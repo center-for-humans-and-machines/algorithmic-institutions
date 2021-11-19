@@ -10,7 +10,7 @@ def load_requirements(filename='requirements.txt'):
 
 
 setup(
-    name='aimanage',
+    name='aimanager',
     version="0.0.1",
     description='',
     url='',
@@ -18,7 +18,7 @@ setup(
     author_email='',
     license='',
     packages=[package for package in find_packages()
-              if package.startswith('aimanage')],
+              if package.startswith('aimanager')],
     zip_safe=False,
     install_requires=load_requirements(),
     extras_require={'dev': load_requirements('requirements_dev.txt')},
