@@ -6,7 +6,12 @@ def split_xy(df):
     index = ['session', 'global_group_id', 'episode', 'participant_code', 'round_number']
     df = df.set_index(index).sort_index()
     prev_df = df.groupby(index[:-1]).shift(1)
-    w_is_not_null = ~prev_df['contribution'].isnull()
+    rename = {
+        c: 'prev_' + c
+        for c in prev_df.columns
+    }
+    prev_df = prev_df.rename(columns=rename)
+    w_is_not_null = ~prev_df['prev_contribution'].isnull()
     x = prev_df[w_is_not_null]
     y = df[w_is_not_null]['contribution']
     return x, y

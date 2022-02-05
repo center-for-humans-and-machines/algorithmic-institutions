@@ -1,9 +1,9 @@
 import numpy as np
 
 
-def int_to_ordinal(arr, n_levels=21):
+def int_to_ordinal(arr, n_levels):
     """
-    Turns a integer array into an ordinal encoding. 
+    Turns a integer series into an ordinal encoding. 
     """
     encoding = np.array(
         [[1]*i + [0]*(n_levels - i - 1)
@@ -24,12 +24,14 @@ def ordinal_to_int(arr):
 def outer(a, b):
     return np.einsum('ij,ik->ijk',a, b).reshape(a.shape[0], a.shape[1]*b.shape[1])
 
-def int_encode(df, column, ordinal=False, n_levels=None):
-    values = df[column].astype(int).values
+def int_encode(data, column=None, ordinal=False):
+    if column:
+        data = data[column]
     if ordinal:
-        return int_to_ordinal(values, n_levels=n_levels)
+        n_levels = len(data.cat.categories)
+        return int_to_ordinal(data.astype(int).values, n_levels)
     else:
-        return values[:,np.newaxis]
+        return data.astype(int).values[:,np.newaxis]
 
 def single_encoder(df, **kwargs):
     return int_encode(df, **kwargs)
@@ -48,6 +50,6 @@ def encoder(df, etype='single', **kwargs):
 def joined_encoder(df, encodings):
     encoding = [
         encoder(df, **e)
-        for e in encodings.values()
+        for e in encodings
     ]
     return np.concatenate(encoding, axis=1)   

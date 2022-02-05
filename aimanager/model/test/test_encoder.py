@@ -1,4 +1,4 @@
-from ..encoder import int_to_ordinal, ordinal_to_int, joined_encoder
+from aimanager.model.encoder import int_to_ordinal, ordinal_to_int, joined_encoder
 import numpy as np
 import pandas as pd
 
@@ -7,6 +7,11 @@ def test_ordinal_conversion():
     # testing the conversion
 
     integers = np.random.randint(0, 21, 30)
+
+    integers = pd.Series(pd.Categorical(
+        integers, categories=np.arange(21), ordered=True
+    ))
+
     ordinal = int_to_ordinal(integers, n_levels=21)
     integers_reverse = ordinal_to_int(ordinal)
 
@@ -15,13 +20,15 @@ def test_ordinal_conversion():
 
 def testing_encoding():
 
-    encodings = {
-        'a': {'ordinal':True, 'n_levels': 3, 'column': 't1'},
-        'b': {'ordinal':False, 'column': 't2'},
-        'c': {'etype': 'interaction','a': {'ordinal':True, 'n_levels': 3, 'column': 't1'}, 'b': {'ordinal':False, 'column': 't2'}}
-    }
+    encodings = [
+        {'ordinal':True, 'column': 't1'},
+        {'ordinal':False, 'column': 't2'},
+        {'etype': 'interaction','a': {'ordinal':True, 'column': 't1'}, 'b': {'ordinal':False, 'column': 't2'}}
+    ]
 
-    t_df = pd.DataFrame({'t1': [0,1,0,1,2], 't2': [0,0,1,1,2]})
+    t_df = pd.DataFrame({'t1': [0,1,0,1,2], 't2': [0,0,1,1,2]}, dtype='category')
+
+
 
     t_enc = joined_encoder(t_df, encodings)
 

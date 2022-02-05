@@ -12,7 +12,11 @@ pip install -e ".[dev]"
 
 # Notebooks
 
-- exploration:
+Update parameter from yml
+
+```
+papermill -f logreg.yml --prepare-only logreg.ipynb logreg.ipynb
+```
 
 # Cluster
 
