@@ -32,3 +32,12 @@ def load_yaml(filename):
 def make_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)
+
+
+def get_all_files(folder):
+    for file in os.listdir(folder):
+        yield os.path.join(folder, file)
+
+
+def check_file(fname):
+    return os.path.isfile(fname)
