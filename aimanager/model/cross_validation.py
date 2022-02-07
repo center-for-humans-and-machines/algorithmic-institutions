@@ -1,5 +1,6 @@
 
 import random
+import numpy as np
 
 
 def split_xy(df):
@@ -15,6 +16,16 @@ def split_xy(df):
     x = prev_df[w_is_not_null]
     y = df[w_is_not_null]['contribution']
     return x, y
+
+
+def get_fraction_of_groups(x_df, y_sr, fraction):
+    group_ids = list(x_df.index.levels[1])
+    sel_group_ids = np.random.choice(group_ids, size=int(len(group_ids)*fraction), replace=False)
+    x_df = x_df.loc[(slice(None),sel_group_ids),:]
+    y_sr = y_sr.loc[(slice(None),sel_group_ids)]
+    assert x_df.index.equals(y_sr.index)
+    assert len(x_df) == len(y_sr)
+    return x_df, y_sr
 
 
 def get_cross_validations(x_df, y_sr, n_splits):
