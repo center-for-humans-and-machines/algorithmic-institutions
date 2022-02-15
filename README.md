@@ -19,6 +19,12 @@ Update parameter from yml
 papermill -f logreg.yml --prepare-only logreg.ipynb logreg.ipynb
 ```
 
+Run notebook from yml.
+
+```
+papermill -f logreg.yml logreg.ipynb logreg.ipynb
+```
+
 # Cluster
 
 ## Setup DJX

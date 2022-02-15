@@ -38,7 +38,7 @@ def outer(a, b):
     return np.einsum('ij,ik->ijk',a, b).reshape(a.shape[0], a.shape[1]*b.shape[1])
 
 
-def int_encode(data, column=None, encoding='numeric', ordinal=False):
+def int_encode(data, column=None, encoding='numeric', ordinal=False, add_axis=False):
     """
         ordinal is deprecated
     """
@@ -55,13 +55,16 @@ def int_encode(data, column=None, encoding='numeric', ordinal=False):
         n_levels = len(data.cat.categories)
         return int_to_onehot(data.astype(int).values, n_levels)
     elif encoding == 'numeric':
-        return data.astype(int).values[:,np.newaxis]
+        val = data.astype(int).values
+        if add_axis:
+            val = val[:,np.newaxis]
+        return val
     else:
         raise ValueError(f"Encoding type {encoding} is unknown.")
 
 
 def single_encoder(df, **kwargs):
-    return int_encode(df, **kwargs)
+    return int_encode(df, add_axis=True, **kwargs)
 
 def interaction_encoder(df, a, b):
     a_val = single_encoder(df, **a)
