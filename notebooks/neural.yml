@@ -3,7 +3,7 @@ x_encoding:
     column: prev_contribution
   - encoding: ordinal
     column: prev_punishment
-y_encoding: onehot
+y_encoding: numeric
 n_contributions: 21
 n_punishments: 31
 n_cross_val: 2
@@ -22,4 +22,4 @@ train_args:
   batch_size: 40
   clamp_grad: 1
   eval_period: 10
-device: cuda
+device: cpu

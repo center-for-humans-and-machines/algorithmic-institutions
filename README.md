@@ -17,6 +17,7 @@ Update parameter from yml
 
 ```
 papermill -f logreg.yml --prepare-only logreg.ipynb logreg.ipynb
+papermill -f neural.yml --prepare-only neural.ipynb neural.ipynb
 ```
 
 Run notebook from yml.

@@ -38,7 +38,7 @@ def outer(a, b):
     return np.einsum('ij,ik->ijk',a, b).reshape(a.shape[0], a.shape[1]*b.shape[1])
 
 
-def int_encode(data, column=None, encoding='numeric', ordinal=False, add_axis=False):
+def int_encode(data, column=None, encoding='numeric', ordinal=False, add_axis=True):
     """
         ordinal is deprecated
     """
