@@ -12,6 +12,7 @@ class Memory():
         self.device = device
         self.output_file = output_file
         self.current_row = 0
+        self.episode = 0
         self.episode_queue = collections.deque([], maxlen=self.n_episodes)
 
 

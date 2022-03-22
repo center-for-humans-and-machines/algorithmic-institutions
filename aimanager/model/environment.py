@@ -15,6 +15,7 @@ class ArtificialHumanEnv():
         'valid': ['agent'],
         'common_good': ['agent'],
         'episode_step': ['agent'],
+        'player_id': ['agent'],
     }
 
     def __init__(
@@ -42,8 +43,9 @@ class ArtificialHumanEnv():
             'prev_contributions': th.zeros(self.n_agents, dtype=th.int64),
             'prev_valid': th.zeros(self.n_agents, dtype=th.bool),
             'payoffs': th.zeros(self.n_agents, dtype=th.float),
-            'common_good': th.tensor(0, dtype=th.float),
-            'episode_step': th.tensor(0, dtype=th.int64)
+            'common_good': th.tensor(self.n_agents, dtype=th.float),
+            'episode_step': th.tensor(0, dtype=th.int64),
+            'player_id': th.arange(4, dtype=th.int64)
         }
 
 
@@ -64,15 +66,14 @@ class ArtificialHumanEnv():
 
     @staticmethod
     def calc_common_good(contributions, punishments):
-        return contributions.sum() * 1.6 + punishments.sum()
+        return (contributions * 1.6 - punishments)
 
     @staticmethod
     def calc_payout(contributions, punishments, commond_good):
         # TODO: check how to handle missing values
-        return 20 - contributions - punishments + 0.25 * commond_good
+        return 20 - contributions - punishments + commond_good
 
     def calc_contributions(self):
-        # print(self.state)
         self.contributions = self.artifical_humans.act(**self.state)
         self.valid = th.ones_like(self.valid)
 
@@ -83,26 +84,31 @@ class ArtificialHumanEnv():
         self.calc_contributions()
         return self.state
 
-    def step(self, punishments):
-        self.episode_step += 1
+    def punish(self, punishments):
 
         assert punishments.max() < self.n_punishments
         assert punishments.dtype == th.int64
 
-        if (self.episode_step == self.episode_steps):
-            done = True
-        elif self.episode_step > self.episode_steps:
-            raise ValueError('Environment is done already.')
-        else:
-            done = False
-
         self.punishments = punishments
         self.common_good = self.calc_common_good(self.contributions, self.punishments)
         self.payoffs = self.calc_payout(self.contributions, self.punishments, self.common_good)
+        return self.state
+
+    def step(self):
+
         self.prev_contributions = self.contributions
         self.prev_punishments = self.punishments
         self.prev_valid = self.valid
 
         self.calc_contributions()
+        reward = self.contributions * 1.6 - self.prev_punishments
 
-        return self.state, self.common_good, done
+        self.episode_step += 1
+        if (self.episode_step == (self.episode_steps - 1)):
+            done = True
+        elif self.episode_step >= self.episode_steps:
+            raise ValueError('Environment is done already.')
+        else:
+            done = False
+        return self.state, reward, done
+
