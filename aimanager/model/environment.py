@@ -100,15 +100,16 @@ class ArtificialHumanEnv():
         self.prev_punishments = self.punishments
         self.prev_valid = self.valid
 
-        self.calc_contributions()
-        reward = self.contributions * 1.6 - self.prev_punishments
 
         self.episode_step += 1
         if (self.episode_step == (self.episode_steps - 1)):
+            reward = - self.prev_punishments
             done = True
         elif self.episode_step >= self.episode_steps:
             raise ValueError('Environment is done already.')
         else:
+            self.calc_contributions()
+            reward = self.contributions * 1.6 - self.prev_punishments
             done = False
         return self.state, reward, done
 
