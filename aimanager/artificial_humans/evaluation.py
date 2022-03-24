@@ -2,7 +2,7 @@
 import pandas as pd
 import torch as th
 import os
-from aimanager.model.metrics import create_metrics, create_confusion_matrix
+from aimanager.artificial_humans.metrics import create_metrics, create_confusion_matrix
 from aimanager.utils.array_to_df import add_labels, using_multiindex
 from aimanager.utils.utils import make_dir
 

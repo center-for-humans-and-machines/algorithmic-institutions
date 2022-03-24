@@ -1,5 +1,5 @@
 import torch as th
-from aimanager.model.neural.mlp import MultiLayer
+from aimanager.generic.mlp import MultiLayer
 
 
 class ArtificialHuman(th.nn.Module):

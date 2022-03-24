@@ -1,4 +1,4 @@
-from aimanager.model.encoder import int_to_ordinal, ordinal_to_int, int_to_onehot, onehot_to_int, joined_encoder
+from aimanager.generic.encoder import int_to_ordinal, ordinal_to_int, int_to_onehot, onehot_to_int, joined_encoder
 import numpy as np
 import pandas as pd
 

@@ -1,0 +1,1 @@
+papermill -f $1.yml --prepare-only $1.ipynb $1.ipynb
