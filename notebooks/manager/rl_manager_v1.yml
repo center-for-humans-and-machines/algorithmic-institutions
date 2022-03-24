@@ -1,0 +1,15 @@
+artificial_humans: "../../data/dev/data/model.pt"
+output_file: "../../data/dev/data/manager_run.pt"
+model_args:
+  n_layers: 2
+  hidden_size: 40
+opt_args:
+  lr: 0.003
+gamma: 0.8
+eps: 0.2
+target_update_freq: 10
+n_episode_steps: 16
+n_episodes: 10000
+sample_args:
+  batch_size: 10
+  horizon: 1000
