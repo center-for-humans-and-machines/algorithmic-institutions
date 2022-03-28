@@ -1,10 +1,17 @@
 y_encoding: onehot
+x_encoding:
+  - name: prev_contributions
+    n_levels: 21
+    encoding: onehot
+  - name: prev_punishments
+    n_levels: 31
+    encoding: onehot
 n_contributions: 21
 n_punishments: 31
 n_cross_val: 2
 fraction_training: 1.0
-data: ../../data/pilot_random1_player_round_slim.csv
-output_path: ../../data/dev
+data: ../../data/experiments/pilot_random1_player_round_slim.csv
+output_path: ../../data/training/dev
 labels: {}
 model_args:
   n_layers: 2

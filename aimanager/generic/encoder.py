@@ -1,85 +1,43 @@
-import numpy as np
-import warnings
+import torch as th
 
 
-def int_to_ordinal(arr, n_levels):
-    """
-    Turns a integer series into an ordinal encoding. 
-    """
-    encoding = np.array(
-        [[1]*i + [0]*(n_levels - i - 1)
-        for i in range(n_levels)]
-    )
+class SinglerEncoder(th.nn.Module):
+    def __init__(self, encoding, name, n_levels):
+        super(SinglerEncoder, self).__init__()
+        self.name = name
+        if encoding == 'ordinal':
+            assert n_levels is not None
+            self.map = th.tensor(
+                [[1]*i + [0]*(n_levels - i - 1)
+                for i in range(n_levels)], dtype=th.float
+            )
+        elif encoding == 'onehot':
+            assert n_levels is not None
+            self.map = th.tensor(
+                [[0]*i + [1] + [0]*(n_levels - i - 1)
+                for i in range(n_levels)], dtype=th.float
+            )
+        elif encoding == 'numeric':
+            self.map = th.linspace(0, 1, n_levels, dtype=th.float).unsqueeze(-1)
+        self.size = self.map.shape[-1]
 
-    return encoding[arr]
-
-def ordinal_to_int(arr):
-    """
-    Get the position of the first 0
-    """
-    n_levels = arr.shape[-1] + 1
-    integers = np.array([i for i in range(n_levels-1,0,-1)])
-    arr = (arr < 0.5).astype(float)
-    arr = arr * integers[np.newaxis]
-    return n_levels - arr.max(1) - 1
-
-
-def int_to_onehot(arr, n_levels):
-    out = np.zeros((arr.size, n_levels))
-    out[np.arange(arr.size),arr] = 1
-    return out
+    def forward(self, **state):
+        enc = self.map[state[self.name]]
+        return enc
 
 
-def onehot_to_int(arr):
-    return arr.argmax(axis=-1)
-  
+class Encoder(th.nn.Module):
+    def __init__(self, encodings):
+        super(Encoder, self).__init__()
+        self.encoder = th.nn.ModuleList([
+            SinglerEncoder(**e)
+            for e in encodings
+        ])
+        self.size = sum(e.size for e in self.encoder)
 
-def outer(a, b):
-    return np.einsum('ij,ik->ijk',a, b).reshape(a.shape[0], a.shape[1]*b.shape[1])
-
-
-def int_encode(data, column=None, encoding='numeric', ordinal=False, add_axis=True):
-    """
-        ordinal is deprecated
-    """
-    if column:
-        data = data[column]
-    if ordinal:
-        warnings.warn(
-            "Using ordinal=True is depricated. Use encoding='oridinal' instead.", DeprecationWarning)
-        encoding = 'ordinal'
-    if encoding == 'ordinal':
-        n_levels = len(data.cat.categories)
-        return int_to_ordinal(data.astype(int).values, n_levels)
-    elif encoding == 'onehot':
-        n_levels = len(data.cat.categories)
-        return int_to_onehot(data.astype(int).values, n_levels)
-    elif encoding == 'numeric':
-        val = data.astype(int).values
-        if add_axis:
-            val = val[:,np.newaxis]
-        return val
-    else:
-        raise ValueError(f"Encoding type {encoding} is unknown.")
-
-
-def single_encoder(df, **kwargs):
-    return int_encode(df, add_axis=True, **kwargs)
-
-def interaction_encoder(df, a, b):
-    a_val = single_encoder(df, **a)
-    b_val = single_encoder(df, **b)
-    return outer(a_val, b_val)
-
-def encoder(df, etype='single', **kwargs):
-    if etype == 'interaction':
-        return interaction_encoder(df, **kwargs)
-    else:
-        return single_encoder(df, **kwargs)
-
-def joined_encoder(df, encodings):
-    encoding = [
-        encoder(df, **e)
-        for e in encodings
-    ]
-    return np.concatenate(encoding, axis=1)   
+    def forward(self, **state):
+        encoding = [
+            e(**state)
+            for e in self.encoder
+        ]
+        return th.cat(encoding, axis=-1)

@@ -1,9 +1,11 @@
 import torch as th
+from zmq import device
 from aimanager.generic.mlp import MultiLayer
+from aimanager.generic.encoder import Encoder
 
 
 class ArtificialHuman(th.nn.Module):
-    def __init__(self, *, n_contributions, n_punishments, y_encoding = 'ordinal',  model=None, **model_args):
+    def __init__(self, *, n_contributions, n_punishments, y_encoding = 'ordinal', x_encoding=None,  model=None, **model_args):
         super(ArtificialHuman, self).__init__()
         if y_encoding == 'ordinal':
             raise NotImplementedError('Currently not supported.')
@@ -15,7 +17,10 @@ class ArtificialHuman(th.nn.Module):
             output_size = 1
         else:
             raise ValueError(f'Unkown y encoding {y_encoding}')
-        input_size = n_contributions + n_punishments
+
+        self.x_encoder = Encoder(x_encoding)
+
+        input_size = self.x_encoder.size
     
         if not model:
             self.model = MultiLayer(output_size=output_size, input_size=input_size, **model_args)
@@ -62,12 +67,9 @@ class ArtificialHuman(th.nn.Module):
             raise ValueError(f'Unkown y encoding {self.y_encoding}')
         return y_pred, y_pred_proba
 
-    def encode_x(self, prev_punishments, prev_contributions, **_):
+    def encode_x(self, **data):
         return {
-            'ah_x_enc': th.cat([
-                th.nn.functional.one_hot(prev_contributions, num_classes=self.n_contributions).float(),
-                th.nn.functional.one_hot(prev_punishments, num_classes=self.n_punishments).float()
-            ], dim=-1)
+            'ah_x_enc': self.x_encoder(**data)
         }
 
     def encode_y(self, contributions, **_):
