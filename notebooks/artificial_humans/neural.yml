@@ -2,10 +2,10 @@ y_encoding: onehot
 x_encoding:
   - name: prev_contributions
     n_levels: 21
-    encoding: onehot
+    encoding: numeric
   - name: prev_punishments
     n_levels: 31
-    encoding: onehot
+    encoding: numeric
 n_contributions: 21
 n_punishments: 31
 n_cross_val: 2
@@ -20,7 +20,7 @@ optimizer_args:
   lr: 1.e-4
   weight_decay: 1.e-5
 train_args:
-  epochs: 1000ßß
+  epochs: 1000
   batch_size: 40
   clamp_grad: 1
   eval_period: 10
