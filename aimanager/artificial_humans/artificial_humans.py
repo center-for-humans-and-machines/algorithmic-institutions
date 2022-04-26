@@ -50,10 +50,9 @@ class ArtificialHuman(th.nn.Module):
         self.model.eval()
         y_pred_logit = self(**state)
         if self.y_encoding == 'ordinal':
-            raise NotImplementedError('Currently not supported.')
-            # y_pred_proba = th.sigmoid(y_pred_logit).detach().cpu().numpy()
+            y_pred_proba = th.sigmoid(y_pred_logit)
             # y_pred = ordinal_to_int(y_pred_proba)
-            # y_pred_proba = np.concatenate([np.ones_like(y_pred_proba[:,[0]]), y_pred_proba[:,:]], axis=1)
+            y_pred_proba = th.cat([cat.ones_like(y_pred_proba[:,[0]]), y_pred_proba[:,:]], axis=1)
         elif self.y_encoding == 'onehot': 
             y_pred_proba = th.nn.functional.softmax(y_pred_logit, dim=-1)
             y_pred = y_pred_proba.argmax(axis=-1)
