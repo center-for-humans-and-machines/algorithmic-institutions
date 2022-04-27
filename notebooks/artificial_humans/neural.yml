@@ -1,4 +1,4 @@
-y_encoding: onehot
+y_encoding: numeric
 x_encoding:
   - name: prev_contributions
     n_levels: 21
@@ -6,6 +6,14 @@ x_encoding:
   - name: prev_punishments
     n_levels: 31
     encoding: numeric
+  - name: round_number
+    n_levels: 16
+    encoding: numeric
+  - name: prev_common_good
+    norm: 128
+    etype: float
+  - name: prev_valid
+    etype: bool
 n_contributions: 21
 n_punishments: 31
 n_cross_val: 2

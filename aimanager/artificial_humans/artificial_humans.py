@@ -1,24 +1,34 @@
 import torch as th
 from zmq import device
 from aimanager.generic.mlp import MultiLayer
-from aimanager.generic.encoder import Encoder
+from aimanager.generic.encoder import Encoder, IntEncoder
+
+def ordinal_to_int(arr):
+    """
+    Get the position of the first 0
+    """
+    n_levels = arr.shape[-1] + 1
+    integers = th.arange(n_levels-1, 0, -1)
+    arr = (arr < 0.5).float()
+    arr = arr * integers.unsqueeze(-1)
+    return n_levels - arr.max(1) - 1
+
 
 
 class ArtificialHuman(th.nn.Module):
     def __init__(self, *, n_contributions, n_punishments, y_encoding = 'ordinal', x_encoding=None,  model=None, **model_args):
         super(ArtificialHuman, self).__init__()
         if y_encoding == 'ordinal':
-            raise NotImplementedError('Currently not supported.')
             output_size = (n_contributions - 1)
         elif y_encoding == 'onehot':
             output_size = n_contributions
         elif y_encoding == 'numeric':
-            raise NotImplementedError('Currently not supported.')
             output_size = 1
         else:
             raise ValueError(f'Unkown y encoding {y_encoding}')
 
         self.x_encoder = Encoder(x_encoding)
+        self.y_encoder = IntEncoder(encoding=y_encoding, name='contributions', n_levels=n_contributions)
 
         input_size = self.x_encoder.size
     
@@ -38,30 +48,26 @@ class ArtificialHuman(th.nn.Module):
         
     def act(self, **state):
         enc = self.encode_x(**state)
-        logit = self(**enc)
-        # print(logit.shape)
-        prob = th.nn.functional.softmax(logit, dim=-1)
-        # print(prob.shape)
+        pred, prob = self.predict(**enc)
         action = th.multinomial(prob, 1).squeeze(-1)
-        # print(action.shape)
-        return action#logit.argmax(axis=-1)
+        return action
 
-    def predict(self, **state):
+    def predict(self, **encoding):
         self.model.eval()
-        y_pred_logit = self(**state)
+        y_pred_logit = self(**encoding)
         if self.y_encoding == 'ordinal':
             y_pred_proba = th.sigmoid(y_pred_logit)
-            # y_pred = ordinal_to_int(y_pred_proba)
-            y_pred_proba = th.cat([cat.ones_like(y_pred_proba[:,[0]]), y_pred_proba[:,:]], axis=1)
+            y_pred = ordinal_to_int(y_pred_proba)
+            y_pred_proba = th.cat([th.ones_like(y_pred_proba[:,[0]]), y_pred_proba], axis=1)
+            y_pred_proba = y_pred_proba / th.sum(y_pred_proba, dim=-1, keepdim=True)
         elif self.y_encoding == 'onehot': 
             y_pred_proba = th.nn.functional.softmax(y_pred_logit, dim=-1)
             y_pred = y_pred_proba.argmax(axis=-1)
-        elif self.y_encoding == 'numeric': 
-            raise NotImplementedError('Currently not supported.')
-            # y_pred = th.sigmoid(y_pred_logit).detach().cpu().numpy()
-            # # TODO: n_contributions is hardcoded here
-            # y_pred = np.around(y_pred*21, decimals=0).astype(np.int64)
-            # y_pred_proba = None
+        elif self.y_encoding == 'numeric':
+            y_pred = th.sigmoid(y_pred_logit.squeeze(-1))
+            y_pred = th.round(y_pred * self.n_contributions)
+            y_pred = y_pred.type(th.int64)
+            y_pred_proba = th.nn.functional.one_hot(y_pred, num_classes=self.n_contributions).float()
         else:
             raise ValueError(f'Unkown y encoding {self.y_encoding}')
         return y_pred, y_pred_proba
@@ -71,24 +77,22 @@ class ArtificialHuman(th.nn.Module):
             'ah_x_enc': self.x_encoder(**data)
         }
 
-    def encode_y(self, contributions, **_):
+    def encode_y(self, **state):
         return {
-            'ah_y_enc': th.nn.functional.one_hot(contributions, num_classes=self.n_contributions).float()
+            'ah_y_enc': self.y_encoder(**state)
         }
 
     def get_lossfn(self):
         if self.y_encoding == 'ordinal':
-            raise NotImplementedError()
             loss_fn = th.nn.BCEWithLogitsLoss()
         elif self.y_encoding == 'onehot':
             loss_fn = th.nn.CrossEntropyLoss(reduction='none')
         elif self.y_encoding == 'numeric':
-            raise NotImplementedError()
             mse = th.nn.MSELoss()
             sig = th.nn.Sigmoid()
             def _loss_fn(yhat,y):
-                yhat = sig(yhat)*self.n_contributions
-                return mse(yhat[:,0],y)
+                yhat = sig(yhat.squeeze(-1))*self.n_contributions
+                return mse(yhat,y.squeeze(-1))
             loss_fn = _loss_fn
         return loss_fn
 

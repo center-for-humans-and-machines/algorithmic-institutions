@@ -1,9 +1,9 @@
 import torch as th
 
 
-class SinglerEncoder(th.nn.Module):
+class IntEncoder(th.nn.Module):
     def __init__(self, encoding, name, n_levels):
-        super(SinglerEncoder, self).__init__()
+        super(IntEncoder, self).__init__()
         self.name = name
         if encoding == 'ordinal':
             assert n_levels is not None
@@ -22,15 +22,53 @@ class SinglerEncoder(th.nn.Module):
         self.size = self.map.shape[-1]
 
     def forward(self, **state):
+        assert state[self.name].dtype == th.int64
         enc = self.map[state[self.name]]
         return enc
+
+
+
+class FloatEncoder(th.nn.Module):
+    def __init__(self, norm, name):
+        super(FloatEncoder, self).__init__()
+        self.size = 1
+        self.norm = norm
+        self.name = name
+
+    def forward(self, **state):
+        assert state[self.name].dtype == th.float
+        enc = (state[self.name] / self.norm).unsqueeze(-1)
+        return enc
+
+
+
+class BoolEncoder(th.nn.Module):
+    def __init__(self, name):
+        super(BoolEncoder, self).__init__()
+        self.size = 1
+        self.name = name
+
+    def forward(self, **state):
+        assert state[self.name].dtype == th.bool
+        enc = state[self.name].float().unsqueeze(-1)
+        return enc
+
+
+encoder = {
+    'int': IntEncoder,
+    'float': FloatEncoder,
+    'bool': BoolEncoder
+}
+
+def get_encoder(etype='int', **kwargs):
+    return encoder[etype](**kwargs)
 
 
 class Encoder(th.nn.Module):
     def __init__(self, encodings):
         super(Encoder, self).__init__()
         self.encoder = th.nn.ModuleList([
-            SinglerEncoder(**e)
+            get_encoder(**e)
             for e in encodings
         ])
         self.size = sum(e.size for e in self.encoder)

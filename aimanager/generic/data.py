@@ -15,40 +15,76 @@ def create_torch_data(df):
 
     punishments = th.zeros((n_episodes, n_steps, n_agents), dtype=th.int64)
     contributions = th.zeros((n_episodes, n_steps, n_agents), dtype=th.int64)
+    round_number = th.zeros((n_episodes, n_steps, n_agents), dtype=th.int64)
     valid = th.zeros((n_episodes, n_steps, n_agents), dtype=th.bool)
+    # public_good = th.zeros((n_episodes, n_steps), dtype=th.bool)
+    common_good = th.zeros((n_episodes, n_steps, n_agents), dtype=th.float)
+
+    default_values = {
+        'punishments': np.rint(df['punishment'].mean()),
+        'contribution': np.rint(df['contribution'].mean()),
+        'player_no_input': True,
+        'common_good': df['common_good'].mean(),
+        'round_number': 0,
+    }
 
     for idx, row in df.iterrows():
         episode, step, agent = row[['episode_id', 'round_number', 'player_id']]
         punishments[episode, step, agent] = row['punishment']
-        contributions[episode, step, agent] = row['contribution']
+        
+        # we impute here with the most common contribution
+        contributions[episode, step, agent] = row['contribution'] if row['player_no_input'] == 0 else 20
         valid[episode, step, agent] = 1 - row['player_no_input']
+        common_good[episode, step, agent] = row['common_good']
+        round_number[episode, step, agent] = row['round_number']
+
+    
+    # for idx, row in df.groupby(['episode_id', 'round_number']).head(1).iterrows():
+    #     episode, step = row[['episode_id', 'round_number']]
+    #     public_good[episode, step]
 
     data = {
         'punishments': punishments,
         'contributions': contributions,
-        'valid': valid
+        'valid': valid,
+        'common_good': common_good,
+        'round_number': round_number
     }
 
     data = {**data, **{f'prev_{k}': shift(t) for k, t in data.items()}}
     return data
 
-def create_syn_data(n_contribution, n_punishment):
-    punishments = th.arange(0, n_punishment)
-    punishments = punishments[np.newaxis,:,np.newaxis]
-    punishments = punishments.tile((n_contribution,1, 1))
+def create_syn_data(n_contribution, n_punishment, n_agents = 4, n_steps = 16):
+    n_episodes = n_contribution * n_punishment
+    n_agents = 4
+    punishments = th.zeros((n_episodes, n_steps, n_agents), dtype=th.int64)
+    contributions = th.zeros((n_episodes, n_steps, n_agents), dtype=th.int64)
+    round_number = th.zeros((n_episodes, n_steps, n_agents), dtype=th.int64)
+    valid = th.zeros((n_episodes, n_steps, n_agents), dtype=th.bool)
+    # public_good = th.zeros((n_episodes, n_steps), dtype=th.bool)
+    common_good = th.zeros((n_episodes, n_steps, n_agents), dtype=th.float)
 
-    contributions = th.arange(0, n_contribution)
-    contributions = contributions[:,np.newaxis,np.newaxis]
-    contributions = contributions.tile((1, n_punishment, 1))
-
-    valid = th.ones((n_contribution, n_punishment, 1), dtype=th.int16)
+    agent = 0
+    episode = 0
+    for contribution in range(n_contribution):
+        for punishment in range(n_punishment):
+            for step in range(n_steps):
+                punishments[episode, step, agent] = punishment
+                contributions[episode, step, agent] = contribution
+                round_number[episode, step, agent] = step
+                common_good[episode, step, agent] = (contribution - punishment) * 4
+                valid[episode, step, agent] = 1
+            episode += 1
 
     data = {
         'prev_valid': valid,
         'prev_punishments': punishments,
         'prev_contributions': contributions,
+        'prev_common_good': common_good,
+        'round_number': round_number
     }
     return data
+
 
 def get_cross_validations(data, n_splits):
     episode_ids = list(range(data['contributions'].shape[0]))
