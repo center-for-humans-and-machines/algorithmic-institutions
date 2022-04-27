@@ -1,5 +1,4 @@
 import torch as th
-from zmq import device
 from aimanager.generic.mlp import MultiLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
 
@@ -8,10 +7,10 @@ def ordinal_to_int(arr):
     Get the position of the first 0
     """
     n_levels = arr.shape[-1] + 1
-    integers = th.arange(n_levels-1, 0, -1)
+    integers = th.arange(n_levels-1, 0, -1, dtype=th.float)
     arr = (arr < 0.5).float()
-    arr = arr * integers.unsqueeze(-1)
-    return n_levels - arr.max(1) - 1
+    arr = th.einsum('ijkl,l->ijkl', arr, integers)
+    return n_levels - arr.max(-1)[0] - 1
 
 
 
@@ -19,6 +18,7 @@ class ArtificialHuman(th.nn.Module):
     def __init__(self, *, n_contributions, n_punishments, y_encoding = 'ordinal', x_encoding=None,  model=None, **model_args):
         super(ArtificialHuman, self).__init__()
         if y_encoding == 'ordinal':
+            raise NotImplementedError()
             output_size = (n_contributions - 1)
         elif y_encoding == 'onehot':
             output_size = n_contributions
@@ -47,6 +47,7 @@ class ArtificialHuman(th.nn.Module):
         return self.model(ah_x_enc)
         
     def act(self, **state):
+        raise NotImplementedError('have to fix this')
         enc = self.encode_x(**state)
         pred, prob = self.predict(**enc)
         action = th.multinomial(prob, 1).squeeze(-1)
@@ -56,10 +57,12 @@ class ArtificialHuman(th.nn.Module):
         self.model.eval()
         y_pred_logit = self(**encoding)
         if self.y_encoding == 'ordinal':
+            raise NotImplementedError()
             y_pred_proba = th.sigmoid(y_pred_logit)
             y_pred = ordinal_to_int(y_pred_proba)
-            y_pred_proba = th.cat([th.ones_like(y_pred_proba[:,[0]]), y_pred_proba], axis=1)
-            y_pred_proba = y_pred_proba / th.sum(y_pred_proba, dim=-1, keepdim=True)
+            y_pred_proba = None
+            # y_pred_proba = th.cat([th.ones((*y_pred_proba.shape[:-1],1)), y_pred_proba], axis=-1)
+            # y_pred_proba = y_pred_proba / th.sum(y_pred_proba, dim=-1, keepdim=True)
         elif self.y_encoding == 'onehot': 
             y_pred_proba = th.nn.functional.softmax(y_pred_logit, dim=-1)
             y_pred = y_pred_proba.argmax(axis=-1)
@@ -91,8 +94,8 @@ class ArtificialHuman(th.nn.Module):
             mse = th.nn.MSELoss()
             sig = th.nn.Sigmoid()
             def _loss_fn(yhat,y):
-                yhat = sig(yhat.squeeze(-1))*self.n_contributions
-                return mse(yhat,y.squeeze(-1))
+                yhat = sig(yhat)
+                return mse(yhat,y)
             loss_fn = _loss_fn
         return loss_fn
 

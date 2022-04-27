@@ -25,6 +25,7 @@ class Evaluator:
 
     def eval_set(self, model, set_name):
         y_pred, y_pred_proba = model.predict(**self.data[set_name])
+
         mask = self.data[set_name]['valid']
         y_true = th.masked_select(self.data[set_name]['contributions'], mask)
         y_pred = th.masked_select(y_pred, mask)
@@ -39,8 +40,8 @@ class Evaluator:
     def eval_sync(self, model):
         y_pred, y_pred_proba = model.predict(**self.data['syn'])
         y_pred = y_pred.detach().cpu().numpy()
-        y_pred_proba = y_pred_proba.detach().cpu().numpy()
         if y_pred_proba is not None:
+            y_pred_proba = y_pred_proba.detach().cpu().numpy()
             proba_df = using_multiindex(
                 y_pred_proba, ['prev_contribution', 'prev_punishment', 'dummy', 'contribution']).rename(columns={'value': 'proba'})
             pred_df = using_multiindex(
