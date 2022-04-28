@@ -59,8 +59,10 @@ class ArtificialHuman(th.nn.Module):
         elif self.y_encoding == 'numeric':
             if self.y_scaling == 'sigmoid':
                 y_pred = th.sigmoid(y_pred_logit.squeeze(-1))
+            elif self.y_scaling in ['hardtanh','None']:
+                y_pred = th.nn.functional.hardtanh(y_pred_logit, min_val=0.0, max_val=1.0).squeeze(-1)
             else:
-                y_pred = y_pred_logit.squeeze(-1)
+                raise ValueError('Unkown y scaling.')
             y_pred = self.y_encoder.decode(y_pred)
             y_pred_proba = th.nn.functional.one_hot(y_pred, num_classes=self.n_contributions).float()
         else:
@@ -84,9 +86,15 @@ class ArtificialHuman(th.nn.Module):
             loss_fn = th.nn.CrossEntropyLoss(reduction='none')
         elif self.y_encoding == 'numeric':
             mse = th.nn.MSELoss()
-            sig = th.nn.Sigmoid()
             def _loss_fn(yhat,y):
-                yhat = sig(yhat)
+                if self.y_scaling == 'sigmoid':
+                    yhat = th.sigmoid(yhat)
+                elif self.y_scaling == 'hardtanh':
+                    yhat = th.nn.functional.hardtanh(yhat, min_val=0.0, max_val=1.0)
+                elif self.y_scaling == 'None':
+                    pass
+                else:
+                    raise ValueError('Unkown y_scaling.')
                 return mse(yhat,y)
             loss_fn = _loss_fn
         return loss_fn
