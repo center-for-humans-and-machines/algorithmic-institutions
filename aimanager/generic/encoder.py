@@ -5,12 +5,15 @@ class IntEncoder(th.nn.Module):
     def __init__(self, encoding, name, n_levels):
         super(IntEncoder, self).__init__()
         self.name = name
+        self.encoding = encoding
+        self.n_levels = n_levels
         if encoding == 'ordinal':
             assert n_levels is not None
             self.map = th.tensor(
                 [[1]*i + [0]*(n_levels - i - 1)
                 for i in range(n_levels)], dtype=th.float
             )
+            self.position_values = th.arange(n_levels-1, 0, -1, dtype=th.float)
         elif encoding == 'onehot':
             assert n_levels is not None
             self.map = th.tensor(
@@ -26,7 +29,19 @@ class IntEncoder(th.nn.Module):
         enc = self.map[state[self.name]]
         return enc
 
+    def decode(self, arr):
+        if self.encoding == 'ordinal':
+            raise NotImplementedError()
+            arr = (arr < 0.5).float()
+            arr = th.einsum('ijkl,l->ijkl', arr, self.position_values)
+            return self.n_levels - arr.max(-1)[0] - 1
+        elif self.encoding == 'onehot':
+            return arr.argmax(axis=-1)
+        elif self.encoding == 'numeric':
+            arr = th.round(arr * (self.n_levels - 1))
+            return arr.type(th.int64)
 
+            
 
 class FloatEncoder(th.nn.Module):
     def __init__(self, norm, name):

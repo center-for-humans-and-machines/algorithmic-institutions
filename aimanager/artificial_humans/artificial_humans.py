@@ -2,20 +2,9 @@ import torch as th
 from aimanager.generic.mlp import MultiLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
 
-def ordinal_to_int(arr):
-    """
-    Get the position of the first 0
-    """
-    n_levels = arr.shape[-1] + 1
-    integers = th.arange(n_levels-1, 0, -1, dtype=th.float)
-    arr = (arr < 0.5).float()
-    arr = th.einsum('ijkl,l->ijkl', arr, integers)
-    return n_levels - arr.max(-1)[0] - 1
-
-
 
 class ArtificialHuman(th.nn.Module):
-    def __init__(self, *, n_contributions, n_punishments, y_encoding = 'ordinal', x_encoding=None,  model=None, **model_args):
+    def __init__(self, *, n_contributions, n_punishments, y_encoding='ordinal', y_scaling='sigmoid', x_encoding=None,  model=None, **model_args):
         super(ArtificialHuman, self).__init__()
         if y_encoding == 'ordinal':
             raise NotImplementedError()
@@ -39,6 +28,7 @@ class ArtificialHuman(th.nn.Module):
         self.y_encoding = y_encoding
         self.n_contributions = n_contributions
         self.n_punishments = n_punishments
+        self.y_scaling = y_scaling
 
     def forward(self, ah_x_enc, **_):
         """
@@ -59,17 +49,19 @@ class ArtificialHuman(th.nn.Module):
         if self.y_encoding == 'ordinal':
             raise NotImplementedError()
             y_pred_proba = th.sigmoid(y_pred_logit)
-            y_pred = ordinal_to_int(y_pred_proba)
+            y_pred = self.y_encoder.decode(y_pred_proba)
             y_pred_proba = None
             # y_pred_proba = th.cat([th.ones((*y_pred_proba.shape[:-1],1)), y_pred_proba], axis=-1)
             # y_pred_proba = y_pred_proba / th.sum(y_pred_proba, dim=-1, keepdim=True)
         elif self.y_encoding == 'onehot': 
             y_pred_proba = th.nn.functional.softmax(y_pred_logit, dim=-1)
-            y_pred = y_pred_proba.argmax(axis=-1)
+            y_pred = self.y_encoder.decode(y_pred_proba)
         elif self.y_encoding == 'numeric':
-            y_pred = th.sigmoid(y_pred_logit.squeeze(-1))
-            y_pred = th.round(y_pred * self.n_contributions)
-            y_pred = y_pred.type(th.int64)
+            if self.y_scaling == 'sigmoid':
+                y_pred = th.sigmoid(y_pred_logit.squeeze(-1))
+            else:
+                y_pred = y_pred_logit.squeeze(-1)
+            y_pred = self.y_encoder.decode(y_pred)
             y_pred_proba = th.nn.functional.one_hot(y_pred, num_classes=self.n_contributions).float()
         else:
             raise ValueError(f'Unkown y encoding {self.y_encoding}')
