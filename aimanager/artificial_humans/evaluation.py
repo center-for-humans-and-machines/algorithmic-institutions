@@ -26,16 +26,26 @@ class Evaluator:
     def eval_set(self, model, set_name):
         y_pred, y_pred_proba = model.predict(**self.data[set_name])
 
-        mask = self.data[set_name]['valid']
-        y_true = th.masked_select(self.data[set_name]['contributions'], mask)
-        y_pred = th.masked_select(y_pred, mask)
-        y_true = y_true.detach().cpu().numpy()
-        y_pred = y_pred.detach().cpu().numpy()
+        strategies = ['greedy', 'sampling']
+        for strategy in strategies:
+            if strategy == 'greedy':
+                pass
+            elif strategy == 'sampling':
+                shape = y_pred_proba.shape
+                y_pred = th.multinomial(y_pred_proba.reshape(-1, shape[-1]), 1)
+                y_pred = y_pred.squeeze(-1).reshape(shape[:-1])
+            else:
+                raise ValueError(f"Unknown strategy {strategy}")
 
+            mask = self.data[set_name]['valid']
+            y_true = th.masked_select(self.data[set_name]['contributions'], mask)
+            y_pred = th.masked_select(y_pred, mask)
+            y_true = y_true.detach().cpu().numpy()
+            y_pred = y_pred.detach().cpu().numpy()
 
-        self.metrics += create_metrics(y_true, y_pred, set=set_name, **self.labels)
-        self.confusion_matrix += create_confusion_matrix(
-            y_true, y_pred, set=set_name, **self.labels)
+            self.metrics += create_metrics(y_true, y_pred, set=set_name, strategy=strategy, **self.labels)
+            self.confusion_matrix += create_confusion_matrix(
+                y_true, y_pred, set=set_name, strategy=strategy, **self.labels)
 
     def eval_sync(self, model):
         y_pred, y_pred_proba = model.predict(**self.data['syn'])
