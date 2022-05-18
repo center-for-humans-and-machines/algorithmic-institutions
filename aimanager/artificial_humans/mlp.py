@@ -3,9 +3,9 @@ from aimanager.generic.mlp import MultiLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
 from torch_geometric.loader import DataLoader
 
-class DenseArtificialHuman(th.nn.Module):
+class MLPArtificialHuman(th.nn.Module):
     def __init__(self, *, n_contributions, n_punishments, x_encoding=None,  model=None, **model_args):
-        super(DenseArtificialHuman, self).__init__()
+        super(MLPArtificialHuman, self).__init__()
         output_size = n_contributions
         self.y_encoding = 'onehot'
 

@@ -1,11 +1,20 @@
 import pandas as pd
 
 
-def using_multiindex(A, columns):
+def using_multiindex(A, columns, value_columns=None):
     shape = A.shape
+    if value_columns is not None:
+        assert len(columns) == len(shape) - 1
+        new_shape = (-1,len(value_columns))
+    else:
+        assert len(columns) == len(shape)
+        new_shape = (-1,)
+        value_columns = ['value']
+
     index = pd.MultiIndex.from_product(
-        [range(s) for s in shape], names=columns)
-    df = pd.DataFrame({'value': A.flatten()}, index=index).reset_index()
+        [range(s) for s,c in zip(shape, columns)], names=columns)
+    df = pd.DataFrame(A.reshape(*new_shape), columns=value_columns, index=index)
+    df = df.reset_index()
     return df
 
 

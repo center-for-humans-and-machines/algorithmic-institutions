@@ -1,0 +1,35 @@
+x_encoding:
+  - name: prev_contributions
+    n_levels: 21
+    encoding: numeric
+  - name: prev_punishments
+    n_levels: 31
+    encoding: numeric
+  - name: round_number
+    n_levels: 16
+    encoding: numeric
+  - name: prev_common_good
+    norm: 128
+    etype: float
+  - name: prev_valid
+    etype: bool
+n_contributions: 21
+n_punishments: 31
+n_cross_val: 2
+fraction_training: 1.0
+data_file: ../../data/experiments/pilot_random1_player_round_slim.csv
+output_path: ../../data/training/dev
+labels: {}
+model_name: mlp
+model_args:
+  n_layers: 2
+  hidden_size: 40
+optimizer_args:
+  lr: 1.e-4
+  weight_decay: 1.e-5
+train_args:
+  epochs: 1000
+  batch_size: 40
+  clamp_grad: 1
+  eval_period: 10
+device: cpu

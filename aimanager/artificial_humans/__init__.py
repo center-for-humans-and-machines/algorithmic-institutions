@@ -1,5 +1,5 @@
-from .dense_ah import DenseArtificialHuman
+from .mlp import MLPArtificialHuman
 
 AH_MODELS = {
-    'dense': DenseArtificialHuman
+    'mlp': MLPArtificialHuman
 }

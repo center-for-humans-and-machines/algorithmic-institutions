@@ -3,9 +3,11 @@ import numpy as np
 import pandas as pd
 import random
 
+
+# TODO: right shift and reasonable imputation
 def shift(tensor):
     tensor = th.roll(tensor, 1, 1)
-    tensor[:,0] = 0
+    tensor[:,:,0] = 0
     return tensor
 
 
@@ -14,35 +16,21 @@ def create_torch_data(df):
     n_steps = df['round_number'].max() + 1
     n_agents = df['player_id'].max() + 1
 
-    punishments = th.zeros((n_episodes, n_steps, n_agents), dtype=th.int64)
-    contributions = th.zeros((n_episodes, n_steps, n_agents), dtype=th.int64)
-    round_number = th.zeros((n_episodes, n_steps, n_agents), dtype=th.int64)
-    valid = th.zeros((n_episodes, n_steps, n_agents), dtype=th.bool)
-    # public_good = th.zeros((n_episodes, n_steps), dtype=th.bool)
-    common_good = th.zeros((n_episodes, n_steps, n_agents), dtype=th.float)
-
-    # default_values = {
-    #     'punishments': np.rint(df['punishment'].mean()),
-    #     'contribution': np.rint(df['contribution'].mean()),
-    #     'player_no_input': True,
-    #     'common_good': df['common_good'].mean(),
-    #     'round_number': 0,
-    # }
+    punishments = th.zeros((n_episodes, n_agents, n_steps), dtype=th.int64)
+    contributions = th.zeros((n_episodes, n_agents, n_steps), dtype=th.int64)
+    round_number = th.zeros((n_episodes, n_agents, n_steps), dtype=th.int64)
+    valid = th.zeros((n_episodes, n_agents, n_steps), dtype=th.bool)
+    common_good = th.zeros((n_episodes, n_agents, n_steps), dtype=th.float)
 
     for idx, row in df.iterrows():
         eps, step, agent = row[['episode_id', 'round_number', 'player_id']]
-        punishments[eps, step, agent] = row['punishment']
+        punishments[eps, agent, step] = row['punishment']
         
         # we impute here with the most common contribution
-        contributions[eps, step, agent] = row['contribution'] if row['player_no_input'] == 0 else 20
-        valid[eps, step, agent] = 1 - row['player_no_input']
-        common_good[eps, step, agent] = row['common_good']
-        round_number[eps, step, agent] = step
-
-    
-    # for idx, row in df.groupby(['episode_id', 'round_number']).head(1).iterrows():
-    #     episode, step = row[['episode_id', 'round_number']]
-    #     public_good[episode, step]
+        contributions[eps, agent, step] = row['contribution'] if row['player_no_input'] == 0 else 20
+        valid[eps, agent, step] = 1 - row['player_no_input']
+        common_good[eps, agent, step] = row['common_good']
+        round_number[eps, agent, step] = step
 
     data = {
         'punishments': punishments,
@@ -78,15 +66,19 @@ def create_syn_data(n_contribution, n_punishment, n_agents = 4, n_steps = 16):
     return create_torch_data(df)
 
 
-
-def get_cross_validations(data, n_splits):
+def get_cross_validations(data, n_splits, fraction_training=1.0):
     episode_ids = list(range(data['contributions'].shape[0]))
     random.shuffle(episode_ids)
     groups = [episode_ids[i::n_splits] for i in range(n_splits)]
-
     for i in range(n_splits):
         test_groups = groups[i]
         train_groups = [gg for g in groups for gg in g]
+
+        # get a random fraction of the training groups
+        random.shuffle(train_groups)
+        train_groups = train_groups[:int(fraction_training*len(train_groups))]
+        train_groups.sort()
+        
         test_data = {
             k: t[test_groups]
             for k, t in data.items()

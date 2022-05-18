@@ -51,17 +51,18 @@ class Evaluator:
             self.confusion_matrix += create_confusion_matrix(
                 y_true, y_pred, set=set_name, strategy=strategy, **self.labels)
 
-    def eval_sync(self, model):
+    def eval_sync(self, model, syn_index):
         y_pred, y_pred_proba = model.predict(self.data['syn'])
         y_pred = y_pred.detach().cpu().numpy()
+        y_pred_proba = y_pred_proba.detach().cpu().numpy()
         proba_df = using_multiindex(
-            y_pred_proba, ['episode_id', 'round_number', 'player_id', 'contribution']).rename(columns={'value': 'proba'})
+            y_pred_proba, ['idx', 'round_number', 'contribution']).rename(columns={'value': 'proba'})
         pred_df = using_multiindex(
-            y_pred, ['episode_id', 'round_number', 'player_id']).rename(columns={'value': 'pred_contribution'})
+            y_pred, ['idx', 'round_number']).rename(columns={'value': 'pred_contribution'})
 
         pred_df = self.data['syn_df'].merge(pred_df).merge(proba_df)
         pred_df = add_labels(pred_df, {'set': 'train', **self.labels})
-        self.synthetic_predicitions += pred_df.to_dict('records')
+        self.synthetic_predicitions.append(pred_df)
 
     def add_loss(self, loss):
         self.metrics.append(dict(name='loss', value=loss, **self.labels))
@@ -70,7 +71,7 @@ class Evaluator:
         make_dir(output_path)
         self._save_metric(self.metrics, 'metrics.parquet', output_path, labels)
         self._save_metric(self.confusion_matrix, 'confusion_matrix.parquet', output_path, labels)
-        self._save_metric(self.synthetic_predicitions, 'synthetic_predicitions.parquet', output_path, labels)
+        self._save_metric(pd.concat(self.synthetic_predicitions), 'synthetic_predicitions.parquet', output_path, labels)
 
 
     @staticmethod
