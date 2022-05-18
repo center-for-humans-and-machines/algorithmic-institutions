@@ -41,7 +41,6 @@ class IntEncoder(th.nn.Module):
             arr = th.round(arr * (self.n_levels - 1))
             return arr.type(th.int64)
 
-            
 
 class FloatEncoder(th.nn.Module):
     def __init__(self, norm, name):
@@ -93,4 +92,5 @@ class Encoder(th.nn.Module):
             e(**state)
             for e in self.encoder
         ]
+
         return th.cat(encoding, axis=-1)

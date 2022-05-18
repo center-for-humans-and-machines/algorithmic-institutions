@@ -5,6 +5,7 @@ import os
 from aimanager.artificial_humans.metrics import create_metrics, create_confusion_matrix
 from aimanager.utils.array_to_df import add_labels, using_multiindex
 from aimanager.utils.utils import make_dir
+from torch_geometric.data import Batch
 
 
 class Evaluator:
@@ -13,18 +14,19 @@ class Evaluator:
         self.confusion_matrix = []
         self.synthetic_predicitions = []
 
-    def set_data(self, train, test, syn):
+    def set_data(self, train, test, syn, syn_df):
         self.data = {
             'train': train,
             'test': test,
-            'syn': syn
+            'syn': syn,
+            'syn_df': syn_df
         }
 
     def set_labels(self, **labels):
         self.labels = labels
 
     def eval_set(self, model, set_name):
-        y_pred, y_pred_proba = model.predict(**self.data[set_name])
+        y_pred, y_pred_proba = model.predict(self.data[set_name])
 
         strategies = ['greedy', 'sampling']
         for strategy in strategies:
@@ -37,8 +39,10 @@ class Evaluator:
             else:
                 raise ValueError(f"Unknown strategy {strategy}")
 
-            mask = self.data[set_name]['valid']
-            y_true = th.masked_select(self.data[set_name]['contributions'], mask)
+            data = Batch.from_data_list(self.data[set_name])
+
+            mask = data['mask']
+            y_true = th.masked_select(data['y'], mask)
             y_pred = th.masked_select(y_pred, mask)
             y_true = y_true.detach().cpu().numpy()
             y_pred = y_pred.detach().cpu().numpy()
@@ -48,19 +52,14 @@ class Evaluator:
                 y_true, y_pred, set=set_name, strategy=strategy, **self.labels)
 
     def eval_sync(self, model):
-        y_pred, y_pred_proba = model.predict(**self.data['syn'])
+        y_pred, y_pred_proba = model.predict(self.data['syn'])
         y_pred = y_pred.detach().cpu().numpy()
-        if y_pred_proba is not None:
-            y_pred_proba = y_pred_proba.detach().cpu().numpy()
-            proba_df = using_multiindex(
-                y_pred_proba, ['prev_contribution', 'prev_punishment', 'dummy', 'contribution']).rename(columns={'value': 'proba'})
-            pred_df = using_multiindex(
-                y_pred, ['prev_contribution', 'prev_punishment', 'dummy']).rename(columns={'value': 'pred_contribution'})
-            pred_df = pred_df.merge(proba_df)
-            pred_df['predicted'] = pred_df['contribution'] == pred_df['pred_contribution']
-            pred_df = pred_df.drop(columns=['pred_contribution', 'dummy'])
-        else:
-            raise NotImplementedError("Needs y_pred_proba.")
+        proba_df = using_multiindex(
+            y_pred_proba, ['episode_id', 'round_number', 'player_id', 'contribution']).rename(columns={'value': 'proba'})
+        pred_df = using_multiindex(
+            y_pred, ['episode_id', 'round_number', 'player_id']).rename(columns={'value': 'pred_contribution'})
+
+        pred_df = self.data['syn_df'].merge(pred_df).merge(proba_df)
         pred_df = add_labels(pred_df, {'set': 'train', **self.labels})
         self.synthetic_predicitions += pred_df.to_dict('records')
 

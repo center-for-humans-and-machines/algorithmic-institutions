@@ -97,7 +97,6 @@ class ArtificialHuman(th.nn.Module):
                     pass
                 else:
                     raise ValueError('Unkown y_scaling.')
-                # print(yhat.min().item(), yhat.max().item(), yhat.mean().item(), y.min().item(), y.max().item(), y.mean().item())
                 return mse(yhat,y)
             loss_fn = _loss_fn
         return loss_fn
