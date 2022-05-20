@@ -5,9 +5,9 @@ import random
 
 
 # TODO: right shift and reasonable imputation
-def shift(tensor):
-    tensor = th.roll(tensor, 1, 1)
-    tensor[:,:,0] = 0
+def shift(tensor, default):
+    tensor = th.roll(tensor, 1, 2)
+    tensor[:,:,0] = default
     return tensor
 
 
@@ -19,6 +19,7 @@ def create_torch_data(df):
     punishments = th.zeros((n_episodes, n_agents, n_steps), dtype=th.int64)
     contributions = th.zeros((n_episodes, n_agents, n_steps), dtype=th.int64)
     round_number = th.zeros((n_episodes, n_agents, n_steps), dtype=th.int64)
+    is_first = th.zeros((n_episodes, n_agents, n_steps), dtype=th.bool)
     valid = th.zeros((n_episodes, n_agents, n_steps), dtype=th.bool)
     common_good = th.zeros((n_episodes, n_agents, n_steps), dtype=th.float)
 
@@ -31,6 +32,7 @@ def create_torch_data(df):
         valid[eps, agent, step] = 1 - row['player_no_input']
         common_good[eps, agent, step] = row['common_good']
         round_number[eps, agent, step] = step
+        is_first[eps, agent, step] = step == 0
 
     data = {
         'punishments': punishments,
@@ -38,9 +40,17 @@ def create_torch_data(df):
         'valid': valid,
         'common_good': common_good,
         'round_number': round_number,
+        'is_first': is_first,
     }
 
-    data = {**data, **{f'prev_{k}': shift(t) for k, t in data.items()}}
+    default_values = {
+        'punishments': np.rint(df['punishment'].mean()),
+        'contributions': np.rint(df['contribution'].mean()),
+        'valid': False,
+        'common_good': df['common_good'].mean(),
+    }
+
+    data = {**data, **{f'prev_{k}': shift(t, default_values[k]) for k, t in data.items() if k in default_values}}
     return data
 
 
@@ -59,7 +69,8 @@ def create_syn_data(n_contribution, n_punishment, n_agents = 4, n_steps = 16):
                         'punishment': punishment,
                         'contribution': contribution,
                         'common_good': (contribution - punishment) * 4,
-                        'player_no_input': 0,
+                        'player_no_input': False,
+                        'is_first': step == 0
                     })
             episode += 1
     df = pd.DataFrame.from_records(recs)
