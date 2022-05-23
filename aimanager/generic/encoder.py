@@ -79,18 +79,23 @@ def get_encoder(etype='int', **kwargs):
 
 
 class Encoder(th.nn.Module):
-    def __init__(self, encodings):
+    def __init__(self, encodings, aggregation=None):
         super(Encoder, self).__init__()
         self.encoder = th.nn.ModuleList([
             get_encoder(**e)
             for e in encodings
         ])
         self.size = sum(e.size for e in self.encoder)
+        self.aggregation = aggregation
 
     def forward(self, **state):
         encoding = [
             e(**state)
             for e in self.encoder
         ]
-
-        return th.cat(encoding, axis=-1)
+        encoding = th.cat(encoding, axis=-1)
+        if self.aggregation == 'mean':
+            encoding = encoding.mean(dim=1, keepdim=True)
+        else:
+            assert self.aggregation is None, f"Unknown aggregation type {self.aggregation}"
+        return encoding
