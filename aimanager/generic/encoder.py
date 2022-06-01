@@ -93,7 +93,11 @@ class Encoder(th.nn.Module):
             e(**state)
             for e in self.encoder
         ]
-        encoding = th.cat(encoding, axis=-1)
+        if len(self.encoder) >= 1:
+            encoding = th.cat(encoding, axis=-1)
+        else:
+            encoding = th.empty(list(state.values())[0].shape + (0,), )
+
         if self.aggregation == 'mean':
             encoding = encoding.mean(dim=1, keepdim=True)
         else:
