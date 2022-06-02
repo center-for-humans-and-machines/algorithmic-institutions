@@ -1,0 +1,1 @@
+papermill -p run $1 notebooks/merge.ipynb notebooks/merge.ipynb --cwd $(pwd)/notebooks

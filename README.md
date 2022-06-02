@@ -7,7 +7,8 @@ python3.9 -m venv .venv
 . .venv/bin/activate
 pip install --upgrade pip
 pip install wheel
-pip install torch
+pip install torch -f https://data.pyg.org/whl/torch-1.11.0+cpu.html
+pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.11.0+cpu.html
 pip install -e ".[dev]"
 pip install -e djx
 ```
