@@ -78,24 +78,23 @@ def create_syn_data(n_contribution, n_punishment, n_agents = 4, n_steps = 16):
 
 
 def get_cross_validations(data, n_splits, fraction_training=1.0):
-    episode_ids = list(range(data['contributions'].shape[0]))
-    random.shuffle(episode_ids)
-    groups = [episode_ids[i::n_splits] for i in range(n_splits)]
+    episode_idx = list(range(data['contributions'].shape[0]))
+    random.shuffle(episode_idx)
+    groups = [episode_idx[i::n_splits] for i in range(n_splits)]
     for i in range(n_splits):
-        test_groups = groups[i]
-        train_groups = [gg for g in groups for gg in g]
+        test_idx = groups[i]
+        train_idx = [idx for idx in episode_idx if idx not in test_idx]
 
         # get a random fraction of the training groups
-        random.shuffle(train_groups)
-        train_groups = train_groups[:int(fraction_training*len(train_groups))]
-        train_groups.sort()
+        random.shuffle(train_idx)
+        train_idx = train_idx[:int(fraction_training*len(train_idx))]
         
         test_data = {
-            k: t[test_groups]
+            k: t[test_idx]
             for k, t in data.items()
         }
         train_data = {
-            k: t[train_groups]
+            k: t[train_idx]
             for k, t in data.items()
         }
         yield train_data, test_data
