@@ -38,4 +38,8 @@ train_args:
   batch_size: 20
   clamp_grad: 1
   eval_period: 10
+shuffle_features:
+  - prev_punishments
+  - prev_contributions
+  - prev_common_good
 device: cpu

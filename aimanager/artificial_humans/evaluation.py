@@ -2,7 +2,7 @@
 import pandas as pd
 import torch as th
 import os
-from aimanager.artificial_humans.metrics import create_metrics, create_confusion_matrix
+from aimanager.artificial_humans.metrics import create_metrics, create_confusion_matrix, calc_log_loss
 from aimanager.utils.array_to_df import add_labels, using_multiindex
 from aimanager.utils.utils import make_dir
 from torch_geometric.data import Batch
@@ -14,19 +14,34 @@ class Evaluator:
         self.confusion_matrix = []
         self.synthetic_predicitions = []
 
-    def set_data(self, train, test, syn, syn_df):
-        self.data = {
-            'train': train,
-            'test': test,
-            'syn': syn,
-            'syn_df': syn_df
-        }
+    # def set_data(self, train, test, syn, syn_df):
+    #     self.data = {
+    #         'train': train,
+    #         'test': test,
+    #         'syn': syn,
+    #         'syn_df': syn_df
+    #     }
 
     def set_labels(self, **labels):
         self.labels = labels
 
-    def eval_set(self, model, set_name):
-        y_pred, y_pred_proba = model.predict(self.data[set_name])
+    def eval_set(self, model, data, **add_labels):
+        y_pred, y_pred_proba = model.predict(data)
+
+        data = Batch.from_data_list(data)
+
+        mask = data['mask']
+        y_true = th.masked_select(data['y'], mask)
+        y_true = y_true.detach().cpu().numpy()
+        n_levels = y_pred_proba.shape[-1]
+
+        y_pred_proba_ = th.masked_select(y_pred_proba, mask.unsqueeze(-1))
+        y_pred_proba_ = y_pred_proba_.reshape(-1, n_levels)
+
+        y_pred_proba_ = y_pred_proba_.detach().cpu().numpy()
+
+        self.metrics.append(calc_log_loss(
+            y_true, y_pred_proba_, n_levels=n_levels, **add_labels, **self.labels))
 
         strategies = ['greedy', 'sampling']
         for strategy in strategies:
@@ -39,30 +54,27 @@ class Evaluator:
             else:
                 raise ValueError(f"Unknown strategy {strategy}")
 
-            data = Batch.from_data_list(self.data[set_name])
-
-            mask = data['mask']
-            y_true = th.masked_select(data['y'], mask)
             y_pred = th.masked_select(y_pred, mask)
-            y_true = y_true.detach().cpu().numpy()
             y_pred = y_pred.detach().cpu().numpy()
 
-            self.metrics += create_metrics(y_true, y_pred, set=set_name, strategy=strategy, **self.labels)
+            self.metrics += create_metrics(y_true, y_pred, strategy=strategy, **add_labels, **self.labels)
             self.confusion_matrix += create_confusion_matrix(
-                y_true, y_pred, set=set_name, strategy=strategy, **self.labels)
+                y_true, y_pred, strategy=strategy, **add_labels, **self.labels)
 
-    def eval_sync(self, model, syn_index):
-        y_pred, y_pred_proba = model.predict(self.data['syn'])
+    def eval_syn(self, model, data, data_df):
+        y_pred, y_pred_proba = model.predict(data)
         y_pred = y_pred.detach().cpu().numpy()
         y_pred_proba = y_pred_proba.detach().cpu().numpy()
         proba_df = using_multiindex(
             y_pred_proba, ['idx', 'round_number', 'contribution']).rename(columns={'value': 'proba'})
-        pred_df = using_multiindex(
-            y_pred, ['idx', 'round_number']).rename(columns={'value': 'pred_contribution'})
+        proba_df['exp_contribution'] = proba_df['contribution'] * proba_df['proba']
+        exp_con_df = proba_df.groupby(['idx', 'round_number'])['exp_contribution'].sum().reset_index()
+        # pred_df = using_multiindex(
+        #     y_pred, ['idx', 'round_number']).rename(columns={'value': 'pred_contribution'})
 
-        pred_df = self.data['syn_df'].merge(pred_df).merge(proba_df)
-        pred_df = add_labels(pred_df, {'set': 'train', **self.labels})
-        self.synthetic_predicitions.append(pred_df)
+        exp_con_df = data_df.merge(exp_con_df)
+        exp_con_df = add_labels(exp_con_df, **self.labels)
+        self.synthetic_predicitions.append(exp_con_df)
 
     def add_loss(self, loss):
         self.metrics.append(dict(name='loss', value=loss, **self.labels))
@@ -79,3 +91,5 @@ class Evaluator:
         df = pd.DataFrame(rec)
         df = add_labels(df, labels)
         df.to_parquet(os.path.join(output_path, filename))
+
+    eval_sync = eval_syn # backport typo
