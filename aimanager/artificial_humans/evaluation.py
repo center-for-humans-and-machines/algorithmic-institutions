@@ -73,7 +73,7 @@ class Evaluator:
         #     y_pred, ['idx', 'round_number']).rename(columns={'value': 'pred_contribution'})
 
         exp_con_df = data_df.merge(exp_con_df)
-        exp_con_df = add_labels(exp_con_df, **self.labels)
+        exp_con_df = add_labels(exp_con_df, self.labels)
         self.synthetic_predicitions.append(exp_con_df)
 
     def add_loss(self, loss):
