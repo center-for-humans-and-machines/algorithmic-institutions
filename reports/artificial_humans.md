@@ -66,6 +66,8 @@ For all evaluation in the following, we report (if applicable) averages on cross
 | -- | 
 | *Cross entropy over the training period of 2000 episodes for 6 different model architectures. The full model is overfitting. The model with node and edge model, as well as a GRU is performing best and is not overfitting within the observed training period.* |
 
+We found an architecture with an edge model, a node model and a GRU to be performing best. For this reason we will report results for this model throughout, if not not explicitly stated otherwise.
+
 ### Hyperparameter
 
 We found that very narrow networks with 5 hidden units were performing best. We scanned over the parameter batch size and learning rate.
