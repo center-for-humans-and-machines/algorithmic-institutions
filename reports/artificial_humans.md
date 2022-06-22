@@ -64,19 +64,19 @@ For all evaluation in the following, we report (if applicable) averages on cross
 
 | ![Learning curve architecture](../notebooks/grid_search/plots/graph_3/architecture.jpg) | 
 | -- | 
-| *Log loss over the training period of 2000 episodes for 6 different model architectures. The full model is overfitting. The model with node and edge model, as well as a GRU is performing best and is not overfitting within the observed training period.* |
+| *Cross entropy over the training period of 2000 episodes for 6 different model architectures. The full model is overfitting. The model with node and edge model, as well as a GRU is performing best and is not overfitting within the observed training period.* |
 
 ### Hyperparameter
 
 We found that very narrow networks with 5 hidden units were performing best. We scanned over the parameter batch size and learning rate.
 
 | ![Hidden Size and Batch Size](../notebooks/grid_search/plots/graph_fine_tuning/hidden_batch.jpg) | 
-|:--:| 
-| *Log loss after 4000 episodes for different number of hidden units and batch sizes. A batch size of 20 corresponds to 20 groups a 4 participants a 16 rounds. Data shown for a learning rate of 0.001. * |
+| -- | 
+| *Test set cross entropy after 4000 episodes for different number of hidden units and batch sizes. A batch size of 20 corresponds to 20 groups a 4 participants a 16 rounds. Data shown for a learning rate of 0.001.* |
 
 | ![Learning Rate](../notebooks/grid_search/plots/graph_fine_tuning/hidden_batch.jpg) | 
 | -- | 
-| *Log loss after 2000 and 4000 episodes for different learning rates of 0.001. Data shown for a 5 hidden units and a batch size of 10.* |
+| *Test set cross entropy after 2000 and 4000 episodes for different learning rates of 0.001. Data shown for a 5 hidden units and a batch size of 10.* |
 
 We choose a batch size of 10, a learning rate of 0.001 and 5 hidden units, as these value were consistently well performing. 
 
@@ -90,7 +90,7 @@ The confusion matrix shows that our model well captures most of the variance and
 
 
 | ![Distribution](../notebooks/grid_search/plots/graph_fine_tuning/distribution.jpg) | 
-|:--:| 
+| -- | 
 | *Frequency of the different contributions at three exemplarily rounds. The actual frequencies in the tests are depicted in orange. The average predicted likelihoods for each contribution is depicted in.* |
 
 ### Feature Importance
@@ -101,7 +101,7 @@ We find the previous contribution to dominate the model. However, all three feat
 
 | ![Feature Importance](../notebooks/grid_search/plots/graph_fine_tuning/feature_importance.jpg) | 
 | -- | 
-| *Test set log loss over the training period of 5000, while shuffleing (within the test set) one of the input features 'previous common good', 'previous contribution' and 'previous punishment'.* |
+| *Test set cross entropy over the training period of 5000, while shuffleing (within the test set) one of the input features 'previous common good', 'previous contribution' and 'previous punishment'.* |
 
 ### Punishment sensitivity and myopic optimal punishments
 
