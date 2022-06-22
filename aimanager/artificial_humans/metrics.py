@@ -29,9 +29,19 @@ def calc_log_loss(y_true, y_pred_proba, n_levels, **labels):
     }
 
 
-def create_confusion_matrix(y_true, y_pred, **labels):
-    # first dimension is true, second dimension is predicted
-    cm = confusion_matrix(y_true, y_pred)
-    cm_df = using_multiindex(cm, columns=['y_true','y_pred'])
-    cm_df = add_labels(cm_df, labels)
-    return cm_df.to_dict(orient='records')
+def create_confusion_matrix(y_true, y_pred_proba, mask, **labels):
+    print(y_pred_proba.shape)
+    y_pred_proba = y_pred_proba.detach().cpu().numpy()
+    y_true = y_true.detach().cpu().numpy()
+    mask = mask.detach().cpu().numpy()
+    proba_df = using_multiindex(
+        y_pred_proba, ['idx', 'round_number', 'pred_contribution']).rename(columns={'value': 'proba'})
+    mask_df = using_multiindex(
+        mask, ['idx', 'round_number']).rename(columns={'value': 'valid'})
+    y_df = using_multiindex(
+        y_true, ['idx', 'round_number']).rename(columns={'value': 'true_contribution'})
+
+
+    df = proba_df.merge(mask_df).merge(y_df)
+    df = add_labels(df, labels)
+    return df

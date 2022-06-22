@@ -25,7 +25,7 @@ class Evaluator:
     def set_labels(self, **labels):
         self.labels = labels
 
-    def eval_set(self, model, data, **add_labels):
+    def eval_set(self, model, data, calc_confusion=True, **add_labels):
         y_pred, y_pred_proba = model.predict(data)
 
         data = Batch.from_data_list(data)
@@ -43,6 +43,10 @@ class Evaluator:
         self.metrics.append(calc_log_loss(
             y_true, y_pred_proba_, n_levels=n_levels, **add_labels, **self.labels))
 
+        if calc_confusion:
+            self.confusion_matrix.append(create_confusion_matrix(
+                data['y'], y_pred_proba, mask, **add_labels, **self.labels))
+
         strategies = ['greedy', 'sampling']
         for strategy in strategies:
             if strategy == 'greedy':
@@ -58,8 +62,7 @@ class Evaluator:
             y_pred = y_pred.detach().cpu().numpy()
 
             self.metrics += create_metrics(y_true, y_pred, strategy=strategy, **add_labels, **self.labels)
-            self.confusion_matrix += create_confusion_matrix(
-                y_true, y_pred, strategy=strategy, **add_labels, **self.labels)
+
 
     def eval_syn(self, model, data, data_df):
         y_pred, y_pred_proba = model.predict(data)
@@ -82,7 +85,7 @@ class Evaluator:
     def save(self, output_path, labels):
         make_dir(output_path)
         self._save_metric(self.metrics, 'metrics.parquet', output_path, labels)
-        self._save_metric(self.confusion_matrix, 'confusion_matrix.parquet', output_path, labels)
+        self._save_metric(pd.concat(self.confusion_matrix), 'confusion_matrix.parquet', output_path, labels)
         self._save_metric(pd.concat(self.synthetic_predicitions), 'synthetic_predicitions.parquet', output_path, labels)
 
 
