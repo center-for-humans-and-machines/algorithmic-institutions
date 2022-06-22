@@ -130,4 +130,4 @@ Learning curves for different architectures show that (unsurprisingly) more comp
 | -- | 
 | *Shuffled featured importance over a training period of 2000 episodes, i.e. reduction of cross entropy due to shuffleing of individual features. In independent runs we utilize only a fraction of the training data while keeping the test set fix.* |
 
-Shuffle features importance suggests, that while the performance of the model as a whole is increasing with additional training data, the importance of individual features is changing to a much lesser degree. This could suggest, that collecting additional training data might not drastically change the sensitivity of the artificial humans in regard to, for instance, punishments. 
+Shuffle features importance suggests, that while the performance of the model as a whole is increasing with additional training data, the importance of individual features is changing to a much lesser degree. This could suggest, that collecting additional training data might not drastically change the sensitivity of the artificial humans regarding, for instance, punishments. 
