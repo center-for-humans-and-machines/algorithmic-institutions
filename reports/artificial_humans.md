@@ -111,14 +111,14 @@ We investigated the models sensitivity to punishments, as this is most relevant 
 | -- | 
 | *Expected contribution in the next round conditioned on the contribution and punishment in the previous round. We show 4 exemplary rounds. Note that in all cases contribution and punishments are constant accross the full episode.* |
 
-Generally expected contributions depend on both previous punishments and previous contributions. Also contributions increase, generally increase when the punishment matches (at least) the defected amoung (20 - contribution). Based on this analysis, we calculate a myopically optimal punishment. When optimizing on the expected next contributions the myopic optimal punishment is mostly just above the diagonal (punishment == defection). However when considering the expected net payoff for the institution (next contribution - punishment) no punishment is generally the myopic optimal choice.
+Generally expected contributions depend on both previous punishments and previous contributions. Also contributions generally increase with increasing punishments until the punishment matches (roughly) the defected amoung (20 - contribution). Based on this analysis, we calculate a myopically optimal punishment. When optimizing on the expected next contributions the myopic optimal punishment is mostly at or slightly above the diagonal (punishment == defection). However when considering the expected net payoff for the institution (next contribution * 1.6 - punishment) no punishment is generally the myopic optimal choice.
 
 
 | ![Myopically Optimal](../notebooks/grid_search/plots/graph_fine_tuning/myopic_optimal.jpg) | 
 | -- | 
 | *We calculate the myopically optimal punishment. We compare as target the expected next contribution of the artificial human and the expected payoff for the manager (next contribution * 1.6 - punishment). The error band reflects bootstraped 95% intervals of the different cross validation.* |
 
- This suggest, that punishment can only be beneficially in our specific setup, if the long term benefits in facilitating cooperation are taken into account. Furthermore, to maximise the common good, punishment have to be used sparsely and effectively.
+This suggest, that punishment can only be beneficially in game and provided human behavior, if the long term benefits of facilitating cooperation are taken into account. Furthermore, to maximise the common good, punishment might need to be used sparsely and efficiently.
 
 ### Data utilization
 
@@ -126,11 +126,11 @@ Generally expected contributions depend on both previous punishments and previou
 | -- | 
 | *Cross entropy over a training period of 2000 episodes. In independent runs we utilize only a fraction of the training data while keeping the test set fix. Here we present curves for a two layer perceptron (vanilla), a model with a additional GRU layer (rnn) and finally a model with an additional edge model.* |
 
-Learning curves for different architectures show that (unsurprisingly) more complex models benefit more from additional training data. In particular the most complex model still improves considerably when using 100% instead of 80% of the training data. This suggest, that additional training data still could improve model performance. 
+Learning curves for different architectures show that (unsurprisingly) more complex models benefit more from additional training data. In particular the most complex model still improves considerably when using 100% instead of 80% of the training data. This suggest, that additional training data could improve model performance. 
 
 
 | ![Learning curve features](../notebooks/grid_search/plots/graph_learning_curve/learning_curve_feature.jpg) | 
 | -- | 
 | *Shuffled featured importance over a training period of 2000 episodes, i.e. reduction of cross entropy due to shuffleing of individual features. In independent runs we utilize only a fraction of the training data while keeping the test set fix.* |
 
-Shuffled features importance suggest, that while the performance of model as a whole is increasing with additional traing data, the importance of individual features is changing to a much lesser degree. This could suggest, that collecting additional training data might not drastically change the sensitivity of the artificial humans on, for instance, punishments. 
+Shuffle features importance suggest, that while the performance of model as a whole is increasing with additional training data, the importance of individual features is changing to a much lesser degree. This could suggest, that collecting additional training data might not drastically change the sensitivity of the artificial humans in regard of, for instance, punishments. 
