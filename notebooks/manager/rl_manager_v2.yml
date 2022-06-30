@@ -1,0 +1,32 @@
+artificial_humans: "../../data/training/ah_11/data/model.pt"
+artificial_humans_model: graph
+output_file: "../../data/training/dev/data/manager_run.pt"
+model_args:
+  hidden_size: 5
+  add_rnn: True
+  add_edge_model: True
+  add_global_model: False
+  x_encoding:
+    - name: prev_contributions
+      n_levels: 21
+      encoding: numeric
+    - name: prev_punishments
+      n_levels: 31
+      encoding: numeric
+  u_encoding:
+    - name: round_number
+      n_levels: 16
+      encoding: numeric
+    - name: prev_common_good
+      norm: 128
+      etype: float
+opt_args:
+  lr: 0.003
+gamma: 0.8
+eps: 0.2
+target_update_freq: 10
+n_episode_steps: 16
+n_episodes: 10000
+sample_args:
+  batch_size: 10
+  horizon: 1000

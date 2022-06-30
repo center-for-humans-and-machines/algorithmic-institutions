@@ -4,14 +4,13 @@ import pandas as pd
 import random
 
 
-# TODO: right shift and reasonable imputation
 def shift(tensor, default):
     tensor = th.roll(tensor, 1, 2)
     tensor[:,:,0] = default
     return tensor
 
 
-def create_torch_data(df):
+def create_torch_data(df, default_values=None):
     n_episodes = df['episode_id'].max() + 1
     n_steps = df['round_number'].max() + 1
     n_agents = df['player_id'].max() + 1
@@ -42,19 +41,19 @@ def create_torch_data(df):
         'round_number': round_number,
         'is_first': is_first,
     }
-
-    default_values = {
-        'punishments': np.rint(df['punishment'].mean()),
-        'contributions': np.rint(df['contribution'].mean()),
-        'valid': False,
-        'common_good': df['common_good'].mean(),
-    }
+    if not default_values:
+        default_values = {
+            'punishments': np.rint(df['punishment'].mean()),
+            'contributions': np.rint(df['contribution'].mean()),
+            'valid': False,
+            'common_good': df['common_good'].mean(),
+        }
 
     data = {**data, **{f'prev_{k}': shift(t, default_values[k]) for k, t in data.items() if k in default_values}}
-    return data
+    return data, default_values
 
 
-def create_syn_data(n_contribution, n_punishment, n_agents = 4, n_steps = 16):
+def create_syn_data(n_contribution, n_punishment, default_values, n_agents = 4, n_steps = 16):
     agent = 0
     episode = 0
     recs = []
@@ -74,27 +73,34 @@ def create_syn_data(n_contribution, n_punishment, n_agents = 4, n_steps = 16):
                     })
             episode += 1
     df = pd.DataFrame.from_records(recs)
-    return create_torch_data(df)
+    return create_torch_data(df, default_values=default_values)[0]
 
 
 def get_cross_validations(data, n_splits, fraction_training=1.0):
     episode_idx = list(range(data['contributions'].shape[0]))
     random.shuffle(episode_idx)
-    groups = [episode_idx[i::n_splits] for i in range(n_splits)]
-    for i in range(n_splits):
-        test_idx = groups[i]
-        train_idx = [idx for idx in episode_idx if idx not in test_idx]
-
-        # get a random fraction of the training groups
-        random.shuffle(train_idx)
-        train_idx = train_idx[:int(fraction_training*len(train_idx))]
-        
-        test_data = {
-            k: t[test_idx]
-            for k, t in data.items()
-        }
+    if n_splits is None:
         train_data = {
-            k: t[train_idx]
+            k: t[episode_idx]
             for k, t in data.items()
         }
-        yield train_data, test_data
+        yield train_data, None
+    else:
+        groups = [episode_idx[i::n_splits] for i in range(n_splits)]
+        for i in range(n_splits):
+            test_idx = groups[i]
+            train_idx = [idx for idx in episode_idx if idx not in test_idx]
+
+            # get a random fraction of the training groups
+            random.shuffle(train_idx)
+            train_idx = train_idx[:int(fraction_training*len(train_idx))]
+            
+            test_data = {
+                k: t[test_idx]
+                for k, t in data.items()
+            }
+            train_data = {
+                k: t[train_idx]
+                for k, t in data.items()
+            }
+            yield train_data, test_data

@@ -1,7 +1,8 @@
-# memory
+import os
 import collections
 import numpy as np
 import torch as th
+from aimanager.utils.utils import make_dir
 
 
 class Memory():
@@ -18,7 +19,7 @@ class Memory():
 
     def init_store(self, state):
         self.memory = {**{
-                k: th.empty((self.n_episodes, self.n_episode_steps, *t.shape), dtype=t.dtype, device=self.device)
+                k: th.zeros((self.n_episodes, self.n_episode_steps, *t.shape), dtype=t.dtype, device=self.device)
                 for k, t in state.items()
             },
             'episode': th.empty((self.n_episodes, self.n_episode_steps), dtype=th.int64, device=self.device),
@@ -68,6 +69,8 @@ class Memory():
         return len(self.episode_queue)
 
     def write(self):
+        dirname = os.path.dirname(self.output_file)
+        make_dir(dirname)
         if self.output_file:
             th.save(
                 {

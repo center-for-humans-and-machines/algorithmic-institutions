@@ -1,3 +1,7 @@
+from matplotlib.pyplot import fill
+from aimanager.generic.graph_encode import create_fully_connected
+from torch_geometric.data import Data, Batch
+
 import torch as th
 
 
@@ -14,7 +18,7 @@ class ArtificialHumanEnv():
         'payoffs': ['agent'],
         'valid': ['agent'],
         'common_good': ['agent'],
-        'episode_step': ['agent'],
+        'round_number': ['agent'],
         'player_id': ['agent'],
     }
 
@@ -31,22 +35,28 @@ class ArtificialHumanEnv():
         self.n_punishments = n_punishments
         self.artifical_humans = artifical_humans
         self.n_agents = n_agents
+        self.reward_baseline = (artifical_humans.default_values['common_good'] / 4)
+        self.reward_scale = 1 / 20*1.6
+        self.edge_index = create_fully_connected(n_agents)
         self.reset_state()
 
 
     def reset_state(self):
-        self.state = {
+        state = {
             'punishments': th.zeros(self.n_agents, dtype=th.int64),
             'contributions': th.zeros(self.n_agents, dtype=th.int64),
+            'round_number': th.zeros(self.n_agents, dtype=th.int64),
             'valid': th.zeros(self.n_agents, dtype=th.bool),
-            'prev_punishments': th.zeros(self.n_agents, dtype=th.int64),
-            'prev_contributions': th.zeros(self.n_agents, dtype=th.int64),
-            'prev_valid': th.zeros(self.n_agents, dtype=th.bool),
+            'common_good': th.zeros(self.n_agents, dtype=th.float),
             'payoffs': th.zeros(self.n_agents, dtype=th.float),
-            'common_good': th.tensor(self.n_agents, dtype=th.float),
-            'episode_step': th.tensor(0, dtype=th.int64),
-            'player_id': th.arange(4, dtype=th.int64)
         }
+        default_values = self.artifical_humans.default_values
+
+        prev_state = {
+                f'prev_{k}': th.full_like(state[k], fill_value=default_values[k]) 
+                for k, t in state.items() if k in default_values
+        }
+        self.state = {**prev_state, **state}
 
 
     def __getattr__(self, name):
@@ -69,17 +79,23 @@ class ArtificialHumanEnv():
         return (contributions * 1.6 - punishments)
 
     @staticmethod
-    def calc_payout(contributions, punishments, commond_good):
-        # TODO: check how to handle missing values
-        return 20 - contributions - punishments + commond_good
+    def calc_payout(contributions, punishments, commond_good, valid):
+        payout = 20 - contributions - punishments + commond_good
+        payout[~valid] = 0
+        return payout
 
     def calc_contributions(self):
-        self.contributions = self.artifical_humans.act(**self.state)
+        state = {k: v.unsqueeze(0).unsqueeze(-1) for k, v in self.state.items()}
+        encoded = self.artifical_humans.encode(state, mask=False, y_encode=False, edge_index=self.edge_index)
+        contributions = self.artifical_humans.predict_one(encoded[0], reset_rnn=self.round_number[0] == 0)[0]
+        self.contributions = contributions.squeeze(-1)
         self.valid = th.ones_like(self.valid)
 
     def init_episode(self):
         self.episode += 1
-        self.episode_step = 0
+        self.round_number = th.zeros_like(self.round_number)
+
+
         self.reset_state()
         self.calc_contributions()
         return self.state
@@ -91,25 +107,25 @@ class ArtificialHumanEnv():
 
         self.punishments = punishments
         self.common_good = self.calc_common_good(self.contributions, self.punishments)
-        self.payoffs = self.calc_payout(self.contributions, self.punishments, self.common_good)
+        self.payoffs = self.calc_payout(self.contributions, self.punishments, self.common_good, self.valid)
         return self.state
 
     def step(self):
-
-        self.prev_contributions = self.contributions
-        self.prev_punishments = self.punishments
-        self.prev_valid = self.valid
-
-
-        self.episode_step += 1
-        if (self.episode_step == (self.episode_steps - 1)):
-            reward = - self.prev_punishments
+        if (self.round_number[0] == (self.episode_steps - 1)):
+            reward = - self.prev_punishments.to(th.float)
             done = True
-        elif self.episode_step >= self.episode_steps:
+        elif self.round_number[0] >= self.episode_steps:
             raise ValueError('Environment is done already.')
         else:
+            for k in self.state:
+                if k[:4] == 'prev':
+                    self.state[k] = self.state[k[5:]]
             self.calc_contributions()
-            reward = self.contributions * 1.6 - self.prev_punishments
+            
+            reward = (self.contributions.to(th.float) * 1.6 - self.prev_punishments.to(th.float) - self.reward_baseline) * self.reward_scale
             done = False
+        self.round_number += 1
         return self.state, reward, done
 
+
+        

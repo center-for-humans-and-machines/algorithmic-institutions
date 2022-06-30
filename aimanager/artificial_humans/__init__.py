@@ -1,5 +1,5 @@
 from .mlp import MLPArtificialHuman
-from .graph import GraphNetwork
+from aimanager.generic.graph import GraphNetwork
 
 AH_MODELS = {
     'mlp': MLPArtificialHuman,

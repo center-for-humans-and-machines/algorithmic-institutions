@@ -85,8 +85,10 @@ class Evaluator:
     def save(self, output_path, labels):
         make_dir(output_path)
         self._save_metric(self.metrics, 'metrics.parquet', output_path, labels)
-        self._save_metric(pd.concat(self.confusion_matrix), 'confusion_matrix.parquet', output_path, labels)
-        self._save_metric(pd.concat(self.synthetic_predicitions), 'synthetic_predicitions.parquet', output_path, labels)
+        if len(self.confusion_matrix):
+            self._save_metric(pd.concat(self.confusion_matrix), 'confusion_matrix.parquet', output_path, labels)
+        if len(self.synthetic_predicitions):
+            self._save_metric(pd.concat(self.synthetic_predicitions), 'synthetic_predicitions.parquet', output_path, labels)
 
 
     @staticmethod

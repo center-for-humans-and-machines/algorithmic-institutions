@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def using_multiindex(A, columns, value_columns=None):
+def using_multiindex(A, columns, value_columns=None, value_name='value'):
     shape = A.shape
     if value_columns is not None:
         assert len(columns) == len(shape) - 1
@@ -9,7 +9,7 @@ def using_multiindex(A, columns, value_columns=None):
     else:
         assert len(columns) == len(shape)
         new_shape = (-1,)
-        value_columns = ['value']
+        value_columns = [value_name]
 
     index = pd.MultiIndex.from_product(
         [range(s) for s,c in zip(shape, columns)], names=columns)

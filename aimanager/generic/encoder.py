@@ -29,14 +29,18 @@ class IntEncoder(th.nn.Module):
         enc = self.map[state[self.name]]
         return enc
 
-    def decode(self, arr):
+    def decode(self, arr, sample=False):
         if self.encoding == 'ordinal':
             raise NotImplementedError()
             arr = (arr < 0.5).float()
             arr = th.einsum('ijkl,l->ijkl', arr, self.position_values)
             return self.n_levels - arr.max(-1)[0] - 1
         elif self.encoding == 'onehot':
-            return arr.argmax(axis=-1)
+            if sample: 
+                dec = th.multinomial(arr.reshape(-1, arr.shape[-1]), 1)
+                return dec.reshape(arr.shape[:-1])
+            else:
+                return arr.argmax(axis=-1)
         elif self.encoding == 'numeric':
             arr = th.round(arr * (self.n_levels - 1))
             return arr.type(th.int64)

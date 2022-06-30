@@ -30,7 +30,6 @@ def calc_log_loss(y_true, y_pred_proba, n_levels, **labels):
 
 
 def create_confusion_matrix(y_true, y_pred_proba, mask, **labels):
-    print(y_pred_proba.shape)
     y_pred_proba = y_pred_proba.detach().cpu().numpy()
     y_true = y_true.detach().cpu().numpy()
     mask = mask.detach().cpu().numpy()
