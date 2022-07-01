@@ -1,6 +1,4 @@
-from matplotlib.pyplot import fill
 from aimanager.generic.graph_encode import create_fully_connected
-from torch_geometric.data import Data, Batch
 
 import torch as th
 

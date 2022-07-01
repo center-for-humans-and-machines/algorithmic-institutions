@@ -182,21 +182,21 @@ class GraphNetwork(th.nn.Module):
         x, _, _ = self.op2(x, edge_index, edge_attr, u, batch)
         return x
 
-    def predict(self, data):
+    def predict(self, data, sample=True):
         self.eval()
-        y_pred_logit = th.cat([self(d)
+        y_logit = th.cat([self(d)
             for d in iter(DataLoader(data, shuffle=False, batch_size=10))
         ])
-        y_pred_proba = th.nn.functional.softmax(y_pred_logit, dim=-1)
-        y_pred = self.y_encoder.decode(y_pred_proba)
+        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+        y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
 
     def predict_one(self, data, reset_rnn=True, sample=True):
         self.eval()
         batch = Batch.from_data_list([data])
-        y_pred_logit = self(batch, reset_rnn)
-        y_pred_proba = th.nn.functional.softmax(y_pred_logit, dim=-1)
+        y_logit = self(batch, reset_rnn)
+        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
@@ -205,11 +205,13 @@ class GraphNetwork(th.nn.Module):
         to_save = {
             'op1': self.op1,
             'op2': self.op2,
+            'rnn_n': self.rnn_n,
+            'rnn_g': self.rnn_g,
             'n_contributions': self.n_contributions,
             'n_punishments': self.n_punishments,
             'x_encoding': self.x_encoding, 
             'u_encoding': self.u_encoding,
-            'default_values': self.default_values
+            'default_values': self.default_values,
         }
         th.save(to_save, filename)
 
