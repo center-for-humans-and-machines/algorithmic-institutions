@@ -69,9 +69,9 @@ class Memory():
         return len(self.episode_queue)
 
     def write(self):
-        dirname = os.path.dirname(self.output_file)
-        make_dir(dirname)
         if self.output_file:
+            dirname = os.path.dirname(self.output_file)
+            make_dir(dirname)
             th.save(
                 {
                     k: t[:self.current_row] for k, t in self.memory.items()
