@@ -6,7 +6,7 @@ from aimanager.utils.utils import make_dir
 
 
 class Memory():
-    def __init__(self, device, n_episodes, n_episode_steps, output_file):
+    def __init__(self, device, n_episodes, n_episode_steps, output_file=None):
         self.memory = None
         self.n_episodes = n_episodes
         self.n_episode_steps = n_episode_steps
@@ -27,10 +27,10 @@ class Memory():
         }
 
     def next_episode(self, episode):
+        self.episode = episode
         if self.current_row == (self.n_episodes - 1):
             self.write()
         self.current_row = (self.current_row + 1) % self.n_episodes
-        self.episode = episode
         self.episode_queue.appendleft(self.current_row)
 
     def add(self, episode_step, **state):
@@ -76,7 +76,7 @@ class Memory():
                 {
                     k: t[:self.current_row] for k, t in self.memory.items()
                 },
-                f'{self.output_file}_{self.episode}.pt'
+                f'{self.output_file}.{self.episode + 1}.pt'
             )
 
     def __del__(self):
