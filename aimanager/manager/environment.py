@@ -74,11 +74,11 @@ class ArtificialHumanEnv():
 
     @staticmethod
     def calc_common_good(contributions, punishments):
-        return (contributions * 1.6 - punishments)
+        return (contributions * 1.6 - punishments).sum() * th.ones_like(punishments, dtype=th.float)
 
     @staticmethod
     def calc_payout(contributions, punishments, commond_good, valid):
-        payout = 20 - contributions - punishments + commond_good
+        payout = 20 - contributions - punishments + commond_good / valid.sum()
         payout[~valid] = 0
         return payout
 
@@ -105,7 +105,7 @@ class ArtificialHumanEnv():
 
         self.punishments = punishments
         self.common_good = self.calc_common_good(self.contributions, self.punishments)
-        self.payoffs = self.calc_payout(self.contributions, self.punishments, self.common_good, self.valid)
+        # self.payoffs = self.calc_payout(self.contributions, self.punishments, self.common_good, self.valid)
         return self.state
 
     def step(self):
@@ -119,9 +119,10 @@ class ArtificialHumanEnv():
                 if k[:4] == 'prev':
                     self.state[k] = self.state[k[5:]]
             self.calc_contributions()
-            
-            reward = (self.contributions.to(th.float) * 1.6 - self.prev_punishments.to(th.float) - self.reward_baseline) * self.reward_scale
+            reward = self.contributions.to(th.float) * 1.6 - self.prev_punishments.to(th.float) 
             done = False
+        self.payoffs = reward
+        reward = (reward - self.reward_baseline) * self.reward_scale
         self.round_number += 1
         return self.state, reward, done
 

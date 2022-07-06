@@ -5,12 +5,11 @@ from torch_geometric.data import Data, Batch
 
 
 def merge_data(eps_data):
-    no_merge = ['idx', 'group_idx', 'num_nodes', 'edge_index', 'ptr', 'batch']
+    no_merge = ['idx', 'group_idx', 'num_nodes', 'edge_index', 'ptr', 'batch', 'player_idx']
     merge = list(set(eps_data[0].keys) - set(no_merge))
     no_merge_values = {k: eps_data[0][k] for k in no_merge}
     merged_values = {k: th.concat([d[k]for d in eps_data], dim=1) for k in merge}
     return Data(**no_merge_values, **merged_values)
-
 
 
 class GraphMemory():

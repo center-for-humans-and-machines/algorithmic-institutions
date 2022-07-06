@@ -1,5 +1,6 @@
 import torch as th
 from aimanager.generic.graph import GraphNetwork
+from torch_geometric.loader import DataLoader
 
 class ArtificalManager():
     def __init__(
@@ -12,12 +13,12 @@ class ArtificalManager():
             self.policy_model = policy_model
         else:
             self.policy_model = GraphNetwork(
-                n_contributions=n_contributions, n_punishments=n_punishments, default_values=default_values,
+                y_name='punishments', y_levels=31, default_values=default_values,
                 **model_args).to(device)
 
         if opt_args:
             self.target_model = GraphNetwork(
-                n_contributions=n_contributions, n_punishments=n_punishments, default_values=default_values,
+                y_name='punishments', y_levels=31, default_values=default_values,
                 **model_args).to(device)
 
             self.target_model.eval()
@@ -43,6 +44,15 @@ class ArtificalManager():
         obs = self.encode_obs(**state)
         q = self.get_q(manager_observations=obs)
         return q.argmax(dim=-1)
+
+
+    def get_actions(self, data):
+        q_values = th.cat([self.get_q(d, first=True)
+            for d in iter(DataLoader(data, shuffle=False, batch_size=10))
+        ])
+        greedy_actions = q_values.argmax(-1)
+        return greedy_actions, q_values
+
 
     # TODO: we might want to use a different sampler here
     def eps_greedy(self, q_values, eps):

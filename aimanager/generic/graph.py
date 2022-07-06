@@ -74,23 +74,23 @@ class EmptyEncoder(th.nn.Module):
 
 
 class GraphNetwork(th.nn.Module):
-    def __init__(self, n_contributions, n_punishments, x_encoding=[], u_encoding=[], add_rnn=True, add_edge_model=True, 
-            add_global_model=True, hidden_size=None, op1=None, op2=None, rnn_n=None, rnn_g=None, default_values={}):
+    def __init__(self, y_levels=21, y_name='contributions', x_encoding=[], u_encoding=[], add_rnn=True, add_edge_model=True, 
+            add_global_model=True, hidden_size=None, op1=None, op2=None, rnn_n=None, rnn_g=None, default_values={}, **_):
         super().__init__()
         self.x_encoder = Encoder(x_encoding)
         self.u_encoder = Encoder(u_encoding, aggregation='mean')
-        self.y_encoder = IntEncoder(encoding='onehot', name='contributions', n_levels=n_contributions)
-        self.edge_encoder = EmptyEncoder(refrence='contributions')
+        self.y_encoder = IntEncoder(encoding='onehot', name=y_name, n_levels=y_levels)
+        self.edge_encoder = EmptyEncoder(refrence=y_name)
 
         x_features = self.x_encoder.size
         u_features = self.u_encoder.size
         y_features = self.y_encoder.size
         edge_features = self.edge_encoder.size
-        self.n_contributions = n_contributions
-        self.n_punishments = n_punishments
         self.x_encoding = x_encoding
         self.u_encoding = u_encoding
         self.default_values = default_values
+        self.y_levels = y_levels
+        self.y_name = y_name
 
         if op1 is None:
             if add_edge_model:
@@ -162,7 +162,8 @@ class GraphNetwork(th.nn.Module):
 
         dataset = [
             Data(
-                **{k: v[i] for k, v in encoded.items() if v is not None}, edge_index=edge_index, idx=i, group_idx=i, num_nodes=n_agents
+                **{k: v[i] for k, v in encoded.items() if v is not None}, edge_index=edge_index, idx=i, group_idx=i, 
+                num_nodes=n_agents, player_idx=th.arange(n_agents)
                 ).to(self.device)
             for i in range(n_episodes)
         ]
@@ -207,8 +208,7 @@ class GraphNetwork(th.nn.Module):
             'op2': self.op2,
             'rnn_n': self.rnn_n,
             'rnn_g': self.rnn_g,
-            'n_contributions': self.n_contributions,
-            'n_punishments': self.n_punishments,
+            'y_levels': self.y_levels,
             'x_encoding': self.x_encoding, 
             'u_encoding': self.u_encoding,
             'default_values': self.default_values,
