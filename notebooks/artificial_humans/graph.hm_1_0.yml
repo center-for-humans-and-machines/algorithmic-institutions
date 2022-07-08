@@ -1,0 +1,50 @@
+output_path: ../../data/artificial_humans/ahm_1_0
+data_file: ../../data/experiments/pilot_random1_player_round_slim.csv
+device: cpu
+labels: {}
+experiment_names:
+- trail_rounds_2
+fraction_training: 1.0
+mask_name: manager_valid
+model_args:
+  add_edge_model: true
+  add_global_model: false
+  add_rnn: false
+  hidden_size: 5
+  u_encoding:
+  - encoding: numeric
+    n_levels: 16
+    name: round_number
+  - etype: float
+    name: prev_common_good
+    norm: 32
+  x_encoding:
+  - encoding: numeric
+    n_levels: 21
+    name: contributions
+  - encoding: numeric
+    n_levels: 31
+    name: prev_punishments
+  - etype: bool
+    name: valid
+  - etype: bool
+    name: prev_manager_valid
+  y_levels: 31
+  y_name: punishments
+model_name: graph
+n_cross_val: null
+n_player: 4
+optimizer_args:
+  lr: 0.0005
+  weight_decay: 1.0e-04
+shuffle_features:
+- prev_punishments
+- contributions
+- prev_common_good
+- valid
+- prev_manager_valid
+train_args:
+  batch_size: 20
+  clamp_grad: 1
+  epochs: 5000
+  eval_period: 50

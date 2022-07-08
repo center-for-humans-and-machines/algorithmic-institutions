@@ -14,18 +14,11 @@ class Evaluator:
         self.confusion_matrix = []
         self.synthetic_predicitions = []
 
-    # def set_data(self, train, test, syn, syn_df):
-    #     self.data = {
-    #         'train': train,
-    #         'test': test,
-    #         'syn': syn,
-    #         'syn_df': syn_df
-    #     }
-
     def set_labels(self, **labels):
         self.labels = labels
 
     def eval_set(self, model, data, calc_confusion=True, **add_labels):
+        y_name = model.y_name
         y_pred, y_pred_proba = model.predict(data)
 
         data = Batch.from_data_list(data)
@@ -45,7 +38,7 @@ class Evaluator:
 
         if calc_confusion:
             self.confusion_matrix.append(create_confusion_matrix(
-                data['y'], y_pred_proba, mask, **add_labels, **self.labels))
+                data['y'], y_pred_proba, mask, y_name=y_name, **add_labels, **self.labels))
 
         strategies = ['greedy', 'sampling']
         for strategy in strategies:
@@ -65,16 +58,14 @@ class Evaluator:
 
 
     def eval_syn(self, model, data, data_df):
+        y_name = model.y_name
         y_pred, y_pred_proba = model.predict(data)
         y_pred = y_pred.detach().cpu().numpy()
         y_pred_proba = y_pred_proba.detach().cpu().numpy()
         proba_df = using_multiindex(
-            y_pred_proba, ['idx', 'round_number', 'contribution']).rename(columns={'value': 'proba'})
-        proba_df['exp_contribution'] = proba_df['contribution'] * proba_df['proba']
-        exp_con_df = proba_df.groupby(['idx', 'round_number'])['exp_contribution'].sum().reset_index()
-        # pred_df = using_multiindex(
-        #     y_pred, ['idx', 'round_number']).rename(columns={'value': 'pred_contribution'})
-
+            y_pred_proba, ['idx', 'round_number', y_name]).rename(columns={'value': 'proba'})
+        proba_df[f'exp_{y_name}'] = proba_df[y_name] * proba_df['proba']
+        exp_con_df = proba_df.groupby(['idx', 'round_number'])[f'exp_{y_name}'].sum().reset_index()
         exp_con_df = data_df.merge(exp_con_df)
         exp_con_df = add_labels(exp_con_df, self.labels)
         self.synthetic_predicitions.append(exp_con_df)

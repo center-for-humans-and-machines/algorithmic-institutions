@@ -41,17 +41,18 @@ class ArtificialHumanEnv():
 
     def reset_state(self):
         state = {
-            'punishments': th.zeros(self.n_agents, dtype=th.int64),
-            'contributions': th.zeros(self.n_agents, dtype=th.int64),
-            'round_number': th.zeros(self.n_agents, dtype=th.int64),
-            'valid': th.zeros(self.n_agents, dtype=th.bool),
-            'common_good': th.zeros(self.n_agents, dtype=th.float),
-            'payoffs': th.zeros(self.n_agents, dtype=th.float),
+            'punishments': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
+            'contributions': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
+            'round_number': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
+            'valid': th.zeros(self.n_agents, dtype=th.bool, device=self.device),
+            'manager_valid': th.zeros(self.n_agents, dtype=th.bool, device=self.device),
+            'common_good': th.zeros(self.n_agents, dtype=th.float, device=self.device),
+            'payoffs': th.zeros(self.n_agents, dtype=th.float, device=self.device),
         }
         default_values = self.artifical_humans.default_values
 
         prev_state = {
-                f'prev_{k}': th.full_like(state[k], fill_value=default_values[k]) 
+                f'prev_{k}': th.full_like(state[k], fill_value=default_values[k])
                 for k, t in state.items() if k in default_values
         }
         self.state = {**prev_state, **state}
@@ -73,18 +74,18 @@ class ArtificialHumanEnv():
             object.__setattr__(self, name, value)
 
     @staticmethod
-    def calc_common_good(contributions, punishments):
-        return (contributions * 1.6 - punishments).sum() * th.ones_like(punishments, dtype=th.float)
+    def calc_common_good(contributions, punishments, valid):
+        return (contributions[valid] * 1.6 - punishments[valid]).mean() * th.ones_like(punishments, dtype=th.float)
 
     @staticmethod
     def calc_payout(contributions, punishments, commond_good, valid):
-        payout = 20 - contributions - punishments + commond_good / valid.sum()
+        payout = 20 - contributions - punishments + commond_good
         payout[~valid] = 0
         return payout
 
     def calc_contributions(self):
         state = {k: v.unsqueeze(0).unsqueeze(-1) for k, v in self.state.items()}
-        encoded = self.artifical_humans.encode(state, mask=False, y_encode=False, edge_index=self.edge_index)
+        encoded = self.artifical_humans.encode(state, mask=None, y_encode=False, edge_index=self.edge_index)
         contributions = self.artifical_humans.predict_one(encoded[0], reset_rnn=self.round_number[0] == 0)[0]
         self.contributions = contributions.squeeze(-1)
         self.valid = th.ones_like(self.valid)
@@ -104,7 +105,7 @@ class ArtificialHumanEnv():
         assert punishments.dtype == th.int64
 
         self.punishments = punishments
-        self.common_good = self.calc_common_good(self.contributions, self.punishments)
+        self.common_good = self.calc_common_good(self.contributions, self.punishments, self.valid)
         # self.payoffs = self.calc_payout(self.contributions, self.punishments, self.common_good, self.valid)
         return self.state
 
@@ -119,7 +120,7 @@ class ArtificialHumanEnv():
                 if k[:4] == 'prev':
                     self.state[k] = self.state[k[5:]]
             self.calc_contributions()
-            reward = self.contributions.to(th.float) * 1.6 - self.prev_punishments.to(th.float) 
+            reward = self.contributions.to(th.float) * 1.6 - self.prev_punishments.to(th.float)
             done = False
         self.payoffs = reward
         reward = (reward - self.reward_baseline) * self.reward_scale
@@ -127,4 +128,3 @@ class ArtificialHumanEnv():
         return self.state, reward, done
 
 
-        

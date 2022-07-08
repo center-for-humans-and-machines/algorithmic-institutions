@@ -1,0 +1,1 @@
+papermill -f $1/$2.$3.yml $1/$2.ipynb $1/run/$2.$3.ipynb --cwd $(pwd)/$1

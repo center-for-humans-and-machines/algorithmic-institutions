@@ -30,8 +30,8 @@ class NodeModel(th.nn.Module):
         if activation is None:
             self.node_mlp = Lin(in_features=in_features, out_features=out_features)
         else:
-            self.node_mlp = Seq(Lin(in_features=in_features, out_features=out_features), activation)
-
+            self.node_mlp = Seq(Lin(in_features=in_features,
+                                out_features=out_features), activation)
 
     def forward(self, x, edge_index, edge_attr, u, batch):
         # x: [N, F_x], where N is the number of nodes.
@@ -45,6 +45,7 @@ class NodeModel(th.nn.Module):
         out = th.cat([x, out, u[batch]], dim=-1)
         out = self.node_mlp(out)
         return out
+
 
 class GlobalModel(th.nn.Module):
     def __init__(self, x_features, edge_features, u_features, out_features):
@@ -74,8 +75,8 @@ class EmptyEncoder(th.nn.Module):
 
 
 class GraphNetwork(th.nn.Module):
-    def __init__(self, y_levels=21, y_name='contributions', x_encoding=[], u_encoding=[], add_rnn=True, add_edge_model=True, 
-            add_global_model=True, hidden_size=None, op1=None, op2=None, rnn_n=None, rnn_g=None, default_values={}, **_):
+    def __init__(self,  op1=None, op2=None, rnn_n=None, rnn_g=None, *, y_levels=21, y_name='contributions', x_encoding=[], u_encoding=[],
+                 add_rnn=True, add_edge_model=True, add_global_model=True, hidden_size=None, default_values={}, **_):
         super().__init__()
         self.x_encoder = Encoder(x_encoding)
         self.u_encoder = Encoder(u_encoding, aggregation='mean')
@@ -95,20 +96,20 @@ class GraphNetwork(th.nn.Module):
         if op1 is None:
             if add_edge_model:
                 edge_model = EdgeModel(
-                    x_features=x_features, edge_features=edge_features, 
+                    x_features=x_features, edge_features=edge_features,
                     u_features=u_features, out_features=hidden_size)
                 edge_features = hidden_size
             else:
                 edge_model = None
 
             node_model = NodeModel(
-                x_features=x_features, edge_features=edge_features, 
+                x_features=x_features, edge_features=edge_features,
                 u_features=u_features, out_features=hidden_size, activation=ReLU())
             x_features = hidden_size
 
             if add_global_model:
                 gobal_model = GlobalModel(
-                    x_features=x_features, edge_features=edge_features, 
+                    x_features=x_features, edge_features=edge_features,
                     u_features=u_features, out_features=hidden_size)
                 u_features = hidden_size
             else:
@@ -117,25 +118,26 @@ class GraphNetwork(th.nn.Module):
             self.op1 = MetaLayer(edge_model, node_model, gobal_model)
 
             if add_rnn:
-                self.rnn_n = GRU(input_size=x_features, hidden_size=hidden_size, num_layers=1, batch_first=True)
+                self.rnn_n = GRU(input_size=x_features, hidden_size=hidden_size,
+                                 num_layers=1, batch_first=True)
                 self.rnn_n_h0 = None
                 x_features = hidden_size
             else:
                 self.rnn_n = None
 
             if add_rnn and add_global_model:
-                self.rnn_g = GRU(input_size=u_features, hidden_size=hidden_size, num_layers=1, batch_first=True)
+                self.rnn_g = GRU(input_size=u_features, hidden_size=hidden_size,
+                                 num_layers=1, batch_first=True)
                 self.rnn_g_h0 = None
                 u_features = hidden_size
             else:
                 self.rnn_g = None
 
-
             self.op2 = MetaLayer(
                 None,
                 NodeModel(
-                    x_features=x_features, edge_features=0, 
-                    u_features=u_features, out_features=y_features), 
+                    x_features=x_features, edge_features=0,
+                    u_features=u_features, out_features=y_features),
                 None
             )
         else:
@@ -145,15 +147,13 @@ class GraphNetwork(th.nn.Module):
             self.rnn_g = rnn_g
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
-            
-    
 
-    def encode(self, data, *, edge_index, mask=True, y_encode=True, info_columns=None):
+    def encode(self, data, *, edge_index, mask='valid', y_encode=True, info_columns=None):
         encoded = {
-            'mask': data['valid'] if mask else None,
+            'mask': data[mask] if mask is not None else None,
             'x': self.x_encoder(**data),
             'y_enc': self.y_encoder(**data) if y_encode else None,
-            'y': data['contributions'] if y_encode else None,
+            'y': data[self.y_name] if y_encode else None,
             'u': self.u_encoder(**data),
             'edge_attr': self.edge_encoder(**data, n_edges=edge_index.shape[1]),
             'info': th.stack([data[c] for c in info_columns], dim=-1) if info_columns else None
@@ -162,9 +162,9 @@ class GraphNetwork(th.nn.Module):
 
         dataset = [
             Data(
-                **{k: v[i] for k, v in encoded.items() if v is not None}, edge_index=edge_index, idx=i, group_idx=i, 
+                **{k: v[i] for k, v in encoded.items() if v is not None}, edge_index=edge_index, idx=i, group_idx=i,
                 num_nodes=n_agents, player_idx=th.arange(n_agents)
-                ).to(self.device)
+            ).to(self.device)
             for i in range(n_episodes)
         ]
         return dataset
@@ -186,12 +186,11 @@ class GraphNetwork(th.nn.Module):
     def predict(self, data, sample=True):
         self.eval()
         y_logit = th.cat([self(d)
-            for d in iter(DataLoader(data, shuffle=False, batch_size=10))
-        ])
+                          for d in iter(DataLoader(data, shuffle=False, batch_size=10))
+                          ])
         y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
-
 
     def predict_one(self, data, reset_rnn=True, sample=True):
         self.eval()
@@ -201,7 +200,6 @@ class GraphNetwork(th.nn.Module):
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
-
     def save(self, filename):
         to_save = {
             'op1': self.op1,
@@ -209,7 +207,8 @@ class GraphNetwork(th.nn.Module):
             'rnn_n': self.rnn_n,
             'rnn_g': self.rnn_g,
             'y_levels': self.y_levels,
-            'x_encoding': self.x_encoding, 
+            'y_name': self.y_name,
+            'x_encoding': self.x_encoding,
             'u_encoding': self.u_encoding,
             'default_values': self.default_values,
         }
@@ -218,6 +217,11 @@ class GraphNetwork(th.nn.Module):
     @classmethod
     def load(cls, filename):
         to_load = th.load(filename)
+
+        # ensure backward compatibility
+        if 'manager_valid' not in to_load['default_values']:
+            to_load['default_values']['manager_valid'] = False
+
         ah = cls(**to_load)
         return ah
 

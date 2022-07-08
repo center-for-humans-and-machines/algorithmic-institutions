@@ -26,6 +26,8 @@ class IntEncoder(th.nn.Module):
 
     def forward(self, **state):
         assert state[self.name].dtype == th.int64
+        if self.map.device != state[self.name].device:
+            self.map = self.map.to(state[self.name].device)
         enc = self.map[state[self.name]]
         return enc
 
