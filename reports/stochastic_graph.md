@@ -1,3 +1,5 @@
+## Algorithmic Mechanism (Deepmind)
+
 ```mermaid
 flowchart TD
 
@@ -5,7 +7,7 @@ pCG ---> Gr
 pCon ---> Gr
 pPay ---> Gr
 
-Gr ---> Con
+Gr ---> Con((Con))
 
 Mech ---> Fac
 Con ---> Mech
@@ -18,7 +20,7 @@ Con ---> CG
 
 
 
-pGr ---> pCon
+pGr ---> pCon((pCon))
 
 pMech ---> pFac
 pCon ---> pMech
@@ -29,40 +31,74 @@ pCG ---> pPay
 pCon ---> pCG
 ```
 
+## Ours
+
 ```mermaid
 flowchart TD
 
+ppPun((ppPun)) ---> pMan
+pCon((pCon)) ---> pMan
+
+pMan ---> pPun((pPun))
+
+pPun ---> pCG
+pCon ---> pCG
+
 pCG ---> Gr
-pCon ---> Gr
-pPun ---> Gr
+pCon((pCon)) ---> Gr
+pPun((pPun)) ---> Gr
 
-Gr ---> Con
-
+Gr ---> Con((Con))
 
 Con ---> Man
-pPun
+pPun ---> Man
 
-Man ---> Pun
+Man ---> Pun((Pun))
 
-
-
-Con ---> Mech
-
-Fac ---> Pay
-CG ---> Pay
-
+Pun ---> CG
 Con ---> CG
 
+CG ---> nGr
+Con ---> nGr
+Pun ---> nGr
 
+nGr ---> nCon((nCon))
 
+nCon ---> loss
+Pun ---> loss
+```
 
-pGr ---> pCon
+```mermaid
+flowchart TD
 
-pMech ---> pFac
-pCon ---> pMech
+ppPun((ppPun)) ---> pMan
+pCon((pCon)) ---> pMan
 
-pFac ---> pPay
-pCG ---> pPay
+pMan ---> pPun((pPun))
 
+pPun ---> pCG
 pCon ---> pCG
+
+pCG ---> Gr
+pCon((pCon)) ---> Gr
+pPun((pPun)) ---> Gr
+
+Gr ---> Con((Con))
+
+Con ---> Man
+pPun ---> Man
+
+Man ---> Pun((Pun))
+
+Pun ---> CG
+Con ---> CG
+
+CG ---> nGr
+Con ---> nGr
+Pun ---> nGr
+
+nGr ---> nCon((nCon))
+
+nCon ---> payoff
+Pun ---> payoff
 ```
