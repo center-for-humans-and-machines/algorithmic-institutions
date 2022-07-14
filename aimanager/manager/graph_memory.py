@@ -13,39 +13,50 @@ def merge_data(eps_data):
 
 
 class GraphMemory():
-    def __init__(self, device, n_episodes, n_nodes, n_episode_steps):
-        self.n_episodes = n_episodes
+    def __init__(self, device, n_batch, n_nodes, n_episode_steps, batch_size, sample_size=None):
+        self.n_batch = n_batch
         self.n_episode_steps = n_episode_steps
+        self.sample_size = sample_size
+        self.batch_size = batch_size
+
+        self.n_episodes = self.n_batch * self.batch_size
+
         self.episode_queue = collections.deque([], maxlen=self.n_episodes)
-        self.reset_eps_memory()
+        self.reset_batch_memory()
         self.memory = {
             'action': th.empty((self.n_episodes, n_nodes, self.n_episode_steps), dtype=th.int64, device=device),
             'reward':  th.empty((self.n_episodes, n_nodes, self.n_episode_steps), dtype=th.float, device=device),
             'obs': [None]*self.n_episodes,
         }
 
-    def reset_eps_memory(self):
-        self.eps_memory = {
+    def reset_batch_memory(self):
+        self.batch_memory = {
             'action': [],
             'reward': [],
             'obs': [],
         }
 
-    def next_episode(self, episode):
-        current_row = episode % self.n_episodes
-        self.memory['obs'][current_row] = merge_data(self.eps_memory['obs'])
-        self.memory['action'][current_row] = th.stack(self.eps_memory['action'], dim=1)
-        self.memory['reward'][current_row] = th.stack(self.eps_memory['reward'], dim=1)
-        self.episode_queue.appendleft(current_row)
-        self.reset_eps_memory()
+    def next_batch(self, update_step):
+        start_row = (update_step * self.batch_size) % self.n_episodes
+        end_row = start_row + self.batch_size
+
+        # TODO: the merging here needs to be changed
+        raise NotImplementedError('')
+
+        self.memory['obs'][start_row:end_row] = merge_data(self.batch_memory['obs'])
+        self.memory['action'][start_row:end_row] = th.stack(self.batch_memory['action'], dim=1)
+        self.memory['reward'][start_row:end_row] = th.stack(self.batch_memory['reward'], dim=1)
+        self.episode_queue.extendleft(range(start_row, end_row))
+        self.reset_batch_memory()
 
     def add(self, action, reward, obs):
-        self.eps_memory['action'].append(action)
-        self.eps_memory['reward'].append(reward)
-        self.eps_memory['obs'].append(obs)
+        self.batch_memory['action'].append(action)
+        self.batch_memory['reward'].append(reward)
+        self.batch_memory['obs'].append(obs)
 
-
-    def sample(self, batch_size, horizon=None, **kwargs):
+    def sample(self, batch_size=None, horizon=None, **kwargs):
+        if batch_size is None:
+            batch_size = self.sample_size
         if horizon is None:
             horizon = self.n_episodes
         eff_horizon = min(len(self), horizon)

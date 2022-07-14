@@ -183,10 +183,10 @@ class GraphNetwork(th.nn.Module):
         x, _, _ = self.op2(x, edge_index, edge_attr, u, batch)
         return x
 
-    def predict(self, data, sample=True):
+    def predict(self, data, sample=True, batch_size=10, reset_rnn=True):
         self.eval()
-        y_logit = th.cat([self(d)
-                          for d in iter(DataLoader(data, shuffle=False, batch_size=10))
+        y_logit = th.cat([self(d, reset_rnn)
+                          for d in iter(DataLoader(data, shuffle=False, batch_size=batch_size))
                           ])
         y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
         y_pred = self.y_encoder.decode(y_pred_proba, sample)

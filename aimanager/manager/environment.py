@@ -21,11 +21,12 @@ class ArtificialHumanEnv():
     }
 
     def __init__(
-            self, *, artifical_humans, n_agents, n_contributions, n_punishments, episode_steps, device):
+            self, *, artifical_humans, batch_size, n_agents, n_contributions, n_punishments, episode_steps, device):
         """
         Args:
             asdasd
         """
+        self.batch_size = batch_size
         self.episode = 0
         self.episode_steps = episode_steps
         self.device = device
@@ -38,31 +39,28 @@ class ArtificialHumanEnv():
         self.edge_index = create_fully_connected(n_agents)
         self.reset_state()
 
-
     def reset_state(self):
         state = {
-            'punishments': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
-            'contributions': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
-            'round_number': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
-            'valid': th.zeros(self.n_agents, dtype=th.bool, device=self.device),
-            'manager_valid': th.zeros(self.n_agents, dtype=th.bool, device=self.device),
-            'common_good': th.zeros(self.n_agents, dtype=th.float, device=self.device),
-            'payoffs': th.zeros(self.n_agents, dtype=th.float, device=self.device),
+            'punishments': th.zeros((self.batch_size, self.n_agents), dtype=th.int64, device=self.device),
+            'contributions': th.zeros((self.batch_size, self.n_agents), dtype=th.int64, device=self.device),
+            'round_number': th.zeros((self.batch_size, self.n_agents), dtype=th.int64, device=self.device),
+            'valid': th.zeros((self.batch_size, self.n_agents), dtype=th.bool, device=self.device),
+            'manager_valid': th.zeros((self.batch_size, self.n_agents), dtype=th.bool, device=self.device),
+            'common_good': th.zeros((self.batch_size, self.n_agents), dtype=th.float, device=self.device),
+            'payoffs': th.zeros((self.batch_size, self.n_agents), dtype=th.float, device=self.device),
         }
         default_values = self.artifical_humans.default_values
 
         prev_state = {
-                f'prev_{k}': th.full_like(state[k], fill_value=default_values[k])
-                for k, t in state.items() if k in default_values
+            f'prev_{k}': th.full_like(state[k], fill_value=default_values[k])
+            for k, t in state.items() if k in default_values
         }
         self.state = {**prev_state, **state}
-
 
     def __getattr__(self, name):
         if 'state' in self.__dict__:
             state = self.__dict__['state']
             return state[name]
-
 
     def __setattr__(self, name, value):
         if 'state' in self.__dict__:
@@ -84,16 +82,19 @@ class ArtificialHumanEnv():
         return payout
 
     def calc_contributions(self):
-        state = {k: v.unsqueeze(0).unsqueeze(-1) for k, v in self.state.items()}
-        encoded = self.artifical_humans.encode(state, mask=None, y_encode=False, edge_index=self.edge_index)
-        contributions = self.artifical_humans.predict_one(encoded[0], reset_rnn=self.round_number[0] == 0)[0]
-        self.contributions = contributions.squeeze(-1)
+        state = {k: v.unsqueeze(-1) for k, v in self.state.items()}
+        encoded = self.artifical_humans.encode(
+            state, mask=None, y_encode=False, edge_index=self.edge_index)
+        contributions = self.artifical_humans.predict(
+            encoded, reset_rnn=self.round_number[0][0] == 0, batch_size=self.batch_size)[0]
+
+        print(contributions.shape)
+        self.contributions = contributions
         self.valid = th.ones_like(self.valid)
 
     def init_episode(self):
         self.episode += 1
         self.round_number = th.zeros_like(self.round_number)
-
 
         self.reset_state()
         self.calc_contributions()
@@ -126,5 +127,3 @@ class ArtificialHumanEnv():
         reward = (reward - self.reward_baseline) * self.reward_scale
         self.round_number += 1
         return self.state, reward, done
-
-

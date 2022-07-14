@@ -7,7 +7,7 @@ from torch_geometric.data import Batch
 class ArtificalManager():
     def __init__(
             self, *, n_contributions, n_punishments, default_values, model_args=None, policy_model=None, opt_args=None,
-            gamma=None, target_update_freq=None,  device):
+            gamma=None, target_update_freq=None, eps=0,  device):
         self.device = device
 
         if policy_model:
@@ -28,6 +28,7 @@ class ArtificalManager():
             self.target_update_freq = target_update_freq
         self.n_contributions = n_contributions
         self.n_punishments = n_punishments
+        self.eps = eps
 
     def init_episode(self, episode):
         if (episode % self.target_update_freq == 0):
@@ -58,7 +59,7 @@ class ArtificalManager():
         selected_actions = q_values.argmax(dim=-1)
         return selected_actions
 
-    def eps_greedy(self, q_values, eps):
+    def eps_greedy(self, q_values):
         """
         Args:
             q_values: Tensor of type `th.float` and arbitrary shape, last dimension reflect the actions.
@@ -74,7 +75,7 @@ class ArtificalManager():
 
         # random number which determine whether to take the random action
         random_numbers = th.rand(size=actions_shape, device=self.device)
-        select_random = (random_numbers < eps).long()
+        select_random = (random_numbers < self.eps).long()
         picked_actions = select_random * random_actions + (1 - select_random) * greedy_actions
 
         return picked_actions
