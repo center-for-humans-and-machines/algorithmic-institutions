@@ -1,7 +1,5 @@
 import torch as th
 from aimanager.generic.graph import GraphNetwork
-from torch_geometric.loader import DataLoader
-from torch_geometric.data import Batch
 
 
 class ArtificalManager():
@@ -30,34 +28,32 @@ class ArtificalManager():
         self.n_punishments = n_punishments
         self.eps = eps
 
-    def init_episode(self, episode):
-        if (episode % self.target_update_freq == 0):
-            # copy policy net to target net
-            self.target_model.load_state_dict(self.policy_model.state_dict())
-
     def encode(self, state, edge_index, **_):
         return self.policy_model.encode(state, edge_index=edge_index)
 
-    def get_q(self, manager_observations, first=False, **_):
+    def encode_pure(self, state, **_):
+        return self.policy_model.encode_pure(state)
+
+    def get_q(self, manager_observations, first=False):
         with th.no_grad():
             return self.policy_model(manager_observations, reset_rnn=first)
 
-    def get_action(self, state, edge_index, first=False):
-        state_ = {k: v.unsqueeze(0).unsqueeze(-1) for k, v in state.items()}
-        obs = Batch.from_data_list(self.encode(state_, edge_index=edge_index))
+    # def get_action(self, state, edge_index, first=False):
+    #     state_ = {k: v.unsqueeze(0).unsqueeze(-1) for k, v in state.items()}
+    #     obs = Batch.from_data_list(self.encode(state_, edge_index=edge_index))
 
-        q_values = self.get_q(manager_observations=obs, first=first).squeeze(1)
-        selected_action = q_values.argmax(dim=-1)
+    #     q_values = self.get_q(manager_observations=obs, first=first).squeeze(1)
+    #     selected_action = q_values.argmax(dim=-1)
 
-        return selected_action
+    #     return selected_action
 
-    def get_actions(self, states, edge_index):
-        obs = self.encode(states, edge_index=edge_index)
-        q_values = th.cat([self.get_q(d, first=True)
-                           for d in iter(DataLoader(obs, shuffle=False, batch_size=50))
-                           ])
-        selected_actions = q_values.argmax(dim=-1)
-        return selected_actions
+    # def get_actions(self, states, edge_index):
+    #     obs = self.encode(states, edge_index=edge_index)
+    #     q_values = th.cat([self.get_q(d, first=True)
+    #                        for d in iter(DataLoader(obs, shuffle=False, batch_size=50))
+    #                        ])
+    #     selected_actions = q_values.argmax(dim=-1)
+    #     return selected_actions
 
     def eps_greedy(self, q_values):
         """
@@ -80,7 +76,11 @@ class ArtificalManager():
 
         return picked_actions
 
-    def update(self, action, reward, obs, **_):
+    def update(self, update_step, action, reward, **obs):
+        if (update_step % self.target_update_freq == 0):
+            # copy policy net to target net
+            self.target_model.load_state_dict(self.policy_model.state_dict())
+
         self.policy_model.train()
         current_state_action_values = self.policy_model(
             obs, reset_rnn=True).gather(-1, action.unsqueeze(-1))

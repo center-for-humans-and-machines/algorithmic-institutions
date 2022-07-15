@@ -1,0 +1,50 @@
+description: >-
+  First test of the rl manager v3. Here we test only basis learning parameter
+  with a very simple manager architecture and the simple artificial humans.
+exec:
+  command: papermill -f {job_file} notebooks/manager/rl_manager_v3.ipynb {output_path}/rl_manager_v3.ipynb --cwd $(pwd)/notebooks/manager
+  script_name: gpu
+  cores: 2
+  memory: 8
+params_only: true
+params:
+  artificial_humans: "../../data/artificial_humans/ah_1_1_simple/data/model.pt"
+  artificial_humans_model: graph
+  data_path: "../../data/manager/v3/simple/"
+  manager_args:
+    opt_args:
+      lr: 0.001
+    gamma: 1.0
+    eps: 0.1
+    target_update_freq: 100
+    model_args:
+      hidden_size: 20
+      add_rnn: False
+      add_edge_model: False
+      add_global_model: False
+      x_encoding:
+        - name: contributions
+          n_levels: 21
+          encoding: numeric
+      u_encoding: []
+  replay_memory_args:
+    n_batches: 1000
+  n_update_steps: 10000
+  eval_period: 5
+  env_args:
+    n_agents: 4
+    n_contributions: 21
+    n_punishments: 31
+    n_rounds: 16
+    batch_size: 1000
+  device: cuda
+  job_id: dev
+grid:
+  - labels.target_update_freq: [100, 1000]
+    target_update_freq: [100, 1000]
+  - labels.lr: ["3.e-4", "1.e-3"]
+    opt_args.lr: [3.e-4, 1.e-3]
+  - labels.gamma: [0.5, 0.8, 1]
+    gamma: [0.5, 0.8, 1]
+  - labels.eps: [0.1, 0.2]
+    eps: [0.1, 0.2]

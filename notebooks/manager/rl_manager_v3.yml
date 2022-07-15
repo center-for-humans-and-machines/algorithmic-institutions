@@ -1,6 +1,6 @@
 artificial_humans: "../../data/training/ah_10/data/model.pt"
 artificial_humans_model: graph
-output_path: "../../data/manager/v2/dev/"
+data_path: "../../train_data/manager/v2/dev/"
 manager_args:
   opt_args:
     lr: 0.003
@@ -13,7 +13,7 @@ manager_args:
     add_edge_model: True
     add_global_model: False
     x_encoding:
-      - name: prev_contributions
+      - name: contributions
         n_levels: 21
         encoding: numeric
       - name: prev_punishments
@@ -27,16 +27,14 @@ manager_args:
         norm: 128
         etype: float
 replay_memory_args:
-  n_episodes: 20
-  sample_size: 5
+  n_batches: 20
 n_update_steps: 10
-eval_args:
-  test_period: 10
-  batch_size: 1000
+eval_period: 5
 env_args:
   n_agents: 4
   n_contributions: 21
   n_punishments: 31
-  episode_steps: 16
-  batch_size: 10
+  n_rounds: 16
+  batch_size: 1000
 device: cpu
+job_id: dev

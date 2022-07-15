@@ -6,79 +6,90 @@ from aimanager.utils.utils import make_dir
 
 
 class Memory():
-    def __init__(self, device, n_episodes, n_episode_steps, output_file=None):
+    def __init__(
+            self, device, n_batches, n_rounds, batch_size, group_size, output_file=None):
         self.memory = None
-        self.n_episodes = n_episodes
-        self.n_episode_steps = n_episode_steps
+        self.n_batches = n_batches
+        self.size = n_batches * batch_size * group_size
+        self.batch_size = batch_size
+        self.n_rounds = n_rounds
         self.device = device
         self.output_file = output_file
-        self.current_row = 0
-        self.episode = 0
-        self.episode_queue = collections.deque([], maxlen=self.n_episodes)
+        self.start_row = None
+        self.rewind = 0
+        self.group_que = collections.deque([], maxlen=self.n_batches*batch_size)
 
+    @property
+    def last_valid_row(self):
+        lvr = self.start_row + self.batch_size
+        return lvr if lvr >= 0 else None
 
     def init_store(self, state):
-        self.memory = {**{
-                k: th.zeros((self.n_episodes, self.n_episode_steps, *t.shape), dtype=t.dtype, device=self.device)
-                for k, t in state.items()
-            },
-            'episode': th.empty((self.n_episodes, self.n_episode_steps), dtype=th.int64, device=self.device),
-            'episode_steps': th.empty((self.n_episodes, self.n_episode_steps), dtype=th.int64, device=self.device)
+        self.memory = {
+            k: th.zeros((self.size, self.n_rounds, *t.shape[2:]),
+                        dtype=t.dtype, device=self.device)
+            for k, t in state.items() if t is not None
         }
 
-    def next_episode(self, episode):
-        self.episode = episode
-        if self.current_row == (self.n_episodes - 1):
-            self.write()
-        self.current_row = (self.current_row + 1) % self.n_episodes
-        self.episode_queue.appendleft(self.current_row)
+    def start_batch(self, groups):
+        if self.start_row is None:
+            self.start_row = 0
+        else:
+            self.start_row = (self.start_row + self.batch_size)
+        self.end_row = self.start_row + sum(len(g) for g in groups)
+        self.current_group = [[r+self.start_row for r in g] for g in groups]
 
-    def add(self, episode_step, **state):
+    def finish_batch(self):
+        self.group_que.extendleft(self.current_group)
+        if self.end_row >= (self.size + 1):
+            self.write()
+            self.start_row = None
+            self.rewind += 1
+
+    def add(self, round_number, **state):
         if self.memory is None:
             self.init_store(state)
-        self.memory['episode'][self.current_row,episode_step] = self.episode
-        self.memory['episode_steps'][self.current_row,episode_step] = episode_step
-        for k, t in state.items():
-            self.memory[k][self.current_row,episode_step] = t
 
-    def sample(self, batch_size, horizon, **kwargs):
-        eff_horizon = min(len(self), horizon)
-        if eff_horizon < batch_size:
+        for k, t in state.items():
+            if t is not None:
+                self.memory[k][self.start_row:self.end_row, round_number] = t[:, 0]
+
+    def sample(self, **kwargs):
+        assert self.batch_size is not None, 'No sample size defined.'
+        if len(self) < self.batch_size:
             return None
-        relative_episode = np.random.choice(eff_horizon, batch_size, replace=False)
+        relative_episode = np.random.choice(len(self), self.batch_size, replace=False)
         return self.get_relative(relative_episode, **kwargs)
 
-    def last(self, batch_size, **kwargs):
-        assert batch_size <= self.n_episodes
-        relative_episodes = np.arange(batch_size)
+    def last(self, **kwargs):
+        assert self.batch_size is not None, 'No sample size defined.'
+        if len(self) < self.batch_size:
+            return None
+        relative_episodes = np.arange(self.batch_size)
         return self.get_relative(relative_episodes, **kwargs)
 
     def get_relative(self, relative_episode, keys=None):
         if keys is None:
             keys = self.memory.keys()
         hist_idx = th.tensor(
-            [self.episode_queue[rp] for rp in relative_episode], dtype=th.int64, device=self.device)
+            [row for rp in relative_episode for row in self.group_que[rp]],
+            dtype=th.int64, device=self.device)
         return {k: v[hist_idx] for k, v in self.memory.items() if k in keys}
 
-    def rec(self, state, episode, episode_steps):
-        if self.memory is None:
-            self.init_store(state)
-        self.add_state(state, episode, episode_steps)
-
     def __len__(self):
-        return len(self.episode_queue)
+        return len(self.group_que)
 
     def write(self):
-        if self.output_file:
+        if self.output_file and self.last_valid_row is not None:
             dirname = os.path.dirname(self.output_file)
             make_dir(dirname)
             th.save(
                 {
-                    k: t[:self.current_row] for k, t in self.memory.items()
+                    k: t[:self.last_valid_row] for k, t in self.memory.items()
                 },
-                f'{self.output_file}.{self.episode + 1}.pt'
+                f'{self.output_file}.{self.rewind}.pt'
             )
 
     def __del__(self):
-        if hasattr(self, 'memory') and (self.current_row != 0):
+        if self.memory is not None:
             self.write()

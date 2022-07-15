@@ -4,13 +4,13 @@ from aimanager.manager.memory import Memory
 
 
 class ManagerEvaluator():
-    def __init__(self, n_episode_steps, batch_size, output_file=None, test_period=1):
+    def __init__(self, n_rounds, batch_size, output_file=None, test_period=1):
         self.device = th.device('cpu')
         self.test_period = test_period
         self.t_episode = 0
         self.recorder = Memory(
-            n_episodes=n_episode_steps // test_period * batch_size,
-            n_episode_steps=n_episode_steps, output_file=output_file, device=self.device)
+            n_episodes=n_rounds // test_period * batch_size,
+            n_n_rounds=n_rounds, output_file=output_file, device=self.device)
 
     def eval_update(self, manager, env, update_step):
         if update_step % self.test_period == 0:

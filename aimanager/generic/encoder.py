@@ -11,14 +11,14 @@ class IntEncoder(th.nn.Module):
             assert n_levels is not None
             self.map = th.tensor(
                 [[1]*i + [0]*(n_levels - i - 1)
-                for i in range(n_levels)], dtype=th.float
+                 for i in range(n_levels)], dtype=th.float
             )
             self.position_values = th.arange(n_levels-1, 0, -1, dtype=th.float)
         elif encoding == 'onehot':
             assert n_levels is not None
             self.map = th.tensor(
                 [[0]*i + [1] + [0]*(n_levels - i - 1)
-                for i in range(n_levels)], dtype=th.float
+                 for i in range(n_levels)], dtype=th.float
             )
         elif encoding == 'numeric':
             self.map = th.linspace(0, 1, n_levels, dtype=th.float).unsqueeze(-1)
@@ -38,7 +38,7 @@ class IntEncoder(th.nn.Module):
             arr = th.einsum('ijkl,l->ijkl', arr, self.position_values)
             return self.n_levels - arr.max(-1)[0] - 1
         elif self.encoding == 'onehot':
-            if sample: 
+            if sample:
                 dec = th.multinomial(arr.reshape(-1, arr.shape[-1]), 1)
                 return dec.reshape(arr.shape[:-1])
             else:
@@ -61,7 +61,6 @@ class FloatEncoder(th.nn.Module):
         return enc
 
 
-
 class BoolEncoder(th.nn.Module):
     def __init__(self, name):
         super(BoolEncoder, self).__init__()
@@ -80,12 +79,13 @@ encoder = {
     'bool': BoolEncoder
 }
 
+
 def get_encoder(etype='int', **kwargs):
     return encoder[etype](**kwargs)
 
 
 class Encoder(th.nn.Module):
-    def __init__(self, encodings, aggregation=None):
+    def __init__(self, encodings, aggregation=None, keepdim=True):
         super(Encoder, self).__init__()
         self.encoder = th.nn.ModuleList([
             get_encoder(**e)
@@ -93,6 +93,7 @@ class Encoder(th.nn.Module):
         ])
         self.size = sum(e.size for e in self.encoder)
         self.aggregation = aggregation
+        self.keepdim = keepdim
 
     def forward(self, **state):
         encoding = [
@@ -105,7 +106,7 @@ class Encoder(th.nn.Module):
             encoding = th.empty(list(state.values())[0].shape + (0,), )
 
         if self.aggregation == 'mean':
-            encoding = encoding.mean(dim=1, keepdim=True)
+            encoding = encoding.mean(dim=1, keepdim=self.keepdim)
         else:
             assert self.aggregation is None, f"Unknown aggregation type {self.aggregation}"
         return encoding

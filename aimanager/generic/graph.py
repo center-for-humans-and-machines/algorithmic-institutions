@@ -148,6 +148,16 @@ class GraphNetwork(th.nn.Module):
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
 
+    def encode_pure(self, data, *, mask='valid', y_encode=True):
+        encoded = {
+            'mask': data[mask] if mask is not None else None,
+            'x': self.x_encoder(**data),
+            'y_enc': self.y_encoder(**data).unsqueeze(1) if y_encode else None,  # hacky solution
+            'y': data[self.y_name] if y_encode else None,
+            'u': self.u_encoder(**data),
+        }
+        return encoded
+
     def encode(self, data, *, edge_index, mask='valid', y_encode=True, info_columns=None):
         encoded = {
             'mask': data[mask] if mask is not None else None,
@@ -172,7 +182,11 @@ class GraphNetwork(th.nn.Module):
     def forward(self, data, reset_rnn=True):
         x = data['x']
         edge_index = data['edge_index']
-        edge_attr = data['edge_attr']
+        if 'edge_attr' in data:
+            edge_attr = data['edge_attr']
+        else:
+            edge_attr = th.empty(
+                (edge_index.shape[1], x.shape[1], 0), dtype=th.float, device=edge_index.device)
         u = data['u']
         batch = data['batch']
         x, _, u = self.op1(x, edge_index, edge_attr, u, batch)
@@ -182,6 +196,13 @@ class GraphNetwork(th.nn.Module):
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
         x, _, _ = self.op2(x, edge_index, edge_attr, u, batch)
         return x
+
+    def predict_pure(self, data, sample=True, reset_rnn=True):
+        self.eval()
+        y_logit = self(data, reset_rnn)
+        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+        y_pred = self.y_encoder.decode(y_pred_proba, sample)
+        return y_pred, y_pred_proba
 
     def predict(self, data, sample=True, batch_size=10, reset_rnn=True):
         self.eval()
