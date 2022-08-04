@@ -12,12 +12,12 @@ class ArtificalManager():
             self.policy_model = policy_model
         else:
             self.policy_model = GraphNetwork(
-                y_name='punishments', y_levels=31, default_values=default_values,
+                y_name='punishments', y_levels=n_punishments, default_values=default_values,
                 **model_args).to(device)
 
         if opt_args:
             self.target_model = GraphNetwork(
-                y_name='punishments', y_levels=31, default_values=default_values,
+                y_name='punishments', y_levels=n_punishments, default_values=default_values,
                 **model_args).to(device)
 
             self.target_model.eval()
@@ -37,23 +37,6 @@ class ArtificalManager():
     def get_q(self, manager_observations, first=False):
         with th.no_grad():
             return self.policy_model(manager_observations, reset_rnn=first)
-
-    # def get_action(self, state, edge_index, first=False):
-    #     state_ = {k: v.unsqueeze(0).unsqueeze(-1) for k, v in state.items()}
-    #     obs = Batch.from_data_list(self.encode(state_, edge_index=edge_index))
-
-    #     q_values = self.get_q(manager_observations=obs, first=first).squeeze(1)
-    #     selected_action = q_values.argmax(dim=-1)
-
-    #     return selected_action
-
-    # def get_actions(self, states, edge_index):
-    #     obs = self.encode(states, edge_index=edge_index)
-    #     q_values = th.cat([self.get_q(d, first=True)
-    #                        for d in iter(DataLoader(obs, shuffle=False, batch_size=50))
-    #                        ])
-    #     selected_actions = q_values.argmax(dim=-1)
-    #     return selected_actions
 
     def eps_greedy(self, q_values):
         """
@@ -89,8 +72,8 @@ class ArtificalManager():
 
         # we skip the first observation and set the future value for the last
         # observation to 0
-        next_state_values[:, :-
-                          1] = self.target_model(obs, reset_rnn=True)[:, 1:].max(-1)[0].detach()
+        next_state_values[:, :-1] \
+            = self.target_model(obs, reset_rnn=True)[:, 1:].max(-1)[0].detach()
 
         # Compute the expected Q values
         expected_state_action_values = (next_state_values * self.gamma) + reward
