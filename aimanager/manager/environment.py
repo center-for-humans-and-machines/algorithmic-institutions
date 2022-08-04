@@ -117,6 +117,7 @@ class ArtificialHumanEnv():
     def update_contributions(self):
         encoded = self.artifical_humans.encode_pure(self.state, mask=None, y_encode=False)
         encoded = {**encoded, **self.get_batch_structure()}
+
         contributions = self.artifical_humans.predict_pure(
             encoded, reset_rnn=self.round_number[0][0] == 0)[0]
         self.contributions = contributions

@@ -78,8 +78,8 @@ class GraphNetwork(th.nn.Module):
     def __init__(self,  op1=None, op2=None, rnn_n=None, rnn_g=None, *, y_levels=21, y_name='contributions', x_encoding=[], u_encoding=[],
                  add_rnn=True, add_edge_model=True, add_global_model=True, hidden_size=None, default_values={}, **_):
         super().__init__()
-        self.x_encoder = Encoder(x_encoding)
-        self.u_encoder = Encoder(u_encoding, aggregation='mean')
+        self.x_encoder = Encoder(x_encoding, refrence=y_name)
+        self.u_encoder = Encoder(u_encoding, aggregation='mean', refrence=y_name)
         self.y_encoder = IntEncoder(encoding='onehot', name=y_name, n_levels=y_levels)
         self.edge_encoder = EmptyEncoder(refrence=y_name)
 

@@ -85,7 +85,7 @@ def get_encoder(etype='int', **kwargs):
 
 
 class Encoder(th.nn.Module):
-    def __init__(self, encodings, aggregation=None, keepdim=True):
+    def __init__(self, encodings, aggregation=None, keepdim=True, refrence=None):
         super(Encoder, self).__init__()
         self.encoder = th.nn.ModuleList([
             get_encoder(**e)
@@ -94,6 +94,7 @@ class Encoder(th.nn.Module):
         self.size = sum(e.size for e in self.encoder)
         self.aggregation = aggregation
         self.keepdim = keepdim
+        self.refrence = refrence
 
     def forward(self, **state):
         encoding = [
@@ -103,7 +104,8 @@ class Encoder(th.nn.Module):
         if len(self.encoder) >= 1:
             encoding = th.cat(encoding, axis=-1)
         else:
-            encoding = th.empty(list(state.values())[0].shape + (0,), )
+            encoding = th.empty(state[self.refrence].shape + (0,),
+                                device=state[self.refrence].device)
 
         if self.aggregation == 'mean':
             encoding = encoding.mean(dim=1, keepdim=self.keepdim)

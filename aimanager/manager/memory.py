@@ -52,7 +52,7 @@ class Memory():
 
         for k, t in state.items():
             if t is not None:
-                self.memory[k][self.start_row:self.end_row, round_number] = t[:, 0]
+                self.memory[k][self.start_row:self.end_row, round_number] = t[:, 0].to(self.device)
 
     def sample(self, **kwargs):
         assert self.batch_size is not None, 'No sample size defined.'
@@ -68,13 +68,16 @@ class Memory():
         relative_episodes = np.arange(self.batch_size)
         return self.get_relative(relative_episodes, **kwargs)
 
-    def get_relative(self, relative_episode, keys=None):
+    def get_relative(self, relative_episode, keys=None, device=None):
         if keys is None:
             keys = self.memory.keys()
         hist_idx = th.tensor(
             [row for rp in relative_episode for row in self.group_que[rp]],
             dtype=th.int64, device=self.device)
-        return {k: v[hist_idx] for k, v in self.memory.items() if k in keys}
+        sample = {k: v[hist_idx] for k, v in self.memory.items() if k in keys}
+        if device is not None:
+            sample = {k: v.to(device) for k, v in sample.items()}
+        return sample
 
     def __len__(self):
         return len(self.group_que)

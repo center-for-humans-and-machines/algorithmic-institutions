@@ -1,18 +1,25 @@
 description: >-
   First test of the rl manager v3. Here we test only basis learning parameter
   with a very simple manager architecture and the simple artificial humans.
+
+run_dir: temp/manager/v3/
 exec:
   command: papermill -f {job_file} notebooks/manager/rl_manager_v3.ipynb {output_path}/rl_manager_v3.ipynb --cwd $(pwd)/notebooks/manager
   script_name: gpu
+<<<<<<< HEAD:run/manager_v3/simple_1.yml
   cores: 2
   memory: 8
   data_dir: data
   temp_dir: temp
+=======
+  # cores: 2
+  # memory: 16
+>>>>>>> Debug manager v3.:run/manager/v3/simple.yml
 params_only: true
 params:
   artificial_humans: "../../data/artificial_humans/ah_1_1_simple/data/model.pt"
   artificial_humans_model: graph
-  data_path: "../../data/manager/v3/simple/"
+  data_path: "../../train_data/manager/v3/"
   manager_args:
     opt_args:
       lr: 0.001
@@ -31,7 +38,7 @@ params:
       u_encoding: []
   replay_memory_args:
     n_batches: 1000
-  n_update_steps: 10000
+  n_update_steps: 1000
   eval_period: 5
   env_args:
     n_agents: 4
@@ -40,7 +47,6 @@ params:
     n_rounds: 16
     batch_size: 1000
   device: cuda
-  job_id: dev
 grid:
   - labels.target_update_freq: [100, 1000]
     target_update_freq: [100, 1000]
