@@ -6,6 +6,8 @@ exec:
   script_name: gpu
   cores: 2
   memory: 8
+  data_dir: data
+  temp_dir: temp
 params_only: true
 params:
   artificial_humans: "../../data/artificial_humans/ah_1_1_simple/data/model.pt"
@@ -42,9 +44,9 @@ params:
 grid:
   - labels.target_update_freq: [100, 1000]
     target_update_freq: [100, 1000]
-  - labels.lr: ["3.e-4", "1.e-3"]
-    opt_args.lr: [3.e-4, 1.e-3]
-  - labels.gamma: [0.5, 0.8, 1]
-    gamma: [0.5, 0.8, 1]
-  - labels.eps: [0.1, 0.2]
-    eps: [0.1, 0.2]
+  # - labels.lr: ["3.e-4", "1.e-3"]
+  #   opt_args.lr: [3.e-4, 1.e-3]
+  # - labels.gamma: [0.5, 0.8, 1]
+  #   gamma: [0.5, 0.8, 1]
+  # - labels.eps: [0.1, 0.2]
+  #   eps: [0.1, 0.2]
