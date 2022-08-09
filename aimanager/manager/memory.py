@@ -16,6 +16,7 @@ class Memory():
         self.device = device
         self.output_file = output_file
         self.start_row = None
+        self.end_row = None
         self.rewind = 0
         self.group_que = collections.deque([], maxlen=self.n_batches*batch_size)
 
@@ -32,19 +33,20 @@ class Memory():
         }
 
     def start_batch(self, groups):
-        if self.start_row is None:
+        batch_size = sum(len(g) for g in groups)
+        if (self.end_row is None):
+            self.start_row = 0
+        elif (self.end_row + batch_size) >= self.size:
+            self.write()
+            self.rewind += 1
             self.start_row = 0
         else:
-            self.start_row = (self.start_row + self.batch_size)
+            self.start_row = self.end_row
         self.end_row = self.start_row + sum(len(g) for g in groups)
         self.current_group = [[r+self.start_row for r in g] for g in groups]
 
     def finish_batch(self):
         self.group_que.extendleft(self.current_group)
-        if self.end_row >= (self.size + 1):
-            self.write()
-            self.start_row = None
-            self.rewind += 1
 
     def add(self, round_number, **state):
         if self.memory is None:
@@ -57,14 +59,14 @@ class Memory():
     def sample(self, **kwargs):
         assert self.batch_size is not None, 'No sample size defined.'
         if len(self) < self.batch_size:
-            return None
+            return None, None
         relative_episode = np.random.choice(len(self), self.batch_size, replace=False)
         return self.get_relative(relative_episode, **kwargs)
 
     def last(self, **kwargs):
         assert self.batch_size is not None, 'No sample size defined.'
         if len(self) < self.batch_size:
-            return None
+            return None, None
         relative_episodes = np.arange(self.batch_size)
         return self.get_relative(relative_episodes, **kwargs)
 
@@ -74,10 +76,12 @@ class Memory():
         hist_idx = th.tensor(
             [row for rp in relative_episode for row in self.group_que[rp]],
             dtype=th.int64, device=self.device)
+
+        groups = [self.group_que[rp] for rp in relative_episode]
         sample = {k: v[hist_idx] for k, v in self.memory.items() if k in keys}
         if device is not None:
             sample = {k: v.to(device) for k, v in sample.items()}
-        return sample
+        return sample, groups
 
     def __len__(self):
         return len(self.group_que)

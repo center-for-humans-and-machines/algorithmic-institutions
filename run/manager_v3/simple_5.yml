@@ -24,14 +24,17 @@ params:
       add_edge_model: False
       add_global_model: False
       x_encoding:
+        - name: round_number
+          n_levels: 16
+          encoding: numeric
         - name: contributions
           n_levels: 21
           encoding: numeric
       u_encoding: []
   replay_memory_args:
     n_batches: 1000
-  n_update_steps: 1000
-  eval_period: 5
+  n_update_steps: 5000
+  eval_period: 20
   env_args:
     n_agents: 4
     n_contributions: 21
@@ -42,8 +45,8 @@ params:
 grid:
   - labels.target_update_freq: [100, 1000]
     target_update_freq: [100, 1000]
-  # - labels.lr: ["3.e-4", "1.e-3"]
-  #   opt_args.lr: [3.e-4, 1.e-3]
+  # - labels.lr: ["3.e-4", "1.e-4"]
+  #   opt_args.lr: [3.e-4, 1.e-4]
   # - labels.gamma: [0.5, 0.8, 1]
   #   gamma: [0.5, 0.8, 1]
   # - labels.eps: [0.1, 0.2]

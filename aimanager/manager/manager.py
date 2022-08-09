@@ -5,7 +5,7 @@ from aimanager.generic.graph import GraphNetwork
 class ArtificalManager():
     def __init__(
             self, *, n_contributions, n_punishments, default_values, model_args=None, policy_model=None, opt_args=None,
-            gamma=None, target_update_freq=None, eps=0,  device):
+            gamma=None, target_update_freq=None, eps=None, device):
         self.device = device
 
         if policy_model:
@@ -16,6 +16,10 @@ class ArtificalManager():
                 **model_args).to(device)
 
         if opt_args:
+            assert model_args is not None
+            assert gamma is not None
+            assert target_update_freq is not None
+            assert eps is not None
             self.target_model = GraphNetwork(
                 y_name='punishments', y_levels=n_punishments, default_values=default_values,
                 **model_args).to(device)
@@ -24,8 +28,14 @@ class ArtificalManager():
             self.optimizer = th.optim.RMSprop(self.policy_model.parameters(), **opt_args)
             self.gamma = gamma
             self.target_update_freq = target_update_freq
+        else:
+            assert model_args is None
+            assert gamma is None
+            assert target_update_freq is None
+            assert eps is None
         self.n_contributions = n_contributions
         self.n_punishments = n_punishments
+        self.default_values = default_values
         self.eps = eps
 
     def encode(self, state, edge_index, **_):
@@ -60,6 +70,7 @@ class ArtificalManager():
         return picked_actions
 
     def update(self, update_step, action, reward, **obs):
+
         if (update_step % self.target_update_freq == 0):
             # copy policy net to target net
             self.target_model.load_state_dict(self.policy_model.state_dict())
@@ -93,12 +104,13 @@ class ArtificalManager():
         to_save = {
             'policy_model': self.policy_model,
             'n_contributions': self.n_contributions,
-            'n_punishments': self.n_punishments
+            'n_punishments': self.n_punishments,
+            'default_values': self.default_values
         }
         th.save(to_save, filename)
 
     @classmethod
-    def load(cls, filename):
+    def load(cls, filename, device):
         to_load = th.load(filename)
-        ah = cls(**to_load)
+        ah = cls(**to_load, device=device)
         return ah

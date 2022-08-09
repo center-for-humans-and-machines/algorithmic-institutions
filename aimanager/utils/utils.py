@@ -31,7 +31,10 @@ def load_yaml(filename):
 
 def make_dir(directory):
     if not os.path.exists(directory):
-        os.makedirs(directory)
+        try:
+            os.makedirs(directory)
+        except:
+            print('Failed to create dir. Most likely a different worker is creating the directory currently.')
 
 
 def get_all_files(folder):

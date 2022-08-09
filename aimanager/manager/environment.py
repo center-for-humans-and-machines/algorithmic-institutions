@@ -110,7 +110,7 @@ class ArtificialHumanEnv():
 
     def update_reward(self):
         if self.done:
-            self.reward = self.prev_punishments.to(th.float)
+            self.reward = - self.prev_punishments.to(th.float)
         else:
             self.reward = self.contributions * 1.6 - self.prev_punishments
 
