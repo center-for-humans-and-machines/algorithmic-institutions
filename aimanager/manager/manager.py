@@ -71,6 +71,9 @@ class ArtificalManager():
 
     def update(self, update_step, action, reward, **obs):
 
+        import ipdb
+        ipdb.set_trace()
+
         if (update_step % self.target_update_freq == 0):
             # copy policy net to target net
             self.target_model.load_state_dict(self.policy_model.state_dict())
