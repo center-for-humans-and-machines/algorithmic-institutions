@@ -9,7 +9,7 @@ from aimanager.utils.array_to_df import add_labels
 from aimanager.utils.utils import make_dir
 from aimanager.manager.manager import ArtificalManager
 from aimanager.artificial_humans import AH_MODELS
-from aimanager.manager.environment import ArtificialHumanEnv
+from aimanager.manager.environment_v3 import ArtificialHumanEnv
 from aimanager.manager.memory import Memory
 from itertools import count
 import os

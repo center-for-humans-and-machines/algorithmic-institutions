@@ -71,9 +71,6 @@ class ArtificalManager():
 
     def update(self, update_step, action, reward, **obs):
 
-        import ipdb
-        ipdb.set_trace()
-
         if (update_step % self.target_update_freq == 0):
             # copy policy net to target net
             self.target_model.load_state_dict(self.policy_model.state_dict())
@@ -84,8 +81,8 @@ class ArtificalManager():
 
         next_state_values = th.zeros_like(reward, device=self.device)
 
-        # we skip the first observation and set the future value for the last
-        # observation to 0
+        # we skip the first observation and set the future value for the terminal
+        # state to 0
         next_state_values[:, :-1] \
             = self.target_model(obs, reset_rnn=True)[:, 1:].max(-1)[0].detach()
 
@@ -96,12 +93,18 @@ class ArtificalManager():
         loss = th.nn.functional.smooth_l1_loss(
             current_state_action_values, expected_state_action_values.unsqueeze(-1))
 
+        loss_ur = th.nn.functional.smooth_l1_loss(
+            current_state_action_values, expected_state_action_values.unsqueeze(-1),
+            reduction='none')
+        loss_ur = loss_ur.mean(dim=0)
+
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
         for param in self.policy_model.parameters():
             param.grad.data.clamp_(-1, 1)
         self.optimizer.step()
+        return loss_ur
 
     def save(self, filename):
         to_save = {
