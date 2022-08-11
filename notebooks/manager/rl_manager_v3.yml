@@ -1,6 +1,6 @@
 artificial_humans: "../../data/training/ah_10/data/model.pt"
 artificial_humans_model: graph
-data_path: "../../train_data/manager/v2/dev/"
+data_dir: "../../data/manager_v3/dev/"
 manager_args:
   opt_args:
     lr: 0.003
@@ -9,27 +9,27 @@ manager_args:
   target_update_freq: 20
   model_args:
     hidden_size: 5
-    add_rnn: True
-    add_edge_model: True
+    add_rnn: False
+    add_edge_model: False
     add_global_model: False
     x_encoding:
       - name: contributions
         n_levels: 21
         encoding: numeric
-      - name: prev_punishments
-        n_levels: 31
-        encoding: numeric
+      # - name: prev_punishments
+      #   n_levels: 31
+      #   encoding: numeric
     u_encoding:
       - name: round_number
         n_levels: 16
-        encoding: numeric
-      - name: prev_common_good
-        norm: 128
-        etype: float
+        encoding: onehot
+      # - name: prev_common_good
+      #   norm: 128
+      #   etype: float
 replay_memory_args:
-  n_batches: 20
-n_update_steps: 10
-eval_period: 5
+  n_batches: 100
+n_update_steps: 1000
+eval_period: 20
 env_args:
   n_agents: 4
   n_contributions: 21
@@ -38,3 +38,4 @@ env_args:
   batch_size: 1000
 device: cpu
 job_id: dev
+labels: {}
