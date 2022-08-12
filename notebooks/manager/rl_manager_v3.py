@@ -31,7 +31,8 @@ manager_args = {
         "x_encoding": [
             {"name": "contributions", "n_levels": 21, "encoding": "numeric"}
         ],
-        "u_encoding": [{"name": "round_number", "n_levels": 16, "encoding": "onehot"}],
+        "b_encoding": [{"name": "round_number", "n_levels": 16, "encoding": "onehot"}],
+        "u_encoding": [],
     },
 }
 replay_memory_args = {"n_batches": 100}

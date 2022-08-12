@@ -75,12 +75,14 @@ class EmptyEncoder(th.nn.Module):
 
 
 class GraphNetwork(th.nn.Module):
-    def __init__(self,  op1=None, op2=None, rnn_n=None, rnn_g=None, *, y_levels=21, y_name='contributions', x_encoding=[], u_encoding=[],
-                 add_rnn=True, add_edge_model=True, add_global_model=True, hidden_size=None, default_values={}, **_):
+    def __init__(self,  op1=None, op2=None, rnn_n=None, rnn_g=None, bias=None, *, y_levels=21, y_name='contributions', x_encoding=[], u_encoding=[],
+                 b_encoding=None, add_rnn=True, add_edge_model=True, add_global_model=True, hidden_size=None, default_values={}, **_):
         super().__init__()
         self.x_encoder = Encoder(x_encoding, refrence=y_name)
         self.u_encoder = Encoder(u_encoding, aggregation='mean', refrence=y_name)
         self.y_encoder = IntEncoder(encoding='onehot', name=y_name, n_levels=y_levels)
+        self.bias_encoder = Encoder(
+            b_encoding, refrence=y_name) if b_encoding is not None else None
         self.edge_encoder = EmptyEncoder(refrence=y_name)
 
         x_features = self.x_encoder.size
@@ -140,13 +142,39 @@ class GraphNetwork(th.nn.Module):
                     u_features=u_features, out_features=y_features),
                 None
             )
+            self.bias = Lin(in_features=self.bias_encoder.size,
+                            out_features=1) if b_encoding is not None else None
+
         else:
             self.op1 = op1
             self.op2 = op2
             self.rnn_n = rnn_n
             self.rnn_g = rnn_g
+            self.bias = bias
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
+
+    def forward(self, data, reset_rnn=True):
+        x = data['x']
+        edge_index = data['edge_index']
+        if 'edge_attr' in data:
+            edge_attr = data['edge_attr']
+        else:
+            edge_attr = th.empty(
+                (edge_index.shape[1], x.shape[1], 0), dtype=th.float, device=edge_index.device)
+        u = data['u']
+        batch = data['batch']
+        x, _, u = self.op1(x, edge_index, edge_attr, u, batch)
+        if self.rnn_n is not None:
+            x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
+        if self.rnn_g is not None:
+            u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
+        x, _, _ = self.op2(x, edge_index, edge_attr, u, batch)
+        if self.bias:
+            import ipdb
+            ipdb.set_trace()
+            x = x + self.bias(data['b'])
+        return x
 
     def encode_pure(self, data, *, mask='valid', y_encode=True):
         encoded = {
@@ -155,6 +183,7 @@ class GraphNetwork(th.nn.Module):
             'y_enc': self.y_encoder(**data).unsqueeze(1) if y_encode else None,  # hacky solution
             'y': data[self.y_name] if y_encode else None,
             'u': self.u_encoder(**data, datashape='batch*agent_round'),
+            'bias': self.bias_encoder(**data) if self.bias_encoder is not None else None,
             'edge_index': data['edge_index'],
             'batch': data['batch'],
         }
@@ -180,24 +209,6 @@ class GraphNetwork(th.nn.Module):
             for i in range(n_episodes)
         ]
         return dataset
-
-    def forward(self, data, reset_rnn=True):
-        x = data['x']
-        edge_index = data['edge_index']
-        if 'edge_attr' in data:
-            edge_attr = data['edge_attr']
-        else:
-            edge_attr = th.empty(
-                (edge_index.shape[1], x.shape[1], 0), dtype=th.float, device=edge_index.device)
-        u = data['u']
-        batch = data['batch']
-        x, _, u = self.op1(x, edge_index, edge_attr, u, batch)
-        if self.rnn_n is not None:
-            x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
-        if self.rnn_g is not None:
-            u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
-        x, _, _ = self.op2(x, edge_index, edge_attr, u, batch)
-        return x
 
     def predict_pure(self, data, sample=True, reset_rnn=True):
         self.eval()

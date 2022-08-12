@@ -39,7 +39,7 @@ class Memory():
         self.memory['episode'][self.current_row, episode_step] = self.episode
         self.memory['episode_steps'][self.current_row, episode_step] = episode_step
         for k, t in state.items():
-            self.memory[k][self.current_row, :, [episode_step]] = t
+            self.memory[k][self.current_row, :, [episode_step]] = t.to(self.device)
 
     def sample(self, batch_size, horizon=None, **kwargs):
         if horizon is None:

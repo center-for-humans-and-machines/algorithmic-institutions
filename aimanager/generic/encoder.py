@@ -106,10 +106,12 @@ class Encoder(th.nn.Module):
             encoding = th.cat(encoding, axis=-1)
             if self.aggregation == 'mean':
                 if datashape == 'batch_agent_round':
-                    assert len(encoding.shape) == 4
+                    assert len(
+                        encoding.shape) == 4, f'Expected 4 dimensions. Shape is {len(encoding.shape)}'
                     encoding = encoding.mean(dim=1, keepdim=self.keepdim)
                 elif datashape == 'batch*agent_round':
-                    assert len(encoding.shape) == 3
+                    assert len(
+                        encoding.shape) == 3, f'Expected 3 dimensions. Shape is {len(encoding.shape)}'
                     encoding = scatter_mean(encoding, state['batch'], dim=0)
                 else:
                     raise ValueError('Unknown datashape.')
@@ -119,9 +121,13 @@ class Encoder(th.nn.Module):
         else:
             if self.aggregation == 'mean':
                 if datashape == 'batch_agent_round':
+                    assert len(
+                        state[self.refrence].shape) == 3, f'Expected 3 dimensions. Shape is {len(state[self.refrence].shape)}'
                     enc_shape = (state[self.refrence].shape[0], 1,
                                  state[self.refrence].shape[2], 0)
                 elif datashape == 'batch*agent_round':
+                    assert len(
+                        state[self.refrence].shape) == 2, f'Expected 2 dimensions. Shape is {len(state[self.refrence].shape)}'
                     enc_shape = (state['batch'].max(), state[self.refrence].shape[1], 0)
                 else:
                     raise ValueError('Unknown datashape.')

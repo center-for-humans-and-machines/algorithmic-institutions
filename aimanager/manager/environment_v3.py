@@ -22,12 +22,13 @@ class ArtificialHumanEnv():
     }
 
     def __init__(
-            self, *, artifical_humans, batch_size, n_agents, n_contributions, n_punishments, n_rounds, device):
+            self, *, artifical_humans, batch_size, n_agents, n_contributions, n_punishments, n_rounds, device, default_values=None):
         """
         Args:
             asdasd
         """
         self.batch_size = batch_size
+        self.default_values = artifical_humans.default_values if default_values is None else default_values
         self.n_rounds = n_rounds
         self.device = device
         self.n_contributions = n_contributions
@@ -66,11 +67,10 @@ class ArtificialHumanEnv():
             'group': th.tensor([i for i, g in enumerate(self.groups) for a in g], dtype=th.int64, device=self.device),
             'agent': th.tensor([a for i, g in enumerate(self.groups) for a in g], dtype=th.int64, device=self.device),
         }
-        default_values = self.artifical_humans.default_values
 
         prev_state = {
-            f'prev_{k}': th.full_like(state[k], fill_value=default_values[k])
-            for k, t in state.items() if k in default_values
+            f'prev_{k}': th.full_like(state[k], fill_value=self.default_values[k])
+            for k, t in state.items() if k in self.default_values
         }
         self.state = {**prev_state, **state}
 

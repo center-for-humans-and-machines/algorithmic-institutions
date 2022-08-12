@@ -48,6 +48,13 @@ class ArtificalManager():
         with th.no_grad():
             return self.policy_model(manager_observations, reset_rnn=first)
 
+    def get_punishment(self, **state):
+        first = state['round_number'].max() == 0
+        encoded = self.policy_model.encode_pure(state)
+        q_values = self.policy_model(encoded, reset_rnn=first)
+        greedy_actions = q_values.argmax(-1)
+        return greedy_actions
+
     def eps_greedy(self, q_values):
         """
         Args:
@@ -117,6 +124,6 @@ class ArtificalManager():
 
     @classmethod
     def load(cls, filename, device):
-        to_load = th.load(filename)
+        to_load = th.load(filename, map_location=device)
         ah = cls(**to_load, device=device)
         return ah
