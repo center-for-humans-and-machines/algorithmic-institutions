@@ -38,7 +38,6 @@ class ArtificialHumanEnv():
         self.edge_index = create_fully_connected(n_agents)
         self.reset_state()
 
-
     def reset_state(self):
         state = {
             'punishments': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
@@ -52,17 +51,15 @@ class ArtificialHumanEnv():
         default_values = self.artifical_humans.default_values
 
         prev_state = {
-                f'prev_{k}': th.full_like(state[k], fill_value=default_values[k])
-                for k, t in state.items() if k in default_values
+            f'prev_{k}': th.full_like(state[k], fill_value=default_values[k])
+            for k, t in state.items() if k in default_values
         }
         self.state = {**prev_state, **state}
-
 
     def __getattr__(self, name):
         if 'state' in self.__dict__:
             state = self.__dict__['state']
             return state[name]
-
 
     def __setattr__(self, name, value):
         if 'state' in self.__dict__:
@@ -85,15 +82,16 @@ class ArtificialHumanEnv():
 
     def calc_contributions(self):
         state = {k: v.unsqueeze(0).unsqueeze(-1) for k, v in self.state.items()}
-        encoded = self.artifical_humans.encode(state, mask=None, y_encode=False, edge_index=self.edge_index)
-        contributions = self.artifical_humans.predict_one(encoded[0], reset_rnn=self.round_number[0] == 0)[0]
+        encoded = self.artifical_humans.encode(
+            state, mask=None, y_encode=False, edge_index=self.edge_index)
+        contributions = self.artifical_humans.predict_one(
+            encoded[0], reset_rnn=self.round_number[0] == 0)[0]
         self.contributions = contributions.squeeze(-1)
         self.valid = th.ones_like(self.valid)
 
     def init_episode(self):
         self.episode += 1
         self.round_number = th.zeros_like(self.round_number)
-
 
         self.reset_state()
         self.calc_contributions()
@@ -110,7 +108,8 @@ class ArtificialHumanEnv():
         return self.state
 
     def step(self):
-        if (self.round_number[0] == (self.episode_steps - 1)):
+        self.round_number += 1
+        if (self.round_number[0] == (self.episode_steps)):
             reward = - self.prev_punishments.to(th.float)
             done = True
         elif self.round_number[0] >= self.episode_steps:
@@ -124,7 +123,4 @@ class ArtificialHumanEnv():
             done = False
         self.payoffs = reward
         reward = (reward - self.reward_baseline) * self.reward_scale
-        self.round_number += 1
         return self.state, reward, done
-
-

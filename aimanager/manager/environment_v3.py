@@ -112,13 +112,8 @@ class ArtificialHumanEnv():
             self.reward = (self.contributions * 1.6 - self.prev_punishments) / 32
 
     def update_contributions(self):
-        encoded = self.artifical_humans.encode_pure(self.state, mask=None, y_encode=False)
-        encoded = {**encoded, **self.get_batch_structure()}
-        # import ipdb
-        # ipdb.set_trace()
-
-        # print(self.round_number[0][0])
-
+        state = {**self.state, **self.get_batch_structure()}
+        encoded = self.artifical_humans.encode_pure(state, mask=None, y_encode=False)
         contributions = self.artifical_humans.predict_pure(
             encoded, reset_rnn=self.round_number[0][0] == 0)[0]
         self.contributions = contributions
@@ -136,7 +131,7 @@ class ArtificialHumanEnv():
         assert punishments.dtype == th.int64
         self.punishments = punishments
         self.update_common_good()
-        self.update_payoff()
+        # self.update_payoff()
         return self.state
 
     def step(self):

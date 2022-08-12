@@ -1,4 +1,5 @@
 import torch as th
+from torch_scatter import scatter_mean
 
 
 class IntEncoder(th.nn.Module):
@@ -96,19 +97,36 @@ class Encoder(th.nn.Module):
         self.keepdim = keepdim
         self.refrence = refrence
 
-    def forward(self, **state):
+    def forward(self, datashape='batch_agent_round', **state):
         encoding = [
             e(**state)
             for e in self.encoder
         ]
         if len(self.encoder) >= 1:
             encoding = th.cat(encoding, axis=-1)
-        else:
-            encoding = th.empty(state[self.refrence].shape + (0,),
-                                device=state[self.refrence].device)
+            if self.aggregation == 'mean':
+                if datashape == 'batch_agent_round':
+                    assert len(encoding.shape) == 4
+                    encoding = encoding.mean(dim=1, keepdim=self.keepdim)
+                elif datashape == 'batch*agent_round':
+                    assert len(encoding.shape) == 3
+                    encoding = scatter_mean(encoding, state['batch'], dim=0)
+                else:
+                    raise ValueError('Unknown datashape.')
+            else:
+                assert self.aggregation is None, f"Unknown aggregation type {self.aggregation}"
 
-        if self.aggregation == 'mean':
-            encoding = encoding.mean(dim=1, keepdim=self.keepdim)
         else:
-            assert self.aggregation is None, f"Unknown aggregation type {self.aggregation}"
+            if self.aggregation == 'mean':
+                if datashape == 'batch_agent_round':
+                    enc_shape = (state[self.refrence].shape[0], 1,
+                                 state[self.refrence].shape[2], 0)
+                elif datashape == 'batch*agent_round':
+                    enc_shape = (state['batch'].max(), state[self.refrence].shape[1], 0)
+                else:
+                    raise ValueError('Unknown datashape.')
+            else:
+                assert self.aggregation is None, f"Unknown aggregation type {self.aggregation}"
+                enc_shape = state[self.refrence].shape + (0,)
+            encoding = th.empty(enc_shape, device=state[self.refrence].device)
         return encoding
