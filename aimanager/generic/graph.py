@@ -75,8 +75,10 @@ class EmptyEncoder(th.nn.Module):
 
 
 class GraphNetwork(th.nn.Module):
-    def __init__(self,  op1=None, op2=None, rnn_n=None, rnn_g=None, bias=None, *, y_levels=21, y_name='contributions', x_encoding=[], u_encoding=[],
-                 b_encoding=None, add_rnn=True, add_edge_model=True, add_global_model=True, hidden_size=None, default_values={}, **_):
+    def __init__(self,  op1=None, op2=None, rnn_n=None, rnn_g=None, bias=None, b_encoding=None, *,
+                 y_levels=21, y_name='contributions', x_encoding=[], u_encoding=[],
+                 add_rnn=True, add_edge_model=True, add_global_model=True, hidden_size=None,
+                 default_values={}, **_):
         super().__init__()
         self.x_encoder = Encoder(x_encoding, refrence=y_name)
         self.u_encoder = Encoder(u_encoding, aggregation='mean', refrence=y_name)
