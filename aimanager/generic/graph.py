@@ -93,6 +93,7 @@ class GraphNetwork(th.nn.Module):
         edge_features = self.edge_encoder.size
         self.x_encoding = x_encoding
         self.u_encoding = u_encoding
+        self.b_encoding = b_encoding
         self.default_values = default_values
         self.y_levels = y_levels
         self.y_name = y_name
@@ -144,8 +145,14 @@ class GraphNetwork(th.nn.Module):
                     u_features=u_features, out_features=y_features),
                 None
             )
-            self.bias = Lin(in_features=self.bias_encoder.size,
-                            out_features=1) if b_encoding is not None else None
+            if b_encoding is not None:
+                self.bias = Seq(
+                    Lin(in_features=self.bias_encoder.size, out_features=hidden_size),
+                    ReLU(),
+                    Lin(in_features=hidden_size, out_features=1),
+                )
+            else:
+                self.bias = None
 
         else:
             self.op1 = op1
@@ -173,7 +180,19 @@ class GraphNetwork(th.nn.Module):
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
         x, _, _ = self.op2(x, edge_index, edge_attr, u, batch)
         if self.bias:
+            # if x.shape[1] > 1:
+            #     import ipdb
+            #     ipdb.set_trace()
+            #     print(*(f"{w:6.2f}" for w in self.bias.weight.tolist()
+            #           [0]), f" | {x.min().item():6.2f} {x.max().item():6.2f} {x.mean().item():6.2f}")
             x = x + self.bias(data['b'])
+
+        # if x.shape[1] > 1:
+        #     print(*(f"{w:6.2f}" for w in x.mean(dim=1).mean(dim=0).tolist()),
+        #           f" | {x.min().item():6.2f} {x.max().item():6.2f} {x.mean().item():6.2f}")
+        #     import ipdb
+        #     ipdb.set_trace()
+
         return x
 
     def encode_pure(self, data, *, mask='valid', y_encode=True):
@@ -240,10 +259,12 @@ class GraphNetwork(th.nn.Module):
             'op2': self.op2,
             'rnn_n': self.rnn_n,
             'rnn_g': self.rnn_g,
+            'bias': self.bias,
             'y_levels': self.y_levels,
             'y_name': self.y_name,
             'x_encoding': self.x_encoding,
             'u_encoding': self.u_encoding,
+            'b_encoding': self.b_encoding,
             'default_values': self.default_values,
         }
         th.save(to_save, filename)

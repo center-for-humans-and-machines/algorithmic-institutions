@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[43]:
 
 
 # Parameters
@@ -29,13 +29,14 @@ manager_args = {
         "add_edge_model": False,
         "add_global_model": False,
         "x_encoding": [
-            {"name": "contributions", "n_levels": 21, "encoding": "numeric"}
+            {"name": "contributions", "n_levels": 21, "encoding": "numeric"},
+            # {"name": "round_number", "n_levels": 16, "encoding": "numeric"}
         ],
         "b_encoding": [{"name": "round_number", "n_levels": 16, "encoding": "onehot"}],
     },
 }
 replay_memory_args = {"n_episodes": 100}
-n_update_steps = 1000
+n_update_steps = 500
 eval_period = 20
 env_args = {
     "n_agents": 4,
@@ -49,7 +50,7 @@ job_id = "dev"
 labels = {}
 
 
-# In[2]:
+# In[44]:
 
 
 get_ipython().run_line_magic('load_ext', 'autoreload')
@@ -62,7 +63,7 @@ make_dir(metrics_dir)
 make_dir(model_dir)
 
 
-# In[3]:
+# In[45]:
 
 
 rec_keys = [
@@ -111,7 +112,7 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
     return metric_list
 
 
-# In[4]:
+# In[46]:
 
 
 device = th.device(device)
@@ -157,13 +158,13 @@ model_file = os.path.join(model_dir, f'{job_id}.pt')
 manager.save(model_file)
 
 
-# In[5]:
+# In[47]:
 
 
 # lm = ArtificalManager.load(model_file, device=th.device('cpu'))
 
 
-# In[6]:
+# In[48]:
 
 
 id_vars = ['round_number', 'sampling', 'update_step']
