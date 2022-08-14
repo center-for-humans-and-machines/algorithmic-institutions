@@ -171,8 +171,6 @@ class GraphNetwork(th.nn.Module):
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
         x, _, _ = self.op2(x, edge_index, edge_attr, u, batch)
         if self.bias:
-            import ipdb
-            ipdb.set_trace()
             x = x + self.bias(data['b'])
         return x
 
@@ -183,7 +181,7 @@ class GraphNetwork(th.nn.Module):
             'y_enc': self.y_encoder(**data).unsqueeze(1) if y_encode else None,  # hacky solution
             'y': data[self.y_name] if y_encode else None,
             'u': self.u_encoder(**data, datashape='batch*agent_round'),
-            'bias': self.bias_encoder(**data) if self.bias_encoder is not None else None,
+            **({'b': self.bias_encoder(**data)} if self.bias_encoder is not None else {}),
             'edge_index': data['edge_index'],
             'batch': data['batch'],
         }

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
+# In[1]:
 
 
 # Parameters
@@ -10,12 +10,12 @@ from aimanager.utils.utils import make_dir
 from aimanager.manager.manager import ArtificalManager
 from aimanager.artificial_humans import AH_MODELS
 from aimanager.manager.environment_v3 import ArtificialHumanEnv
-from aimanager.manager.memory_v3 import Memory
+from aimanager.manager.memory_v1_2 import Memory
 from itertools import count
 import os
 import pandas as pd
 import torch as th
-artificial_humans = "../../data/training/ah_10/data/model.pt"
+artificial_humans = "../../data/artificial_humans/ah_1_1_simple/data/model.pt"
 artificial_humans_model = "graph"
 data_dir = "../../data/manager_v3/dev/"
 manager_args = {
@@ -32,11 +32,10 @@ manager_args = {
             {"name": "contributions", "n_levels": 21, "encoding": "numeric"}
         ],
         "b_encoding": [{"name": "round_number", "n_levels": 16, "encoding": "onehot"}],
-        "u_encoding": [],
     },
 }
-replay_memory_args = {"n_batches": 100}
-n_update_steps = 3
+replay_memory_args = {"n_episodes": 100}
+n_update_steps = 1000
 eval_period = 20
 env_args = {
     "n_agents": 4,
@@ -50,7 +49,7 @@ job_id = "dev"
 labels = {}
 
 
-# In[8]:
+# In[2]:
 
 
 get_ipython().run_line_magic('load_ext', 'autoreload')
@@ -63,7 +62,7 @@ make_dir(metrics_dir)
 make_dir(model_dir)
 
 
-# In[9]:
+# In[3]:
 
 
 rec_keys = [
@@ -75,14 +74,11 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
     state = env.reset()
     metric_list = []
     for round_number in count():
-        encoded = manager.encode_pure(state)
-
-        batch_structure = env.get_batch_structure()
-
-        obs = {**encoded, **batch_structure}
+        _state = {**state, **env.get_batch_structure()}
+        encoded = manager.encode_pure(_state)
 
         # Get q values from controller
-        q_values = manager.get_q(obs, first=round_number == 0)
+        q_values = manager.get_q(encoded, first=round_number == 0)
 
         if on_policy:
             action = q_values.argmax(-1)
@@ -98,8 +94,8 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
         state, reward, done = env.step()
         if replay_mem is not None:
             replay_mem.add(
-                round_number=round_number, action=action, reward=reward,
-                **encoded)
+                episode_step=round_number, action=action, reward=reward,
+                **{k: v for k, v in encoded.items() if k not in ['edge_index', 'batch']})
 
         metrics['next_reward'] = reward.mean().item()
         metrics['q_min'] = q_values.min().item()
@@ -115,7 +111,7 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
     return metric_list
 
 
-# In[10]:
+# In[4]:
 
 
 device = th.device(device)
@@ -131,22 +127,21 @@ manager = ArtificalManager(
     default_values=artifical_humans.default_values, device=device, **manager_args)
 
 replay_mem = Memory(
-    n_rounds=env.n_rounds, device=cpu, batch_size=env.batch_size, group_size=env.n_agents,
-    **replay_memory_args)
+    n_episode_steps=env.n_rounds, device=cpu, **replay_memory_args)
 
 metrics_list = []
 
 for update_step in range(n_update_steps):
-    replay_mem.start_batch(env.groups)
+    # replay_mem.start_batch(env.groups)
 
     # here we sample one batch of episodes and add them to the replay buffer
     off_policy_metrics = run_batch(manager, env, replay_mem,
                                    on_policy=False, update_step=update_step)
 
-    replay_mem.finish_batch()
+    replay_mem.next_episode(update_step)
 
     # allow manager to update itself
-    sample, groups = replay_mem.sample(device=device)
+    sample = replay_mem.get_random(device=device)
     graph = env.get_batch_structure()
 
     if sample is not None:
@@ -157,18 +152,18 @@ for update_step in range(n_update_steps):
         metrics_list.extend(
             run_batch(manager, env, replay_mem=None, on_policy=True, update_step=update_step))
 
-model_file = os.path.join(model_dir, f'{job_id}.parquet')
+model_file = os.path.join(model_dir, f'{job_id}.pt')
 
 manager.save(model_file)
 
 
-# In[11]:
+# In[5]:
 
 
 # lm = ArtificalManager.load(model_file, device=th.device('cpu'))
 
 
-# In[12]:
+# In[6]:
 
 
 id_vars = ['round_number', 'sampling', 'update_step']
