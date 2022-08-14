@@ -22,7 +22,8 @@ class ArtificialHumanEnv():
     }
 
     def __init__(
-            self, *, artifical_humans, batch_size, n_agents, n_contributions, n_punishments, n_rounds, device):
+            self, *, artifical_humans, batch_size, n_agents, n_contributions, n_punishments,
+            n_rounds, device, agg_reward=False):
         """
         Args:
             asdasd
@@ -49,7 +50,7 @@ class ArtificialHumanEnv():
         self.groups = [[(i*self.n_agents + a) for a in range(self.n_agents)]
                        for i in range(self.batch_size)
                        ]
-
+        self.agg_reward = agg_reward
         self.reset_state()
 
     def reset_state(self):
@@ -63,6 +64,7 @@ class ArtificialHumanEnv():
             'contributor_payoff': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
             'manager_payoff': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
             'reward': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
+            'total_reward': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
             'group': th.tensor([i for i, g in enumerate(self.groups) for a in g], dtype=th.int64, device=self.device),
             'agent': th.tensor([a for i, g in enumerate(self.groups) for a in g], dtype=th.int64, device=self.device),
         }
@@ -107,9 +109,16 @@ class ArtificialHumanEnv():
 
     def update_reward(self):
         if self.done:
-            self.reward = - self.prev_punishments.to(th.float) / 32
+            reward = - self.prev_punishments.to(th.float) / 32
         else:
-            self.reward = (self.contributions * 1.6 - self.prev_punishments) / 32
+            reward = (self.contributions * 1.6 - self.prev_punishments) / 32
+        self.total_reward += reward
+
+        if self.agg_reward:
+            self.reward = (self.total_reward /
+                           self.n_rounds) if self.done else th.zeros_like(reward)
+        else:
+            self.reward = reward
 
     def update_contributions(self):
         state = {**self.state, **self.get_batch_structure()}
