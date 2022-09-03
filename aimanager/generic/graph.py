@@ -39,7 +39,6 @@ class NodeModel(th.nn.Module):
         # edge_attr: [E, F_e]
         # u: [B, F_u]
         # batch: [N] with max entry B - 1.
-
         row, col = edge_index
         out = scatter_mean(edge_attr, col, dim=0, dim_size=x.size(0))
         out = th.cat([x, out, u[batch]], dim=-1)
