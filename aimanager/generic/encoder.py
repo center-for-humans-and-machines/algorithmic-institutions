@@ -26,10 +26,13 @@ class IntEncoder(th.nn.Module):
         self.size = self.map.shape[-1]
 
     def forward(self, **state):
-        assert state[self.name].dtype == th.int64
-        if self.map.device != state[self.name].device:
-            self.map = self.map.to(state[self.name].device)
-        enc = self.map[state[self.name]]
+        tensor = state[self.name]
+        if tensor.dtype == th.bool:
+            tensor = tensor.type(th.int64)
+        assert tensor.dtype == th.int64
+        if self.map.device != tensor.device:
+            self.map = self.map.to(tensor.device)
+        enc = self.map[tensor]
         return enc
 
     def decode(self, arr, sample=False):
@@ -128,7 +131,7 @@ class Encoder(th.nn.Module):
                 elif datashape == 'batch*agent_round':
                     assert len(
                         state[self.refrence].shape) == 2, f'Expected 2 dimensions. Shape is {len(state[self.refrence].shape)}'
-                    enc_shape = (state['batch'].max(), state[self.refrence].shape[1], 0)
+                    enc_shape = (state['batch'].max()+1, state[self.refrence].shape[1], 0)
                 else:
                     raise ValueError('Unknown datashape.')
             else:

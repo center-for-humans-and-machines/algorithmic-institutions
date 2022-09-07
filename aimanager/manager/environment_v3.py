@@ -138,12 +138,12 @@ class ArtificialHumanEnv():
         self.round_number += 1
         if self.done:
             raise ValueError('Environment is done already.')
+        for k in self.state:
+            if k[:4] == 'prev':
+                self.state[k] = self.state[k[5:]]
         if (self.round_number[0, 0] == (self.n_rounds)):
             self.done = True
         else:
-            for k in self.state:
-                if k[:4] == 'prev':
-                    self.state[k] = self.state[k[5:]]
             self.update_contributions()
         self.update_reward()
         return self.state, self.reward, self.done

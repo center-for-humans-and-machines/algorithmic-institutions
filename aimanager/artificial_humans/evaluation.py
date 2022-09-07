@@ -22,7 +22,6 @@ class Evaluator:
         y_pred, y_pred_proba = model.predict(data)
 
         data = Batch.from_data_list(data)
-
         mask = data['mask']
         y_true = th.masked_select(data['y'], mask)
         y_true = y_true.detach().cpu().numpy()
@@ -54,8 +53,8 @@ class Evaluator:
             y_pred = th.masked_select(y_pred, mask)
             y_pred = y_pred.detach().cpu().numpy()
 
-            self.metrics += create_metrics(y_true, y_pred, strategy=strategy, **add_labels, **self.labels)
-
+            self.metrics += create_metrics(y_true, y_pred,
+                                           strategy=strategy, **add_labels, **self.labels)
 
     def eval_syn(self, model, data, data_df):
         y_name = model.y_name
@@ -73,19 +72,21 @@ class Evaluator:
     def add_loss(self, loss):
         self.metrics.append(dict(name='loss', value=loss, **self.labels))
 
-    def save(self, output_path, labels):
-        make_dir(output_path)
-        self._save_metric(self.metrics, 'metrics.parquet', output_path, labels)
+    def save(self, output_path, labels, job_id='all'):
+        self._save_metric(self.metrics, output_path, 'metrics', labels, job_id)
         if len(self.confusion_matrix):
-            self._save_metric(pd.concat(self.confusion_matrix), 'confusion_matrix.parquet', output_path, labels)
+            self._save_metric(pd.concat(self.confusion_matrix), output_path,
+                              'confusion_matrix', labels, job_id)
         if len(self.synthetic_predicitions):
-            self._save_metric(pd.concat(self.synthetic_predicitions), 'synthetic_predicitions.parquet', output_path, labels)
-
+            self._save_metric(pd.concat(self.synthetic_predicitions), output_path,
+                              'synthetic_predicitions', labels, job_id)
 
     @staticmethod
-    def _save_metric(rec, filename, output_path, labels):
+    def _save_metric(rec, output_path, metric_name, labels, job_id='all'):
+        metric_path = os.path.join(output_path, metric_name)
+        make_dir(metric_path)
         df = pd.DataFrame(rec)
-        df = add_labels(df, labels)
-        df.to_parquet(os.path.join(output_path, filename))
+        df = add_labels(df, {**labels, 'job_id': job_id})
+        df.to_parquet(os.path.join(metric_path, f'{job_id}.parquet'))
 
-    eval_sync = eval_syn # backport typo
+    eval_sync = eval_syn  # backport typo

@@ -79,12 +79,12 @@ class GraphNetwork(th.nn.Module):
                  add_rnn=True, add_edge_model=True, add_global_model=True, hidden_size=None,
                  default_values={}, **_):
         super().__init__()
-        self.x_encoder = Encoder(x_encoding, refrence=y_name)
-        self.u_encoder = Encoder(u_encoding, aggregation='mean', refrence=y_name)
+        self.x_encoder = Encoder(x_encoding, refrence='contributions')
+        self.u_encoder = Encoder(u_encoding, aggregation='mean', refrence='contributions')
         self.y_encoder = IntEncoder(encoding='onehot', name=y_name, n_levels=y_levels)
         self.bias_encoder = Encoder(
-            b_encoding, refrence=y_name) if b_encoding is not None else None
-        self.edge_encoder = EmptyEncoder(refrence=y_name)
+            b_encoding, refrence='contributions') if b_encoding is not None else None
+        self.edge_encoder = EmptyEncoder(refrence='contributions')
 
         x_features = self.x_encoder.size
         u_features = self.u_encoder.size
@@ -179,19 +179,7 @@ class GraphNetwork(th.nn.Module):
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
         x, _, _ = self.op2(x, edge_index, edge_attr, u, batch)
         if self.bias:
-            # if x.shape[1] > 1:
-            #     import ipdb
-            #     ipdb.set_trace()
-            #     print(*(f"{w:6.2f}" for w in self.bias.weight.tolist()
-            #           [0]), f" | {x.min().item():6.2f} {x.max().item():6.2f} {x.mean().item():6.2f}")
             x = x + self.bias(data['b'])
-
-        # if x.shape[1] > 1:
-        #     print(*(f"{w:6.2f}" for w in x.mean(dim=1).mean(dim=0).tolist()),
-        #           f" | {x.min().item():6.2f} {x.max().item():6.2f} {x.mean().item():6.2f}")
-        #     import ipdb
-        #     ipdb.set_trace()
-
         return x
 
     def encode_pure(self, data, *, mask='valid', y_encode=True):
@@ -269,8 +257,8 @@ class GraphNetwork(th.nn.Module):
         th.save(to_save, filename)
 
     @classmethod
-    def load(cls, filename):
-        to_load = th.load(filename)
+    def load(cls, filename, device=None):
+        to_load = th.load(filename, map_location=device)
 
         # ensure backward compatibility
         if 'manager_valid' not in to_load['default_values']:

@@ -1,0 +1,68 @@
+description: >-
+  Investigation of the model architecture and the relevance of global features.
+exec:
+  command: papermill -f {job_file} notebooks/artificial_humans/graph.ipynb {output_path}/graph.ipynb --cwd $(pwd)/notebooks/artificial_humans
+  script_name: gpu
+  data_dir: data
+  temp_dir: temp
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  mask_name: manager_valid
+  experiment_names: [trail_rounds_2]
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 6
+  n_player: 4
+  data_file: ../../data/experiments/pilot_random1_player_round_slim.csv
+  model_name: graph
+  shuffle_features:
+    - prev_punishments
+    - contributions
+    - prev_common_good
+    - valid
+    - prev_manager_valid
+  model_args:
+    y_levels: 31
+    y_name: punishments
+    hidden_size: 5
+    add_rnn: False
+    add_edge_model: False
+    add_global_model: False
+    x_encoding:
+      - name: contributions
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishments
+        n_levels: 31
+        encoding: numeric
+      - etype: bool
+        name: valid
+      - etype: bool
+        name: prev_manager_valid
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 10000
+    batch_size: 20
+    clamp_grad: 1
+    eval_period: 50
+  device: cuda
+grid:
+  - labels.rnn: [true, false]
+    model_args.add_rnn: [true, false]
+  - labels.edge: [true, false]
+    model_args.add_edge_model: [true, false]
+  - - labels.global_features: true
+      model_args.u_encoding:
+        - name: round_number
+          n_levels: 16
+          encoding: numeric
+        - name: prev_common_good
+          norm: 128
+          etype: float
+    - labels.global_features: false
+      model_args.u_encoding: []
