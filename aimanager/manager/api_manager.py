@@ -11,13 +11,12 @@ from aimanager.manager.manager import ArtificalManager
 def create_data(rounds, default_values):
     contributions = th.tensor([r['contributions'] for r in rounds], dtype=th.int64)
     valid = ~th.tensor([r['missing_inputs'] for r in rounds], dtype=th.bool)
-    manager_valid = th.tensor([
-        [False]*len(r['contributions']) if r['punishments'] is None else [True] *
-        len(r['contributions'])
-        for r in rounds], dtype=th.bool)
+    contributions = th.where(valid, contributions, int(default_values['contributions']))
+
+    manager_valid = th.tensor([[p is not None for p in r['punishments']]
+                              for r in rounds], dtype=th.bool)
     punishments = th.tensor(
-        [[default_values['punishments']] *
-            len(r['contributions']) if r['punishments'] is None else r['punishments']
+        [[default_values['punishments'] if p is None else p for p in r['punishments']]
          for r in rounds], dtype=th.int64)
     round_number = th.tensor([[r['round']]*len(r['contributions'])
                              for r in rounds], dtype=th.int64)
@@ -50,8 +49,8 @@ def create_data(rounds, default_values):
 class Manager:
     def encode(self, rounds):
         data = create_data(rounds, self.model.default_values)
-        for k, v in data.items():
-            print(k, v.shape)
+        # for k, v in data.items():
+        #     print(k, v.shape, v.max())
 
         encoded = self.model.encode_pure(data, y_encode=False)
         return encoded
@@ -79,8 +78,6 @@ class RLManager(Manager):
 MANAGER_CLASS = {
     'human': HumanManager,
     'rl': RLManager
-
-
 }
 
 
