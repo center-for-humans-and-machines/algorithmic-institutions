@@ -4,11 +4,21 @@ from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
 
 
+# def replace_none(l, dv):
+#     return [dv if v is None else l for v in l]
+
+
 def create_data(rounds, default_values):
     contributions = th.tensor([r['contributions'] for r in rounds], dtype=th.int64)
     valid = ~th.tensor([r['missing_inputs'] for r in rounds], dtype=th.bool)
-    manager_valid = ~th.tensor([r['manager_missing_inputs'] for r in rounds], dtype=th.bool)
-    punishments = th.tensor([r['punishments'] for r in rounds], dtype=th.int64)
+    manager_valid = th.tensor([
+        [False]*len(r['contributions']) if r['punishments'] is None else [True] *
+        len(r['contributions'])
+        for r in rounds], dtype=th.bool)
+    punishments = th.tensor(
+        [[default_values['punishments']] *
+            len(r['contributions']) if r['punishments'] is None else r['punishments']
+         for r in rounds], dtype=th.int64)
     round_number = th.tensor([[r['round']]*len(r['contributions'])
                              for r in rounds], dtype=th.int64)
 
@@ -21,9 +31,9 @@ def create_data(rounds, default_values):
     batch = th.zeros(len(last_round['groups']), dtype=th.int64)
 
     prev_punishments = th.full_like(punishments, fill_value=default_values['punishments'])
-    prev_punishments[1:] = punishments[:-1]
+    prev_punishments[1:] = punishments[: -1]
     prev_manager_valid = th.full_like(manager_valid, fill_value=default_values['manager_valid'])
-    prev_manager_valid[1:] = manager_valid[:-1]
+    prev_manager_valid[1:] = manager_valid[: -1]
 
     data = {
         'prev_manager_valid': prev_manager_valid.T,
@@ -40,6 +50,9 @@ def create_data(rounds, default_values):
 class Manager:
     def encode(self, rounds):
         data = create_data(rounds, self.model.default_values)
+        for k, v in data.items():
+            print(k, v.shape)
+
         encoded = self.model.encode_pure(data, y_encode=False)
         return encoded
 
@@ -66,6 +79,8 @@ class RLManager(Manager):
 MANAGER_CLASS = {
     'human': HumanManager,
     'rl': RLManager
+
+
 }
 
 
