@@ -22,7 +22,8 @@ class ArtificialHumanEnv():
     }
 
     def __init__(
-            self, *, artifical_humans, batch_size, n_agents, n_contributions, n_punishments, n_rounds, device, default_values=None):
+            self, *, artifical_humans, artifical_humans_valid=None, batch_size, n_agents,
+            n_contributions, n_punishments, n_rounds, device, default_values=None):
         """
         Args:
             asdasd
@@ -34,6 +35,7 @@ class ArtificialHumanEnv():
         self.n_contributions = n_contributions
         self.n_punishments = n_punishments
         self.artifical_humans = artifical_humans
+        self.artifical_humans_valid = artifical_humans_valid
         self.n_agents = n_agents
         self.edge_index = create_fully_connected(n_agents)
         self.batch_edge_index = th.tensor(
@@ -114,11 +116,24 @@ class ArtificialHumanEnv():
 
     def update_contributions(self):
         state = {**self.state, **self.get_batch_structure()}
+
+        # artificial humans
         encoded = self.artifical_humans.encode_pure(state, mask=None, y_encode=False)
         contributions = self.artifical_humans.predict_pure(
             encoded, reset_rnn=self.round_number[0][0] == 0)[0]
+
+        # artificial humans valid
+        if self.artifical_humans_valid is not None:
+            encoded = self.artifical_humans_valid.encode_pure(state, mask=None, y_encode=False)
+            valid = self.artifical_humans_valid.predict_pure(
+                encoded, reset_rnn=self.round_number[0][0] == 0)[0]
+            valid = valid.to(th.bool)
+            contributions[~valid] = self.artifical_humans.default_values['contributions']
+        else:
+            valid = th.ones_like(self.valid)
+
         self.contributions = contributions
-        self.valid = th.ones_like(self.valid)
+        self.valid = valid
 
     def reset(self):
         self.round_number = th.zeros_like(self.round_number)
