@@ -21,7 +21,8 @@ class ArtificialHumanEnv():
     }
 
     def __init__(
-            self, *, artifical_humans, n_agents, n_contributions, n_punishments, episode_steps, device):
+            self, *, artifical_humans, artifical_humans_valid=None, n_agents, n_contributions,
+            n_punishments, episode_steps, device):
         """
         Args:
             asdasd
@@ -32,6 +33,7 @@ class ArtificialHumanEnv():
         self.n_contributions = n_contributions
         self.n_punishments = n_punishments
         self.artifical_humans = artifical_humans
+        self.artifical_humans_valid = artifical_humans_valid
         self.n_agents = n_agents
         self.reward_baseline = (artifical_humans.default_values['common_good'] / 4)
         self.reward_scale = 1 / 20*1.6
@@ -82,12 +84,28 @@ class ArtificialHumanEnv():
 
     def calc_contributions(self):
         state = {k: v.unsqueeze(0).unsqueeze(-1) for k, v in self.state.items()}
+
+        # artificial humans
         encoded = self.artifical_humans.encode(
             state, mask=None, y_encode=False, edge_index=self.edge_index)
         contributions = self.artifical_humans.predict_one(
             encoded[0], reset_rnn=self.round_number[0] == 0)[0]
+
+        # artificial humans valid
+        if self.artifical_humans_valid is not None:
+            encoded = self.artifical_humans_valid.encode(
+                state, mask=None, y_encode=False, edge_index=self.edge_index)
+            valid = self.artifical_humans_valid.predict_one(
+                encoded[0], reset_rnn=self.round_number[0] == 0)[0]
+            valid = valid.to(th.bool)
+        else:
+            self.valid = th.ones_like(self.valid)
+
         self.contributions = contributions.squeeze(-1)
-        self.valid = th.ones_like(self.valid)
+        self.valid = valid.squeeze(-1)
+        self.contributions[~self.valid] = self.artifical_humans.default_values['contributions']
+
+        #  th.ones_like(self.valid)
 
     def init_episode(self):
         self.episode += 1
