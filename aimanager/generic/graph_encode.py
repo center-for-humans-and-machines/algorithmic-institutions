@@ -4,10 +4,11 @@ from torch_geometric.data import Data
 
 
 def create_fully_connected(n_nodes):
-    return th.tensor([[i,j]
-        for i in range(n_nodes)
-        for j in range(n_nodes)
-    ]).T
+    return th.tensor([[i, j]
+                      for i in range(n_nodes)
+                      for j in range(n_nodes)
+                      if i != j
+                      ]).T
 
 
 def encode(
@@ -18,14 +19,14 @@ def encode(
 
     n_episodes, n_agents, n_rounds, _ = encoded['x'].shape
 
-    edge_attr = th.zeros(n_player*n_player, n_rounds,0)
+    edge_attr = th.zeros(n_player*n_player, n_rounds, 0)
     edge_index = create_fully_connected(n_player)
 
     dataset = [
         Data(
-            **{k: v[i] for k, v in encoded.items() if v is not None}, 
+            **{k: v[i] for k, v in encoded.items() if v is not None},
             edge_attr=edge_attr, edge_index=edge_index, idx=i, group_idx=i, num_nodes=n_player
-            ).to(device)
+        ).to(device)
         for i in range(n_episodes)
     ]
     return dataset

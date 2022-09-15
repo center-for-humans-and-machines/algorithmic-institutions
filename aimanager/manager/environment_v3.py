@@ -41,6 +41,7 @@ class ArtificialHumanEnv():
              for i in range(self.batch_size)
              for a in range(self.n_agents)
              for b in range(self.n_agents)
+             if a != b
              ], device=self.device, dtype=th.int64).T
         self.batch = th.tensor(
             [i
@@ -130,6 +131,7 @@ class ArtificialHumanEnv():
         assert punishments.max() < self.n_punishments
         assert punishments.dtype == th.int64
         self.punishments = punishments
+        self.manager_valid = th.ones_like(self.manager_valid)
         self.update_common_good()
         # self.update_payoff()
         return self.state

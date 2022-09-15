@@ -163,6 +163,7 @@ class GraphNetwork(th.nn.Module):
             self.rnn_g_h0 = None
 
     def forward(self, data, reset_rnn=True):
+        # print(data)
         x = data['x']
         edge_index = data['edge_index']
         if 'edge_attr' in data:
