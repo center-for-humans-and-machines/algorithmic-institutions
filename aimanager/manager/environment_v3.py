@@ -61,6 +61,7 @@ class ArtificialHumanEnv():
             'punishments': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.int64, device=self.device),
             'contributions': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.int64, device=self.device),
             'round_number': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.int64, device=self.device),
+            'is_first': th.ones((self.batch_size * self.n_agents, 1), dtype=th.bool, device=self.device),
             'valid': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.bool, device=self.device),
             'manager_valid': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.bool, device=self.device),
             'common_good': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
@@ -153,6 +154,7 @@ class ArtificialHumanEnv():
 
     def step(self):
         self.round_number += 1
+        self.is_first = th.zeros_like(self.is_first)
         if self.done:
             raise ValueError('Environment is done already.')
         for k in self.state:
