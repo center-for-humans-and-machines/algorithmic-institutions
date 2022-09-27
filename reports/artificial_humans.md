@@ -111,14 +111,17 @@ rate of 3.e-4.
 
 ### Architecture
 
-We investigate the effect of the edge model, the GRU unit and the round
-features on model performance.
+We investigate the effect of different components of the architecture on the
+models performance. In particular we investigated the edge
+model, the GRU unit (RNN) and of round features (global features). We run grid
+with all 8 combinations of these three features being active and inactive.
 
 ![Learning Rate](../notebooks/ah_evaluation/plots/01_2_rnn_edge_features/learning_curve_model.jpg)
 
-A linear regression on the cross entropy of the last 20% of the epochs  shows that influence of
-the RNN and the edge model considerable. Round features (round number and common
-good) on the other hand are having a minor influence on test set performance.
+A linear regression on the cross entropy of the last 20% of the epochs has large
+negative coefficients for the RNN and the edge model. This indicates that these
+two components considerable improve the model performance. Round (Global) features (round number and common
+good) on the other hand are only having a minor influence.
 
 ![Learning Rate](../notebooks/ah_evaluation/plots/01_2_rnn_edge_features/effect_size.jpg)
 
@@ -131,9 +134,10 @@ without round based features.
 
 We investigate the individual importance of the input features 'previous
 contributions', 'previous punishments' and 'previous entry valid' on the model
-performance, by individually shuffling them.
+performance, by individually shuffling them and calculating the resulting loss
+in predictive performance.
 
-We find the model to be dominatly rely on previous contribution. However, all
+We find the model to be dominantly rely on previous contribution. However, all
 three features do contribute.
 
 ![Shuffle Feature](../notebooks/ah_evaluation/plots/01_2_rnn_edge_features/shuffle_features.jpg)
@@ -147,7 +151,7 @@ The confusion matrix shows that our model well captures most of the variance and
 _Confusion matrix between predicted and actual contribution (average accross the test sets). For the predictions we are weighting each contribution level with the corresponding probabilty assigned by the model. This is different to a confusion matrix most used for classification problems, where only the class with the highest predicted probability is
 considered._
 
-We investigate if the predicted frequency of each contribution level corresponds
+We investigate if the empirical frequency of each contribution level corresponds
 to the modeled contribution probability. Both distributions match well and we do
 not see any systematic diviations.
 

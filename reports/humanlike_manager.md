@@ -10,13 +10,14 @@ The original batch size of 10 lead to failing convergence.
 
 ## Architecture
 
-Evaluating the the different components of our architecture, we found that
-adding an recurrent unit and round based features added little to the model
-performance. And the best average performance was archived by a models without these features.
+We run a binary grid over the components a) edge model, b) recurrent unit and c)
+global features. We found that a large improvement of performance for
+adding the edge model, but only little influence by adding a recurrent unit and
+adding global features. The best average cross validated performance was
+archived by models with an edge model only. Therefore we settled on this model
+for the artificial human manager.
 
 ![Effect size](../notebooks/human_like_evaluation/plots/01_rnn_edge_features/effect_size.jpg)
-
-Therefore we settled on model without a recurrent unit and round based features, but that includes an edge model.
 
 ## Simulation
 
@@ -28,7 +29,7 @@ contribution and punishment levels that are relative stable across rounds.
 We also investigate the behavior of larger and smaller groups and found relative
 low deviation in both, behavior of the group as well as the behavior of the
 manager. A detailed discussion of the comparision of artificial groups and real
-group follows in the seciont "Comparision".
+group follows in the section "Comparision".
 
 Finally, we compare the average punishments conditioned on the contribution of
 the respective group member, between human manager and our human like manager

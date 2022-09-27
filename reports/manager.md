@@ -1,7 +1,7 @@
 # RL Manager
 
 We train a 'optimal manager' using deep Q learning to manage a group of
-artificial humans. The manager is rewarded by the common good of the group.
+artificial human contributors. The manager is rewarded by the common good of the group.
 
 ## Artificial Humans environment
 
@@ -20,10 +20,10 @@ invalid (and replaces the corresponding values with a default), that has been
 predicted to be invalid by the `valid response model`.
 
 The environment then also computes collective values such as the common good and
-keeps track of the game rounds. Importantly, an environment step, does not
-align with a round in the game. An environment step starts with the punishment
-of the group members. Then the contribution of the group members and the common
-good for the next round is calculated.
+keeps track of the game rounds. Importantly, an step of the environment, does not
+align with a round in the game as seen by participants. An step of the
+environment starts with the punishment of the group members. Then the
+contribution of the group members and the common good for the next round is calculated.
 
 A reward is calculated, that is composed of the punishment and next rounds
 contribution.
@@ -38,8 +38,7 @@ the manager.
 
 However, the first contribution is causally independent from the policy ${\pi}$.
 For this reason the optimal policy for the reformulated rewards, remains the
-optimal
-policy for maximising the common good.
+optimal policy for maximising the common good.
 
 $$
 arg max_{\pi} \sum_i R_i = arg max_{\pi} \sum_i (C_i * 1.6 - P_i)
@@ -55,14 +54,17 @@ especially for $\gamma = 1$, the Q-value depends strongly on the round number as
 the possible maximal future cummulative rewards decreases from round to round.
 
 We found empirical, that adding a onehot encoded round number as input to the
-action-value model stabilzes the training and explosion of the action value
+action-value model stabilzes the training and avoids explosion of the action value
 network. This solution is somewhat unsatisfing, as it inflates the weights in
 the first layer and might lead to overfitting. Therefore we removed the round
 number from the features of the main model, but added a second additive bias
 that is derived from the round number. The bias is soley contingent on the round
-number and therefore does not allow for any interaction between round and
+number and is the same for all possible actions in that round. Therefore the
+bias does not allow for any interaction between round number and
 participants behavior.
 
+On the other hand, we add a gated recurrent unit within the behavioral part of
+the model that allows implicitly for a temporal evolution of the the optimal policy.
 
 ```mermaid
 flowchart TD
@@ -94,8 +96,6 @@ style I2 stroke-width:0px
 style R stroke-width:0px
 ```
 
-The gated recurrent unit within the behavioral part of the model on the other
-hand, allows implicitly for such temporal evolutions of the the optimal policy.
 
 ## Technical Details
 
@@ -132,7 +132,7 @@ curve](../notebooks/manager_evaluation/plots/16_target_updated2/average_common_g
 
 ### Neural Units
 
-To simply parametrisation we are using the same number of neural units
+To simplify parametrisation we are using the same number of neural units
 throughout the model in each layer. We investigated the different number of
 neural units and found a sweat spot for 20 hidden units.
 

@@ -3,7 +3,7 @@
 We are simulating 100 games each of groups of 4 artificial contributors managed by either
 the humanlike manager and the RL manager. We also compare artificial
 contributors trained on the full dataset with artificial contributor that were
-trained only on those human contributors that where managed by a human manager.
+trained only on those human contributors that weere managed by a human manager.
 
 ## Collective behavior
 
@@ -11,7 +11,7 @@ trained only on those human contributors that where managed by a human manager.
 
 We can make the following observations:
 1. The RL manager (green) archives a larger common good compared to the rule based (brown) and the human manager from
-   the pilot (violet)
+   the pilots (violet)
 2. The RL manager (green, red) punishes stronger then the human manager (violet), in particular in early rounds.
 3. The RL performance is robust, however reduced, when managing alternative
    artificial participants trained on a subset of the data (red)
