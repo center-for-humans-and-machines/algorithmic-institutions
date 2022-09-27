@@ -103,13 +103,8 @@ def create_syn_data(n_contribution, n_punishment, default_values, n_agents=4, n_
 def get_cross_validations(data, n_splits, fraction_training=1.0):
     episode_idx = list(range(data['contributions'].shape[0]))
     random.shuffle(episode_idx)
-    if n_splits is None:
-        train_data = {
-            k: t[episode_idx]
-            for k, t in data.items()
-        }
-        yield train_data, None
-    else:
+
+    if n_splits is not None:
         groups = [episode_idx[i::n_splits] for i in range(n_splits)]
         for i in range(n_splits):
             test_idx = groups[i]
@@ -127,4 +122,10 @@ def get_cross_validations(data, n_splits, fraction_training=1.0):
                 k: t[train_idx]
                 for k, t in data.items()
             }
-            yield train_data, test_data
+            yield i, train_data, test_data
+
+    train_data = {
+        k: t[episode_idx]
+        for k, t in data.items()
+    }
+    yield None, train_data, None
