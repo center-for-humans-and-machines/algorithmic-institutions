@@ -121,7 +121,10 @@ The replay memory size has a relative minor influence on the training dynamic.
 The target update frequency on the other hand, has clear manifistations in the
 evolution of the Q-values over the training period. A frequent updates lead
 to fluctuations of the q-values in early in the training. A very large update
-period leads to a slow convergence and a step like increase of the q-values as future rewards a slowly propagated to earlier actions. We therefore choose an
+period leads to a slow convergence and a step like increase of the q-values as
+future rewards a slowly propagated to earlier actions.
+
+We therefore choose an
 intermediate update period of 100 training steps. For the replay memory size we
 likewise choosed 100 training steps.
 
