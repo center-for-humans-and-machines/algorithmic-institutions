@@ -110,10 +110,13 @@ class ArtificialHumanEnv():
         self.manager_payoff = self.common_good / 4
 
     def update_reward(self):
+        masked_contribution = th.where(self.valid, self.contributions, 0)
+        masked_prev_punishments = th.where(self.prev_valid, self.prev_punishments, 0)
+
         if self.done:
-            self.reward = - self.prev_punishments.to(th.float) / 32
+            self.reward = - masked_prev_punishments.to(th.float) / 32
         else:
-            self.reward = (self.contributions * 1.6 - self.prev_punishments) / 32
+            self.reward = (masked_contribution * 1.6 - masked_prev_punishments) / 32
 
     def update_contributions(self):
         state = {**self.state, **self.get_batch_structure()}

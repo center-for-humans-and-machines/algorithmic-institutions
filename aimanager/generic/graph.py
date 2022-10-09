@@ -30,8 +30,8 @@ class NodeModel(th.nn.Module):
         if activation is None:
             self.node_mlp = Lin(in_features=in_features, out_features=out_features)
         else:
-            self.node_mlp = Seq(Lin(in_features=in_features,
-                                out_features=out_features), activation)
+            self.node_mlp = Seq(
+                Lin(in_features=in_features, out_features=out_features), activation)
 
     def forward(self, x, edge_index, edge_attr, u, batch):
         # x: [N, F_x], where N is the number of nodes.
@@ -108,7 +108,7 @@ class GraphNetwork(th.nn.Module):
 
             node_model = NodeModel(
                 x_features=x_features, edge_features=edge_features,
-                u_features=u_features, out_features=hidden_size, activation=ReLU())
+                u_features=u_features, out_features=hidden_size, activation=Tanh())
             x_features = hidden_size
 
             if add_global_model:
@@ -147,7 +147,7 @@ class GraphNetwork(th.nn.Module):
             if b_encoding is not None:
                 self.bias = Seq(
                     Lin(in_features=self.bias_encoder.size, out_features=hidden_size),
-                    ReLU(),
+                    Tanh(),
                     Lin(in_features=hidden_size, out_features=1),
                 )
             else:
@@ -163,7 +163,6 @@ class GraphNetwork(th.nn.Module):
             self.rnn_g_h0 = None
 
     def forward(self, data, reset_rnn=True):
-        # print(data)
         x = data['x']
         edge_index = data['edge_index']
         if 'edge_attr' in data:

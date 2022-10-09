@@ -1,0 +1,55 @@
+description: >-
+  Scan of random sampling in the model.
+exec:
+  command: papermill -f {job_file} notebooks/manager/rl_manager_v3.ipynb {output_path}/rl_manager_v3.ipynb --cwd $(pwd)/notebooks/manager
+  script_name: gpu
+  cores: 2
+  memory: 16
+  data_dir: data
+  temp_dir: temp
+params_only: true
+params:
+  artificial_humans: ../../artifacts/artificial_humans/03_dataset/model/dataset_all.pt
+  artificial_humans_model: graph
+  artificial_humans_valid: ../../artifacts/artificial_humans/02_2_valid/model/rnn_True.pt
+  manager_args:
+    opt_args:
+      lr: 3.e-4
+    gamma: 1.0
+    eps: 0.1
+    target_update_freq: 1000
+    model_args:
+      hidden_size: 100
+      add_rnn: true
+      add_edge_model: true
+      add_global_model: False
+      x_encoding:
+        - name: contributions
+          n_levels: 21
+          encoding: numeric
+        - name: prev_punishments
+          n_levels: 31
+          encoding: numeric
+        - etype: bool
+          name: valid
+        - etype: bool
+          name: prev_valid
+      b_encoding:
+        - name: round_number
+          n_levels: 16
+          encoding: onehot
+  replay_memory_args:
+    n_episodes: 100
+  n_update_steps: 20000
+  eval_period: 20
+  env_args:
+    n_agents: 4
+    n_contributions: 21
+    n_punishments: 31
+    n_rounds: 16
+    batch_size: 1000
+  device: cuda
+grid:
+  - labels.eps: [0.1, 0.2]
+    manager_args.eps: [0.1, 0.2]
+  - labels.run: [0,1,2,3,4,5,6,7,8,9]
