@@ -232,13 +232,13 @@ class GraphNetwork(th.nn.Module):
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
-    def predict_one(self, data, reset_rnn=True, sample=True):
-        self.eval()
-        batch = Batch.from_data_list([data])
-        y_logit = self(batch, reset_rnn)
-        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
-        y_pred = self.y_encoder.decode(y_pred_proba, sample)
-        return y_pred, y_pred_proba
+    # def predict_one(self, data, reset_rnn=True, sample=True):
+    #     self.eval()
+    #     batch = Batch.from_data_list([data])
+    #     y_logit = self(batch, reset_rnn)
+    #     y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+    #     y_pred = self.y_encoder.decode(y_pred_proba, sample)
+    #     return y_pred, y_pred_proba
 
     def save(self, filename):
         to_save = {

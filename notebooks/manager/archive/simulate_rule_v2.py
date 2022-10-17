@@ -6,7 +6,7 @@
 
 # Parameters
 from aimanager.artificial_humans import AH_MODELS
-from aimanager.manager.environment_v3 import ArtificialHumanEnv
+from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.utils.utils import make_dir
 from itertools import count
 import pandas as pd

@@ -1,6 +1,7 @@
 from aimanager.generic.graph_encode import create_fully_connected
 
 import torch as th
+from torch_scatter import scatter_sum
 
 
 class ArtificialHumanEnv():
@@ -21,40 +22,59 @@ class ArtificialHumanEnv():
     }
 
     def __init__(
-            self, *, artifical_humans, artifical_humans_valid=None, n_agents, n_contributions,
-            n_punishments, episode_steps, device):
+            self, *, artifical_humans, artifical_humans_valid=None, batch_size, n_agents,
+            n_contributions, n_punishments, n_rounds, device, default_values=None):
         """
         Args:
             asdasd
         """
-        self.episode = 0
-        self.episode_steps = episode_steps
+        self.batch_size = batch_size
+        self.default_values = artifical_humans.default_values if default_values is None else default_values
+        self.n_rounds = n_rounds
         self.device = device
         self.n_contributions = n_contributions
         self.n_punishments = n_punishments
         self.artifical_humans = artifical_humans
         self.artifical_humans_valid = artifical_humans_valid
         self.n_agents = n_agents
-        self.reward_baseline = (artifical_humans.default_values['common_good'] / 4)
-        self.reward_scale = 1 / 20*1.6
         self.edge_index = create_fully_connected(n_agents)
+        self.batch_edge_index = th.tensor(
+            [[a+(i*self.n_agents), b+(i*self.n_agents)]
+             for i in range(self.batch_size)
+             for a in range(self.n_agents)
+             for b in range(self.n_agents)
+             if a != b
+             ], device=self.device, dtype=th.int64).T
+        self.batch = th.tensor(
+            [i
+             for i in range(self.batch_size)
+             for a in range(self.n_agents)
+             ], device=self.device, dtype=th.int64)
+        self.groups = [[(i*self.n_agents + a) for a in range(self.n_agents)]
+                       for i in range(self.batch_size)
+                       ]
+
         self.reset_state()
 
     def reset_state(self):
         state = {
-            'punishments': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
-            'contributions': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
-            'round_number': th.zeros(self.n_agents, dtype=th.int64, device=self.device),
-            'valid': th.zeros(self.n_agents, dtype=th.bool, device=self.device),
-            'manager_valid': th.zeros(self.n_agents, dtype=th.bool, device=self.device),
-            'common_good': th.zeros(self.n_agents, dtype=th.float, device=self.device),
-            'payoffs': th.zeros(self.n_agents, dtype=th.float, device=self.device),
+            'punishments': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.int64, device=self.device),
+            'contributions': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.int64, device=self.device),
+            'round_number': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.int64, device=self.device),
+            'is_first': th.ones((self.batch_size * self.n_agents, 1), dtype=th.bool, device=self.device),
+            'valid': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.bool, device=self.device),
+            'manager_valid': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.bool, device=self.device),
+            'common_good': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
+            'contributor_payoff': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
+            'manager_payoff': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
+            'reward': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
+            'group': th.tensor([i for i, g in enumerate(self.groups) for a in g], dtype=th.int64, device=self.device),
+            'agent': th.tensor([a for i, g in enumerate(self.groups) for a in g], dtype=th.int64, device=self.device),
         }
-        default_values = self.artifical_humans.default_values
 
         prev_state = {
-            f'prev_{k}': th.full_like(state[k], fill_value=default_values[k])
-            for k, t in state.items() if k in default_values
+            f'prev_{k}': th.full_like(state[k], fill_value=self.default_values[k])
+            for k, t in state.items() if k in self.default_values
         }
         self.state = {**prev_state, **state}
 
@@ -72,73 +92,86 @@ class ArtificialHumanEnv():
         else:
             object.__setattr__(self, name, value)
 
-    @staticmethod
-    def calc_common_good(contributions, punishments, valid):
-        return (contributions[valid] * 1.6 - punishments[valid]).mean() * th.ones_like(punishments, dtype=th.float)
+    def update_common_good(self):
+        masked_contribution = th.where(self.valid, self.contributions, 0)
+        masked_punishments = th.where(self.valid, self.punishments, 0)
+        sum_contribution = scatter_sum(
+            masked_contribution, self.batch, dim=0, dim_size=self.batch_size)
+        sum_punishments = scatter_sum(
+            masked_punishments, self.batch, dim=0, dim_size=self.batch_size)
+        sum_valid = scatter_sum(
+            self.valid.to(th.float), self.batch, dim=0, dim_size=self.batch_size)
+        common_good = (sum_contribution * 1.6 - sum_punishments) / sum_valid
+        self.common_good = common_good[self.batch]
 
-    @staticmethod
-    def calc_payout(contributions, punishments, commond_good, valid):
-        payout = 20 - contributions - punishments + commond_good
-        payout[~valid] = 0
-        return payout
+    def update_payoff(self):
+        contributor_payoff = 20 - self.contributions - self.punishments + self.common_good
+        self.contributor_payoff = th.where(self.valid, contributor_payoff, 0)
+        self.manager_payoff = self.common_good / 4
 
-    def calc_contributions(self):
-        state = {k: v.unsqueeze(0).unsqueeze(-1) for k, v in self.state.items()}
+    def update_reward(self):
+        masked_contribution = th.where(self.valid, self.contributions, 0)
+        masked_prev_punishments = th.where(self.prev_valid, self.prev_punishments, 0)
+
+        if self.done:
+            self.reward = - masked_prev_punishments.to(th.float) / 32
+        else:
+            self.reward = (masked_contribution * 1.6 - masked_prev_punishments) / 32
+
+    def update_contributions(self):
+        state = {**self.state, **self.get_batch_structure()}
 
         # artificial humans
-        encoded = self.artifical_humans.encode(
-            state, mask=None, y_encode=False, edge_index=self.edge_index)
-        contributions = self.artifical_humans.predict_one(
-            encoded[0], reset_rnn=self.round_number[0] == 0)[0]
+        encoded = self.artifical_humans.encode_pure(state, mask=None, y_encode=False)
+        contributions = self.artifical_humans.predict_pure(
+            encoded, reset_rnn=self.round_number[0][0] == 0)[0]
 
         # artificial humans valid
         if self.artifical_humans_valid is not None:
-            encoded = self.artifical_humans_valid.encode(
-                state, mask=None, y_encode=False, edge_index=self.edge_index)
-            valid = self.artifical_humans_valid.predict_one(
-                encoded[0], reset_rnn=self.round_number[0] == 0)[0]
+            encoded = self.artifical_humans_valid.encode_pure(state, mask=None, y_encode=False)
+            valid = self.artifical_humans_valid.predict_pure(
+                encoded, reset_rnn=self.round_number[0][0] == 0)[0]
             valid = valid.to(th.bool)
+            contributions[~valid] = self.artifical_humans.default_values['contributions']
         else:
-            self.valid = th.ones_like(self.valid)
+            valid = th.ones_like(self.valid)
 
-        self.contributions = contributions.squeeze(-1)
-        self.valid = valid.squeeze(-1)
-        self.contributions[~self.valid] = self.artifical_humans.default_values['contributions']
+        self.contributions = contributions
+        self.valid = valid
 
-        #  th.ones_like(self.valid)
-
-    def init_episode(self):
-        self.episode += 1
+    def reset(self):
         self.round_number = th.zeros_like(self.round_number)
-
+        self.done = False
         self.reset_state()
-        self.calc_contributions()
+        self.update_contributions()
         return self.state
 
     def punish(self, punishments):
-
         assert punishments.max() < self.n_punishments
         assert punishments.dtype == th.int64
-
         self.punishments = punishments
-        self.common_good = self.calc_common_good(self.contributions, self.punishments, self.valid)
-        # self.payoffs = self.calc_payout(self.contributions, self.punishments, self.common_good, self.valid)
+        self.manager_valid = th.ones_like(self.manager_valid)
+        self.update_common_good()
+        # self.update_payoff()
         return self.state
 
     def step(self):
         self.round_number += 1
-        if (self.round_number[0] == (self.episode_steps)):
-            reward = - self.prev_punishments.to(th.float)
-            done = True
-        elif self.round_number[0] >= self.episode_steps:
+        self.is_first = th.zeros_like(self.is_first)
+        if self.done:
             raise ValueError('Environment is done already.')
+        for k in self.state:
+            if k[:4] == 'prev':
+                self.state[k] = self.state[k[5:]]
+        if (self.round_number[0, 0] == (self.n_rounds)):
+            self.done = True
         else:
-            for k in self.state:
-                if k[:4] == 'prev':
-                    self.state[k] = self.state[k[5:]]
-            self.calc_contributions()
-            reward = self.contributions.to(th.float) * 1.6 - self.prev_punishments.to(th.float)
-            done = False
-        self.payoffs = reward
-        reward = (reward - self.reward_baseline) * self.reward_scale
-        return self.state, reward, done
+            self.update_contributions()
+        self.update_reward()
+        return self.state, self.reward, self.done
+
+    def get_batch_structure(self):
+        return {
+            'edge_index': self.batch_edge_index,
+            'batch': self.batch
+        }

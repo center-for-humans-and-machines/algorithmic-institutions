@@ -2,6 +2,7 @@ import os
 import collections
 import numpy as np
 import torch as th
+import random
 from aimanager.utils.utils import make_dir
 
 
@@ -18,7 +19,7 @@ class Memory():
 
     def init_store(self, state):
         self.memory = {**{
-            k: th.zeros((self.n_episodes, t.shape[0], self.n_episode_steps, *t.shape[2:]),
+            k: th.zeros((self.n_episodes, self.n_episode_steps, *t.shape),
                         dtype=t.dtype, device=self.device)
             for k, t in state.items()
         },
@@ -39,7 +40,7 @@ class Memory():
         self.memory['episode'][self.current_row, episode_step] = self.episode
         self.memory['episode_steps'][self.current_row, episode_step] = episode_step
         for k, t in state.items():
-            self.memory[k][self.current_row, :, [episode_step]] = t.to(self.device)
+            self.memory[k][self.current_row, episode_step] = t
 
     def sample(self, batch_size, horizon=None, **kwargs):
         if horizon is None:

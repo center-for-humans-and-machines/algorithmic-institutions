@@ -14,14 +14,14 @@ We calculate the cumulative common good across all 16 rounds for a grid of
 different factors $s$, $c$ and $b$. We also compare results for two different
 artificial humans (complex and simple).
 
-![Common Good S C](../notebooks/manager_evaluation/plots/v1_2_1/common_good_s_c.jpg)
+![Common Good S C](../notebooks/simulate_rule/plots/simulate_rule_v1_2_1/common_good_s_c.jpg)
 
 > The average common good over the full episode for different punishment slopes $c$ and binary
 > punishment of any defectors $s$. We show
 > results for complex and simple artificial humans on the left and right
 > respectively.
 
-![Common Good S B](../notebooks/manager_evaluation/plots/v1_2_1/common_good_s_b.jpg)
+![Common Good S B](../notebooks/simulate_rule/plots/simulate_rule_v1_2_1/common_good_s_b.jpg)
 
 > The average common good over the full episode for different punishment slopes
 > $c$ and grace values $b$. We show
@@ -39,7 +39,7 @@ artificial humans (complex and simple).
 
 **Contribution and punishments over rounds**
 
-![Con Pun Over Rounds](../notebooks/manager_evaluation/plots/v1_2_1/over_rounds.jpg)
+![Con Pun Over Rounds](../notebooks/simulate_rule/plots/simulate_rule_v1_2_1/over_rounds.jpg)
 
 > The evolution of contributions and punishments on the y-axis are depicted over
 > 16 rounds on the x-axis.
@@ -49,7 +49,7 @@ artificial humans (complex and simple).
 
 **Common Good and Cumulative Common Good**
 
-![Common Good Over Rounds](../notebooks/manager_evaluation/plots/v1_2_1/over_rounds_cg.jpg)
+![Common Good Over Rounds](../notebooks/simulate_rule/plots/simulate_rule_v1_2_1/over_rounds_cg.jpg)
 
 > We show in the first row the common good (averaged over multiple simulations).
 > The second row depicts the cumulative average common good. Thereby, we
@@ -61,7 +61,7 @@ artificial humans (complex and simple).
 
 **Common Good and Cumulative Common Good**
 
-![Manager Reward Over Rounds](../notebooks/manager_evaluation/plots/v1_2_1/over_rounds_rew.jpg)
+![Manager Reward Over Rounds](../notebooks/simulate_rule/plots/simulate_rule_v1_2_1/over_rounds_rew.jpg)
 
 > We show the manager reward in the first row and the cumulative manager reward
 > in the second row. The reward in each round is corresponding to the common
@@ -94,12 +94,12 @@ later rounds leading to an superior common good through higher contributions.
 
 ### Apply the rule only to 1,2,3,4 agents
 
-![Different Agents](../notebooks/manager_evaluation/plots/v1_agents_1/metric_ah.jpg)
+![Different Agents](../notebooks/simulate_rule/plots/v1_agents_1/metric_ah.jpg)
 
 ### Apply the rule only to some rounds - Total over episode
 
-![Some Rounds](../notebooks/manager_evaluation/plots/v1_rounds_1/metric_ah.jpg)
+![Some Rounds](../notebooks/simulate_rule/plots/v1_rounds_1/metric_ah.jpg)
 
 ### Apply the rule only to some rounds - Per round
 
-![Some Rounds](../notebooks/manager_evaluation/plots/v1_rounds_1/metric_ah.jpg)
+![Some Rounds](../notebooks/simulate_rule/plots/v1_rounds_1/metric_ah.jpg)

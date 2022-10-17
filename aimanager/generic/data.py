@@ -76,30 +76,6 @@ def create_torch_data(df, default_values=None):
     return data, default_values
 
 
-def create_syn_data(n_contribution, n_punishment, default_values, n_agents=4, n_steps=16):
-    agent = 0
-    episode = 0
-    recs = []
-    for contribution in range(n_contribution):
-        for punishment in range(n_punishment):
-            for step in range(n_steps):
-                for agent in range(n_agents):
-                    recs.append({
-                        'episode_id': episode,
-                        'round_number': step,
-                        'player_id': agent,
-                        'punishment': punishment,
-                        'contribution': contribution,
-                        'common_good': (contribution - punishment) * 4,
-                        'player_no_input': False,
-                        'manager_no_input': False,
-                        'is_first': step == 0
-                    })
-            episode += 1
-    df = pd.DataFrame.from_records(recs)
-    return create_torch_data(df, default_values=default_values)[0]
-
-
 def get_cross_validations(data, n_splits, fraction_training=1.0):
     episode_idx = list(range(data['contributions'].shape[0]))
     random.shuffle(episode_idx)
@@ -113,6 +89,11 @@ def get_cross_validations(data, n_splits, fraction_training=1.0):
             # get a random fraction of the training groups
             random.shuffle(train_idx)
             train_idx = train_idx[:int(fraction_training*len(train_idx))]
+
+            assert len(set(train_idx).intersection(set(test_idx))) == 0
+            assert len(train_idx) == len(set(train_idx))
+            assert len(test_idx) == len(set(test_idx))
+            assert (len(test_idx) + len(train_idx)) == len(episode_idx)
 
             test_data = {
                 k: t[test_idx]

@@ -1,6 +1,6 @@
 import torch as th
 from itertools import count
-from aimanager.manager.memory import Memory
+from aimanager.manager.archive.memory import Memory
 
 
 class ManagerEvaluator():

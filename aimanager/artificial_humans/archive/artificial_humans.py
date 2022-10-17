@@ -1,5 +1,5 @@
 import torch as th
-from aimanager.generic.mlp import MultiLayer
+from aimanager.generic.archive.mlp import MultiLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
 
 
@@ -19,10 +19,11 @@ class ArtificialHuman(th.nn.Module):
         print(y_scaling)
 
         self.x_encoder = Encoder(x_encoding)
-        self.y_encoder = IntEncoder(encoding=y_encoding, name='contributions', n_levels=n_contributions)
+        self.y_encoder = IntEncoder(
+            encoding=y_encoding, name='contributions', n_levels=n_contributions)
 
         input_size = self.x_encoder.size
-    
+
         if not model:
             self.model = MultiLayer(output_size=output_size, input_size=input_size, **model_args)
         else:
@@ -37,7 +38,7 @@ class ArtificialHuman(th.nn.Module):
         Takes an already encoded tensor
         """
         return self.model(ah_x_enc)
-        
+
     def act(self, **state):
         raise NotImplementedError('have to fix this')
         enc = self.encode_x(**state)
@@ -55,18 +56,20 @@ class ArtificialHuman(th.nn.Module):
             y_pred_proba = None
             # y_pred_proba = th.cat([th.ones((*y_pred_proba.shape[:-1],1)), y_pred_proba], axis=-1)
             # y_pred_proba = y_pred_proba / th.sum(y_pred_proba, dim=-1, keepdim=True)
-        elif self.y_encoding == 'onehot': 
+        elif self.y_encoding == 'onehot':
             y_pred_proba = th.nn.functional.softmax(y_pred_logit, dim=-1)
             y_pred = self.y_encoder.decode(y_pred_proba)
         elif self.y_encoding == 'numeric':
             if self.y_scaling == 'sigmoid':
                 y_pred = th.sigmoid(y_pred_logit.squeeze(-1))
-            elif self.y_scaling in ['hardtanh','None']:
-                y_pred = th.nn.functional.hardtanh(y_pred_logit, min_val=0.0, max_val=1.0).squeeze(-1)
+            elif self.y_scaling in ['hardtanh', 'None']:
+                y_pred = th.nn.functional.hardtanh(
+                    y_pred_logit, min_val=0.0, max_val=1.0).squeeze(-1)
             else:
                 raise ValueError('Unkown y scaling.')
             y_pred = self.y_encoder.decode(y_pred)
-            y_pred_proba = th.nn.functional.one_hot(y_pred, num_classes=self.n_contributions).float()
+            y_pred_proba = th.nn.functional.one_hot(
+                y_pred, num_classes=self.n_contributions).float()
         else:
             raise ValueError(f'Unkown y encoding {self.y_encoding}')
         return y_pred, y_pred_proba
@@ -88,7 +91,8 @@ class ArtificialHuman(th.nn.Module):
             loss_fn = th.nn.CrossEntropyLoss(reduction='none')
         elif self.y_encoding == 'numeric':
             mse = th.nn.MSELoss()
-            def _loss_fn(yhat,y):
+
+            def _loss_fn(yhat, y):
                 if self.y_scaling == 'sigmoid':
                     yhat = th.sigmoid(yhat)
                 elif self.y_scaling == 'hardtanh':
@@ -97,7 +101,7 @@ class ArtificialHuman(th.nn.Module):
                     pass
                 else:
                     raise ValueError('Unkown y_scaling.')
-                return mse(yhat,y)
+                return mse(yhat, y)
             loss_fn = _loss_fn
         return loss_fn
 

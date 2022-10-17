@@ -5,6 +5,16 @@
 
 
 # Parameters
+from aimanager.utils.array_to_df import add_labels
+from aimanager.utils.utils import make_dir
+from aimanager.manager.manager import ArtificalManager
+from aimanager.artificial_humans import AH_MODELS
+from aimanager.manager.environment_v3 import ArtificialHumanEnv
+from aimanager.manager.archive.memory_v1_2 import Memory
+from itertools import count
+import os
+import pandas as pd
+import torch as th
 artificial_humans = "../../artifacts/artificial_humans/01_rnn_edge_features/model/rnn_True__edge_True__global_features_False.pt"
 artificial_humans_valid = "../../artifacts/artificial_humans/02_valid/model/rnn_True.pt"
 artificial_humans_model = "graph"
@@ -46,17 +56,6 @@ labels = {}
 get_ipython().run_line_magic('load_ext', 'autoreload')
 get_ipython().run_line_magic('autoreload', '2')
 
-import torch as th
-import pandas as pd
-import os
-from itertools import count
-
-from aimanager.manager.memory_v1_2 import Memory
-from aimanager.manager.environment_v3 import ArtificialHumanEnv
-from aimanager.artificial_humans import AH_MODELS
-from aimanager.manager.manager import ArtificalManager
-from aimanager.utils.utils import make_dir
-from aimanager.utils.array_to_df import add_labels
 
 metrics_dir = os.path.join(data_dir, 'metrics')
 model_dir = os.path.join(data_dir, 'model')
@@ -70,6 +69,7 @@ make_dir(model_dir)
 rec_keys = [
     'punishments', 'contributions', 'common_good', 'contributor_payoff', 'manager_payoff']
 
+
 def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
 
     state = env.reset()
@@ -80,7 +80,7 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
 
         # Get q values from controller
         q_values = manager.get_q(encoded, first=round_number == 0)
-    
+
         if on_policy:
             action = q_values.argmax(-1)
         else:
@@ -88,15 +88,15 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
             action = manager.eps_greedy(q_values=q_values)
 
         state = env.punish(action)
-        
+
         metrics = {k: state[k].to(th.float).mean().item() for k in rec_keys}
 
         # pass actions to environment and advance by one step
         state, reward, done = env.step()
         if replay_mem is not None:
             replay_mem.add(
-                episode_step=round_number, action=action, reward=reward, 
-                **{k:v for k, v in encoded.items() if k not in ['edge_index', 'batch']})
+                episode_step=round_number, action=action, reward=reward,
+                **{k: v for k, v in encoded.items() if k not in ['edge_index', 'batch']})
 
         metrics['next_reward'] = reward.mean().item()
         metrics['q_min'] = q_values.min().item()
@@ -106,7 +106,7 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
         metrics['sampling'] = 'greedy' if on_policy else 'eps-greedy'
         metrics['update_step'] = update_step
         metric_list.append(metrics)
-        
+
         if done:
             break
     return metric_list
@@ -118,14 +118,16 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
 device = th.device(device)
 cpu = th.device('cpu')
 
-artificial_humans = AH_MODELS[artificial_humans_model].load(artificial_humans, device=device).to(device)
-artificial_humans_valid = AH_MODELS[artificial_humans_model].load(artificial_humans_valid, device=device).to(device)
+artificial_humans = AH_MODELS[artificial_humans_model].load(
+    artificial_humans, device=device).to(device)
+artificial_humans_valid = AH_MODELS[artificial_humans_model].load(
+    artificial_humans_valid, device=device).to(device)
 
 env = ArtificialHumanEnv(
     artifical_humans=artificial_humans, artifical_humans_valid=artificial_humans_valid, device=device, **env_args)
 
 manager = ArtificalManager(
-    n_contributions=env.n_contributions, n_punishments=env.n_punishments, 
+    n_contributions=env.n_contributions, n_punishments=env.n_punishments,
     default_values=artificial_humans.default_values, device=device, **manager_args)
 
 replay_mem = Memory(
@@ -137,17 +139,18 @@ for update_step in range(n_update_steps):
     # replay_mem.start_batch(env.groups)
 
     # here we sample one batch of episodes and add them to the replay buffer
-    off_policy_metrics = run_batch(manager, env, replay_mem, on_policy=False, update_step=update_step)
+    off_policy_metrics = run_batch(manager, env, replay_mem,
+                                   on_policy=False, update_step=update_step)
 
     replay_mem.next_episode(update_step)
-    
+
     # allow manager to update itself
     sample = replay_mem.get_random(device=device)
     graph = env.get_batch_structure()
 
     if sample is not None:
         loss = manager.update(update_step, **sample, **graph)
-    
+
     if (update_step % eval_period) == 0:
         metrics_list.extend([{**m, 'loss': l.item()} for m, l in zip(off_policy_metrics, loss)])
         metrics_list.extend(
@@ -169,7 +172,7 @@ manager.save(model_file)
 
 id_vars = ['round_number', 'sampling', 'update_step']
 value_vars = ['punishments', 'contributions', 'common_good', 'contributor_payoff',
-       'manager_payoff', 'next_reward', 'q_min', 'q_max', 'q_mean', 'loss']
+              'manager_payoff', 'next_reward', 'q_min', 'q_max', 'q_mean', 'loss']
 
 df = pd.DataFrame.from_records(metrics_list)
 
@@ -178,4 +181,3 @@ df = df.melt(id_vars=id_vars, value_vars=value_vars, var_name='metric')
 df = add_labels(df, {**labels, 'job_id': job_id})
 
 df.to_parquet(os.path.join(metrics_dir, f'{job_id}.parquet'))
-

@@ -1,7 +1,8 @@
 import torch as th
-from aimanager.generic.mlp import MultiLayer
+from aimanager.generic.archive.mlp import MultiLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
 from torch_geometric.loader import DataLoader
+
 
 class MLPArtificialHuman(th.nn.Module):
     def __init__(self, *, n_contributions, n_punishments, x_encoding=None,  model=None, **model_args):
@@ -10,10 +11,11 @@ class MLPArtificialHuman(th.nn.Module):
         self.y_encoding = 'onehot'
 
         self.x_encoder = Encoder(x_encoding)
-        self.y_encoder = IntEncoder(encoding='onehot', name='contributions', n_levels=n_contributions)
+        self.y_encoder = IntEncoder(
+            encoding='onehot', name='contributions', n_levels=n_contributions)
 
         input_size = self.x_encoder.size
-    
+
         if not model:
             self.model = MultiLayer(output_size=output_size, input_size=input_size, **model_args)
         else:
@@ -21,13 +23,12 @@ class MLPArtificialHuman(th.nn.Module):
         self.n_contributions = n_contributions
         self.n_punishments = n_punishments
 
-
     def forward(self, data):
         """
         Takes an already encoded tensor
         """
         return self.model(data['x'])
-        
+
     def act(self, **state):
         raise NotImplementedError('have to fix this')
         enc = self.encode_x(**state)
@@ -38,8 +39,8 @@ class MLPArtificialHuman(th.nn.Module):
     def predict(self, data):
         self.model.eval()
         y_pred_logit = th.cat([self(d)
-            for d in iter(DataLoader(data, shuffle=False, batch_size=10))
-        ])
+                               for d in iter(DataLoader(data, shuffle=False, batch_size=10))
+                               ])
         y_pred_proba = th.nn.functional.softmax(y_pred_logit, dim=-1)
         y_pred = self.y_encoder.decode(y_pred_proba)
         return y_pred, y_pred_proba

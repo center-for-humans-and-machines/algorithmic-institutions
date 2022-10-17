@@ -5,6 +5,15 @@
 
 
 # Parameters
+from aimanager.utils.array_to_df import using_multiindex, add_labels
+from aimanager.artificial_humans import AH_MODELS
+from aimanager.manager.environment import ArtificialHumanEnv
+from aimanager.manager.archive.memory import Memory
+from aimanager.utils.utils import make_dir
+from itertools import count
+import numpy as np
+import torch as th
+import os
 artificial_humans = "../../data/artificial_humans/ah_1_1/data/model.pt"
 artificial_humans_model = "graph"
 output_path = "../../data/manager/simulate_rule/v1_comp_fixed/"
@@ -23,16 +32,6 @@ round_numbers = None
 get_ipython().run_line_magic('load_ext', 'autoreload')
 get_ipython().run_line_magic('autoreload', '2')
 
-import os
-import torch as th
-import numpy as np
-from itertools import count
-from aimanager.utils.utils import make_dir
-
-from aimanager.manager.memory import Memory
-from aimanager.manager.environment import ArtificialHumanEnv
-from aimanager.artificial_humans import AH_MODELS
-from aimanager.utils.array_to_df import using_multiindex, add_labels
 
 output_path = os.path.join(output_path, 'data')
 
@@ -51,9 +50,11 @@ class RuleManager:
     def get_punishment(self, contributions, round_number,  **_):
         punishments = th.zeros_like(contributions)
         if (self.round_numbers is None) or (round_number[0] in self.round_numbers):
-            punishments = (20-contributions) * self.s + (20 != contributions).to(th.float) * self.c - self.b
+            punishments = (20-contributions) * self.s + \
+                (20 != contributions).to(th.float) * self.c - self.b
             punishments = punishments.round().to(th.int64)
-            punishments = th.minimum(th.maximum(punishments, th.zeros_like(punishments)), th.full_like(punishments, 30))
+            punishments = th.minimum(th.maximum(punishments, th.zeros_like(
+                punishments)), th.full_like(punishments, 30))
         if self.agents is not None:
             punishments_ = th.zeros_like(contributions)
             punishments_[self.agents] = punishments[self.agents]
@@ -68,12 +69,13 @@ class RuleManager:
 rec_keys = [
     'punishments', 'contributions', 'common_good', 'contributor_payoff', 'manager_payoff']
 
+
 def run_batch(manager, env):
     state = env.reset()
     metric_list = []
-    for round_number in count():      
+    for round_number in count():
         encoded = manager.encode_pure(state)
-        
+
         batch_structure = env.get_batch_structure()
 
         obs = {**encoded, **batch_structure}
@@ -82,16 +84,16 @@ def run_batch(manager, env):
         action = manager.punishments(obs, first=round_number == 0)
 
         state = env.punish(action)
-        
+
         metrics = {k: state[k].to(th.float).mean().item() for k in rec_keys}
 
         # pass actions to environment and advance by one step
         state, reward, done = env.step()
-    
+
         metrics['next_reward'] = reward.mean().item()
         metrics['round_number'] = round_number
         metric_list.append(metrics)
-         
+
         if done:
             break
     return metric_list
@@ -110,7 +112,8 @@ s_values = list(np.arange(0, 4.1, 0.2))
 env = ArtificialHumanEnv(
     artifical_humans=artifical_humans, n_agents=4, n_contributions=21, n_punishments=31, episode_steps=n_episode_steps, device=device)
 
-recorder = Memory(n_episodes=n_episodes*len(s_values), n_episode_steps=n_episode_steps, output_file=None, device=device)
+recorder = Memory(n_episodes=n_episodes*len(s_values),
+                  n_episode_steps=n_episode_steps, output_file=None, device=device)
 
 
 for s in s_values:
@@ -133,11 +136,16 @@ for s in s_values:
 # In[95]:
 
 
-punishments = using_multiindex(recorder.memory['punishments'].numpy(), columns=['idx','round_number', 'agent'], value_name='punishments')
-common_good = using_multiindex(recorder.memory['common_good'].numpy(), columns=['idx','round_number', 'agent'], value_name='common_good')
-contributions = using_multiindex(recorder.memory['contributions'].numpy(), columns=['idx','round_number', 'agent'], value_name='contributions')
-payoffs = using_multiindex(recorder.memory['payoffs'].numpy(), columns=['idx','round_number', 'agent'], value_name='payoffs')
-s = using_multiindex(recorder.memory['s'].numpy(), columns=['idx','round_number', 'agent'], value_name='s')
+punishments = using_multiindex(recorder.memory['punishments'].numpy(), columns=[
+                               'idx', 'round_number', 'agent'], value_name='punishments')
+common_good = using_multiindex(recorder.memory['common_good'].numpy(), columns=[
+                               'idx', 'round_number', 'agent'], value_name='common_good')
+contributions = using_multiindex(recorder.memory['contributions'].numpy(), columns=[
+                                 'idx', 'round_number', 'agent'], value_name='contributions')
+payoffs = using_multiindex(recorder.memory['payoffs'].numpy(), columns=[
+                           'idx', 'round_number', 'agent'], value_name='payoffs')
+s = using_multiindex(recorder.memory['s'].numpy(), columns=[
+                     'idx', 'round_number', 'agent'], value_name='s')
 
 df = punishments.merge(common_good).merge(contributions).merge(payoffs).merge(s)
 
@@ -145,7 +153,6 @@ df = df.drop(columns=['idx'])
 
 df = df.groupby(['round_number', 'agent', 's']).mean().reset_index()
 # df = add_labels(df, labels=labels)
-
 
 
 make_dir(output_path)
@@ -156,4 +163,3 @@ df.to_csv(os.path.join(output_path, 'trace.csv'))
 
 
 df
-

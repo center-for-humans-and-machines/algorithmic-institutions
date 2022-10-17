@@ -10,6 +10,7 @@ trained only on those human contributors that weere managed by a human manager.
 ![Learning curve](../notebooks/test_manager/plots/simulate_mixed/comparison_pilot.jpg)
 
 We can make the following observations:
+
 1. The RL manager (green) archives a larger common good compared to the rule based (brown) and the human manager from
    the pilots (violet)
 2. The RL manager (green, red) punishes stronger then the human manager (violet), in particular in early rounds.
@@ -39,4 +40,3 @@ particular prominent for contributions below 14 points.
 
 The policy of the artificial human manager (blue, orange) is well aligned with
 the empirical policy found for human manager (violet).
-
