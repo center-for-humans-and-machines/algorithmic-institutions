@@ -73,21 +73,9 @@ style I2 stroke-width:0px
 ## Evaluation
 
 For all evaluations in the following, we report (if applicable) averages on
-cross-validated test sets (k=6). Thereby always a complete group (and their full
+cross-validated test sets (k=20). Thereby always a complete group (and their full
 episode) is randomly assigned to one of the six folds, to prevent correlation
 between folds.
-
-### Data utilisation
-
-Learning curves trained on increasing subsets of the full dataset show that (unsurprisingly) more complex models benefit more from additional training data. In particular, the most complex model still improves considerably when using 100% instead of 80% of the training data. This suggests, that additional training data could improve model performance.
-
-![Learning
-curve](../notebooks/ah_evaluation/plots/graph_learning_curve/learning_curve_model.jpg)
-_Cross entropy over a training period of 2000 episodes. In independent runs we
-utilize only a fraction of the training data while keeping the test set fix.
-Here we present curves for a two layer perceptron (vanilla), a model with a
-additional GRU layer (rnn) and finally a model with an additional edge model._
-
 
 ### Hyperparameter
 
@@ -101,32 +89,22 @@ the learning rate. We found that 5 hidden units were performaning best in
 avoiding overfitting. Furthermore, we choose a batch size of 10 and a learning
 rate of 3.e-4.
 
-| ![Hidden Size and Batch Size](../notebooks/ah_evaluation/plots/graph_fine_tuning/hidden_batch.jpg)                                                                                                                    |
-| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| _Test set cross entropy after 4000 episodes for different number of hidden units and batch sizes. A batch size of 20 corresponds to 20 groups a 4 participants a 16 rounds. Data shown for a learning rate of 0.001._ |
+![Hidden Size](../notebooks/evalutation/plots/artificial_humans_05_hidden_size/model_comparision.jpg)
 
-| ![Learning Rate](../notebooks/ah_evaluation/plots/graph_fine_tuning/lr.jpg)                                                                          |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| _Test set cross entropy after 2000 and 4000 episodes for different learning rates of 0.001. Data shown for a 5 hidden units and a batch size of 10._ |
 
 ### Architecture
 
 We investigate the effect of different components of the architecture on the
-models performance. In particular we investigated the edge
-model, the GRU unit (RNN) and of round features (global features). We run grid
-with all 8 combinations of these three features being active and inactive.
+models performance. We found that `round number` and
+the `previous common good` did not increased predictive performance, if edge
+model and GRU unit was included. We then investigated the influence of these two
+components on the cross validated predictive performance.
 
-![Learning Rate](../notebooks/ah_evaluation/plots/01_2_rnn_edge_features/learning_curve_model.jpg)
+![Learning Rate](../notebooks/evalutation/plots/artificial_humans_04_model/model_comparision.jpg)
 
-A linear regression on the cross entropy of the last 20% of the epochs has large
-negative coefficients for the RNN and the edge model. This indicates that these
-two components considerable improve the model performance. Round (Global) features (round number and common
-good) on the other hand are only having a minor influence.
-
-![Learning Rate](../notebooks/ah_evaluation/plots/01_2_rnn_edge_features/effect_size.jpg)
-
-For that reason we choose the model with an RNN unit and the edge model, but
-without round based features.
+We found no significant difference between the different architectures. We still
+choose a model with node model and recurrent unit, as we found weak evidence for this
+model to perform better then a model with a node model only.
 
 ## Model evalution
 
@@ -140,14 +118,13 @@ in predictive performance.
 We find the model to be dominantly rely on previous contribution. However, all
 three features do contribute.
 
-![Shuffle Feature](../notebooks/ah_evaluation/plots/01_2_rnn_edge_features/shuffle_features.jpg)
-
+![Shuffle Feature](../notebooks/evalutation/plots/artificial_humans_04_model/shuffle_feature_importance.jpg)
 
 ### Confusion Matrix
 
 The confusion matrix shows that our model well captures most of the variance and mostly only confuses between close or adjacent contribution levels. The model appears to predominantly predict contributions that are multiples of 5. Looking at the distribution of actual contributions, this appears to be a feature of the behavior of the participants, that (in particular in early rounds) predominantly chose contributions of 5, 10, 15, or 20. The model however appears to well capture the distribution of contributions on average.
 
-![Confusion Matrix](../notebooks/ah_evaluation/plots/01_2_rnn_edge_features/confusion_matrix.jpg)
+![Confusion Matrix](../notebooks/evalutation/plots/artificial_humans_04_model/confusion_matrix.jpg)
 _Confusion matrix between predicted and actual contribution (average accross the test sets). For the predictions we are weighting each contribution level with the corresponding probabilty assigned by the model. This is different to a confusion matrix most used for classification problems, where only the class with the highest predicted probability is
 considered._
 
@@ -155,7 +132,7 @@ We investigate if the empirical frequency of each contribution level corresponds
 to the modeled contribution probability. Both distributions match well and we do
 not see any systematic diviations.
 
-![Histogram](../notebooks/ah_evaluation/plots/01_2_rnn_edge_features/histogram.jpg)
+![Histogram](../notebooks/evalutation/plots/artificial_humans_04_model/action_histogram.jpg)
 
 ## Valid response model
 
@@ -173,7 +150,7 @@ Our model archives a roc score of 0.61, which suggest a low
 predictive power. More importantly, for our purpose, the chance of a participant
 to not enter a valid solution is well represented.
 
-![Confusion Matrix](../notebooks/ah_evaluation/plots/02_2_valid/historgram.jpg)
+![Confusion Matrix](../notebooks/evalutation/plots/artificial_humans_02_3_valid/action_histogram.jpg)
 
 
 

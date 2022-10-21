@@ -1,5 +1,8 @@
-run: '04_model'
-base_folder: 'artificial_humans'
+run: 04_3_model
+base_folder: artificial_humans
 target: contributions
+test: t-test_paired
+selection:
+  architecture: 'node+rnn'
 order: ['node', 'node+edge', 'node+rnn', 'node+edge+rnn']
-pairs: [['node', 'node+edge'], ['node', 'node+rnn'], ['node', 'node+edge+rnn']]
+pairs: [['node', 'node+edge'], ['node', 'node+rnn'], ['node+rnn', 'node+edge+rnn']]

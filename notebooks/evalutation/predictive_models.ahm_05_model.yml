@@ -1,5 +1,8 @@
-run: '05_model'
-base_folder: 'human_like_manager'
+run: 05_2_model
+base_folder: human_like_manager
 target: punishments
+test: t-test_paired
+selection:
+  architecture: 'node+edge'
 order: ['node', 'node+edge', 'node+rnn', 'node+edge+rnn']
-pairs: [['node', 'node+edge'], ['node', 'node+rnn'], ['node', 'node+edge+rnn']]
+pairs: [['node', 'node+edge'], ['node', 'node+rnn'], ['node+edge', 'node+edge+rnn']]

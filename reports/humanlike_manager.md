@@ -10,14 +10,13 @@ The original batch size of 10 lead to failing convergence.
 
 ## Architecture
 
-We run a binary grid over the components a) edge model, b) recurrent unit and c)
-global features. We found that a large improvement of performance for
-adding the edge model, but only little influence by adding a recurrent unit and
-adding global features. The best average cross validated performance was
-archived by models with an edge model only. Therefore we settled on this model
-for the artificial human manager.
+We run a binary grid over the components a) edge model and b) recurrent unit. We
+found no significant improvement in performance for adding a recurrent unit and
+adding a the edge model. The best average cross validated performance was
+archived by a model with an node and a edge model. Therefore we settled on this
+model for the artificial human manager.
 
-![Effect size](../notebooks/human_like_evaluation/plots/01_rnn_edge_features/effect_size.jpg)
+![Effect size](../notebooks/evalutation/plots/human_like_manager_05_model/model_comparision.jpg)
 
 ## Simulation
 
