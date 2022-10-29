@@ -93,7 +93,8 @@ def get_cross_validations(data, n_splits, fraction_training=1.0):
             assert len(set(train_idx).intersection(set(test_idx))) == 0
             assert len(train_idx) == len(set(train_idx))
             assert len(test_idx) == len(set(test_idx))
-            assert (len(test_idx) + len(train_idx)) == len(episode_idx)
+            if fraction_training == 1.:
+                assert (len(test_idx) + len(train_idx)) == len(episode_idx)
 
             test_data = {
                 k: t[test_idx]

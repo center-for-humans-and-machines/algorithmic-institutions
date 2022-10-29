@@ -33,6 +33,8 @@ def create_data(rounds, default_values):
     prev_punishments[1:] = punishments[: -1]
     prev_manager_valid = th.full_like(manager_valid, fill_value=default_values['manager_valid'])
     prev_manager_valid[1:] = manager_valid[: -1]
+    prev_valid = th.full_like(valid, fill_value=default_values['valid'])
+    prev_valid[1:] = valid[: -1]
 
     data = {
         'prev_manager_valid': prev_manager_valid.T,
@@ -40,6 +42,7 @@ def create_data(rounds, default_values):
         'prev_punishments': prev_punishments.T,
         'round_number': round_number.T,
         'valid': valid.T,
+        'prev_valid': prev_valid.T,
         'edge_index': edge_index.T,
         'batch': batch
     }

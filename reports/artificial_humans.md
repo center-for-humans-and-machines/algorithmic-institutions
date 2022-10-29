@@ -21,7 +21,7 @@ the group members. All inputs are scaled in the range 0 to 1.
 ## Neural architecture
 
 We structure our model in three parts following recent work on graph networks
-(Relational inductive biases, deep learning, and graph networks). Thereby we
+{Relational inductive biases, deep learning, and graph networks}. Thereby we
 describe the group as a fully connected graph of four nodes. Our architecture
 design was guided by ensuring permutation symmetry in the relationship between
 individuals. Furthermore, we included GRUs to allow for learning temporal
@@ -73,17 +73,24 @@ style I2 stroke-width:0px
 ## Evaluation
 
 For all evaluations in the following, we report (if applicable) averages on
-cross-validated test sets (k=20). Thereby always a complete group (and their full
+cross-validated test sets (k=10). Thereby always a complete group (and their full
 episode) is randomly assigned to one of the six folds, to prevent correlation
 between folds.
+
+### Features
+
+As input we include the `previous contribution` and the
+`previous punishment` of each group member. When the corresponding human
+in the pilot did not entered a contribution or punishment we imputed these
+values with the corresponding median. Additionally, we include binary
+variable that indicate the corresponding validity. We found
+including the `round number` and the `previous common good` as features to not
+increase performance.
 
 ### Hyperparameter
 
 We perform an initial hyperparameter optimisation with the full model as
-depicted above. As player feature we include the `previous contribution` and the
-`previous punishment`. As round based features we include the `round number` and
-the `previous common good`. In the final model we include `previous entry valid` as additional feature for completness.
-
+depicted above.
 We did a hyperparameter scan over the number of hidden units, the batch size and
 the learning rate. We found that 5 hidden units were performaning best in
 avoiding overfitting. Furthermore, we choose a batch size of 10 and a learning
@@ -95,16 +102,15 @@ rate of 3.e-4.
 ### Architecture
 
 We investigate the effect of different components of the architecture on the
-models performance. We found that `round number` and
-the `previous common good` did not increased predictive performance, if edge
-model and GRU unit was included. We then investigated the influence of these two
-components on the cross validated predictive performance.
+models cross validated predictive performance.
 
-![Learning Rate](../notebooks/evalutation/plots/artificial_humans_04_model/model_comparision.jpg)
+![Learning Rate](../notebooks/evalutation/plots/artificial_humans_04_3_model/model_comparision.jpg)
 
-We found no significant difference between the different architectures. We still
-choose a model with node model and recurrent unit, as we found weak evidence for this
-model to perform better then a model with a node model only.
+We found a significant improvement for independently adding the node model and for adding the
+edge model. However, the model with rnn unit performed significant better then the one with the edge
+model. We found only weak evidence for an improvement of adding the edge model
+to an model with rnn unit.
+Nevertheless, given its superior performance, we use the full model to train the RL manager.
 
 ## Model evalution
 
@@ -147,7 +153,7 @@ being valid. We are adding a recurrent unit, however, unlike for the model on
 contributions, we do not add a edge model.
 
 Our model archives a roc score of 0.61, which suggest a low
-predictive power. More importantly, for our purpose, the chance of a participant
+predictive power. More importantly, for our purpose, the frequency of a participant
 to not enter a valid solution is well represented.
 
 ![Confusion Matrix](../notebooks/evalutation/plots/artificial_humans_02_3_valid/action_histogram.jpg)

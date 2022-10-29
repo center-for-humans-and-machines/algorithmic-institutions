@@ -115,7 +115,7 @@ punishments, the round number and the previous common good.
 We investigated the effect of the size of the replay memory and the period of updateing the target network.
 
 ![Learning
-curve](../notebooks/manager_evaluation/plots/16_target_updated2/lc_q_values.jpg)
+curve](../notebooks/evalutation/plots/manager_v3_16_target_updated3/q_values.jpg)
 
 The replay memory size has a relative minor influence on the training dynamic.
 The target update frequency on the other hand, has clear manifistations in the
@@ -124,31 +124,30 @@ to fluctuations of the q-values in early in the training. A very large update
 period leads to a slow convergence and a step like increase of the q-values as
 future rewards a slowly propagated to earlier actions.
 
-We therefore choose an
-intermediate update period of 100 training steps. For the replay memory size we
-likewise choosed 100 training steps.
+Overall, neither memory size nor update frequency had a large impact on
+commulative rewards. We choosed a update period of 1000 and a memory size of 100.
 
 
-![Learning
-curve](../notebooks/manager_evaluation/plots/16_target_updated2/average_common_good.jpg)
+![TotalReward](../notebooks/evalutation/plots/manager_v3_16_target_updated3/cum_reward.jpg)
 
 
 ### Neural Units
 
 To simplify parametrisation we are using the same number of neural units
 throughout the model in each layer. We investigated the different number of
-neural units and found a sweat spot for 20 hidden units.
+neural units. We found that performance to increase significant with increasing
+number of hidden units up to a hidden size of 200. Given the relative small
+performance difference beyond 100 hidden unites, we choose conservative size of
+100 hidden units.
 
-![Learning
-curve](../notebooks/manager_evaluation/plots/13_hiddensize/average_common_good.jpg)
+![Hiddensize](../notebooks/evalutation/plots/manager_v3_13_hiddensize3/model_comparision.jpg)
 
 ### Off-Policy Sampling
 
-We utilze an epsilon-greedy sampling approach. We found results to be relative
-insensitive towards the sampling frequency $\epsilon$. We choose $\epsilon = 0.1$.
+We utilze an epsilon-greedy sampling approach. We found significant higher
+performance for a frequency $\epsilon$ of $0.1$, which we correspondingly choosed.
 
-![Learning
-curve](../notebooks/manager_evaluation/plots/14_eps/average_common_good.jpg)
+![EPS](../notebooks/evalutation/plots/manager_v3_14_eps3/model_comparision.jpg)
 
 ### Neural Architecture
 
@@ -162,44 +161,16 @@ strategy can be computed based on the contributions of the to punish participant
 only.
 
 ![Learning
-curve](../notebooks/manager_evaluation/plots/17_model/average_common_good.jpg)
+curve](../notebooks/evalutation/plots/manager_v3_17_model3/model_comparision.jpg)
 
 Correspondingly, we selected for the RL based manager a model with recurrent
 units, but without edge model and without group level features.
-
-### Selected architecture
-
-```mermaid
-flowchart TD
-    subgraph N[Node Model]
-        N0([&]) --> N1[Linear] --> N2[RelU] --> GRU1[GRU] --> N3[Linear]
-    end
-    subgraph B[Bias Model]
-        B0[Linear] --> B2[RelU] --> B3[Linear]
-    end
-
-I1[Contribution] --> N0
-I2[Previous Punishment] --> N0
-R1[Round Number] --> B0
-
-N3 --> F1
-B3 --> F1
-F1([+]) --> F2[Softmax] --> F3[Punishment]
-
-
-style F3 stroke-width:0px
-style I1 stroke-width:0px
-style I2 stroke-width:0px
-style R1 stroke-width:0px
-```
-
 
 ### Simulations
 
 We simulated the 10000 groups with the RL manager managing a artificial humans.
 
-![Learning
-curve](../notebooks/test_manager/plots/simulate_ah_om/comparison_pilot.jpg)
+![Comparision Pilot](../notebooks/test_manager/plots/simulate_ah_om/comparison_pilot.jpg)
 
 Punishments in the first rounds are significantly higher for the RL manager then
 for both the human
@@ -212,8 +183,7 @@ rule based manager respectivly.
 The RL manager is on average punishing considerable more for the same level of
 contribution in comparision to both, the human and the rule based manager.
 
-![Learning
-curve](../notebooks/test_manager/plots/simulate_ah_om/comparison_pilot_policy.jpg)
+![Comparision Pilot Policy](../notebooks/test_manager/plots/simulate_ah_om/comparison_pilot_policy.jpg)
 
 We also investigated how this relationship develops over the 16 rounds. It can
 be shown, that the RL is relative forgiving in the first round. In the then
@@ -222,8 +192,7 @@ following rounds it appears to be particular strict. Sometimes punishing up to
 towards the end of the game, the manager is again much more forgiving with a
 contribution of 10 coins only resulting in a punishment of 4 coins.
 
-![Learning
-curve](../notebooks/test_manager/plots/simulate_ah_om/policy_round_number.jpg)
+![Policy Round Number](../notebooks/test_manager/plots/simulate_ah_om/policy_round_number.jpg)
 
 Finally, we investigate how the policy depends on the previous mean contribution of the
 artificial human. The following plot shows the relationship between contribution
@@ -231,8 +200,7 @@ and punishment of round 8 to 12. The color code indicates the mean previous
 contribution. We find that the RL manager is more strict (higher punishments)
 with artificial humans that had higher previous contribution.
 
-![Learning
-curve](../notebooks/test_manager/plots/simulate_ah_om/policy_prev_contribution.jpg)
+![Policy Previous Contribution](../notebooks/test_manager/plots/simulate_ah_om/policy_prev_contribution.jpg)
 
 
 
