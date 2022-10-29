@@ -93,8 +93,10 @@ punishments.
 We plot the average punishment conditioned on the contribution of
 the punished group member. Thereby, we visualize an empirical punishing policy
 conditioned on the contribution. The plots show a close match between the
-artificial human manager and the real human manager in the pilots. The rule-based manager is showing higher punishments across all contribution
-levels. The optimal manager shows relatively high punishment for small defection
+artificial human manager (blue) and the real human manager (green) in the
+pilots. The rule-based manager (red) is showing higher punishments across all
+contribution
+levels. The optimal manager (orange) shows relatively high punishment for small defection
 (i.e. a contribution of 17 points).
 The punishment is only mildly increasing from 17 points down to a contribution of 9 points. For lower contributions, the punishment is rapidly increasing to levels even
 above 20 points. Thereby the punishments of the optimal manager are partially
