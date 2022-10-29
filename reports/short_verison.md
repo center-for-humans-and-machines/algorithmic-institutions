@@ -113,7 +113,7 @@ distinctivly above the ones of all other manager.
 
 ## Coverage of the pilots
 
-We also investigate the distribution of punishments conditioned on the
+We investigate the distribution of punishments conditioned on the
 contributions of the group members. A comparision of the optimal manager and the
 pilots shows, that for medium and high contributions, the
 punishment levels shown by the optimal manager have been reasonably sampled in the pilot,
@@ -125,4 +125,39 @@ behavior in this regime.
 
 ![Comparision Pilot](../notebooks/test_manager/plots/simulate_mixed/comparison_pilot_policy_box.jpg)
 
+## Behavior of RL manager
 
+Further investigating the behavior of the RL manager, we found that optimal
+manager is punishing in the first rounds significantly harsher then in later
+rounds.
+
+![Policy Round Number](../notebooks/test_manager/plots/simulate_ah_om/policy_round_number.jpg)
+
+In the first three rounds punishment decrease roughly linearly with increasing
+contribution. In later rounds punishments are bimodal in respect to
+contributions. One peak in respect of punishment is located at contributions of
+around 16 to 17 points. Punishment for contributions from 7 to 14 points are
+generally lower then for those higher contributions. For contributions below 7
+points punishment are increasing rapidly.
+
+Additionally, we investigated the punishments in relation to the average
+contribution of artificial human. In particular we group the data of the second
+half of the experiment by the mean contribution in the first half.
+
+![Policy Previous Contribution](../notebooks/test_manager/plots/simulate_ah_om/policy_prev_contribution.jpg)
+
+We find, that the RL manager the more a participant contributed on average in
+the first half of the experiment, the more strict is the the RL manager reacting
+to defections in the second half.
+
+We can conlcude, that while apparently being effective, the RL manager is
+showing behavior that might be described as unfair. In particular the RL manager
+is showing a) a non-Monotonic
+relationship between contribution and punishment and b) a higher punishment of
+participants that contributed more in the past. The RL manager needs is
+optimized on the marginal benefit of punishing. Correspondingly, these behavior might be
+efficient if the cost of punishment does not outweight to potential benefit of
+an increase in contribution. However, we do not know if a) artificial humans
+correctly model possible feeling of being treated unfair and b) is such feeling
+could lead to participants selecting an less efficient (but more fair) human
+manager.
