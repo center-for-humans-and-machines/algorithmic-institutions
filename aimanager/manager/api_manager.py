@@ -70,6 +70,7 @@ class HumanManager(Manager):
 
 class RLManager(Manager):
     def __init__(self, model_path):
+        self.model_path = model_path
         self.model = ArtificalManager.load(model_path, device=th.device('cpu')).policy_model
         self.model.u_encoder.refrence = 'contributions'
 
@@ -86,6 +87,7 @@ MANAGER_CLASS = {
 
 class MultiManager:
     def __init__(self, managers):
+        self.manager_settings = managers
         self.managers = {k: MANAGER_CLASS[m['type']](m['path']) for k, m in managers.items()}
 
     def get_punishments(self, rounds):
@@ -94,3 +96,6 @@ class MultiManager:
             k: m.get_punishments(rounds) for k, m in self.managers.items()
         }
         return [punishments[g][i] if g in punishments else None for i, g in enumerate(groups)], punishments
+
+    def get_info(self):
+        return self.manager_settings
