@@ -35,11 +35,11 @@ class IntEncoder(th.nn.Module):
         if tensor.dtype == th.bool:
             tensor = tensor.type(th.int64)
         assert tensor.dtype == th.int64
+        self.map = self.map.to(tensor.device)
         if self.encoding == 'projection':
+            tensor = tensor % self.n_levels
             return self.map(tensor)
         else:
-            if self.map.device != tensor.device:
-                self.map = self.map.to(tensor.device)
             return self.map[tensor]
 
     def decode(self, arr, sample=False):

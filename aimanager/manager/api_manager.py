@@ -9,6 +9,8 @@ from aimanager.manager.manager import ArtificalManager
 
 
 def create_data(rounds, default_values):
+    last_round = rounds[-1]
+
     contributions = th.tensor([r['contributions'] for r in rounds], dtype=th.int64)
     valid = ~th.tensor([r['missing_inputs'] for r in rounds], dtype=th.bool)
     contributions = th.where(valid, contributions, int(default_values['contributions']))
@@ -18,10 +20,13 @@ def create_data(rounds, default_values):
     punishments = th.tensor(
         [[default_values['punishments'] if p is None else p for p in r['punishments']]
          for r in rounds], dtype=th.int64)
-    round_number = th.tensor([[r['round']]*len(r['contributions'])
-                             for r in rounds], dtype=th.int64)
 
-    last_round = rounds[-1]
+    group_size = len(last_round['contributions'])
+    round_number = th.tensor([[r['round']]*group_size
+                             for r in rounds], dtype=th.int64)
+    episode_group_idx = th.tensor([[last_round['episode_group_idx']]*group_size
+                                   for r in rounds], dtype=th.int64)
+
     edge_index = th.tensor([
         [g1idx, g2idx]
         for g1idx, g1 in enumerate(last_round['groups'])
@@ -44,6 +49,7 @@ def create_data(rounds, default_values):
         'valid': valid.T,
         'prev_valid': prev_valid.T,
         'edge_index': edge_index.T,
+        'episode_group_idx': episode_group_idx.T,
         'batch': batch
     }
     return data
