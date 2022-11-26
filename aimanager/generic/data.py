@@ -17,6 +17,9 @@ def create_torch_data(df, default_values=None):
     n_steps = df['round_number'].max() + 1
     n_agents = df['player_id'].max() + 1
 
+    episode_group = df['global_group_id'] + '__' + df['episode_idx'].astype(str)
+    df['episode_group_idx'] = episode_group.rank(method='dense').astype(int) - 1
+
     df['player_input'] = df['player_no_input'] == 0
     df['manager_input'] = df['manager_no_input'] == 0
     df['round_player_input'] = df.groupby(['episode_id', 'round_number'])[
@@ -38,6 +41,7 @@ def create_torch_data(df, default_values=None):
     contributions = th.full((n_episodes, n_agents, n_steps),
                             fill_value=default_values['contributions'], dtype=th.int64)
     round_number = th.zeros((n_episodes, n_agents, n_steps), dtype=th.int64)
+    episode_group_idx = th.zeros((n_episodes, n_agents, n_steps), dtype=th.int64)
     is_first = th.zeros((n_episodes, n_agents, n_steps), dtype=th.bool)
     valid = th.full((n_episodes, n_agents, n_steps),
                     fill_value=default_values['valid'], dtype=th.bool)
@@ -56,6 +60,7 @@ def create_torch_data(df, default_values=None):
         is_first[eps, agent, step] = step == 0
         round_number[eps, agent, step] = step
         common_good[eps, agent, step] = row['common_good']
+        episode_group_idx[eps, agent, step] = row['episode_group_idx']
         if row['player_input']:
             punishments[eps, agent, step] = row['punishment']
             contributions[eps, agent, step] = row['contribution']
@@ -68,7 +73,8 @@ def create_torch_data(df, default_values=None):
         'common_good': common_good,
         'round_number': round_number,
         'is_first': is_first,
-        'manager_valid': manager_valid
+        'manager_valid': manager_valid,
+        'episode_group_idx': episode_group_idx,
     }
 
     data = {**data, **{f'prev_{k}': shift(t, default_values[k])

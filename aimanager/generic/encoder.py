@@ -15,25 +15,32 @@ class IntEncoder(th.nn.Module):
                  for i in range(n_levels)], dtype=th.float
             )
             self.position_values = th.arange(n_levels-1, 0, -1, dtype=th.float)
+            self.size = self.map.shape[-1]
         elif encoding == 'onehot':
             assert n_levels is not None
             self.map = th.tensor(
                 [[0]*i + [1] + [0]*(n_levels - i - 1)
                  for i in range(n_levels)], dtype=th.float
             )
+            self.size = self.map.shape[-1]
         elif encoding == 'numeric':
             self.map = th.linspace(0, 1, n_levels, dtype=th.float).unsqueeze(-1)
-        self.size = self.map.shape[-1]
+            self.size = self.map.shape[-1]
+        elif encoding == 'projection':
+            self.map = th.nn.Embedding(n_levels, 1)
+            self.size = 1
 
     def forward(self, **state):
         tensor = state[self.name]
         if tensor.dtype == th.bool:
             tensor = tensor.type(th.int64)
         assert tensor.dtype == th.int64
-        if self.map.device != tensor.device:
-            self.map = self.map.to(tensor.device)
-        enc = self.map[tensor]
-        return enc
+        if self.encoding == 'projection':
+            return self.map(tensor)
+        else:
+            if self.map.device != tensor.device:
+                self.map = self.map.to(tensor.device)
+            return self.map[tensor]
 
     def decode(self, arr, sample=False):
         if self.encoding == 'ordinal':
@@ -50,6 +57,8 @@ class IntEncoder(th.nn.Module):
         elif self.encoding == 'numeric':
             arr = th.round(arr * (self.n_levels - 1))
             return arr.type(th.int64)
+        elif self.encoding == 'projection':
+            raise NotImplementedError()
 
 
 class FloatEncoder(th.nn.Module):
@@ -75,6 +84,17 @@ class BoolEncoder(th.nn.Module):
         assert state[self.name].dtype == th.bool
         enc = state[self.name].float().unsqueeze(-1)
         return enc
+
+
+# class EmbeddingEncoder(th.nn.Module):
+#     def __init__(self, name, dimensions, n_levels):
+#         super(EmbeddingEncoder, self).__init__()
+#         self.embedding = th.ones((n_levels, dimensions), dtype=th.float)
+#         self.name = name
+#         self.size = dimensions
+
+#     def forward(self, **state):
+#         return self.embedding[state[self.name]]
 
 
 encoder = {
