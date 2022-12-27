@@ -292,7 +292,7 @@ class GraphNetwork(th.nn.Module):
     def predict_autoreg(self, data, sample=True, reset_rnn=True):
         self.eval()
         # TODO: add autoregression
-        raise NotImplementedError
+        raise NotImplementedError("Autoregression not implemented yet.")
 
     # def predict(self, data, sample=True, batch_size=10, reset_rnn=True):
     #     self.eval()
