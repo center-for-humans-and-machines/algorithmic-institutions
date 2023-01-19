@@ -2,31 +2,6 @@ from sklearn.metrics import mean_absolute_error, accuracy_score, log_loss, confu
 from aimanager.utils.array_to_df import using_multiindex, add_labels
 
 
-def create_metrics(y_true, y_pred,  **labels):
-    accuracy = accuracy_score(y_true, y_pred)
-    mabserr = mean_absolute_error(y_true, y_pred)
-    metrics = [
-    {
-        'name': 'mean_absolute_error',
-        'value': mabserr,
-        **labels
-    },
-    {
-        'name': 'accuracy',
-        'value': accuracy,
-        **labels
-    }
-    ]
-    return metrics
-
-
-def calc_log_loss(y_true, y_pred_proba, n_levels, **labels):
-    ll =  log_loss(y_true, y_pred_proba, labels=list(range(n_levels)))
-    return {
-        'name': 'log_loss',
-        'value': ll,
-        **labels
-    }
 
 
 def create_confusion_matrix(y_true, y_pred_proba, mask, y_name, **labels):

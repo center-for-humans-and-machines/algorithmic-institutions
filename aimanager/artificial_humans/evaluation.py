@@ -1,15 +1,16 @@
 import pandas as pd
 import torch as th
 import os
-from aimanager.artificial_humans.metrics import (
-    create_metrics,
-    calc_log_loss,
-)
 from aimanager.utils.array_to_df import add_labels
 from aimanager.utils.utils import make_dir
+from sklearn.metrics import (
+    mean_absolute_error,
+    accuracy_score,
+    log_loss,
+)
 
 
-def eval_set(self, model, data, **add_labels):
+def eval_model(model, data):
     metrics = []
     strategies = ["greedy", "sampling"]
     for strategy in strategies:
@@ -18,6 +19,7 @@ def eval_set(self, model, data, **add_labels):
         elif strategy == "sampling":
             y_pred, y_pred_proba = model.predict_pure(data, sample=True)
 
+        # mask y_true, y_pred, y_pred_proba
         mask = data["mask"]
         y_true = th.masked_select(data["y"], mask)
         y_true = y_true.detach().cpu().numpy()
@@ -26,25 +28,29 @@ def eval_set(self, model, data, **add_labels):
         y_pred = y_pred.detach().cpu().numpy()
 
         n_levels = y_pred_proba.shape[-1]
-        y_pred_proba_ = th.masked_select(y_pred_proba, mask.unsqueeze(-1))
-        y_pred_proba_ = y_pred_proba_.reshape(-1, n_levels)
+        y_pred_proba = th.masked_select(y_pred_proba, mask.unsqueeze(-1))
+        y_pred_proba = y_pred_proba.reshape(-1, n_levels)
+        y_pred_proba = y_pred_proba.detach().cpu().numpy()
 
-        y_pred_proba_ = y_pred_proba_.detach().cpu().numpy()
-
-        metrics.append(
-            calc_log_loss(
-                y_true,
-                y_pred_proba_,
-                n_levels=n_levels,
-                **add_labels,
-                **self.labels,
-                strategy=strategy,
-            )
-        )
-
-        metrics += create_metrics(
-            y_true, y_pred, strategy=strategy, **add_labels, **self.labels
-        )
+        metrics += [
+            {
+                "name": "mean_absolute_error",
+                "value": mean_absolute_error(y_true, y_pred),
+                "strategy": strategy,
+            },
+            {
+                "name": "accuracy",
+                "value": accuracy_score(y_true, y_pred),
+                "strategy": strategy,
+            },
+        ]
+    # log loss is independent of the sampling strategy
+    metrics += [
+        {
+            "name": "log_loss",
+            "value": log_loss(y_true, y_pred_proba, labels=list(range(n_levels))),
+        },
+    ]
     return metrics
 
 
@@ -59,6 +65,7 @@ class Recorder:
         self.metrics.append(dict(name=name, value=value, **self.labels))
 
     def rec_many(self, metrics):
+        metrics = [{**m, **self.labels} for m in metrics]
         self.metrics += metrics
 
     def save(self, output_path, labels, job_id="all"):
