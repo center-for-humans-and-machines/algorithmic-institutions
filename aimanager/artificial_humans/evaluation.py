@@ -61,11 +61,11 @@ class Recorder:
     def set_labels(self, **labels):
         self.labels = labels
 
-    def rec(self, value, name="loss"):
-        self.metrics.append(dict(name=name, value=value, **self.labels))
+    def rec(self, value, name="loss", **labels):
+        self.metrics.append(dict(name=name, value=value, **self.labels, **labels))
 
-    def rec_many(self, metrics):
-        metrics = [{**m, **self.labels} for m in metrics]
+    def rec_many(self, metrics, **labels):
+        metrics = [{**m, **self.labels, **labels} for m in metrics]
         self.metrics += metrics
 
     def save(self, output_path, labels, job_id="all"):

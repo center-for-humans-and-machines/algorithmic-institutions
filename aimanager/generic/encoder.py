@@ -34,7 +34,9 @@ class IntEncoder(th.nn.Module):
         tensor = state[self.name]
         if tensor.dtype == th.bool:
             tensor = tensor.type(th.int64)
-        assert tensor.dtype == th.int64
+        assert (
+            tensor.dtype == th.int64
+        ), f"Expected int for {self.name}, got {state[self.name].dtype}"
         self.map = self.map.to(tensor.device)
         if self.encoding == "projection":
             tensor = tensor % self.n_levels
@@ -69,7 +71,9 @@ class FloatEncoder(th.nn.Module):
         self.name = name
 
     def forward(self, **state):
-        assert state[self.name].dtype == th.float
+        assert (
+            state[self.name].dtype == th.float
+        ), f"Expected float for {self.name}, got {state[self.name].dtype}"
         enc = (state[self.name] / self.norm).unsqueeze(-1)
         return enc
 
@@ -81,20 +85,11 @@ class BoolEncoder(th.nn.Module):
         self.name = name
 
     def forward(self, **state):
-        assert state[self.name].dtype == th.bool
+        assert (
+            state[self.name].dtype == th.bool
+        ), f"Expected bool for {self.name}, got {state[self.name].dtype}"
         enc = state[self.name].float().unsqueeze(-1)
         return enc
-
-
-# class EmbeddingEncoder(th.nn.Module):
-#     def __init__(self, name, dimensions, n_levels):
-#         super(EmbeddingEncoder, self).__init__()
-#         self.embedding = th.ones((n_levels, dimensions), dtype=th.float)
-#         self.name = name
-#         self.size = dimensions
-
-#     def forward(self, **state):
-#         return self.embedding[state[self.name]]
 
 
 encoder = {"int": IntEncoder, "float": FloatEncoder, "bool": BoolEncoder}

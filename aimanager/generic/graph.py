@@ -103,17 +103,13 @@ class GraphNetwork(th.nn.Module):
         **_
     ):
         super().__init__()
-        self.x_encoder = Encoder(x_encoding, refrence="contributions")
-        self.u_encoder = Encoder(
-            u_encoding, aggregation="mean", refrence="contributions"
-        )
+        self.x_encoder = Encoder(x_encoding, refrence=y_name)
+        self.u_encoder = Encoder(u_encoding, aggregation="mean", refrence=y_name)
         self.y_encoder = IntEncoder(encoding="onehot", name=y_name, n_levels=y_levels)
         self.bias_encoder = (
-            Encoder(b_encoding, refrence="contributions")
-            if b_encoding is not None
-            else None
+            Encoder(b_encoding, refrence=y_name) if b_encoding is not None else None
         )
-        self.edge_encoder = EmptyEncoder(refrence="contributions")
+        self.edge_encoder = EmptyEncoder(refrence=y_name)
 
         x_features = self.x_encoder.size
         u_features = self.u_encoder.size
@@ -235,20 +231,18 @@ class GraphNetwork(th.nn.Module):
             x = x + self.bias(data["b"])
         return x
 
-    def encode_pure(self, data, *, mask="valid", y_encode=True):
+    def encode(self, data, *, mask="valid", y_encode=True):
         encoded = {
             "mask": data[mask] if mask is not None else None,
             "x": self.x_encoder(**data),
             "y_enc": self.y_encoder(**data).unsqueeze(1) if y_encode else None,
             "y": data[self.y_name] if y_encode else None,
-            "u": self.u_encoder(**data, datashape="batch*agent_round"),
+            "u": self.u_encoder(**data, datashape="batch_agent_round"),
             **(
                 {"b": self.bias_encoder(**data)}
                 if self.bias_encoder is not None
                 else {}
             ),
-            "edge_index": data["edge_index"],
-            "batch": data["batch"],
         }
         return encoded
 

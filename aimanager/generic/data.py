@@ -80,10 +80,10 @@ def create_torch_data_new(df, default_values=None):
         default_values = get_default_values(df)
 
     data_names = {
-        "round_number": th.int,
+        "round_number": th.int64,
         "is_first": th.bool,
-        "contribution": th.int,
-        "punishment": th.int,
+        "contribution": th.int64,
+        "punishment": th.int64,
         "common_good": th.float,
         "contribution_valid": th.bool,
         "punishment_valid": th.bool,
