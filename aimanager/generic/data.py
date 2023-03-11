@@ -26,6 +26,7 @@ class AgentRound(pa.SchemaModel):
     punishment: Series[int]
     punishment_valid: Series[bool]
     common_good: Series[float]
+    recorded: Series[bool]
 
 
 def parse_agent_rounds(df):
@@ -47,6 +48,7 @@ def parse_agent_rounds(df):
         "contribution_valid"
     ].transform("sum")
     df["common_good"] = (df["common_good"] / round_player_input).fillna(0)
+    df["recorded"] = True
 
     df.drop(columns=["global_group_id", "player_no_input"], inplace=True)
     df.rename(columns={"player_id": "player_idx"}, inplace=True)
@@ -87,6 +89,7 @@ def create_torch_data_new(df, default_values=None):
         "common_good": th.float,
         "contribution_valid": th.bool,
         "punishment_valid": th.bool,
+        "recorded": th.bool,
     }
 
     n_groups = df["group_idx"].max() + 1
