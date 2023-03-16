@@ -9,6 +9,7 @@ exec:
   memory: 8
 params_only: true
 params:
+  seed: 1234
   fraction_training: 1.0
   mask_name: recorded
   experiment_names: [trail_rounds_2, random_1]
@@ -40,6 +41,7 @@ params:
     eval_period: 50
     l1_entropy: 0
   device: cuda
+  autoregression: false
 grid:
   - labels.rnn: [true, false]
     model_args.add_rnn: [true, false]

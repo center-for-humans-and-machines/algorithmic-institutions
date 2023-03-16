@@ -4,32 +4,47 @@ import torch as th
 from torch_scatter import scatter_sum
 
 
-class ArtificialHumanEnv():
+class ArtificialHumanEnv:
     """
     Environment that runs the virtual humans and calculuates the value of the common good.
 
     Indices:
         t: agent types [0..1]
     """
+
     state_dimensions = {
-        'punishment': ['agent'],
-        'contribution': ['agent'],
-        'payoffs': ['agent'],
-        'contribution_valid': ['agent'],
-        'common_good': ['agent'],
-        'round_number': ['agent'],
-        'player_id': ['agent'],
+        "punishment": ["agent"],
+        "contribution": ["agent"],
+        "payoffs": ["agent"],
+        "contribution_valid": ["agent"],
+        "common_good": ["agent"],
+        "round_number": ["agent"],
+        "player_id": ["agent"],
     }
 
     def __init__(
-            self, *, artifical_humans, artifical_humans_valid=None, batch_size, n_agents,
-            n_contributions, n_punishments, n_rounds, device, default_values=None):
+        self,
+        *,
+        artifical_humans,
+        artifical_humans_valid=None,
+        batch_size,
+        n_agents,
+        n_contributions,
+        n_punishments,
+        n_rounds,
+        device,
+        default_values=None,
+    ):
         """
         Args:
             asdasd
         """
         self.batch_size = batch_size
-        self.default_values = artifical_humans.default_values if default_values is None else default_values
+        self.default_values = (
+            artifical_humans.default_values
+            if default_values is None
+            else default_values
+        )
         self.n_rounds = n_rounds
         self.device = device
         self.n_contributions = n_contributions
@@ -39,53 +54,69 @@ class ArtificialHumanEnv():
         self.n_agents = n_agents
         self.edge_index = create_fully_connected(n_agents)
         self.batch_edge_index = th.tensor(
-            [[a+(i*self.n_agents), b+(i*self.n_agents)]
-             for i in range(self.batch_size)
-             for a in range(self.n_agents)
-             for b in range(self.n_agents)
-             if a != b
-             ], device=self.device, dtype=th.int64).T
+            [
+                [a + (i * self.n_agents), b + (i * self.n_agents)]
+                for i in range(self.batch_size)
+                for a in range(self.n_agents)
+                for b in range(self.n_agents)
+                if a != b
+            ],
+            device=self.device,
+            dtype=th.int64,
+        ).T
+
         self.batch = th.tensor(
-            [i
-             for i in range(self.batch_size)
-             for a in range(self.n_agents)
-             ], device=self.device, dtype=th.int64)
-        self.groups = [[(i*self.n_agents + a) for a in range(self.n_agents)]
-                       for i in range(self.batch_size)
-                       ]
+            [i for i in range(self.batch_size) for a in range(self.n_agents)],
+            device=self.device,
+            dtype=th.int64,
+        )
+        self.groups = [
+            [(i * self.n_agents + a) for a in range(self.n_agents)]
+            for i in range(self.batch_size)
+        ]
 
         self.reset_state()
 
     def reset_state(self):
+        size = (self.batch_size, self.n_agents, 1)
         state = {
-            'punishment': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.int64, device=self.device),
-            'contribution': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.int64, device=self.device),
-            'round_number': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.int64, device=self.device),
-            'is_first': th.ones((self.batch_size * self.n_agents, 1), dtype=th.bool, device=self.device),
-            'contribution_valid': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.bool, device=self.device),
-            'punishment_valid': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.bool, device=self.device),
-            'common_good': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
-            'contributor_payoff': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
-            'manager_payoff': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
-            'reward': th.zeros((self.batch_size * self.n_agents, 1), dtype=th.float, device=self.device),
-            'group': th.tensor([i for i, g in enumerate(self.groups) for a in g], dtype=th.int64, device=self.device),
-            'agent': th.tensor([a for i, g in enumerate(self.groups) for a in g], dtype=th.int64, device=self.device),
+            "punishment": th.zeros(size, dtype=th.int64, device=self.device),
+            "contribution": th.zeros(size, dtype=th.int64, device=self.device),
+            "round_number": th.zeros(size, dtype=th.int64, device=self.device),
+            "is_first": th.ones(size, dtype=th.bool, device=self.device),
+            "contribution_valid": th.zeros(size, dtype=th.bool, device=self.device),
+            "punishment_valid": th.zeros(size, dtype=th.bool, device=self.device),
+            "common_good": th.zeros(size, dtype=th.float, device=self.device),
+            "contributor_payoff": th.zeros(size, dtype=th.float, device=self.device),
+            "manager_payoff": th.zeros(size, dtype=th.float, device=self.device),
+            "reward": th.zeros(size, dtype=th.float, device=self.device),
+            "group": th.tensor(
+                [[i for a in g] for i, g in enumerate(self.groups)],
+                dtype=th.int64,
+                device=self.device,
+            ),
+            "agent": th.tensor(
+                [[a for a in g] for i, g in enumerate(self.groups)],
+                dtype=th.int64,
+                device=self.device,
+            ),
         }
 
         prev_state = {
-            f'prev_{k}': th.full_like(state[k], fill_value=self.default_values[k])
-            for k, t in state.items() if k in self.default_values
+            f"prev_{k}": th.full_like(state[k], fill_value=self.default_values[k])
+            for k, t in state.items()
+            if k in self.default_values
         }
         self.state = {**prev_state, **state}
 
     def __getattr__(self, name):
-        if 'state' in self.__dict__:
-            state = self.__dict__['state']
+        if "state" in self.__dict__:
+            state = self.__dict__["state"]
             return state[name]
 
     def __setattr__(self, name, value):
-        if 'state' in self.__dict__:
-            if name in self.__dict__['state']:
+        if "state" in self.__dict__:
+            if name in self.__dict__["state"]:
                 self.state[name] = value
             else:
                 object.__setattr__(self, name, value)
@@ -96,43 +127,67 @@ class ArtificialHumanEnv():
         masked_contribution = th.where(self.contribution_valid, self.contributions, 0)
         masked_punishment = th.where(self.contribution_valid, self.punishment, 0)
         sum_contribution = scatter_sum(
-            masked_contribution, self.batch, dim=0, dim_size=self.batch_size)
+            masked_contribution, self.batch, dim=0, dim_size=self.batch_size
+        )
         sum_punishment = scatter_sum(
-            masked_punishment, self.batch, dim=0, dim_size=self.batch_size)
+            masked_punishment, self.batch, dim=0, dim_size=self.batch_size
+        )
         sum_contribution_valid = scatter_sum(
-            self.contribution_valid.to(th.float), self.batch, dim=0, dim_size=self.batch_size)
+            self.contribution_valid.to(th.float),
+            self.batch,
+            dim=0,
+            dim_size=self.batch_size,
+        )
         common_good = (sum_contribution * 1.6 - sum_punishment) / sum_contribution_valid
         self.common_good = common_good[self.batch]
 
     def update_payoff(self):
         contributor_payoff = 20 - self.contribution - self.punishment + self.common_good
-        self.contributor_payoff = th.where(self.contribution_valid, contributor_payoff, 0)
+        self.contributor_payoff = th.where(
+            self.contribution_valid, contributor_payoff, 0
+        )
         self.manager_payoff = self.common_good / 4
 
     def update_reward(self):
         masked_contribution = th.where(self.contribution_valid, self.contribution, 0)
-        masked_prev_punishment = th.where(self.prev_contribution_valid, self.prev_punishment, 0)
+        masked_prev_punishment = th.where(
+            self.prev_contribution_valid, self.prev_punishment, 0
+        )
 
         if self.done:
-            self.reward = - masked_prev_punishment.to(th.float) / 32
+            self.reward = -masked_prev_punishment.to(th.float) / 32
         else:
             self.reward = (masked_contribution * 1.6 - masked_prev_punishment) / 32
 
     def update_contribution(self):
-        state = {**self.state, **self.get_batch_structure()}
-
         # artificial humans
-        encoded = self.artifical_humans.encode(state, mask=None, y_encode=False)
+        encoded = self.artifical_humans.encode(
+            self.state,
+            mask=None,
+            y_encode=False,
+            edge_index=self.batch_edge_index,
+            device=self.device,
+        )
         contribution = self.artifical_humans.predict(
-            encoded, reset_rnn=self.round_number[0][0] == 0)[0]
+            encoded, reset_rnn=self.round_number[0][0] == 0
+        )[0]
 
         # artificial humans valid
         if self.artifical_humans_valid is not None:
-            encoded = self.artifical_humans_valid.encode(state, mask=None, y_encode=False)
+            encoded = self.artifical_humans_valid.encode(
+                self.state,
+                mask=None,
+                y_encode=False,
+                edge_index=self.batch_edge_index,
+                device=self.device,
+            )
             contribution_valid = self.artifical_humans_valid.predict(
-                encoded, reset_rnn=self.round_number[0][0] == 0)[0]
+                encoded, reset_rnn=self.round_number[0][0] == 0
+            )[0]
             contribution_valid = contribution_valid.to(th.bool)
-            contribution[~contribution_valid] = self.artifical_humans.default_values['contribution']
+            contribution[~contribution_valid] = self.artifical_humans.default_values[
+                "contribution"
+            ]
         else:
             contribution_valid = th.ones_like(self.contribution_valid)
 
@@ -159,19 +214,13 @@ class ArtificialHumanEnv():
         self.round_number += 1
         self.is_first = th.zeros_like(self.is_first)
         if self.done:
-            raise ValueError('Environment is done already.')
+            raise ValueError("Environment is done already.")
         for k in self.state:
-            if k[:4] == 'prev':
+            if k[:4] == "prev":
                 self.state[k] = self.state[k[5:]]
-        if (self.round_number[0, 0] == (self.n_rounds)):
+        if self.round_number[0, 0] == (self.n_rounds):
             self.done = True
         else:
             self.update_contribution()
         self.update_reward()
         return self.state, self.reward, self.done
-
-    def get_batch_structure(self):
-        return {
-            'edge_index': self.batch_edge_index,
-            'batch': self.batch
-        }

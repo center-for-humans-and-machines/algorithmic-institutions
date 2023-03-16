@@ -1,4 +1,5 @@
 from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU, ReLU
+import numpy as np
 import torch as th
 from torch_scatter import scatter_mean
 from torch_geometric.nn import MetaLayer
@@ -92,7 +93,8 @@ class GraphNetwork(th.nn.Module):
         b_encoding=None,
         *,
         y_levels=21,
-        y_name="contributions",
+        y_name="contribution",
+        autoregressive=False,
         x_encoding=[],
         u_encoding=[],
         add_rnn=True,
@@ -121,6 +123,7 @@ class GraphNetwork(th.nn.Module):
         self.default_values = default_values
         self.y_levels = y_levels
         self.y_name = y_name
+        self.autoregressive = autoregressive
 
         if op1 is None:
             if add_edge_model:
@@ -231,9 +234,38 @@ class GraphNetwork(th.nn.Module):
             x = x + self.bias(data["b"])
         return x
 
-    def encode(self, data, *, mask="valid", y_encode=True):
+    def encode(
+        self,
+        data,
+        *,
+        mask=None,
+        autoreg_mask=None,
+        y_encode=True,
+        edge_index=None,
+        device=None
+    ):
+        device = self.device if device is None else device
+        if autoreg_mask:
+            y_masked_name = self.y_name + "_masked"
+            data[y_masked_name] = data[self.y_name].clone()
+            assert autoreg_mask.shape[0] == data[self.y_name].shape[0]
+            # if mask.shape[0] != data[self.y_name].shape[0]:
+            #     mask = mask.repeat(data[target + "_masked"].shape[0], 1)
+            data[y_masked_name][autoreg_mask] = self.default_values[self.y_name]
+            data["autoreg_mask"] = (
+                th.ones_like(self.y_name, dtype=th.bool)
+                & autoreg_mask[:, :, np.newaxis]
+            )
+
+        if autoreg_mask and mask is not None:
+            mask_ = data[mask] & autoreg_mask[:, :, np.newaxis]
+        elif mask is not None:
+            mask_ = data[mask]
+        else:
+            mask_ = None
+
         encoded = {
-            "mask": data[mask] if mask is not None else None,
+            "mask": mask_,
             "x": self.x_encoder(**data),
             "y_enc": self.y_encoder(**data).unsqueeze(1) if y_encode else None,
             "y": data[self.y_name] if y_encode else None,
@@ -244,38 +276,16 @@ class GraphNetwork(th.nn.Module):
                 else {}
             ),
         }
+        n_groups, n_player, n_rounds, _ = encoded["x"].shape
+        encoded = {k: v.flatten(0, 1) for k, v in encoded.items() if v is not None}
+        encoded["batch"] = th.tensor(
+            [i for i in range(n_groups) for j in range(n_player)], device=device
+        )
+        encoded["edge_index"] = edge_index
+        encoded = {k: v.to(device) for k, v in encoded.items()}
         return encoded
 
-    # def encode(
-    #     self, data, *, edge_index, mask="valid", y_encode=True, info_columns=None
-    # ):
-    #     encoded = {
-    #         "mask": data[mask] if mask is not None else None,
-    #         "x": self.x_encoder(**data),
-    #         "y_enc": self.y_encoder(**data) if y_encode else None,
-    #         "y": data[self.y_name] if y_encode else None,
-    #         "u": self.u_encoder(**data),
-    #         "edge_attr": self.edge_encoder(**data, n_edges=edge_index.shape[1]),
-    #         "info": th.stack([data[c] for c in info_columns], dim=-1)
-    #         if info_columns
-    #         else None,
-    #     }
-    #     n_episodes, n_agents, n_rounds, _ = encoded["x"].shape
-
-    #     dataset = [
-    #         Data(
-    #             **{k: v[i] for k, v in encoded.items() if v is not None},
-    #             edge_index=edge_index,
-    #             idx=i,
-    #             group_idx=i,
-    #             num_nodes=n_agents,
-    #             player_idx=th.arange(n_agents)
-    #         ).to(self.device)
-    #         for i in range(n_episodes)
-    #     ]
-    #     return dataset
-
-    def predict_pure(self, data, sample=True, reset_rnn=True):
+    def predict_encoded(self, data, sample=True, reset_rnn=True):
         self.eval()
         # TODO: add autoregression
         y_logit = self(data, reset_rnn)
@@ -283,28 +293,55 @@ class GraphNetwork(th.nn.Module):
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
-    def predict_autoreg(self, data, sample=True, reset_rnn=True):
+    def predict_normal(self, data, sample=True, reset_rnn=True):
+        n_batch, n_nodes, n_rounds = data[self.y_name].shape
+        edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
+        encoded = self.encode(
+            data, y_encode=False, edge_index=edge_index, device=self.device
+        )
+        return self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
+
+    def predict_autoreg(self, data, sample=True):
         self.eval()
-        # TODO: add autoregression
-        raise NotImplementedError("Autoregression not implemented yet.")
+        assert (
+            self.rnn_n is None and self.rnn_g is None
+        ), "Autoregressive predictions do not support RNN"
 
-    # def predict(self, data, sample=True, batch_size=10, reset_rnn=True):
-    #     self.eval()
-    #     # TODO: use predict_pure
-    #     y_logit = th.cat([self(d, reset_rnn)
-    #                       for d in iter(DataLoader(data, shuffle=False, batch_size=batch_size))
-    #                       ])
-    #     y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
-    #     y_pred = self.y_encoder.decode(y_pred_proba, sample)
-    #     return y_pred, y_pred_proba
+        n_batch, n_nodes, n_rounds = data["contribution"].shape
+        edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
 
-    # def predict_one(self, data, reset_rnn=True, sample=True):
-    #     self.eval()
-    #     batch = Batch.from_data_list([data])
-    #     y_logit = self(batch, reset_rnn)
-    #     y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
-    #     y_pred = self.y_encoder.decode(y_pred_proba, sample)
-    #     return y_pred, y_pred_proba
+        agent_order = np.arange(n_nodes)
+        agent_order = np.random.permutation(agent_order)
+
+        autoreg_mask = th.ones((n_batch, n_nodes), device=self.device, dtype=th.bool)
+
+        y_pred_auto = th.full_like(
+            data[self.y_name], fill_value=self.default_values[self.y_name]
+        )
+        y_masked_name = self.y_name + "_masked"
+
+        for i in agent_order:
+            data[y_masked_name] = y_pred_auto
+            encoded = self.encode(
+                data,
+                autoreg_mask=autoreg_mask,
+                y_encode=False,
+                edge_index=edge_index,
+                device=self.device,
+            )
+            y_logit = self(encoded)
+            y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+            y_pred = self.y_encoder.decode(y_pred_proba, sample)
+            y_pred_auto[:, i] = y_pred[:, i]
+            autoreg_mask[:, i] = True
+
+        return y_pred_auto
+
+    def predict(self, *args, **kwargs):
+        if self.autoregressive:
+            return self.predict_autoreg(*args, **kwargs)
+        else:
+            return self.predict(*args, **kwargs)
 
     def save(self, filename):
         to_save = [
@@ -315,6 +352,7 @@ class GraphNetwork(th.nn.Module):
             "bias",
             "y_levels",
             "y_name",
+            "autoregressive",
             "x_encoding",
             "u_encoding",
             "b_encoding",
@@ -336,3 +374,15 @@ class GraphNetwork(th.nn.Module):
     def to(self, device):
         self.device = device
         return super().to(device)
+
+    def create_fully_connected(self, n_nodes, n_groups=1):
+        return th.tensor(
+            [
+                [i + k * n_nodes, j + k * n_nodes]
+                for k in range(n_groups)
+                for i in range(n_nodes)
+                for j in range(n_nodes)
+                if i != j
+            ],
+            device=self.device,
+        ).T

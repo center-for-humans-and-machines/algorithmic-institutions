@@ -15,9 +15,9 @@ def eval_model(model, data):
     strategies = ["greedy", "sampling"]
     for strategy in strategies:
         if strategy == "greedy":
-            y_pred, y_pred_proba = model.predict_pure(data, sample=False)
+            y_pred, y_pred_proba = model.predict(data, sample=False)
         elif strategy == "sampling":
-            y_pred, y_pred_proba = model.predict_pure(data, sample=True)
+            y_pred, y_pred_proba = model.predict(data, sample=True)
 
         # mask y_true, y_pred, y_pred_proba
         mask = data["mask"]
