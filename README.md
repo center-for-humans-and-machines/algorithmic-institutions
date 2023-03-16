@@ -20,7 +20,7 @@ pip install -e djx
 Run a notebook
 
 ```
-python run_notebook.py evaluation/predictive_models ahc_02_valid
+python run.py evaluation/predictive_models ahc_02_valid
 ```
 
 Update parameter only

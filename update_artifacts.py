@@ -1,3 +1,5 @@
+# !/usr/bin/env python3
+
 import subprocess
 
 with open(".artifactinclude", "r") as f:

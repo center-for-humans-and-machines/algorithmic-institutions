@@ -267,7 +267,7 @@ class GraphNetwork(th.nn.Module):
         encoded = {
             "mask": mask_,
             "x": self.x_encoder(**data),
-            "y_enc": self.y_encoder(**data).unsqueeze(1) if y_encode else None,
+            # "y_enc": self.y_encoder(**data).unsqueeze(1) if y_encode else None,
             "y": data[self.y_name] if y_encode else None,
             "u": self.u_encoder(**data, datashape="batch_agent_round"),
             **(
@@ -281,8 +281,10 @@ class GraphNetwork(th.nn.Module):
         encoded["batch"] = th.tensor(
             [i for i in range(n_groups) for j in range(n_player)], device=device
         )
+        if edge_index is None:
+            edge_index = self.create_fully_connected(n_player, n_groups=n_groups)
         encoded["edge_index"] = edge_index
-        encoded = {k: v.to(device) for k, v in encoded.items()}
+        encoded = {k: v.to(device) for k, v in encoded.items() if v is not None}
         return encoded
 
     def predict_encoded(self, data, sample=True, reset_rnn=True):
@@ -293,13 +295,16 @@ class GraphNetwork(th.nn.Module):
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
-    def predict_normal(self, data, sample=True, reset_rnn=True):
+    def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
         n_batch, n_nodes, n_rounds = data[self.y_name].shape
-        edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
+        if edge_index is None:
+            edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
-        return self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
+        predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
+        predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
+        return predict
 
     def predict_autoreg(self, data, sample=True):
         self.eval()
@@ -341,7 +346,7 @@ class GraphNetwork(th.nn.Module):
         if self.autoregressive:
             return self.predict_autoreg(*args, **kwargs)
         else:
-            return self.predict(*args, **kwargs)
+            return self.predict_independent(*args, **kwargs)
 
     def save(self, filename):
         to_save = [

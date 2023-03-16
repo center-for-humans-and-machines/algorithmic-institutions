@@ -124,22 +124,14 @@ class ArtificialHumanEnv:
             object.__setattr__(self, name, value)
 
     def update_common_good(self):
-        masked_contribution = th.where(self.contribution_valid, self.contributions, 0)
+        masked_contribution = th.where(self.contribution_valid, self.contribution, 0)
         masked_punishment = th.where(self.contribution_valid, self.punishment, 0)
-        sum_contribution = scatter_sum(
-            masked_contribution, self.batch, dim=0, dim_size=self.batch_size
-        )
-        sum_punishment = scatter_sum(
-            masked_punishment, self.batch, dim=0, dim_size=self.batch_size
-        )
-        sum_contribution_valid = scatter_sum(
-            self.contribution_valid.to(th.float),
-            self.batch,
-            dim=0,
-            dim_size=self.batch_size,
-        )
-        common_good = (sum_contribution * 1.6 - sum_punishment) / sum_contribution_valid
-        self.common_good = common_good[self.batch]
+        sum_contribution = masked_contribution.sum(dim=1, keepdim=True)
+        sum_punishment = masked_punishment.sum(dim=1, keepdim=True)
+        sum_contribution_valid = self.contribution_valid.sum(dim=1, keepdim=True)
+        self.common_good = (
+            (sum_contribution * 1.6 - sum_punishment) / sum_contribution_valid
+        ).expand(-1, self.n_agents, -1)
 
     def update_payoff(self):
         contributor_payoff = 20 - self.contribution - self.punishment + self.common_good
@@ -160,29 +152,18 @@ class ArtificialHumanEnv:
             self.reward = (masked_contribution * 1.6 - masked_prev_punishment) / 32
 
     def update_contribution(self):
-        # artificial humans
-        encoded = self.artifical_humans.encode(
-            self.state,
-            mask=None,
-            y_encode=False,
-            edge_index=self.batch_edge_index,
-            device=self.device,
-        )
         contribution = self.artifical_humans.predict(
-            encoded, reset_rnn=self.round_number[0][0] == 0
+            self.state,
+            reset_rnn=self.round_number[0, 0, 0] == 0,
+            edge_index=self.batch_edge_index,
         )[0]
 
         # artificial humans valid
         if self.artifical_humans_valid is not None:
-            encoded = self.artifical_humans_valid.encode(
-                self.state,
-                mask=None,
-                y_encode=False,
-                edge_index=self.batch_edge_index,
-                device=self.device,
-            )
             contribution_valid = self.artifical_humans_valid.predict(
-                encoded, reset_rnn=self.round_number[0][0] == 0
+                self.state,
+                reset_rnn=self.round_number[0, 0, 0] == 0,
+                edge_index=self.batch_edge_index,
             )[0]
             contribution_valid = contribution_valid.to(th.bool)
             contribution[~contribution_valid] = self.artifical_humans.default_values[
