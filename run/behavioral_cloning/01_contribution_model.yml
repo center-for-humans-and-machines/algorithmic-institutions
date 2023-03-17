@@ -1,7 +1,7 @@
 description: >-
   Investigation of the model architecture and the relevance of global features.
 exec:
-  command: papermill -f {job_file} notebooks/artificial_humans/graph.ipynb {output_path}/graph.ipynb --cwd $(pwd)/notebooks/artificial_humans
+  command: python run.py run {job_file}
   script_name: gpu
   data_dir: data
   temp_dir: temp
@@ -9,6 +9,7 @@ exec:
   memory: 8
 params_only: true
 params:
+  __notebook__: notebooks/artificial_humans/graph.ipynb
   fraction_training: 1.0
   seed: 38381
   mask_name: contribution_valid
@@ -17,7 +18,7 @@ params:
   n_punishments: 31
   n_cross_val: 10
   n_player: 4
-  data_file: ../../data/experiments/pilot_random1_player_round_slim.csv
+  data_file: ../../experiments/pilot_random1_player_round_slim.csv
   model_name: graph
   shuffle_features: [prev_punishment, prev_contribution, contribution_valid]
   model_args:

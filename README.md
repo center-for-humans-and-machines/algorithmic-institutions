@@ -62,10 +62,18 @@ python run_notebook.py simulate_rule/simulate_rule_v1_2_1  ahc_02_valid_node+rnn
 First ensure that the job_pattern at (`djx/djx/job_pattern`) do fit your local
 cluster.
 
-## Run a grid
+## Train behavioral clones
 
 ```
-djx run/artificial_humans/02_valid.yml
+djx run/behavioral_cloning/01_contribution_model.yml
+djx run/behavioral_cloning/02_contribution_valid_model.yml
+djx run/behavioral_cloning/03_punishment_autoregressive.yml
+```
+
+## Train RL manager
+
+```
+djx run/manager/01_model.yml
 ```
 
 # Reproducing Figures

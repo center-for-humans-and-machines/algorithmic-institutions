@@ -5,36 +5,32 @@ exec:
   script_name: gpu
   data_dir: data
   temp_dir: temp
+  temp_dir: temp
   cores: 4
   memory: 8
 params_only: true
 params:
   __notebook__: notebooks/artificial_humans/graph.ipynb
-  seed: 71826387
   fraction_training: 1.0
-  mask_name: recorded
-  experiment_names: [trail_rounds_2]
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [trail_rounds_2, random_1]
   n_contributions: 21
   n_punishments: 31
   n_cross_val: 10
   n_player: 4
-  data_file: ../../data/experiments/pilot_random1_player_round_slim.csv
+  data_file: experiments/pilot_random1_player_round_slim.csv
   model_name: graph
-  shuffle_features:
-    - contribution
-    - prev_punishment
-    - contribution_valid
-    - prev_punishment_valid
-    - punishment_masked
+  shuffle_features: [prev_punishment, prev_contribution, contribution_valid]
   model_args:
-    y_levels: 31
-    y_name: punishment
+    y_levels: 21
+    y_name: contribution
     hidden_size: 5
-    add_rnn: False
+    add_rnn: True
     add_edge_model: True
     add_global_model: False
     x_encoding:
-      - name: contribution
+      - name: prev_contribution
         n_levels: 21
         encoding: numeric
       - name: prev_punishment
@@ -42,24 +38,18 @@ params:
         encoding: numeric
       - etype: bool
         name: contribution_valid
-      - etype: bool
-        name: prev_punishment_valid
-      - name: punishment_masked
-        n_levels: 31
-        encoding: numeric
-      - etype: bool
-        name: autoreg_mask
   optimizer_args:
     lr: 3.e-4
     weight_decay: 1.e-5
   train_args:
-    epochs: 10000
-    batch_size: 20
+    epochs: 100
+    batch_size: 10
     clamp_grad: 1
     eval_period: 50
     l1_entropy: 0
   device: cuda
-  autoregression: True
+  autoregression: False
 grid:
-  - labels.architecture: [node, node+edge]
-    model_args.add_edge_model: [false, true]
+- labels.architecture: [node, node+edge, node+rnn, node+edge+rnn]
+  model_args.add_rnn: [false, false, true, true]
+  model_args.add_edge_model: [false, true, false, true]

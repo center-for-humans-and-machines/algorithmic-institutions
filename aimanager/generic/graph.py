@@ -267,7 +267,7 @@ class GraphNetwork(th.nn.Module):
         encoded = {
             "mask": mask_,
             "x": self.x_encoder(**data),
-            # "y_enc": self.y_encoder(**data).unsqueeze(1) if y_encode else None,
+            "y_enc": self.y_encoder(**data).unsqueeze(1) if y_encode else None,
             "y": data[self.y_name] if y_encode else None,
             "u": self.u_encoder(**data, datashape="batch_agent_round"),
             **(
