@@ -1,10 +1,10 @@
 __notebook__: notebooks/artificial_humans/graph.ipynb
 autoregression: false
 data_file: experiments/pilot_random1_player_round_slim.csv
-device: cuda
+device: cpu
 experiment_names:
-- trail_rounds_2
-- random_1
+  - trail_rounds_2
+  - random_1
 fraction_training: 1.0
 job_id: architecture_node+edge+rnn
 labels:
@@ -16,14 +16,14 @@ model_args:
   add_rnn: true
   hidden_size: 5
   x_encoding:
-  - encoding: numeric
-    n_levels: 21
-    name: prev_contribution
-  - encoding: numeric
-    n_levels: 31
-    name: prev_punishment
-  - etype: bool
-    name: contribution_valid
+    - encoding: numeric
+      n_levels: 21
+      name: prev_contribution
+    - encoding: numeric
+      n_levels: 31
+      name: prev_punishment
+    - etype: bool
+      name: contribution_valid
   y_levels: 21
   y_name: contribution
 model_name: graph
@@ -36,9 +36,9 @@ optimizer_args:
   weight_decay: 1.0e-05
 seed: 38381
 shuffle_features:
-- prev_punishment
-- prev_contribution
-- contribution_valid
+  - prev_punishment
+  - prev_contribution
+  - contribution_valid
 train_args:
   batch_size: 10
   clamp_grad: 1
