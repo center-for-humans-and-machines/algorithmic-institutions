@@ -103,7 +103,7 @@ def create_data(rounds, n_groups, default_values):
         "round_number": round_number.permute(0, 2, 1),
     }
 
-    calc_prev = ["punishments", "punishment_valid", "contribution_valid"]
+    calc_prev = ["punishment", "contribution", "punishment_valid", "contribution_valid"]
     for k in calc_prev:
         prev = th.full_like(data[k], fill_value=default_values[k])
         prev[:, :, 1:] = data[k][:, :, 1:]
@@ -120,9 +120,7 @@ class HumanManager:
         self.model = GraphNetwork.load(model_path, device=th.device("cpu"))
 
     def get_punishments(self, data, n_groups):
-        data = create_data(data, n_groups, self.model.default_values)
-        pred = self.model.predict(data, sample=True)
-        print(pred)
+        pred = self.model.predict(data, sample=True)[0]
         return pred
 
 
@@ -134,9 +132,7 @@ class RLManager:
         # self.model.u_encoder.refrence = "contribution"
 
     def get_punishments(self, data, n_groups):
-        data = create_data(data, n_groups, self.model.default_values)
-        pred = self.model.predict(data, sample=False)
-        print(pred)
+        pred = self.model.predict(data, sample=False)[0]
         return pred
         # return self.model.predict_pure(encoded, sample=False)[0][:, -1].tolist()
 
@@ -150,15 +146,40 @@ class MultiManager:
             k: MANAGER_CLASS[m["type"]](m["path"]) for k, m in managers.items()
         }
         self.n_groups = len(self.managers)
+        self.group_idx = {k: i for i, k in enumerate(managers.keys())}
 
     def get_punishments(self, rounds):
         group = rounds[-1]["group"]
+        group_idx = [self.group_idx[g] for g in group]
 
-        punishments = {
-            k: m.get_punishments(rounds, self.n_groups)[:, :, -1]
+        # we use the batch dimension to seperate the different groups
+        # we mask contributions and punishments corresponding to the groups
+        # the batch size corresponds to the number of models
+        # the data for both models is identical in principal, we compute them
+        # seperately as the models might use different default values
+        data = {
+            k: create_data(rounds, self.n_groups, m.model.default_values)
             for k, m in self.managers.items()
         }
-        punishments = {k: v[group] for k, v in punishments.items()}
-        return [
-            punishments[g][i] if g in punishments else None for i, g in enumerate(group)
-        ], punishments
+
+        punishment = {
+            k: m.get_punishments(data[k], self.n_groups)
+            for k, m in self.managers.items()
+        }
+
+        # we select from the model responds only those matching the right group
+        # this is the same for all models and independent of the actual model of
+        # the group
+        # we also select the last punishment in the round dimension
+        punishment = {
+            k: v[group_idx, th.arange(len(group_idx)), -1]
+            for k, v in punishment.items()
+        }
+
+        # we select the punishment where the group matches the model
+        matched_punishment = [
+            punishment[g][i].item() if g in punishment else None
+            for i, g in enumerate(group)
+        ]
+
+        return matched_punishment, punishment

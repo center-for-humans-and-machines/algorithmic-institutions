@@ -117,6 +117,9 @@ class ArtificialHumanEnv:
     def __setattr__(self, name, value):
         if "state" in self.__dict__:
             if name in self.__dict__["state"]:
+                assert (
+                    value.shape == self.state[name].shape
+                ), f"Shape of {name} does not match. [{value.shape} != {self.state[name].shape}]"
                 self.state[name] = value
             else:
                 object.__setattr__(self, name, value)
