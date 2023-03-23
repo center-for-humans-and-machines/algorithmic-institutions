@@ -295,10 +295,14 @@ class GraphNetwork(th.nn.Module):
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
-    def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
+    def predict_independent(
+        self, data, sample=True, reset_rnn=True, edge_index=None
+    ):
         n_batch, n_nodes, n_rounds = data[self.y_name].shape
         if edge_index is None:
-            edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
+            edge_index = self.create_fully_connected(
+                n_nodes, n_groups=n_batch
+            )
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
@@ -313,7 +317,9 @@ class GraphNetwork(th.nn.Module):
         ), "Autoregressive predictions do not support RNN"
 
         n_batch, n_nodes, n_rounds = data["contribution"].shape
-        edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
+        edge_index = self.create_fully_connected(
+            n_nodes, n_groups=n_batch
+        )
 
         agent_order = np.arange(n_nodes)
         agent_order = np.random.permutation(agent_order)
@@ -373,7 +379,8 @@ class GraphNetwork(th.nn.Module):
         if "manager_valid" not in to_load["default_values"]:
             to_load["default_values"]["manager_valid"] = False
 
-        ah = cls(**to_load)
+        ah = cls(**to_load, device=device)
+        ah.device = device
         return ah
 
     def to(self, device):

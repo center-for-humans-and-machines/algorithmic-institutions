@@ -1,13 +1,37 @@
 import pandas as pd
 import torch as th
 import os
-from aimanager.utils.array_to_df import add_labels
+from aimanager.utils.array_to_df import add_labels, using_multiindex
 from aimanager.utils.utils import make_dir
 from sklearn.metrics import (
     mean_absolute_error,
     accuracy_score,
     log_loss,
 )
+
+
+def create_confusion_matrix(model, data, y_name, labels):
+    y_pred, y_pred_proba = model.predict_encoded(data, sample=False)
+    y_pred_proba = y_pred_proba.detach().cpu().numpy()
+
+    mask = data["mask"]
+    y_true = data["y"].detach().cpu().numpy()
+    mask = mask.detach().cpu().numpy()
+    proba_df = using_multiindex(
+        y_pred_proba, ["idx", "round_number", f"pred_{y_name}"]
+    ).rename(columns={"value": "proba"})
+    mask_df = using_multiindex(mask, ["idx", "round_number"]).rename(
+        columns={"value": "valid"}
+    )
+
+    y_df = using_multiindex(y_true, ["idx", "round_number"]).rename(
+        columns={"value": f"true_{y_name}"}
+    )
+
+    df = proba_df.merge(mask_df).merge(y_df)
+    df = df[df['valid']]
+    df = add_labels(df, labels)
+    return df
 
 
 def eval_model(model, data):
