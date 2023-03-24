@@ -295,14 +295,10 @@ class GraphNetwork(th.nn.Module):
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
-    def predict_independent(
-        self, data, sample=True, reset_rnn=True, edge_index=None
-    ):
+    def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
         n_batch, n_nodes, n_rounds = data[self.y_name].shape
         if edge_index is None:
-            edge_index = self.create_fully_connected(
-                n_nodes, n_groups=n_batch
-            )
+            edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
@@ -312,14 +308,13 @@ class GraphNetwork(th.nn.Module):
 
     def predict_autoreg(self, data, sample=True):
         self.eval()
+        print("predict autoreg")
         assert (
             self.rnn_n is None and self.rnn_g is None
         ), "Autoregressive predictions do not support RNN"
 
         n_batch, n_nodes, n_rounds = data["contribution"].shape
-        edge_index = self.create_fully_connected(
-            n_nodes, n_groups=n_batch
-        )
+        edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
 
         agent_order = np.arange(n_nodes)
         agent_order = np.random.permutation(agent_order)

@@ -104,7 +104,6 @@ class ArtificalManager:
         return picked_actions
 
     def update(self, update_step, action, reward, **obs):
-
         if update_step % self.target_update_freq == 0:
             # copy policy net to target net
             self.target_model.load_state_dict(self.policy_model.state_dict())
@@ -158,7 +157,7 @@ class ArtificalManager:
 
     def save(self, filename):
         to_save = {
-            "policy_model": self.policy_model,
+            "policy_model": self.policy_model.to(th.device("cpu")),
             "n_contributions": self.n_contributions,
             "n_punishments": self.n_punishments,
             "default_values": self.default_values,
