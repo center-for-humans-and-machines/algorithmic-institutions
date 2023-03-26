@@ -5,9 +5,6 @@ from torch_scatter import scatter_mean
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
 
-# from torch_geometric.loader import DataLoader
-# from torch_geometric.data import Batch, Data
-
 
 class EdgeModel(th.nn.Module):
     def __init__(self, x_features, edge_features, u_features, out_features):
