@@ -109,9 +109,6 @@ def create_data(rounds, n_groups, default_values):
         prev[:, :, 1:] = data[k][:, :, 1:]
         data[f"prev_{k}"] = prev
 
-    # # transpose data
-    # data = {k: v.T for k, v in data.items()}
-
     return data
 
 

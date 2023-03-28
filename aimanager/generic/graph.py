@@ -315,15 +315,18 @@ class GraphNetwork(th.nn.Module):
         agent_order = np.arange(n_nodes)
         agent_order = np.random.permutation(agent_order)
 
+        # we start with predicting all agents; we will use only the prediction
+        # of one agent
         autoreg_mask = th.ones((n_batch, n_nodes), device=self.device, dtype=th.bool)
 
-        y_pred_auto = th.full_like(
+        # initially set all y_pred to the default value
+        y_pred = th.full_like(
             data[self.y_name], fill_value=self.default_values[self.y_name]
         )
         y_masked_name = self.y_name + "_masked"
 
         for i in agent_order:
-            data[y_masked_name] = y_pred_auto
+            data[y_masked_name] = y_pred
             encoded = self.encode(
                 data,
                 autoreg_mask=autoreg_mask,
@@ -334,10 +337,13 @@ class GraphNetwork(th.nn.Module):
             y_logit = self(encoded)
             y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
             y_pred = self.y_encoder.decode(y_pred_proba, sample)
-            y_pred_auto[:, i] = y_pred[:, i]
-            autoreg_mask[:, i] = True
 
-        return y_pred_auto
+            print(y_pred.shape, y_pred.shape)
+
+            y_pred[:, i] = y_pred[:, i]
+            autoreg_mask[:, i] = False
+
+        return y_pred
 
     def predict(self, *args, **kwargs):
         if self.autoregressive:

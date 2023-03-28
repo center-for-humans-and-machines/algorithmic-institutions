@@ -23,6 +23,6 @@ subprocess.call(
         "--include-from=.artifactinclude_rsync",
         "data/",
         "artifacts/",
-        "--delete-excluded",
+        # "--delete-excluded",
     ]
 )
