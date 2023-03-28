@@ -286,7 +286,6 @@ class GraphNetwork(th.nn.Module):
 
     def predict_encoded(self, data, sample=True, reset_rnn=True):
         self.eval()
-        # TODO: add autoregression
         y_logit = self(data, reset_rnn)
         y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
