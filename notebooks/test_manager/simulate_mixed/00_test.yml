@@ -1,0 +1,14 @@
+__notebook__: notebooks/test_manager/simulate_mixed.ipynb
+artificial_humans:
+  human managed:
+    contribution_model: artifacts/artificial_humans/04_3_2_model/model/architecture_node+edge+rnn.pt
+    valid_model: artifacts/artificial_humans/02_4_valid/model/rnn_True.pt
+managers:
+  humanlike:
+    type: human
+    path: data/behavioral_cloning/00_test/model/architecture_node+edge.pt
+  optimal:
+    type: human
+    path: data/manager/00_test/model/run_0.pt
+n_episode_steps: 16
+n_episodes: 500

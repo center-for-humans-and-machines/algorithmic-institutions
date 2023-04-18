@@ -1,0 +1,14 @@
+__notebook__: notebooks/evalutation/predictive_models_autoreg.ipynb
+run: "19_contribution_valid_model_v2"
+base_folder: "behavioral_cloning"
+target: "contribution_valid"
+test: "t-test_paired"
+
+selection: {"rnn": false, 'dataset': 'full'}
+comparision: 'rnn'
+groups: [{'dataset': 'full'}, {'dataset': 'human_manager'}]
+comparison: rnn
+order: ['True', 'False']
+pairs: [
+  ['True', 'False'],
+]

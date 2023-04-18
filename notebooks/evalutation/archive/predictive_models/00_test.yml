@@ -1,0 +1,9 @@
+__notebook__: notebooks/evalutation/predictive_models.ipynb
+run: 00_test
+base_folder: behavioral_cloning
+target: contributions
+test: t-test_paired
+selection:
+  architecture: 'node+rnn'
+order: ['node', 'node+edge', 'node+rnn', 'node+edge+rnn']
+pairs: [['node', 'node+edge'], ['node', 'node+rnn'],  ['node+edge', 'node+rnn'], ['node+rnn', 'node+edge+rnn']]
