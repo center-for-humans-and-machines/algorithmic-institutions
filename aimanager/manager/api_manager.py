@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
+from aimanager.generic.data import shift
 
 
 class Round(BaseModel):
@@ -39,7 +40,7 @@ def fill_none(values, fill_value=0):
     return [v if v is not None else fill_value for v in values]
 
 
-def create_data(rounds, n_groups, default_values):
+def create_data(rounds, groups, default_values):
     """Create data object for the algorithmic manager based on round records."""
     current_round = rounds[-1]
 
@@ -47,15 +48,16 @@ def create_data(rounds, n_groups, default_values):
         [
             [
                 [
-                    c if (cv and g1 == g2) else 0
+                    c if (cv and g1 == g2) else default_values["contribution"]
                     for c, cv, g1 in zip(
                         r["contribution"], r["contribution_valid"], r["group"]
                     )
                 ]
                 for r in rounds
             ]
-            for g2 in range(n_groups)
-        ]
+            for g2 in groups
+        ],
+        dtype=th.int64,
     )
     contribution_valid = th.tensor(
         [
@@ -63,22 +65,24 @@ def create_data(rounds, n_groups, default_values):
                 [cv and g1 == g2 for cv, g1 in zip(r["contribution_valid"], r["group"])]
                 for r in rounds
             ]
-            for g2 in range(n_groups)
-        ]
+            for g2 in groups
+        ],
+        dtype=th.bool,
     )
     punishment = th.tensor(
         [
             [
                 [
-                    p if (pv and g1 == g2) else 0
+                    p if (pv and g1 == g2) else default_values["punishment"]
                     for p, pv, g1 in zip(
                         r["punishment"], r["punishment_valid"], r["group"]
                     )
                 ]
                 for r in rounds
             ]
-            for g2 in range(n_groups)
-        ]
+            for g2 in groups
+        ],
+        dtype=th.int64,
     )
     punishment_valid = th.tensor(
         [
@@ -86,13 +90,15 @@ def create_data(rounds, n_groups, default_values):
                 [(pv and g1 == g2) for pv, g1 in zip(r["punishment_valid"], r["group"])]
                 for r in rounds
             ]
-            for g2 in range(n_groups)
-        ]
+            for g2 in groups
+        ],
+        dtype=th.bool,
     )
 
     group_size = len(current_round["contribution"])
     round_number = th.tensor(
-        [[[r["round"]] * group_size for r in rounds] for _ in range(n_groups)]
+        [[[r["round"]] * group_size for r in rounds] for _ in range(len(groups))],
+        dtype=th.int64,
     )
 
     data = {
@@ -101,13 +107,14 @@ def create_data(rounds, n_groups, default_values):
         "punishment": punishment.permute(0, 2, 1),
         "punishment_valid": punishment_valid.permute(0, 2, 1),
         "round_number": round_number.permute(0, 2, 1),
+        "is_first": round_number.permute(0, 2, 1) == 0,
     }
 
     calc_prev = ["punishment", "contribution", "punishment_valid", "contribution_valid"]
-    for k in calc_prev:
-        prev = th.full_like(data[k], fill_value=default_values[k])
-        prev[:, :, 1:] = data[k][:, :, 1:]
-        data[f"prev_{k}"] = prev
+    data = {
+        **data,
+        **{f"prev_{k}": shift(data[k], default_values[k]) for k in calc_prev},
+    }
 
     return data
 
@@ -116,7 +123,7 @@ class HumanManager:
     def __init__(self, model_path):
         self.model = GraphNetwork.load(model_path, device=th.device("cpu"))
 
-    def get_punishments(self, data, n_groups):
+    def get_punishments(self, data):
         pred = self.model.predict(data, sample=True)[0]
         return pred
 
@@ -128,7 +135,7 @@ class RLManager:
         ).policy_model
         # self.model.u_encoder.refrence = "contribution"
 
-    def get_punishments(self, data, n_groups):
+    def get_punishments(self, data):
         pred = self.model.predict(data, sample=False)[0]
         return pred
         # return self.model.predict_pure(encoded, sample=False)[0][:, -1].tolist()
@@ -142,41 +149,48 @@ class MultiManager:
         self.managers = {
             k: MANAGER_CLASS[m["type"]](m["path"]) for k, m in managers.items()
         }
-        self.n_groups = len(self.managers)
+        self.groups = list(self.managers.keys())
         self.group_idx = {k: i for i, k in enumerate(managers.keys())}
 
     def get_punishments(self, rounds):
-        group = rounds[-1]["group"]
-        group_idx = [self.group_idx[g] for g in group]
-
         # we use the batch dimension to seperate the different groups
         # we mask contributions and punishments corresponding to the groups
         # the batch size corresponds to the number of models
         # the data for both models is identical in principal, we compute them
         # seperately as the models might use different default values
         data = {
-            k: create_data(rounds, self.n_groups, m.model.default_values)
+            k: create_data(rounds, self.groups, m.model.default_values)
             for k, m in self.managers.items()
         }
 
-        punishment = {
-            k: m.get_punishments(data[k], self.n_groups)
-            for k, m in self.managers.items()
-        }
+        punishment = {k: m.get_punishments(data[k]) for k, m in self.managers.items()}
+
+        # print(punishment)
+        # for k, v in punishment.items():
+        #     print(k, v.shape)
 
         # we select from the model responds only those matching the right group
         # this is the same for all models and independent of the actual model of
         # the group
         # we also select the last punishment in the round dimension
+        group = rounds[-1]["group"]
+        group_idx = [self.group_idx[g] for g in group]
+
+        # print(group, group_idx)
+
         punishment = {
             k: v[group_idx, th.arange(len(group_idx)), -1]
             for k, v in punishment.items()
         }
+
+        # print(punishment)
 
         # we select the punishment where the group matches the model
         matched_punishment = [
             punishment[g][i].item() if g in punishment else None
             for i, g in enumerate(group)
         ]
+
+        # print(matched_punishment)
 
         return matched_punishment, punishment

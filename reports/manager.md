@@ -115,7 +115,7 @@ punishments, the round number and the previous common good.
 We investigated the effect of the size of the replay memory and the period of updateing the target network.
 
 ![Learning
-curve](../notebooks/evalutation/plots/manager_v3_16_target_updated3/q_values.jpg)
+curve](../notebooks/evalutation/archive/plots/manager_v3_16_target_updated3/q_values.jpg)
 
 The replay memory size has a relative minor influence on the training dynamic.
 The target update frequency on the other hand, has clear manifistations in the
@@ -128,7 +128,7 @@ Overall, neither memory size nor update frequency had a large impact on
 commulative rewards. We choosed a update period of 1000 and a memory size of 100.
 
 
-![TotalReward](../notebooks/evalutation/plots/manager_v3_16_target_updated3/cum_reward.jpg)
+![TotalReward](../notebooks/evalutation/archive/plots/manager_v3_16_target_updated3/cum_reward.jpg)
 
 
 ### Neural Units
@@ -140,14 +140,14 @@ number of hidden units up to a hidden size of 200. Given the relative small
 performance difference beyond 100 hidden unites, we choose conservative size of
 100 hidden units.
 
-![Hiddensize](../notebooks/evalutation/plots/manager_v3_13_hiddensize3/model_comparision.jpg)
+![Hiddensize](../notebooks/evalutation/archive/plots/manager_v3_13_hiddensize3/model_comparision.jpg)
 
 ### Off-Policy Sampling
 
 We utilze an epsilon-greedy sampling approach. We found significant higher
 performance for a frequency $\epsilon$ of $0.1$, which we correspondingly choosed.
 
-![EPS](../notebooks/evalutation/plots/manager_v3_14_eps3/model_comparision.jpg)
+![EPS](../notebooks/evalutation/archive/plots/manager_v3_14_eps3/model_comparision.jpg)
 
 ### Neural Architecture
 
@@ -161,7 +161,7 @@ strategy can be computed based on the contributions of the to punish participant
 only.
 
 ![Learning
-curve](../notebooks/evalutation/plots/manager_v3_17_model3/model_comparision.jpg)
+curve](../notebooks/evalutation/archive/plots/manager_v3_17_model3/model_comparision.jpg)
 
 Correspondingly, we selected for the RL based manager a model with recurrent
 units, but without edge model and without group level features.

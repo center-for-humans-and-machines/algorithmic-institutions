@@ -29,7 +29,7 @@ def create_confusion_matrix(model, data, y_name, labels):
     )
 
     df = proba_df.merge(mask_df).merge(y_df)
-    df = df[df['valid']]
+    # df = df[df['valid']]
     df = add_labels(df, labels)
     return df
 

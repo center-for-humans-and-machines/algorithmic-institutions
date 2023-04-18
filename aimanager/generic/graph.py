@@ -99,7 +99,7 @@ class GraphNetwork(th.nn.Module):
         add_global_model=True,
         hidden_size=None,
         default_values={},
-        **_
+        **_,
     ):
         super().__init__()
         self.x_encoder = Encoder(x_encoding, refrence=y_name)
@@ -236,27 +236,27 @@ class GraphNetwork(th.nn.Module):
         data,
         *,
         mask=None,
-        autoreg_mask=None,
+        # autoreg_mask=None,
         y_encode=True,
         edge_index=None,
-        device=None
+        device=None,
     ):
         device = self.device if device is None else device
-        if autoreg_mask:
-            y_masked_name = self.y_name + "_masked"
-            data[y_masked_name] = data[self.y_name].clone()
-            assert autoreg_mask.shape[0] == data[self.y_name].shape[0]
-            # if mask.shape[0] != data[self.y_name].shape[0]:
-            #     mask = mask.repeat(data[target + "_masked"].shape[0], 1)
-            data[y_masked_name][autoreg_mask] = self.default_values[self.y_name]
-            data["autoreg_mask"] = (
-                th.ones_like(self.y_name, dtype=th.bool)
-                & autoreg_mask[:, :, np.newaxis]
-            )
+        # if autoreg_mask is not None:
+        #     y_masked_name = self.y_name + "_masked"
+        #     data[y_masked_name] = data[self.y_name].clone()
+        #     assert autoreg_mask.shape[0] == data[self.y_name].shape[0]
+        #     # if mask.shape[0] != data[self.y_name].shape[0]:
+        #     #     mask = mask.repeat(data[target + "_masked"].shape[0], 1)
+        #     data[y_masked_name][autoreg_mask] = self.default_values[self.y_name]
+        #     data["autoreg_mask"] = (
+        #         th.ones_like(self.y_name, dtype=th.bool)
+        #         & autoreg_mask[:, :, np.newaxis]
+        #     )
 
-        if autoreg_mask and mask is not None:
-            mask_ = data[mask] & autoreg_mask[:, :, np.newaxis]
-        elif mask is not None:
+        # if autoreg_mask and mask is not None:
+        #     mask_ = data[mask] & autoreg_mask[:, :, np.newaxis]
+        if mask is not None:
             mask_ = data[mask]
         else:
             mask_ = None
@@ -304,7 +304,7 @@ class GraphNetwork(th.nn.Module):
 
     def predict_autoreg(self, data, sample=True):
         self.eval()
-        print("predict autoreg")
+        # print("predict autoreg")
         assert (
             self.rnn_n is None and self.rnn_g is None
         ), "Autoregressive predictions do not support RNN"
@@ -317,33 +317,50 @@ class GraphNetwork(th.nn.Module):
 
         # we start with predicting all agents; we will use only the prediction
         # of one agent
-        autoreg_mask = th.ones((n_batch, n_nodes), device=self.device, dtype=th.bool)
+        autoreg_mask = th.ones(
+            (n_batch, n_nodes, n_rounds), device=self.device, dtype=th.bool
+        )
 
         # initially set all y_pred to the default value
         y_pred = th.full_like(
             data[self.y_name], fill_value=self.default_values[self.y_name]
         )
+        y_masked = data[self.y_name].clone()
+        y_pred_proba = th.zeros(
+            (n_batch, n_nodes, n_rounds, self.y_levels),
+            device=self.device,
+            dtype=th.float,
+        )
         y_masked_name = self.y_name + "_masked"
 
         for i in agent_order:
-            data[y_masked_name] = y_pred
+            data[y_masked_name] = y_masked
+            data["autoreg_mask"] = autoreg_mask
+
+            # print(f"# {i}")
+            # for k, v in data.items():
+            #     print(k)
+            #     print(v)
+
             encoded = self.encode(
                 data,
-                autoreg_mask=autoreg_mask,
                 y_encode=False,
                 edge_index=edge_index,
                 device=self.device,
             )
             y_logit = self(encoded)
-            y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
-            y_pred = self.y_encoder.decode(y_pred_proba, sample)
-
-            print(y_pred.shape, y_pred.shape)
-
-            y_pred[:, i] = y_pred[:, i]
+            y_pred_proba_ = th.nn.functional.softmax(y_logit, dim=-1)
+            y_pred_ = self.y_encoder.decode(y_pred_proba_, sample)
+            y_pred_ = y_pred_.reshape(n_batch, n_nodes, n_rounds)
+            y_pred_proba_ = y_pred_proba_.reshape(
+                n_batch, n_nodes, n_rounds, self.y_levels
+            )
+            y_pred[:, i] = y_pred_[:, i]
+            y_pred_proba[:, i] = y_pred_proba_[:, i]
+            y_masked[:, i, -1] = y_pred_[:, i, -1]
             autoreg_mask[:, i] = False
 
-        return y_pred
+        return y_pred, y_pred_proba
 
     def predict(self, *args, **kwargs):
         if self.autoregressive:
@@ -371,11 +388,6 @@ class GraphNetwork(th.nn.Module):
     @classmethod
     def load(cls, filename, device=None):
         to_load = th.load(filename, map_location=device)
-
-        # ensure backward compatibility
-        if "manager_valid" not in to_load["default_values"]:
-            to_load["default_values"]["manager_valid"] = False
-
         ah = cls(**to_load, device=device)
         ah.device = device
         return ah
