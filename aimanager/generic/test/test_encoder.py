@@ -1,82 +1,98 @@
-from aimanager.generic.encoder import int_to_ordinal, ordinal_to_int, int_to_onehot, onehot_to_int, joined_encoder
-import numpy as np
-import pandas as pd
+import torch as th
+import pytest
+from aimanager.generic.encoder import IntEncoder, FloatEncoder, BoolEncoder, Encoder
 
 
-def test_int_to_ordinal():
-    integers = np.array([0,3,2])
-    ordinal = int_to_ordinal(integers, n_levels=4)
-
-    expected = np.array([
-        [0,0,0],
-        [1,1,1],
-        [1,1,0]
-    ])
-
-    np.testing.assert_array_equal(ordinal, expected)
-
-
-def test_ordinal_to_int():
-    ordinal = np.array([
-        [0.3,0.2,0.6],
-        [0.8,0.9,0.6],
-        [0.6,0.7,0.4]
-    ])
-    expected = np.array([0,3,2])
-    integers = ordinal_to_int(ordinal)
-
-    np.testing.assert_array_equal(integers, expected)
-
-
-
-def test_ordinal_conversion():
-    # testing the conversion
-
-    integers = np.random.randint(0, 21, 30)
-
-    ordinal = int_to_ordinal(integers, n_levels=21)
-    integers_reverse = ordinal_to_int(ordinal)
-
-    np.testing.assert_array_equal(integers, integers_reverse)
+@pytest.fixture
+def example_state_results():
+    state = {
+        "int_tensor": th.tensor([1, 2, 3], dtype=th.int64),
+        "float_tensor": th.tensor([1.0, 2.0, 3.0]),
+        "bool_tensor": th.tensor([True, False, True]),
+        "batch": th.tensor([0, 1, 0]),
+    }
+    results = {
+        "int_tensor": {
+            "ordinal": th.tensor(
+                [[1.0, 0.0, 0.0, 0.0], [1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 1.0, 0.0]],
+                dtype=th.float,
+            ),
+            "onehot": th.tensor(
+                [
+                    [0.0, 1.0, 0.0, 0.0, 0.0],
+                    [0.0, 0.0, 1.0, 0.0, 0.0],
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                ],
+                dtype=th.float,
+            ),
+            "numeric": th.tensor([[1.0], [2.0], [3.0]], dtype=th.float) / 4,
+            "projection": th.tensor(
+                [[0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0]],
+                dtype=th.float,
+            ),
+        },
+        "float_tensor": th.tensor([[1.0], [2.0], [3.0]], dtype=th.float) / 3,
+        "bool_tensor": th.tensor([[1.0], [0.0], [1.0]], dtype=th.float),
+    }
+    return state, results
 
 
+def test_int_encoder(example_state_results):
+    example_state, results = example_state_results
+    encoder = IntEncoder(encoding="ordinal", name="int_tensor", n_levels=5)
+    output = encoder(**example_state)
+    expected_output = results["int_tensor"]["ordinal"]
+    assert th.allclose(output, expected_output, rtol=1e-03, atol=1e-03)
 
-def test_onehot_conversion():
-    # testing the conversion
+    encoder = IntEncoder(encoding="onehot", name="int_tensor", n_levels=5)
+    output = encoder(**example_state)
+    expected_output = results["int_tensor"]["onehot"]
+    assert th.allclose(output, expected_output, rtol=1e-03, atol=1e-03)
 
-    integers = np.random.randint(0, 21, 30)
-
-    onehot = int_to_onehot(integers, n_levels=21)
-
-    assert (onehot.sum(-1) == 1).all()
-
-    integers_reverse = onehot_to_int(onehot)
-
-    np.testing.assert_array_equal(integers, integers_reverse)
+    encoder = IntEncoder(encoding="numeric", name="int_tensor", n_levels=5)
+    output = encoder(**example_state)
+    expected_output = results["int_tensor"]["numeric"]
+    assert th.allclose(output, expected_output, rtol=1e-03, atol=1e-03)
 
 
+def test_float_encoder(example_state_results):
+    example_state, results = example_state_results
+    encoder = FloatEncoder(norm=3.0, name="float_tensor")
+    output = encoder(**example_state)
+    expected_output = results["float_tensor"]
+    assert th.allclose(output, expected_output, rtol=1e-03, atol=1e-03)
 
-def testing_encoding():
 
+def test_bool_encoder(example_state_results):
+    example_state, results = example_state_results
+    encoder = BoolEncoder(name="bool_tensor")
+    output = encoder(**example_state)
+    expected_output = results["bool_tensor"]
+    assert th.allclose(output, expected_output, rtol=1e-03, atol=1e-03)
+
+
+def test_encoder(example_state_results):
+    example_state, results = example_state_results
     encodings = [
-        {'encoding': 'ordinal', 'column': 't1'},
-        {'encoding': 'numeric', 'column': 't2'},
-        {'etype': 'interaction','a': {'encoding': 'ordinal', 'column': 't1'}, 'b': {'encoding': 'numeric', 'column': 't2'}}
+        {"encoding": "ordinal", "name": "int_tensor", "n_levels": 5, "etype": "int"},
+        {"encoding": "numeric", "name": "int_tensor", "n_levels": 5, "etype": "int"},
+        {"encoding": "onehot", "name": "int_tensor", "n_levels": 5, "etype": "int"},
+        {"name": "bool_tensor", "etype": "bool"},
+        {"name": "float_tensor", "etype": "float", "norm": 3.0},
     ]
-
-    t_df = pd.DataFrame({'t1': [0,1,0,1,2], 't2': [0,0,1,1,2]}, dtype='category')
-
-    t_enc = joined_encoder(t_df, encodings)
-
-    enc_a = np.array([[0,0],[1,0],[0,0],[1,0],[1,1]])
-    enc_b = np.array([0,0,1,1,2])[:, np.newaxis]
-
-    np.testing.assert_array_equal(t_enc[:,[0,1]], enc_a)
-    np.testing.assert_array_equal(
-        t_enc[:,[2]],
-        enc_b
+    encoder = Encoder(encodings, aggregation="mean", keepdim=False)
+    # add two more dimensions to state
+    _example_state = {k: v.unsqueeze(0).unsqueeze(0) for k, v in example_state.items()}
+    output = encoder(**_example_state)
+    _output = output.squeeze(0).squeeze(0)
+    expected_output = th.cat(
+        [
+            results["int_tensor"]["ordinal"],
+            results["int_tensor"]["numeric"],
+            results["int_tensor"]["onehot"],
+            results["bool_tensor"],
+            results["float_tensor"],
+        ],
+        dim=1,
     )
-    np.testing.assert_array_equal(
-        t_enc[:,[3,4]],
-        enc_a*enc_b
-    )
+    assert th.allclose(_output, expected_output, rtol=1e-03, atol=1e-03)

@@ -1,5 +1,5 @@
 import torch as th
-from typing import Optional
+from typing import Optional, List, Union
 from pydantic import BaseModel
 
 from aimanager.generic.graph import GraphNetwork
@@ -9,93 +9,78 @@ from aimanager.generic.data import shift
 
 class Round(BaseModel):
     round: int
-    groups: list[int]
-    contribution: list[int]
-    punishment: list[int]
-    contribution_valid: list[bool]
-    punishment_valid: list[bool]
+    group: List[Union[str, int]]
+    contribution: List[int]
+    punishment: List[int]
+    contribution_valid: List[bool]
+    punishment_valid: List[bool]
 
 
 class RoundExternal(BaseModel):
     round: int
-    groups: list[int]
-    contributions: list[int]
-    punishments: list[Optional[int]]
-    missing_inputs: list[bool]
+    groups: List[str]
+    contributions: List[int]
+    punishments: List[Optional[int]]
+    missing_inputs: List[bool]
 
 
-def parse_round(round: RoundExternal) -> Round:
+def parse_round(round) -> Round:
     """Parse round data from external to internal format."""
+    round = RoundExternal(**round)
     return Round(
         round=round.round,
-        groups=round.groups,
+        group=round.groups,
         contribution=round.contributions,
         punishment=[p if p is not None else 0 for p in round.punishments],
         contribution_valid=[not m for m in round.missing_inputs],
         punishment_valid=[p is not None for p in round.punishments],
-    )
-
-
-def fill_none(values, fill_value=0):
-    return [v if v is not None else fill_value for v in values]
+    ).dict()
 
 
 def create_data(rounds, groups, default_values):
     """Create data object for the algorithmic manager based on round records."""
-    current_round = rounds[-1]
 
-    contribution = th.tensor(
-        [
+    def create_tensor(record_key, default_key):
+        return th.tensor(
             [
                 [
-                    c if (cv and g1 == g2) else default_values["contribution"]
-                    for c, cv, g1 in zip(
-                        r["contribution"], r["contribution_valid"], r["group"]
-                    )
+                    [
+                        value
+                        if (is_valid and g1 == g2)
+                        else default_values[default_key]
+                        for value, is_valid, g1 in zip(
+                            r[record_key], r[f"{record_key}_valid"], r["group"]
+                        )
+                    ]
+                    for r in rounds
                 ]
-                for r in rounds
-            ]
-            for g2 in groups
-        ],
-        dtype=th.int64,
-    )
-    contribution_valid = th.tensor(
-        [
-            [
-                [cv and g1 == g2 for cv, g1 in zip(r["contribution_valid"], r["group"])]
-                for r in rounds
-            ]
-            for g2 in groups
-        ],
-        dtype=th.bool,
-    )
-    punishment = th.tensor(
-        [
+                for g2 in groups
+            ],
+            dtype=th.int64,
+        )
+
+    def create_bool_tensor(record_key):
+        return th.tensor(
             [
                 [
-                    p if (pv and g1 == g2) else default_values["punishment"]
-                    for p, pv, g1 in zip(
-                        r["punishment"], r["punishment_valid"], r["group"]
-                    )
+                    [
+                        is_valid and g1 == g2
+                        for is_valid, g1 in zip(r[f"{record_key}_valid"], r["group"])
+                    ]
+                    for r in rounds
                 ]
-                for r in rounds
-            ]
-            for g2 in groups
-        ],
-        dtype=th.int64,
-    )
-    punishment_valid = th.tensor(
-        [
-            [
-                [(pv and g1 == g2) for pv, g1 in zip(r["punishment_valid"], r["group"])]
-                for r in rounds
-            ]
-            for g2 in groups
-        ],
-        dtype=th.bool,
-    )
+                for g2 in groups
+            ],
+            dtype=th.bool,
+        )
 
-    group_size = len(current_round["contribution"])
+    contribution = create_tensor("contribution", "contribution")
+    contribution_valid = create_bool_tensor("contribution")
+
+    punishment = create_tensor("punishment", "punishment")
+    punishment_valid = create_bool_tensor("punishment")
+
+    group_size = len(rounds[-1]["contribution"])
     round_number = th.tensor(
         [[[r["round"]] * group_size for r in rounds] for _ in range(len(groups))],
         dtype=th.int64,
@@ -120,8 +105,9 @@ def create_data(rounds, groups, default_values):
 
 
 class HumanManager:
-    def __init__(self, model_path):
+    def __init__(self, model_path, **_):
         self.model = GraphNetwork.load(model_path, device=th.device("cpu"))
+        self.default_values = self.model.default_values
 
     def get_punishments(self, data):
         pred = self.model.predict(data, sample=True)[0]
@@ -129,10 +115,11 @@ class HumanManager:
 
 
 class RLManager:
-    def __init__(self, model_path):
+    def __init__(self, model_path, **_):
         self.model = ArtificalManager.load(
             model_path, device=th.device("cpu")
         ).policy_model
+        self.default_values = self.model.default_values
         # self.model.u_encoder.refrence = "contribution"
 
     def get_punishments(self, data):
@@ -141,16 +128,32 @@ class RLManager:
         # return self.model.predict_pure(encoded, sample=False)[0][:, -1].tolist()
 
 
-MANAGER_CLASS = {"human": HumanManager, "rl": RLManager}
+class DummyManager:
+    def __init__(self, **_):
+        self.model = None
+        self.default_values = {
+            "contribution": 0,
+            "punishment": 0,
+            "contribution_valid": False,
+            "punishment_valid": False,
+        }
+
+    def get_punishments(self, data):
+        return data["punishment"]
+
+
+MANAGER_CLASS = {"human": HumanManager, "rl": RLManager, "dummy": DummyManager}
 
 
 class MultiManager:
     def __init__(self, managers):
-        self.managers = {
-            k: MANAGER_CLASS[m["type"]](m["path"]) for k, m in managers.items()
-        }
+        self.managers = {k: MANAGER_CLASS[m["type"]](**m) for k, m in managers.items()}
         self.groups = list(self.managers.keys())
         self.group_idx = {k: i for i, k in enumerate(managers.keys())}
+
+    def get_punishments_external(self, rounds: List[RoundExternal]):
+        parse_rounds = [parse_round(r) for r in rounds]
+        return self.get_punishments(parse_rounds)
 
     def get_punishments(self, rounds):
         # we use the batch dimension to seperate the different groups
@@ -159,15 +162,11 @@ class MultiManager:
         # the data for both models is identical in principal, we compute them
         # seperately as the models might use different default values
         data = {
-            k: create_data(rounds, self.groups, m.model.default_values)
+            k: create_data(rounds, self.groups, m.default_values)
             for k, m in self.managers.items()
         }
 
         punishment = {k: m.get_punishments(data[k]) for k, m in self.managers.items()}
-
-        # print(punishment)
-        # for k, v in punishment.items():
-        #     print(k, v.shape)
 
         # we select from the model responds only those matching the right group
         # this is the same for all models and independent of the actual model of
@@ -176,21 +175,15 @@ class MultiManager:
         group = rounds[-1]["group"]
         group_idx = [self.group_idx[g] for g in group]
 
-        # print(group, group_idx)
-
         punishment = {
             k: v[group_idx, th.arange(len(group_idx)), -1]
             for k, v in punishment.items()
         }
 
-        # print(punishment)
-
         # we select the punishment where the group matches the model
         matched_punishment = [
-            punishment[g][i].item() if g in punishment else None
+            punishment[g][i].item() if (g in punishment) else None
             for i, g in enumerate(group)
         ]
-
-        # print(matched_punishment)
 
         return matched_punishment, punishment

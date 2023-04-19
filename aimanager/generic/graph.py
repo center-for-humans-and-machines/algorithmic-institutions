@@ -242,20 +242,6 @@ class GraphNetwork(th.nn.Module):
         device=None,
     ):
         device = self.device if device is None else device
-        # if autoreg_mask is not None:
-        #     y_masked_name = self.y_name + "_masked"
-        #     data[y_masked_name] = data[self.y_name].clone()
-        #     assert autoreg_mask.shape[0] == data[self.y_name].shape[0]
-        #     # if mask.shape[0] != data[self.y_name].shape[0]:
-        #     #     mask = mask.repeat(data[target + "_masked"].shape[0], 1)
-        #     data[y_masked_name][autoreg_mask] = self.default_values[self.y_name]
-        #     data["autoreg_mask"] = (
-        #         th.ones_like(self.y_name, dtype=th.bool)
-        #         & autoreg_mask[:, :, np.newaxis]
-        #     )
-
-        # if autoreg_mask and mask is not None:
-        #     mask_ = data[mask] & autoreg_mask[:, :, np.newaxis]
         if mask is not None:
             mask_ = data[mask]
         else:

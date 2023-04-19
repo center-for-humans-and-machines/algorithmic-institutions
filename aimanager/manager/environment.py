@@ -1,7 +1,10 @@
-from aimanager.generic.graph_encode import create_fully_connected
-
 import torch as th
-from torch_scatter import scatter_sum
+
+
+def create_fully_connected(n_nodes):
+    return th.tensor(
+        [[i, j] for i in range(n_nodes) for j in range(n_nodes) if i != j]
+    ).T
 
 
 class ArtificialHumanEnv:
@@ -37,7 +40,17 @@ class ArtificialHumanEnv:
     ):
         """
         Args:
-            asdasd
+            artifical_humans: The virtual humans that will be used to generate
+                the contribution.
+            artifical_humans_valid: The virtual humans that will be used to
+                generate the action validity.
+            batch_size: The number of batches.
+            n_agents: The number of agents.
+            n_contributions: The number of contributions.
+            n_punishments: The number of punishments.
+            n_rounds: The number of rounds.
+            device: The device to use.
+            default_values: The default values for the state.
         """
         self.batch_size = batch_size
         self.default_values = (
@@ -76,6 +89,7 @@ class ArtificialHumanEnv:
         ]
 
         self.reset_state()
+        self.reset()
 
     def reset_state(self):
         size = (self.batch_size, self.n_agents, 1)
@@ -135,6 +149,8 @@ class ArtificialHumanEnv:
         self.common_good = (
             (sum_contribution * 1.6 - sum_punishment) / sum_contribution_valid
         ).expand(-1, self.n_agents, -1)
+        # handle division by zero
+        self.common_good = th.where(sum_contribution_valid > 0, self.common_good, 0)
 
     def update_payoff(self):
         contributor_payoff = 20 - self.contribution - self.punishment + self.common_good

@@ -29,6 +29,8 @@ class IntEncoder(th.nn.Module):
         elif encoding == "projection":
             self.map = th.nn.Embedding(n_levels, 1)
             self.size = 1
+        else:
+            raise ValueError(f"Unknown encoding {encoding}")
 
     def forward(self, **state):
         tensor = state[self.name]

@@ -3,13 +3,6 @@ import torch as th
 from torch_geometric.data import Data
 
 
-def create_fully_connected(n_nodes):
-    return th.tensor([[i, j]
-                      for i in range(n_nodes)
-                      for j in range(n_nodes)
-                      if i != j
-                      ]).T
-
 
 def encode(
         model, data, *, mask=True, index=False, y_encode=True, device, n_player=4, syn_index=[]):
