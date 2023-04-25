@@ -150,6 +150,7 @@ class MultiManager:
         self.managers = {k: MANAGER_CLASS[m["type"]](**m) for k, m in managers.items()}
         self.groups = list(self.managers.keys())
         self.group_idx = {k: i for i, k in enumerate(managers.keys())}
+        self.manager_info = managers
 
     def get_punishments_external(self, rounds: List[RoundExternal]):
         parse_rounds = [parse_round(r) for r in rounds]
@@ -187,3 +188,6 @@ class MultiManager:
         ]
 
         return matched_punishment, punishment
+
+    def get_info(self):
+        return self.manager_info
