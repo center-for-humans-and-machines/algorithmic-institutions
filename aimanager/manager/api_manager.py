@@ -45,9 +45,9 @@ def create_data(rounds, groups, default_values):
             [
                 [
                     [
-                        value
+                        int(value)
                         if (is_valid and g1 == g2)
-                        else default_values[default_key]
+                        else int(default_values[default_key])
                         for value, is_valid, g1 in zip(
                             r[record_key], r[f"{record_key}_valid"], r["group"]
                         )
@@ -177,14 +177,13 @@ class MultiManager:
         group_idx = [self.group_idx[g] for g in group]
 
         punishment = {
-            k: v[group_idx, th.arange(len(group_idx)), -1]
+            k: v[group_idx, th.arange(len(group_idx)), -1].tolist()
             for k, v in punishment.items()
         }
 
         # we select the punishment where the group matches the model
         matched_punishment = [
-            punishment[g][i].item() if (g in punishment) else None
-            for i, g in enumerate(group)
+            punishment[g][i] if (g in punishment) else None for i, g in enumerate(group)
         ]
 
         return matched_punishment, punishment
