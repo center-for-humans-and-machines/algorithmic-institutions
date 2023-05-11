@@ -32,32 +32,33 @@ on the model architecture and its evaluation can be found in the supplementary m
 ## Behavioral Cloning of Governour
 
 We also train a behavioral clone predicting the punishment of a human
-governour. The different contributions in a single round are decided upon
-independently by the different participants. However, the punishment is
-determined by a single governour. To capture this correlation in punishments
-within the same round, we train an autoregressive model. Toward that goal, we
+governour. While the different contributions in a single round are decided upon
+independently by the different participants, the punishment is
+determined by a single governour. Therefore the punishments within a single
+round cannot be considered as independent. For this reason, we model the
+punshiments autogressively. Toward that goal, we
 randomly select a subset of the participants to be predicted and add the
 punishment of the other participants as input features. For inference, we
-likewise iteratively predict the punishment of each participant. Besides the
+likewise iteratively predict the punishment of each participant and previously
+predicted punishments as features. Besides the
 autoregressive nature, the model architecture is identical to the one predicting
 contributions. We found a strong improvement in predictive performance when
 including the autoregressive component. Details on the model architecture and
 its evaluation can be found in the supplementary material.
 
+## Training an optimal governour
 
-
-
-
-
-
-We model the influence of the contributions of
-
-
-
-We trained a model parallel to the one predicting contributions,
-however with the current contributions and previous punishments as input
-features. We found
-
+We train through reinforcment learning an governour to optimal punish the
+behavioral clones of human contributors to maximize the common good. We use a deep Q-learning to
+train the optimal governour maximising the cummulative common good accross all
+rounds without discounting. The
+architecture of the model is identical to the one predicting contributions, with
+the acceptation that we omit the softmax operation and an additional bias term.
+The cummulativly expected future rewards (Q-values) are decreasing over time,
+as the repeated game is approaching its end. To enable the model to account for
+this, we added a bias term specificly depending on the round number. Details on
+the model architecture and its evaluation can be found in the supplementary
+material.
 
 ## Optimal Manager
 
