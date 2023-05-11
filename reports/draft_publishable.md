@@ -18,57 +18,88 @@ to be filled
 
 ## Behavioral Cloning of Contributors
 
-* high level model architecture
-* input features
-* training procedure
-* selected hyperparameters
+We train behavioral clones that are predicting behavior of human participants
+based on historic contributions and punishments of all participants in a group.
+We formulate the problem as classification problem, where the model is
+predicting the probability of a participant to contribute a certain amount. We
+model the influence of the other group members on the contribution of a single
+participant by a graph neural network operating on a fully connected network. We
+use a recurrent unit to allow for
+temporal relationships. We found that both, social influence and temporal
+relationships are important for the predictive performance of the model. Details
+on the model architecture and its evaluation can be found in the supplementary material.
 
 ## Behavioral Cloning of Governour
 
-* auto-regressive model
-* input features
+We also train a behavioral clone predicting the punishment of a human
+governour. The different contributions in a single round are decided upon
+independently by the different participants. However, the punishment is
+determined by a single governour. To capture this correlation in punishments
+within the same round, we train an autoregressive model. Toward that goal, we
+randomly select a subset of the participants to be predicted and add the
+punishment of the other participants as input features. For inference, we
+likewise iteratively predict the punishment of each participant. Besides the
+autoregressive nature, the model architecture is identical to the one predicting
+contributions. We found a strong improvement in predictive performance when
+including the autoregressive component. Details on the model architecture and
+its evaluation can be found in the supplementary material.
+
+
+
+
+
+
+
+We model the influence of the contributions of
+
+
+
+We trained a model parallel to the one predicting contributions,
+however with the current contributions and previous punishments as input
+features. We found
 
 
 ## Optimal Manager
 
-* high level model architecture
-* training procedure
-* hyperparameters
-
-# Supplimental material
+# Supplementary Material
 
 ## Model architecture
 
-We structure our model in three parts following recent work on graph networks
-{Relational inductive biases, deep learning, and graph networks}. Thereby we
-describe the group as a fully connected graph of four nodes, one node for each
-group member. Considering direction of influence we obtained 12 directed edges
-between the nodes. Our architecture
-design was guided by ensuring permutation symmetry in the relationship between
-individuals. Furthermore, we included recurrent neural units, in particular GRUs, to allow for learning temporal
-relationships.
+Our model is structured into three distinct parts, following the graph network
+(https://arxiv.org/abs/1806.01261) formalism. We use the same general
+architecture for all three models, however we adapt the input features and the
+output layer to the specific task. We represent the group as a fully connected
+graph composed of four nodes, with each node corresponding to a group member.
+Accounting for the direction of influence, we obtain 12 directed edges between
+the nodes. Our architecture design ensures permutation symmetry in the
+relationships between individuals and incorporates Gated Recurrent Units (GRUs)
+to facilitate learning temporal relationships.
 
-A edge model is computing a reprensentation of the relationship between two
-nodes. In order to do so, we first construct a edge feature vector by
-concatenating the features of the corresponding nodes. The edge model is then
-applied to each of the 12 directed edges. The edge model consist of a single
-layer perceptron. The output of the edge model is then averaged over all incoming edges
-of the target node. The resulting vector is then concatenated with the node
-features to form the input of the node model.
+As the first module within the graph neural network, an edge model computes a
+representation of the relationship between two nodes. To achieve this, we first
+construct an edge feature vector by concatenating the features of the source and
+target node of the particular edge. The edge model, a single-layer perceptron, is then applied to each of the 12
+directed edges.
 
-A node model is applied to each of the 4 nodes. The output of the edge model is
-, depending on the application, the contribution of the node or the punishment
-or the Q-value of the node. The node model consist of a single layer perceptron,
-followed by a gated recurrent unit and a final linear layer. By placing the GRUs after aggregating pairwise interactions, we
-assume that temporal relationships are relevant on the global and individual
-level, but not at the level of pairwise relationships. In the case of the
-predictive models a softmax operation is applied to the output of the final
-layer.
+Second, a node model is applied to each of the four nodes. The output of the
+edge model is averaged across all incoming edges of the target node.
+Subsequently, the resulting vector is concatenated
+with the features of the target node to form the input of the node model. The
+node model consists of a single-layer perceptron, followed by a GRU and a final
+linear layer. By positioning the GRUs after aggregating pairwise interactions,
+we assume that temporal relationships are relevant at the global and individual
+levels, but not at the pairwise relationship level.
 
-We use for all linear layers (except the last layer) and the GRU the same number
-of output units, which we denote as 'hidden units' in the following. We use
-rectified linear units (ReLU) as activation function for all layers.
+Depending on the application, the output of the edge model serves as the
+contribution, punishment, or Q-value of the node. For predictive models, a
+softmax operation is applied to the output of the final layer. All linear layers
+(except the final layer) and the GRU share the same number of output units,
+referred to as 'hidden units' hereafter. We employ Rectified Linear Units (ReLU)
+as the activation function for all layers.
 
+In the case of the Q-value model, we add an additional bias model. The bias
+consists of a single-layer perceptron followed by a ReLU activation function and
+a final linear layer. Its output is added to the output of the node model.
 
 ```mermaid
 flowchart TD
@@ -102,105 +133,53 @@ style R stroke-width:0px
 
 ## Behavioral Cloning of Contributors
 
+formulation of the problem
 
+Features
 
+performance comparision of architectures
 
-## Behavioral Cloning of Governour
+other things we tried (e.g. regression)
 
+parameters selected
 
-## Hyperparameters Optimization
+hyperparameter optimization
 
-###
+## Behavioral Cloning of Gouverneur
 
+formulation of the problem
 
+Autoregession
 
+Features / architecture
 
+parameters selected
 
+hyperparameter optimization
 
-We train behavioral clones that are predicting behavior of
-human participants based on historic contributions and punishments of all
-participants in a group. The CC are modeled with neural networks which
-architecture we are describing in the following in greater detail.
+## RL Gouverneur
 
+formulation of the problem
 
+Environment / Reward / Definition of a round
 
+Method / Deep Q learning
 
+parameters selected
 
+hyperparameter optimization
 
-In each
-round, we predict a multinominal distribution over the 21 possible contributions
-for each of the 4 group members. We optimize the model on the cross-entropy
-loss. Cases in which participants do not enter a contribution are masked and do
-not enter the loss.
+## Simulation and Evaluation
 
-We investigated formulating the problem as a regression instead of a classification. However, shrinkage resulted in missing out on the extremes (i.e. contributions of 0 or 20). Also predicting contributions as point values does not allow to capture mixed strategies, i.e. cases in which participants in a given situation randomly decide between different contributions.
+### Simulation
 
-We train the models using an Adam Optimizer with a learning rate of 0.003. Gradients are clamped at absolute 1 and weights are regulized with a decay of 1.e-4. We train batches of 10 groups and full episodes.
+### Evaluation
 
-We distinguish between two different types of features. Round features, i.e.
-round number and common good, are identically for all members in the group.
-Individual features, i.e. contributions and punishments, are different between
-the group members. All inputs are scaled in the range 0 to 1.
+comparision of average punishment over contribution levels
 
+change over rounds
 
-
-
-
-
-
-# Supplementayr Material
-
-## Neural architecture
-
-We structure our model in three parts following recent work on graph networks
-{Relational inductive biases, deep learning, and graph networks}. Thereby we
-describe the group as a fully connected graph of four nodes. Our architecture
-design was guided by ensuring permutation symmetry in the relationship between
-individuals. Furthermore, we included GRUs to allow for learning temporal
-relationships. By placing the GRUs after aggregating pairwise interactions, we
-assume that temporal relationships are relevant on the global and individual
-level, but not at the level of pairwise relationships. The model receives global
-(round number and previous common good) and node features (previous contribution
-and received punishment). No explicit edge features are provided.
-
-An edge model is applied to each of the 16 combinations of nodes (considering
-order), reflecting the 12 directed edges of the fully connected graph. For each
-edge, the global features are concatenated with the node features of the node
-pair. The resulting vector is then passed through a single layer perceptron. All
-resulting vectors from the same source node are averaged to a single vector.
-
-A node model is applied to each of the 4 nodes. The output of the edge model is
-concatenated with the global and the node features. The resulting vector is then
-passed through a single layer perceptron. The perceptron is followed by a gated
-recurrent unit and final linear layer, which then after applying a softmax
-operation outputs the distribution over the 21 possible contribution levels.
-
-We use for all linear layers (except the last layer) and the GRU the same number of output units, which we denote as 'hidden units' in the following.
-
-```mermaid
-flowchart TD
-    subgraph E[Edge Model]
-        E0([&]) --> E1[Linear] --> E2[Tanh]
-    end
-    subgraph N[Node Model]
-        N0([&]) --> N1[Linear] --> N2[Tanh] --> GRU1[GRU] --> N3[Linear]
-    end
-
-G[Round Features] --> N0
-G --> E0
-I1[Player A Features] --> E0
-I2[Player B Features] --> E0
-E2 --> M1[Add & Norm] --> N0
-I1 --> N0
-
-N3 --> F2[Softmax] --> F3[Contribution A]
-
-
-style F3 stroke-width:0px
-style G stroke-width:0px
-style I1 stroke-width:0px
-style I2 stroke-width:0px
-```
+change dependent on previous behavior of the par
 
 ## Evaluation
 
@@ -229,7 +208,6 @@ avoiding overfitting. Furthermore, we choose a batch size of 10 and a learning
 rate of 3.e-4.
 
 ![Hidden Size](../notebooks/evalutation/plots/artificial_humans_05_hidden_size/model_comparision.jpg)
-
 
 ### Architecture
 
@@ -290,17 +268,6 @@ to not enter a valid solution is well represented.
 
 ![Confusion Matrix](../notebooks/evalutation/plots/artificial_humans_02_3_valid/action_histogram.jpg)
 
-
-
-
-
-
-
-
-
-
 # Results
 
 ## Rule based manager (supplimental)
-
-
