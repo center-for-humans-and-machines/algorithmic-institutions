@@ -187,152 +187,124 @@ predicted punishments as features.
 
 We use the same architecture as for the model of the contributors. In total 6
 feature enter the model: the contribution of the participant in the current
-round, the punishment of the participant in the previous round, 
+round, the punishment of the participant in the previous round,
+a binary variables indicating whether the participant entered a valid
+contribution and punishment, the punishment of (other) participants in the
+current round, and a binary variable indicating the availability of the
+the latter. The fist two features are scaled to the range 0 to 1.
 
+We investigate the effect of different components of the architecture on the
+models cross validated predictive performance.
 
+![Model Comparision](../notebooks/evalutation/predictive_models_autoreg/11_punishment_autoregressive/model_comparision_.jpg)
 
-      - name: contribution
-        n_levels: 21
-        encoding: numeric
-      - name: prev_punishment
-        n_levels: 31
-        encoding: numeric
-      - etype: bool
-        name: contribution_valid
-      - etype: bool
-        name: prev_punishment_valid
-      - name: punishment_masked
-        n_levels: 31
-        encoding: numeric
-      - etype: bool
-        name: autoreg_mask
+The edge model turns out to be the most important component of the model. This
+is related to the autorregressive formulation of the problem. The edge model
+allows for the model to utilize the information about the punishment of the
+other participants in the current round. The recurrent unit does not improve the
+model significantly. We therefore decided to use the model without the recurrent
+unit for all further analyses.
 
+## Optimal Gouverneur
 
-Features / architecture
+We use reinformcement learning to train a policy to punish participants with the
+goal to maximize the cumulative common good of the group. We train the policy using deep Q
+learning.
 
-parameters selected
+As described above, we use the behavioral cloning models to predict the
+contribution of the participants in the current round. We use a small independent
+model to additionally predict whether a participant enters a valid contribution.
+We combine these models to predict the behavior of human participants in the group
+conditioned on the punishment of the governour.
 
-hyperparameter optimization
+We compute a reward that is reflecting the common good of the group. To ease the
+learning process, we reward the governour after a punishment with the
+contributions in the next round (multiplied by 1.6) discounted by the governours
+punishment in the current round.
 
-## RL Gouverneur
+$$
+R_i = C_{i+1} * 1.6 - P_{i}, \quad i < n-1 \\
+R_n = -P_n
+$$
 
-formulation of the problem
+We omit the contribution of the first round, as it cannot be influenced by the
+governour. We use a discount factor of 1. The policy hence maximizes the
+cumulative common good of the group over the course of the game (with the
+exception of the first contribution).
 
-Environment / Reward / Definition of a round
+$$
+R_{tot} = 1.6 * \sum_{i=2}^{n} C_i - \sum_{i=1}^{n} P_i
+$$
 
-Method / Deep Q learning
+The general architecture of the optimal governour is the same as for the
+behavioral clones. The output of the model is the q-value of the different
+potential punishments. Hence we use a linear output layer without activation
+function. The Q-values are decaying over the course of the game. We found that
+adding the round number as a onehot encoded input to the model stabilizes the
+training. This solution is somewhat unsatisfing, as it inflates the number of
+weights in the first layer, potential spurious correlations and might lead to overfitting. We therefore removed
+the round number from the features of the main model, but added a second
+additive bias to the final output of the model that is derived soley from the
+round number. We found this solution to be stable and to perform well.
 
-The cummulativly expected future rewards (Q-values) are decreasing over time,
-as the repeated game is approaching its end. To enable the model to account for
-this, we added a bias term specificly depending on the round number.
+We define an episode as a batch of 1000 groups of 4 behavioral clones for 16
+steps which we run vectorized in parallel. We run 20000 episodes in total. We
+update the governour policy after each episode. We use a replay memory of 100
+episodes. We use a target network to stabilize the training. We update the
+target network every 1000 steps. We use an RMSprop optimizer with a learning
+rate of 3.e-4. We use a discount factor of 1. We use an epsilon greedy policy
+with an epsilon of 0.1. We use a hidden size of 100 for all hidden layers.
 
-In the case of the Q-value model, we add an additional bias model. The bias
-consists of a single-layer perceptron followed by a ReLU activation function and
-a final linear layer. Its output is added to the output of the node model.
+These parameters where the result of a hyperparameter optimization. We found the
+no significant influence of the memory size. We found that more frequent target
+network updates leading to instablilities in the training, while less frequent
+updates lead to slower convergence. We found strong influence of the number of
+hidden units on the performance up to 100 hidden units. We found an epsilon of
+0.1 to outperform larger values.
 
-parameters selected
+We investigate the effect of different components of the architecture on the
+maximum common good achieved by the governour.
 
-hyperparameter optimization
+![Model Comparision](../notebooks/evalutation/rl_models/04_model/model_comparision.jpg)
+
+The recurrent unit turns out to be the most important addition to the model.
+As the full model with recurrent unit and edge model performed significantly better than the model without the
+egde-model, we decided to use the full model for all further analyses and the
+final experiment.
 
 ## Simulation and Evaluation
 
 ### Simulation
 
-### Evaluation
+We simulate the behavior of the behavioral clones and the optimal governour. To
+allow for direct comparision with the pilot study with a human governour, we
+created a version of behavioral contribution clones that was trained only on
+data from this specific pilot study.
 
-comparision of average punishment over contribution levels
+![Comparision Pilot](../notebooks/test_manager/simulate_mixed/02_all/comparison_pilot.jpg)
 
-change over rounds
+We found that aggregated behavior of the cloned governour well matches the
+behavior of the human governour in the pilot study. We found a small deviation
+in the average contribution level of the cloned contributors.
 
-change dependent on previous behavior of the par
+We then simulated the behavior of the cloned governour and the optimal governour
+when interacting with cloned contributors trained on the data from both pilots.
 
-## Evaluation
+![Comparision Manager](../notebooks/test_manager/simulate_mixed/02_all/comparison_manager.jpg)
 
-For all evaluations in the following, we report (if applicable) averages on
-cross-validated test sets (k=10). Thereby always a complete group (and their full
-episode) is randomly assigned to one of the six folds, to prevent correlation
-between folds.
+We find that the optimal punishes more than the cloned governour in the first
+rounds. This then leads to higher contributions in the later rounds. The optimal
+therefore outperforms the cloned governour in terms of the cumulative common good of the
+group.
 
-### Features
+Based on these simulations, we then investigated the empirical policies of the
+different governours.
 
-As input we include the `previous contribution` and the
-`previous punishment` of each group member. When the corresponding human
-in the pilot did not entered a contribution or punishment we imputed these
-values with the corresponding median. Additionally, we include binary
-variable that indicate the corresponding validity. We found
-including the `round number` and the `previous common good` as features to not
-increase performance.
+![Comparision Policy](../notebooks/test_manager/simulate_mixed/02_all/comparison_pilot_policy.jpg)
 
-### Hyperparameter
-
-We perform an initial hyperparameter optimisation with the full model as
-depicted above.
-We did a hyperparameter scan over the number of hidden units, the batch size and
-the learning rate. We found that 5 hidden units were performaning best in
-avoiding overfitting. Furthermore, we choose a batch size of 10 and a learning
-rate of 3.e-4.
-
-![Hidden Size](../notebooks/evalutation/plots/artificial_humans_05_hidden_size/model_comparision.jpg)
-
-### Architecture
-
-We investigate the effect of different components of the architecture on the
-models cross validated predictive performance.
-
-![Learning Rate](../notebooks/evalutation/plots/artificial_humans_04_3_model/model_comparision.jpg)
-
-We found a significant improvement for independently adding the node model and for adding the
-edge model. However, the model with rnn unit performed significant better then the one with the edge
-model. We found only weak evidence for an improvement of adding the edge model
-to an model with rnn unit.
-Nevertheless, given its superior performance, we use the full model to train the RL manager.
-
-## Model evalution
-
-### Feature importance
-
-We investigate the individual importance of the input features 'previous
-contributions', 'previous punishments' and 'previous entry valid' on the model
-performance, by individually shuffling them and calculating the resulting loss
-in predictive performance.
-
-We find the model to be dominantly rely on previous contribution. However, all
-three features do contribute.
-
-![Shuffle Feature](../notebooks/evalutation/plots/artificial_humans_04_model/shuffle_feature_importance.jpg)
-
-### Confusion Matrix
-
-The confusion matrix shows that our model well captures most of the variance and mostly only confuses between close or adjacent contribution levels. The model appears to predominantly predict contributions that are multiples of 5. Looking at the distribution of actual contributions, this appears to be a feature of the behavior of the participants, that (in particular in early rounds) predominantly chose contributions of 5, 10, 15, or 20. The model however appears to well capture the distribution of contributions on average.
-
-![Confusion Matrix](../notebooks/evalutation/plots/artificial_humans_04_model/confusion_matrix.jpg)
-_Confusion matrix between predicted and actual contribution (average accross the test sets). For the predictions we are weighting each contribution level with the corresponding probabilty assigned by the model. This is different to a confusion matrix most used for classification problems, where only the class with the highest predicted probability is
-considered._
-
-We investigate if the empirical frequency of each contribution level corresponds
-to the modeled contribution probability. Both distributions match well and we do
-not see any systematic diviations.
-
-![Histogram](../notebooks/evalutation/plots/artificial_humans_04_model/action_histogram.jpg)
-
-## Valid response model
-
-Additional to the model predicting contributions, we also train a second
-independent model to predict, wheather an agent is making a valid contribution.
-We use the same general architecture, however we now use a binar target (valid
-contribution) and we train the model on the full recorded dataset (including
-invalid responses).
-
-We use a model only including the boolean information of the previous round
-being valid. We are adding a recurrent unit, however, unlike for the model on
-contributions, we do not add a edge model.
-
-Our model archives a roc score of 0.61, which suggest a low
-predictive power. More importantly, for our purpose, the frequency of a participant
-to not enter a valid solution is well represented.
-
-![Confusion Matrix](../notebooks/evalutation/plots/artificial_humans_02_3_valid/action_histogram.jpg)
-
-# Results
-
-## Rule based manager (supplimental)
+We find that the cloned governour punished similar to the human governour for
+the respective contribution levels. The optimal governour on the other hand
+punishes more than the other governours in particular for low contribution. We
+also observe that the punishments are not monotonically increasing with the
+contribution level. For instance the punishments for a contribution of 13 are on
+average lower than for a contribution of 15.
