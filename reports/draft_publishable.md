@@ -14,7 +14,23 @@ following steps and components:
 
 ## Data Collection
 
-to be filled
+### Pilot 1 - Human Manager
+
+In a first pilot study with ~40 groups of 4 participants plus a human manager. The manager was instructed to maximise the common
+good of the group. The manager was receiving a payout proportionally to the
+common pool. We collected two episodes a 8 rounds per group with the manager changing.
+
+We found that the human manager often was reluctant to punish the participants.
+
+### Pilot 2 - Rule Based Manager
+
+For this reason, we conducted a second pilot study with a rule based manager. We
+collected data of ~45 groups of 4 participants. We utilized a rule to determine
+the punishments. The rule would relate the punishment to the contribution of the
+participant. The specific relation between contribution and punishment was
+specific to the round and the participant. However, we ensured correlation
+of the rule between rounds and participants. Details on the rule can be found
+in the supplementary material.
 
 ## Behavioral Cloning of Contributors
 
@@ -55,6 +71,32 @@ the model architecture and its evaluation can be found in the supplementary
 material.
 
 # Supplementary Material
+
+## Rule Based Manager
+
+For the second pilot study, we utilized a rule to determine the punishments. The
+rule would relate the punishment to the contribution of the participant and had
+the form:
+$$punishment = \alpha_{slope} \cdot (20-contribution)+ \alpha_{defect} \cdot  (contribution \ne 20) - \alpha_{offset}$$
+
+The factors s,c and b were distinct for each contributor and round. However,
+they were sampled from a random processes ensuring correlation
+over the rounds as well as a correlation between rounds.
+
+$$
+\alpha = \alpha * \frac{1} {1 + Sigmoid(\beta_{round} * \mathcal{N}(0,
+\Sigma) + \beta_{par} \mathcal{N}(0, \Sigma) + \beta_{offset})}
+$$
+
+The following table summarize the parameters of the random process.
+
+| Parameter        | $\alpha_{slope}$ | $\alpha_{defect}$ | $\alpha_{offset}$ |
+| ---------------- | ---------------- | ----------------- | ----------------- |
+| $\Sigma$         | 8                | 8                 | 8                 |
+| $\beta_{round}$  | 1.0              | 2                 | 2                 |
+| $\beta_{par}$    | 0.5              | 1                 | 1                 |
+| $\beta_{offset}$ | 0.0              | 0                 | 0                 |
+| $\alpha$         | 2                | 8                 | 2                 |
 
 ## Model architecture
 
