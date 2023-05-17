@@ -1,101 +1,192 @@
 import torch as th
+from typing import Optional, List, Union
+from pydantic import BaseModel
 
 from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
+from aimanager.generic.data import shift
 
 
-# def replace_none(l, dv):
-#     return [dv if v is None else l for v in l]
+class Round(BaseModel):
+    round: int
+    group: List[Union[str, int]]
+    contribution: List[int]
+    punishment: List[int]
+    contribution_valid: List[bool]
+    punishment_valid: List[bool]
 
 
-def create_data(rounds, default_values):
-    contributions = th.tensor([r['contributions'] for r in rounds], dtype=th.int64)
-    valid = ~th.tensor([r['missing_inputs'] for r in rounds], dtype=th.bool)
-    contributions = th.where(valid, contributions, int(default_values['contributions']))
+class RoundExternal(BaseModel):
+    round: int
+    groups: List[str]
+    contributions: List[int]
+    punishments: List[Optional[int]]
+    missing_inputs: List[bool]
 
-    manager_valid = th.tensor([[p is not None for p in r['punishments']]
-                              for r in rounds], dtype=th.bool)
-    punishments = th.tensor(
-        [[default_values['punishments'] if p is None else p for p in r['punishments']]
-         for r in rounds], dtype=th.int64)
-    round_number = th.tensor([[r['round']]*len(r['contributions'])
-                             for r in rounds], dtype=th.int64)
 
-    last_round = rounds[-1]
-    edge_index = th.tensor([
-        [g1idx, g2idx]
-        for g1idx, g1 in enumerate(last_round['groups'])
-        for g2idx, g2 in enumerate(last_round['groups'])
-        if ((g1idx != g2idx) and (g1 == g2))], dtype=th.int64)
-    batch = th.zeros(len(last_round['groups']), dtype=th.int64)
+def parse_round(round) -> Round:
+    """Parse round data from external to internal format."""
+    round = RoundExternal(**round)
+    return Round(
+        round=round.round,
+        group=round.groups,
+        contribution=round.contributions,
+        punishment=[p if p is not None else 0 for p in round.punishments],
+        contribution_valid=[not m for m in round.missing_inputs],
+        punishment_valid=[p is not None for p in round.punishments],
+    ).dict()
 
-    prev_punishments = th.full_like(punishments, fill_value=default_values['punishments'])
-    prev_punishments[1:] = punishments[: -1]
-    prev_manager_valid = th.full_like(manager_valid, fill_value=default_values['manager_valid'])
-    prev_manager_valid[1:] = manager_valid[: -1]
-    prev_valid = th.full_like(valid, fill_value=default_values['valid'])
-    prev_valid[1:] = valid[: -1]
+
+def create_data(rounds, groups, default_values):
+    """Create data object for the algorithmic manager based on round records."""
+
+    def create_tensor(record_key, default_key):
+        return th.tensor(
+            [
+                [
+                    [
+                        int(value)
+                        if (is_valid and g1 == g2)
+                        else int(default_values[default_key])
+                        for value, is_valid, g1 in zip(
+                            r[record_key], r[f"{record_key}_valid"], r["group"]
+                        )
+                    ]
+                    for r in rounds
+                ]
+                for g2 in groups
+            ],
+            dtype=th.int64,
+        )
+
+    def create_bool_tensor(record_key):
+        return th.tensor(
+            [
+                [
+                    [
+                        is_valid and g1 == g2
+                        for is_valid, g1 in zip(r[f"{record_key}_valid"], r["group"])
+                    ]
+                    for r in rounds
+                ]
+                for g2 in groups
+            ],
+            dtype=th.bool,
+        )
+
+    contribution = create_tensor("contribution", "contribution")
+    contribution_valid = create_bool_tensor("contribution")
+
+    punishment = create_tensor("punishment", "punishment")
+    punishment_valid = create_bool_tensor("punishment")
+
+    group_size = len(rounds[-1]["contribution"])
+    round_number = th.tensor(
+        [[[r["round"]] * group_size for r in rounds] for _ in range(len(groups))],
+        dtype=th.int64,
+    )
 
     data = {
-        'prev_manager_valid': prev_manager_valid.T,
-        'contributions': contributions.T,
-        'prev_punishments': prev_punishments.T,
-        'round_number': round_number.T,
-        'valid': valid.T,
-        'prev_valid': prev_valid.T,
-        'edge_index': edge_index.T,
-        'batch': batch
+        "contribution": contribution.permute(0, 2, 1),
+        "contribution_valid": contribution_valid.permute(0, 2, 1),
+        "punishment": punishment.permute(0, 2, 1),
+        "punishment_valid": punishment_valid.permute(0, 2, 1),
+        "round_number": round_number.permute(0, 2, 1),
+        "is_first": round_number.permute(0, 2, 1) == 0,
     }
+
+    calc_prev = ["punishment", "contribution", "punishment_valid", "contribution_valid"]
+    data = {
+        **data,
+        **{f"prev_{k}": shift(data[k], default_values[k]) for k in calc_prev},
+    }
+
     return data
 
 
-class Manager:
-    def encode(self, rounds):
-        data = create_data(rounds, self.model.default_values)
-        # for k, v in data.items():
-        #     print(k, v.shape, v.max())
+class HumanManager:
+    def __init__(self, model_path, **_):
+        self.model = GraphNetwork.load(model_path, device=th.device("cpu"))
+        self.default_values = self.model.default_values
 
-        encoded = self.model.encode_pure(data, y_encode=False)
-        return encoded
-
-
-class HumanManager(Manager):
-    def __init__(self, model_path):
-        self.model = GraphNetwork.load(model_path, device=th.device('cpu'))
-
-    def get_punishments(self, rounds):
-        encoded = self.encode(rounds)
-        return self.model.predict_pure(encoded, sample=True)[0][:, -1].tolist()
+    def get_punishments(self, data):
+        pred = self.model.predict(data, sample=True)[0]
+        return pred
 
 
-class RLManager(Manager):
-    def __init__(self, model_path):
-        self.model_path = model_path
-        self.model = ArtificalManager.load(model_path, device=th.device('cpu')).policy_model
-        self.model.u_encoder.refrence = 'contributions'
+class RLManager:
+    def __init__(self, model_path, **_):
+        self.model = ArtificalManager.load(
+            model_path, device=th.device("cpu")
+        ).policy_model
+        self.default_values = self.model.default_values
+        # self.model.u_encoder.refrence = "contribution"
 
-    def get_punishments(self, rounds):
-        encoded = self.encode(rounds)
-        return self.model.predict_pure(encoded, sample=False)[0][:, -1].tolist()
+    def get_punishments(self, data):
+        pred = self.model.predict(data, sample=False)[0]
+        return pred
+        # return self.model.predict_pure(encoded, sample=False)[0][:, -1].tolist()
 
 
-MANAGER_CLASS = {
-    'human': HumanManager,
-    'rl': RLManager
-}
+class DummyManager:
+    def __init__(self, **_):
+        self.model = None
+        self.default_values = {
+            "contribution": 0,
+            "punishment": 0,
+            "contribution_valid": False,
+            "punishment_valid": False,
+        }
+
+    def get_punishments(self, data):
+        return data["punishment"]
+
+
+MANAGER_CLASS = {"human": HumanManager, "rl": RLManager, "dummy": DummyManager}
 
 
 class MultiManager:
     def __init__(self, managers):
-        self.manager_settings = managers
-        self.managers = {k: MANAGER_CLASS[m['type']](m['path']) for k, m in managers.items()}
+        self.managers = {k: MANAGER_CLASS[m["type"]](**m) for k, m in managers.items()}
+        self.groups = list(self.managers.keys())
+        self.group_idx = {k: i for i, k in enumerate(managers.keys())}
+        self.manager_info = managers
+
+    def get_punishments_external(self, rounds: List[RoundExternal]):
+        parse_rounds = [parse_round(r) for r in rounds]
+        return self.get_punishments(parse_rounds)
 
     def get_punishments(self, rounds):
-        groups = rounds[-1]['groups']
-        punishments = {
-            k: m.get_punishments(rounds) for k, m in self.managers.items()
+        # we use the batch dimension to seperate the different groups
+        # we mask contributions and punishments corresponding to the groups
+        # the batch size corresponds to the number of models
+        # the data for both models is identical in principal, we compute them
+        # seperately as the models might use different default values
+        data = {
+            k: create_data(rounds, self.groups, m.default_values)
+            for k, m in self.managers.items()
         }
-        return [punishments[g][i] if g in punishments else None for i, g in enumerate(groups)], punishments
+
+        punishment = {k: m.get_punishments(data[k]) for k, m in self.managers.items()}
+
+        # we select from the model responds only those matching the right group
+        # this is the same for all models and independent of the actual model of
+        # the group
+        # we also select the last punishment in the round dimension
+        group = rounds[-1]["group"]
+        group_idx = [self.group_idx[g] for g in group]
+
+        punishment = {
+            k: v[group_idx, th.arange(len(group_idx)), -1].tolist()
+            for k, v in punishment.items()
+        }
+
+        # we select the punishment where the group matches the model
+        matched_punishment = [
+            punishment[g][i] if (g in punishment) else None for i, g in enumerate(group)
+        ]
+
+        return matched_punishment, punishment
 
     def get_info(self):
-        return self.manager_settings
+        return self.manager_info

@@ -1,0 +1,19 @@
+__notebook__: notebooks/test_manager/simulate_mixed.ipynb
+artificial_humans:
+  human managed:
+    contribution_model: data/behavioral_cloning/17_contribution_model_short_v3/model/architecture_node+edge+rnn__dataset_human_manager.pt
+    valid_model: data/behavioral_cloning/19_contribution_valid_model_v2/model/rnn_False__dataset_human_manager.pt
+  full:
+    contribution_model: data/behavioral_cloning/20_contribution_model_v3/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: data/behavioral_cloning/19_contribution_valid_model_v2/model/rnn_False__dataset_full.pt
+managers:
+  humanlike:
+    type: human
+    path: data/behavioral_cloning/18_punishment_autoregressive_v2/model/architecture_node+edge.pt
+    autoregressive: true
+  optimal:
+    type: rl
+    path: data/manager/03_model/model/architecture_node+edge+rnn__run_0.pt
+n_episode_steps: 16
+n_episodes: 1000
+

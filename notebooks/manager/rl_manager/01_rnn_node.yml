@@ -1,0 +1,39 @@
+__notebook__: notebooks/manager/rl_manager.ipynb
+artificial_humans: "artifacts/artificial_humans/04_3_2_model/model/architecture_node+edge+rnn.pt"
+artificial_humans_valid: "artifacts/artificial_humans/02_4_valid/model/rnn_True.pt"
+artificial_humans_model: graph
+manager_args:
+  opt_args:
+    lr: 3.e-4
+  gamma: 1.0
+  eps: 0.1
+  target_update_freq: 100
+  model_args:
+    hidden_size: 20
+    add_rnn: true
+    add_edge_model: False
+    add_global_model: False
+    x_encoding:
+      - name: contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+    b_encoding:
+      - name: round_number
+        n_levels: 16
+        encoding: onehot
+replay_memory_args:
+  n_episodes: 10
+n_update_steps: 20
+training_batch_size: 3
+eval_period: 5
+env_args:
+  n_agents: 4
+  n_contributions: 21
+  n_punishments: 31
+  n_rounds: 16
+  batch_size: 1000
+device: cpu
+seed: 42

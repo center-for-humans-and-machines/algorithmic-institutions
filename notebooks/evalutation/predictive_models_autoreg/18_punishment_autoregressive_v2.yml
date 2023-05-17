@@ -1,0 +1,18 @@
+__notebook__: notebooks/evalutation/predictive_models_autoreg.ipynb
+run: "18_punishment_autoregressive_v2"
+base_folder: "behavioral_cloning"
+target: "punishment"
+test: "t-test_paired"
+selection: {"architecture": "node+edge+rnn"}
+
+comparision: 'architecture'
+groups: [{}]
+order: ["node", "node+edge", "node+rnn", "node+edge+rnn"]
+pairs: [
+    ["node", "node+edge"],
+    ["node", "node+rnn"],
+    ["node+edge", "node+rnn"],
+    ["node+rnn", "node+edge+rnn"],
+    ["node+edge", "node+edge+rnn"],
+    ["node", "node+edge+rnn"],
+]

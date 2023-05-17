@@ -39,11 +39,11 @@ repeated RL runs) model performance. All architectures investigated involved the
 
 _Artificial Human Contributors_
 
-![AHC](../notebooks/evalutation/plots/artificial_humans_04_3_model/model_comparision.jpg)
+![AHC](../notebooks/evalutation/predictive_models_autoreg/17_contribution_model_short_v3/model_comparision_full.jpg)
 
 _Artificial Human Manager_
 
-![AHM](../notebooks/evalutation/plots/human_like_manager_05_2_model/model_comparision.jpg)
+![AHM](../notebooks/evalutation/predictive_models_autoreg/18_punishment_autoregressive_v2/model_comparision_.jpg)
 
 _Optimal Manager_
 

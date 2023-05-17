@@ -1,0 +1,48 @@
+description: >-
+  Build a model for valid contributions.
+exec:
+  command: python run.py run {job_file}
+  script_name: gpu
+  data_dir: data
+  temp_dir: temp
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  __notebook__: notebooks/artificial_humans/graph.ipynb
+  seed: 1234
+  fraction_training: 1.0
+  mask_name: recorded
+  experiment_names: [trail_rounds_2, random_1]
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 6
+  n_player: 4
+  data_file: experiments/pilot_random1_player_round_slim.csv
+  model_name: graph
+  shuffle_features: [prev_punishment, prev_contribution, prev_common_good, prev_contribution_valid]
+  model_args:
+    y_levels: 2
+    y_name: contribution_valid
+    hidden_size: 5
+    add_rnn: False
+    add_edge_model: False
+    add_global_model: False
+    x_encoding:
+      - etype: bool
+        name: prev_contribution_valid
+    u_encoding: []
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 10000
+    batch_size: 10
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: false
+grid:
+  - labels.rnn: [true, false]
+    model_args.add_rnn: [true, false]
