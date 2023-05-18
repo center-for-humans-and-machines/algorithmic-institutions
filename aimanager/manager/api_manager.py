@@ -28,7 +28,7 @@ def parse_round(round) -> Round:
     """Parse round data from external to internal format."""
     round = RoundExternal(**round)
     return Round(
-        round=round.round,
+        round=round.round - 1,
         group=round.groups,
         contribution=round.contributions,
         punishment=[p if p is not None else 0 for p in round.punishments],
@@ -115,46 +115,19 @@ class HumanManager:
 
 
 class RLManager:
-    def __init__(self, model_path, n_steps, model_max_steps=None, **_):
+    def __init__(self, model_path, **_):
         self.model = ArtificalManager.load(
             model_path, device=th.device("cpu")
         ).policy_model
         self.default_values = self.model.default_values
-        self.round_map = self.create_round_map(n_steps, model_max_steps)
         # self.model.u_encoder.refrence = "contribution"
 
-    @staticmethod
-    def create_round_map(n_steps, model_max_steps):
-        # the rl mangager can only process rounds up to 16 steps
-        # we need to adjust the round to the correct length
-        # we will modify round 5 to 12
-        if model_max_steps is None:
-            return None
-        else:
-            missing_rounds = n_steps - model_max_steps
-            multiplier = (missing_rounds // (model_max_steps - 8)) + 2
-            adjusted_rounds = [
-                i for i in range(4, model_max_steps - 4) for _ in range(multiplier)
-            ][: n_steps - 8]
-
-            round_map = (
-                list(range(0, 4))
-                + adjusted_rounds
-                + list(range(model_max_steps - 4, model_max_steps))
-            )
-            assert len(round_map) == n_steps
-            return th.tensor(round_map, dtype=th.int64)
-
-    def adjusted_round(self, data):
-        data["round_number"] = self.round_map[data["round_number"]]
-        return data
-
     def get_punishments(self, data):
-        if self.round_map is not None:
-            data = self.adjusted_round(data)
+        # the round number only enteres the bias and hence does not effect the
+        # output, set to zero to allow for larger rollout length
+        data["round_number"] = th.zeros_like(data["round_number"])
         pred = self.model.predict(data, sample=False)[0]
         return pred
-        # return self.model.predict_pure(encoded, sample=False)[0][:, -1].tolist()
 
 
 class DummyManager:
