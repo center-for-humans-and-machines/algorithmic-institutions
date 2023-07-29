@@ -1,0 +1,53 @@
+program: notebooks/artificial_humans/transformer.py
+method: grid
+metric:
+  goal: minimize
+  name: loss
+parameters:
+  d_model:
+    values:
+      - 16
+      - 32
+      - 64
+  nhead:
+    value: 2
+  num_layers:
+    values:
+      - 2
+      - 3
+      - 4
+  dim_feedforward:
+    values:
+      - 64
+      - 128
+      - 256
+  dropout:
+    values:
+      - 0.3
+      - 0.5
+      - 0.7
+  learning_rate:
+    values:
+      - 1.e-3
+      - 1.e-4
+      - 3.e-4
+  weight_decay:
+    values:
+      - 1e-5
+      - 1e-4
+      - 1e-3
+  patience:
+    values:
+      - 5
+      - 10
+      - 15
+  n_epochs:
+    values:
+      - 100
+      - 200
+      - 300
+  batch_size:
+    values:
+      - 8
+      - 16
+      - 32
