@@ -104,7 +104,7 @@ rate of 3.e-4.
 We investigate the effect of different components of the architecture on the
 models cross validated predictive performance.
 
-![Learning Rate](../notebooks/evalutation/plots/artificial_humans_04_3_model/model_comparision.jpg)
+![Learning Rate](../notebooks/evalutation/archive/plots/artificial_humans_04_3_model/model_comparision.jpg)
 
 We found a significant improvement for independently adding the node model and for adding the
 edge model. However, the model with rnn unit performed significant better then the one with the edge
@@ -124,7 +124,7 @@ in predictive performance.
 We find the model to be dominantly rely on previous contribution. However, all
 three features do contribute.
 
-![Shuffle Feature](../notebooks/evalutation/plots/artificial_humans_04_model/shuffle_feature_importance.jpg)
+![Shuffle Feature](../notebooks/evalutation/archive/plots/artificial_humans_04_model/shuffle_feature_importance.jpg)
 
 ### Confusion Matrix
 
