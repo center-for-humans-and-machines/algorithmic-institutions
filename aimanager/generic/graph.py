@@ -341,6 +341,12 @@ class GraphNetwork(th.nn.Module):
             y_pred_proba_ = y_pred_proba_.reshape(
                 n_batch, n_nodes, n_rounds, self.y_levels
             )
+            print("contribution", data["contribution"])
+            print("autoreg_mask", data["autoreg_mask"])
+            print("y_mask", data[y_masked_name])
+            print("y_pred_proba", y_pred_proba_[:, i])
+            print("y_pred", y_pred_[:, i, -1])
+
             y_pred[:, i] = y_pred_[:, i]
             y_pred_proba[:, i] = y_pred_proba_[:, i]
             y_masked[:, i, -1] = y_pred_[:, i, -1]
