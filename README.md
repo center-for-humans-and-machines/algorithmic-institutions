@@ -88,6 +88,7 @@ python run.py run notebooks/evalutation/rl_models/06_model.yml
 
 ### Run Simulations
 
+Should be run on a GPU node.
 ```
 python run.py run notebooks/test_manager/simulate_mixed/03_all.yml
 ```
@@ -95,6 +96,7 @@ python run.py run notebooks/test_manager/simulate_mixed/03_all.yml
 
 # Simulate existing models
 
+Should be run on a GPU node. 
 ```
 python run.py run notebooks/test_manager/simulate_mixed/02_all_artifacts.yml
 ```
