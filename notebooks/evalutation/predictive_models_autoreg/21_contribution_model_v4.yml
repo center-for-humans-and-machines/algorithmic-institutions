@@ -1,0 +1,13 @@
+__notebook__: notebooks/evalutation/predictive_models_autoreg.ipynb
+run: "21_contribution_model_v4"
+base_folder: "behavioral_cloning"
+target: "contribution"
+test: "t-test_paired"
+selection: {"architecture": "node+edge+rnn", 'dataset': 'full'}
+
+comparision: 'architecture'
+groups: [{'dataset': 'full'}, {'dataset': 'human_manager'}]
+order: ["node", "node+edge+rnn"]
+pairs: [
+    ["node", "node+edge+rnn"],
+]

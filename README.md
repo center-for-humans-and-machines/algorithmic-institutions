@@ -29,52 +29,76 @@ Update parameter only
 python run_notebook.py evaluation/predictive_models ahc_02_valid --prepare_only
 ```
 
-## Examples
+## Retrain Models
 
-### Train behavioral clones
 
-Clone human contributors
+### Behavioral Clones
 
-```
-python run_notebook.py artificial_humans/graph  ahc_02_valid_node+rnn
-```
+Contribution
 
-Clone human manager
-
-```
-python run_notebook.py artificial_humans/graph  ahc_02_valid_node+rnn
+``` 
+djx run/behavioral_cloning/21_contribution_model_v4.yml
 ```
 
-### Train RL-based manager
+Contribution Is Valid
 
 ```
-python run_notebook.py artificial_humans/graph  ahc_02_valid_node+rnn
+djx run/behavioral_cloning/22_contribution_valid_model_v4.yml 
 ```
 
-### Run simulations with multiple manager
+Punishments
 
 ```
-python run_notebook.py simulate_rule/simulate_rule_v1_2_1  ahc_02_valid_node+rnn
+djx run/behavioral_cloning/23_punishment_autoregressive_v4.yml
 ```
 
-# Train on Slurm Cluster
-
-First ensure that the job_pattern at (`djx/djx/job_pattern`) do fit your local
-cluster.
-
-## Train behavioral clones
+### RL Manager
 
 ```
-djx run/behavioral_cloning/01_contribution_model.yml
-djx run/behavioral_cloning/02_contribution_valid_model.yml
-djx run/behavioral_cloning/03_punishment_autoregressive.yml
+djx run/manager/06_model.yml
 ```
 
-## Train RL manager
+## Evaluate Models
+
+### Behavioral Clones
+
+Contribution
 
 ```
-djx run/manager/01_model.yml
+python run.py run notebooks/evalutation/predictive_models_autoreg/21_contribution_model_v4.yml
 ```
+
+Contribution Is Valid
+
+```
+python run.py run notebooks/evalutation/predictive_models_autoreg/22_contribution_valid_model_v4.yml
+```
+
+Punishments
+
+```
+python run.py run notebooks/evalutation/predictive_models_autoreg/23_punishment_autoregressive_v4.yml
+```
+
+RL Manager
+
+```
+python run.py run notebooks/evalutation/rl_models/06_model.yml
+```
+
+### Run Simulations
+
+```
+python run.py run notebooks/test_manager/simulate_mixed/03_all.yml
+```
+
+
+# Simulate existing models
+
+```
+python run.py run notebooks/test_manager/simulate_mixed/02_all_artifacts.yml
+```
+
 
 # Reproducing Figures
 

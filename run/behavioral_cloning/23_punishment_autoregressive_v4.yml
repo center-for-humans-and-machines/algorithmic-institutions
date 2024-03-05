@@ -1,0 +1,71 @@
+description: >-
+  Investigation of the model architecture and the relevance of global features.
+exec:
+  command: python run.py run {job_file}
+  script_name: gpu
+  data_dir: data
+  temp_dir: temp
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  __notebook__: notebooks/artificial_humans/graph.ipynb
+  seed: 71826387
+  fraction_training: 1.0
+  mask_name: recorded
+  experiment_names: [trail_rounds_2]
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 10
+  n_player: 4
+  data_file: experiments/pilot_random1_player_round_slim.csv
+  model_name: graph
+  shuffle_features:
+    - contribution
+    - prev_punishment
+    - contribution_valid
+    - prev_punishment_valid
+    - punishment_masked
+  model_args:
+    y_levels: 31
+    y_name: punishment
+    hidden_size: 5
+    add_rnn: False
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - etype: bool
+        name: contribution_valid
+      - etype: bool
+        name: prev_punishment_valid
+      - name: punishment_masked
+        n_levels: 31
+        encoding: numeric
+      - etype: bool
+        name: autoreg_mask
+      - etype: bool
+        name: is_first
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 10000
+    batch_size: 20
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: True
+  min_predicted: 1
+  max_predicted: 4
+grid:
+  - labels.architecture: [node, node+edge]
+    model_args.add_rnn: [false, false]
+    model_args.add_edge_model: [false, true]
+
