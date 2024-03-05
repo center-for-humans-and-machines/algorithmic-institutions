@@ -1,0 +1,12 @@
+program: notebooks/transformer/transformer_v2.py
+method: bayes
+metric:
+  goal: minimize
+  name: Val Loss
+parameters:
+  dataset_folder:
+    values:
+      - "data/transformer_clone/trail_rounds_2_v1"
+  pretrained_run_id:
+    values:
+        - "1sdjpnum"

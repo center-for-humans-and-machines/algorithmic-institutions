@@ -17,4 +17,4 @@ source .venv/bin/activate
 
 echo "Entered environment"
 
-wandb agent {sweep_id} --project {project_name} --entity chm-hci --count 10
+{command}

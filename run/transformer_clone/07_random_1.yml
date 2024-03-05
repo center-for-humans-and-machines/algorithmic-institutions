@@ -1,4 +1,4 @@
-program: notebooks/artificial_humans/transformer.py
+program: notebooks/transformer/transformer_v2.py
 method: bayes
 metric:
   goal: minimize
@@ -42,13 +42,13 @@ parameters:
       - 1e-3
   patience:
     values:
-      - 5
-      - 10
-      - 15
+      - 20
   n_epochs:
     values:
       - 200
   batch_size:
     values:
       - 16
-      - 32
+  dataset_folder:
+    values:
+      - "data/transformer_clone/random_1_v2"

@@ -1,19 +1,17 @@
-program: notebooks/artificial_humans/transformer.py
-method: bayes
+program: notebooks/transformer/transformer_v2.py
+method: random
 metric:
   goal: minimize
   name: Val Loss
 parameters:
   d_model:
     values:
-      - 16
-      - 32
-      - 64
+      - 4
+      - 8
   nhead:
     values:
       - 2
       - 4
-      - 8
   num_layers:
     values:
       - 2
@@ -21,9 +19,9 @@ parameters:
       - 4
   dim_feedforward:
     values:
-      - 64
-      - 128
-      - 256
+      - 4
+      - 8
+      - 16
   dropout:
     values:
       - 0.0
@@ -42,13 +40,13 @@ parameters:
       - 1e-3
   patience:
     values:
-      - 5
-      - 10
-      - 15
+      - 20
   n_epochs:
     values:
       - 200
   batch_size:
     values:
       - 16
-      - 32
+  dataset_folder:
+    values:
+      - "data/transformer_clone/random_1_v2"

@@ -4,6 +4,8 @@ base_folder: "behavioral_cloning"
 target: "contribution"
 test: "t-test_paired"
 selection: {"architecture": "node+edge+rnn", 'dataset': 'full'}
+metric: 'mean_absolute_error'
+strategy: 'greedy'
 
 comparision: 'architecture'
 groups: [{'dataset': 'full'}, {'dataset': 'human_manager'}]

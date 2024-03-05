@@ -3,6 +3,8 @@ run: "11_punishment_autoregressive"
 base_folder: "behavioral_cloning"
 target: "punishment"
 test: "t-test_paired"
+metric: 'accuracy'
+strategy: 'greedy'
 selection: {"architecture": "node+edge+rnn"}
 
 comparision: 'architecture'

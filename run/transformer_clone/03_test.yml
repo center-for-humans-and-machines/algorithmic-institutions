@@ -1,4 +1,4 @@
-program: notebooks/artificial_humans/transformer.py
+program: notebooks/artificial_humans/transformer_v2.py
 method: bayes
 metric:
   goal: minimize
@@ -6,9 +6,9 @@ metric:
 parameters:
   d_model:
     values:
-      - 16
-      - 32
       - 64
+      - 128
+      - 256
   nhead:
     values:
       - 2
@@ -21,30 +21,25 @@ parameters:
       - 4
   dim_feedforward:
     values:
-      - 64
-      - 128
       - 256
   dropout:
     values:
       - 0.0
+      - 0.1
       - 0.3
-      - 0.5
-      - 0.7
   learning_rate:
     values:
       - 1.e-3
-      - 1.e-4
-      - 3.e-4
+      # - 1.e-4
+      # - 3.e-4
   weight_decay:
     values:
+      - 1e-6
       - 1e-5
       - 1e-4
-      - 1e-3
   patience:
     values:
-      - 5
-      - 10
-      - 15
+      - 20
   n_epochs:
     values:
       - 200
