@@ -270,25 +270,29 @@ class GraphNetwork(th.nn.Module):
         encoded = {k: v.to(device) for k, v in encoded.items() if v is not None}
         return encoded
 
-    def predict_encoded(self, data, sample=True, reset_rnn=True):
+    def predict_encoded(self, data, sample=True, reset_rnn=True, temperature=1.0):
         self.eval()
         y_logit = self(data, reset_rnn)
-        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+        y_pred_proba = th.nn.functional.softmax(y_logit / temperature, dim=-1)
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
-    def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
+    def predict_independent(
+        self, data, sample=True, reset_rnn=True, edge_index=None, temperature=1.0
+    ):
         n_batch, n_nodes, n_rounds = data[self.y_name].shape
         if edge_index is None:
             edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
-        predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
+        predict = self.predict_encoded(
+            encoded, sample=sample, reset_rnn=reset_rnn, temperature=temperature
+        )
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
 
-    def predict_autoreg(self, data, sample=True):
+    def predict_autoreg(self, data, sample=True, temperature=1.0):
         self.eval()
         # print("predict autoreg")
         assert (
@@ -335,7 +339,7 @@ class GraphNetwork(th.nn.Module):
                 device=self.device,
             )
             y_logit = self(encoded)
-            y_pred_proba_ = th.nn.functional.softmax(y_logit, dim=-1)
+            y_pred_proba_ = th.nn.functional.softmax(y_logit / temperature, dim=-1)
             y_pred_ = self.y_encoder.decode(y_pred_proba_, sample)
             y_pred_ = y_pred_.reshape(n_batch, n_nodes, n_rounds)
             y_pred_proba_ = y_pred_proba_.reshape(

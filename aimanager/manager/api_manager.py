@@ -45,9 +45,11 @@ def create_data(rounds, groups, default_values):
             [
                 [
                     [
-                        int(value)
-                        if (is_valid and g1 == g2)
-                        else int(default_values[default_key])
+                        (
+                            int(value)
+                            if (is_valid and g1 == g2)
+                            else int(default_values[default_key])
+                        )
                         for value, is_valid, g1 in zip(
                             r[record_key], r[f"{record_key}_valid"], r["group"]
                         )
@@ -105,12 +107,13 @@ def create_data(rounds, groups, default_values):
 
 
 class HumanManager:
-    def __init__(self, model_path, **_):
+    def __init__(self, model_path, temperature=1.0, **_):
         self.model = GraphNetwork.load(model_path, device=th.device("cpu"))
         self.default_values = self.model.default_values
+        self.temperature = temperature
 
     def get_punishments(self, data):
-        pred = self.model.predict(data, sample=True)[0]
+        pred = self.model.predict(data, sample=True, temperature=self.temperature)[0]
         return pred
 
 
