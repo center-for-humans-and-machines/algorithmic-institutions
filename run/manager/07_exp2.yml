@@ -1,0 +1,51 @@
+description: >-
+  We test different architectures for the RL manager.
+exec:
+  command: python run.py run {job_file}
+  script_name: gpu
+  cores: 2
+  memory: 16
+  data_dir: data
+  temp_dir: temp
+params_only: true
+params:
+  __notebook__: notebooks/manager/rl_manager.ipynb
+  artificial_humans: data/behavioral_cloning/21_contribution_model_v4/architecture_node+edge+rnn__dataset_full.pt
+  artificial_humans_valid: data/behavioral_cloning/22_contribution_valid_model_v4/rnn_False__dataset_full.pt
+  seed: 42
+  manager_args:
+    opt_args:
+      lr: 3.e-4
+    gamma: 1.0
+    eps: 0.1
+    target_update_freq: 1000
+    model_args:
+      hidden_size: 100
+      add_rnn: true
+      add_edge_model: true
+      add_global_model: False
+      x_encoding:
+        - name: contribution
+          n_levels: 21
+          encoding: numeric
+        - name: prev_punishment
+          n_levels: 31
+          encoding: numeric
+        - etype: bool
+          name: contribution_valid
+      b_encoding:
+        - name: round_number
+          n_levels: 32
+          encoding: onehot
+  replay_memory_args:
+    n_episodes: 100
+  n_update_steps: 20000
+  eval_period: 20
+  training_batch_size: 1
+  env_args:
+    n_agents: 4
+    n_contributions: 21
+    n_punishments: 31
+    n_rounds: 24
+    batch_size: 1000
+  device: cuda
