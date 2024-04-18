@@ -33,7 +33,7 @@ Contribution Is Valid
 djx run/behavioral_cloning/22_contribution_valid_model_v4.yml 
 ```
 
-Punishments
+Punishments (not used)
 
 ```
 djx run/behavioral_cloning/23_punishment_autoregressive_v4.yml
@@ -42,7 +42,7 @@ djx run/behavioral_cloning/23_punishment_autoregressive_v4.yml
 ### RL Manager
 
 ```
-djx run/manager/06_model.yml
+djx run/manager/07_exp2.yml
 ```
 
 ## Evaluate Models
@@ -61,7 +61,7 @@ Contribution Is Valid
 python run.py run notebooks/evalutation/predictive_models_autoreg/22_contribution_valid_model_v4.yml
 ```
 
-Punishments
+Punishments (not used)
 
 ```
 python run.py run notebooks/evalutation/predictive_models_autoreg/23_punishment_autoregressive_v4.yml
@@ -70,7 +70,7 @@ python run.py run notebooks/evalutation/predictive_models_autoreg/23_punishment_
 RL Manager
 
 ```
-python run.py run notebooks/evalutation/rl_models/06_model.yml
+python run.py run notebooks/evalutation/rl_models/07_exp2.yml
 ```
 
 ### Run Simulations
