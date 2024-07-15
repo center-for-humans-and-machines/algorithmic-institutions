@@ -37,6 +37,7 @@ class ArtificialHumanEnv:
         n_rounds,
         device,
         default_values=None,
+        reward_fomula="common_good",
     ):
         """
         Args:
@@ -65,6 +66,7 @@ class ArtificialHumanEnv:
         self.artifical_humans = artifical_humans
         self.artifical_humans_valid = artifical_humans_valid
         self.n_agents = n_agents
+        self.reward_fomula = reward_fomula
         self.edge_index = create_fully_connected(n_agents)
         self.batch_edge_index = th.tensor(
             [
@@ -90,6 +92,23 @@ class ArtificialHumanEnv:
 
         self.reset_state()
         self.reset()
+
+    def add_agent(self, agent_state: dict[str, th.Tensor]):
+        assert self.batch_size == 1, "Can only add agent with batch_size=1"
+        for key in self.state:
+            self.state[key] = th.cat(
+                [self.state[key], agent_state[key].unsqueeze(1)], dim=1
+            )
+        self.n_agents += 1
+
+    def remove_agent(self, agent_id: int):
+        assert self.batch_size == 1, "Can only remove agent with batch_size=1"
+        for key in self.state:
+            self.state[key] = th.cat(
+                [self.state[key][:, :agent_id], self.state[key][:, agent_id + 1 :]],
+                dim=1,
+            )
+        self.n_agents -= 1
 
     def reset_state(self):
         size = (self.batch_size, self.n_agents, 1)
@@ -122,6 +141,9 @@ class ArtificialHumanEnv:
             if k in self.default_values
         }
         self.state = {**prev_state, **state}
+        self.summed_contributor_payoffs = th.zeros_like(
+            self.state["contributor_payoff"]
+        )
 
     def __getattr__(self, name):
         if "state" in self.__dict__:
@@ -158,6 +180,8 @@ class ArtificialHumanEnv:
             self.contribution_valid, contributor_payoff, 0
         )
         self.manager_payoff = self.common_good / 4
+
+        self.summed_contributor_payoffs += self.contributor_payoff
 
     def update_reward(self):
         masked_contribution = th.where(self.contribution_valid, self.contribution, 0)
@@ -207,7 +231,7 @@ class ArtificialHumanEnv:
         self.punishment = punishment
         self.punishment_valid = th.ones_like(self.punishment_valid)
         self.update_common_good()
-        # self.update_payoff()
+        self.update_payoff()
         return self.state
 
     def step(self):
@@ -224,3 +248,7 @@ class ArtificialHumanEnv:
             self.update_contribution()
         self.update_reward()
         return self.state, self.reward, self.done
+
+    @property
+    def average_contributor_payoff(self):
+        return self.summed_contributor_payoffs.mean(dim=(1, 2))
