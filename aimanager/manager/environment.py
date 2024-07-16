@@ -37,7 +37,7 @@ class ArtificialHumanEnv:
         n_rounds,
         device,
         default_values=None,
-        reward_fomula="common_good",
+        reward_formula="common_good",
     ):
         """
         Args:
@@ -66,7 +66,7 @@ class ArtificialHumanEnv:
         self.artifical_humans = artifical_humans
         self.artifical_humans_valid = artifical_humans_valid
         self.n_agents = n_agents
-        self.reward_fomula = reward_fomula
+        self.reward_formula = reward_formula
         self.edge_index = create_fully_connected(n_agents)
         self.batch_edge_index = th.tensor(
             [
@@ -179,20 +179,44 @@ class ArtificialHumanEnv:
         self.contributor_payoff = th.where(
             self.contribution_valid, contributor_payoff, 0
         )
-        self.manager_payoff = self.common_good / 4
+        self.manager_payoff = self.common_good
 
         self.summed_contributor_payoffs += self.contributor_payoff
 
     def update_reward(self):
-        masked_contribution = th.where(self.contribution_valid, self.contribution, 0)
         masked_prev_punishment = th.where(
             self.prev_contribution_valid, self.prev_punishment, 0
         )
+        masked_contribution = th.where(self.contribution_valid, self.contribution, 0)
 
         if self.done:
             self.reward = -masked_prev_punishment.to(th.float) / 32
         else:
-            self.reward = (masked_contribution * 1.6 - masked_prev_punishment) / 32
+            if self.reward_formula == "common_good":
+                self.reward = (masked_contribution * 1.6 - masked_prev_punishment) / 32
+            elif self.reward_formula in ("payoff", "group_payoff"):
+                sum_contribution = masked_contribution.sum(dim=1, keepdim=True)
+                sum_prev_punishment = masked_prev_punishment.sum(dim=1, keepdim=True)
+                sum_contribution_valid = self.contribution_valid.sum(
+                    dim=1, keepdim=True
+                )
+                # Note that the following "merged_common_good" is not the normal common_good
+                # It considers contributions of round n and punishments of round n-1
+                merged_common_good = (
+                    (sum_contribution * 1.6 - sum_prev_punishment)
+                    / sum_contribution_valid
+                ).expand(-1, self.n_agents, -1)
+                contributor_payoff = (
+                    20 - self.contribution - self.prev_punishment + merged_common_good
+                )
+                masked_payoff = th.where(self.contribution_valid, contributor_payoff, 0)
+                if self.reward_formula == "payoff":
+                    self.reward = masked_payoff / 32
+                else:
+                    group_payoff = masked_payoff.sum(dim=1, keepdim=True)
+                    self.reward = group_payoff.repeat(1, self.n_agents, 1) / 32
+            else:
+                raise ValueError(f"Unknown reward formula: {self.reward_formula}")
 
     def update_contribution(self):
         contribution = self.artifical_humans.predict(
@@ -231,7 +255,7 @@ class ArtificialHumanEnv:
         self.punishment = punishment
         self.punishment_valid = th.ones_like(self.punishment_valid)
         self.update_common_good()
-        self.update_payoff()
+        # self.update_payoff()
         return self.state
 
     def step(self):
