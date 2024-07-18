@@ -194,7 +194,15 @@ class ArtificialHumanEnv:
         else:
             if self.reward_formula == "common_good":
                 self.reward = (masked_contribution * 1.6 - masked_prev_punishment) / 32
-            elif self.reward_formula in ("payoff", "group_payoff"):
+            elif self.reward_formula == "handcrafted":
+                self.reward = (
+                    masked_contribution * 1.6 - masked_prev_punishment * 2
+                ) / 32
+            elif self.reward_formula == "impact_on_group_payoff":
+                self.reward = (
+                    masked_contribution * 0.6 - masked_prev_punishment * 2
+                ) / 32
+            elif self.reward_formula in ("payoff", "group_payoff", "true_common_good"):
                 sum_contribution = masked_contribution.sum(dim=1, keepdim=True)
                 sum_prev_punishment = masked_prev_punishment.sum(dim=1, keepdim=True)
                 sum_contribution_valid = self.contribution_valid.sum(
@@ -206,15 +214,27 @@ class ArtificialHumanEnv:
                     (sum_contribution * 1.6 - sum_prev_punishment)
                     / sum_contribution_valid
                 ).expand(-1, self.n_agents, -1)
-                contributor_payoff = (
-                    20 - self.contribution - self.prev_punishment + merged_common_good
+
+                merged_common_good = th.where(
+                    sum_contribution_valid > 0, merged_common_good, 0
                 )
-                masked_payoff = th.where(self.contribution_valid, contributor_payoff, 0)
-                if self.reward_formula == "payoff":
-                    self.reward = masked_payoff / 32
+                if self.reward_formula == "true_common_good":
+                    self.reward = merged_common_good / 32
                 else:
-                    group_payoff = masked_payoff.sum(dim=1, keepdim=True)
-                    self.reward = group_payoff.repeat(1, self.n_agents, 1) / 32
+                    contributor_payoff = (
+                        20
+                        - self.contribution
+                        - self.prev_punishment
+                        + merged_common_good
+                    )
+                    masked_payoff = th.where(
+                        self.contribution_valid, contributor_payoff, 0
+                    )
+                    if self.reward_formula == "payoff":
+                        self.reward = masked_payoff / 32
+                    elif self.reward_formula == "group_payoff":
+                        group_payoff = masked_payoff.mean(dim=1, keepdim=True)
+                        self.reward = group_payoff.repeat(1, self.n_agents, 1) / 32
             else:
                 raise ValueError(f"Unknown reward formula: {self.reward_formula}")
 
