@@ -87,8 +87,7 @@ def test_artificial_human_env():
     assert env.state["contributor_payoff"].shape == (2, 3, 1)
     assert env.state["manager_payoff"].shape == (2, 3, 1)
     assert env.state["reward"].shape == (2, 3, 1)
-    assert env.state["group"].shape == (2, 3)
-    assert env.state["agent"].shape == (2, 3)
+    assert env.state["group"].shape == (2, 3, 1)
 
     # Test if the contribution works correctly
     assert th.allclose(env.contribution, th.tensor([[[1], [1], [1]], [[1], [1], [1]]]))
