@@ -82,6 +82,10 @@ abbreviation_map = {
     "gamma_1": "ci, γ=1",
     "gamma_0": "ci, γ=0",
     "true_common_good_gamma_08": "cg, γ=0.8",
+    "gamma_07_heavy": "cih, γ=0.7",
+    "gamma_08_heavy": "cih, γ=0.8",
+    "true_common_good_heavy": "cgh, γ=0.8",
+    "group_payoff_heavy_gamma_08": "pgh, γ=0.8",
 }
 
 
@@ -120,7 +124,7 @@ def multibar(df: pd.DataFrame, folder="plots"):
 
 
 if __name__ == "__main__":
-    df = load_data(["05_all", "10_few", "11_one", "09_some"])
+    df = load_data(["05_all", "10_few", "11_one", "09_some", "12_heavies"])
     metric_df = compute_key_metrics(df)
     print(metric_df)
     multibar(metric_df)
