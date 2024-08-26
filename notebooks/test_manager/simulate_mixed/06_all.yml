@@ -1,0 +1,18 @@
+__notebook__: notebooks/test_manager/simulate_multiple.ipynb
+artificial_humans:
+  human managed:
+    contribution_model: data/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_human_manager.pt
+    valid_model: data/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_human_manager.pt
+  full:
+    contribution_model: data/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: data/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+managers:
+  humanlike:
+    type: human
+    path: data/behavioral_cloning/23_punishment_autoregressive_v4/model/architecture_node+edge.pt
+    autoregressive: true
+  payoff_maximize:
+    type: rl
+    path: data/manager/13_exp2_payoff/model/_manager.pt
+n_episode_steps: 24
+n_episodes: 1000
