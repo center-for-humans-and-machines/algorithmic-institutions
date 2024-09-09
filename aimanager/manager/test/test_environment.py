@@ -138,10 +138,16 @@ def test_multi_group_env():
     all_common_good = th.cat(all_common_good, axis=-1)
     all_contribution = th.cat(all_contribution, axis=-1)
     all_punishment = th.cat(all_punishment, axis=-1)
+    all_reward = th.cat(all_reward, axis=-1)
 
     assert th.allclose(
         all_common_good.sum(dim=1),
         all_contribution.sum(dim=1) * 1.6 - all_punishment.sum(dim=1),
+    )
+
+    assert th.allclose(
+        all_reward[:, :, -1] * 32,
+        -all_punishment[:, :, -1].float(),
     )
 
     assert done
