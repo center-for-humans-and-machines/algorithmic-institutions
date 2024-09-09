@@ -1,11 +1,12 @@
-import torch as th
-import numpy as np
 import random
+
+import numpy as np
 import pandera as pa
+import torch as th
 from pandera.typing import Series
 
 
-class AgentRoundRaw(pa.SchemaModel):
+class AgentRoundRaw(pa.DataFrameModel):
     episode_id: Series[int]
     round_number: Series[int]
     player_id: Series[int]
@@ -16,7 +17,7 @@ class AgentRoundRaw(pa.SchemaModel):
     common_good: Series[float]
 
 
-class AgentRound(pa.SchemaModel):
+class AgentRound(pa.DataFrameModel):
     round_number: Series[int]
     is_first: Series[bool]
     player_idx: Series[int]
