@@ -1,7 +1,5 @@
-import numpy as np
 import torch as th
 
-import aimanager
 from aimanager.manager.environment import ArtificialHumanEnv
 
 

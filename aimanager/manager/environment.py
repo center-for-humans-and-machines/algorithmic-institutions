@@ -196,7 +196,7 @@ class ArtificialHumanEnv:
         average_payoff_per_group = th.where(
             contribution_valid.sum(dim=1) > 0, average_payoff_per_group, 0
         )
-        return average_payoff_per_group
+        return contributor_payoff, average_payoff_per_group
 
     def update_common_good(self):
         common_good_per_group = self.compute_common_good_per_group(
@@ -209,11 +209,13 @@ class ArtificialHumanEnv:
 
     def update_payoff(self):
 
-        self.group_payoff = self.compute_average_payoff_per_group(
-            self.contribution,
-            self.punishment,
-            self.contribution_valid,
-            self.common_good,
+        self.contributor_payoff, self.group_payoff = (
+            self.compute_average_payoff_per_group(
+                self.contribution,
+                self.punishment,
+                self.contribution_valid,
+                self.common_good,
+            )
         )
 
         # Broadcast the average payoff of each group to the agents
@@ -246,11 +248,13 @@ class ArtificialHumanEnv:
                 if self.reward_formula == "true_common_good":
                     self.reward = common_good_per_agent / 32
                 else:
-                    contributor_payoff = (
-                        20
-                        - self.contribution
-                        - self.prev_punishment
-                        + common_good_per_agent
+                    contributor_payoff, average_payoff_per_group = (
+                        self.compute_average_payoff_per_group(
+                            self.contribution,
+                            self.prev_punishment,
+                            self.contribution_valid,
+                            common_good_per_agent,
+                        )
                     )
                     masked_payoff = th.where(
                         self.contribution_valid, contributor_payoff, 0
@@ -258,15 +262,6 @@ class ArtificialHumanEnv:
                     if self.reward_formula == "payoff":
                         self.reward = masked_payoff / 32
                     elif self.reward_formula == "group_payoff":
-                        average_payoff_per_group = (
-                            self.compute_average_payoff_per_group(
-                                self.contribution,
-                                self.prev_punishment,
-                                self.contribution_valid,
-                                common_good_per_agent,
-                            )
-                        )
-
                         self.reward = (
                             average_payoff_per_group.gather(1, self.group) / 32
                         )
