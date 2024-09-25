@@ -4,6 +4,7 @@ Usage:
   run.py run <parameter_file_name> [--prepare-only] [--inplace]
   run.py merge <run_folder>
 """
+
 import os
 from docopt import docopt
 import papermill as pm
@@ -46,6 +47,7 @@ else:
     output_path = "notebooks/merge.ipynb"
     parameter = {"run": arguments["<run_folder>"]}
 
+print(f"Running {import_path} with parameters {parameter}")
 
 pm.execute_notebook(
     import_path,

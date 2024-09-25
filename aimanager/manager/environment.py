@@ -36,7 +36,9 @@ class ArtificialHumanEnv:
         n_punishments,
         n_rounds,
         device,
+        n_groups=1,
         default_values=None,
+        reward_formula="common_good",
     ):
         """
         Args:
@@ -62,34 +64,44 @@ class ArtificialHumanEnv:
         self.device = device
         self.n_contributions = n_contributions
         self.n_punishments = n_punishments
+        self.n_groups = n_groups
         self.artifical_humans = artifical_humans
         self.artifical_humans_valid = artifical_humans_valid
         self.n_agents = n_agents
-        self.edge_index = create_fully_connected(n_agents)
+        self.reward_formula = reward_formula
+        self.batch = th.tensor(
+            [i for i in range(self.batch_size) for a in range(self.n_agents)],
+            device=self.device,
+            dtype=th.int64,
+        )
+
+        self.reset_state()
+        agent_groups = th.zeros((batch_size, n_agents), device=device, dtype=th.int64)
+        self.update_groups(agent_groups)
+        self.reset()
+
+    def update_groups(self, agent_groups):
+        """
+        Updates the groups of agents.
+
+        Args:
+            agent_groups: (batch_size, n_agents) tensor containing the group of each agent.
+        """
+        self.group = agent_groups.unsqueeze(-1)
         self.batch_edge_index = th.tensor(
             [
                 [a + (i * self.n_agents), b + (i * self.n_agents)]
                 for i in range(self.batch_size)
                 for a in range(self.n_agents)
                 for b in range(self.n_agents)
-                if a != b
+                if (a != b) and (agent_groups[i, a] == agent_groups[i, b])
             ],
             device=self.device,
             dtype=th.int64,
         ).T
-
-        self.batch = th.tensor(
-            [i for i in range(self.batch_size) for a in range(self.n_agents)],
-            device=self.device,
-            dtype=th.int64,
-        )
-        self.groups = [
-            [(i * self.n_agents + a) for a in range(self.n_agents)]
-            for i in range(self.batch_size)
-        ]
-
-        self.reset_state()
-        self.reset()
+        self.agent_group_mask = th.nn.functional.one_hot(
+            agent_groups, num_classes=self.n_groups
+        ).unsqueeze(-1)
 
     def reset_state(self):
         size = (self.batch_size, self.n_agents, 1)
@@ -104,15 +116,9 @@ class ArtificialHumanEnv:
             "contributor_payoff": th.zeros(size, dtype=th.float, device=self.device),
             "manager_payoff": th.zeros(size, dtype=th.float, device=self.device),
             "reward": th.zeros(size, dtype=th.float, device=self.device),
-            "group": th.tensor(
-                [[i for a in g] for i, g in enumerate(self.groups)],
-                dtype=th.int64,
-                device=self.device,
-            ),
-            "agent": th.tensor(
-                [[a for a in g] for i, g in enumerate(self.groups)],
-                dtype=th.int64,
-                device=self.device,
+            "group": th.zeros(size, dtype=th.int64, device=self.device),
+            "group_payoff": th.zeros(
+                (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
             ),
         }
 
@@ -140,35 +146,128 @@ class ArtificialHumanEnv:
         else:
             object.__setattr__(self, name, value)
 
+    def compute_common_good_per_group(
+        self, contribution, punishment, contribution_valid
+    ):
+        # Method is used with punishment and prev_punishment in update_common_good and update_reward
+        # Set the contribution and punishment to 0 if they are not valid
+        contribution = th.where(contribution_valid, contribution, 0)
+        punishment = th.where(contribution_valid, punishment, 0)
+
+        # Add a dimension for the groups
+        contribution = contribution.unsqueeze(-2) * self.agent_group_mask
+        punishment = punishment.unsqueeze(-2) * self.agent_group_mask
+        contribution_valid = contribution_valid.unsqueeze(-2) * self.agent_group_mask
+
+        # Sum over the agents for each group
+        sum_contribution = contribution.sum(dim=1)
+        sum_punishment = punishment.sum(dim=1)
+        sum_contribution_valid = contribution_valid.sum(dim=1)
+
+        # Calculate the common good per group
+        common_good_per_group = (
+            sum_contribution * 1.6 - sum_punishment
+        ) / sum_contribution_valid
+        # Set common good to 0 if no valid contributions
+        common_good_per_group = th.where(
+            sum_contribution_valid > 0, common_good_per_group, 0
+        )
+        return common_good_per_group
+
+    def compute_average_payoff_per_group(
+        self, contribution, punishment, contribution_valid, common_good
+    ):
+        # Used both with punishment and prev_punishment in update_payoff and update_reward
+        # Compute the payoff for the contributors
+        contributor_payoff = 20 - contribution - punishment + common_good
+
+        # Set the payoff to 0 if the contribution is not valid
+        contributor_payoff = th.where(contribution_valid, contributor_payoff, 0)
+
+        # Compute the average payoff for each group
+        average_payoff_per_group = (
+            contributor_payoff.unsqueeze(-2) * self.agent_group_mask
+        )
+        contribution_valid = contribution_valid.unsqueeze(-2) * self.agent_group_mask
+
+        average_payoff_per_group = average_payoff_per_group.sum(
+            dim=1
+        ) / contribution_valid.sum(dim=1)
+        average_payoff_per_group = th.where(
+            contribution_valid.sum(dim=1) > 0, average_payoff_per_group, 0
+        )
+        return contributor_payoff, average_payoff_per_group
+
     def update_common_good(self):
-        masked_contribution = th.where(self.contribution_valid, self.contribution, 0)
-        masked_punishment = th.where(self.contribution_valid, self.punishment, 0)
-        sum_contribution = masked_contribution.sum(dim=1, keepdim=True)
-        sum_punishment = masked_punishment.sum(dim=1, keepdim=True)
-        sum_contribution_valid = self.contribution_valid.sum(dim=1, keepdim=True)
-        self.common_good = (
-            (sum_contribution * 1.6 - sum_punishment) / sum_contribution_valid
-        ).expand(-1, self.n_agents, -1)
-        # handle division by zero
-        self.common_good = th.where(sum_contribution_valid > 0, self.common_good, 0)
+        common_good_per_group = self.compute_common_good_per_group(
+            self.contribution, self.punishment, self.contribution_valid
+        )
+
+        # Broadcast the common good of each group to the agents
+        common_good_per_agent = common_good_per_group.gather(1, self.group)
+        self.common_good = common_good_per_agent
 
     def update_payoff(self):
-        contributor_payoff = 20 - self.contribution - self.punishment + self.common_good
-        self.contributor_payoff = th.where(
-            self.contribution_valid, contributor_payoff, 0
+
+        self.contributor_payoff, self.group_payoff = (
+            self.compute_average_payoff_per_group(
+                self.contribution,
+                self.punishment,
+                self.contribution_valid,
+                self.common_good,
+            )
         )
-        self.manager_payoff = self.common_good / 4
+
+        # Broadcast the average payoff of each group to the agents
+        self.manager_payoff = self.group_payoff.gather(1, self.group)
 
     def update_reward(self):
-        masked_contribution = th.where(self.contribution_valid, self.contribution, 0)
         masked_prev_punishment = th.where(
             self.prev_contribution_valid, self.prev_punishment, 0
         )
+        masked_contribution = th.where(self.contribution_valid, self.contribution, 0)
 
         if self.done:
             self.reward = -masked_prev_punishment.to(th.float) / 32
         else:
-            self.reward = (masked_contribution * 1.6 - masked_prev_punishment) / 32
+            if self.reward_formula == "common_good":
+                self.reward = (masked_contribution * 1.6 - masked_prev_punishment) / 32
+            elif self.reward_formula == "impact_on_group_payoff":
+                self.reward = (
+                    masked_contribution * 0.6 - masked_prev_punishment * 2
+                ) / 32
+            elif self.reward_formula in ("payoff", "true_common_good", "group_payoff"):
+                # Compute common_good with prev punishment
+                common_good_per_group = self.compute_common_good_per_group(
+                    self.contribution, self.prev_punishment, self.contribution_valid
+                )
+
+                # Broadcast the common good of each group to the agents
+                common_good_per_agent = common_good_per_group.gather(1, self.group)
+
+                if self.reward_formula == "true_common_good":
+                    self.reward = common_good_per_agent / 32
+                else:
+                    contributor_payoff, average_payoff_per_group = (
+                        self.compute_average_payoff_per_group(
+                            self.contribution,
+                            self.prev_punishment,
+                            self.contribution_valid,
+                            common_good_per_agent,
+                        )
+                    )
+                    masked_payoff = th.where(
+                        self.contribution_valid, contributor_payoff, 0
+                    )
+                    if self.reward_formula == "payoff":
+                        self.reward = masked_payoff / 32
+                    elif self.reward_formula == "group_payoff":
+                        self.reward = (
+                            average_payoff_per_group.gather(1, self.group) / 32
+                        )
+
+            else:
+                raise ValueError(f"Unknown reward formula: {self.reward_formula}")
 
     def update_contribution(self):
         contribution = self.artifical_humans.predict(
@@ -202,15 +301,17 @@ class ArtificialHumanEnv:
         return self.state
 
     def punish(self, punishment):
+        assert self.state is not None
         assert punishment.max() < self.n_punishments
         assert punishment.dtype == th.int64
         self.punishment = punishment
         self.punishment_valid = th.ones_like(self.punishment_valid)
         self.update_common_good()
-        # self.update_payoff()
+        self.update_payoff()
         return self.state
 
     def step(self):
+        assert self.state is not None
         self.round_number += 1
         self.is_first = th.zeros_like(self.is_first)
         if self.done:

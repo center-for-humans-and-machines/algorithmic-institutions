@@ -13,10 +13,12 @@ params:
   artificial_humans: data/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
   artificial_humans_valid: data/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
   artificial_humans_model: graph
+  job_id: 15_exp2
+  seed: 42
   manager_args:
     opt_args:
       lr: 3.e-4
-    gamma: 1.0
+    gamma: 0.8
     eps: 0.1
     target_update_freq: 1000
     model_args:
@@ -33,27 +35,20 @@ params:
           encoding: numeric
         - etype: bool
           name: contribution_valid
-        - etype: bool
-          name: prev_contribution_valid
       b_encoding:
         - name: round_number
-          n_levels: 16
+          n_levels: 32
           encoding: onehot
   replay_memory_args:
     n_episodes: 100
-  n_update_steps: 20000
+  n_update_steps: 100000
   eval_period: 20
   training_batch_size: 1
   env_args:
     n_agents: 4
     n_contributions: 21
     n_punishments: 31
-    n_rounds: 16
+    n_rounds: 24
     batch_size: 1000
+    reward_formula: true_common_good
   device: cuda
-grid:
-  - labels.architecture: [node, node+edge+rnn]
-    manager_args.model_args.add_rnn: [false, true]
-    manager_args.model_args.add_edge_model: [false, true]
-  - labels.run: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    seed: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]

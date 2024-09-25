@@ -1,4 +1,5 @@
 import torch as th
+
 from aimanager.manager.environment import ArtificialHumanEnv
 
 
@@ -16,6 +17,138 @@ class MockArtificialHumanValid:
 
     def predict(self, state, reset_rnn, edge_index):
         return (th.ones((state["contribution"].shape), dtype=th.bool),)
+
+
+def test_multi_group_env():
+    test_punish = th.tensor([[[1], [0], [1], [0], [1], [0]]])
+    default_values = {
+        "punishment": 1,
+        "contribution": 1,
+        "payoffs": 1,
+        "contribution_valid": True,
+        "common_good": 1,
+        "round_number": 1,
+        "player_id": 1,
+    }
+    artifical_humans = MockArtificialHuman(default_values=default_values)
+    artifical_humans_valid = MockArtificialHumanValid()
+
+    env = ArtificialHumanEnv(
+        artifical_humans=artifical_humans,
+        artifical_humans_valid=artifical_humans_valid,
+        batch_size=1,
+        n_agents=6,
+        n_contributions=3,
+        n_punishments=3,
+        n_rounds=3,
+        n_groups=2,
+        device="cpu",
+        default_values={
+            "punishment": 0,
+            "contribution": 0,
+            "round_number": 0,
+            "is_first": False,
+            "contribution_valid": False,
+            "punishment_valid": False,
+            "common_good": 0,
+            "contributor_payoff": 0,
+            "manager_payoff": 0,
+            "reward": 0,
+        },
+        reward_formula="group_payoff",
+    )
+
+    env.update_groups(th.tensor([[0, 0, 0, 1, 1, 1]]))
+
+    env.punish(test_punish)
+
+    old_state = env.state.copy()
+
+    all_common_good = []
+    all_reward = []
+    all_contribution = []
+    all_punishment = []
+
+    all_contribution.append(env.contribution)
+    all_punishment.append(env.punishment)
+    all_common_good.append(env.common_good)
+
+    # Test step
+    state, reward, done = env.step()
+    env.punish(test_punish)
+    all_common_good.append(env.common_good)
+
+    all_reward.append(env.reward)
+    all_contribution.append(env.contribution)
+    all_punishment.append(env.punishment)
+
+    assert th.allclose(env.punishment, test_punish)
+    assert th.allclose(env.prev_punishment, old_state["punishment"])
+    assert th.allclose(env.prev_contribution, old_state["contribution"])
+    assert th.allclose(env.round_number, th.tensor([[[1], [1], [1], [1], [1], [1]]]))
+    assert th.allclose(env.group, th.tensor([[[0], [0], [0], [1], [1], [1]]]))
+    assert th.allclose(
+        env.common_good,
+        th.tensor(
+            [
+                [[(3 * 1.6 - th.sum(test_punish[0, :3])) / 3]] * 3
+                + [[(3 * 1.6 - th.sum(test_punish[0, 3:])) / 3]] * 3,
+            ]
+        ),
+    )
+    assert th.allclose(
+        env.group_payoff,
+        th.tensor(
+            [
+                [
+                    [
+                        (
+                            th.sum(env.common_good[0, :3])
+                            - th.sum(test_punish[0, :3])
+                            + 19 * 3
+                        )
+                        / 3
+                    ],
+                    [
+                        (
+                            th.sum(env.common_good[0, 3:])
+                            - th.sum(test_punish[0, 3:])
+                            + 19 * 3
+                        )
+                        / 3
+                    ],
+                ]
+            ]
+        ),
+    )
+
+    # Finish the game
+    while not done:
+        state, reward, done = env.step()
+        all_reward.append(env.reward)
+        if not done:
+            all_common_good.append(env.common_good)
+            all_contribution.append(env.contribution)
+            all_punishment.append(env.punishment)
+        env.punish(test_punish)
+
+    # Test cummulative rewards
+    all_common_good = th.cat(all_common_good, axis=-1)
+    all_contribution = th.cat(all_contribution, axis=-1)
+    all_punishment = th.cat(all_punishment, axis=-1)
+    all_reward = th.cat(all_reward, axis=-1)
+
+    assert th.allclose(
+        all_common_good.sum(dim=1),
+        all_contribution.sum(dim=1) * 1.6 - all_punishment.sum(dim=1),
+    )
+
+    assert th.allclose(
+        all_reward[:, :, -1] * 32,
+        -all_punishment[:, :, -1].float(),
+    )
+
+    assert done
 
 
 def test_artificial_human_env():
@@ -87,8 +220,7 @@ def test_artificial_human_env():
     assert env.state["contributor_payoff"].shape == (2, 3, 1)
     assert env.state["manager_payoff"].shape == (2, 3, 1)
     assert env.state["reward"].shape == (2, 3, 1)
-    assert env.state["group"].shape == (2, 3)
-    assert env.state["agent"].shape == (2, 3)
+    assert env.state["group"].shape == (2, 3, 1)
 
     # Test if the contribution works correctly
     assert th.allclose(env.contribution, th.tensor([[[1], [1], [1]], [[1], [1], [1]]]))
