@@ -13,6 +13,8 @@ def sample_groups(
     between_group_std: float,
     within_group_std: float,
     experiments: int,
+    condition2_between_group_std: float = None,
+    condition2_within_group_std: float = None,
 ):
     r"""
     Let \sigma_b^2 be the between-group variance, \sigma_w^2 be the within-group variance, and g be the group size.
@@ -24,15 +26,28 @@ def sample_groups(
 
     We can ignore the fixed offset \mu
     """
-    sampled_group_effects = np.random.normal(
-        0, between_group_std, n_groups_per_condition * 2 * experiments
-    ).reshape((experiments, 2, n_groups_per_condition))
+    if condition2_between_group_std is None:
+        condition2_between_group_std = between_group_std
+    if condition2_within_group_std is None:
+        condition2_within_group_std = within_group_std
+
+    sampled_group_effects = np.empty((experiments, 2, n_groups_per_condition))
+    for i, std in enumerate([between_group_std, condition2_between_group_std]):
+        sampled_group_effects[:, i] = np.random.normal(
+            0, std, n_groups_per_condition * experiments
+        ).reshape((experiments, n_groups_per_condition))
+
+    sampled_individual_effects = np.empty(
+        (experiments, 2, n_groups_per_condition, group_size)
+    )
+    for i, std in enumerate([within_group_std, condition2_within_group_std]):
+        sampled_individual_effects[:, i] = np.random.normal(
+            0, std, n_groups_per_condition * experiments * group_size
+        ).reshape((experiments, n_groups_per_condition, group_size))
+
     sampled_group_effects = np.repeat(
         sampled_group_effects[..., np.newaxis], group_size, axis=3
     )
-    sampled_individual_effects = np.random.normal(
-        0, within_group_std, group_size * 2 * experiments * n_groups_per_condition
-    ).reshape((experiments, 2, n_groups_per_condition, group_size))
 
     effect = np.zeros((experiments, 2, n_groups_per_condition, group_size))
     effect[:, 1] = mean_diff
