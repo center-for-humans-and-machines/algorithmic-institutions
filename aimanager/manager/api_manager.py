@@ -45,9 +45,11 @@ def create_data(rounds, groups, default_values):
             [
                 [
                     [
-                        int(value)
-                        if (is_valid and g1 == g2)
-                        else int(default_values[default_key])
+                        (
+                            int(value)
+                            if (is_valid and g1 == g2)
+                            else int(default_values[default_key])
+                        )
                         for value, is_valid, g1 in zip(
                             r[record_key], r[f"{record_key}_valid"], r["group"]
                         )
@@ -131,7 +133,7 @@ class RLManager:
 
 
 class DummyManager:
-    def __init__(self, **_):
+    def __init__(self, copy_punishment=False, **_):
         self.model = None
         self.default_values = {
             "contribution": 0,
@@ -139,6 +141,7 @@ class DummyManager:
             "contribution_valid": False,
             "punishment_valid": False,
         }
+        self.copy_punishment = copy_punishment
 
     def get_punishments(self, data):
         return data["punishment"]
@@ -156,6 +159,7 @@ class MultiManager:
         }
         self.groups = list(self.managers.keys())
         self.group_idx = {k: i for i, k in enumerate(managers.keys())}
+
         self.manager_info = managers
 
     def get_punishments_external(self, rounds: List[RoundExternal]):
@@ -186,6 +190,14 @@ class MultiManager:
             k: v[group_idx, th.arange(len(group_idx)), -1].tolist()
             for k, v in punishment.items()
         }
+
+        # Copy the punishment from the last round if the dummy manager has copy_punishment set to true
+        for k, m in self.managers.items():
+            if hasattr(m, "copy_punishment") and m.copy_punishment:
+                assert (
+                    rounds[-1]["punishment"] is not None
+                ), "Specified to copy punishment but did not provide punishment"
+                punishment[k] = rounds[-1]["punishment"]
 
         # we select the punishment where the group matches the model
         matched_punishment = [
