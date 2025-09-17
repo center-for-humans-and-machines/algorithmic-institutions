@@ -260,6 +260,7 @@ def basic_plots(dfe: pd.DataFrame, save_path: str):
         errorbar=None,
         linestyle="-",
     )
+    plt.savefig(os.path.join(save_path, "payoff_group.png"))
     plt.title("Average Payoff per group over rounds")
     plt.close()
 
@@ -438,26 +439,72 @@ def add_past_round_averages_by_governor(dfc: pd.DataFrame) -> pd.DataFrame:
     # Ensure proper ordering for cumulative calculations
     dfm = dfm.sort_values(["session", "group_idx", "groups", "round"])  # stable sort
 
-    # Cumulative average up to previous round for each governor
+    # Cumulative averages: up to previous round (past_avg) and including current (to_date_avg)
     for col in metrics:
         dfm[f"{col}_past_avg"] = dfm.groupby(["session", "group_idx", "groups"])[
             col
         ].transform(lambda s: s.expanding().mean().shift(1))
+        dfm[f"{col}_to_date_avg"] = dfm.groupby(["session", "group_idx", "groups"])[
+            col
+        ].transform(lambda s: s.expanding().mean())
 
     # Split by governor and rename columns
     past_cols = [f"{m}_past_avg" for m in metrics]
+    todate_cols = [f"{m}_to_date_avg" for m in metrics]
 
     dfai = dfm[dfm["groups"] == "ai_governor"][
-        ["session", "group_idx", "round"] + past_cols
-    ].rename(columns={c: c.replace("_past_avg", "_past_avg_ai") for c in past_cols})
+        ["session", "group_idx", "round"] + past_cols + todate_cols
+    ].rename(
+        columns={
+            **{c: c.replace("_past_avg", "_past_avg_ai") for c in past_cols},
+            **{c: c.replace("_to_date_avg", "_to_date_avg_ai") for c in todate_cols},
+        }
+    )
 
     dfh = dfm[dfm["groups"] == "human_punishment"][
-        ["session", "group_idx", "round"] + past_cols
-    ].rename(columns={c: c.replace("_past_avg", "_past_avg_h") for c in past_cols})
+        ["session", "group_idx", "round"] + past_cols + todate_cols
+    ].rename(
+        columns={
+            **{c: c.replace("_past_avg", "_past_avg_h") for c in past_cols},
+            **{c: c.replace("_to_date_avg", "_to_date_avg_h") for c in todate_cols},
+        }
+    )
 
     # Merge back to participant-level rows for the same (session, group_idx, round)
     dfc = dfc.merge(dfai, on=["session", "group_idx", "round"], how="left")
     dfc = dfc.merge(dfh, on=["session", "group_idx", "round"], how="left")
+
+    # Fill missing past averages using previous round's to-date averages, per (session, group_idx)
+    dfc = dfc.sort_values(["session", "group_idx", "round"])  # stable sort
+    past_ai_cols = [f"{m}_past_avg_ai" for m in metrics]
+    past_h_cols = [f"{m}_past_avg_h" for m in metrics]
+    todate_ai_cols = [f"{m}_to_date_avg_ai" for m in metrics]
+    todate_h_cols = [f"{m}_to_date_avg_h" for m in metrics]
+
+    # Previous round's to-date (includes last round where governor existed)
+    prev_todate_ai = dfc.groupby(["session", "group_idx"], group_keys=False)[
+        todate_ai_cols
+    ].apply(lambda g: g.shift(1).ffill())
+    prev_todate_h = dfc.groupby(["session", "group_idx"], group_keys=False)[
+        todate_h_cols
+    ].apply(lambda g: g.shift(1).ffill())
+
+    # Fill NAs in past averages with prev to-date
+    for m in metrics:
+        dfc[f"{m}_past_avg_ai"] = dfc[f"{m}_past_avg_ai"].fillna(
+            prev_todate_ai[f"{m}_to_date_avg_ai"]
+        )
+        dfc[f"{m}_past_avg_h"] = dfc[f"{m}_past_avg_h"].fillna(
+            prev_todate_h[f"{m}_to_date_avg_h"]
+        )
+
+    # Optional: forward-fill any remaining gaps in past averages within group
+    dfc[past_ai_cols] = dfc.groupby(["session", "group_idx"])[past_ai_cols].ffill()
+    dfc[past_h_cols] = dfc.groupby(["session", "group_idx"])[past_h_cols].ffill()
+
+    # Drop helper to-date columns to keep dfc tidy
+    drop_cols = todate_ai_cols + todate_h_cols
+    dfc = dfc.drop(columns=[c for c in drop_cols if c in dfc.columns])
 
     # AI - Human deltas for the past-average metrics
     dfc["contributions_past_avg_delta"] = (
@@ -557,7 +604,19 @@ def individual_correlations(df: pd.DataFrame) -> pd.DataFrame:
     ]
     dependent_vars = ["chose_algorithmic"]
 
+    # Debug: print which rows are dropped because of which var
+    dropped_info = {}
+    for col in independent_vars + dependent_vars:
+        missing_mask = df[col].isna()
+        dropped_rows = df[missing_mask]
+        if not dropped_rows.empty:
+            dropped_info[col] = dropped_rows.index.tolist()
+    if dropped_info:
+        print("Rows dropped due to NaNs in columns:")
+        for col, idxs in dropped_info.items():
+            print(f"  {col}: {idxs}")
     df = df.dropna(subset=independent_vars + dependent_vars)
+    print(df.shape, df.columns)
     df = df[independent_vars + dependent_vars]
     print(df.corr()[dependent_vars])
 
