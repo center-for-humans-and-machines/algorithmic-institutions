@@ -18,7 +18,7 @@ def multimerge(dfs, on):
     return reduce(lambda left, right: pd.merge(left, right, on=on, how="outer"), dfs)
 
 
-def load_data(data_folders, evals_path="evals"):
+def load_data(data_folders, evals_path="notebooks/test_manager/simulate_mixed"):
     def clean_run_name(run_name):
         return run_name.replace("ah full managed by ", "")
 
