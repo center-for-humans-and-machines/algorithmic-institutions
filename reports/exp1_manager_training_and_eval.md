@@ -45,6 +45,7 @@ to include the simulation runs that you actually have.
 At `notebooks/test_manager/simulate_group_selection.ipynb` you find code to simulate group selection behavior with the RL managers and the humanlike manager. You may want to adapt the loaded managers to the ones that you train. This is still very crude given that our humanlike manager model is pretty bad. So I'd guess we need to work on new evaluations that maybe make use of the experiment 1 data or the experiment 2 pilot data.
 
 But with this, you can create plots like this
+
 ![](../plots/group_selection/manager_compare_payoff.png)
 
 
