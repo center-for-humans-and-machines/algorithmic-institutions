@@ -7,13 +7,15 @@ This is pretty much unmodified from the code when I joined the project. And I di
 * `djx run/behavioral_cloning/21_contribution_model_v4.yml`
 * `djx run/behavioral_cloning/22_contribution_valid_model_v4.yml`
 
-There are artifacts for the expected resulting models at `artifacts/behavioral_cloning/21_contribution_model_v4/model` and `artifacts/behavioral_cloning/22_contribution_model_v4/model`
+There are artifacts for the expected resulting models at `artifacts/behavioral_cloning/21_contribution_model_v4/model` and `artifacts/behavioral_cloning/22_contribution_model_v4/model`.
+
+Note: If you fail to load any model artifact, the reason is very likely that the `torch_geometric` version that you are using is different from the one that created the artifact.
 
 ## RL model
 Here I tried out a lot of different reward functions. The config I ended up with is at [run/manager/17_exp2_group_payoff_heavy_optimize.yml](run/manager/17_exp2_group_payoff_heavy_optimize.yml). To train it run
 * `djx run/manager/17_exp2_group_payoff_heavy_optimize.yml`
 
-The resulting model is also stored as an artifact in this repo at [artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt](artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt)
+The resulting model is also stored as an artifact in this repo at [artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt](artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt).
 
 The other yml files in `run/manager` are mostly for different reward functions.
 
