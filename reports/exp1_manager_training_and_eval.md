@@ -12,10 +12,10 @@ There are artifacts for the expected resulting models at `artifacts/behavioral_c
 Note: If you fail to load any model artifact, the reason is very likely that the `torch_geometric` version that you are using is different from the one that created the artifact.
 
 ## RL model
-Here I tried out a lot of different reward functions. The config I ended up with is at [run/manager/17_exp2_group_payoff_heavy_optimize.yml](run/manager/17_exp2_group_payoff_heavy_optimize.yml). To train it run
+Here I tried out a lot of different reward functions. The config I ended up with is at [run/manager/17_exp2_group_payoff_heavy_optimize.yml](../run/manager/17_exp2_group_payoff_heavy_optimize.yml). To train it run
 * `djx run/manager/17_exp2_group_payoff_heavy_optimize.yml`
 
-The resulting model is also stored as an artifact in this repo at [artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt](artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt).
+The resulting model is also stored as an artifact in this repo at [artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt](../artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt).
 
 The other yml files in `run/manager` are mostly for different reward functions.
 
@@ -37,7 +37,7 @@ These `data.csv` can further be used to create a plot like this
 
 ![](../plots/key_metrics.png)
 
-This plot is created using [key_eval_measures.py](notebooks/test_manager/key_eval_measures.py). You will need to adapt the line
+This plot is created using [key_eval_measures.py](../notebooks/test_manager/key_eval_measures.py). You will need to adapt the line
 ```python
 df = load_data(["05_all", "10_few", "11_one", "09_some", "12_heavies"])
 ```
