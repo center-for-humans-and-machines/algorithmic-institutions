@@ -259,13 +259,13 @@ class GraphNetwork(th.nn.Module):
                 else {}
             ),
         }
-        n_groups, n_player, n_rounds, _ = encoded["x"].shape
+        n_batch, n_player, n_rounds, _ = encoded["x"].shape
         encoded = {k: v.flatten(0, 1) for k, v in encoded.items() if v is not None}
         encoded["batch"] = th.tensor(
-            [i for i in range(n_groups) for j in range(n_player)], device=device
+            [i for i in range(n_batch) for j in range(n_player)], device=device
         )
         if edge_index is None:
-            edge_index = self.create_fully_connected(n_player, n_groups=n_groups)
+            edge_index = self.create_fully_connected(n_player, n_batch=n_batch)
         encoded["edge_index"] = edge_index
         encoded = {k: v.to(device) for k, v in encoded.items() if v is not None}
         return encoded
@@ -280,7 +280,7 @@ class GraphNetwork(th.nn.Module):
     def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
         n_batch, n_nodes, n_rounds = data[self.y_name].shape
         if edge_index is None:
-            edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
+            edge_index = self.create_fully_connected(n_nodes, n_batch=n_batch)
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
@@ -296,7 +296,7 @@ class GraphNetwork(th.nn.Module):
         ), "Autoregressive predictions do not support RNN"
 
         n_batch, n_nodes, n_rounds = data["contribution"].shape
-        edge_index = self.create_fully_connected(n_nodes, n_groups=n_batch)
+        edge_index = self.create_fully_connected(n_nodes, n_batch=n_batch)
 
         agent_order = np.arange(n_nodes)
         agent_order = np.random.permutation(agent_order)
@@ -382,11 +382,11 @@ class GraphNetwork(th.nn.Module):
         self.device = device
         return super().to(device)
 
-    def create_fully_connected(self, n_nodes, n_groups=1):
+    def create_fully_connected(self, n_nodes, n_batch=1):
         return th.tensor(
             [
                 [i + k * n_nodes, j + k * n_nodes]
-                for k in range(n_groups)
+                for k in range(n_batch)
                 for i in range(n_nodes)
                 for j in range(n_nodes)
                 if i != j
