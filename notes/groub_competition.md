@@ -15,3 +15,31 @@ Rough todos:
 * Implement network update during playouts
 * Retrain on updated reward
 * Maybe you can look first into the running another pilot with minimum group size.
+
+
+
+
+
+
+
+# Thoughts
+* Manager punish group member in round t
+* Member moves in different group in round t+1
+
+
+# We mainly need to make sure that if
+* a group member is entering a group, punishments from the other manager are not to be applied
+* 
+
+        # We assuming a decomposition of the Q-value, in which the managers q value 
+        # can be decomposed into individual q values for the actions on each agent
+
+        
+
+Strategty
+* First reshape rewards to agents during training (should work for fixed groups)
+* Second, implement summing q values for reward (second step)
+
+
+
+
