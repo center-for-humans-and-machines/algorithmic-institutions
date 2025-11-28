@@ -103,7 +103,7 @@ class ArtificalManager:
 
         return picked_actions
 
-    def update(self, update_step, action, reward, group, **obs):
+    def update(self, update_step, action, reward, agent_group_mask, **obs):
         if update_step % self.target_update_freq == 0:
             # copy policy net to target net
             self.target_model.load_state_dict(self.policy_model.state_dict())
@@ -120,7 +120,7 @@ class ArtificalManager:
             -1, action.unsqueeze(-1)
         )  # episodes, agents, round, 1
 
-        next_v = th.zeros_like(reward, device=self.device)
+        current_q_group = th.einsum('eari,ag->egri', current_q, agent_group_mask) # episodes, groups, round, 1
 
         # we skip the first observation and set the future value for the terminal
         # state to 0
@@ -131,15 +131,16 @@ class ArtificalManager:
             *action.shape, -1
         )  # episodes, agents, round, actions
 
-        next_v[:, :, :-1] = next_q_values[:, :, 1:].max(-1)[0].detach()
+        max_next_q_value = next_q_values[:, :, 1:].max(-1)[0].detach() # episodes, agents, round-1
+        max_next_q_value_group = th.einsum('ear,ag->egr', max_next_q_value, agent_group_mask) # episodes, groups, round-1
+        next_v = th.zeros_like(reward, device=self.device)
+        next_v[:, :, :-1] = max_next_q_value_group # episodes, groups, round
 
-        # works only for fixed groups
-        reward_per_agent = reward.gather(1, group)
         # Compute the expected Q values
-        expected_q = (next_v * self.gamma) + reward_per_agent
+        expected_q = (next_v * self.gamma) + reward # episodes, groups, round
 
         # Compute Huber loss
-        loss = th.nn.functional.smooth_l1_loss(current_q, expected_q.unsqueeze(-1))
+        loss = th.nn.functional.smooth_l1_loss(current_q_group, expected_q.unsqueeze(-1))
 
         # Compute the loss for each agent and round
         loss_ur = th.nn.functional.smooth_l1_loss(
