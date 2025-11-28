@@ -64,3 +64,8 @@ A:
 B: 
 
 
+
+
+# TODO
+
+[] Check if group and action is correct in regard to round, given the weired shift I am working with 
