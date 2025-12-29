@@ -171,6 +171,7 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
                 **sample,
                 batch=env.batch,
                 edge_index=env.batch_edge_index,
+                group=env.group
             )
 
         if (update_step % eval_period) == 0:
