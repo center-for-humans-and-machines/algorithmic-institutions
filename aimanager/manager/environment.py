@@ -1,3 +1,4 @@
+from multiprocessing import Value
 import torch as th
 
 
@@ -104,8 +105,9 @@ class ArtificialHumanEnv:
         ).unsqueeze(-1)
 
     def reset_state(self):
-        size = (self.batch_size, self.n_agents, 1)
-        state = {
+        size = (self.n_rounds, self.batch_size, self.n_agents)
+        self.round = 0
+        self.state = {
             "punishment": th.zeros(size, dtype=th.int64, device=self.device),
             "contribution": th.zeros(size, dtype=th.int64, device=self.device),
             "round_number": th.zeros(size, dtype=th.int64, device=self.device),
@@ -114,7 +116,6 @@ class ArtificialHumanEnv:
             "punishment_valid": th.zeros(size, dtype=th.bool, device=self.device),
             "common_good": th.zeros(size, dtype=th.float, device=self.device),
             "contributor_payoff": th.zeros(size, dtype=th.float, device=self.device),
-            # "manager_payoff": th.zeros(size, dtype=th.float, device=self.device), 
             "reward": th.zeros(size, dtype=th.float, device=self.device),
             "agent_group": th.zeros(size, dtype=th.int64, device=self.device),
             "group_payoff": th.zeros(
@@ -122,17 +123,17 @@ class ArtificialHumanEnv:
             ),
         }
 
-        prev_state = {
-            f"prev_{k}": th.full_like(state[k], fill_value=self.default_values[k])
-            for k, t in state.items()
-            if k in self.default_values
-        }
-        self.state = {**prev_state, **state}
 
     def __getattr__(self, name):
         if "state" in self.__dict__:
             state = self.__dict__["state"]
-            return state[name]
+            if name in state:
+                return state[name][self.round]
+            elif 'prev' in name and name[5:] in state:
+                return state[name[5:]][self.round - 1]
+            elif 'full' in name and name[5:] in state:
+                return state[name[5:]]
+            
 
     def __setattr__(self, name, value):
         if "state" in self.__dict__:
@@ -140,9 +141,9 @@ class ArtificialHumanEnv:
                 assert (
                     value.shape == self.state[name].shape
                 ), f"Shape of {name} does not match. [{value.shape} != {self.state[name].shape}]"
-                self.state[name] = value
+                self.state[name][self.round] = value
             else:
-                object.__setattr__(self, name, value)
+                raise ValueError(f"Unknown attribute: {name}")
         else:
             object.__setattr__(self, name, value)
 
@@ -268,7 +269,7 @@ class ArtificialHumanEnv:
     def update_contribution(self):
         contribution = self.artifical_humans.predict(
             self.state,
-            reset_rnn=self.round_number[0, 0, 0] == 0,
+            reset_rnn=self.round == 0,
             edge_index=self.batch_edge_index,
         )[0]
 
@@ -276,7 +277,7 @@ class ArtificialHumanEnv:
         if self.artifical_humans_valid is not None:
             contribution_valid = self.artifical_humans_valid.predict(
                 self.state,
-                reset_rnn=self.round_number[0, 0, 0] == 0,
+                reset_rnn=self.round == 0,
                 edge_index=self.batch_edge_index,
             )[0]
             contribution_valid = contribution_valid.to(th.bool)
@@ -289,12 +290,29 @@ class ArtificialHumanEnv:
         self.contribution = contribution
         self.contribution_valid = contribution_valid
 
+    def view_state(self):
+        current_state = {
+            k: v[self.round] for k, v in self.state.items()
+        }
+        if self.round == 0:
+            prev_state = {
+                f"prev_{k}": th.full_like(self.state[k], fill_value=self.default_values[k])
+                for k, t in self.state.items()
+                if k in self.default_values
+            }
+        else:
+            prev_state = {
+                f"prev_{k}": v[self.round - 1] for k, v in self.state.items() if k in self.default_values
+            }
+        return {**current_state, **prev_state}
+
+
     def reset(self):
-        self.round_number = th.zeros_like(self.round_number)
+        self.round = 0
         self.done = False
         self.reset_state()
         self.update_contribution()
-        return self.state
+        return self.view_state()
 
     def punish(self, punishment):
         assert self.state is not None
@@ -304,20 +322,18 @@ class ArtificialHumanEnv:
         self.punishment_valid = th.ones_like(self.punishment_valid)
         self.update_common_good()
         self.update_payoff()
-        return self.state
+        return self.view_state()
 
     def step(self):
         assert self.state is not None
         self.round_number += 1
+        self.round += 1
         self.is_first = th.zeros_like(self.is_first)
         if self.done:
             raise ValueError("Environment is done already.")
-        for k in self.state:
-            if k[:4] == "prev":
-                self.state[k] = self.state[k[5:]]
-        if self.round_number[0, 0] == (self.n_rounds):
+        if self.round == (self.n_rounds):
             self.done = True
         else:
             self.update_contribution()
         self.update_reward()
-        return self.state, self.reward, self.done
+        return self.view_state(), self.reward, self.done
