@@ -102,23 +102,22 @@ class ArtificalManager:
         greedy_actions = greedy_actions.squeeze(1)         # (E, A, T)
         return greedy_actions
 
+    def expand_obs_for_groups(self, obs, n_groups):
+        exclude_keys = ["group_payoff"]
 
-def expand_obs_for_groups(self, obs, n_groups):
-    exclude_keys = ["group_payoff"]
+        E, A, T = obs["agent_group"].shape[:3]
 
-    E, A, T = obs["agent_group"].shape[:3]
+        obs_group = {
+            k: v.unsqueeze(1).expand(
+                E, n_groups, *v.shape[1:]   # -> (E, G, A, T, ...)
+            ) for k, v in obs.items() if k not in exclude_keys
+        }
+        group_idx = th.arange(n_groups, device=self.device).view(1, n_groups, 1, 1)
+        obs_group["group"] = group_idx.expand(E, n_groups, A, T)
+        obs_group["in_group"] = obs_group["group"] == obs_group["agent_group"]
 
-    obs_group = {
-        k: v.unsqueeze(1).expand(
-            E, n_groups, *v.shape[1:]   # -> (E, G, A, T, ...)
-        ) for k, v in obs.items() if k not in exclude_keys
-    }
-    group_idx = th.arange(n_groups, device=self.device).view(1, n_groups, 1, 1)
-    obs_group["group"] = group_idx.expand(E, n_groups, A, T)
-    obs_group["in_group"] = obs_group["group"] == obs_group["agent_group"]
-
-    obs_group = {k: v.reshape(E * n_groups, *v.shape[2:]) for k, v in obs_group.items()}
-    return obs_group
+        obs_group = {k: v.reshape(E * n_groups, *v.shape[2:]) for k, v in obs_group.items()}
+        return obs_group
 
     def update(self, update_step, action, reward, **obs):
         if update_step % self.target_update_freq == 0:
