@@ -1,0 +1,37 @@
+[project]
+name = "algorithmic-institutions"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "djx",
+    "docopt>=0.6.2",
+    "lxml>=6.0.2",
+    "matplotlib<=3.7.3",
+    "numpy<2.0.0",
+    "pandas>=2.3.3",
+    "pandera>=0.26.1",
+    "pyarrow==6.0.0",
+    "pyyaml>=6.0.3",
+    "scikit-learn>=1.6.1",
+    "scipy>=1.13.1",
+    "seaborn>=0.13.2",
+    "statannotations>=0.7.2",
+    "statsmodels>=0.14.6",
+]
+
+[dependency-groups]
+dev = [
+    "autopep8>=2.3.2",
+    "black>=25.11.0",
+    "flake8>=7.3.0",
+    "ipdb>=0.13.13",
+    "ipykernel>=6.31.0",
+    "ipython>=8.18.1",
+    "papermill>=2.6.0",
+    "pytest>=8.4.2",
+]
+
+[tool.uv.sources]
+djx = { git = "https://github.com/dkollective/djx.git" }
