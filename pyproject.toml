@@ -5,21 +5,28 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "djx",
     "docopt>=0.6.2",
     "lxml>=6.0.2",
     "matplotlib<=3.7.3",
     "numpy<2.0.0",
     "pandas>=2.3.3",
     "pandera>=0.26.1",
-    "pyarrow==6.0.0",
+    "pyarrow>=10",
     "pyyaml>=6.0.3",
     "scikit-learn>=1.6.1",
     "scipy>=1.13.1",
     "seaborn>=0.13.2",
     "statannotations>=0.7.2",
     "statsmodels>=0.14.6",
+    "torch==1.11.0",
+    "torch-scatter==2.0.9",
+    "torch-sparse==0.6.13",
+    "torch-cluster==1.6.0",
+    "torch-spline-conv==1.2.1",
+    "torch-geometric==2.5.0",
+    "fastparquet>=2024.11.0",
 ]
+
 
 [dependency-groups]
 dev = [
@@ -33,5 +40,7 @@ dev = [
     "pytest>=8.4.2",
 ]
 
-[tool.uv.sources]
-djx = { git = "https://github.com/dkollective/djx.git" }
+[tool.uv]
+find-links = [
+  "https://data.pyg.org/whl/torch-1.11.0+cu102.html"
+]
