@@ -2,6 +2,35 @@
 
 ## Install main package
 
+### 0. Installing `uv` 
+It is advised to use `uv` as the virtual environment manager. Install `uv` if you don't have it already:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+check also [uv installation instructions](https://docs.astral.sh/uv/getting-started/installation/)
+
+### 1. Create and activate virtual environment
+
+you can easily create and activate a virtual environment using `uv`:
+```bash
+uv sync
+```
+this will create a virtual environment in `.venv` folder and install all dependencies listed in `pyproject.toml` file.
+
+You can then activate the virtual environment using:
+```bash
+source .venv/bin/activate
+```
+
+### 2. Installing `djx` sub-module
+Install `djx` sub-module in editable mode:
+```bash
+uv pip install -e djx
+```
+
+### 3. Alternative: Manual virtual environment setup
+If you prefer to set up the virtual environment manually without `uv`, you can follow these steps:
+
 ```
 python3.9 -m venv .venv
 . .venv/bin/activate
