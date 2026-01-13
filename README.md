@@ -1,5 +1,14 @@
 # Setup
 
+## Clone repository with sub-modules on Tardis Cluster
+
+> You need to run this command on Tardis Cluster.
+
+To clone the repository along with its sub-modules, use the following command:
+```bash
+git clone --recurse-submodules git@github.com:center-for-humans-and-machines/algorithmic-institutions.git
+```
+
 ## Install main package
 
 ### 0. Installing `uv` 
@@ -28,7 +37,7 @@ Install `djx` sub-module in editable mode:
 uv pip install -e djx
 ```
 
-### 3. Alternative: Manual virtual environment setup
+### 2. Alternative: Manual virtual environment setup
 If you prefer to set up the virtual environment manually without `uv`, you can follow these steps:
 
 ```
