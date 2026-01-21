@@ -52,7 +52,23 @@ pip install -e djx
 ```
 
 # Notebooks
+Tardis and Raven clusters use different slurm scripts. To run scripts on the GPU infrastructure one needs to modify the script field in the respective config file accordingly.
+```yaml
+# Tardis
+...
+exec:
+  command: python run.py run {job_file}
+  script_name: gpu
+  cores: 2
+...
 
+# Raven
+exec:
+  command: python run.py run {job_file}
+  script_name: gpu_raven
+  cores: 2
+...
+```
 
 ## Retrain Models
 
