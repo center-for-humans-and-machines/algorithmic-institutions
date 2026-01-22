@@ -18,7 +18,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "statannotations>=0.7.2",
     "statsmodels>=0.14.6",
-    "torch==1.11.0",
+    "torch==1.11.0+cu113",
     "torch-scatter==2.0.9",
     "torch-sparse==0.6.13",
     "torch-cluster==1.6.0",
@@ -42,5 +42,14 @@ dev = [
 
 [tool.uv]
 find-links = [
-  "https://data.pyg.org/whl/torch-1.11.0+cu102.html"
+  "https://download.pytorch.org/whl/cu113",
+  "https://data.pyg.org/whl/torch-1.11.0+cu113.html"
 ]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu113" }
+
+[[tool.uv.index]]
+name = "pytorch-cu113"
+url = "https://download.pytorch.org/whl/cu113"
+explicit = true

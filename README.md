@@ -20,8 +20,17 @@ check also [uv installation instructions](https://docs.astral.sh/uv/getting-star
 
 ### 1. Create and activate virtual environment
 
+This project supports 2 clusters:
+1. Tardis
+2. Raven
+Due to cuda compatibility, we have two sets of uv environment files(`.toml` and `.lock`).
+You can change the names of the files to what uv is expecting before running `uv sync`.
+
 you can easily create and activate a virtual environment using `uv`:
 ```bash
+# Example for Tardis (same for Raven named files)
+# change tardis.lock --> uv.lock
+# change tardis.toml --> pyproject.toml
 uv sync
 ```
 this will create a virtual environment in `.venv` folder and install all dependencies listed in `pyproject.toml` file.
@@ -52,7 +61,23 @@ pip install -e djx
 ```
 
 # Notebooks
+Tardis and Raven clusters use different slurm scripts. To run scripts on the GPU infrastructure one needs to modify the script field in the respective config file accordingly.
+```yaml
+# Tardis
+...
+exec:
+  command: python run.py run {job_file}
+  script_name: gpu
+  cores: 2
+...
 
+# Raven
+exec:
+  command: python run.py run {job_file}
+  script_name: gpu_raven
+  cores: 2
+...
+```
 
 ## Retrain Models
 
