@@ -227,11 +227,14 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
         "loss",
     ]
 
-    print(f"Saving metrics dataframe to {os.path.join(metrics_dir, f"{job_id}.parquet")}")
+    
+
+    metrics_path = os.path.join(metrics_dir, f"{job_id}.parquet")
+    print(f"Saving metrics dataframe to {metrics_path}")
     df = pd.DataFrame.from_records(metrics_list)
     df = df.melt(id_vars=id_vars, value_vars=value_vars, var_name="metric")
     df = add_labels(df, {**labels, "job_id": job_id})
-    df.to_parquet(os.path.join(metrics_dir, f"{job_id}.parquet"))
+    df.to_parquet(metrics_path)
 
     return model_file
 
