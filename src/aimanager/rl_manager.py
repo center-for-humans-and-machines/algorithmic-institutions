@@ -6,6 +6,13 @@ from itertools import count
 import numpy as np
 import pandas as pd
 import torch as th
+# pytorch geometric meta module has changed place
+# since the the saving of the training data, this points
+# to the new location
+import torch_geometric.nn.models.meta as meta_module
+sys.modules['torch_geometric.nn.meta'] = meta_module
+
+from tqdm import tqdm
 import yaml
 
 from aimanager.manager.memory import Memory
@@ -14,6 +21,7 @@ from aimanager.artificial_humans import AH_MODELS
 from aimanager.manager.manager import ArtificalManager
 from aimanager.utils.utils import make_dir
 from aimanager.utils.array_to_df import add_labels
+
 
 
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "rl_manager.yml")
@@ -32,6 +40,7 @@ replay_keys = []
 
 def load_config(path: str = None) -> dict:
     """Load YAML config for the RL manager."""
+    print(f"Loading config from {path}")
     config_path = path or DEFAULT_CONFIG_PATH
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
@@ -91,6 +100,7 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
     cpu = th.device("cpu")
 
     # Seeding
+    print(f"Seeding with seed {config['seed']}")
     seed = config["seed"]
     th.random.manual_seed(seed)
     np.random.seed(seed)
@@ -100,6 +110,8 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
     output_dir = data_dir or config["output_dir"]
     metrics_dir = os.path.join(output_dir, "metrics")
     model_dir = os.path.join(output_dir, "model")
+    print(f"Output directories: metrics_dir={metrics_dir},"\
+                f" model_dir={model_dir}")
     make_dir(metrics_dir)
     make_dir(model_dir)
 
@@ -110,6 +122,8 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
         basedir, config["artificial_humans_valid"]
     )
 
+    print(f"Loading artificial humans from {artificial_humans_path}" \
+                f" and {artificial_humans_valid_path}")
     ah = AH_MODELS[config["artificial_humans_model"]].load(
         artificial_humans_path, device=device
     ).to(device)
@@ -117,6 +131,7 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
         artificial_humans_valid_path, device=device
     ).to(device)
 
+    print(f"Creating environment with {config['env_args']}")
     env = ArtificialHumanEnv(
         artifical_humans=ah,
         artifical_humans_valid=ahv,
@@ -152,7 +167,8 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
     training_batch_size = config["training_batch_size"]
     eval_period = config["eval_period"]
 
-    for update_step in range(n_update_steps):
+    print(f"Training manager for {n_update_steps} update steps")
+    for update_step in tqdm(range(n_update_steps)):
         # here we sample one batch of episodes and add them to the replay buffer
         off_policy_metrics = run_batch(
             manager, env, replay_mem, on_policy=False, update_step=update_step
@@ -189,10 +205,12 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
             )
 
     model_file = os.path.join(model_dir, f"{job_id}_manager.pt")
+    print(f"Saving manager to {model_file}")
 
     manager.save(model_file)
 
     # test model saving and loading
+    print(f"Loading manager from {model_file}")
     manager.load(model_file, device=device)
 
     id_vars = ["round_number", "sampling", "update_step"]
@@ -209,6 +227,7 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
         "loss",
     ]
 
+    print(f"Saving metrics dataframe to {os.path.join(metrics_dir, f"{job_id}.parquet")}")
     df = pd.DataFrame.from_records(metrics_list)
     df = df.melt(id_vars=id_vars, value_vars=value_vars, var_name="metric")
     df = add_labels(df, {**labels, "job_id": job_id})
