@@ -16,7 +16,7 @@
 #
 #SBATCH --time=01:00:00
 
-CONFIG_PATH=${1:-"notebooks/test_manager/simulate_mixed/01_compare.yml"}
+CONFIG_PATH=${1:-"configs/simulation/01_compare.yml"}
 
 set -e
 
@@ -24,4 +24,4 @@ source .venv/bin/activate
 
 module load cuda/11.4
 
-python run.py run $CONFIG_PATH
+python src/simulation/simulate.py $CONFIG_PATH
