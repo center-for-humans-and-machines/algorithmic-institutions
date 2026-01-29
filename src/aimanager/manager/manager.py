@@ -103,7 +103,7 @@ class ArtificalManager:
 
         return picked_actions
 
-    def update(self, update_step, action, reward, **obs):
+    def update(self, update_step, action, reward, group, **obs):
         if update_step % self.target_update_freq == 0:
             # copy policy net to target net
             self.target_model.load_state_dict(self.policy_model.state_dict())
@@ -133,8 +133,10 @@ class ArtificalManager:
 
         next_v[:, :, :-1] = next_q_values[:, :, 1:].max(-1)[0].detach()
 
+        # works only for fixed groups
+        reward_per_agent = reward.gather(1, group)
         # Compute the expected Q values
-        expected_q = (next_v * self.gamma) + reward
+        expected_q = (next_v * self.gamma) + reward_per_agent
 
         # Compute Huber loss
         loss = th.nn.functional.smooth_l1_loss(current_q, expected_q.unsqueeze(-1))

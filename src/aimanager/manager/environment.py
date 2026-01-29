@@ -114,7 +114,7 @@ class ArtificialHumanEnv:
             "punishment_valid": th.zeros(size, dtype=th.bool, device=self.device),
             "common_good": th.zeros(size, dtype=th.float, device=self.device),
             "contributor_payoff": th.zeros(size, dtype=th.float, device=self.device),
-            "manager_payoff": th.zeros(size, dtype=th.float, device=self.device),
+            # "manager_payoff": th.zeros(size, dtype=th.float, device=self.device), 
             "reward": th.zeros(size, dtype=th.float, device=self.device),
             "group": th.zeros(size, dtype=th.int64, device=self.device),
             "group_payoff": th.zeros(
@@ -198,6 +198,26 @@ class ArtificialHumanEnv:
         )
         return contributor_payoff, average_payoff_per_group
 
+    def compute_average_per_group(
+        self, metric, valid=None
+    ):
+        if valid is None:
+            valid = th.one_like(metric, dtype=th.bool)
+
+        sum_per_group = (
+            metric.unsqueeze(-2) * self.agent_group_mask
+        )
+        valid_per_group = valid.unsqueeze(-2) * self.agent_group_mask
+
+        average_per_group = sum_per_group.sum(
+            dim=1
+        ) / valid_per_group.sum(dim=1)
+
+        average_per_group = th.where(
+            valid_per_group.sum(dim=1) > 0, average_per_group, 0
+        )
+        return average_per_group
+
     def update_common_good(self):
         common_good_per_group = self.compute_common_good_per_group(
             self.contribution, self.punishment, self.contribution_valid
@@ -219,51 +239,29 @@ class ArtificialHumanEnv:
         )
 
         # Broadcast the average payoff of each group to the agents
-        self.manager_payoff = self.group_payoff.gather(1, self.group)
+        # self.manager_payoff = self.group_payoff.gather(1, self.group) # no longer needed
 
     def update_reward(self):
-        masked_prev_punishment = th.where(self.prev_contribution_valid, self.prev_punishment, th.zeros_like(self.prev_punishment))
-        masked_contribution = th.where(self.contribution_valid, self.contribution, th.zeros_like(self.contribution))
-
+        masked_prev_punishment = th.where(
+            self.prev_contribution_valid, self.prev_punishment, 0
+        )
         if self.done:
-            self.reward = -masked_prev_punishment.to(th.float) / 32
+            average_masked_punishment_per_group = self.compute_average_per_group(masked_prev_punishment)
+            self.reward = -average_masked_punishment_per_group / 32 # new computation per group
         else:
-            if self.reward_formula == "common_good":
-                self.reward = (masked_contribution * 1.6 - masked_prev_punishment) / 32
-            elif self.reward_formula == "impact_on_group_payoff":
-                self.reward = (
-                    masked_contribution * 0.6 - masked_prev_punishment * 2
-                ) / 32
-            elif self.reward_formula in ("payoff", "true_common_good", "group_payoff"):
-                # Compute common_good with prev punishment
+            if self.reward_formula == "group_payoff":
+                # this assumes all groups in the batch to be identicial compositioned
+                contribution_per_group = self.compute_average_per_group(self.contribution, self.contribution_valid)
+                # this additional assumes that groups do not change throughout the game
+                prev_punishment_per_group = self.compute_average_per_group(self.prev_punishment, self.contribution_valid)
                 common_good_per_group = self.compute_common_good_per_group(
                     self.contribution, self.prev_punishment, self.contribution_valid
                 )
-
-                # Broadcast the common good of each group to the agents
-                common_good_per_agent = common_good_per_group.gather(1, self.group)
-
-                if self.reward_formula == "true_common_good":
-                    self.reward = common_good_per_agent / 32
-                else:
-                    contributor_payoff, average_payoff_per_group = (
-                        self.compute_average_payoff_per_group(
-                            self.contribution,
-                            self.prev_punishment,
-                            self.contribution_valid,
-                            common_good_per_agent,
-                        )
-                    )
-                    masked_payoff = th.where(
-                        self.contribution_valid, contributor_payoff, th.zeros_like(contributor_payoff)
-                    )
-                    if self.reward_formula == "payoff":
-                        self.reward = masked_payoff / 32
-                    elif self.reward_formula == "group_payoff":
-                        self.reward = (
-                            average_payoff_per_group.gather(1, self.group) / 32
-                        )
-
+                payoff_per_group = 20 - contribution_per_group - prev_punishment_per_group + common_good_per_group
+                self.reward = payoff_per_group / 32
+            elif self.reward_formula == 'group_payoff_round':
+                # this assumes all groups in the batch to be identicial compositioned
+                self.reward = self.group_payoff
             else:
                 raise ValueError(f"Unknown reward formula: {self.reward_formula}")
 
