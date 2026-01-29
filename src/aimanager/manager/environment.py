@@ -38,7 +38,7 @@ class ArtificialHumanEnv:
         device,
         n_groups=1,
         default_values=None,
-        reward_formula="common_good",
+        reward_formula="group_payoff",
     ):
         """
         Args:
@@ -202,7 +202,7 @@ class ArtificialHumanEnv:
         self, metric, valid=None
     ):
         if valid is None:
-            valid = th.one_like(metric, dtype=th.bool)
+            valid = th.ones_like(metric, dtype=th.bool)
 
         sum_per_group = (
             metric.unsqueeze(-2) * self.agent_group_mask
@@ -214,7 +214,7 @@ class ArtificialHumanEnv:
         ) / valid_per_group.sum(dim=1)
 
         average_per_group = th.where(
-            valid_per_group.sum(dim=1) > 0, average_per_group, 0
+            valid_per_group.sum(dim=1) > 0, average_per_group, th.zeros_like(average_per_group)
         )
         return average_per_group
 
@@ -247,7 +247,8 @@ class ArtificialHumanEnv:
         )
         if self.done:
             average_masked_punishment_per_group = self.compute_average_per_group(masked_prev_punishment)
-            self.reward = -average_masked_punishment_per_group / 32 # new computation per group
+            # Broadcast the average masked punishment of each group to the agents
+            self.reward = -average_masked_punishment_per_group.gather(1, self.group) / 32 # new computation per group
         else:
             if self.reward_formula == "group_payoff":
                 # this assumes all groups in the batch to be identicial compositioned
@@ -258,7 +259,8 @@ class ArtificialHumanEnv:
                     self.contribution, self.prev_punishment, self.contribution_valid
                 )
                 payoff_per_group = 20 - contribution_per_group - prev_punishment_per_group + common_good_per_group
-                self.reward = payoff_per_group / 32
+                # Broadcast the per-group payoff to per-agent
+                self.reward = payoff_per_group.gather(1, self.group) / 32
             elif self.reward_formula == 'group_payoff_round':
                 # this assumes all groups in the batch to be identicial compositioned
                 self.reward = self.group_payoff

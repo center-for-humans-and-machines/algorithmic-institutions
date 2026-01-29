@@ -31,7 +31,8 @@ rec_keys = [
     "contribution",
     "common_good",
     "contributor_payoff",
-    "manager_payoff",
+    # "manager_payoff",
+    "group_payoff",
 ]
 
 # Will be set in train_manager based on the encoding config
@@ -89,7 +90,7 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
     return metric_list
 
 
-def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str = None):
+def train_manager(config: dict, labels=None, data_dir: str = None):
     """Train the manager using the provided config."""
     global replay_keys
 
@@ -159,6 +160,9 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
     replay_keys = [n["name"] for n in model_args["x_encoding"]]
     replay_keys += [n["name"] for n in model_args["b_encoding"]]
     replay_keys += ["punishment"]
+    # add group to replay keys after moving
+    # individual reward to group reward
+    replay_keys += ["group"]
     replay_keys = list(set(replay_keys))
 
     metrics_list = []
@@ -187,7 +191,6 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
                 **sample,
                 batch=env.batch,
                 edge_index=env.batch_edge_index,
-                group=env.group
             )
 
         if (update_step % eval_period) == 0:
@@ -205,7 +208,7 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
                 )
             )
 
-    model_file = os.path.join(model_dir, f"{job_id}_manager.pt")
+    model_file = os.path.join(model_dir, f"{config['job_id']}_manager.pt")
     print(f"Saving manager to {model_file}")
 
     manager.save(model_file)
@@ -220,21 +223,22 @@ def train_manager(config: dict, job_id: str = "none", labels=None, data_dir: str
         "contribution",
         "common_good",
         "contributor_payoff",
-        "manager_payoff",
+        # "manager_payoff",
         "next_reward",
         "q_min",
         "q_max",
         "q_mean",
         "loss",
+        "group_payoff",
     ]
 
     
 
-    metrics_path = os.path.join(metrics_dir, f"{job_id}.parquet")
+    metrics_path = os.path.join(metrics_dir, f"{config['job_id']}.parquet")
     print(f"Saving metrics dataframe to {metrics_path}")
     df = pd.DataFrame.from_records(metrics_list)
     df = df.melt(id_vars=id_vars, value_vars=value_vars, var_name="metric")
-    df = add_labels(df, {**labels, "job_id": job_id})
+    df = add_labels(df, {**labels, "job_id": config['job_id']})
     df.to_parquet(metrics_path)
 
     return model_file

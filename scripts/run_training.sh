@@ -14,7 +14,7 @@
 #SBATCH --constraint="gpu"
 #SBATCH --gres=gpu:a100:1
 #
-#SBATCH --time=03:00:00
+#SBATCH --time=08:00:00
 
 CONFIG_PATH=${1:-"src/aimanager/rl_manager.yml"}
 

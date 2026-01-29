@@ -29,7 +29,7 @@ manager_args:
 replay_memory_args:
   n_episodes: 10
 
-n_update_steps: 20000
+n_update_steps: 20
 training_batch_size: 3
 eval_period: 5
 
@@ -39,6 +39,7 @@ env_args:
   n_punishments: 31
   n_rounds: 16
   batch_size: 1000
+  reward_formula: group_payoff
 
 device: "cuda"
 seed: 42
