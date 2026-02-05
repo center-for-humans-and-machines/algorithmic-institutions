@@ -73,6 +73,9 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
 
     df_sim = punishments.merge(common_good).merge(contributions).merge(group)
 
+    # Calculate payoff: endowment (20) - contribution - punishment + common_good
+    df_sim["payoff"] = 20 - df_sim["contribution"] - df_sim["punishment"] + df_sim["common_good"]
+
     df_sim["participant_code"] = (
         df_sim["participant_code"].astype(str) + "_" + df_sim["episode"].astype(str)
     )
@@ -234,6 +237,8 @@ def load_pilot_data(basedir: str) -> pd.DataFrame:
 
     df_pilot["run"] = df_pilot["experiment_name"].map(experiment_name_map)
     df_pilot["common_good"] = df_pilot["common_good"] / 4
+    # Calculate payoff: endowment (20) - contribution - punishment + common_good
+    df_pilot["payoff"] = 20 - df_pilot["contribution"] - df_pilot["punishment"] + df_pilot["common_good"]
     df_pilot = df_pilot[
         [
             "round_number",
@@ -241,6 +246,7 @@ def load_pilot_data(basedir: str) -> pd.DataFrame:
             "contribution",
             "participant_code",
             "punishment",
+            "payoff",
             "run",
             "global_group_id",
         ]
@@ -258,7 +264,7 @@ def create_plots(df: pd.DataFrame, output_dir: str, managers_config: dict) -> No
 
     dfm = df.melt(
         id_vars=["episode", "round_number", "participant_code", "run"],
-        value_vars=["punishment", "contribution", "common_good"],
+        value_vars=["punishment", "contribution", "common_good", "payoff"],
     )
 
     # Plot 1: Manager comparison
@@ -320,6 +326,7 @@ def create_plots(df: pd.DataFrame, output_dir: str, managers_config: dict) -> No
             "punishment": "mean",
             "contribution": "mean",
             "common_good": "mean",
+            "payoff": "mean",
         })
         .reset_index()
     )
