@@ -151,8 +151,8 @@ class ArtificialHumanEnv:
     ):
         # Method is used with punishment and prev_punishment in update_common_good and update_reward
         # Set the contribution and punishment to 0 if they are not valid
-        contribution = th.where(contribution_valid, contribution, 0)
-        punishment = th.where(contribution_valid, punishment, 0)
+        contribution = th.where(contribution_valid, contribution, th.zeros_like(contribution))
+        punishment = th.where(contribution_valid, punishment, th.zeros_like(punishment))
 
         # Add a dimension for the groups
         contribution = contribution.unsqueeze(-2) * self.agent_group_mask
@@ -170,7 +170,7 @@ class ArtificialHumanEnv:
         ) / sum_contribution_valid
         # Set common good to 0 if no valid contributions
         common_good_per_group = th.where(
-            sum_contribution_valid > 0, common_good_per_group, 0
+            sum_contribution_valid > 0, common_good_per_group, th.zeros_like(common_good_per_group)
         )
         return common_good_per_group
 
@@ -182,7 +182,7 @@ class ArtificialHumanEnv:
         contributor_payoff = 20 - contribution - punishment + common_good
 
         # Set the payoff to 0 if the contribution is not valid
-        contributor_payoff = th.where(contribution_valid, contributor_payoff, 0)
+        contributor_payoff = th.where(contribution_valid, contributor_payoff, th.zeros_like(contributor_payoff))
 
         # Compute the average payoff for each group
         average_payoff_per_group = (
@@ -194,7 +194,7 @@ class ArtificialHumanEnv:
             dim=1
         ) / contribution_valid.sum(dim=1)
         average_payoff_per_group = th.where(
-            contribution_valid.sum(dim=1) > 0, average_payoff_per_group, 0
+            contribution_valid.sum(dim=1) > 0, average_payoff_per_group, th.zeros_like(average_payoff_per_group)
         )
         return contributor_payoff, average_payoff_per_group
 
@@ -222,10 +222,8 @@ class ArtificialHumanEnv:
         self.manager_payoff = self.group_payoff.gather(1, self.group)
 
     def update_reward(self):
-        masked_prev_punishment = th.where(
-            self.prev_contribution_valid, self.prev_punishment, 0
-        )
-        masked_contribution = th.where(self.contribution_valid, self.contribution, 0)
+        masked_prev_punishment = th.where(self.prev_contribution_valid, self.prev_punishment, th.zeros_like(self.prev_punishment))
+        masked_contribution = th.where(self.contribution_valid, self.contribution, th.zeros_like(self.contribution))
 
         if self.done:
             self.reward = -masked_prev_punishment.to(th.float) / 32
@@ -257,7 +255,7 @@ class ArtificialHumanEnv:
                         )
                     )
                     masked_payoff = th.where(
-                        self.contribution_valid, contributor_payoff, 0
+                        self.contribution_valid, contributor_payoff, th.zeros_like(contributor_payoff)
                     )
                     if self.reward_formula == "payoff":
                         self.reward = masked_payoff / 32
