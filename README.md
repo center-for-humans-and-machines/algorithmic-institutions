@@ -163,3 +163,7 @@ python run.py run notebooks/test_manager/simulate_mixed/02_all_artifacts.yml
 | Run Name     | Run Folder        | Run File | Description                                                             |
 | ------------ | ----------------- | -------- | ----------------------------------------------------------------------- |
 | ahc_02_valid | artificial_humans | 02_valid | Model predicting if human contributors are making a valid contribution. |
+
+
+# Further Docs
+- The up-to-date version of the pipeline is detailed [here](reports/reproduce_rl_manager.md).
