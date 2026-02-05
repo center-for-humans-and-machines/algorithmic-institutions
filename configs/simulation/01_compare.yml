@@ -7,17 +7,17 @@ managers:
     type: human
     path: artifacts/behavioral_cloning/23_punishment_autoregressive_v4/model/architecture_node+edge.pt
     autoregressive: true
-  optimal_old:
+  baseline:
     type: rl
     path: artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt
-  raven_grouped_#26:
-    type: rl
-    path: artifacts/manager/01_rnn_node/model/raven_per_group_manager.pt
-  raven_common_good_#26:
+  after_pr5_#26:
     type: rl
     path: artifacts/manager/01_rnn_node/model/raven_common_good.pt
+  after_pr4_#26:
+    type: rl
+    path: artifacts/manager/01_rnn_node_v2/model/raven_per_group_manager.pt
 
-n_episode_steps: 32
+n_episode_steps: 24
 n_episodes: 100
-output_dir: artifacts/simulation/01_compare
+output_dir: artifacts/simulation/01_compare_v2
 base_dir: .
