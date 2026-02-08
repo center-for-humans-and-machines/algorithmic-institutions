@@ -115,7 +115,8 @@ class ArtificialHumanEnv:
             "common_good": th.zeros(size, dtype=th.float, device=self.device),
             "contributor_payoff": th.zeros(size, dtype=th.float, device=self.device),
             # "manager_payoff": th.zeros(size, dtype=th.float, device=self.device), 
-            "reward": th.zeros(size, dtype=th.float, device=self.device),
+            "reward": th.zeros(
+                (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device),
             "group": th.zeros(size, dtype=th.int64, device=self.device),
             "group_payoff": th.zeros(
                 (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
@@ -247,8 +248,7 @@ class ArtificialHumanEnv:
         )
         if self.done:
             average_masked_punishment_per_group = self.compute_average_per_group(masked_prev_punishment)
-            # Broadcast the average masked punishment of each group to the agents
-            self.reward = -average_masked_punishment_per_group.gather(1, self.group) / 32 # new computation per group
+            self.reward = -average_masked_punishment_per_group / 32
         else:
             if self.reward_formula == "group_payoff":
                 # this assumes all groups in the batch to be identicial compositioned
@@ -259,8 +259,7 @@ class ArtificialHumanEnv:
                     self.contribution, self.prev_punishment, self.contribution_valid
                 )
                 payoff_per_group = 20 - contribution_per_group - prev_punishment_per_group + common_good_per_group
-                # Broadcast the per-group payoff to per-agent
-                self.reward = payoff_per_group.gather(1, self.group) / 32
+                self.reward = payoff_per_group / 32
             elif self.reward_formula == 'group_payoff_round':
                 # this assumes all groups in the batch to be identicial compositioned
                 self.reward = self.group_payoff

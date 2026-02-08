@@ -103,7 +103,7 @@ class ArtificalManager:
 
         return picked_actions
 
-    def update(self, update_step, action, reward, **obs):
+    def update(self, update_step, action, reward, group, **obs):
         if update_step % self.target_update_freq == 0:
             # copy policy net to target net
             self.target_model.load_state_dict(self.policy_model.state_dict())
@@ -120,7 +120,10 @@ class ArtificalManager:
             -1, action.unsqueeze(-1)
         )  # episodes, agents, round, 1
 
-        next_v = th.zeros_like(reward, device=self.device)
+        # works only for fixed groups
+        reward_per_agent = reward.gather(1, group)
+
+        next_v = th.zeros_like(reward_per_agent, device=self.device)
 
         # we skip the first observation and set the future value for the terminal
         # state to 0
@@ -133,9 +136,6 @@ class ArtificalManager:
 
         next_v[:, :, :-1] = next_q_values[:, :, 1:].max(-1)[0].detach()
 
-        # works only for fixed groups
-        # already broadcasted in environment
-        reward_per_agent = reward
         # Compute the expected Q values
         expected_q = (next_v * self.gamma) + reward_per_agent
 
