@@ -1,22 +1,18 @@
 # Reproducing RL Manager Model
 
 To train the RL Manager model you need some human clone models to be trained first before running these. However, you can also use existing artifacts in the `artifacts/` folder.
+
+The following commands need to be run while the virtual environment is activated. Refer [here](../README.md) to set it up.
+
+## Training a Model
+The training is configured in a config file. An example config file can be found [here](../configs/training/01_rnn_node.yml)
+You can directly run this to train the model, passing the path to the config file to use as the sole argument:
 ```bash
-cp -r artifacts/behavioral_cloning/* data/behavioral_cloning/*
+sbatch scripts/run_training.sh configs/training/01_rnn_node.yml
 ```
-Then you can run the following command to train 
+## Run Simulation to Evaluate
+The following will run the simulations and save the results as configured in the yml file.
 ```bash
-djx run/manager/17_exp2_group_payoff_heavy_optimize.yml
+python src/simulation/run.py configs/simulation/01_compare.yml
 ```
-This would take circa 5 hours on a single GPU machine.
-
-
-## Evaluating New RL Manager Model
-To evaluate the newly trained RL Manager model, you can run the following  command on interactive GPU node:
-```python
-python run.py run notebooks/test_manager/simulate_mixed/12_b_heavies_mixed.yml
-```
-This would compare the newly trained RL Manager model against existing behavioral cloning models and old RL Manager model.
-
-You should expect similar performance of the newly trained RL Manager model against the old RL Manager model as shown in the report.
 
