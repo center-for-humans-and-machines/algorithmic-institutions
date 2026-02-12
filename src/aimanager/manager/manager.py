@@ -103,7 +103,7 @@ class ArtificalManager:
 
         return picked_actions
 
-    def update(self, update_step, action, reward, group, **obs):
+    def update(self, update_step, action, reward, agent_group_mask, **obs):
         if update_step % self.target_update_freq == 0:
             # copy policy net to target net
             self.target_model.load_state_dict(self.policy_model.state_dict())
@@ -119,11 +119,11 @@ class ArtificalManager:
         current_q = current_q.gather(
             -1, action.unsqueeze(-1)
         )  # episodes, agents, round, 1
-
-        # works only for fixed groups
-        reward_per_agent = reward.gather(1, group)
-
-        next_v = th.zeros_like(reward_per_agent, device=self.device)
+        
+        # squeeze last dummy dimension
+        # float is needed for the einsum operation to work
+        mask = agent_group_mask.squeeze(-1).float()  # (e, a, g, 1) -> (e, a, g)
+        current_q_group = th.einsum('eari,eag->egri', current_q, mask) # (e, g, r, 1)
 
         # we skip the first observation and set the future value for the terminal
         # state to 0
@@ -134,13 +134,20 @@ class ArtificalManager:
             *action.shape, -1
         )  # episodes, agents, round, actions
 
-        next_v[:, :, :-1] = next_q_values[:, :, 1:].max(-1)[0].detach()
+        max_next_q_value = next_q_values[:, :, 1:].max(-1)[0].detach() # episodes, agents, round-1
+        max_next_q_value_group = th.einsum('ear,eag->egr', max_next_q_value, mask) # episodes, groups, round-1
+        next_v = th.zeros_like(reward, device=self.device)
+        next_v[:, :, :-1] = max_next_q_value_group # episodes, groups, round
 
         # Compute the expected Q values
-        expected_q = (next_v * self.gamma) + reward_per_agent
+        expected_q_group = (next_v * self.gamma) + reward # episodes, groups, round
 
         # Compute Huber loss
-        loss = th.nn.functional.smooth_l1_loss(current_q, expected_q.unsqueeze(-1))
+        loss = th.nn.functional.smooth_l1_loss(current_q_group, expected_q_group.unsqueeze(-1))
+
+        # Map group values to agents explicitly instead of 
+        # loss_ur calculation doing it implicitly.
+        expected_q = th.einsum('egr,eag->ear', expected_q_group, mask) # (e, a, r)
 
         # Compute the loss for each agent and round
         loss_ur = th.nn.functional.smooth_l1_loss(
