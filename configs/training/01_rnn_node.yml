@@ -25,6 +25,8 @@ manager_args:
           encoding: numeric
         - etype: bool
           name: contribution_valid
+        - name: "in_group"
+          encoding: bool
       b_encoding:
         - name: round_number
           n_levels: 32
@@ -38,6 +40,7 @@ eval_period: 20
 training_batch_size: 1
 
 env_args:
+  n_groups: 2
   n_agents: 4
   n_contributions: 21
   n_punishments: 31
