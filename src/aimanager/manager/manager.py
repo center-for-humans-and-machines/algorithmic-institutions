@@ -110,7 +110,8 @@ class ArtificalManager:
         obs_group = {
             k: v.unsqueeze(1).expand(
                 E, n_groups, *v.shape[1:]   # -> (E, G, A, T, ...)
-            ) for k, v in obs.items() if k not in exclude_keys
+            ) for k, v in obs.items() 
+            if k not in exclude_keys and v.shape[0] == E
         }
         group_idx = th.arange(n_groups, device=self.device).view(1, n_groups, 1, 1)
         obs_group["group"] = group_idx.expand(E, n_groups, A, T)
@@ -127,7 +128,7 @@ class ArtificalManager:
         E, A, T = action.shape
         G = self.n_groups
         exp_obs = self.expand_obs_for_groups(obs, self.n_groups)
-        in_group = exp_obs['in_group'].reshape(E,G,A,T) # episodes, groups, agents, round
+        in_group = exp_obs['in_group'].reshape(E,G,A,T).float() # episodes, groups, agents, round
 
         self.policy_model.train()
         encoded = self.policy_model.encode(exp_obs, y_encode=False)
@@ -176,6 +177,7 @@ class ArtificalManager:
             "policy_model": self.policy_model.to(th.device("cpu")),
             "n_contributions": self.n_contributions,
             "n_punishments": self.n_punishments,
+            "n_groups": self.n_groups,
             "default_values": self.default_values,
         }
         th.save(to_save, filename)

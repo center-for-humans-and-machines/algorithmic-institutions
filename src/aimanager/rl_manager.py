@@ -153,9 +153,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     replay_keys = [n["name"] for n in model_args["x_encoding"]]
     replay_keys += [n["name"] for n in model_args["b_encoding"]]
     replay_keys += ["punishment"]
-    # add group to replay keys after moving
-    # individual reward to group reward
-    replay_keys += ["group"]
+    replay_keys += ["agent_group"]
     replay_keys = list(set(replay_keys))
 
     metrics_list = []
@@ -190,7 +188,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         if (update_step % eval_period) == 0:
             if sample is not None:
                 metrics_list.extend(
-                    [{**m, "loss": l.item()} for m, l in zip(off_policy_metrics, loss)]
+                    [{**m, "loss": loss.item()} for m in off_policy_metrics]
                 )
             metrics_list.extend(
                 run_batch(
