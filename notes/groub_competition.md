@@ -19,7 +19,8 @@ Rough todos:
 
 
 
-
+# Strategy
+* We update the interaction network for group members; but for the manager, we use fully connected
 
 
 # Thoughts
@@ -34,12 +35,37 @@ Rough todos:
         # We assuming a decomposition of the Q-value, in which the managers q value 
         # can be decomposed into individual q values for the actions on each agent
 
-        
 
-Strategty
+
+Strategty 1
 * First reshape rewards to agents during training (should work for fixed groups)
 * Second, implement summing q values for reward (second step)
 
 
+Strategy - enable dynamic groups
+* We doublicate the input data by the number of groups
+    * repeat observation to add group dimension
+    * add in-out group identifier
+    * reshape group into batch
+    * compute q
+    * reshape q to regain batch
+* We add to the input information if a group member is in the group, or the other group
+* We compute a single q-value for each group, agent and action
+* We only further consider the q-value for the group in which the actual agent is positioned
 
 
+Implementation Options
+A:
+* Doublicate in Manager
+* Compute ingroup metric in Manager
+* add metric to obs
+* ...
+
+B: 
+
+
+
+
+# TODO
+
+[] Check if group and action is correct in regard to round, given the weired shift I am working with 

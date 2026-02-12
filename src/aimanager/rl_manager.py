@@ -55,15 +55,7 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
     for round_number in count():
         statecopy = {k: v.clone() for k, v in state.items() if k in replay_keys}
 
-        # Get q values from controller
-        q_values = manager.get_q(
-            state, first=round_number == 0, edge_index=env.batch_edge_index
-        )
-        if on_policy:
-            action = q_values.argmax(-1)
-        else:
-            # Sample an action
-            action = manager.eps_greedy(q_values=q_values)
+        action, q_values = manager.get_action(state, greedy=on_policy)
 
         state = env.punish(action)
 
@@ -144,6 +136,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     manager = ArtificalManager(
         n_contributions=env.n_contributions,
         n_punishments=env.n_punishments,
+        n_groups=env.n_groups,
         default_values=ah.default_values,
         device=device,
         **manager_args,

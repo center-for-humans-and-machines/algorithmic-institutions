@@ -21,6 +21,8 @@ manager_args:
       - name: "prev_punishment"
         n_levels: 31
         encoding: "numeric"
+      - name: "in_group"
+        encoding: "bool"
     b_encoding:
       - name: "round_number"
         n_levels: 16
@@ -34,6 +36,7 @@ training_batch_size: 3
 eval_period: 5
 
 env_args:
+  n_groups: 2
   n_agents: 4
   n_contributions: 21
   n_punishments: 31
