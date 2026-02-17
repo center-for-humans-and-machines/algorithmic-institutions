@@ -65,13 +65,13 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
         columns=columns,
         value_name="contribution",
     )
-    group = using_multiindex(
-        recorder.memory["group"].squeeze(1).numpy(),
+    agent_group = using_multiindex(
+        recorder.memory["agent_group"].squeeze(1).numpy(),
         columns=columns,
-        value_name="group",
+        value_name="agent_group",
     )
 
-    df_sim = punishments.merge(common_good).merge(contributions).merge(group)
+    df_sim = punishments.merge(common_good).merge(contributions).merge(agent_group)
 
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
     df_sim["payoff"] = 20 - df_sim["contribution"] - df_sim["punishment"] + df_sim["common_good"]
@@ -111,6 +111,11 @@ def run_simulation(config: dict, output_dir: str) -> list:
     # Extract config parameters
     artificial_humans = config["artificial_humans"]
     managers_config = config["managers"]
+    n_groups = config["n_groups"]
+    n_agents = config["n_agents"]
+    n_contributions = config["n_contributions"]
+    n_punishments = config["n_punishments"]
+    n_rounds = config["n_rounds"]
     n_episode_steps = config["n_episode_steps"]
     n_episodes = config["n_episodes"]
     basedir = config.get("basedir", ".")
@@ -138,7 +143,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
     # Create runs: all combinations of managers and artificial humans
     runs = {
-        f"ah {h} managed by {m}": {"groups": [m] * 4, "humans": h}
+        f"ah {h} managed by {m}": {"groups": [m] * n_agents, "humans": h}
         for m in managers.keys()
         for h in artificial_humans.keys()
     }
@@ -147,7 +152,6 @@ def run_simulation(config: dict, output_dir: str) -> list:
     for name, run in runs.items():
         print(f"Start run {name}")
         groups = run["groups"]
-        n_agents = len(groups)
 
         # Load artificial humans
         hm_path = os.path.join(
@@ -165,9 +169,10 @@ def run_simulation(config: dict, output_dir: str) -> list:
             artifical_humans=ah,
             artifical_humans_valid=ah_val,
             n_agents=n_agents,
-            n_contributions=21,
-            n_punishments=31,
-            n_rounds=n_episode_steps,
+            n_contributions=n_contributions,
+            n_punishments=n_punishments,
+            n_rounds=n_rounds,
+            n_groups=n_groups,
             batch_size=1,
             device=device,
         )
@@ -256,7 +261,7 @@ def load_pilot_data(basedir: str) -> pd.DataFrame:
     return df_pilot
 
 
-def create_plots(df: pd.DataFrame, output_dir: str, managers_config: dict) -> None:
+def create_plots(df: pd.DataFrame, output_dir: str, managers_config: dict, figure_name: str = "") -> None:
     """Create and save comparison plots."""
     make_dir(output_dir)
 
@@ -292,6 +297,8 @@ def create_plots(df: pd.DataFrame, output_dir: str, managers_config: dict) -> No
             height=3,
             aspect=1,
         )
+        # add a name to the plot
+        g.fig.suptitle(f"Manager Comparison: {figure_name}", y=1.02)
         g.set(ylim=(0, None))
         g.savefig(os.path.join(output_dir, "comparison_manager.jpg"))
         plt.close()
@@ -377,7 +384,7 @@ def main():
         df = pd.concat(dfs).reset_index(drop=True)
 
     # Create plots
-    create_plots(df, output_dir, config["managers"])
+    create_plots(df, output_dir, config["managers"], config["figure_name"])
 
     print("Simulation complete!")
 
