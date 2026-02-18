@@ -13,6 +13,6 @@ sbatch scripts/run_training.sh configs/training/01_rnn_node.yml
 ## Run Simulation to Evaluate
 The following will run the simulations and save the results as configured in the yml file.
 ```bash
-python src/simulation/run.py configs/simulation/01_compare.yml
+python src/aimanager/simulation/run.py configs/simulation/01_compare.yml
 ```
 
