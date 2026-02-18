@@ -80,6 +80,14 @@ def create_data(rounds, groups, default_values):
     punishment = create_tensor("punishment", "punishment")
     punishment_valid = create_bool_tensor("punishment")
 
+    in_group = th.tensor(
+        [
+            [[g1 == g2 for g1 in r["group"]] for r in rounds]
+            for g2 in groups
+        ],
+        dtype=th.bool,
+    )
+
     group_size = len(rounds[-1]["contribution"])
     round_number = th.tensor(
         [[[r["round"]] * group_size for r in rounds] for _ in range(len(groups))],
@@ -93,6 +101,7 @@ def create_data(rounds, groups, default_values):
         "punishment_valid": punishment_valid.permute(0, 2, 1),
         "round_number": round_number.permute(0, 2, 1),
         "is_first": round_number.permute(0, 2, 1) == 0,
+        "in_group": in_group.permute(0, 2, 1),
     }
 
     calc_prev = ["punishment", "contribution", "punishment_valid", "contribution_valid"]
@@ -138,6 +147,7 @@ class DummyManager:
             "punishment": 0,
             "contribution_valid": False,
             "punishment_valid": False,
+            "in_group": False,
         }
 
     def get_punishments(self, data):

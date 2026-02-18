@@ -55,15 +55,7 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
     for round_number in count():
         statecopy = {k: v.clone() for k, v in state.items() if k in replay_keys}
 
-        # Get q values from controller
-        q_values = manager.get_q(
-            state, first=round_number == 0, edge_index=env.batch_edge_index
-        )
-        if on_policy:
-            action = q_values.argmax(-1)
-        else:
-            # Sample an action
-            action = manager.eps_greedy(q_values=q_values)
+        action, q_values = manager.get_action(state, greedy=on_policy)
 
         state = env.punish(action)
 
@@ -144,6 +136,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     manager = ArtificalManager(
         n_contributions=env.n_contributions,
         n_punishments=env.n_punishments,
+        n_groups=env.n_groups,
         default_values=ah.default_values,
         device=device,
         **manager_args,
@@ -160,9 +153,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     replay_keys = [n["name"] for n in model_args["x_encoding"]]
     replay_keys += [n["name"] for n in model_args["b_encoding"]]
     replay_keys += ["punishment"]
-    # add group to replay keys after moving
-    # individual reward to group reward
-    replay_keys += ["group"]
+    replay_keys += ["agent_group"]
     replay_keys = list(set(replay_keys))
 
     metrics_list = []
@@ -197,7 +188,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         if (update_step % eval_period) == 0:
             if sample is not None:
                 metrics_list.extend(
-                    [{**m, "loss": l.item()} for m, l in zip(off_policy_metrics, loss)]
+                    [{**m, "loss": loss.item()} for m in off_policy_metrics]
                 )
             metrics_list.extend(
                 run_batch(

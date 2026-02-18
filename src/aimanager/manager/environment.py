@@ -87,7 +87,7 @@ class ArtificialHumanEnv:
         Args:
             agent_groups: (batch_size, n_agents) tensor containing the group of each agent.
         """
-        self.group = agent_groups.unsqueeze(-1)
+        self.agent_groups = agent_groups.unsqueeze(-1)
         self.batch_edge_index = th.tensor(
             [
                 [a + (i * self.n_agents), b + (i * self.n_agents)]
@@ -117,7 +117,7 @@ class ArtificialHumanEnv:
             # "manager_payoff": th.zeros(size, dtype=th.float, device=self.device), 
             "reward": th.zeros(
                 (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device),
-            "group": th.zeros(size, dtype=th.int64, device=self.device),
+            "agent_group": th.zeros(size, dtype=th.int64, device=self.device),
             "group_payoff": th.zeros(
                 (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
             ),
@@ -225,7 +225,7 @@ class ArtificialHumanEnv:
         )
 
         # Broadcast the common good of each group to the agents
-        common_good_per_agent = common_good_per_group.gather(1, self.group)
+        common_good_per_agent = common_good_per_group.gather(1, self.agent_groups)
         self.common_good = common_good_per_agent
 
     def update_payoff(self):

@@ -7,14 +7,21 @@ managers:
     type: human
     path: artifacts/behavioral_cloning/23_punishment_autoregressive_v4/model/architecture_node+edge.pt
     autoregressive: true
-  baseline_pr4:
+  baseline_pr6:
     type: rl
     path: artifacts/manager/01_rnn_node_v2/model/raven_per_group_manager.pt
-  after_pr6:
+  after_pr7:
     type: rl
-    path: artifacts/manager/01_rnn_node/model/raven_per_group_manager.pt
+    path: artifacts/manager/01_rnn_node_v3/model/raven_per_group_manager.pt
 
 n_episode_steps: 24
 n_episodes: 100
-output_dir: artifacts/simulation/01_compare_v3
+n_groups: 2
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: artifacts/simulation/pr7_n_groups==2
+figure_name: n_groups==2
 base_dir: .
