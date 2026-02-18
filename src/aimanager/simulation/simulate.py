@@ -14,16 +14,10 @@ import sys
 from itertools import count
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch as th
 import yaml
-
-# pytorch geometric meta module has changed place
-# since the saving of the training data, this points to the new location
-import torch_geometric.nn.models.meta as meta_module
-sys.modules['torch_geometric.nn.meta'] = meta_module
 
 from aimanager.artificial_humans import GraphNetwork
 from aimanager.manager.api_manager import MultiManager
@@ -31,6 +25,12 @@ from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.manager.memory import Memory
 from aimanager.utils.array_to_df import using_multiindex
 from aimanager.utils.utils import make_dir
+
+# pytorch geometric meta module has changed place
+# since the saving of the training data, this points to the new location
+import torch_geometric.nn.models.meta as meta_module
+
+sys.modules["torch_geometric.nn.meta"] = meta_module
 
 
 def load_config(config_path: str) -> dict:
@@ -74,7 +74,9 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
     df_sim = punishments.merge(common_good).merge(contributions).merge(agent_group)
 
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
-    df_sim["payoff"] = 20 - df_sim["contribution"] - df_sim["punishment"] + df_sim["common_good"]
+    df_sim["payoff"] = (
+        20 - df_sim["contribution"] - df_sim["punishment"] + df_sim["common_good"]
+    )
 
     df_sim["participant_code"] = (
         df_sim["participant_code"].astype(str) + "_" + df_sim["episode"].astype(str)
@@ -128,7 +130,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
     # Add model_path to managers config
     managers = {
-        k: {**v, 'model_path': os.path.join(basedir, v['path'])}
+        k: {**v, "model_path": os.path.join(basedir, v["path"])}
         for k, v in managers_config.items()
     }
     print(f"Managers: {managers}")
@@ -243,7 +245,9 @@ def load_pilot_data(basedir: str) -> pd.DataFrame:
     df_pilot["run"] = df_pilot["experiment_name"].map(experiment_name_map)
     df_pilot["common_good"] = df_pilot["common_good"] / 4
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
-    df_pilot["payoff"] = 20 - df_pilot["contribution"] - df_pilot["punishment"] + df_pilot["common_good"]
+    df_pilot["payoff"] = (
+        20 - df_pilot["contribution"] - df_pilot["punishment"] + df_pilot["common_good"]
+    )
     df_pilot = df_pilot[
         [
             "round_number",
@@ -261,7 +265,9 @@ def load_pilot_data(basedir: str) -> pd.DataFrame:
     return df_pilot
 
 
-def create_plots(df: pd.DataFrame, output_dir: str, managers_config: dict, figure_name: str = "") -> None:
+def create_plots(
+    df: pd.DataFrame, output_dir: str, managers_config: dict, figure_name: str = ""
+) -> None:
     """Create and save comparison plots."""
     make_dir(output_dir)
 
@@ -273,16 +279,13 @@ def create_plots(df: pd.DataFrame, output_dir: str, managers_config: dict, figur
     )
 
     # Plot 1: Manager comparison
-    manager_runs = [
-        f"ah full managed by {m}" for m in managers_config.keys()
-    ]
+    manager_runs = [f"ah full managed by {m}" for m in managers_config.keys()]
     w = dfm["run"].isin(manager_runs)
 
     if w.any():
         dfg = dfm[w].copy()
         run_map = {
-            f"ah full managed by {m}": f"{m} manager"
-            for m in managers_config.keys()
+            f"ah full managed by {m}": f"{m} manager" for m in managers_config.keys()
         }
         dfg["run"] = dfg["run"].map(run_map)
 
@@ -329,12 +332,14 @@ def create_plots(df: pd.DataFrame, output_dir: str, managers_config: dict, figur
     # Save aggregates
     aggregates = (
         df.groupby(["run", "round_number"])
-        .agg({
-            "punishment": "mean",
-            "contribution": "mean",
-            "common_good": "mean",
-            "payoff": "mean",
-        })
+        .agg(
+            {
+                "punishment": "mean",
+                "contribution": "mean",
+                "common_good": "mean",
+                "payoff": "mean",
+            }
+        )
         .reset_index()
     )
     aggregates_path = os.path.join(output_dir, "aggregates.csv")

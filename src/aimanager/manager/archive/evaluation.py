@@ -3,14 +3,17 @@ from itertools import count
 from aimanager.manager.archive.memory import Memory
 
 
-class ManagerEvaluator():
+class ManagerEvaluator:
     def __init__(self, n_rounds, batch_size, output_file=None, test_period=1):
-        self.device = th.device('cpu')
+        self.device = th.device("cpu")
         self.test_period = test_period
         self.t_episode = 0
         self.recorder = Memory(
             n_episodes=n_rounds // test_period * batch_size,
-            n_n_rounds=n_rounds, output_file=output_file, device=self.device)
+            n_n_rounds=n_rounds,
+            output_file=output_file,
+            device=self.device,
+        )
 
     def eval_update(self, manager, env, update_step):
         if update_step % self.test_period == 0:

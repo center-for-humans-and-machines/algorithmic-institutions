@@ -15,4 +15,3 @@ The following will run the simulations and save the results as configured in the
 ```bash
 python src/aimanager/simulation/run.py configs/simulation/01_compare.yml
 ```
-

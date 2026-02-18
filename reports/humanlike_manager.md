@@ -42,9 +42,3 @@ the respective group member, between human manager and our human like manager
 model. We found both to match mostly within statistical errors.
 
 ![Policy Comparision](../notebooks/test_manager/plots/simulate_ah_hm/comparison_pilot_policy.jpg)
-
-
-
-
-
-

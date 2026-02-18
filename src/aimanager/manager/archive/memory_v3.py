@@ -5,9 +5,10 @@ import torch as th
 from aimanager.utils.utils import make_dir
 
 
-class Memory():
+class Memory:
     def __init__(
-            self, device, n_batches, n_rounds, batch_size, group_size, output_file=None):
+        self, device, n_batches, n_rounds, batch_size, group_size, output_file=None
+    ):
         self.memory = None
         self.n_batches = n_batches
         self.size = n_batches * batch_size * group_size
@@ -18,7 +19,7 @@ class Memory():
         self.start_row = None
         self.end_row = None
         self.rewind = 0
-        self.group_que = collections.deque([], maxlen=self.n_batches*batch_size)
+        self.group_que = collections.deque([], maxlen=self.n_batches * batch_size)
 
     @property
     def last_valid_row(self):
@@ -27,14 +28,18 @@ class Memory():
 
     def init_store(self, state):
         self.memory = {
-            k: th.zeros((self.size, self.n_rounds, *t.shape[2:]),
-                        dtype=t.dtype, device=self.device)
-            for k, t in state.items() if t is not None
+            k: th.zeros(
+                (self.size, self.n_rounds, *t.shape[2:]),
+                dtype=t.dtype,
+                device=self.device,
+            )
+            for k, t in state.items()
+            if t is not None
         }
 
     def start_batch(self, groups):
         batch_size = sum(len(g) for g in groups)
-        if (self.end_row is None):
+        if self.end_row is None:
             self.start_row = 0
         elif (self.end_row + batch_size) >= self.size:
             self.write()
@@ -43,7 +48,7 @@ class Memory():
         else:
             self.start_row = self.end_row
         self.end_row = self.start_row + sum(len(g) for g in groups)
-        self.current_group = [[r+self.start_row for r in g] for g in groups]
+        self.current_group = [[r + self.start_row for r in g] for g in groups]
 
     def finish_batch(self):
         self.group_que.extendleft(self.current_group)
@@ -54,17 +59,19 @@ class Memory():
 
         for k, t in state.items():
             if t is not None:
-                self.memory[k][self.start_row:self.end_row, round_number] = t[:, 0].to(self.device)
+                self.memory[k][self.start_row : self.end_row, round_number] = t[
+                    :, 0
+                ].to(self.device)
 
     def sample(self, **kwargs):
-        assert self.batch_size is not None, 'No sample size defined.'
+        assert self.batch_size is not None, "No sample size defined."
         if len(self) < self.batch_size:
             return None, None
         relative_episode = np.random.choice(len(self), self.batch_size, replace=False)
         return self.get_relative(relative_episode, **kwargs)
 
     def last(self, **kwargs):
-        assert self.batch_size is not None, 'No sample size defined.'
+        assert self.batch_size is not None, "No sample size defined."
         if len(self) < self.batch_size:
             return None, None
         relative_episodes = np.arange(self.batch_size)
@@ -75,7 +82,9 @@ class Memory():
             keys = self.memory.keys()
         hist_idx = th.tensor(
             [row for rp in relative_episode for row in self.group_que[rp]],
-            dtype=th.int64, device=self.device)
+            dtype=th.int64,
+            device=self.device,
+        )
 
         groups = [self.group_que[rp] for rp in relative_episode]
         sample = {k: v[hist_idx] for k, v in self.memory.items() if k in keys}
@@ -91,10 +100,8 @@ class Memory():
             dirname = os.path.dirname(self.output_file)
             make_dir(dirname)
             th.save(
-                {
-                    k: t[:self.last_valid_row] for k, t in self.memory.items()
-                },
-                f'{self.output_file}.{self.rewind}.pt'
+                {k: t[: self.last_valid_row] for k, t in self.memory.items()},
+                f"{self.output_file}.{self.rewind}.pt",
             )
 
     def __del__(self):

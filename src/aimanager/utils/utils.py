@@ -1,14 +1,10 @@
 import json
 import yaml
-import sys
 import os
 
 
-# basics
-
-
 def save_json(obj, filename):
-    with open(filename, 'w') as f:
+    with open(filename, "w") as f:
         json.dump(obj, f)
 
 
@@ -19,7 +15,7 @@ def load_json(filename):
 
 
 def save_yaml(obj, filename):
-    with open(filename, 'w') as f:
+    with open(filename, "w") as f:
         yaml.dump(obj, f)
 
 
@@ -33,8 +29,11 @@ def make_dir(directory):
     if not os.path.exists(directory):
         try:
             os.makedirs(directory)
-        except:
-            print('Failed to create dir. Most likely a different worker is creating the directory currently.')
+        except Exception as e:
+            print(
+                "Failed to create dir. Most likely a different worker "
+                f"is creating the directory currently. {e}"
+            )
 
 
 def get_all_files(folder):

@@ -1,4 +1,4 @@
-from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU, ReLU
+from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU
 import numpy as np
 import torch as th
 from torch_scatter import scatter_mean

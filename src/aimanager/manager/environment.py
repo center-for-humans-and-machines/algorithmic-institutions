@@ -9,7 +9,8 @@ def create_fully_connected(n_nodes):
 
 class ArtificialHumanEnv:
     """
-    Environment that runs the virtual humans and calculuates the value of the common good.
+    Environment that runs the virtual humans and
+    calculuates the value of the common good.
 
     Indices:
         t: agent types [0..1]
@@ -85,7 +86,8 @@ class ArtificialHumanEnv:
         Updates the groups of agents.
 
         Args:
-            agent_groups: (batch_size, n_agents) tensor containing the group of each agent.
+            agent_groups: (batch_size, n_agents) tensor
+            containing the group of each agent.
         """
         self.agent_groups = agent_groups.unsqueeze(-1)
         self.batch_edge_index = th.tensor(
@@ -114,9 +116,10 @@ class ArtificialHumanEnv:
             "punishment_valid": th.zeros(size, dtype=th.bool, device=self.device),
             "common_good": th.zeros(size, dtype=th.float, device=self.device),
             "contributor_payoff": th.zeros(size, dtype=th.float, device=self.device),
-            # "manager_payoff": th.zeros(size, dtype=th.float, device=self.device), 
+            # "manager_payoff": th.zeros(size, dtype=th.float, device=self.device),
             "reward": th.zeros(
-                (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device),
+                (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
+            ),
             "agent_group": th.zeros(size, dtype=th.int64, device=self.device),
             "group_payoff": th.zeros(
                 (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
@@ -138,9 +141,10 @@ class ArtificialHumanEnv:
     def __setattr__(self, name, value):
         if "state" in self.__dict__:
             if name in self.__dict__["state"]:
-                assert (
-                    value.shape == self.state[name].shape
-                ), f"Shape of {name} does not match. [{value.shape} != {self.state[name].shape}]"
+                assert value.shape == self.state[name].shape, (
+                    f"Shape of {name} does not match. "
+                    f"[{value.shape} != {self.state[name].shape}]"
+                )
                 self.state[name] = value
             else:
                 object.__setattr__(self, name, value)
@@ -150,9 +154,12 @@ class ArtificialHumanEnv:
     def compute_common_good_per_group(
         self, contribution, punishment, contribution_valid
     ):
-        # Method is used with punishment and prev_punishment in update_common_good and update_reward
+        # Method is used with punishment and prev_punishment
+        # in update_common_good and update_reward
         # Set the contribution and punishment to 0 if they are not valid
-        contribution = th.where(contribution_valid, contribution, th.zeros_like(contribution))
+        contribution = th.where(
+            contribution_valid, contribution, th.zeros_like(contribution)
+        )
         punishment = th.where(contribution_valid, punishment, th.zeros_like(punishment))
 
         # Add a dimension for the groups
@@ -171,19 +178,24 @@ class ArtificialHumanEnv:
         ) / sum_contribution_valid
         # Set common good to 0 if no valid contributions
         common_good_per_group = th.where(
-            sum_contribution_valid > 0, common_good_per_group, th.zeros_like(common_good_per_group)
+            sum_contribution_valid > 0,
+            common_good_per_group,
+            th.zeros_like(common_good_per_group),
         )
         return common_good_per_group
 
     def compute_average_payoff_per_group(
         self, contribution, punishment, contribution_valid, common_good
     ):
-        # Used both with punishment and prev_punishment in update_payoff and update_reward
+        # Used both with punishment and prev_punishment
+        # in update_payoff and update_reward
         # Compute the payoff for the contributors
         contributor_payoff = 20 - contribution - punishment + common_good
 
         # Set the payoff to 0 if the contribution is not valid
-        contributor_payoff = th.where(contribution_valid, contributor_payoff, th.zeros_like(contributor_payoff))
+        contributor_payoff = th.where(
+            contribution_valid, contributor_payoff, th.zeros_like(contributor_payoff)
+        )
 
         # Compute the average payoff for each group
         average_payoff_per_group = (
@@ -195,27 +207,25 @@ class ArtificialHumanEnv:
             dim=1
         ) / contribution_valid.sum(dim=1)
         average_payoff_per_group = th.where(
-            contribution_valid.sum(dim=1) > 0, average_payoff_per_group, th.zeros_like(average_payoff_per_group)
+            contribution_valid.sum(dim=1) > 0,
+            average_payoff_per_group,
+            th.zeros_like(average_payoff_per_group),
         )
         return contributor_payoff, average_payoff_per_group
 
-    def compute_average_per_group(
-        self, metric, valid=None
-    ):
+    def compute_average_per_group(self, metric, valid=None):
         if valid is None:
             valid = th.ones_like(metric, dtype=th.bool)
 
-        sum_per_group = (
-            metric.unsqueeze(-2) * self.agent_group_mask
-        )
+        sum_per_group = metric.unsqueeze(-2) * self.agent_group_mask
         valid_per_group = valid.unsqueeze(-2) * self.agent_group_mask
 
-        average_per_group = sum_per_group.sum(
-            dim=1
-        ) / valid_per_group.sum(dim=1)
+        average_per_group = sum_per_group.sum(dim=1) / valid_per_group.sum(dim=1)
 
         average_per_group = th.where(
-            valid_per_group.sum(dim=1) > 0, average_per_group, th.zeros_like(average_per_group)
+            valid_per_group.sum(dim=1) > 0,
+            average_per_group,
+            th.zeros_like(average_per_group),
         )
         return average_per_group
 
@@ -239,28 +249,36 @@ class ArtificialHumanEnv:
             )
         )
 
-        # Broadcast the average payoff of each group to the agents
-        # self.manager_payoff = self.group_payoff.gather(1, self.group) # no longer needed
-
     def update_reward(self):
         masked_prev_punishment = th.where(
             self.prev_contribution_valid, self.prev_punishment, 0
         )
         if self.done:
-            average_masked_punishment_per_group = self.compute_average_per_group(masked_prev_punishment)
+            average_masked_punishment_per_group = self.compute_average_per_group(
+                masked_prev_punishment
+            )
             self.reward = -average_masked_punishment_per_group / 32
         else:
             if self.reward_formula == "group_payoff":
                 # this assumes all groups in the batch to be identicial compositioned
-                contribution_per_group = self.compute_average_per_group(self.contribution, self.contribution_valid)
+                contribution_per_group = self.compute_average_per_group(
+                    self.contribution, self.contribution_valid
+                )
                 # this additional assumes that groups do not change throughout the game
-                prev_punishment_per_group = self.compute_average_per_group(self.prev_punishment, self.contribution_valid)
+                prev_punishment_per_group = self.compute_average_per_group(
+                    self.prev_punishment, self.contribution_valid
+                )
                 common_good_per_group = self.compute_common_good_per_group(
                     self.contribution, self.prev_punishment, self.contribution_valid
                 )
-                payoff_per_group = 20 - contribution_per_group - prev_punishment_per_group + common_good_per_group
+                payoff_per_group = (
+                    20
+                    - contribution_per_group
+                    - prev_punishment_per_group
+                    + common_good_per_group
+                )
                 self.reward = payoff_per_group / 32
-            elif self.reward_formula == 'group_payoff_round':
+            elif self.reward_formula == "group_payoff_round":
                 # this assumes all groups in the batch to be identicial compositioned
                 self.reward = self.group_payoff
             else:

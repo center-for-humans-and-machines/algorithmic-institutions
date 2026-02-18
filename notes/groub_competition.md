@@ -30,9 +30,9 @@ Rough todos:
 
 # We mainly need to make sure that if
 * a group member is entering a group, punishments from the other manager are not to be applied
-* 
+*
 
-        # We assuming a decomposition of the Q-value, in which the managers q value 
+        # We assuming a decomposition of the Q-value, in which the managers q value
         # can be decomposed into individual q values for the actions on each agent
 
 
@@ -61,11 +61,11 @@ A:
 * add metric to obs
 * ...
 
-B: 
+B:
 
 
 
 
 # TODO
 
-[] Check if group and action is correct in regard to round, given the weired shift I am working with 
+[] Check if group and action is correct in regard to round, given the weired shift I am working with

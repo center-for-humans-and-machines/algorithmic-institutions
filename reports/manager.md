@@ -201,6 +201,3 @@ contribution. We find that the RL manager is more strict (higher punishments)
 with artificial humans that had higher previous contribution.
 
 ![Policy Previous Contribution](../notebooks/test_manager/plots/simulate_ah_om/policy_prev_contribution.jpg)
-
-
-

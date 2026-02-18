@@ -11,7 +11,7 @@ git clone --recurse-submodules git@github.com:center-for-humans-and-machines/alg
 
 ## Install main package
 
-### 0. Installing `uv` 
+### 0. Installing `uv`
 It is advised to use `uv` as the virtual environment manager. Install `uv` if you don't have it already:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -86,14 +86,14 @@ exec:
 
 Contribution
 
-``` 
+```
 djx run/behavioral_cloning/21_contribution_model_v4.yml
 ```
 
 Contribution Is Valid
 
 ```
-djx run/behavioral_cloning/22_contribution_valid_model_v4.yml 
+djx run/behavioral_cloning/22_contribution_valid_model_v4.yml
 ```
 
 Punishments (not used)
@@ -146,7 +146,7 @@ python run.py run notebooks/test_manager/simulate_mixed/03_all.yml
 
 # Simulate existing models
 
-Should be run on a GPU node. 
+Should be run on a GPU node.
 ```
 python run.py run notebooks/test_manager/simulate_mixed/02_all_artifacts.yml
 ```

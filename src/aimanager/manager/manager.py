@@ -16,7 +16,7 @@ class ArtificalManager:
         gamma=None,
         target_update_freq=None,
         eps=None,
-        device
+        device,
     ):
         self.device = device
         self.n_groups = n_groups
@@ -28,7 +28,7 @@ class ArtificalManager:
                 y_name="punishment",
                 y_levels=n_punishments,
                 default_values=default_values,
-                **model_args
+                **model_args,
             ).to(device)
 
         if opt_args:
@@ -40,7 +40,7 @@ class ArtificalManager:
                 y_name="punishment",
                 y_levels=n_punishments,
                 default_values=default_values,
-                **model_args
+                **model_args,
             ).to(device)
 
             self.target_model.eval()
@@ -75,15 +75,15 @@ class ArtificalManager:
 
             n_actions = q_values.shape[-1]
             greedy_action = q_values.argmax(-1)
-            agent_group = state["agent_group"].unsqueeze(1)       # (E, 1, A, T)
-            greedy_action = greedy_action.gather(1, agent_group)   # (E, 1, A, T)
-            greedy_action = greedy_action.squeeze(1)         # (E, A, T)
+            agent_group = state["agent_group"].unsqueeze(1)  # (E, 1, A, T)
+            greedy_action = greedy_action.gather(1, agent_group)  # (E, 1, A, T)
+            greedy_action = greedy_action.squeeze(1)  # (E, A, T)
             if not greedy:
                 random_actions = th.randint(
                     0, n_actions, size=greedy_action.shape, device=self.device
                 )
                 random_numbers = th.rand(size=greedy_action.shape, device=self.device)
-                select_random = (random_numbers < self.eps)
+                select_random = random_numbers < self.eps
                 picked_action = th.where(select_random, random_actions, greedy_action)
                 return picked_action, q_values
             else:
@@ -97,9 +97,9 @@ class ArtificalManager:
         q_values = self.policy_model(encoded, reset_rnn=first)
         q_values = q_values.reshape(n_batch, self.n_groups, n_agents, n_rounds, -1)
         greedy_actions = q_values.argmax(-1)  # (E, G, A, T)
-        agent_group = state["agent_group"].unsqueeze(1)       # (E, 1, A, T)
-        greedy_actions = greedy_actions.gather(1, agent_group)   # (E, 1, A, T)
-        greedy_actions = greedy_actions.squeeze(1)         # (E, A, T)
+        agent_group = state["agent_group"].unsqueeze(1)  # (E, 1, A, T)
+        greedy_actions = greedy_actions.gather(1, agent_group)  # (E, 1, A, T)
+        greedy_actions = greedy_actions.squeeze(1)  # (E, A, T)
         return greedy_actions
 
     def expand_obs_for_groups(self, obs, n_groups):
@@ -108,16 +108,17 @@ class ArtificalManager:
         E, A, T = obs["agent_group"].shape[:3]
 
         obs_group = {
-            k: v.unsqueeze(1).expand(
-                E, n_groups, *v.shape[1:]   # -> (E, G, A, T, ...)
-            ) for k, v in obs.items() 
+            k: v.unsqueeze(1).expand(E, n_groups, *v.shape[1:])  # -> (E, G, A, T, ...)
+            for k, v in obs.items()
             if k not in exclude_keys and v.shape[0] == E
         }
         group_idx = th.arange(n_groups, device=self.device).view(1, n_groups, 1, 1)
         obs_group["group"] = group_idx.expand(E, n_groups, A, T)
         obs_group["in_group"] = obs_group["group"] == obs_group["agent_group"]
 
-        obs_group = {k: v.reshape(E * n_groups, *v.shape[2:]) for k, v in obs_group.items()}
+        obs_group = {
+            k: v.reshape(E * n_groups, *v.shape[2:]) for k, v in obs_group.items()
+        }
         return obs_group
 
     def update(self, update_step, action, reward, **obs):
@@ -128,7 +129,9 @@ class ArtificalManager:
         E, A, T = action.shape
         G = self.n_groups
         exp_obs = self.expand_obs_for_groups(obs, self.n_groups)
-        in_group = exp_obs['in_group'].reshape(E,G,A,T).float() # episodes, groups, agents, round
+        in_group = (
+            exp_obs["in_group"].reshape(E, G, A, T).float()
+        )  # episodes, groups, agents, round
 
         self.policy_model.train()
         encoded = self.policy_model.encode(exp_obs, y_encode=False)
@@ -142,7 +145,9 @@ class ArtificalManager:
             -1, action.unsqueeze(1).unsqueeze(-1)
         )  # episodes, groups, agents, round, 1
 
-        current_q_group = th.einsum('egari,egar->egri', current_q, in_group) # episodes, groups, rounds, 1
+        current_q_group = th.einsum(
+            "egari,egar->egri", current_q, in_group
+        )  # episodes, groups, rounds, 1
 
         # we skip the first observation and set the future value for the terminal
         # state to 0
@@ -153,16 +158,22 @@ class ArtificalManager:
             E, G, A, T, -1
         )  # episodes, groups, agents, round, actions
 
-        max_next_q_value = next_q_values[:, :, :, 1:].max(-1)[0].detach() # episodes, groups, agents, round-1
-        max_next_q_value_group = th.einsum('egar,egar->egr', max_next_q_value, in_group[:,:,:,1:])
+        max_next_q_value = (
+            next_q_values[:, :, :, 1:].max(-1)[0].detach()
+        )  # episodes, groups, agents, round-1
+        max_next_q_value_group = th.einsum(
+            "egar,egar->egr", max_next_q_value, in_group[:, :, :, 1:]
+        )
         next_v = th.zeros_like(reward, device=self.device)
-        next_v[:, :, :-1] = max_next_q_value_group # episodes, groups, round
+        next_v[:, :, :-1] = max_next_q_value_group  # episodes, groups, round
 
         # Compute the expected Q values
-        expected_q = (next_v * self.gamma) + reward # episodes, groups, round
+        expected_q = (next_v * self.gamma) + reward  # episodes, groups, round
 
         # Compute Huber loss
-        loss = th.nn.functional.smooth_l1_loss(current_q_group, expected_q.unsqueeze(-1))
+        loss = th.nn.functional.smooth_l1_loss(
+            current_q_group, expected_q.unsqueeze(-1)
+        )
 
         # Optimize the model
         self.optimizer.zero_grad()

@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def using_multiindex(A, columns, value_columns=None, value_name='value'):
+def using_multiindex(A, columns, value_columns=None, value_name="value"):
     """
     Turns a multi-dimension numpy array into a single dataframe.
 
@@ -26,7 +26,8 @@ def using_multiindex(A, columns, value_columns=None, value_name='value'):
         value_columns = [value_name]
 
     index = pd.MultiIndex.from_product(
-        [range(s) for s, c in zip(shape, columns)], names=columns)
+        [range(s) for s, c in zip(shape, columns)], names=columns
+    )
     df = pd.DataFrame(A.reshape(*new_shape), columns=value_columns, index=index)
     df = df.reset_index()
     return df
@@ -40,6 +41,7 @@ def map_columns(df, **map_columns):
 
 def to_alphabete(df, columns):
     import string
+
     string_mapper = {x: y for x, y in enumerate(string.ascii_uppercase, 0)}
     for col in columns:
         df[col] = df[col].map(string_mapper)
@@ -49,11 +51,15 @@ def to_alphabete(df, columns):
 def to_alphabete_sm(sr):
     # to_alphabete method used in solution_manipulation
     import string
-    string_mapper = {j+i*len(string.ascii_uppercase): l1 + l2 for i, l1 in enumerate(
-        string.ascii_uppercase, 0) for j, l2 in enumerate(string.ascii_uppercase, 0)}
+
+    string_mapper = {
+        j + i * len(string.ascii_uppercase): l1 + l2
+        for i, l1 in enumerate(string.ascii_uppercase, 0)
+        for j, l2 in enumerate(string.ascii_uppercase, 0)
+    }
     return sr.map(string_mapper)
 
 
 def add_labels(df, labels):
-    label_df = pd.DataFrame(data=labels, dtype='category', index=df.index)
+    label_df = pd.DataFrame(data=labels, dtype="category", index=df.index)
     return pd.concat([label_df, df], axis=1)
