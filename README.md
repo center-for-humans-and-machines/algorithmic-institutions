@@ -11,7 +11,7 @@ git clone --recurse-submodules git@github.com:center-for-humans-and-machines/alg
 
 ## Install main package
 
-### 0. Installing `uv` 
+### 0. Installing `uv`
 It is advised to use `uv` as the virtual environment manager. Install `uv` if you don't have it already:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -40,13 +40,20 @@ You can then activate the virtual environment using:
 source .venv/bin/activate
 ```
 
-### 2. Installing `djx` sub-module
+### 2. Install pre-commit for development
+For automated checks to keep codebase structure and code format one needs to install pre-commit
+
+```bash
+pre-commit install
+```
+
+### 3. Installing `djx` sub-module
 Install `djx` sub-module in editable mode:
 ```bash
 uv pip install -e djx
 ```
 
-### 2. Alternative: Manual virtual environment setup
+### Alternative: Manual virtual environment setup
 If you prefer to set up the virtual environment manually without `uv`, you can follow these steps:
 
 ```
@@ -59,6 +66,9 @@ pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geo
 pip install -e ".[dev]"
 pip install -e djx
 ```
+
+# Up-to-date Docs for Cluster Runs
+- The up-to-date version of the pipeline is detailed [here](reports/reproduce_rl_manager.md).
 
 # Notebooks
 Tardis and Raven clusters use different slurm scripts. To run scripts on the GPU infrastructure one needs to modify the script field in the respective config file accordingly.
@@ -86,14 +96,14 @@ exec:
 
 Contribution
 
-``` 
+```
 djx run/behavioral_cloning/21_contribution_model_v4.yml
 ```
 
 Contribution Is Valid
 
 ```
-djx run/behavioral_cloning/22_contribution_valid_model_v4.yml 
+djx run/behavioral_cloning/22_contribution_valid_model_v4.yml
 ```
 
 Punishments (not used)
@@ -146,7 +156,7 @@ python run.py run notebooks/test_manager/simulate_mixed/03_all.yml
 
 # Simulate existing models
 
-Should be run on a GPU node. 
+Should be run on a GPU node.
 ```
 python run.py run notebooks/test_manager/simulate_mixed/02_all_artifacts.yml
 ```
@@ -163,7 +173,3 @@ python run.py run notebooks/test_manager/simulate_mixed/02_all_artifacts.yml
 | Run Name     | Run Folder        | Run File | Description                                                             |
 | ------------ | ----------------- | -------- | ----------------------------------------------------------------------- |
 | ahc_02_valid | artificial_humans | 02_valid | Model predicting if human contributors are making a valid contribution. |
-
-
-# Further Docs
-- The up-to-date version of the pipeline is detailed [here](reports/reproduce_rl_manager.md).

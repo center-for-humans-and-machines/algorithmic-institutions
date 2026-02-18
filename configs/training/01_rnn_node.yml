@@ -35,7 +35,7 @@ manager_args:
 replay_memory_args:
   n_episodes: 100
 
-n_update_steps: 100000
+n_update_steps: 50000
 eval_period: 20
 training_batch_size: 1
 
@@ -51,5 +51,3 @@ env_args:
 device: "cuda"
 output_dir: "artifacts/manager/01_rnn_node_v3"
 basedir: "."
-
-

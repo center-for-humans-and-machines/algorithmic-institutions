@@ -135,9 +135,10 @@ class Encoder(th.nn.Module):
         else:
             if self.aggregation == "mean":
                 if datashape == "batch_agent_round":
-                    assert (
-                        len(state[self.refrence].shape) == 3
-                    ), f"Expected 3 dimensions. Shape is {len(state[self.refrence].shape)}"
+                    assert len(state[self.refrence].shape) == 3, (
+                        f"Expected 3 dimensions. Shape is "
+                        f"{len(state[self.refrence].shape)}"
+                    )
                     enc_shape = (
                         state[self.refrence].shape[0],
                         1,
@@ -145,9 +146,10 @@ class Encoder(th.nn.Module):
                         0,
                     )
                 elif datashape == "batch*agent_round":
-                    assert (
-                        len(state[self.refrence].shape) == 2
-                    ), f"Expected 2 dimensions. Shape is {len(state[self.refrence].shape)}"
+                    assert len(state[self.refrence].shape) == 2, (
+                        f"Expected 2 dimensions. Shape is "
+                        f"{len(state[self.refrence].shape)}"
+                    )
                     enc_shape = (
                         state["batch"].max() + 1,
                         state[self.refrence].shape[1],

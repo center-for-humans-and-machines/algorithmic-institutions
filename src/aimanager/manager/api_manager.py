@@ -45,9 +45,11 @@ def create_data(rounds, groups, default_values):
             [
                 [
                     [
-                        int(value)
-                        if (is_valid and g1 == g2)
-                        else int(default_values[default_key])
+                        (
+                            int(value)
+                            if (is_valid and g1 == g2)
+                            else int(default_values[default_key])
+                        )
                         for value, is_valid, g1 in zip(
                             r[record_key], r[f"{record_key}_valid"], r["group"]
                         )
@@ -81,10 +83,7 @@ def create_data(rounds, groups, default_values):
     punishment_valid = create_bool_tensor("punishment")
 
     in_group = th.tensor(
-        [
-            [[g1 == g2 for g1 in r["group"]] for r in rounds]
-            for g2 in groups
-        ],
+        [[[g1 == g2 for g1 in r["group"]] for r in rounds] for g2 in groups],
         dtype=th.bool,
     )
 

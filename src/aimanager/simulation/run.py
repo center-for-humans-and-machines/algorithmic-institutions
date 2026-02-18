@@ -43,9 +43,7 @@ def validate_config(config: dict, config_path: str) -> None:
     required_keys = ["artificial_humans", "managers", "n_episodes", "n_episode_steps"]
     missing = [k for k in required_keys if k not in config]
     if missing:
-        raise ValueError(
-            f"Config {config_path} missing required keys: {missing}"
-        )
+        raise ValueError(f"Config {config_path} missing required keys: {missing}")
 
 
 def run_local(config_path: str) -> None:

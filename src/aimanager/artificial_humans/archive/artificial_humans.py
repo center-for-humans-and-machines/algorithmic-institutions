@@ -68,8 +68,6 @@ class ArtificialHuman(th.nn.Module):
             y_pred_proba = th.sigmoid(y_pred_logit)
             y_pred = self.y_encoder.decode(y_pred_proba)
             y_pred_proba = None
-            # y_pred_proba = th.cat([th.ones((*y_pred_proba.shape[:-1],1)), y_pred_proba], axis=-1)
-            # y_pred_proba = y_pred_proba / th.sum(y_pred_proba, dim=-1, keepdim=True)
         elif self.y_encoding == "onehot":
             y_pred_proba = th.nn.functional.softmax(y_pred_logit, dim=-1)
             y_pred = self.y_encoder.decode(y_pred_proba)

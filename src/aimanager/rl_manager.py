@@ -1,19 +1,13 @@
 import os
 import sys
 import random
-from itertools import count
+import yaml
 
+from itertools import count
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import torch as th
-# pytorch geometric meta module has changed place
-# since the the saving of the training data, this points
-# to the new location
-import torch_geometric.nn.models.meta as meta_module
-sys.modules['torch_geometric.nn.meta'] = meta_module
-
-from tqdm import tqdm
-import yaml
 
 from aimanager.manager.memory import Memory
 from aimanager.manager.environment import ArtificialHumanEnv
@@ -22,6 +16,12 @@ from aimanager.manager.manager import ArtificalManager
 from aimanager.utils.utils import make_dir
 from aimanager.utils.array_to_df import add_labels
 
+# pytorch geometric meta module has changed place
+# since the the saving of the training data, this points
+# to the new location
+import torch_geometric.nn.models.meta as meta_module
+
+sys.modules["torch_geometric.nn.meta"] = meta_module
 
 
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "rl_manager.yml")
@@ -48,7 +48,6 @@ def load_config(path: str = None) -> dict:
 
 
 def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
-    global replay_keys
 
     state = env.reset()
     metric_list = []
@@ -103,8 +102,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     output_dir = data_dir or config["output_dir"]
     metrics_dir = os.path.join(output_dir, "metrics")
     model_dir = os.path.join(output_dir, "model")
-    print(f"Output directories: metrics_dir={metrics_dir},"\
-                f" model_dir={model_dir}")
+    print(f"Output directories: metrics_dir={metrics_dir}," f" model_dir={model_dir}")
     make_dir(metrics_dir)
     make_dir(model_dir)
 
@@ -115,14 +113,20 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         basedir, config["artificial_humans_valid"]
     )
 
-    print(f"Loading artificial humans from {artificial_humans_path}" \
-                f" and {artificial_humans_valid_path}")
-    ah = AH_MODELS[config["artificial_humans_model"]].load(
-        artificial_humans_path, device=device
-    ).to(device)
-    ahv = AH_MODELS[config["artificial_humans_model"]].load(
-        artificial_humans_valid_path, device=device
-    ).to(device)
+    print(
+        f"Loading artificial humans from {artificial_humans_path}"
+        f" and {artificial_humans_valid_path}"
+    )
+    ah = (
+        AH_MODELS[config["artificial_humans_model"]]
+        .load(artificial_humans_path, device=device)
+        .to(device)
+    )
+    ahv = (
+        AH_MODELS[config["artificial_humans_model"]]
+        .load(artificial_humans_valid_path, device=device)
+        .to(device)
+    )
 
     print(f"Creating environment with {config['env_args']}")
     env = ArtificialHumanEnv(
@@ -172,9 +176,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         replay_mem.next_episode(update_step)
 
         # allow manager to update itself
-        sample = replay_mem.get_random(
-            device=device, n_episodes=training_batch_size
-        )
+        sample = replay_mem.get_random(device=device, n_episodes=training_batch_size)
 
         if sample is not None:
             loss = manager.update(
@@ -182,7 +184,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                 **sample,
                 batch=env.batch,
                 edge_index=env.batch_edge_index,
-                agent_group_mask=env.agent_group_mask
+                agent_group_mask=env.agent_group_mask,
             )
 
         if (update_step % eval_period) == 0:
@@ -224,13 +226,11 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         "group_payoff",
     ]
 
-    
-
     metrics_path = os.path.join(metrics_dir, f"{config['job_id']}.parquet")
     print(f"Saving metrics dataframe to {metrics_path}")
     df = pd.DataFrame.from_records(metrics_list)
     df = df.melt(id_vars=id_vars, value_vars=value_vars, var_name="metric")
-    df = add_labels(df, {**labels, "job_id": config['job_id']})
+    df = add_labels(df, {**labels, "job_id": config["job_id"]})
     df.to_parquet(metrics_path)
 
     return model_file
@@ -240,5 +240,3 @@ if __name__ == "__main__":
     config_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_CONFIG_PATH
     config = load_config(config_path)
     train_manager(config)
-
-

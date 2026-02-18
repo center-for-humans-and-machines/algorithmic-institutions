@@ -157,6 +157,3 @@ predictive power. More importantly, for our purpose, the frequency of a particip
 to not enter a valid solution is well represented.
 
 ![Confusion Matrix](../notebooks/evalutation/plots/artificial_humans_02_3_valid/action_histogram.jpg)
-
-
-

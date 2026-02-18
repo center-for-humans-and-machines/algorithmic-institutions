@@ -1,30 +1,34 @@
-
 import random
 import numpy as np
 
 
 def split_xy(df, filter_nan=True):
-    index = ['session', 'global_group_id', 'episode', 'participant_code', 'round_number']
+    index = [
+        "session",
+        "global_group_id",
+        "episode",
+        "participant_code",
+        "round_number",
+    ]
     df = df.set_index(index).sort_index()
     prev_df = df.groupby(index[:-1]).shift(1)
-    rename = {
-        c: 'prev_' + c
-        for c in prev_df.columns
-    }
+    rename = {c: "prev_" + c for c in prev_df.columns}
     prev_df = prev_df.rename(columns=rename)
     if filter_nan:
-        w_is_not_null = ~prev_df['prev_contribution'].isnull()
+        w_is_not_null = ~prev_df["prev_contribution"].isnull()
         x = prev_df[w_is_not_null]
-        y = df[w_is_not_null]['contribution']
+        y = df[w_is_not_null]["contribution"]
     else:
         x = prev_df
-        y = df['contribution']
+        y = df["contribution"]
     return x, y
 
 
 def get_fraction_of_groups(x_df, y_sr, fraction):
     group_ids = list(x_df.index.levels[1])
-    sel_group_ids = np.random.choice(group_ids, size=int(len(group_ids)*fraction), replace=False)
+    sel_group_ids = np.random.choice(
+        group_ids, size=int(len(group_ids) * fraction), replace=False
+    )
     x_df = x_df.loc[(slice(None), sel_group_ids), :]
     y_sr = y_sr.loc[(slice(None), sel_group_ids)]
     assert x_df.index.equals(y_sr.index)
