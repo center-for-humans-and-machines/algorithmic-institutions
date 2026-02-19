@@ -1,5 +1,14 @@
+description: >-
+  Investigation of the model architecture and the relevance of global features.
+exec:
+  command: python src/aimanager/artificial_humans/train.py {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: temp
+  cores: 4
+  memory: 8
+params_only: true
 params:
-  __notebook__: notebooks/artificial_humans/graph.ipynb
   fraction_training: 1.0
   seed: 38381
   mask_name: contribution_valid
@@ -11,6 +20,8 @@ params:
   data_file: experiments/pilot_random1_player_round_slim.csv
   model_name: graph
   shuffle_features: [prev_punishment, prev_contribution, contribution_valid]
+  basedir: .
+  output_dir: artifacts/artificial_humans/raven_script
   model_args:
     y_levels: 21
     y_name: contribution
