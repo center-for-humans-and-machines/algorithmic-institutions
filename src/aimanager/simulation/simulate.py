@@ -279,28 +279,38 @@ def create_plots(
     )
 
     # Plot 1: Manager comparison
-    manager_runs = [f"ah full managed by {m}" for m in managers_config.keys()]
-    w = dfm["run"].isin(manager_runs)
+    manager_keys = list(managers_config.keys())
+
+    # keep any run that looks like "ah ... managed by {manager}"
+    w = dfm["run"].str.startswith("ah ") & dfm["run"].apply(
+        lambda s: any(s.endswith(f"managed by {m}") for m in manager_keys)
+    )
 
     if w.any():
         dfg = dfm[w].copy()
-        run_map = {
-            f"ah full managed by {m}": f"{m} manager" for m in managers_config.keys()
-        }
-        dfg["run"] = dfg["run"].map(run_map)
+
+        # turn "ah {ah_name} managed by {m}" into "{ah_name} (managed by {m})"
+        def to_label(s: str) -> str:
+            # expected pattern: "ah {ah_name} managed by {manager}"
+            if not s.startswith("ah ") or " managed by " not in s:
+                return s
+            body = s[len("ah ") :]  # "{ah_name} managed by {manager}"
+            ah_name, manager = body.split(" managed by ", 1)
+            return f"{ah_name} (managed by {manager})"
+
+        dfg["run"] = dfg["run"].apply(to_label)
 
         g = sns.relplot(
             data=dfg,
             x="round_number",
             y="value",
             col="variable",
-            hue="run",
+            hue="run",  # legend will now show "{ah_name} (managed by {manager})"
             kind="line",
             facet_kws={"sharey": False, "sharex": True},
             height=3,
             aspect=1,
         )
-        # add a name to the plot
         g.fig.suptitle(f"Manager Comparison: {figure_name}", y=1.02)
         g.set(ylim=(0, None))
         g.savefig(os.path.join(output_dir, "comparison_manager.jpg"))
