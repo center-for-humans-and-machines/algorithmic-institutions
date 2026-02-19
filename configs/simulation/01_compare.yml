@@ -1,7 +1,9 @@
 artificial_humans:
   full:
-    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
-    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+    # contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    # valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+    contribution_model: artifacts/training/artificial_humans/notebook_21/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/training/artificial_humans/notebook_22/model/rnn_False__dataset_full.pt
 managers:
   humanlike:
     type: human
@@ -16,12 +18,12 @@ managers:
 
 n_episode_steps: 24
 n_episodes: 100
-n_groups: 2
+n_groups: 1
 n_agents: 4
 n_contributions: 21
 n_punishments: 31
 n_rounds: 24
 
-output_dir: plots/simulation/pr7_n_groups==2
-figure_name: n_groups==2
+output_dir: plots/simulation/ah_raven_notebook
+figure_name: raven_notebook
 base_dir: .
