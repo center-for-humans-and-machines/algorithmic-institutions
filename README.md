@@ -68,7 +68,7 @@ pip install -e djx
 ```
 
 # Up-to-date Docs for Cluster Runs
-- The up-to-date version of the pipeline is detailed [here](reports/reproduce_rl_manager.md).
+- The up-to-date version of the pipeline is detailed [here](reports/up_to_date_docs.md).
 
 # Notebooks
 Tardis and Raven clusters use different slurm scripts. To run scripts on the GPU infrastructure one needs to modify the script field in the respective config file accordingly.
