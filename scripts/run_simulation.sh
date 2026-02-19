@@ -1,8 +1,8 @@
 #!/bin/bash -l
 #
 #SBATCH --chdir=.
-#SBATCH --output=.log/aimanager_simulation_%j.out
-#SBATCH --error=.log/aimanager_simulation_%j.out
+#SBATCH --output=.log/sim/aimanager_simulation_%j.out
+#SBATCH --error=.log/sim/aimanager_simulation_%j.out
 #SBATCH --job-name=aimanager_simulation
 #
 #SBATCH --nodes=1
@@ -24,4 +24,4 @@ source .venv/bin/activate
 
 module load cuda/11.4
 
-python src/simulation/simulate.py $CONFIG_PATH
+python src/aimanager/simulation/simulate.py $CONFIG_PATH
