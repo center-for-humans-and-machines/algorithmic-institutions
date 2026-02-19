@@ -1,8 +1,8 @@
 #!/bin/bash -l
 #
 #SBATCH --chdir=.
-#SBATCH --output=.log/aimanager_training_%j.out
-#SBATCH --error=.log/aimanager_training_%j.out
+#SBATCH --output=.log/manager/aimanager_training_%j.out
+#SBATCH --error=.log/manager/aimanager_training_%j.out
 #SBATCH --job-name=aimanager_training
 #
 #SBATCH --nodes=1

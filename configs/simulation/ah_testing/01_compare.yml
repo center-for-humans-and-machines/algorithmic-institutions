@@ -1,0 +1,26 @@
+artificial_humans:
+  djx_old:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+  djx_notebook:
+    contribution_model: artifacts/training/artificial_humans/notebook_21/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/training/artificial_humans/notebook_22/model/rnn_False__dataset_full.pt
+  new_script:
+    contribution_model: artifacts/artificial_humans/raven_script_21/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+managers:
+  latest_manager:
+    type: rl
+    path: artifacts/manager/pr7/model/raven_per_group_manager.pt
+
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/ah_training_eval
+figure_name: script_vs_notebook
+base_dir: .
