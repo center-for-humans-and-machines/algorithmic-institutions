@@ -16,7 +16,7 @@ def main(in_path: str, n_agents: int) -> None:
     """
     Create a player-round CSV from ah_data.csv, keeping only rounds
     with 8 active agents, and shaping it like the pilot
-    `*_player_round_slim` data (plus a group_idx column).
+    `*_player_round_slim` data (plus a group_id column).
     """
     repo_root = Path(__file__).resolve().parents[2]
 
@@ -41,7 +41,7 @@ def main(in_path: str, n_agents: int) -> None:
     )
     df = df[has_8_agents & all_active].copy()
 
-    # We will assign a dense episode_id over (session, group_idx, episode).
+    # We will assign a dense episode_id over (session, group_id, episode).
     episode_id_lookup: dict[tuple[str, int, int], int] = {}
 
     rows = []
@@ -62,11 +62,11 @@ def main(in_path: str, n_agents: int) -> None:
         unique_group_labels = sorted(set(groups_list))
         group_label_to_idx = {label: i for i, label in enumerate(unique_group_labels)}
 
-        # Treat each (session, group_idx) as a single episode, like a full game.
-        # We therefore create a separate episode_id per (session, per-group index).
+        # Treat each (session, group_id) as a single episode, like a full game.
+        # We therefore create a separate episode_id per (session, per-group).
         episode = 1
-        for group_label, group_idx in group_label_to_idx.items():
-            episode_key = (str(session), group_idx, episode)
+        for group_label, group_id in group_label_to_idx.items():
+            episode_key = (str(session), group_id, episode)
             if episode_key not in episode_id_lookup:
                 episode_id_lookup[episode_key] = len(episode_id_lookup)
             episode_id = episode_id_lookup[episode_key]
@@ -74,9 +74,10 @@ def main(in_path: str, n_agents: int) -> None:
             # 0-based round_number within episode.
             round_number = round_raw - 1
 
-            # "session #<group_idx>" identifier; this will later be used together
-            # with episode_id in parse_agent_rounds to create a dense group_idx.
-            global_group_id = f"{session} #{group_idx}"
+            # "session #<group_id>" identifier; this will later be used
+            # together with episode_id in parse_agent_rounds to create
+            # a dense group_idx (the tensor batch dimension).
+            global_group_id = f"{session} #{group_id}"
 
             # Simple, deterministic definition of common_good; adjust if needed.
             common_good = float(sum(contributions))
@@ -86,14 +87,14 @@ def main(in_path: str, n_agents: int) -> None:
 
             for player_id in range(n_agents):
                 # Only include players belonging to this group_label
-                if group_label_to_idx[groups_list[player_id]] != group_idx:
+                if group_label_to_idx[groups_list[player_id]] != group_id:
                     continue
 
                 rows.append(
                     {
                         "session": session,
                         "global_group_id": global_group_id,
-                        "group_idx": group_idx,  # per-agent group index 0,1,...
+                        "group_id": group_id,  # sub-group membership 0,1,...
                         "episode": episode,
                         "episode_id": episode_id,
                         "experiment_name": "ah_group_switching",
@@ -115,7 +116,7 @@ def main(in_path: str, n_agents: int) -> None:
     cols = [
         "session",
         "global_group_id",
-        "group_idx",
+        "group_id",
         "episode",
         "episode_id",
         "experiment_name",
