@@ -97,6 +97,48 @@ Labels control the workflow for GitHub issues:
 
 **IMPORTANT**: All commits must be made using the `/commit` skill. This ensures staged files are reviewed before committing.
 
+### Environment
+
+- PyG/CUDA packages are Linux-only (see `sys_platform` markers in `pyproject.toml`)
+- Local macOS has CPU-only `torch==1.11.0` without PyG subpackages
+- Full environment (torch + CUDA + PyG) only available on Raven cluster
+
+### Testing
+
+**IMPORTANT**: Tests MUST be run on the Raven HPC cluster, not locally.
+The test suite depends on `torch_scatter` and other PyG packages that are only
+available on Linux. Even tests that use `device="cpu"` will fail to import locally.
+
+```bash
+# Run all tests (syncs code first):
+scripts/remote_test.sh
+
+# Sync only (no tests):
+scripts/remote_test.sh --sync-only
+
+# Test only (skip sync):
+scripts/remote_test.sh --test-only
+
+# Run specific tests:
+scripts/remote_test.sh -- -k test_encoder -v
+```
+
+**Prerequisites**: SSH ControlMaster must be active (`ssh raven` in a separate terminal, persists 12h).
+
+**Test logs**: `.claude/test-logs/latest.log` (symlink to most recent run)
+
+**Test locations**:
+- `src/aimanager/generic/test/test_encoder.py` - Tensor encoder unit tests
+- `src/aimanager/manager/test/test_environment.py` - RL environment unit tests
+
+### Remote Cluster (Raven)
+
+- Host: raven.mpcdf.mpg.de (via ProxyJump through gate.mpcdf.mpg.de)
+- User: certuer
+- Project path: ~/algorithmic-institutions
+- Remote `.venv` must be pre-configured
+- Tests run on login node (no GPU needed)
+
 ### Commands
 
 - **Install**: `uv sync`
@@ -105,7 +147,7 @@ Labels control the workflow for GitHub issues:
 - **Pre-commit run**: `pre-commit run --all-files`
 - **Format**: `black src/`
 - **Lint**: `flake8 src/ --max-line-length=88 --extend-ignore=E203,W503`
-- **Run tests**: `pytest`
+- **Run tests**: `scripts/remote_test.sh`
 - **Run notebook**: `python run.py run <yaml_config>`
 - **Train AH models**: `python src/aimanager/artificial_humans/run.py <config>`
 - **Run simulation**: `python src/aimanager/simulation/run.py <config>`
