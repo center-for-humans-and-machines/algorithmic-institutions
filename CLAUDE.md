@@ -128,8 +128,9 @@ scripts/remote_test.sh -- -k test_encoder -v
 **Test logs**: `.claude/test-logs/latest.log` (symlink to most recent run)
 
 **Test locations**:
-- `src/aimanager/generic/test/test_encoder.py` - Tensor encoder unit tests
-- `src/aimanager/manager/test/test_environment.py` - RL environment unit tests
+- `src/aimanager/tests/test_encoder.py` - Tensor encoder unit tests
+- `src/aimanager/tests/test_environment.py` - RL environment unit tests
+- `scripts/tests/test_remote_test.py` - Remote test script tests (runs locally)
 
 ### Remote Cluster (Raven)
 
