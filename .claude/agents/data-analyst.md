@@ -1,5 +1,5 @@
 ---
-name: researcher
+name: data-analyst
 description: Use this agent to implement data analysis, processing pipelines, visualisations, or statistical models. Handles reading, editing, and writing code and notebooks to fulfil a task defined by the user or a plan.
 model: opus
 color: green
