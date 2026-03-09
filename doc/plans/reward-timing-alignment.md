@@ -10,6 +10,7 @@ Issue: #40
 | 2 | `group_payoff` lookahead | Compute `group_payoff` reward from same-round state, not next-round contributions | High |
 | 3 | `update_reward` structure | Refactor into a clean top-level fork between reward formulas | Medium |
 | 4 | Replay memory timing | Verify replay stores reward for the correct (state, action) pair | Low |
+| 5 | Manual regression test | Run training with both reward formulas and compare learning curves | High |
 
 ## Context: Current Flow
 
@@ -44,6 +45,13 @@ The round loop in `run_batch()` is: `reset()` then repeat `[get_action -> punish
 - **Where**: `src/aimanager/rl_manager.py`, `run_batch()`, lines 50-67.
 - **Why**: Changing when reward is computed could create a mismatch between the state the manager saw when choosing an action and the reward attributed to that action. After the changes in sections 1-3, replay storage should be audited to confirm correctness. No change is expected here, but it should be verified.
 
+## 5. Manual regression test
+
+- **What**: After implementing sections 1-3, run RL training with both the original `group_payoff` config (`run/manager/17_exp2_group_payoff_heavy_optimize.yml`) and the new `group_payoff_round` config (`run/manager/22_exp2_group_payoff_round_heavy_optimize.yml`). Compare the resulting learning curves (episode reward over training steps) to validate behavioral equivalence.
+- **Where**: Training runs on cluster using both configs; comparison via evaluation notebook or manual plot inspection.
+- **Why**: The plan argues that `group_payoff_round` already has correct same-round timing and that the fix to `group_payoff` is a shift in attribution, not magnitude. Running both formulas side-by-side after the fix confirms that (a) `group_payoff_round` trains successfully with the terminal branch fix, and (b) the corrected `group_payoff` produces comparable learning dynamics to the pre-fix version. Divergent curves would indicate an implementation error or an incorrect assumption about equivalence.
+- **Config**: The `group_payoff_round` config is identical to `17_exp2_group_payoff_heavy_optimize.yml` except for `reward_formula: group_payoff_round`. It is checked in at `run/manager/22_exp2_group_payoff_round_heavy_optimize.yml`.
+
 ## Open Questions
 
 None -- the investigation resolved all five concerns. The `group_payoff_round` formula already has correct same-round timing but needs its terminal branch fixed. The `group_payoff` formula needs its reward computation moved to use same-round data. Both benefit from the structural refactor.
@@ -62,3 +70,4 @@ None -- the investigation resolved all five concerns. The `group_payoff_round` f
 - [ ] Refactor `update_reward()` into top-level formula fork
 - [ ] Audit replay memory pairing after changes
 - [ ] Add or update tests in `src/aimanager/manager/test/test_environment.py` covering both formulas and terminal/non-terminal rounds
+- [ ] Run manual regression test: train with both `17_exp2_group_payoff_heavy_optimize.yml` and `22_exp2_group_payoff_round_heavy_optimize.yml`, compare learning curves
