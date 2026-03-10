@@ -129,10 +129,35 @@ def _make_row(r, global_group_id, group_id, player_id, episode_id, common_good):
     }
 
 
+def combine(transformed_path: str, new_data_path: str, out_path: str) -> None:
+    """Concatenate the pseudo-matched old data with new group-switching data."""
+    old = pd.read_csv(transformed_path)
+    new = pd.read_csv(new_data_path)
+    combined = pd.concat([old, new], ignore_index=True)
+    combined.to_csv(out_path, index=False)
+    print(f"Combined {len(old)} + {len(new)} = {len(combined)} rows " f"to {out_path}")
+
+
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--in_path", type=str, required=True)
-    parser.add_argument("--out_path", type=str, required=True)
-    parser.add_argument("--seed", type=int, default=42)
+    sub = parser.add_subparsers(dest="command")
+
+    # Transform subcommand
+    transform_p = sub.add_parser("transform")
+    transform_p.add_argument("--in_path", type=str, required=True)
+    transform_p.add_argument("--out_path", type=str, required=True)
+    transform_p.add_argument("--seed", type=int, default=42)
+
+    # Combine subcommand
+    combine_p = sub.add_parser("combine")
+    combine_p.add_argument("--transformed_path", type=str, required=True)
+    combine_p.add_argument("--new_data_path", type=str, required=True)
+    combine_p.add_argument("--out_path", type=str, required=True)
+
     args = parser.parse_args()
-    main(args.in_path, args.out_path, args.seed)
+    if args.command == "transform":
+        main(args.in_path, args.out_path, args.seed)
+    elif args.command == "combine":
+        combine(args.transformed_path, args.new_data_path, args.out_path)
+    else:
+        parser.print_help()
