@@ -77,7 +77,6 @@ sync_files() {
         --exclude='artifacts/' \
         --exclude='plots/' \
         --exclude='notebooks/' \
-        --exclude='experiments/' \
         "${LOCAL_PROJECT_DIR}/" \
         "${REMOTE_HOST}:${REMOTE_PROJECT_DIR}/"
     info "Sync complete."
