@@ -48,12 +48,15 @@ fi
 
 # ── Ensure local parent directory exists ─────────────────────────────
 LOCAL_TARGET="${LOCAL_PROJECT_DIR}/${REMOTE_PATH}"
-mkdir -p "$(dirname "${LOCAL_TARGET}")"
+LOCAL_PARENT="$(dirname "${LOCAL_TARGET}")"
+mkdir -p "${LOCAL_PARENT}"
 
 # ── Fetch from cluster ───────────────────────────────────────────────
 info "Fetching ${REMOTE_PATH} from ${REMOTE_HOST}..."
+# Sync into the parent directory so that e.g. remote configs/ maps to
+# local configs/ instead of creating configs/configs/.
 rsync -azP \
     "${REMOTE_HOST}:${REMOTE_PROJECT_DIR}/${REMOTE_PATH}" \
-    "${LOCAL_TARGET}"
+    "${LOCAL_PARENT}/"
 
 info "Done. Fetched to ${LOCAL_TARGET}"
