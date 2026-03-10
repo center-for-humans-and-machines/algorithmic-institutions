@@ -72,25 +72,11 @@ check_ssh() {
 sync_files() {
     info "Syncing files to ${REMOTE_HOST}:${REMOTE_PROJECT_DIR}..."
     rsync -azP --delete \
-        --exclude='.venv/' \
-        --exclude='data/' \
+        --filter=':- .gitignore' \
+        --exclude='.git/' \
         --exclude='artifacts/' \
         --exclude='plots/' \
-        --exclude='.git/' \
         --exclude='notebooks/' \
-        --exclude='jobs/' \
-        --exclude='wandb/' \
-        --exclude='__pycache__/' \
-        --exclude='.DS_Store' \
-        --exclude='*.pyc' \
-        --exclude='.claude/worktrees/' \
-        --exclude='.claude/test-logs/' \
-        --exclude='evals/' \
-        --exclude='models/' \
-        --exclude='temp/' \
-        --exclude='.env' \
-        --exclude='.env.sh' \
-        --exclude='.vscode/' \
         --exclude='experiments/' \
         "${LOCAL_PROJECT_DIR}/" \
         "${REMOTE_HOST}:${REMOTE_PROJECT_DIR}/"
