@@ -14,6 +14,7 @@ from aimanager.artificial_humans.evaluation import (
 )
 from aimanager.utils.utils import make_dir
 from itertools import permutations
+from tqdm import tqdm
 
 
 def shuffle_feature(data, feature_name):
@@ -173,7 +174,7 @@ def main(config):
         n_steps = 0
 
         print("Starting training for CV {i}")
-        for e in range(train_args["epochs"]):
+        for e in tqdm(range(train_args["epochs"])):
             rec.set_labels(cv_split=i, epoch=e)
             model.train()
             for j, b_data in enumerate(batch_loader(train_data, batch_size)):
