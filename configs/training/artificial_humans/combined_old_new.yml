@@ -14,6 +14,9 @@ params:
   seed: 38381
   mask_name: contribution_valid
   experiment_names: [trail_rounds_2, random_1, ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: full
   n_contributions: 21
   n_punishments: 31
   n_cross_val: 10
@@ -54,7 +57,3 @@ params:
     l1_entropy: 0
   device: cuda
   autoregression: False
-grid:
-- labels.architecture: [node, node+edge+rnn]
-  model_args.add_rnn: [false, true]
-  model_args.add_edge_model: [false, true]
