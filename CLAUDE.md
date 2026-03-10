@@ -149,6 +149,7 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Format**: `black src/`
 - **Lint**: `flake8 src/ --max-line-length=88 --extend-ignore=E203,W503`
 - **Run tests**: `scripts/remote_test.sh`
+- **Fetch from cluster**: `scripts/fetch_cluster.sh <remote_path>` (path relative to `~/algorithmic-institutions`)
 - **Run notebook**: `python run.py run <yaml_config>`
 - **Train AH models**: `python src/aimanager/artificial_humans/run.py <config>`
 - **Run simulation**: `python src/aimanager/simulation/run.py <config>`
