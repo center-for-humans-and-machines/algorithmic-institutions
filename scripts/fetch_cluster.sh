@@ -6,15 +6,17 @@
 #   - SSH ControlMaster connection must be established first: ssh raven
 #
 # Usage:
-#   scripts/fetch_cluster.sh <remote_path>
+#   scripts/fetch_cluster.sh <remote_path> [local_destination]
 #
 # The remote_path is relative to ~/algorithmic-institutions on Raven.
-# Files are fetched to the same relative path locally.
+# Files are fetched to the same relative path locally, unless a
+# local_destination is provided.
 #
 # Examples:
 #   scripts/fetch_cluster.sh artifacts/model.pt
 #   scripts/fetch_cluster.sh artifacts/
 #   scripts/fetch_cluster.sh configs/training/
+#   scripts/fetch_cluster.sh temp/training/run1 ./logs/run1
 #
 set -euo pipefail
 
@@ -25,12 +27,13 @@ LOCAL_PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # ── Validate arguments ───────────────────────────────────────────────
 if [[ $# -eq 0 ]]; then
-    echo "Usage: scripts/fetch_cluster.sh <remote_path>" >&2
+    echo "Usage: scripts/fetch_cluster.sh <remote_path> [local_destination]" >&2
     echo "  remote_path is relative to ${REMOTE_PROJECT_DIR}" >&2
     exit 1
 fi
 
 REMOTE_PATH="$1"
+LOCAL_DEST="${2:-}"
 
 # ── Helpers ──────────────────────────────────────────────────────────
 info()  { echo "==> $*"; }
@@ -46,17 +49,24 @@ else
     exit 2
 fi
 
-# ── Ensure local parent directory exists ─────────────────────────────
-LOCAL_TARGET="${LOCAL_PROJECT_DIR}/${REMOTE_PATH}"
-LOCAL_PARENT="$(dirname "${LOCAL_TARGET}")"
-mkdir -p "${LOCAL_PARENT}"
+# ── Determine local target ───────────────────────────────────────────
+if [[ -n "${LOCAL_DEST}" ]]; then
+    LOCAL_TARGET="${LOCAL_DEST}"
+    mkdir -p "${LOCAL_TARGET}"
+    RSYNC_TARGET="${LOCAL_TARGET}/"
+else
+    LOCAL_TARGET="${LOCAL_PROJECT_DIR}/${REMOTE_PATH}"
+    LOCAL_PARENT="$(dirname "${LOCAL_TARGET}")"
+    mkdir -p "${LOCAL_PARENT}"
+    # Sync into the parent directory so that e.g. remote configs/
+    # maps to local configs/ instead of creating configs/configs/.
+    RSYNC_TARGET="${LOCAL_PARENT}/"
+fi
 
 # ── Fetch from cluster ───────────────────────────────────────────────
 info "Fetching ${REMOTE_PATH} from ${REMOTE_HOST}..."
-# Sync into the parent directory so that e.g. remote configs/ maps to
-# local configs/ instead of creating configs/configs/.
 rsync -azP \
     "${REMOTE_HOST}:${REMOTE_PROJECT_DIR}/${REMOTE_PATH}" \
-    "${LOCAL_PARENT}/"
+    "${RSYNC_TARGET}"
 
 info "Done. Fetched to ${LOCAL_TARGET}"
