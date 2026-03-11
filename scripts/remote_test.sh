@@ -74,9 +74,11 @@ sync_files() {
     rsync -azP --delete \
         --filter=':- .gitignore' \
         --exclude='.git/' \
+        --exclude='.venv/' \
         --exclude='artifacts/' \
         --exclude='plots/' \
         --exclude='notebooks/' \
+        --exclude='temp/' \
         "${LOCAL_PROJECT_DIR}/" \
         "${REMOTE_HOST}:${REMOTE_PROJECT_DIR}/"
     info "Sync complete."
