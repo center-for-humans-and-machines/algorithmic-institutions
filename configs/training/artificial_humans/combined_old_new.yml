@@ -13,16 +13,16 @@ params:
   fraction_training: 1.0
   seed: 38381
   mask_name: contribution_valid
-  experiment_names: [trail_rounds_2, random_1, ah_group_switching]
+  experiment_names: [trail_rounds_2, random_1]
   labels:
     architecture: node+edge+rnn
     dataset: full
   n_contributions: 21
   n_punishments: 31
-  n_cross_val: 10
+  n_cross_val: null
   n_player: 8
   n_groups: 2
-  data_file: experiments/combined_pilot_group_switching.csv
+  data_file: experiments/pilot_pseudo_8_agents.csv
   model_name: graph
   shuffle_features: [prev_punishment, prev_contribution, contribution_valid]
   basedir: .
