@@ -49,14 +49,9 @@ def main(in_path: str, out_path: str, seed: int = 42) -> None:
 
         global_gid = f"pair_{pair_episode_id}"
 
-        # Sum contributions per round for combined common_good.
-        cg_a = df_a.groupby("round_number")["contribution"].sum().to_dict()
-        cg_b = df_b.groupby("round_number")["contribution"].sum().to_dict()
-
-        for round_num in sorted(cg_a.keys()):
-            combined_cg = cg_a.get(round_num, 0.0) + cg_b.get(round_num, 0.0)
-
+        for round_num in df_a["round_number"].unique():
             # Group A: group_id=0, player_id unchanged (0-3)
+            # Keep original per-group common_good
             for _, r in df_a[df_a["round_number"] == round_num].iterrows():
                 rows.append(
                     _make_row(
@@ -65,7 +60,7 @@ def main(in_path: str, out_path: str, seed: int = 42) -> None:
                         group_id=0,
                         player_id=int(r["player_id"]),
                         episode_id=pair_episode_id,
-                        common_good=combined_cg,
+                        common_good=float(r["common_good"]),
                     )
                 )
 
@@ -78,7 +73,7 @@ def main(in_path: str, out_path: str, seed: int = 42) -> None:
                         group_id=1,
                         player_id=int(r["player_id"]) + 4,
                         episode_id=pair_episode_id,
-                        common_good=combined_cg,
+                        common_good=float(r["common_good"]),
                     )
                 )
 
