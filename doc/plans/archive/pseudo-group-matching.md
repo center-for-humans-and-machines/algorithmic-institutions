@@ -1,4 +1,4 @@
-# [DRAFT] Pseudo group matching and Group IDs for old experiment data
+# [DONE] Pseudo group matching and Group IDs for old experiment data
 
 ## Goal
 
@@ -28,7 +28,7 @@ Create `scripts/data_creation/pilot_pseudo_group_matching.py` that:
   - First group: `group_id=0`, `player_id` unchanged (0-3).
   - Second group: `group_id=1`, `player_id` remapped to 4-7.
   - `global_group_id` is set to a new synthetic identifier for the pair.
-  - `common_good` is recomputed as the sum of contributions from both groups for each round.
+  - `common_good` is preserved per-group (each group keeps its original common good value).
   - `episode_id` is reassigned as a new dense integer for the merged pair.
 - If there is an odd number of episodes in a round-count bucket, the unpaired episode is dropped (logged with a warning).
 - Outputs a CSV with the same columns and order as `group_switching_ah_data_8_agents.csv`.
@@ -68,8 +68,61 @@ single combined CSV. This can be as simple as `pd.concat` followed by
 
 ## Next Actions
 
-- [ ] Implement `scripts/data_creation/pilot_pseudo_group_matching.py`
-- [ ] Run the script on both `pilot1_player_round_slim.csv` and `pilot_random1_player_round_slim.csv`
-- [ ] Concatenate outputs with `group_switching_ah_data_8_agents.csv` into a combined CSV
-- [ ] Create training config `configs/training/artificial_humans/combined_old_new.yml`
-- [ ] Verify end-to-end: train artificial humans on combined data on the Raven cluster
+- [x] Implement `scripts/data_creation/pilot_pseudo_group_matching.py`
+- [x] Run the script on `pilot_random1_player_round_slim.csv`
+- [x] Concatenate outputs with `group_switching_ah_data_8_agents.csv` into a combined CSV
+- [x] Create training configs (`pseudo_group.yml`, `pseudo_group_combined.yml`)
+- [x] Verify end-to-end: train artificial humans on combined data on the Raven cluster
+
+## Post-implementation: simulation mismatch debugging
+
+After training, simulations revealed that AH model contributions did not match
+pilot data. Investigation uncovered a bug in training
+(`src/aimanager/artificial_humans/train.py`) and two bugs in the simulation
+environment (`src/aimanager/manager/environment.py`):
+
+### Bug 0: Training used fully-connected edges across groups
+
+`create_fully_connected` in `train.py` built edges between all agents
+regardless of group membership. This meant the GNN message-passing during
+training mixed signals across groups that should be independent.
+
+**Fix**: Added `n_agent_groups` parameter to `create_fully_connected`. Edges
+are now restricted to within-group connections (`i // agents_per_grp ==
+j // agents_per_grp`). Training calls pass `n_groups` from the config:
+
+### Bug 1: Simulation agent groups all assigned to group 0
+
+`ArtificialHumanEnv.__init__` created `agent_groups` as
+`th.zeros((batch_size, n_agents))`, assigning every agent to group 0. The
+model was trained with proper group assignments (0 and 1), so at simulation
+time the `agent_group` feature was wrong for half the agents.
+
+**Fix**: Compute agent groups by evenly distributing agents across groups:
+```python
+agent_groups = th.arange(n_agents).div(
+    n_agents // n_groups, rounding_mode="floor"
+).clamp(max=n_groups - 1)
+```
+
+### Bug 2: Group assignments lost on state reset
+
+`reset_state()` was called before `update_groups()` in `__init__`, and
+`reset_state()` itself zeroed out the `agent_group` tensor. This meant
+group assignments were overwritten every time the environment reset.
+
+**Fix**: Call `update_groups()` before `reset_state()`, and preserve
+`self.agent_groups` in `reset_state()` instead of zeroing:
+```python
+"agent_group": self.agent_groups.clone()
+if hasattr(self, "agent_groups")
+else th.zeros(size, dtype=th.int64, device=self.device),
+```
+
+### Outcome
+
+With both fixes applied, simulation contributions match pilot data
+distributions, confirming the trained models are correct. The combined
+model (pilot pseudo + group switching) is slightly less accurate because
+pseudo-grouped data lacks real inter-group dynamics and the real group
+switching dataset is small.
