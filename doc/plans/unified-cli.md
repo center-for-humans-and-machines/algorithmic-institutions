@@ -144,57 +144,25 @@ beneath the config path.
 
 ### Changes per pipeline
 
-#### AH training (`artificial_humans/run.py`)
+#### AH training (`artificial_humans/run.py`) — DONE
 
-- Change `temp_dir` in AH training configs from `temp` to `.log`.
-  The existing path construction in `run.py` (`os.path.join(temp_dir,
-  *exp_dir[1:])`) already produces the right structure:
-  `.log/training/artificial_humans/{config_name}/{job_id}/`.
-- No code changes needed in `run.py` — just config updates.
+Changed `temp_dir` in all AH training configs from `temp` to `.log`.
+The existing path construction in `run.py` already produces:
+`.log/training/artificial_humans/{config_name}/{job_id}/`.
+No code changes needed — config-only.
 
-#### Manager training — new orchestrator
+#### Manager training — DONE
 
-Manager training currently has no orchestrator. The SLURM script
-(`scripts/manager/run_training.sh`) is submitted directly, and
-`train_cluster.sh` runs `rl_manager.py` on the login node without
-sbatch.
+Created `src/aimanager/manager/run.py` orchestrator following the
+simulation pattern. Converted `scripts/manager/run_training.sh` to a
+template with `{log_file}`, `{job_id}`, `{config_path}` placeholders.
+Updated `train_cluster.sh` to call the new orchestrator.
 
-Create `src/aimanager/manager/run.py` following the same pattern as AH's
-`run.py` and simulation's `run.py`:
+#### Simulation (`simulation/run.py`) — DONE
 
-1. Load the config YAML.
-2. Derive `config_name` from the config file path.
-3. Generate a UUID `{job_id}` for this submission.
-4. Create job directory: `.log/training/manager/{config_name}/{job_id}/`.
-5. Copy config to `{job_dir}/config.yml`.
-6. Generate a job-specific SLURM script from the template
-   (`scripts/manager/run_training.sh`) with `--output`/`--error`
-   pointing to `{job_dir}/log.log`. Save as `{job_dir}/run.sh`.
-7. Submit via `sbatch {job_dir}/run.sh`.
-
-Update `scripts/manager/run_training.sh` to be a template with
-`{log_file}` and `{config_path}` placeholders (like AH's template).
-
-Update `train_cluster.sh` to call the new orchestrator:
-`python src/aimanager/manager/run.py <config>` instead of
-`python src/aimanager/rl_manager.py <config>`.
-
-#### Simulation (`simulation/run.py`)
-
-Enhance the existing orchestrator `simulation/run.py` to create per-job
-directories and archive job files:
-
-1. Derive `config_name` from the config file path.
-2. Generate a UUID `{job_id}` for this submission.
-3. Create job directory: `.log/simulation/{config_name}/{job_id}/`.
-4. Copy config to `{job_dir}/config.yml`.
-5. Generate a job-specific SLURM script from the template
-   (`scripts/run_simulation.sh`) with `--output`/`--error` pointing to
-   `{job_dir}/log.log`. Save as `{job_dir}/run.sh`.
-6. Submit via `sbatch {job_dir}/run.sh`.
-
-Update `scripts/run_simulation.sh` to be a template with `{log_file}`
-and `{config_path}` placeholders.
+Created `src/aimanager/simulation/run.py` orchestrator. Converted
+`scripts/run_simulation.sh` to a template with `{log_file}`, `{job_id}`,
+`{config_path}` placeholders.
 
 ### SLURM script template pattern
 
@@ -228,15 +196,20 @@ All three pipelines will use the same approach as AH training:
 
 ## Next actions
 
+### Logging compaction (DONE)
+
+- [x] Logging: update AH training configs `temp_dir: temp` → `.log`
+- [x] Logging: convert `scripts/run_simulation.sh` to template
+- [x] Logging: create `src/aimanager/simulation/run.py` orchestrator
+- [x] Logging: convert `scripts/manager/run_training.sh` to template
+- [x] Logging: create `src/aimanager/manager/run.py` orchestrator
+- [x] Logging: update `train_cluster.sh` manager branch to use new orchestrator
+
+### Unified CLI (TODO)
+
 - [ ] Refactor `rl_manager.py` to expose callable `main()` function
 - [ ] Create `src/aimanager/cli.py` with validation and dispatch
 - [ ] Create `src/aimanager/__main__.py`
 - [ ] Update shell scripts / SLURM orchestrators to use new CLI
-- [ ] Logging: update AH training configs `temp_dir: temp` → `.log`
-- [ ] Logging: convert `scripts/manager/run_training.sh` to template
-- [ ] Logging: create `src/aimanager/manager/run.py` orchestrator
-- [ ] Logging: enhance `simulation/run.py` to archive job files
-- [ ] Logging: convert `scripts/run_simulation.sh` to template
-- [ ] Logging: update `train_cluster.sh` manager branch to use new orchestrator
 - [ ] Test all three subcommands with existing configs on Raven
 - [ ] Update CLAUDE.md commands section
