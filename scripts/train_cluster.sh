@@ -95,7 +95,7 @@ run_training() {
             ;;
         manager)
             train_cmd+=" && uv run python"
-            train_cmd+=" src/aimanager/rl_manager.py"
+            train_cmd+=" src/aimanager/manager/run.py"
             train_cmd+=" ${CONFIG_FILE}"
             ;;
     esac
