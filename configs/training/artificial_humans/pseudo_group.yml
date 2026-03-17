@@ -2,10 +2,10 @@ description: >-
   Training on combined old pilot data (pseudo group matched) and new
   group switching data.
 exec:
-  command: python src/aimanager/artificial_humans/train.py {job_file}
+  command: python -m aimanager train-ah {job_file}
   script_name: run_training
   data_dir: artifacts
-  temp_dir: temp
+  temp_dir: .log
   cores: 4
   memory: 8
 params_only: true

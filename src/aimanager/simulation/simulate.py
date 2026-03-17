@@ -357,30 +357,17 @@ def create_plots(
     print(f"Saved: {aggregates_path}")
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Run simulation from config file",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "config_path",
-        type=str,
-        help="Path to simulation config YAML file",
-    )
+def run_cli(config, config_path):
+    """Entry point for the unified CLI.
 
-    args = parser.parse_args()
-
-    # Validate config file exists
-    if not os.path.exists(args.config_path):
-        print(f"Error: Config file not found: {args.config_path}", file=sys.stderr)
-        sys.exit(1)
-
-    # Load config
-    config = load_config(args.config_path)
-    output_dir = get_output_dir(config, args.config_path)
+    Args:
+        config: Parsed YAML config dict.
+        config_path: Path to the config file (used to derive output_dir).
+    """
+    output_dir = get_output_dir(config, config_path)
     basedir = config.get("basedir", ".")
 
-    print(f"Config: {args.config_path}")
+    print(f"Config: {config_path}")
     print(f"Output directory: {output_dir}")
 
     # Create output directory
@@ -402,6 +389,32 @@ def main():
     create_plots(df, output_dir, config["managers"], config["figure_name"])
 
     print("Simulation complete!")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run simulation from config file",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "config_path",
+        type=str,
+        help="Path to simulation config YAML file",
+    )
+
+    args = parser.parse_args()
+
+    # Validate config file exists
+    if not os.path.exists(args.config_path):
+        print(
+            f"Error: Config file not found: {args.config_path}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Load config
+    config = load_config(args.config_path)
+    run_cli(config, args.config_path)
 
 
 if __name__ == "__main__":
