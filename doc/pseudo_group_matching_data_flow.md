@@ -5,59 +5,13 @@ This document describes every step of
 old 4-player pilot experiment data into the new 8-player format used by
 the artificial human training pipeline.
 
-## Usage Modes
-
-The script has two subcommands: `transform` and `combine`.
-
-### Mode 1: `transform` -- Convert 4-player data to 8-player format
-
-Reads an old 4-player pilot CSV, randomly pairs episodes with matching
-round counts, and writes an 8-player CSV.
+## CLI Interface
 
 ```
-python scripts/data_creation/pilot_pseudo_group_matching.py transform \
+python scripts/data_creation/pilot_pseudo_group_matching.py \
     --in_path <input_csv> \
     --out_path <output_csv> \
     --seed <int, default=42>
-```
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `--in_path` | Yes | Path to old 4-player CSV |
-| `--out_path` | Yes | Path for the transformed 8-player CSV |
-| `--seed` | No | Random seed for pairing (default: 42) |
-
-### Mode 2: `combine` -- Merge transformed data with new data
-
-Concatenates a transformed old-data CSV with the new group-switching
-CSV into a single file for training.
-
-```
-python scripts/data_creation/pilot_pseudo_group_matching.py combine \
-    --transformed_path <transformed_csv> \
-    --new_data_path <new_data_csv> \
-    --out_path <output_csv>
-```
-
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `--transformed_path` | Yes | Path to the transformed 8-player CSV (output of `transform`) |
-| `--new_data_path` | Yes | Path to the new group-switching CSV |
-| `--out_path` | Yes | Path for the combined output CSV |
-
-### Example: Full pipeline
-
-```bash
-# Step 1: Transform old pilot data to 8-player format
-python scripts/data_creation/pilot_pseudo_group_matching.py transform \
-    --in_path experiments/pilot_random1_player_round_slim.csv \
-    --out_path experiments/pilot_random1_pseudo_8_agents.csv
-
-# Step 2: Combine with new group-switching data
-python scripts/data_creation/pilot_pseudo_group_matching.py combine \
-    --transformed_path experiments/pilot_random1_pseudo_8_agents.csv \
-    --new_data_path experiments/group_switching_ah_data_8_agents.csv \
-    --out_path experiments/combined_pilot_group_switching.csv
 ```
 
 ## Input Format
@@ -314,12 +268,10 @@ global_group_id = "pair_0", episode_id = 0
 
 ## Run Output
 
-### Transform
-
 With `pilot_random1_player_round_slim.csv` and default seed:
 
 ```
-$ python scripts/data_creation/pilot_pseudo_group_matching.py transform \
+$ python scripts/data_creation/pilot_pseudo_group_matching.py \
     --in_path experiments/pilot_random1_player_round_slim.csv \
     --out_path experiments/pilot_random1_pseudo_8_agents.csv
 
@@ -331,17 +283,3 @@ Wrote 5728 rows (66 pairs) to experiments/pilot_random1_pseudo_8_agents.csv
 
 - 135 input episodes -> 3 dropped (odd buckets) -> 66 pairs
 - 5728 output rows (66 pairs x variable rounds x 8 players)
-
-### Combine
-
-```
-$ python scripts/data_creation/pilot_pseudo_group_matching.py combine \
-    --transformed_path experiments/pilot_random1_pseudo_8_agents.csv \
-    --new_data_path experiments/group_switching_ah_data_8_agents.csv \
-    --out_path experiments/combined_pilot_group_switching.csv
-
-Combined 5728 + 2720 = 8448 rows to experiments/combined_pilot_group_switching.csv
-```
-
-- 5728 rows from transformed old data + 2720 rows from new data = 8448 total
-- 3 experiment names in combined output: `trail_rounds_2`, `random_1`, `ah_group_switching`
