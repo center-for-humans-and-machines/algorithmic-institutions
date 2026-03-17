@@ -1,10 +1,10 @@
-"""Simulation Orchestrator.
+"""Manager Training Orchestrator.
 
-Creates per-job directories under .log/simulation/{config_name}/{job_id}/,
+Creates per-job directories under .log/training/manager/{config_name}/{job_id}/,
 archives the config and SLURM script, then submits via sbatch.
 
 Usage:
-    python src/aimanager/simulation/run.py <config_path>
+    python src/aimanager/manager/run.py <config_path>
 """
 
 import os
@@ -37,13 +37,15 @@ def ensure_dir(directory):
 
 def config_name_from_path(config_path):
     """Derive config name from path, e.g.
-    configs/simulation/ah_testing/group.yml -> simulation/ah_testing/group
+    configs/training/rl_manager/01_rnn_node.yml -> rl_manager/01_rnn_node
     """
     path = os.path.normpath(config_path)
     name = os.path.splitext(path)[0]
     parts = name.split(os.sep)
-    # Drop leading 'configs' directory if present
+    # Drop leading 'configs' and 'training' directories if present
     if parts and parts[0] == "configs":
+        parts = parts[1:]
+    if parts and parts[0] == "training":
         parts = parts[1:]
     return os.path.join(*parts)
 
@@ -53,7 +55,7 @@ def run(config_path):
     config_name = config_name_from_path(config_path)
     job_id = str(uuid.uuid4())[:8]
 
-    run_dir = os.path.join(".log", config_name, job_id)
+    run_dir = os.path.join(".log", "training", "manager", config_name, job_id)
     log_file = os.path.join(run_dir, "log.log")
     job_file = os.path.join(run_dir, "config.yml")
     script_file = os.path.join(run_dir, "run.sh")
@@ -64,7 +66,7 @@ def run(config_path):
     shutil.copy2(config_path, job_file)
 
     # Fill SLURM template
-    template = read_file("scripts/run_simulation.sh")
+    template = read_file("scripts/manager/run_training.sh")
     script_str = template.format(
         log_file=log_file,
         job_id=job_id,

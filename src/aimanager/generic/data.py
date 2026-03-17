@@ -11,6 +11,7 @@ class AgentRoundRaw(pa.DataFrameModel):
     round_number: Series[int]
     player_id: Series[int]
     global_group_id: Series[str]
+    group_id: Series[int]
     player_no_input: Series[int]
     contribution: Series[float]
     punishment: Series[float]
@@ -41,13 +42,16 @@ def parse_agent_rounds(df):
     df["punishment"] = df["punishment"].fillna(0).astype(int)
     df["contribution"] = df["contribution"].fillna(0).astype(int)
 
-    # derive an absolute agent_group
-    base_group = df["group_idx"].astype(int)
-    df["agent_group"] = base_group - base_group.min()
+    # sub-group membership (node feature for GNN)
+    df["agent_group"] = df["group_id"].astype(int)
 
-    # create a single group idx for each episode of each group
-    episode_group = df["global_group_id"] + "__" + df["episode_id"].astype(str)
-    df["group_idx"] = episode_group.rank(method="dense").astype(int) - 1
+    # episode-batch index (tensor's first dimension)
+    episode_group = (
+        df["global_group_id"] + "__" + df["episode_id"].astype(str)
+    )
+    df["group_idx"] = (
+        episode_group.rank(method="dense").astype(int) - 1
+    )
 
     # rescale common good by the total number of participants in round
     round_player_input = df.groupby(["episode_id", "round_number"])[
@@ -56,7 +60,10 @@ def parse_agent_rounds(df):
     df["common_good"] = (df["common_good"] / round_player_input).fillna(0)
     df["recorded"] = True
 
-    df.drop(columns=["global_group_id", "player_no_input"], inplace=True)
+    df.drop(
+        columns=["global_group_id", "group_id", "player_no_input"],
+        inplace=True,
+    )
     df.rename(columns={"player_id": "player_idx"}, inplace=True)
     AgentRound(df)
     return df

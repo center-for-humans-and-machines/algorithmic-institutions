@@ -31,12 +31,8 @@ Write plan files to `doc/plans/` (flat directory) using descriptive names; statu
 - One sentence per entry; prefer updating existing entries over adding new ones
 
 ## GitHub issue workflow
-- When planning for a GitHub issue:
-  1. Create a new branch from `main` named `<issue-number>-<short-description>` (e.g. `14-parallel-group-training`)
-  2. Commit the plan file to that branch (plan as the only diff)
-  3. Push the branch to the remote
-  4. Add a comment to the issue linking to the plan file **on the branch** (e.g. `https://github.com/<org>/<repo>/blob/plan/<plan-name>/doc/plans/<plan-name>.md`). Do NOT link to `main` — the plan is not on main until merged.
-  5. Add the label `human-plan-review` to the issue
+- When planning for a GitHub issue: after writing the plan, commit it to a new branch based on `main` (plan as the only diff) and add a short comment to the issue referencing the branch; add also link to the plan
+- After finishing the plan and the issue comment, add the label `human-plan-review` to the issue
 
 ## Execution
 - Always run in background mode by default unless the caller explicitly requests foreground.

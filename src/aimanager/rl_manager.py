@@ -236,7 +236,12 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     return model_file
 
 
+def main(config):
+    """Entry point for the unified CLI."""
+    train_manager(config)
+
+
 if __name__ == "__main__":
     config_path = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_CONFIG_PATH
     config = load_config(config_path)
-    train_manager(config)
+    main(config)

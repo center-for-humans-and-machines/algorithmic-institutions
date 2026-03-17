@@ -24,20 +24,24 @@ A research project exploring AI-driven group management dynamics. Uses supervise
 
 ```
 src/aimanager/                    # Main Python package
+  __main__.py                     # Unified CLI entry (python -m aimanager)
+  cli.py                          # CLI dispatch, config validation
+  rl_manager.py                   # RL manager training logic
   artificial_humans/              # Artificial human models (supervised DL)
     train.py                      # Training logic
-    run.py                        # CLI entry point for AH training
+    run.py                        # SLURM orchestrator for AH training
     evaluation.py                 # Model evaluation
     grid.py                       # Grid search utilities
   manager/                        # Manager models
     manager.py                    # Base manager logic
     environment.py                # RL environment
+    run.py                        # SLURM orchestrator for manager training
     artificial_human_group.py     # Group of artificial humans for training
     api_manager.py                # API-based manager interface
   generic/                        # Generic model components and encoders
   simulation/                     # Simulation framework
     simulate.py                   # Core simulation logic
-    run.py                        # CLI entry point for simulations
+    run.py                        # SLURM orchestrator for simulations
   utils/                          # Shared utilities
 scripts/                          # Executable shell/python scripts
   artificial_humans/              # AH training scripts
@@ -84,18 +88,65 @@ Labels control the workflow for GitHub issues:
 
 ### Key Files
 
+- `src/aimanager/cli.py` -- Unified CLI dispatch and config validation
+- `src/aimanager/__main__.py` -- Entry point for `python -m aimanager`
 - `src/aimanager/artificial_humans/train.py` -- AH model training logic
-- `src/aimanager/artificial_humans/run.py` -- CLI entry point for AH training
+- `src/aimanager/artificial_humans/run.py` -- SLURM orchestrator for AH training
 - `src/aimanager/manager/environment.py` -- RL training environment for managers
 - `src/aimanager/manager/manager.py` -- Manager model logic
+- `src/aimanager/manager/run.py` -- SLURM orchestrator for manager training
 - `src/aimanager/simulation/simulate.py` -- Core simulation (manager vs artificial humans)
-- `src/aimanager/rl_manager.py` -- RL manager entry point
+- `src/aimanager/simulation/run.py` -- SLURM orchestrator for simulations
+- `src/aimanager/rl_manager.py` -- RL manager training logic
 - `run.py` -- Notebook runner using Papermill with YAML parameter files
 - `reports/basics.md` -- Game rules and experimental setup reference
 
 ### Git Workflow
 
 **IMPORTANT**: All commits must be made using the `/commit` skill. This ensures staged files are reviewed before committing.
+
+### Environment
+
+- PyG/CUDA packages are Linux-only (see `sys_platform` markers in `pyproject.toml`)
+- Local macOS has CPU-only `torch==1.11.0` without PyG subpackages
+- Full environment (torch + CUDA + PyG) only available on Raven cluster
+
+### Testing
+
+**IMPORTANT**: Tests MUST be run on the Raven HPC cluster, not locally.
+The test suite depends on `torch_scatter` and other PyG packages that are only
+available on Linux. Even tests that use `device="cpu"` will fail to import locally.
+
+```bash
+# Run all tests (syncs code first):
+scripts/remote_test.sh
+
+# Sync only (no tests):
+scripts/remote_test.sh --sync-only
+
+# Test only (skip sync):
+scripts/remote_test.sh --test-only
+
+# Run specific tests:
+scripts/remote_test.sh -- -k test_encoder -v
+```
+
+**Prerequisites**: SSH ControlMaster must be active (`ssh raven` in a separate terminal, persists 12h).
+
+**Test logs**: `.claude/test-logs/latest.log` (symlink to most recent run)
+
+**Test locations**:
+- `src/aimanager/tests/test_encoder.py` - Tensor encoder unit tests
+- `src/aimanager/tests/test_environment.py` - RL environment unit tests
+- `scripts/tests/test_remote_test.py` - Remote test script tests (runs locally)
+
+### Remote Cluster (Raven)
+
+- Host: raven.mpcdf.mpg.de (via ProxyJump through gate.mpcdf.mpg.de)
+- User: certuer
+- Project path: ~/algorithmic-institutions
+- Remote `.venv` must be pre-configured
+- Tests run on login node (no GPU needed)
 
 ### Commands
 
@@ -105,10 +156,12 @@ Labels control the workflow for GitHub issues:
 - **Pre-commit run**: `pre-commit run --all-files`
 - **Format**: `black src/`
 - **Lint**: `flake8 src/ --max-line-length=88 --extend-ignore=E203,W503`
-- **Run tests**: `pytest`
+- **Run tests**: `scripts/remote_test.sh`
+- **Fetch from cluster**: `scripts/fetch_cluster.sh <remote_path>` (path relative to `~/algorithmic-institutions`)
 - **Run notebook**: `python run.py run <yaml_config>`
-- **Train AH models**: `python src/aimanager/artificial_humans/run.py <config>`
-- **Run simulation**: `python src/aimanager/simulation/run.py <config>`
+- **Train AH models**: `python -m aimanager train-ah <config>`
+- **Train RL manager**: `python -m aimanager train-manager <config>`
+- **Run simulation**: `python -m aimanager simulate <config>`
 
 ### Where to Find Things
 
