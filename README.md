@@ -74,6 +74,10 @@ pip install -e ".[dev]"
 pip install -e djx
 ```
 
+# Development Workflow
+
+See [doc/claude_code_workflow.md](doc/claude_code_workflow.md) for the AI-assisted development workflow using Claude Code agents.
+
 # Up-to-date Docs for Cluster Runs
 - The up-to-date version of the pipeline is detailed [here](reports/up_to_date_docs.md).
 
