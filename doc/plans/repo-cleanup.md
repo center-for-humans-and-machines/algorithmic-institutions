@@ -121,10 +121,12 @@ Keep: `basics.md`, `artificial_humans.md`, `manager.md`,
 
 ## Phase 6 — Config consistency
 
-- [ ] Verify all remaining configs reference only kept artifacts
-- [ ] Update simulation configs if artifact paths changed in phase 2e
-- [ ] Verify `.artifactinclude` matches final artifact set
-- [ ] Sync cleaned artifacts to Raven cluster
+- [x] Verify all remaining configs reference only kept artifacts
+- [x] Fix `group.yml` artifact paths (pseudo_group, combined_old_new_group,
+      raven_script_21)
+- [x] Remove stale `configs/simulation/ah_testing/01_compare.yml`
+- [x] Trim `.artifactinclude` from 30 to 13 active entries
+- [x] Sync cleaned artifacts to Raven cluster
 
 ---
 
