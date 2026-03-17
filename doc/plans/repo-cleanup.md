@@ -113,12 +113,9 @@ Keep: `basics.md`, `artificial_humans.md`, `manager.md`,
 
 ## Phase 5 — Miscellaneous
 
-- [ ] Delete `update_artifacts.py` (superseded by CLI + fetch skill)
-- [ ] Remove old DJX run definitions: `run/behavioral_cloning/` (24 files)
-- [ ] Review `notebooks/archive/` (38 MB, 60+ files) — delete or keep
-      for reference
-- [ ] Move completed plan `doc/plans/47-train-skill.md` to archive if
-      done
+- [x] Delete `update_artifacts.py` (superseded by CLI + fetch skill)
+- Kept `notebooks/archive/` for reference
+- Skipped `doc/plans/47-train-skill.md` — still ACTIVE
 
 ---
 

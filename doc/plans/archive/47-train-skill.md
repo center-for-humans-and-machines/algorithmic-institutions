@@ -1,4 +1,4 @@
-# [ACTIVE] Add /train skill and extend /fetch-cluster (#47)
+# [DONE] Add /train skill and extend /fetch-cluster (#47)
 
 ## Task 1: `scripts/train_cluster.sh`
 
