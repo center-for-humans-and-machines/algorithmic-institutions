@@ -66,7 +66,7 @@ None -- the investigation resolved all five concerns. The `group_payoff_round` f
 
 - [x] Review and approve this plan
 - [x] Implement terminal branch split for `group_payoff_round`
-- [ ] Implement same-round reward computation for `group_payoff`
+- [x] Implement same-round reward computation for `group_payoff`
 - [ ] Refactor `update_reward()` into top-level formula fork
 - [ ] Audit replay memory pairing after changes
 - [ ] Add or update tests in `src/aimanager/manager/test/test_environment.py` covering both formulas and terminal/non-terminal rounds

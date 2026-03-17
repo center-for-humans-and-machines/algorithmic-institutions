@@ -274,16 +274,22 @@ class ArtificialHumanEnv:
                 )
         else:
             if self.reward_formula == "group_payoff":
-                # this assumes all groups in the batch to be identicial compositioned
+                # Use prev_* to get same-round data (step() already
+                # advanced contribution to the next round).
                 contribution_per_group = self.compute_average_per_group(
-                    self.contribution, self.contribution_valid
+                    self.prev_contribution,
+                    self.prev_contribution_valid,
                 )
-                # this additional assumes that groups do not change throughout the game
                 prev_punishment_per_group = self.compute_average_per_group(
-                    self.prev_punishment, self.contribution_valid
+                    self.prev_punishment,
+                    self.prev_contribution_valid,
                 )
-                common_good_per_group = self.compute_common_good_per_group(
-                    self.contribution, self.prev_punishment, self.contribution_valid
+                common_good_per_group = (
+                    self.compute_common_good_per_group(
+                        self.prev_contribution,
+                        self.prev_punishment,
+                        self.prev_contribution_valid,
+                    )
                 )
                 payoff_per_group = (
                     20
