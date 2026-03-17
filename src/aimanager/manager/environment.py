@@ -255,10 +255,8 @@ class ArtificialHumanEnv:
         )
 
     def update_reward(self):
-        if self.done:
-            if self.reward_formula == "group_payoff_round":
-                self.reward = self.group_payoff
-            else:
+        if self.reward_formula == "group_payoff":
+            if self.done:
                 masked_prev_punishment = th.where(
                     self.prev_contribution_valid,
                     self.prev_punishment,
@@ -272,17 +270,20 @@ class ArtificialHumanEnv:
                 self.reward = (
                     -average_masked_punishment_per_group / 32
                 )
-        else:
-            if self.reward_formula == "group_payoff":
+            else:
                 # Use prev_* to get same-round data (step() already
                 # advanced contribution to the next round).
-                contribution_per_group = self.compute_average_per_group(
-                    self.prev_contribution,
-                    self.prev_contribution_valid,
+                contribution_per_group = (
+                    self.compute_average_per_group(
+                        self.prev_contribution,
+                        self.prev_contribution_valid,
+                    )
                 )
-                prev_punishment_per_group = self.compute_average_per_group(
-                    self.prev_punishment,
-                    self.prev_contribution_valid,
+                prev_punishment_per_group = (
+                    self.compute_average_per_group(
+                        self.prev_punishment,
+                        self.prev_contribution_valid,
+                    )
                 )
                 common_good_per_group = (
                     self.compute_common_good_per_group(
@@ -298,11 +299,12 @@ class ArtificialHumanEnv:
                     + common_good_per_group
                 )
                 self.reward = payoff_per_group / 32
-            elif self.reward_formula == "group_payoff_round":
-                # this assumes all groups in the batch to be identicial compositioned
-                self.reward = self.group_payoff
-            else:
-                raise ValueError(f"Unknown reward formula: {self.reward_formula}")
+        elif self.reward_formula == "group_payoff_round":
+            self.reward = self.group_payoff
+        else:
+            raise ValueError(
+                f"Unknown reward formula: {self.reward_formula}"
+            )
 
     def update_contribution(self):
         contribution = self.artifical_humans.predict(
