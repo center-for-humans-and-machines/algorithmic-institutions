@@ -1,4 +1,4 @@
-# [DRAFT] Unified CLI entry point
+# [DONE] Unified CLI entry point
 
 ## Goal
 
@@ -205,11 +205,11 @@ All three pipelines will use the same approach as AH training:
 - [x] Logging: create `src/aimanager/manager/run.py` orchestrator
 - [x] Logging: update `train_cluster.sh` manager branch to use new orchestrator
 
-### Unified CLI (TODO)
+### Unified CLI
 
-- [ ] Refactor `rl_manager.py` to expose callable `main()` function
-- [ ] Create `src/aimanager/cli.py` with validation and dispatch
-- [ ] Create `src/aimanager/__main__.py`
-- [ ] Update shell scripts / SLURM orchestrators to use new CLI
-- [ ] Test all three subcommands with existing configs on Raven
-- [ ] Update CLAUDE.md commands section
+- [x] Refactor `rl_manager.py` to expose callable `main()` function
+- [x] Create `src/aimanager/cli.py` with validation and dispatch
+- [x] Create `src/aimanager/__main__.py`
+- [x] Update shell scripts / SLURM orchestrators to use new CLI
+- [x] Test all three subcommands with existing configs on Raven
+- [x] Update CLAUDE.md commands section

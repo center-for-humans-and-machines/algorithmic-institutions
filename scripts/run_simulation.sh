@@ -22,4 +22,4 @@ source .venv/bin/activate
 
 module load cuda/11.4
 
-python src/aimanager/simulation/simulate.py {config_path}
+python -m aimanager simulate {config_path}

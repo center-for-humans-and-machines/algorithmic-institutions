@@ -22,4 +22,4 @@ source .venv/bin/activate
 
 module load cuda/11.4
 
-python src/aimanager/rl_manager.py {config_path}
+python -m aimanager train-manager {config_path}
