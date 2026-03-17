@@ -255,14 +255,23 @@ class ArtificialHumanEnv:
         )
 
     def update_reward(self):
-        masked_prev_punishment = th.where(
-            self.prev_contribution_valid, self.prev_punishment, 0
-        )
         if self.done:
-            average_masked_punishment_per_group = self.compute_average_per_group(
-                masked_prev_punishment
-            )
-            self.reward = -average_masked_punishment_per_group / 32
+            if self.reward_formula == "group_payoff_round":
+                self.reward = self.group_payoff
+            else:
+                masked_prev_punishment = th.where(
+                    self.prev_contribution_valid,
+                    self.prev_punishment,
+                    0,
+                )
+                average_masked_punishment_per_group = (
+                    self.compute_average_per_group(
+                        masked_prev_punishment
+                    )
+                )
+                self.reward = (
+                    -average_masked_punishment_per_group / 32
+                )
         else:
             if self.reward_formula == "group_payoff":
                 # this assumes all groups in the batch to be identicial compositioned

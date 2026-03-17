@@ -1,6 +1,6 @@
-# [DRAFT] Align reward timing with manager's action round
+# [ACTIVE] Align reward timing with manager's action round
 
-Issue: #40
+Issue: #41 (supersedes #40)
 
 ## Summary
 
@@ -64,8 +64,8 @@ None -- the investigation resolved all five concerns. The `group_payoff_round` f
 
 ## Next Actions
 
-- [ ] Review and approve this plan
-- [ ] Implement terminal branch split for `group_payoff_round`
+- [x] Review and approve this plan
+- [x] Implement terminal branch split for `group_payoff_round`
 - [ ] Implement same-round reward computation for `group_payoff`
 - [ ] Refactor `update_reward()` into top-level formula fork
 - [ ] Audit replay memory pairing after changes
