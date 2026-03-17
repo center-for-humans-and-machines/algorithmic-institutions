@@ -68,6 +68,6 @@ None -- the investigation resolved all five concerns. The `group_payoff_round` f
 - [x] Implement terminal branch split for `group_payoff_round`
 - [x] Implement same-round reward computation for `group_payoff`
 - [x] Refactor `update_reward()` into top-level formula fork
-- [ ] Audit replay memory pairing after changes
-- [ ] Add or update tests in `src/aimanager/manager/test/test_environment.py` covering both formulas and terminal/non-terminal rounds
+- [x] Audit replay memory pairing after changes (verified, no changes needed)
+- [x] Add or update tests in `src/aimanager/tests/test_environment.py` covering both formulas and terminal/non-terminal rounds
 - [ ] Run manual regression test: train with both `17_exp2_group_payoff_heavy_optimize.yml` and `22_exp2_group_payoff_round_heavy_optimize.yml`, compare learning curves

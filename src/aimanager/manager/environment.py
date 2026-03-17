@@ -306,6 +306,7 @@ class ArtificialHumanEnv:
                 f"Unknown reward formula: {self.reward_formula}"
             )
 
+
     def update_contribution(self):
         contribution = self.artifical_humans.predict(
             self.state,
