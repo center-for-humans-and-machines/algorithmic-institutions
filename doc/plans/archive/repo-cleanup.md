@@ -1,4 +1,4 @@
-# [DRAFT] Repository cleanup
+# [DONE] Repository cleanup
 
 Tracks issue [#52](https://github.com/center-for-humans-and-machines/algorithmic-institutions/issues/52).
 
