@@ -11,6 +11,7 @@ class AgentRoundRaw(pa.DataFrameModel):
     round_number: Series[int]
     player_id: Series[int]
     global_group_id: Series[str]
+    group_id: Series[int]
     player_no_input: Series[int]
     contribution: Series[float]
     punishment: Series[float]
@@ -28,6 +29,7 @@ class AgentRound(pa.DataFrameModel):
     punishment_valid: Series[bool]
     common_good: Series[float]
     recorded: Series[bool]
+    agent_group: Series[int]
 
 
 def parse_agent_rounds(df):
@@ -40,9 +42,16 @@ def parse_agent_rounds(df):
     df["punishment"] = df["punishment"].fillna(0).astype(int)
     df["contribution"] = df["contribution"].fillna(0).astype(int)
 
-    # create a single group idx for each episode of each group
-    episode_group = df["global_group_id"] + "__" + df["episode_id"].astype(str)
-    df["group_idx"] = episode_group.rank(method="dense").astype(int) - 1
+    # sub-group membership (node feature for GNN)
+    df["agent_group"] = df["group_id"].astype(int)
+
+    # episode-batch index (tensor's first dimension)
+    episode_group = (
+        df["global_group_id"] + "__" + df["episode_id"].astype(str)
+    )
+    df["group_idx"] = (
+        episode_group.rank(method="dense").astype(int) - 1
+    )
 
     # rescale common good by the total number of participants in round
     round_player_input = df.groupby(["episode_id", "round_number"])[
@@ -51,7 +60,10 @@ def parse_agent_rounds(df):
     df["common_good"] = (df["common_good"] / round_player_input).fillna(0)
     df["recorded"] = True
 
-    df.drop(columns=["global_group_id", "player_no_input"], inplace=True)
+    df.drop(
+        columns=["global_group_id", "group_id", "player_no_input"],
+        inplace=True,
+    )
     df.rename(columns={"player_id": "player_idx"}, inplace=True)
     AgentRound(df)
     return df
@@ -74,6 +86,7 @@ def get_default_values(df):
         "recorded": False,
         "punishment_valid": False,
         "common_good": cg_def,
+        "agent_group": 0,
     }
     return default_values
 
@@ -91,6 +104,7 @@ def create_torch_data_new(df, default_values=None):
         "contribution_valid": th.bool,
         "punishment_valid": th.bool,
         "recorded": th.bool,
+        "agent_group": th.int64,
     }
 
     n_groups = df["group_idx"].max() + 1

@@ -14,6 +14,7 @@ from aimanager.artificial_humans.evaluation import (
 )
 from aimanager.utils.utils import make_dir
 from itertools import permutations
+from tqdm import tqdm
 
 
 def shuffle_feature(data, feature_name):
@@ -56,7 +57,10 @@ def apply_mask_pattern(data, mask_pattern, y_name, mask_name, default_values):
     return data
 
 
-def create_fully_connected(n_nodes, n_groups=1, device=th.device("cpu")):
+def create_fully_connected(
+    n_nodes, n_groups=1, n_agent_groups=1, device=th.device("cpu")
+):
+    agents_per_grp = n_nodes // n_agent_groups
     return th.tensor(
         [
             [i + k * n_nodes, j + k * n_nodes]
@@ -64,6 +68,7 @@ def create_fully_connected(n_nodes, n_groups=1, device=th.device("cpu")):
             for i in range(n_nodes)
             for j in range(n_nodes)
             if i != j
+            and (i // agents_per_grp == j // agents_per_grp)
         ],
         device=device,
     ).T
@@ -82,6 +87,7 @@ def main(config):
     min_predicted = config.get("min_predicted", None)
     max_predicted = config.get("max_predicted", None)
     n_player = config["n_player"]
+    n_agent_groups = config.get("n_groups", 1)
     n_cross_val = config["n_cross_val"]
     fraction_training = config["fraction_training"]
     model_name = config["model_name"]
@@ -157,13 +163,19 @@ def main(config):
             default_values=default_values, autoregressive=autoregression, **model_args
         ).to(th_device)
         batch_size = train_args["batch_size"]
-        batch_edge_index = create_fully_connected(n_player, n_groups=batch_size)
+        batch_edge_index = create_fully_connected(
+            n_player, n_groups=batch_size, n_agent_groups=n_agent_groups
+        )
         train_edge_index = create_fully_connected(
-            n_player, n_groups=train_data["contribution"].shape[0]
+            n_player,
+            n_groups=train_data["contribution"].shape[0],
+            n_agent_groups=n_agent_groups,
         )
         if test_data is not None:
             test_edge_index = create_fully_connected(
-                n_player, n_groups=test_data["contribution"].shape[0]
+                n_player,
+                n_groups=test_data["contribution"].shape[0],
+                n_agent_groups=n_agent_groups,
             )
         y_name = model_args["y_name"]
 
@@ -172,8 +184,7 @@ def main(config):
         sum_loss = 0
         n_steps = 0
 
-        print("Starting training for CV {i}")
-        for e in range(train_args["epochs"]):
+        for e in tqdm(range(train_args["epochs"])):
             rec.set_labels(cv_split=i, epoch=e)
             model.train()
             for j, b_data in enumerate(batch_loader(train_data, batch_size)):

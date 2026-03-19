@@ -17,9 +17,9 @@ agents handle implementation work.
 
 3. **Human reviews the plan.** Approve, request changes, or reject.
    Once approved, relabel the issue to `engineer-agent-ready` or
-   `research-agent-ready`.
+   `data-analyst-agent-ready`.
 
-4. **Engineer / Researcher agent** picks up the approved plan,
+4. **Engineer / Data analyst agent** picks up the approved plan,
    implements it in an isolated worktree, runs tests and linting,
    creates a PR with a checkbox test plan, comments on the issue, and
    labels it `human-review`.
@@ -37,7 +37,7 @@ agents handle implementation work.
 
 ```
 architect-agent-ready  →  human-plan-review  →  engineer-agent-ready
-                                                 research-agent-ready
+                                                 data-analyst-agent-ready
                                               →  human-review  →  (merged/closed)
 ```
 
@@ -45,7 +45,7 @@ architect-agent-ready  →  human-plan-review  →  engineer-agent-ready
   planning
 - `human-plan-review` — architect wrote a plan, awaiting human
   approval
-- `engineer-agent-ready` / `research-agent-ready` — plan approved,
+- `engineer-agent-ready` / `data-analyst-agent-ready` — plan approved,
   ready for implementation
 - `human-review` — PR is open, awaiting human review
 - `human-specification-required` — issue needs clarification before
@@ -57,7 +57,8 @@ architect-agent-ready  →  human-plan-review  →  engineer-agent-ready
 |-------|------|--------|
 | **Architect** | Explores codebase, writes plans | `.claude/agents/architect.md` |
 | **Engineer** | Implements features, writes tests | `.claude/agents/engineer.md` |
-| **Researcher** | Implements analysis pipelines | `.claude/agents/researcher.md` |
+| **Data Analyst** | Implements analysis pipelines, visualisations | `.claude/agents/data-analyst.md` |
+| **Literature Researcher** | Searches and synthesizes academic literature | `.claude/agents/literature-researcher.md` |
 | **Reviewer** | Runs tests, checks PR checkboxes, reviews for code quality | `.claude/agents/reviewer.md` |
 
 Agents run in isolated git worktrees so they cannot interfere with

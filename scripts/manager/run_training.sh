@@ -1,9 +1,9 @@
 #!/bin/bash -l
 #
 #SBATCH --chdir=.
-#SBATCH --output=.log/manager/aimanager_training_%j.out
-#SBATCH --error=.log/manager/aimanager_training_%j.out
-#SBATCH --job-name=aimanager_training
+#SBATCH --output={log_file}
+#SBATCH --error={log_file}
+#SBATCH --job-name={job_id}
 #
 #SBATCH --nodes=1
 #SBATCH --tasks-per-node=1
@@ -14,9 +14,7 @@
 #SBATCH --constraint="gpu"
 #SBATCH --gres=gpu:a100:1
 #
-#SBATCH --time=15:00:00
-
-CONFIG_PATH=${1:-"src/aimanager/rl_manager.yml"}
+#SBATCH --time=20:00:00
 
 set -e
 
@@ -24,4 +22,4 @@ source .venv/bin/activate
 
 module load cuda/11.4
 
-python src/aimanager/rl_manager.py $CONFIG_PATH
+python -m aimanager train-manager {config_path}

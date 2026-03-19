@@ -1,117 +1,85 @@
 """Simulation Orchestrator.
 
-Entry point for running simulations. Creates output directories and submits
-SLURM jobs via sbatch.
+Creates per-job directories under .log/simulation/{config_name}/{job_id}/,
+archives the config and SLURM script, then submits via sbatch.
 
 Usage:
-    python src/simulation/run.py <config_path> [--local]
-
-Examples:
-    python src/simulation/run.py configs/simulation/01_compare.yml
-    python src/simulation/run.py configs/simulation/01_compare.yml --local
+    python src/aimanager/simulation/run.py <config_path>
 """
 
-import argparse
 import os
+import shutil
 import subprocess
 import sys
+import uuid
 
 import yaml
 
 
-def make_dir(path: str) -> None:
-    """Create directory if it doesn't exist."""
-    os.makedirs(path, exist_ok=True)
-
-
-def load_config(config_path: str) -> dict:
-    """Load YAML configuration file."""
+def load_config(config_path):
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
 
-def get_output_dir(config: dict, config_path: str) -> str:
-    """Determine output directory from config or config path."""
-    if "output_dir" in config:
-        return config["output_dir"]
-    # Default: use config path without extension
-    return os.path.splitext(config_path)[0]
+def read_file(filename):
+    with open(filename, "r") as f:
+        return f.read()
 
 
-def validate_config(config: dict, config_path: str) -> None:
-    """Validate that required config keys are present."""
-    required_keys = ["artificial_humans", "managers", "n_episodes", "n_episode_steps"]
-    missing = [k for k in required_keys if k not in config]
-    if missing:
-        raise ValueError(f"Config {config_path} missing required keys: {missing}")
+def write_file(string, filename):
+    with open(filename, "w") as f:
+        f.write(string)
 
 
-def run_local(config_path: str) -> None:
-    """Run simulation locally without SLURM."""
-    print(f"Running simulation locally with config: {config_path}")
-    result = subprocess.run(
-        [sys.executable, "-m", "src.simulation.simulate", config_path],
-        check=True,
+def ensure_dir(directory):
+    os.makedirs(directory, exist_ok=True)
+
+
+def config_name_from_path(config_path):
+    """Derive config name from path, e.g.
+    configs/simulation/ah_testing/group.yml -> simulation/ah_testing/group
+    """
+    path = os.path.normpath(config_path)
+    name = os.path.splitext(path)[0]
+    parts = name.split(os.sep)
+    # Drop leading 'configs' directory if present
+    if parts and parts[0] == "configs":
+        parts = parts[1:]
+    return os.path.join(*parts)
+
+
+def run(config_path):
+    config = load_config(config_path)
+    config_name = config_name_from_path(config_path)
+    job_id = str(uuid.uuid4())[:8]
+
+    run_dir = os.path.join(".log", config_name, job_id)
+    log_file = os.path.join(run_dir, "log.log")
+    job_file = os.path.join(run_dir, "config.yml")
+    script_file = os.path.join(run_dir, "run.sh")
+
+    ensure_dir(run_dir)
+
+    # Archive config
+    shutil.copy2(config_path, job_file)
+
+    # Fill SLURM template
+    template = read_file("scripts/run_simulation.sh")
+    script_str = template.format(
+        log_file=log_file,
+        job_id=job_id,
+        config_path=config_path,
     )
-    return result.returncode
+    write_file(script_str, script_file)
 
-
-def submit_slurm_job(config_path: str) -> int:
-    """Submit simulation job to SLURM via sbatch."""
-    script_path = "scripts/run_simulation.sh"
-    print(f"Submitting SLURM job with config: {config_path}")
-    result = subprocess.run(
-        ["sbatch", script_path, config_path],
-        capture_output=True,
-        text=True,
+    # Submit
+    start_command = f"sbatch {script_file}"
+    print(start_command)
+    subprocess.run(
+        start_command, stdout=subprocess.PIPE, shell=True, check=True
     )
-    print(result.stdout)
-    if result.stderr:
-        print(result.stderr, file=sys.stderr)
-    return result.returncode
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Run simulation pipeline",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
-    )
-    parser.add_argument(
-        "config_path",
-        type=str,
-        help="Path to simulation config YAML file",
-    )
-    parser.add_argument(
-        "--local",
-        action="store_true",
-        help="Run locally instead of submitting to SLURM",
-    )
-
-    args = parser.parse_args()
-
-    # Validate config file exists
-    if not os.path.exists(args.config_path):
-        print(f"Error: Config file not found: {args.config_path}", file=sys.stderr)
-        sys.exit(1)
-
-    # Load and validate config
-    config = load_config(args.config_path)
-    validate_config(config, args.config_path)
-
-    # Create output directory
-    output_dir = get_output_dir(config, args.config_path)
-    make_dir(output_dir)
-    print(f"Output directory: {output_dir}")
-
-    # Run simulation
-    if args.local:
-        returncode = run_local(args.config_path)
-    else:
-        returncode = submit_slurm_job(args.config_path)
-
-    sys.exit(returncode)
 
 
 if __name__ == "__main__":
-    main()
+    config_path = sys.argv[1]
+    run(config_path)
