@@ -1,6 +1,7 @@
 import os
 import sys
 import random
+import warnings
 import yaml
 
 from itertools import count
@@ -128,12 +129,21 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         .to(device)
     )
 
-    print(f"Creating environment with {config['env_args']}")
+    env_args = config["env_args"].copy()
+    if env_args.pop("reward_formula", None) is not None:
+        warnings.warn(
+            "reward_formula is deprecated and ignored. "
+            "Reward is always computed from group_payoff.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+    print(f"Creating environment with {env_args}")
     env = ArtificialHumanEnv(
         artifical_humans=ah,
         artifical_humans_valid=ahv,
         device=device,
-        **config["env_args"],
+        **env_args,
     )
 
     manager_args = config["manager_args"]
