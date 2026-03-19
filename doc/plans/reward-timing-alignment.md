@@ -1,4 +1,4 @@
-# [ACTIVE] Align reward timing with manager's action round
+# [DONE] Align reward timing with manager's action round
 
 Issue: #41 (supersedes #40)
 
@@ -70,4 +70,4 @@ None -- the investigation resolved all five concerns. The `group_payoff_round` f
 - [x] Refactor `update_reward()` into top-level formula fork
 - [x] Audit replay memory pairing after changes (verified, no changes needed)
 - [x] Add or update tests in `src/aimanager/tests/test_environment.py` covering both formulas and terminal/non-terminal rounds
-- [ ] Run manual regression test: train with both `17_exp2_group_payoff_heavy_optimize.yml` and `22_exp2_group_payoff_round_heavy_optimize.yml`, compare learning curves
+- [x] Run manual regression test: trained both formulas (100k steps each), simulated against pr7 baseline. All three managers produce comparable behavioral dynamics (punishment, contribution, common good, payoff). Results at `plots/simulation/02_reward_timing/`

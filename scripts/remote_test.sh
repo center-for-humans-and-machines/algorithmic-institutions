@@ -75,6 +75,7 @@ sync_files() {
         --filter=':- .gitignore' \
         --exclude='.git/' \
         --exclude='.venv/' \
+        --exclude='.log/' \
         --exclude='artifacts/' \
         --exclude='plots/' \
         --exclude='notebooks/' \
