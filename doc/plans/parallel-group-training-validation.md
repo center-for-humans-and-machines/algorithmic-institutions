@@ -18,7 +18,7 @@ Train two independent groups of 4 agents each (8 agents total, `n_groups=2`) in 
 
 ## Reference Config
 
-`run/manager/17_exp2_group_payoff_heavy_optimize.yml` on branch `multi_manager_rl`. This is the canonical RL training config. Key parameters: `n_agents: 4`, `batch_size: 1000`, `n_rounds: 24`, `reward_formula: group_payoff`, seed 42. After #42 lands, `reward_formula` will be removed (only `group_payoff_round` survives).
+`configs/training/rl_manager/01_rnn_node.yml` — the current canonical RL training config. It replicates the old DJX config `run/manager/17_exp2_group_payoff_heavy_optimize.yml` with only expected differences: `reward_formula` removed (#42) and paths updated from `data/` to `artifacts/`. Key parameters: `n_agents: 4`, `n_groups: 1`, `batch_size: 1000`, `n_rounds: 24`, seed 42.
 
 ## Current State
 
