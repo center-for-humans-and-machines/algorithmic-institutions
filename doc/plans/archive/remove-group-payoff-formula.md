@@ -1,4 +1,4 @@
-# [ACTIVE] Remove group_payoff formula
+# [DONE] Remove group_payoff formula
 
 Issue: #42
 
