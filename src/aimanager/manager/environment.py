@@ -38,6 +38,7 @@ class ArtificialHumanEnv:
         n_rounds,
         device,
         n_groups=1,
+        agent_groups=None,
         default_values=None,
     ):
         """
@@ -74,9 +75,18 @@ class ArtificialHumanEnv:
             dtype=th.int64,
         )
 
-        agent_groups = th.arange(n_agents, device=device).div(
-            n_agents // n_groups, rounding_mode="floor"
-        ).clamp(max=n_groups - 1).unsqueeze(0).expand(batch_size, -1)
+        if agent_groups is not None:
+            agent_groups = th.tensor(
+                agent_groups, device=device, dtype=th.int64
+            ).unsqueeze(0).expand(batch_size, -1)
+        else:
+            agent_groups = th.arange(
+                n_agents, device=device
+            ).div(
+                n_agents // n_groups, rounding_mode="floor"
+            ).clamp(
+                max=n_groups - 1
+            ).unsqueeze(0).expand(batch_size, -1)
         self.update_groups(agent_groups)
         self.reset_state()
 

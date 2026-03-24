@@ -38,7 +38,7 @@ Train two independent groups of 4 agents each (8 agents total, `n_groups=2`) in 
 - **What**: Because `env_args` is already splatted into the env constructor, the new `agent_groups` key flows through automatically once change 1 is in place. Verify this works; add explicit handling only if needed.
 - **Why**: Minimizes code changes as the issue requests.
 
-### 3. New DJX run config
+### 3. New run config
 - **Where**: `run/manager/` (new file, naming TBD)
 - **What**: Based on the reference config with these modifications: `n_agents: 8`, `n_groups: 2`, `agent_groups: [0,0,0,0,1,1,1,1]`. All hyperparameters (lr, gamma, eps, hidden_size, encodings, batch_size, n_rounds) stay identical.
 - **Why**: Two groups of 4 agents each is the regression test configuration. Keeping everything else identical isolates the multi-group change.
