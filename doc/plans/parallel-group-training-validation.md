@@ -1,7 +1,7 @@
-# [DRAFT] Parallel Group Training Validation
+# [DONE] Parallel Group Training Validation
 
 GitHub Issue: #14
-Dependency: #42 (simplified reward computation) must land first
+Dependency: #42 (simplified reward computation) — merged
 
 ## Summary
 
@@ -54,11 +54,19 @@ Train two independent groups of 4 agents each (8 agents total, `n_groups=2`) in 
 - The graph edge index in `update_groups()` is constructed per-group (agents only connect to same-group members). With 8 agents this produces within-group fully-connected edges, which is correct.
 - `batch_edge_index` construction in `update_groups()` uses a triple loop. With 8 agents and `batch_size=1000` this may be slow. If it becomes a bottleneck, flag for optimization but do not block on it.
 
-## Next Actions
+## Progress
 
-- [ ] Wait for #42 to land
-- [ ] Implement change 1 (environment accepts `agent_groups` from config)
-- [ ] Verify change 2 (training loop needs no modification)
-- [ ] Create new run config (change 3)
-- [ ] Run regression test (change 4), document results in notebook
-- [ ] Create PR referencing issue #14
+- [x] Wait for #42 to land — merged into this branch (`4431127`)
+- [x] Implement change 1 — `environment.py` accepts optional `agent_groups`
+      list, converts to tensor, falls back to computed default when absent
+- [x] Verify change 2 — `rl_manager.py` passes `agent_groups` through via
+      `env_args`; added `reward_formula` deprecation guard and step logging
+- [x] Create run configs (change 3) — training:
+      `02_rnn_node_1group.yml`, `02_rnn_node_2groups.yml`; simulation:
+      `03_parallel_groups_1group.yml`, `03_parallel_groups_2groups.yml`
+- [x] Run regression test (change 4) — trained both configs on cluster,
+      simulated in both 1-group and 2-group environments. Learning curves
+      (punishment, contribution, common_good, payoff) are statistically
+      equivalent between 1-group and 2-group managers, confirming parallel
+      group training does not alter learning dynamics.
+- [x] Create PR referencing issue #14
