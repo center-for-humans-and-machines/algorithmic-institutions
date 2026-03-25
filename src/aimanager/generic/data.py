@@ -30,6 +30,7 @@ class AgentRound(pa.DataFrameModel):
     common_good: Series[float]
     recorded: Series[bool]
     agent_group: Series[int]
+    does_switch: Series[bool]
 
 
 def parse_agent_rounds(df):
@@ -44,6 +45,13 @@ def parse_agent_rounds(df):
 
     # sub-group membership (node feature for GNN)
     df["agent_group"] = df["group_id"].astype(int)
+
+    # does_switch: True if agent changes group_id next round
+    df = df.sort_values(["episode_id", "player_id", "round_number"])
+    next_group = df.groupby(
+        ["episode_id", "player_id"]
+    )["group_id"].shift(-1)
+    df["does_switch"] = next_group.ne(df["group_id"]).fillna(False)
 
     # episode-batch index (tensor's first dimension)
     episode_group = (
@@ -87,6 +95,7 @@ def get_default_values(df):
         "punishment_valid": False,
         "common_good": cg_def,
         "agent_group": 0,
+        "does_switch": False,
     }
     return default_values
 
@@ -105,6 +114,7 @@ def create_torch_data_new(df, default_values=None):
         "punishment_valid": th.bool,
         "recorded": th.bool,
         "agent_group": th.int64,
+        "does_switch": th.bool,
     }
 
     n_groups = df["group_idx"].max() + 1

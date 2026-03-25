@@ -12,19 +12,8 @@ def _parse_list(value):
     return ast.literal_eval(value)
 
 
-def main(in_path: str, n_agents: int) -> None:
-    """
-    Create a player-round CSV from ah_data.csv, keeping only rounds
-    with 8 active agents, and shaping it like the pilot
-    `*_player_round_slim` data (plus a group_id column).
-    """
-    repo_root = Path(__file__).resolve().parents[2]
-
-    folder_name = Path(in_path).parent.name
-    file_name = Path(in_path).name.replace(".csv", "")
-    out_path = repo_root / "experiments" / f"{folder_name}_{file_name}_{n_agents}_agents.csv"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-
+def _preprocess_single(in_path: str, n_agents: int):
+    """Parse one wide-format CSV into long agent-round rows."""
     df = pd.read_csv(in_path)
 
     # Parse list-valued columns from their string representations.
@@ -110,38 +99,68 @@ def main(in_path: str, n_agents: int) -> None:
                     }
                 )
 
-    out_df = pd.DataFrame(rows)
+    return rows
 
-    # Match the column order of dummy_group_switching + pilot_random1_slim.
-    cols = [
-        "session",
-        "global_group_id",
-        "group_id",
-        "episode",
-        "episode_id",
-        "experiment_name",
-        "round_number",
-        "participant_code",
-        "player_no_input",
-        "manager_no_input",
-        "player_id",
-        "contribution",
-        "punishment",
-        "payoff",
-        "common_good",
-    ]
-    out_df = out_df[cols]
 
+COLS = [
+    "session",
+    "global_group_id",
+    "group_id",
+    "episode",
+    "episode_id",
+    "experiment_name",
+    "round_number",
+    "participant_code",
+    "player_no_input",
+    "manager_no_input",
+    "player_id",
+    "contribution",
+    "punishment",
+    "payoff",
+    "common_good",
+]
+
+
+def main(in_paths: list[str], n_agents: int, out_path: str = None):
+    """Preprocess one or more wide-format CSVs into a single long CSV."""
+    repo_root = Path(__file__).resolve().parents[2]
+
+    all_rows = []
+
+    for in_path in in_paths:
+        rows = _preprocess_single(in_path, n_agents)
+        # Re-key episode_ids to avoid collisions across files
+        if all_rows:
+            max_id = max(r["episode_id"] for r in all_rows) + 1
+            for r in rows:
+                r["episode_id"] += max_id
+        all_rows.extend(rows)
+
+    out_df = pd.DataFrame(all_rows)[COLS]
+
+    if out_path is None:
+        if len(in_paths) == 1:
+            p = Path(in_paths[0])
+            name = f"{p.parent.name}_{p.stem}_{n_agents}_agents.csv"
+        else:
+            name = f"group_switching_combined_{n_agents}_agents.csv"
+        out_path = repo_root / "experiments" / name
+
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     out_df.to_csv(out_path, index=False)
     print(f"Wrote {len(out_df)} rows to {out_path}")
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--in_path", type=str, required=True)
+    parser.add_argument(
+        "in_paths", nargs="+", help="One or more wide-format CSVs"
+    )
     parser.add_argument(
         "--n_agents",
         help="Number of agents active in each round to filter for",
-        type=int, required=True)
+        type=int, required=True,
+    )
+    parser.add_argument("--out_path", type=str, default=None)
     args = parser.parse_args()
-    main(args.in_path, args.n_agents)
+    main(args.in_paths, args.n_agents, args.out_path)

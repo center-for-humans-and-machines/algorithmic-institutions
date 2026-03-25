@@ -1,4 +1,4 @@
-# [DRAFT] Train group-switching predictor using artificial human GNN
+# [ACTIVE] Train group-switching predictor using artificial human GNN
 
 Issue: #43 | Dependencies: #22 (group ID data format), #23 (pseudo group matching for old data)
 
@@ -60,8 +60,8 @@ Issue: #43 | Dependencies: #22 (group ID data format), #23 (pseudo group matchin
 
 ## Next Actions
 
-- [ ] Implement section 1 (data pipeline) -- depends on #22 being merged
-- [ ] Implement section 3 (default values / encoding) -- can be done alongside section 1
+- [x] Implement section 1 (data pipeline) -- `does_switch` derived in `parse_agent_rounds`
+- [x] Implement section 3 (default values / encoding) -- registered in `get_default_values`, `create_torch_data_new`, `AgentRound` schema
 - [ ] Create training config (section 2) -- can be done independently
 - [ ] Once data is available, verify timing of switching relative to round phases (resolves open questions 1 and 2)
 - [ ] Train and evaluate initial model (section 5) -- depends on new dataset availability
