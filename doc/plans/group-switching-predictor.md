@@ -23,7 +23,7 @@ Issue: #43 | Dependencies: #22 (group ID data format), #23 (pseudo group matchin
 
 - **What**: Compute a boolean `does_switch` column indicating whether a participant changed groups between the current round and the next round. The last round of each episode should have `does_switch = False` (no opportunity to switch).
 - **Where**: `src/aimanager/generic/data.py`, inside or after `parse_agent_rounds`
-- **Why**: The existing pipeline already parses group information (via `global_group_id` / group column from #22). The switching target is a simple shift-and-compare derived from the group column, so it belongs in the same data preparation stage.
+- **Why**: The existing pipeline already parses group information (via `group_id`, which becomes `agent_group` in the parsed data). The switching target is a simple shift-and-compare on `group_id` per player per episode, so it belongs in the same data preparation stage. Note: `global_group_id` is the episode/batch identifier and does not change when an agent switches groups.
 - **Note**: For old data processed via #23 (pseudo group matching with no switching), `does_switch` will be `False` for all rows, which is correct and allows joint training.
 
 ## 2. Training config for switching predictor
