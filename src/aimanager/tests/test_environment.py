@@ -55,7 +55,6 @@ def test_multi_group_env():
             "manager_payoff": 0,
             "reward": 0,
         },
-        reward_formula="group_payoff",
     )
 
     env.update_groups(th.tensor([[0, 0, 0, 1, 1, 1]]))
@@ -123,7 +122,9 @@ def test_multi_group_env():
     )
 
     # Finish the game
+    last_group_payoff = None
     while not done:
+        last_group_payoff = env.group_payoff.clone()
         state, reward, done = env.step()
         all_reward.append(env.reward)
         if not done:
@@ -142,11 +143,8 @@ def test_multi_group_env():
         all_contribution.sum(dim=1) * 1.6 - all_punishment.sum(dim=1),
     )
 
-    # Terminal reward is -avg_prev_punishment_per_group / 32
-    avg_prev_p = env.compute_average_per_group(
-        th.where(env.prev_contribution_valid, env.prev_punishment, 0)
-    )
-    assert th.allclose(reward, -avg_prev_p / 32)
+    # Terminal reward equals group_payoff from the last punish()
+    assert th.allclose(reward, last_group_payoff)
 
     assert done
 
@@ -255,6 +253,7 @@ def test_artificial_human_env():
     all_common_good.append(env.common_good)
 
     # Test step
+    group_payoff_before_step = env.group_payoff.clone()
     state, reward, done = env.step()
     env.punish(th.tensor([[[1], [0], [1]], [[1], [0], [1]]]))
     all_common_good.append(env.common_good)
@@ -266,16 +265,13 @@ def test_artificial_human_env():
     assert th.allclose(env.prev_contribution, old_state["contribution"])
     assert th.allclose(env.round_number, th.tensor([[[1], [1], [1]], [[1], [1], [1]]]))
 
-    # Test if reward is calculated correctly (same-round data, per-group)
-    prev_c = env.prev_contribution.float()
-    prev_p = env.prev_punishment.float()
-    n = prev_c.shape[1]
-    cg = (prev_c.sum(dim=1, keepdim=True) * 1.6 - prev_p.sum(dim=1, keepdim=True)) / n
-    expected = (20 - prev_c - prev_p + cg).mean(dim=1, keepdim=True) / 32
-    assert th.allclose(env.reward, expected)
+    # Reward equals group_payoff computed during the preceding punish()
+    assert th.allclose(reward, group_payoff_before_step)
 
     # Finish the game
+    last_group_payoff = None
     while not done:
+        last_group_payoff = env.group_payoff.clone()
         state, reward, done = env.step()
         all_reward.append(env.reward)
         if not done:
@@ -287,9 +283,8 @@ def test_artificial_human_env():
     # Test if the game is finished
     assert done
 
-    # Test final rewards (terminal: -avg_prev_punishment / 32)
-    expected_terminal = -env.prev_punishment.float().mean(dim=1, keepdim=True) / 32
-    assert th.allclose(reward, expected_terminal)
+    # Terminal reward equals group_payoff from the last punish()
+    assert th.allclose(reward, last_group_payoff)
 
     # Test common good invariant
     all_common_good = th.cat(all_common_good, axis=-1)
@@ -302,8 +297,8 @@ def test_artificial_human_env():
     )
 
 
-def _make_env(reward_formula, n_rounds=3):
-    """Helper to create a single-group env for reward formula tests."""
+def _make_env(n_rounds=3):
+    """Helper to create a single-group env for reward tests."""
     default_values = {
         "punishment": 1,
         "contribution": 1,
@@ -334,13 +329,12 @@ def _make_env(reward_formula, n_rounds=3):
             "manager_payoff": 0,
             "reward": 0,
         },
-        reward_formula=reward_formula,
     )
 
 
-def test_group_payoff_round_non_terminal():
-    """group_payoff_round reward equals group_payoff computed during punish."""
-    env = _make_env("group_payoff_round", n_rounds=3)
+def test_reward_non_terminal():
+    """Reward equals group_payoff computed during punish."""
+    env = _make_env(n_rounds=3)
     punishment = th.tensor([[[1], [0], [2]]])
 
     env.punish(punishment)
@@ -352,9 +346,9 @@ def test_group_payoff_round_non_terminal():
     assert th.allclose(reward, group_payoff_after_punish)
 
 
-def test_group_payoff_round_terminal():
-    """group_payoff_round terminal reward uses group_payoff, not punishment."""
-    env = _make_env("group_payoff_round", n_rounds=2)
+def test_reward_terminal():
+    """Terminal reward uses group_payoff."""
+    env = _make_env(n_rounds=2)
     punishment = th.tensor([[[1], [0], [2]]])
 
     # Round 0
@@ -372,50 +366,3 @@ def test_group_payoff_round_terminal():
     assert th.allclose(reward, group_payoff_after_punish)
 
 
-def test_group_payoff_uses_same_round_data():
-    """group_payoff reward uses prev_* (same-round), not next-round contrib."""
-    env = _make_env("group_payoff", n_rounds=3)
-    punishment = th.tensor([[[1], [0], [2]]])
-
-    env.punish(punishment)
-    # Record same-round data before step advances it
-    contrib = env.contribution.clone()
-    punish = env.punishment.clone()
-    valid = env.contribution_valid.clone()
-
-    state, reward, done = env.step()
-    assert not done
-
-    # After step, prev_* should hold the same-round values
-    assert th.allclose(env.prev_contribution, contrib)
-    assert th.allclose(env.prev_punishment, punish)
-    assert th.allclose(env.prev_contribution_valid, valid)
-
-    # Manually compute expected reward from same-round data
-    # Common good is a group aggregate: (sum_c * 1.6 - sum_p) / n_valid
-    n_valid = valid.sum(dim=1, keepdim=True).float()
-    sum_c = (contrib * valid).sum(dim=1, keepdim=True).float()
-    sum_p = (punish * valid).sum(dim=1, keepdim=True).float()
-    common_good = (sum_c * 1.6 - sum_p) / n_valid
-    # Average payoff per group: mean over agents of (20 - c - p + cg)
-    payoff_per_agent = 20 - contrib.float() - punish.float() + common_good
-    expected_reward = payoff_per_agent.mean(dim=1, keepdim=True) / 32
-    assert th.allclose(reward, expected_reward, atol=1e-5)
-
-
-def test_group_payoff_terminal():
-    """group_payoff terminal reward uses -avg_punishment/32."""
-    env = _make_env("group_payoff", n_rounds=2)
-    punishment = th.tensor([[[1], [0], [2]]])
-
-    # Round 0
-    env.punish(punishment)
-    state, reward, done = env.step()
-    assert not done
-
-    # Round 1 (terminal)
-    env.punish(punishment)
-    state, reward, done = env.step()
-    assert done
-    expected = -punishment.float().mean() / 32
-    assert th.allclose(reward[0, 0, 0], expected)
