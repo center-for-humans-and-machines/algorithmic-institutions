@@ -39,7 +39,6 @@ class ArtificialHumanEnv:
         device,
         n_groups=1,
         default_values=None,
-        reward_formula="group_payoff",
     ):
         """
         Args:
@@ -69,7 +68,6 @@ class ArtificialHumanEnv:
         self.artifical_humans = artifical_humans
         self.artifical_humans_valid = artifical_humans_valid
         self.n_agents = n_agents
-        self.reward_formula = reward_formula
         self.batch = th.tensor(
             [i for i in range(self.batch_size) for a in range(self.n_agents)],
             device=self.device,
@@ -255,39 +253,7 @@ class ArtificialHumanEnv:
         )
 
     def update_reward(self):
-        masked_prev_punishment = th.where(
-            self.prev_contribution_valid, self.prev_punishment, 0
-        )
-        if self.done:
-            average_masked_punishment_per_group = self.compute_average_per_group(
-                masked_prev_punishment
-            )
-            self.reward = -average_masked_punishment_per_group / 32
-        else:
-            if self.reward_formula == "group_payoff":
-                # this assumes all groups in the batch to be identicial compositioned
-                contribution_per_group = self.compute_average_per_group(
-                    self.contribution, self.contribution_valid
-                )
-                # this additional assumes that groups do not change throughout the game
-                prev_punishment_per_group = self.compute_average_per_group(
-                    self.prev_punishment, self.contribution_valid
-                )
-                common_good_per_group = self.compute_common_good_per_group(
-                    self.contribution, self.prev_punishment, self.contribution_valid
-                )
-                payoff_per_group = (
-                    20
-                    - contribution_per_group
-                    - prev_punishment_per_group
-                    + common_good_per_group
-                )
-                self.reward = payoff_per_group / 32
-            elif self.reward_formula == "group_payoff_round":
-                # this assumes all groups in the batch to be identicial compositioned
-                self.reward = self.group_payoff
-            else:
-                raise ValueError(f"Unknown reward formula: {self.reward_formula}")
+        self.reward = self.group_payoff
 
     def update_contribution(self):
         contribution = self.artifical_humans.predict(
