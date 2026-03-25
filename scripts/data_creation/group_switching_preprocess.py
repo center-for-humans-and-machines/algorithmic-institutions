@@ -23,12 +23,9 @@ def _preprocess_single(in_path: str, n_agents: int):
     df["participant_codes_list"] = df["participant_codes"].apply(_parse_list)
     df["groups_list"] = df["groups"].apply(_parse_list)
 
-    # ---- Filter to rounds with exactly 8 active agents ----
-    has_8_agents = df["contributions_list"].apply(len) == n_agents
-    all_active = df["missing_inputs_list"].apply(
-        lambda xs: len(xs) == n_agents and all(not x for x in xs)
-    )
-    df = df[has_8_agents & all_active].copy()
+    # Keep only rounds with the expected number of agents.
+    has_n_agents = df["contributions_list"].apply(len) == n_agents
+    df = df[has_n_agents].copy()
 
     # We will assign a dense episode_id over (session, group_id, episode).
     episode_id_lookup: dict[tuple[str, int, int], int] = {}
@@ -45,59 +42,50 @@ def _preprocess_single(in_path: str, n_agents: int):
         participant_codes = row["participant_codes_list"]
         groups_list = row["groups_list"]
 
-        # Map each distinct group label in this round to an integer 0,1,...
-        # Assumption: groups_list encodes which of the (up to) 2 groups of 4
-        # each participant belongs to in this session/round.
+        # Map each distinct group label to a stable integer.
         unique_group_labels = sorted(set(groups_list))
-        group_label_to_idx = {label: i for i, label in enumerate(unique_group_labels)}
+        group_label_to_idx = {
+            label: i for i, label in enumerate(unique_group_labels)
+        }
 
-        # Treat each (session, group_id) as a single episode, like a full game.
-        # We therefore create a separate episode_id per (session, per-group).
-        episode = 1
-        for group_label, group_id in group_label_to_idx.items():
-            episode_key = (str(session), group_id, episode)
-            if episode_key not in episode_id_lookup:
-                episode_id_lookup[episode_key] = len(episode_id_lookup)
-            episode_id = episode_id_lookup[episode_key]
+        # One episode per competition (session + group_idx).
+        competition_idx = int(row["group_idx"])
+        episode_key = (str(session), competition_idx)
+        if episode_key not in episode_id_lookup:
+            episode_id_lookup[episode_key] = len(episode_id_lookup)
+        episode_id = episode_id_lookup[episode_key]
 
-            # 0-based round_number within episode.
-            round_number = round_raw - 1
+        round_number = round_raw - 1
+        global_group_id = f"{session} #{competition_idx}"
+        common_good = float(sum(contributions))
+        manager_no_input = int(
+            bool(row.get("missing_governor_input", False))
+        )
 
-            # "session #<group_id>" identifier; this will later be used
-            # together with episode_id in parse_agent_rounds to create
-            # a dense group_idx (the tensor batch dimension).
-            global_group_id = f"{session} #{group_id}"
-
-            # Simple, deterministic definition of common_good; adjust if needed.
-            common_good = float(sum(contributions))
-
-            # Manager no-input is at the round level; player_no_input is per agent.
-            manager_no_input = int(bool(row.get("missing_governor_input", False)))
-
-            for player_id in range(n_agents):
-                # Only include players belonging to this group_label
-                if group_label_to_idx[groups_list[player_id]] != group_id:
-                    continue
-
-                rows.append(
-                    {
-                        "session": session,
-                        "global_group_id": global_group_id,
-                        "group_id": group_id,  # sub-group membership 0,1,...
-                        "episode": episode,
-                        "episode_id": episode_id,
-                        "experiment_name": "ah_group_switching",
-                        "round_number": round_number,
-                        "participant_code": participant_codes[player_id],
-                        "player_no_input": int(bool(missing_inputs[player_id])),
-                        "manager_no_input": manager_no_input,
-                        "player_id": player_id,
-                        "contribution": float(contributions[player_id]),
-                        "punishment": float(punishments[player_id]),
-                        "payoff": 0.0,  # placeholder; not used in the GNN pipeline
-                        "common_good": common_good,
-                    }
-                )
+        for player_id in range(n_agents):
+            rows.append(
+                {
+                    "session": session,
+                    "global_group_id": global_group_id,
+                    "group_id": group_label_to_idx[
+                        groups_list[player_id]
+                    ],
+                    "episode": competition_idx,
+                    "episode_id": episode_id,
+                    "experiment_name": "ah_group_switching",
+                    "round_number": round_number,
+                    "participant_code": participant_codes[player_id],
+                    "player_no_input": int(
+                        bool(missing_inputs[player_id])
+                    ),
+                    "manager_no_input": manager_no_input,
+                    "player_id": player_id,
+                    "contribution": float(contributions[player_id]),
+                    "punishment": float(punishments[player_id]),
+                    "payoff": 0.0,
+                    "common_good": common_good,
+                }
+            )
 
     return rows
 

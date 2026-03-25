@@ -184,7 +184,8 @@ def main(config):
         sum_loss = 0
         n_steps = 0
 
-        for e in tqdm(range(train_args["epochs"])):
+        pbar = tqdm(range(train_args["epochs"]))
+        for e in pbar:
             rec.set_labels(cv_split=i, epoch=e)
             model.train()
             for j, b_data in enumerate(batch_loader(train_data, batch_size)):
@@ -231,8 +232,40 @@ def main(config):
             last_epoch = e == (train_args["epochs"] - 1)
             if (e % train_args["eval_period"] == 0) or last_epoch:
                 avg_loss = sum_loss / n_steps
+                pbar.set_postfix(loss=f"{avg_loss:.4f}")
                 print(f"CV {i} | Epoch {e} | Loss {avg_loss}")
                 rec.rec(value=avg_loss, set="train")
+
+                # DEBUG: prediction vs target every 100 epochs
+                if e % 100 == 0 or last_epoch:
+                    model.eval()
+                    with th.no_grad():
+                        _d = apply_mask_pattern(
+                            train_data,
+                            test_mask_pattern[0][np.newaxis],
+                            y_name, mask_name, default_values,
+                        )
+                        _d = model.encode(
+                            _d, mask=mask_name,
+                            edge_index=train_edge_index,
+                            device=th_device,
+                        )
+                        _logit = model(_d).flatten(end_dim=-2)
+                        _pred = _logit.argmax(-1)
+                        _true = _d["y_enc"].flatten(end_dim=-2).argmax(-1)
+                        _m = _d["mask"].flatten().bool()
+                        _p, _t = _pred[_m], _true[_m]
+                        _ok = (_p == _t).sum().item()
+                        _n = _m.sum().item()
+                        print(
+                            f"  target 0={(_t==0).sum().item()}"
+                            f" 1={(_t==1).sum().item()}"
+                            f" | pred 0={(_p==0).sum().item()}"
+                            f" 1={(_p==1).sum().item()}"
+                            f" | acc={_ok}/{_n}"
+                            f" ({_ok/_n:.3f})"
+                        )
+                    model.train()
 
                 # evalute on training data for all possible mask patterns
                 for j, mask in enumerate(test_mask_pattern):
