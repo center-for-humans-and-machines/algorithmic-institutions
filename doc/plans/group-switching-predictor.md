@@ -17,11 +17,11 @@ Issue: #43 | Dependencies: #22 (group ID data format), #23 (pseudo group matchin
 - **Two groups only**: Binary switch prediction (switch or stay). No need to generalize to more groups for now.
 - **Minimal features**: Start with group ID, previous punishment, and previous contribution. Rather than adding cumulative features (e.g. cumulative payoff), rely on the RNN to capture temporal patterns from the sequence of per-round inputs. The edge model may also contribute useful inter-agent information.
 - **Class imbalance**: Use the standard pipeline with unweighted cross-entropy as the first pass. Only introduce weighted loss or resampling if initial results show the model is not learning switching behavior.
-- **Switching timing**: Switching happens between rounds (after a full round completes). The exact moment within the round sequence (after punishment? after common good?) still needs to be verified against the data -- see open questions.
+- **Switching timing**: Switching can only happen every 4 rounds (observable via the `institution_chosen` column in the raw data). This means `does_switch` can only be `True` at rounds 3, 7, 11, 15, 19, 23 (0-indexed). The model should only predict at these decision points, and `does_switch` should be `False` for all other rounds by construction.
 
 ## 1. Data pipeline -- derive `does_switch` target
 
-- **What**: Compute a boolean `does_switch` column indicating whether a participant changed groups between the current round and the next round. The last round of each episode should have `does_switch = False` (no opportunity to switch).
+- **What**: Compute a boolean `does_switch` column indicating whether a participant changed groups at the next decision point. Switching can only happen every 4 rounds, so `does_switch` should only be `True` at decision rounds (3, 7, 11, 15, 19, 23) and `False` for all other rounds. The last round of each episode should also have `does_switch = False`.
 - **Where**: `src/aimanager/generic/data.py`, inside or after `parse_agent_rounds`
 - **Why**: The existing pipeline already parses group information (via `group_id`, which becomes `agent_group` in the parsed data). The switching target is a simple shift-and-compare on `group_id` per player per episode, so it belongs in the same data preparation stage. Note: `global_group_id` is the episode/batch identifier and does not change when an agent switches groups.
 - **Note**: For old data processed via #23 (pseudo group matching with no switching), `does_switch` will be `False` for all rows, which is correct and allows joint training.
@@ -55,14 +55,15 @@ Issue: #43 | Dependencies: #22 (group ID data format), #23 (pseudo group matchin
 
 ## Open Questions
 
-1. **Previous vs. current round features**: Switching happens between rounds, but it is unclear whether the model should use features from the round just completed (current punishment, current contribution) or from the prior round (previous punishment, previous contribution). This depends on the exact timing of the switching decision relative to the round phases. Must be verified against the actual dataset schema once available.
-2. **Exact timing within the round**: We know switching happens after a full round, but the precise moment (after punishment is applied? after common good is computed?) affects which values are "known" to the agent at decision time. Needs confirmation from the experimental protocol in #17 and the collected data.
+1. **Previous vs. current round features**: Switching happens every 4 rounds, but it is unclear whether the model should use features from the round just completed (current punishment, current contribution) or from the prior round. Since agents see contributions, punishments, and common good before deciding to switch, current-round features are likely the correct choice.
+2. ~~**Exact timing within the round**~~: **Resolved.** Switching happens every 4 rounds. The `institution_chosen` column in the raw data marks the decision points. Agents decide after observing the full round (contributions, punishments, common good).
 
 ## Next Actions
 
 - [x] Implement section 1 (data pipeline) -- `does_switch` derived in `parse_agent_rounds`
 - [x] Implement section 3 (default values / encoding) -- registered in `get_default_values`, `create_torch_data_new`, `AgentRound` schema
-- [ ] Create training config (section 2) -- can be done independently
-- [ ] Once data is available, verify timing of switching relative to round phases (resolves open questions 1 and 2)
-- [ ] Train and evaluate initial model (section 5) -- depends on new dataset availability
+- [x] Create training config (section 2) -- `configs/training/artificial_humans/switch_predictor.yml`
+- [x] Verify timing of switching -- every 4 rounds, `switch_every` param added to mask non-decision rounds
+- [x] Train initial model (section 5) -- 85.1% acc on human-human data (28.5% switch rate at decision rounds)
+- [ ] Evaluate model quality (section 5) -- precision/recall, confusion matrix, balanced accuracy
 - [ ] Implement simulation integration (section 4) -- depends on trained model and #17 design

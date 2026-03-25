@@ -125,7 +125,10 @@ def main(config):
 
     df = df[df["experiment_name"].isin(experiment_names)]
 
-    data, default_values = create_torch_data(df)
+    switch_every = config.get("switch_every", None)
+    data, default_values = create_torch_data(
+        df, switch_every=switch_every
+    )
 
     rec = Recorder()
 

@@ -31,9 +31,10 @@ class AgentRound(pa.DataFrameModel):
     recorded: Series[bool]
     agent_group: Series[int]
     does_switch: Series[bool]
+    switch_mask: Series[bool]
 
 
-def parse_agent_rounds(df):
+def parse_agent_rounds(df, switch_every=None):
     AgentRoundRaw(df)
     df["contribution_valid"] = df["player_no_input"] == 0
     df["punishment_valid"] = df["manager_no_input"] == 0
@@ -53,12 +54,27 @@ def parse_agent_rounds(df):
     )["group_id"].shift(-1)
     df["does_switch"] = next_group.notna() & next_group.ne(df["group_id"])
 
+    # Mask non-decision rounds when switch_every is set
+    if switch_every is not None:
+        is_decision = (df["round_number"] + 1) % switch_every == 0
+        df["does_switch"] = df["does_switch"] & is_decision
+        df["switch_mask"] = is_decision
+    else:
+        df["switch_mask"] = True
+
     # DEBUG: verify does_switch derivation
     n_switch = df["does_switch"].sum()
+    n_decision = df["switch_mask"].sum() if switch_every else n_total
     n_total = len(df)
     print(
         f"[does_switch] {n_switch}/{n_total} switches "
         f"({n_switch / n_total:.3f} rate)"
+        + (
+            f" | decision rounds: {n_decision}"
+            f" ({n_switch / n_decision:.3f} at decisions)"
+            if switch_every
+            else ""
+        )
     )
 
     # episode-batch index (tensor's first dimension)
@@ -104,6 +120,7 @@ def get_default_values(df):
         "common_good": cg_def,
         "agent_group": 0,
         "does_switch": False,
+        "switch_mask": False,
     }
     return default_values
 
@@ -123,6 +140,7 @@ def create_torch_data_new(df, default_values=None):
         "recorded": th.bool,
         "agent_group": th.int64,
         "does_switch": th.bool,
+        "switch_mask": th.bool,
     }
 
     n_groups = df["group_idx"].max() + 1
@@ -166,8 +184,8 @@ def create_torch_data_new(df, default_values=None):
     return data, default_values
 
 
-def create_torch_data(df, default_values=None):
-    df = parse_agent_rounds(df.copy())
+def create_torch_data(df, default_values=None, switch_every=None):
+    df = parse_agent_rounds(df.copy(), switch_every=switch_every)
     data, default_values = create_torch_data_new(df, default_values)
     return data, default_values
 
