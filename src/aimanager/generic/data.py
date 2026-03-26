@@ -30,9 +30,11 @@ class AgentRound(pa.DataFrameModel):
     common_good: Series[float]
     recorded: Series[bool]
     agent_group: Series[int]
+    does_switch: Series[bool]
+    switch_mask: Series[bool]
 
 
-def parse_agent_rounds(df):
+def parse_agent_rounds(df, switch_every=None):
     AgentRoundRaw(df)
     df["contribution_valid"] = df["player_no_input"] == 0
     df["punishment_valid"] = df["manager_no_input"] == 0
@@ -44,6 +46,21 @@ def parse_agent_rounds(df):
 
     # sub-group membership (node feature for GNN)
     df["agent_group"] = df["group_id"].astype(int)
+
+    # does_switch: True if agent changes group_id next round
+    df = df.sort_values(["episode_id", "player_id", "round_number"])
+    next_group = df.groupby(
+        ["episode_id", "player_id"]
+    )["group_id"].shift(-1)
+    df["does_switch"] = next_group.notna() & next_group.ne(df["group_id"])
+
+    # Mask non-decision rounds when switch_every is set
+    if switch_every is not None:
+        is_decision = (df["round_number"] + 1) % switch_every == 0
+        df["does_switch"] = df["does_switch"] & is_decision
+        df["switch_mask"] = is_decision
+    else:
+        df["switch_mask"] = True
 
     # episode-batch index (tensor's first dimension)
     episode_group = (
@@ -87,6 +104,8 @@ def get_default_values(df):
         "punishment_valid": False,
         "common_good": cg_def,
         "agent_group": 0,
+        "does_switch": False,
+        "switch_mask": False,
     }
     return default_values
 
@@ -105,6 +124,8 @@ def create_torch_data_new(df, default_values=None):
         "punishment_valid": th.bool,
         "recorded": th.bool,
         "agent_group": th.int64,
+        "does_switch": th.bool,
+        "switch_mask": th.bool,
     }
 
     n_groups = df["group_idx"].max() + 1
@@ -132,21 +153,46 @@ def create_torch_data_new(df, default_values=None):
             if k in default_values
         },
     }
+
     return data, default_values
 
 
-def create_torch_data(df, default_values=None):
-    df = parse_agent_rounds(df.copy())
+def create_torch_data(df, default_values=None, switch_every=None):
+    df = parse_agent_rounds(df.copy(), switch_every=switch_every)
     data, default_values = create_torch_data_new(df, default_values)
     return data, default_values
 
 
-def get_cross_validations(data, n_splits, fraction_training=1.0):
+def get_cross_validations(
+    data, n_splits, fraction_training=1.0, holdout_fold=None
+):
     episode_idx = list(range(data["contribution"].shape[0]))
     random.shuffle(episode_idx)
 
     if n_splits is not None:
         groups = [episode_idx[i::n_splits] for i in range(n_splits)]
+
+        if holdout_fold is not None:
+            assert 0 <= holdout_fold < n_splits, (
+                f"holdout_fold={holdout_fold} out of range "
+                f"for n_splits={n_splits}"
+            )
+            test_idx = groups[holdout_fold]
+            train_idx = [
+                idx for idx in episode_idx if idx not in test_idx
+            ]
+            random.shuffle(train_idx)
+            train_idx = train_idx[
+                : int(fraction_training * len(train_idx))
+            ]
+
+            assert len(set(train_idx).intersection(set(test_idx))) == 0
+
+            test_data = {k: t[test_idx] for k, t in data.items()}
+            train_data = {k: t[train_idx] for k, t in data.items()}
+            yield None, train_data, test_data
+            return
+
         for i in range(n_splits):
             test_idx = groups[i]
             train_idx = [idx for idx in episode_idx if idx not in test_idx]

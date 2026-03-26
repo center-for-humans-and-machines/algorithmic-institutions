@@ -89,6 +89,7 @@ def main(config):
     n_player = config["n_player"]
     n_agent_groups = config.get("n_groups", 1)
     n_cross_val = config["n_cross_val"]
+    holdout_fold = config.get("holdout_fold", None)
     fraction_training = config["fraction_training"]
     model_name = config["model_name"]
     model_args = config["model_args"]
@@ -125,7 +126,10 @@ def main(config):
 
     df = df[df["experiment_name"].isin(experiment_names)]
 
-    data, default_values = create_torch_data(df)
+    switch_every = config.get("switch_every", None)
+    data, default_values = create_torch_data(
+        df, switch_every=switch_every
+    )
 
     rec = Recorder()
 
@@ -157,7 +161,7 @@ def main(config):
     conf_m_all = []
 
     for i, train_data, test_data in get_cross_validations(
-        data, n_cross_val, fraction_training
+        data, n_cross_val, fraction_training, holdout_fold=holdout_fold
     ):
         model = AH_MODELS[model_name](
             default_values=default_values, autoregressive=autoregression, **model_args
@@ -184,7 +188,8 @@ def main(config):
         sum_loss = 0
         n_steps = 0
 
-        for e in tqdm(range(train_args["epochs"])):
+        pbar = tqdm(range(train_args["epochs"]))
+        for e in pbar:
             rec.set_labels(cv_split=i, epoch=e)
             model.train()
             for j, b_data in enumerate(batch_loader(train_data, batch_size)):
@@ -231,6 +236,7 @@ def main(config):
             last_epoch = e == (train_args["epochs"] - 1)
             if (e % train_args["eval_period"] == 0) or last_epoch:
                 avg_loss = sum_loss / n_steps
+                pbar.set_postfix(loss=f"{avg_loss:.4f}")
                 print(f"CV {i} | Epoch {e} | Loss {avg_loss}")
                 rec.rec(value=avg_loss, set="train")
 
