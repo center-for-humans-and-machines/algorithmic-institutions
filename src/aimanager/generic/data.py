@@ -190,12 +190,36 @@ def create_torch_data(df, default_values=None, switch_every=None):
     return data, default_values
 
 
-def get_cross_validations(data, n_splits, fraction_training=1.0):
+def get_cross_validations(
+    data, n_splits, fraction_training=1.0, holdout_fold=None
+):
     episode_idx = list(range(data["contribution"].shape[0]))
     random.shuffle(episode_idx)
 
     if n_splits is not None:
         groups = [episode_idx[i::n_splits] for i in range(n_splits)]
+
+        if holdout_fold is not None:
+            assert 0 <= holdout_fold < n_splits, (
+                f"holdout_fold={holdout_fold} out of range "
+                f"for n_splits={n_splits}"
+            )
+            test_idx = groups[holdout_fold]
+            train_idx = [
+                idx for idx in episode_idx if idx not in test_idx
+            ]
+            random.shuffle(train_idx)
+            train_idx = train_idx[
+                : int(fraction_training * len(train_idx))
+            ]
+
+            assert len(set(train_idx).intersection(set(test_idx))) == 0
+
+            test_data = {k: t[test_idx] for k, t in data.items()}
+            train_data = {k: t[train_idx] for k, t in data.items()}
+            yield None, train_data, test_data
+            return
+
         for i in range(n_splits):
             test_idx = groups[i]
             train_idx = [idx for idx in episode_idx if idx not in test_idx]

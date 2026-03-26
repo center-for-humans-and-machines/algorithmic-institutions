@@ -89,6 +89,7 @@ def main(config):
     n_player = config["n_player"]
     n_agent_groups = config.get("n_groups", 1)
     n_cross_val = config["n_cross_val"]
+    holdout_fold = config.get("holdout_fold", None)
     fraction_training = config["fraction_training"]
     model_name = config["model_name"]
     model_args = config["model_args"]
@@ -160,7 +161,7 @@ def main(config):
     conf_m_all = []
 
     for i, train_data, test_data in get_cross_validations(
-        data, n_cross_val, fraction_training
+        data, n_cross_val, fraction_training, holdout_fold=holdout_fold
     ):
         model = AH_MODELS[model_name](
             default_values=default_values, autoregressive=autoregression, **model_args
