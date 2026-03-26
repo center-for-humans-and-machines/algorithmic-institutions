@@ -44,9 +44,16 @@ src/aimanager/                    # Main Python package
     run.py                        # SLURM orchestrator for simulations
   utils/                          # Shared utilities
 scripts/                          # Executable shell/python scripts
-  artificial_humans/              # AH training scripts
-  manager/                        # Manager training scripts
-  run_simulation.sh               # Batch GPU simulation script
+  artificial_humans/              # AH training SLURM templates
+  manager/                        # Manager training SLURM templates
+  data_creation/                  # Data preprocessing scripts
+  plotting/                       # Reusable plotting scripts
+  tests/                          # Script-level tests (run locally)
+  remote_test.sh                  # Run tests on Raven cluster
+  train_cluster.sh                # Submit training on Raven cluster
+  simulate_cluster.sh             # Submit simulation on Raven cluster
+  fetch_cluster.sh                # Fetch files from Raven cluster
+  run_simulation.sh               # Batch GPU simulation SLURM template
 notebooks/                        # Jupyter notebooks (excluded from linting)
   artificial_humans/              # AH-related notebooks
   evalutation/                    # Evaluation notebooks
@@ -54,7 +61,11 @@ notebooks/                        # Jupyter notebooks (excluded from linting)
   test_manager/                   # Manager testing/simulation notebooks
 configs/                          # YAML experiment configurations
   training/artificial_humans/     # AH training configs
+  training/rl_manager/            # RL manager training configs
   simulation/                     # Simulation configs
+plots/                            # Generated plots and figures
+  group_selection/                # AH model evaluation plots
+  simulation/                     # Simulation result plots
 artifacts/                        # Trained model artifacts
 reports/                          # Research documentation and reports
 run/                              # DJX experiment run definitions
@@ -98,6 +109,9 @@ Labels control the workflow for GitHub issues:
 - `src/aimanager/simulation/simulate.py` -- Core simulation (manager vs artificial humans)
 - `src/aimanager/simulation/run.py` -- SLURM orchestrator for simulations
 - `src/aimanager/rl_manager.py` -- RL manager training logic
+- `scripts/plotting/plot_confusion_matrix.py` -- Reusable confusion matrix plot
+- `scripts/data_creation/group_switching_preprocess.py` -- Group switching data preprocessing
+- `scripts/data_creation/pilot_pseudo_group_matching.py` -- Old 4-player to 8-player data transform
 - `run.py` -- Notebook runner using Papermill with YAML parameter files
 - `reports/basics.md` -- Game rules and experimental setup reference
 
@@ -162,12 +176,14 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Train AH models**: `python -m aimanager train-ah <config>`
 - **Train RL manager**: `python -m aimanager train-manager <config>`
 - **Run simulation**: `python -m aimanager simulate <config>`
+- **Plot confusion matrix**: `python scripts/plotting/plot_confusion_matrix.py <artifact_dir>`
 
 ### Where to Find Things
 
 - Source code: `src/aimanager/`
-- Scripts: `scripts/`
+- Scripts: `scripts/` (cluster orchestration, data creation, plotting)
 - Experiment configs: `configs/` (YAML)
+- Plots and figures: `plots/`
 - DJX run definitions: `run/`
 - Notebooks: `notebooks/`
 - Trained artifacts: `artifacts/`
