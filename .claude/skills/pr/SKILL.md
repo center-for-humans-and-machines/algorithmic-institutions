@@ -51,6 +51,20 @@ trajectory or implications for research outcomes. For each item:>
 
 **IMPORTANT**: Never check off a test item (`[x]`) unless you have actually run it yourself in this session and verified it passed. If you did not run it, leave it unchecked (`[ ]`). Claiming tests passed without running them is worse than leaving them unchecked.
 
+## Images
+
+PRs that touch training pipelines, evaluation, or simulation should **always** include relevant plots. Check `plots/` for new or changed files on the branch (`git diff --name-only main..HEAD -- plots/`) and embed them in the summary. Visual results are a key part of communicating what the PR achieved.
+
+When embedding images in the PR body, **always** use raw GitHub URLs — relative paths do not render on GitHub.
+
+```
+<!-- Wrong -->
+![Plot](plots/example.png)
+
+<!-- Correct -->
+![Plot](https://raw.githubusercontent.com/center-for-humans-and-machines/algorithmic-institutions/<branch>/plots/example.png)
+```
+
 ## Instructions
 
 1. Examine all commits on the current branch vs the base branch (default: `main`, or `$ARGUMENTS` if provided)

@@ -1,4 +1,4 @@
-# [ACTIVE] Train group-switching predictor using artificial human GNN
+# [DONE] Train group-switching predictor using artificial human GNN
 
 Issue: #43 | Dependencies: #22 (group ID data format), #23 (pseudo group matching for old data)
 
