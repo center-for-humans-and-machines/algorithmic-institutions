@@ -1,4 +1,4 @@
-# [ACTIVE] Retrain artificial humans on new group-switching data
+# [DONE] Retrain artificial humans on new group-switching data
 
 ## Goal
 
@@ -39,17 +39,27 @@ Train a contribution prediction model exclusively on the new group-switching exp
 
 ### 4. Simulation config
 
-- Update `configs/simulation/manager_testing/04_group_switching.yml`:
-  - Change `contribution_model` path from the old `artifacts/behavioral_cloning/21_contribution_model_v4/...` to `artifacts/artificial_humans/group_switching_contribution/model/architecture_node+edge+rnn__dataset_full.pt`
+- Created `configs/simulation/ah_testing/group_switching.yml` comparing `pseudo_group`, `group_switching` (with switch model), and `pre_group` AH models against `latest_manager`
+- Fixed bug: `agent_groups` from config was not passed through to `ArtificialHumanEnv`
+- Verified group switching only occurs when switch model is present; groups stay constant otherwise
 
 ## Implementation notes
 
 - The `prev_contribution_valid` feature in `x_encoding` (as `etype: bool`) should remain -- it tells the model which prior contributions are real vs. masked.
 
+## Results
+
+- Test MAE (greedy): **1.94** on holdout fold (10-fold, fold 0)
+- Model without `agent_group` feature scored MAE 1.83, but `agent_group` is structural for the multi-group pipeline
+- AH comparison simulation (`configs/simulation/ah_testing/group_switching.yml`) shows group_switching AH behaves distinctly from pseudo_group and pre_group models
+- Bug fix: `agent_groups` from config was not being passed to `ArtificialHumanEnv` — now wired through
+
 ## Next Actions
 
-- [ ] Check CSV header for `player_no_input` / `contribution_valid` column presence
-- [ ] Create `configs/training/artificial_humans/group_switching_contribution.yml`
-- [ ] Train on Raven cluster
-- [ ] Run confusion matrix evaluation
-- [ ] Update `configs/simulation/manager_testing/04_group_switching.yml` contribution model path
+- [x] Check CSV header for `player_no_input` / `contribution_valid` column presence
+- [x] Create `configs/training/artificial_humans/group_switching_contribution.yml`
+- [x] Train on Raven cluster
+- [x] Run confusion matrix evaluation
+- [x] Create AH comparison simulation config and verify
+- [x] Create AH comparison simulation config (`configs/simulation/ah_testing/group_switching.yml`)
+- [x] Fix `agent_groups` passthrough bug in `simulate.py`
