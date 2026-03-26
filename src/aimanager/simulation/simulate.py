@@ -166,10 +166,20 @@ def run_simulation(config: dict, output_dir: str) -> list:
         ah = GraphNetwork.load(hm_path, device=device)
         ah_val = GraphNetwork.load(hmv_path, device=device)
 
+        # Load optional switch predictor
+        ah_switch = None
+        switch_every = config.get("switch_every", None)
+        ah_config = artificial_humans[run["humans"]]
+        if "switch_model" in ah_config:
+            hms_path = os.path.join(basedir, ah_config["switch_model"])
+            ah_switch = GraphNetwork.load(hms_path, device=device)
+
         # Create environment
         env = ArtificialHumanEnv(
             artifical_humans=ah,
             artifical_humans_valid=ah_val,
+            artifical_humans_switch=ah_switch,
+            switch_every=switch_every,
             n_agents=n_agents,
             n_contributions=n_contributions,
             n_punishments=n_punishments,
@@ -338,6 +348,91 @@ def create_plots(
         g.savefig(os.path.join(output_dir, "comparison_pilot.jpg"))
         plt.close()
         print(f"Saved: {os.path.join(output_dir, 'comparison_pilot.jpg')}")
+
+    # Plot 3: Group switching heatmap (if agent_group data exists)
+    if "agent_group" in df.columns:
+        # Only use simulation runs (not pilot data)
+        sim_runs = [r for r in df["run"].unique() if r.startswith("ah ")]
+        df_sim = df[df["run"].isin(sim_runs)].copy()
+
+        if len(df_sim) > 0:
+            # Extract agent index from participant_code ("3_12" -> 3)
+            df_sim["agent"] = (
+                df_sim["participant_code"]
+                .str.split("_")
+                .str[0]
+                .astype(int)
+            )
+
+        for run_name in sim_runs:
+            run_df = df_sim[df_sim["run"] == run_name]
+            episodes = run_df["episode"].unique()
+            # Sort numerically by episode suffix
+            episodes = sorted(
+                episodes,
+                key=lambda e: int(str(e).rsplit("__", 1)[-1])
+                if "__" in str(e)
+                else e,
+            )
+            n_show = min(4, len(episodes))
+            show_episodes = episodes[:n_show]
+
+            fig, axes = plt.subplots(
+                1, n_show, figsize=(4 * n_show, 4), sharey=True
+            )
+            if n_show == 1:
+                axes = [axes]
+
+            cmap = sns.color_palette(["#4393c3", "#d6604d"], as_cmap=True)
+            for ax, ep in zip(axes, show_episodes):
+                ep_df = run_df[run_df["episode"] == ep]
+                heatmap_data = (
+                    ep_df.pivot(
+                        index="agent",
+                        columns="round_number",
+                        values="agent_group",
+                    )
+                    .astype(int)
+                )
+                sns.heatmap(
+                    heatmap_data,
+                    cmap=cmap,
+                    vmin=0,
+                    vmax=1,
+                    cbar=False,
+                    ax=ax,
+                    linewidths=0.5,
+                    linecolor="white",
+                )
+                ep_label = (
+                    str(ep).rsplit("__", 1)[-1]
+                    if "__" in str(ep)
+                    else str(ep)
+                )
+                ax.set_title(f"Episode {ep_label}")
+                ax.set_xlabel("Round")
+                if ax == axes[0]:
+                    ax.set_ylabel("Agent")
+                else:
+                    ax.set_ylabel("")
+
+            label = run_name.replace("ah ", "").replace(
+                " managed by ", " / "
+            )
+            fig.suptitle(f"Group Membership — {label}", y=1.02)
+            fig.tight_layout()
+            fname = (
+                run_name.replace(" ", "_")
+                .replace("/", "_")
+                + "_groups.png"
+            )
+            fig.savefig(
+                os.path.join(output_dir, fname),
+                dpi=150,
+                bbox_inches="tight",
+            )
+            plt.close(fig)
+            print(f"Saved: {os.path.join(output_dir, fname)}")
 
     # Save aggregates
     aggregates = (

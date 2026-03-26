@@ -65,5 +65,5 @@ Issue: #43 | Dependencies: #22 (group ID data format), #23 (pseudo group matchin
 - [x] Create training config (section 2) -- `configs/training/artificial_humans/switch_predictor.yml`
 - [x] Verify timing of switching -- every 4 rounds, `switch_every` param added to mask non-decision rounds
 - [x] Train initial model (section 5) -- 85.1% acc on human-human data (28.5% switch rate at decision rounds)
-- [ ] Evaluate model quality (section 5) -- precision/recall, confusion matrix, balanced accuracy
-- [ ] Implement simulation integration (section 4) -- depends on trained model and #17 design
+- [x] Evaluate model quality (section 5) -- holdout evaluation with confusion matrix plot
+- [x] Implement simulation integration (section 4) -- switch predictor loaded in env and simulate

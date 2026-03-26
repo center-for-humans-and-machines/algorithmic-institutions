@@ -1,0 +1,23 @@
+artificial_humans:
+  full:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_predictor/model/architecture_node+edge+rnn__dataset_full.pt
+managers:
+  02_2groups:
+    type: rl
+    path: artifacts/manager/02_rnn_node_2groups/model/02_rnn_node_2groups_manager.pt
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/04_group_switching
+figure_name: group_switching
+basedir: .

@@ -31,6 +31,8 @@ class ArtificialHumanEnv:
         *,
         artifical_humans,
         artifical_humans_valid=None,
+        artifical_humans_switch=None,
+        switch_every=None,
         batch_size,
         n_agents,
         n_contributions,
@@ -47,6 +49,11 @@ class ArtificialHumanEnv:
                 the contribution.
             artifical_humans_valid: The virtual humans that will be used to
                 generate the action validity.
+            artifical_humans_switch: The virtual humans that will be used to
+                predict group switching.
+            switch_every: Number of rounds between switching decisions.
+                Switching occurs at rounds where (round_number+1) %
+                switch_every == 0.
             batch_size: The number of batches.
             n_agents: The number of agents.
             n_contributions: The number of contributions.
@@ -68,6 +75,8 @@ class ArtificialHumanEnv:
         self.n_groups = n_groups
         self.artifical_humans = artifical_humans
         self.artifical_humans_valid = artifical_humans_valid
+        self.artifical_humans_switch = artifical_humans_switch
+        self.switch_every = switch_every
         self.n_agents = n_agents
         self.batch = th.tensor(
             [i for i in range(self.batch_size) for a in range(self.n_agents)],
@@ -137,6 +146,8 @@ class ArtificialHumanEnv:
             "group_payoff": th.zeros(
                 (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
             ),
+            "does_switch": th.zeros(size, dtype=th.bool, device=self.device),
+            "switch_mask": th.zeros(size, dtype=th.bool, device=self.device),
         }
 
         prev_state = {
@@ -306,6 +317,23 @@ class ArtificialHumanEnv:
         self.update_payoff()
         return self.state
 
+    def update_groups_from_switch_predictor(self):
+        """Use the switch predictor to update group assignments."""
+        does_switch = self.artifical_humans_switch.predict(
+            self.state,
+            reset_rnn=self.round_number[0, 0, 0] == 0,
+            edge_index=self.batch_edge_index,
+        )[0]
+        does_switch = does_switch.squeeze(-1).to(th.bool)
+
+        # Flip group: 0->1, 1->0
+        current_groups = self.agent_groups.squeeze(-1)
+        new_groups = th.where(
+            does_switch, 1 - current_groups, current_groups
+        )
+        self.update_groups(new_groups)
+        self.state["agent_group"] = self.agent_groups.clone()
+
     def step(self):
         assert self.state is not None
         self.round_number += 1
@@ -315,6 +343,15 @@ class ArtificialHumanEnv:
         for k in self.state:
             if k[:4] == "prev":
                 self.state[k] = self.state[k[5:]]
+
+        # Group switching at decision rounds
+        if (
+            self.artifical_humans_switch is not None
+            and self.switch_every is not None
+            and self.round_number[0, 0, 0] % self.switch_every == 0
+        ):
+            self.update_groups_from_switch_predictor()
+
         if self.round_number[0, 0] == (self.n_rounds):
             self.done = True
         else:
