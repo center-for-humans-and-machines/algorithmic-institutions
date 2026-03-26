@@ -174,6 +174,8 @@ def run_simulation(config: dict, output_dir: str) -> list:
             hms_path = os.path.join(basedir, ah_config["switch_model"])
             ah_switch = GraphNetwork.load(hms_path, device=device)
 
+        agent_groups = config.get("agent_groups", None)
+
         # Create environment
         env = ArtificialHumanEnv(
             artifical_humans=ah,
@@ -187,6 +189,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
             n_groups=n_groups,
             batch_size=1,
             device=device,
+            agent_groups=agent_groups,
         )
 
         # Create recorder
