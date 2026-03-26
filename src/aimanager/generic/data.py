@@ -62,21 +62,6 @@ def parse_agent_rounds(df, switch_every=None):
     else:
         df["switch_mask"] = True
 
-    # DEBUG: verify does_switch derivation
-    n_switch = df["does_switch"].sum()
-    n_decision = df["switch_mask"].sum() if switch_every else n_total
-    n_total = len(df)
-    print(
-        f"[does_switch] {n_switch}/{n_total} switches "
-        f"({n_switch / n_total:.3f} rate)"
-        + (
-            f" | decision rounds: {n_decision}"
-            f" ({n_switch / n_decision:.3f} at decisions)"
-            if switch_every
-            else ""
-        )
-    )
-
     # episode-batch index (tensor's first dimension)
     episode_group = (
         df["global_group_id"] + "__" + df["episode_id"].astype(str)
@@ -168,18 +153,6 @@ def create_torch_data_new(df, default_values=None):
             if k in default_values
         },
     }
-
-    # DEBUG: verify does_switch tensor
-    ds = data["does_switch"]
-    pds = data["prev_does_switch"]
-    print(
-        f"[does_switch tensor] shape={ds.shape} "
-        f"True={ds.sum().item()} dtype={ds.dtype}"
-    )
-    print(
-        f"[prev_does_switch tensor] shape={pds.shape} "
-        f"True={pds.sum().item()} dtype={pds.dtype}"
-    )
 
     return data, default_values
 
