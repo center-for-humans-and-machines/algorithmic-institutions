@@ -55,14 +55,17 @@ trajectory or implications for research outcomes. For each item:>
 
 PRs that touch training pipelines, evaluation, or simulation should **always** include relevant plots. Check `plots/` for new or changed files on the branch (`git diff --name-only main..HEAD -- plots/`) and embed them in the summary. Visual results are a key part of communicating what the PR achieved.
 
-When embedding images in the PR body, **always** use raw GitHub URLs — relative paths do not render on GitHub.
+When embedding images in the PR body, **always** use `raw.githubusercontent.com` URLs with the **commit SHA** (from `git rev-parse HEAD`) — branch names break after the branch is deleted post-merge.
 
 ```
-<!-- Wrong -->
+<!-- Wrong: relative path -->
 ![Plot](plots/example.png)
 
-<!-- Correct -->
+<!-- Wrong: branch name (breaks after merge + branch deletion) -->
 ![Plot](https://raw.githubusercontent.com/center-for-humans-and-machines/algorithmic-institutions/<branch>/plots/example.png)
+
+<!-- Correct: commit SHA permalink -->
+![Plot](https://raw.githubusercontent.com/center-for-humans-and-machines/algorithmic-institutions/<commit-sha>/plots/example.png)
 ```
 
 ## Instructions
