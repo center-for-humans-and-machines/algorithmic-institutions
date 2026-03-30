@@ -223,7 +223,7 @@ def main(config):
 
                 loss.backward(retain_graph=True)
 
-                if train_args["clamp_grad"]:
+                if train_args.get("clamp_grad"):
                     for param in model.parameters():
                         param.grad.data.clamp_(
                             -train_args["clamp_grad"], train_args["clamp_grad"]
