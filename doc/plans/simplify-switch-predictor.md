@@ -160,6 +160,64 @@ relational/temporal components).
 - **Selected config going forward**: h=10, lr=3e-3, 100 epochs
   (`mlp.yml`). Other MLP variants removed.
 
+### Architecture comparison (h=10, lr=3e-3, 5-fold CV)
+
+All runs include agent_group (meaningful with RNN/edge). MLP baseline
+included for comparison (100ep, no agent_group). RNN/edge models trained
+at both 150ep and 500ep to assess overfitting.
+
+#### 150 epoch runs (before overfitting)
+
+| Model | Train Loss (final) | Test Loss (final) | Test Loss (best) |
+|-------|-------------------:|------------------:|-----------------:|
+| MLP (100ep) | 0.5890 +/- 0.0049 | 0.5896 +/- 0.0213 | 0.5882 +/- 0.0192 |
+| MLP+edge | 0.5848 +/- 0.0072 | 0.5989 +/- 0.0244 | 0.5904 +/- 0.0219 |
+| MLP+RNN | 0.5435 +/- 0.0241 | **0.5742 +/- 0.0235** | **0.5627 +/- 0.0167** |
+| MLP+RNN+edge | 0.5389 +/- 0.0517 | 0.5874 +/- 0.0159 | 0.5789 +/- 0.0149 |
+
+<!-- Loss curve plots saved locally in plots/group_selection/switch_pred_mlp_{rnn,edge,rnn_edge}_loss_cv.png -->
+
+#### Architecture comparison conclusions
+
+- **MLP+RNN has the best test loss** (0.5627 best, 0.5742 final) —
+  a clear improvement over the MLP baseline (0.5882). Temporal
+  information is the key signal for predicting switching behavior.
+- **Edge model alone does not help** — MLP+edge test loss (0.5904) is
+  no better than MLP alone (0.5882). The social comparison signal from
+  scatter_mean may be redundant with prev_common_good.
+- **Edge model on top of RNN hurts** — MLP+RNN+edge (0.5789) is worse
+  than MLP+RNN alone (0.5627). Adding the edge model increases capacity
+  without improving generalization.
+- **RNN models overfit past ~150 epochs** — at 500ep, train loss drops
+  toward 0.4 while test loss diverges with high fold variance. 150
+  epochs keeps the models before the overfitting regime.
+- **MLP+edge is more stable** — overfitting only begins around epoch 300,
+  but this stability comes with no test loss improvement.
+
+### Common good ablation (no prev_common_good, lr=1e-4, 500ep)
+
+Tests whether the edge model can replace `prev_common_good` by providing
+group-level signal via scatter_mean. Used lr=1e-4 because lr=3e-3
+caused fast overfitting without common good.
+
+| Model | Test Loss (final) | Test Loss (best) |
+|-------|------------------:|-----------------:|
+| MLP+edge nocg | 0.5995 +/- 0.0253 | 0.5994 +/- 0.0226 |
+| MLP+RNN+edge nocg | 0.5938 +/- 0.0212 | 0.5928 +/- 0.0172 |
+| *MLP (with CG, reference)* | *0.5896 +/- 0.0213* | *0.5882 +/- 0.0192* |
+| *MLP+RNN (with CG, reference)* | *0.5742 +/- 0.0235* | *0.5627 +/- 0.0167* |
+
+- **Edge model does not replace common good** — MLP+edge without CG
+  (0.5994) is worse than the plain MLP with CG (0.5882). The edge
+  model's scatter_mean does not replicate the signal in
+  `prev_common_good`.
+- **Even RNN+edge without CG underperforms MLP with CG** — MLP+RNN+edge
+  nocg (0.5928) does not match the simple MLP baseline that includes
+  common good (0.5882). `prev_common_good` carries independent signal.
+- **Still converging at 500ep with lr=1e-4** — curves have not plateaued,
+  but no overfitting. Could benefit from more epochs, though unlikely
+  to close the gap with CG models.
+
 ## Implementation notes
 
 - One code change: `clamp_grad` in `train.py` changed from
@@ -172,7 +230,7 @@ relational/temporal components).
 - [x] Verify CV folds are static across runs
 - [x] Investigate shuffle_features mechanism for feature importance
 - [x] Train MLP baseline, evaluate by test loss
-- [ ] Train MLP+RNN, evaluate by test loss
-- [ ] Train MLP+RNN+edge, evaluate by test loss
+- [x] Train MLP+RNN, MLP+edge, MLP+RNN+edge — evaluate by test loss
+- [x] Retrain at 150 epochs to avoid overfitting
 - [ ] Run feature importance analysis (shuffle_features + statistics)
 - [ ] Document findings
