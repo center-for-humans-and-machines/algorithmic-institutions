@@ -218,11 +218,105 @@ caused fast overfitting without common good.
   but no overfitting. Could benefit from more epochs, though unlikely
   to close the gap with CG models.
 
+### Feature importance (permutation shuffle test)
+
+Uses the built-in `shuffle_features` mechanism: for each feature, its
+values are randomly permuted across all test samples (breaking the
+feature-target relationship while preserving the distribution). The
+model is re-evaluated on this corrupted data. A large increase in test
+loss means the feature is important; no change means the model doesn't
+use it.
+
+#### MLP (100ep, lr=3e-3)
+
+Baseline test loss: 0.5937
+
+| Feature | Shuffled Loss | Δ Loss | Importance |
+|---------|-------------:|-------:|------------|
+| prev_punishment | 0.5972 | +0.0035 | marginal |
+| prev_contribution | 0.5964 | +0.0027 | marginal |
+| prev_common_good | 0.5928 | -0.0009 | no effect |
+
+No feature matters much — the MLP is just learning the class prior.
+Confirmed by training MLP without CG: test loss 0.5910 vs 0.5919 with
+CG — identical within noise. The earlier Phase 1 finding ("without CG
+the MLP predicts majority class only") was an artifact of the 10k-epoch
+overfitting regime, not a real effect.
+
+#### MLP+RNN (120ep, lr=3e-3)
+
+Baseline test loss: 0.5803
+
+| Feature | Shuffled Loss | Δ Loss | Importance |
+|---------|-------------:|-------:|------------|
+| prev_contribution | 0.5920 | +0.0118 | important |
+| agent_group | 0.5850 | +0.0047 | marginal |
+| prev_common_good | 0.5840 | +0.0038 | marginal |
+| prev_punishment | 0.5809 | +0.0007 | no effect |
+
+- **prev_contribution is the most important feature** — the RNN learns
+  switching behavior primarily from contribution trajectories over time.
+- **agent_group has marginal signal** — group membership matters with
+  temporal context but is not a primary driver.
+- **prev_common_good is marginal** — less important than expected,
+  possibly because the RNN reconstructs group-level info from individual
+  contributions over time.
+- **prev_punishment has no effect** — does not contribute to switch
+  prediction in either model.
+
+#### MLP+RNN extended features (120ep, lr=3e-3)
+
+Added 3 new features on top of the base 4: `prev_does_switch` (bool),
+`round_number` (int, n_levels=24), `prev_contribution_valid` (bool).
+
+Best test loss: **0.5565 +/- 0.0369** (vs 0.5748 base MLP+RNN) —
+improved but with higher fold variance.
+
+Baseline test loss: 0.5663
+
+| Feature | Shuffled Loss | Δ Loss | Importance |
+|---------|-------------:|-------:|------------|
+| prev_common_good | 0.5701 | +0.0038 | marginal |
+| prev_does_switch | 0.5700 | +0.0036 | marginal |
+| prev_contribution | 0.5699 | +0.0036 | marginal |
+| prev_contribution_valid | 0.5688 | +0.0025 | marginal |
+| prev_punishment | 0.5683 | +0.0019 | marginal |
+| round_number | 0.5663 | +0.0000 | no effect |
+| agent_group | 0.5658 | -0.0005 | no effect |
+
+- With more features, importance is spread more evenly — no single
+  feature dominates.
+- **prev_does_switch** and **prev_contribution_valid** both carry
+  marginal signal, contributing to the overall improvement.
+- **round_number** and **agent_group** contribute nothing — dropped from
+  the final config.
+- Final feature selection: prev_contribution, prev_common_good,
+  prev_punishment, prev_does_switch, prev_contribution_valid.
+
+### Overall model comparison
+
+| Model | Test Loss (best) | Fold Variance |
+|-------|----------------:|-------------:|
+| MLP baseline | 0.5919 | 0.0165 |
+| MLP+RNN (4 feat) | 0.5748 | 0.0246 |
+| MLP+RNN ext (7 feat) | 0.5565 | 0.0369 |
+| MLP+RNN feat (5 feat) | 0.5698 | 0.0241 |
+
+The 7-feature extended model has the best test loss but highest fold
+variance. Dropping round_number and agent_group (5 feat) did not help
+— the reduced model is worse than both the extended and close to the
+base 4-feature model. This may reflect CUDA non-determinism between
+runs or subtle feature interactions not captured by the shuffle test.
+Grid search (#44) will provide more definitive feature selection.
+
 ## Implementation notes
 
 - One code change: `clamp_grad` in `train.py` changed from
   `train_args["clamp_grad"]` to `train_args.get("clamp_grad")` to make
   it optional
+- Early stopping added to `train.py`, configurable via
+  `early_stopping_patience` in `train_args` (optional, backwards
+  compatible)
 
 ## Next Actions
 
@@ -232,5 +326,5 @@ caused fast overfitting without common good.
 - [x] Train MLP baseline, evaluate by test loss
 - [x] Train MLP+RNN, MLP+edge, MLP+RNN+edge — evaluate by test loss
 - [x] Retrain at 150 epochs to avoid overfitting
-- [ ] Run feature importance analysis (shuffle_features + statistics)
+- [x] Run feature importance analysis (shuffle_features)
 - [ ] Document findings

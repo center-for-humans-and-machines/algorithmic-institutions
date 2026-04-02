@@ -1,6 +1,7 @@
 description: >-
-  MLP-only switch predictor baseline. No RNN, no edge model.
-  agent_group excluded (no signal without relational/temporal components).
+  MLP + RNN switch predictor with optimized feature selection.
+  Drops round_number and agent_group (no effect per shuffle test).
+  Keeps prev_does_switch and prev_contribution_valid (marginal signal).
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -16,8 +17,8 @@ params:
   switch_every: 4
   experiment_names: [ah_group_switching]
   labels:
-    architecture: mlp
-    dataset: full
+    architecture: mlp+rnn
+    dataset: feat
   n_contributions: 21
   n_punishments: 31
   n_cross_val: 5
@@ -25,14 +26,19 @@ params:
   n_groups: 2
   data_file: experiments/group_switching_human_human_group_switching_8_agents.csv
   model_name: graph
-  shuffle_features: [prev_contribution, prev_common_good, prev_punishment]
+  shuffle_features:
+    - prev_contribution
+    - prev_common_good
+    - prev_punishment
+    - prev_does_switch
+    - prev_contribution_valid
   basedir: .
-  output_dir: artifacts/artificial_humans/switch_pred_mlp
+  output_dir: artifacts/artificial_humans/switch_pred_mlp_rnn_feat
   model_args:
     y_levels: 2
     y_name: does_switch
     hidden_size: 10
-    add_rnn: False
+    add_rnn: True
     add_edge_model: False
     add_global_model: False
     x_encoding:
@@ -45,10 +51,14 @@ params:
       - name: prev_punishment
         n_levels: 31
         encoding: numeric
+      - etype: bool
+        name: prev_does_switch
+      - etype: bool
+        name: prev_contribution_valid
   optimizer_args:
     lr: 3.e-3
   train_args:
-    epochs: 100
+    epochs: 120
     batch_size: 10
     eval_period: 5
     l1_entropy: 0
