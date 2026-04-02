@@ -188,6 +188,11 @@ def main(config):
         sum_loss = 0
         n_steps = 0
 
+        early_stopping_patience = train_args.get("early_stopping_patience")
+        best_test_loss = float("inf")
+        best_model_state = None
+        epochs_without_improvement = 0
+
         pbar = tqdm(range(train_args["epochs"]))
         for e in pbar:
             rec.set_labels(cv_split=i, epoch=e)
@@ -305,9 +310,39 @@ def main(config):
                 postfix = {"loss": f"{avg_loss:.4f}"}
                 if test_log_loss is not None:
                     postfix["test_loss"] = f"{test_log_loss:.4f}"
+                    if early_stopping_patience is not None:
+                        if test_log_loss < best_test_loss:
+                            best_test_loss = test_log_loss
+                            best_model_state = {
+                                k: v.clone()
+                                for k, v in model.state_dict().items()
+                            }
+                            epochs_without_improvement = 0
+                        else:
+                            epochs_without_improvement += (
+                                train_args["eval_period"]
+                            )
+                        postfix["best"] = f"{best_test_loss:.4f}"
+                        postfix["pat"] = (
+                            f"{epochs_without_improvement}"
+                            f"/{early_stopping_patience}"
+                        )
                 pbar.set_postfix(postfix)
                 sum_loss = 0
                 n_steps = 0
+
+            if (
+                early_stopping_patience is not None
+                and epochs_without_improvement >= early_stopping_patience
+            ):
+                pbar.close()
+                print(
+                    f"  Early stopping at epoch {e} "
+                    f"(best test loss: {best_test_loss:.4f})"
+                )
+                if best_model_state is not None:
+                    model.load_state_dict(best_model_state)
+                break
 
         if test_data is not None:
             # compute confusion matrix
