@@ -236,8 +236,6 @@ def main(config):
             last_epoch = e == (train_args["epochs"] - 1)
             if (e % train_args["eval_period"] == 0) or last_epoch:
                 avg_loss = sum_loss / n_steps
-                pbar.set_postfix(loss=f"{avg_loss:.4f}")
-                print(f"CV {i} | Epoch {e} | Loss {avg_loss}")
                 rec.rec(value=avg_loss, set="train")
 
                 # evalute on training data for all possible mask patterns
@@ -255,8 +253,9 @@ def main(config):
                     metrics = eval_model(model, _d)
                     rec.rec_many(metrics, set="train", n_pred=n_pred, mask=j)
 
+                test_log_loss = None
                 if test_data is not None:
-                    # evalute on training data for all possible mask patterns
+                    # evalute on test data for all possible mask patterns
                     for j, mask in enumerate(test_mask_pattern):
                         n_pred = mask.sum().item()
                         _d = apply_mask_pattern(
@@ -274,7 +273,11 @@ def main(config):
                         )
                         metrics = eval_model(model, _d)
                         rec.rec_many(metrics, set="test", n_pred=n_pred, mask=j)
-                        # evalute on training data, shuffled features
+                        if j == 0:
+                            for m in metrics:
+                                if m["name"] == "log_loss":
+                                    test_log_loss = m["value"]
+                        # evalute on test data, shuffled features
                         for sf in shuffle_features:
                             _d = apply_mask_pattern(
                                 test_data,
@@ -298,6 +301,11 @@ def main(config):
                                 n_pred=n_pred,
                                 mask=j,
                             )
+
+                postfix = {"loss": f"{avg_loss:.4f}"}
+                if test_log_loss is not None:
+                    postfix["test_loss"] = f"{test_log_loss:.4f}"
+                pbar.set_postfix(postfix)
                 sum_loss = 0
                 n_steps = 0
 
