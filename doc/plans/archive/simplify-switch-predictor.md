@@ -1,4 +1,4 @@
-# [ACTIVE] Simplify switch predictor architecture for baseline and feature analysis
+# [DONE] Simplify switch predictor architecture for baseline and feature analysis
 
 Issue: #64 | Dependencies: #43 (original switch predictor)
 
