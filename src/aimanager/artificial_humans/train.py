@@ -23,6 +23,18 @@ def shuffle_feature(data, feature_name):
     return data
 
 
+def ablate_feature(data, feature_name):
+    data = {**data}
+    val = data[feature_name]
+    mean = val.float().mean(0)
+    if val.dtype == th.bool:
+        mean = mean.round().bool()
+    elif val.dtype in (th.int64, th.int32, th.long):
+        mean = mean.round().to(val.dtype)
+    data[feature_name] = mean.expand_as(val)
+    return data
+
+
 def batch_loader(data, batch_size):
     n = len(data["contribution"])
     all_idx = np.arange(n)
@@ -95,7 +107,8 @@ def main(config):
     model_args = config["model_args"]
     optimizer_args = config["optimizer_args"]
     train_args = config["train_args"]
-    shuffle_features = config["shuffle_features"]
+    shuffle_features = config.get("shuffle_features", [])
+    ablate_features = config.get("ablate_features", [])
     mask_name = config["mask_name"]
     job_id = config["job_id"]
     data_file = config["data_file"]
@@ -188,6 +201,11 @@ def main(config):
         sum_loss = 0
         n_steps = 0
 
+        early_stopping_patience = train_args.get("early_stopping_patience")
+        best_test_loss = float("inf")
+        best_model_state = None
+        epochs_without_improvement = 0
+
         pbar = tqdm(range(train_args["epochs"]))
         for e in pbar:
             rec.set_labels(cv_split=i, epoch=e)
@@ -223,7 +241,7 @@ def main(config):
 
                 loss.backward(retain_graph=True)
 
-                if train_args["clamp_grad"]:
+                if train_args.get("clamp_grad"):
                     for param in model.parameters():
                         param.grad.data.clamp_(
                             -train_args["clamp_grad"], train_args["clamp_grad"]
@@ -236,8 +254,6 @@ def main(config):
             last_epoch = e == (train_args["epochs"] - 1)
             if (e % train_args["eval_period"] == 0) or last_epoch:
                 avg_loss = sum_loss / n_steps
-                pbar.set_postfix(loss=f"{avg_loss:.4f}")
-                print(f"CV {i} | Epoch {e} | Loss {avg_loss}")
                 rec.rec(value=avg_loss, set="train")
 
                 # evalute on training data for all possible mask patterns
@@ -255,8 +271,9 @@ def main(config):
                     metrics = eval_model(model, _d)
                     rec.rec_many(metrics, set="train", n_pred=n_pred, mask=j)
 
+                test_log_loss = None
                 if test_data is not None:
-                    # evalute on training data for all possible mask patterns
+                    # evalute on test data for all possible mask patterns
                     for j, mask in enumerate(test_mask_pattern):
                         n_pred = mask.sum().item()
                         _d = apply_mask_pattern(
@@ -274,32 +291,74 @@ def main(config):
                         )
                         metrics = eval_model(model, _d)
                         rec.rec_many(metrics, set="test", n_pred=n_pred, mask=j)
-                        # evalute on training data, shuffled features
-                        for sf in shuffle_features:
-                            _d = apply_mask_pattern(
-                                test_data,
-                                mask[np.newaxis],
-                                y_name,
-                                mask_name,
-                                default_values,
+                        if j == 0:
+                            for m in metrics:
+                                if m["name"] == "log_loss":
+                                    test_log_loss = m["value"]
+                        for feats, fn, lbl in [
+                            (shuffle_features, shuffle_feature, "shuffle_feature"),
+                            (ablate_features, ablate_feature, "ablate_feature"),
+                        ]:
+                            for feat in feats:
+                                _d = apply_mask_pattern(
+                                    test_data,
+                                    mask[np.newaxis],
+                                    y_name,
+                                    mask_name,
+                                    default_values,
+                                )
+                                _d = fn(_d, feat)
+                                _d = model.encode(
+                                    _d,
+                                    mask=mask_name,
+                                    edge_index=test_edge_index,
+                                    device=th_device,
+                                )
+                                metrics = eval_model(model, _d)
+                                rec.rec_many(
+                                    metrics,
+                                    set="test",
+                                    **{lbl: feat},
+                                    n_pred=n_pred,
+                                    mask=j,
+                                )
+
+                postfix = {"loss": f"{avg_loss:.4f}"}
+                if test_log_loss is not None:
+                    postfix["test_loss"] = f"{test_log_loss:.4f}"
+                    if early_stopping_patience is not None:
+                        if test_log_loss < best_test_loss:
+                            best_test_loss = test_log_loss
+                            best_model_state = {
+                                k: v.clone()
+                                for k, v in model.state_dict().items()
+                            }
+                            epochs_without_improvement = 0
+                        else:
+                            epochs_without_improvement += (
+                                train_args["eval_period"]
                             )
-                            _d = shuffle_feature(_d, sf)
-                            _d = model.encode(
-                                _d,
-                                mask=mask_name,
-                                edge_index=test_edge_index,
-                                device=th_device,
-                            )
-                            metrics = eval_model(model, _d)
-                            rec.rec_many(
-                                metrics,
-                                set="test",
-                                shuffle_feature=sf,
-                                n_pred=n_pred,
-                                mask=j,
-                            )
+                        postfix["best"] = f"{best_test_loss:.4f}"
+                        postfix["pat"] = (
+                            f"{epochs_without_improvement}"
+                            f"/{early_stopping_patience}"
+                        )
+                pbar.set_postfix(postfix)
                 sum_loss = 0
                 n_steps = 0
+
+            if (
+                early_stopping_patience is not None
+                and epochs_without_improvement >= early_stopping_patience
+            ):
+                pbar.close()
+                print(
+                    f"  Early stopping at epoch {e} "
+                    f"(best test loss: {best_test_loss:.4f})"
+                )
+                if best_model_state is not None:
+                    model.load_state_dict(best_model_state)
+                break
 
         if test_data is not None:
             # compute confusion matrix
