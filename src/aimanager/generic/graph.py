@@ -99,14 +99,21 @@ class GraphNetwork(th.nn.Module):
         add_global_model=True,
         hidden_size=None,
         default_values={},
+        joint_output=None,
         **_,
     ):
         super().__init__()
         self.x_encoder = Encoder(x_encoding, refrence=y_name)
-        self.u_encoder = Encoder(u_encoding, aggregation="mean", refrence=y_name)
-        self.y_encoder = IntEncoder(encoding="onehot", name=y_name, n_levels=y_levels)
+        self.u_encoder = Encoder(
+            u_encoding, aggregation="mean", refrence=y_name
+        )
+        self.y_encoder = IntEncoder(
+            encoding="onehot", name=y_name, n_levels=y_levels
+        )
         self.bias_encoder = (
-            Encoder(b_encoding, refrence=y_name) if b_encoding is not None else None
+            Encoder(b_encoding, refrence=y_name)
+            if b_encoding is not None
+            else None
         )
         self.edge_encoder = EmptyEncoder(refrence=y_name)
 
@@ -121,6 +128,22 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+        self.joint_output = joint_output
+
+        if joint_output is not None:
+            total_output_size = sum(
+                h["n_levels"] for h in joint_output
+            )
+            self.head_decoders = th.nn.ModuleDict()
+            for head in joint_output:
+                if head["name"] != y_name:
+                    self.head_decoders[head["name"]] = IntEncoder(
+                        encoding="onehot",
+                        name=head["name"],
+                        n_levels=head["n_levels"],
+                    )
+        else:
+            total_output_size = y_features
 
         if op1 is None:
             if add_edge_model:
@@ -186,7 +209,7 @@ class GraphNetwork(th.nn.Module):
                     x_features=x_features,
                     edge_features=0,
                     u_features=u_features,
-                    out_features=y_features,
+                    out_features=total_output_size,
                 ),
                 None,
             )
@@ -270,9 +293,38 @@ class GraphNetwork(th.nn.Module):
         encoded = {k: v.to(device) for k, v in encoded.items() if v is not None}
         return encoded
 
+    def split_output(self, y_logit):
+        """Split joint logits into per-head tensors."""
+        result = {}
+        offset = 0
+        for head in self.joint_output:
+            n = head["n_levels"]
+            result[head["name"]] = y_logit[..., offset:offset + n]
+            offset += n
+        return result
+
     def predict_encoded(self, data, sample=True, reset_rnn=True):
         self.eval()
         y_logit = self(data, reset_rnn)
+
+        if self.joint_output is not None:
+            heads = self.split_output(y_logit)
+            y_pred = {}
+            y_pred_proba = {}
+            for head in self.joint_output:
+                name = head["name"]
+                logit = heads[name]
+                proba = th.nn.functional.softmax(logit, dim=-1)
+                if name == self.y_name:
+                    pred = self.y_encoder.decode(proba, sample)
+                else:
+                    pred = self.head_decoders[name].decode(
+                        proba, sample
+                    )
+                y_pred[name] = pred
+                y_pred_proba[name] = proba
+            return y_pred, y_pred_proba
+
         y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
@@ -368,12 +420,14 @@ class GraphNetwork(th.nn.Module):
             "u_encoding",
             "b_encoding",
             "default_values",
+            "joint_output",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
     @classmethod
     def load(cls, filename, device=None):
         to_load = th.load(filename, map_location=device)
+        to_load.setdefault("joint_output", None)
         ah = cls(**to_load, device=device)
         ah.device = device
         return ah
