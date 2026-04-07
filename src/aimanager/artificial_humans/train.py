@@ -220,6 +220,20 @@ def main(config):
                     mask_name,
                     default_values,
                 )
+                is_joint = getattr(model, "joint_output", None)
+                if is_joint:
+                    val_target = (
+                        b_data["contribution_valid"]
+                        .long()
+                        .to(th_device)
+                        .flatten()
+                    )
+                    val_mask = (
+                        b_data["autoreg_mask"]
+                        .to(th_device)
+                        .flatten()
+                    )
+
                 batch_data = model.encode(
                     b_data,
                     mask=mask_name,
@@ -228,16 +242,40 @@ def main(config):
                 )
 
                 y_logit = model(batch_data).flatten(end_dim=-2)
-                y_pred = y_logit.softmax(-1)
-                y_true = batch_data["y_enc"].flatten(end_dim=-2)
                 mask = batch_data["mask"].flatten()
 
-                loss = (
-                    loss_fn(y_logit, y_true)
-                    + (y_pred * y_pred.log()).sum(-1) * train_args["l1_entropy"]
-                )
+                if is_joint:
+                    heads = model.split_output(y_logit)
+                    c_logit = heads[y_name]
+                    c_pred = c_logit.softmax(-1)
+                    c_true = batch_data["y_enc"].flatten(
+                        end_dim=-2
+                    )
+                    l1 = train_args["l1_entropy"]
+                    c_loss = (
+                        loss_fn(c_logit, c_true)
+                        + (c_pred * c_pred.log()).sum(-1) * l1
+                    )
+                    c_loss = (c_loss * mask).sum() / mask.sum()
 
-                loss = (loss * mask).sum() / mask.sum()
+                    v_logit = heads["contribution_valid"]
+                    v_loss = loss_fn(v_logit, val_target)
+                    v_loss = (
+                        (v_loss * val_mask).sum()
+                        / val_mask.sum()
+                    )
+                    loss = c_loss + v_loss
+                else:
+                    y_pred = y_logit.softmax(-1)
+                    y_true = batch_data["y_enc"].flatten(
+                        end_dim=-2
+                    )
+                    loss = (
+                        loss_fn(y_logit, y_true)
+                        + (y_pred * y_pred.log()).sum(-1)
+                        * train_args["l1_entropy"]
+                    )
+                    loss = (loss * mask).sum() / mask.sum()
 
                 loss.backward(retain_graph=True)
 
