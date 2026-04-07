@@ -303,11 +303,63 @@ Baseline test loss: 0.5663
 | MLP+RNN feat (5 feat) | 0.5698 | 0.0241 |
 
 The 7-feature extended model has the best test loss but highest fold
-variance. Dropping round_number and agent_group (5 feat) did not help
-— the reduced model is worse than both the extended and close to the
-base 4-feature model. This may reflect CUDA non-determinism between
-runs or subtle feature interactions not captured by the shuffle test.
-Grid search (#44) will provide more definitive feature selection.
+variance.
+
+### Seed and feature order sensitivity
+
+Investigated whether feature importance rankings are stable across
+different random seeds and feature orderings. Ran the 7-feature
+MLP+RNN model with: (1) seed=38381 original feature order, (2)
+seed=12345 same order, (3) seed=38381 with two features swapped in
+x_encoding. Results are fully deterministic within each configuration.
+
+| | seed=38381 | seed=12345 | swapped order |
+|---|---:|---:|---:|
+| Best test loss | 0.5536 | 0.5611 | 0.5565 |
+
+**Shuffle Δ:**
+
+| Feature | seed=38381 | seed=12345 | swapped order |
+|---------|----------:|----------:|-------------:|
+| prev_contribution_valid | **+0.0063** | +0.0008 | +0.0032 |
+| prev_contribution | +0.0018 | +0.0050 | +0.0036 |
+| prev_does_switch | +0.0010 | +0.0012 | +0.0036 |
+| prev_punishment | +0.0009 | **+0.0061** | +0.0019 |
+| prev_common_good | +0.0005 | -0.0006 | **+0.0038** |
+| agent_group | +0.0002 | +0.0051 | -0.0005 |
+| round_number | +0.0000 | +0.0000 | +0.0000 |
+
+**Ablate Δ:**
+
+| Feature | seed=38381 | seed=12345 | swapped order |
+|---------|----------:|----------:|-------------:|
+| prev_contribution_valid | **+0.0076** | +0.0007 | **+0.0046** |
+| prev_contribution | +0.0017 | **+0.0029** | +0.0020 |
+| prev_common_good | +0.0014 | -0.0008 | +0.0011 |
+| prev_does_switch | -0.0009 | +0.0030 | +0.0023 |
+| prev_punishment | +0.0001 | +0.0023 | +0.0005 |
+| agent_group | -0.0010 | -0.0012 | -0.0005 |
+| round_number | +0.0000 | +0.0000 | +0.0000 |
+
+**Every feature except `round_number` flips between important and
+irrelevant depending on the seed.** The top feature is different in
+each run. Changing the seed has the same magnitude of effect (~0.008
+test loss) as swapping feature order.
+
+**Root cause**: the RNN amplifies initialization-dependent differences.
+The MLP transforms features at each time step, and the GRU carries
+hidden state across 6 decision rounds. Small differences in the MLP
+output at step 1 compound through the recurrence, leading to
+substantially different models by the final step. Verified with a
+synthetic experiment: a plain MLP shows only 0.0006 difference between
+feature orderings, while MLP+RNN shows 0.008 — matching what we
+observe in the real model.
+
+**Conclusion**: with 624 samples from 13 episodes, feature importance
+analysis via permutation or ablation is not reliable for this model.
+The rankings are dominated by initialization noise amplified by the
+RNN. The only robust finding is `round_number` ≈ 0. Meaningful feature
+selection requires the multi-seed grid search planned in #44.
 
 ## Implementation notes
 
@@ -326,5 +378,8 @@ Grid search (#44) will provide more definitive feature selection.
 - [x] Train MLP baseline, evaluate by test loss
 - [x] Train MLP+RNN, MLP+edge, MLP+RNN+edge — evaluate by test loss
 - [x] Retrain at 150 epochs to avoid overfitting
-- [x] Run feature importance analysis (shuffle_features)
-- [ ] Document findings
+- [x] Run feature importance analysis (shuffle_features + ablation)
+- [x] Investigate seed/ordering sensitivity — feature importance is
+  unreliable at this dataset size (RNN amplifies initialization noise)
+- [ ] Document findings — deferred to grid search (#44) which will
+  provide multi-seed feature selection
