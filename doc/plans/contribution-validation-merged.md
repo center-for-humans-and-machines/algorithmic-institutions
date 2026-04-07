@@ -44,17 +44,20 @@ After:
 | 7 | Training config | New YAML config for joint model | no |
 | 8 | Validation | Compare test loss and simulation behavior | no |
 
-### 1. Baseline verification
+### 1. Baseline verification (done)
 
-Confirm that the modern validity config
-(`configs/training/artificial_humans/contribution_valid.yml`) reproduces
-the legacy validity model's test loss. This config has already been
-created and submitted to the cluster.
+Modern config reproduces both legacy models exactly (all three
+match to 4+ decimal places across all 6 CV folds):
 
-- Compare test loss of the new model against the legacy model at
-  `artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt`
-- If test loss matches (within noise), proceed. If not, debug the
-  config before continuing.
+| Model | Test Log Loss | Test Accuracy |
+|-------|-------------:|-------------:|
+| legacy_v4 | 0.0963 +/- 0.0216 | 97.98% |
+| raven_22 | 0.0963 +/- 0.0216 | 97.98% |
+| modern | 0.0963 +/- 0.0216 | 97.98% |
+
+Best fold test loss: 0.0619 (fold 2). Model converges by ~epoch 400
+but is trained to 10k. No overfitting (train/test loss track closely).
+Naive base-rate CE: 0.602 — the model is far better than chance.
 
 ### 2. GraphNetwork output split
 
@@ -277,8 +280,7 @@ New config for the joint model. Key differences from `script_21`:
 
 ## Next Actions
 
-- [ ] Verify baseline: confirm modern validity config matches legacy
-      model test loss
+- [x] Verify baseline: all three models match to 4+ decimal places
 - [ ] Implement `joint_output` in `GraphNetwork` (step 2)
 - [ ] Implement `split_output` and dual-head prediction (step 5)
 - [ ] Implement joint loss in training loop (step 3)
