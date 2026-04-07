@@ -1,7 +1,6 @@
 description: >-
-  MLP + RNN switch predictor with optimized feature selection.
-  Drops round_number and agent_group (no effect per shuffle test).
-  Keeps prev_does_switch and prev_contribution_valid (marginal signal).
+  MLP + RNN switch predictor with all available features.
+  Includes shuffle and ablation importance analysis.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -30,8 +29,18 @@ params:
     - prev_contribution
     - prev_common_good
     - prev_punishment
+    - agent_group
     - prev_does_switch
     - prev_contribution_valid
+    - round_number
+  ablate_features:
+    - prev_contribution
+    - prev_common_good
+    - prev_punishment
+    - agent_group
+    - prev_does_switch
+    - prev_contribution_valid
+    - round_number
   basedir: .
   output_dir: artifacts/artificial_humans/switch_pred_mlp_rnn_feat
   model_args:
@@ -51,10 +60,16 @@ params:
       - name: prev_punishment
         n_levels: 31
         encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: numeric
       - etype: bool
         name: prev_does_switch
       - etype: bool
         name: prev_contribution_valid
+      - name: round_number
+        n_levels: 24
+        encoding: numeric
   optimizer_args:
     lr: 3.e-3
   train_args:

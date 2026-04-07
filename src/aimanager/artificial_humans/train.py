@@ -23,6 +23,18 @@ def shuffle_feature(data, feature_name):
     return data
 
 
+def ablate_feature(data, feature_name):
+    data = {**data}
+    val = data[feature_name]
+    mean = val.float().mean(0)
+    if val.dtype == th.bool:
+        mean = mean.round().bool()
+    elif val.dtype in (th.int64, th.int32, th.long):
+        mean = mean.round().to(val.dtype)
+    data[feature_name] = mean.expand_as(val)
+    return data
+
+
 def batch_loader(data, batch_size):
     n = len(data["contribution"])
     all_idx = np.arange(n)
@@ -95,7 +107,8 @@ def main(config):
     model_args = config["model_args"]
     optimizer_args = config["optimizer_args"]
     train_args = config["train_args"]
-    shuffle_features = config["shuffle_features"]
+    shuffle_features = config.get("shuffle_features", [])
+    ablate_features = config.get("ablate_features", [])
     mask_name = config["mask_name"]
     job_id = config["job_id"]
     data_file = config["data_file"]
@@ -282,30 +295,33 @@ def main(config):
                             for m in metrics:
                                 if m["name"] == "log_loss":
                                     test_log_loss = m["value"]
-                        # evalute on test data, shuffled features
-                        for sf in shuffle_features:
-                            _d = apply_mask_pattern(
-                                test_data,
-                                mask[np.newaxis],
-                                y_name,
-                                mask_name,
-                                default_values,
-                            )
-                            _d = shuffle_feature(_d, sf)
-                            _d = model.encode(
-                                _d,
-                                mask=mask_name,
-                                edge_index=test_edge_index,
-                                device=th_device,
-                            )
-                            metrics = eval_model(model, _d)
-                            rec.rec_many(
-                                metrics,
-                                set="test",
-                                shuffle_feature=sf,
-                                n_pred=n_pred,
-                                mask=j,
-                            )
+                        for feats, fn, lbl in [
+                            (shuffle_features, shuffle_feature, "shuffle_feature"),
+                            (ablate_features, ablate_feature, "ablate_feature"),
+                        ]:
+                            for feat in feats:
+                                _d = apply_mask_pattern(
+                                    test_data,
+                                    mask[np.newaxis],
+                                    y_name,
+                                    mask_name,
+                                    default_values,
+                                )
+                                _d = fn(_d, feat)
+                                _d = model.encode(
+                                    _d,
+                                    mask=mask_name,
+                                    edge_index=test_edge_index,
+                                    device=th_device,
+                                )
+                                metrics = eval_model(model, _d)
+                                rec.rec_many(
+                                    metrics,
+                                    set="test",
+                                    **{lbl: feat},
+                                    n_pred=n_pred,
+                                    mask=j,
+                                )
 
                 postfix = {"loss": f"{avg_loss:.4f}"}
                 if test_log_loss is not None:
