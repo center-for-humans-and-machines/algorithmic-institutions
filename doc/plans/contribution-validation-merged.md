@@ -1,4 +1,4 @@
-# [DRAFT] Merge contribution and validity models into a single joint model
+# [ACTIVE] Merge contribution and validity models into a single joint model
 
 Issue: #65
 
@@ -278,13 +278,31 @@ New config for the joint model. Key differences from `script_21`:
   gradient contribution will naturally be smaller. Consider adding a
   configurable `validity_loss_weight` parameter if tuning is needed.
 
+## Experiment Results
+
+Joint model (6-fold CV, 10k epochs) vs standalone baselines:
+
+| Head | Joint test loss | Standalone test loss | Joint acc | Standalone acc |
+|------|---------------:|--------------------:|----------:|--------------:|
+| contribution | 1.885 | 1.884 | 24.2% | 24.2% |
+| validity | 0.176 | 0.097 | 92.7% | 97.0% |
+
+Contribution head matches baseline within noise. Validity head is
+slightly worse — expected since it shares the full architecture
+(edge+RNN, h=5) and optimizes jointly rather than independently
+with a simpler MLP.
+
+Feature importance analysis requires more data to be conclusive;
+with the current dataset, rankings are sensitive to seed and
+initialization.
+
 ## Next Actions
 
 - [x] Verify baseline: all three models match to 4+ decimal places
-- [ ] Implement `joint_output` in `GraphNetwork` (step 2)
-- [ ] Implement `split_output` and dual-head prediction (step 5)
-- [ ] Implement joint loss in training loop (step 3)
-- [ ] Implement dual-head evaluation metrics (step 4)
+- [x] Implement `joint_output` in `GraphNetwork` (step 2)
+- [x] Implement `split_output` and dual-head prediction (step 5)
+- [x] Implement joint loss in training loop (step 3)
+- [x] Implement dual-head evaluation metrics (step 4)
 - [ ] Add single-model simulation path (step 6)
-- [ ] Create joint training config (step 7)
-- [ ] Train on cluster and validate (step 8)
+- [x] Create joint training config (step 7)
+- [x] Train on cluster and validate (step 8)
