@@ -12,6 +12,8 @@ from sklearn.metrics import (
 
 def create_confusion_matrix(model, data, y_name, labels):
     y_pred, y_pred_proba = model.predict_encoded(data, sample=False)
+    if isinstance(y_pred_proba, dict):
+        y_pred_proba = y_pred_proba[y_name]
     y_pred_proba = y_pred_proba.detach().cpu().numpy()
 
     mask = data["mask"]
@@ -34,47 +36,71 @@ def create_confusion_matrix(model, data, y_name, labels):
     return df
 
 
-def eval_model(model, data):
+def _eval_single_head(model, data, mask, y_true_tensor, head=None):
+    """Evaluate a single prediction head."""
     metrics = []
     strategies = ["greedy", "sampling"]
     for strategy in strategies:
-        if strategy == "greedy":
-            y_pred, y_pred_proba = model.predict_encoded(data, sample=False)
-        elif strategy == "sampling":
-            y_pred, y_pred_proba = model.predict_encoded(data, sample=True)
+        sample = strategy == "sampling"
+        preds = model.predict_encoded(data, sample=sample)
+        y_pred, y_pred_proba = preds
 
-        # mask y_true, y_pred, y_pred_proba
-        mask = data["mask"]
-        y_true = th.masked_select(data["y"], mask)
+        if isinstance(y_pred, dict):
+            name = head or model.y_name
+            y_pred = y_pred[name]
+            y_pred_proba = y_pred_proba[name]
+
+        y_true = th.masked_select(y_true_tensor, mask)
         y_true = y_true.detach().cpu().numpy()
 
         y_pred = th.masked_select(y_pred, mask)
         y_pred = y_pred.detach().cpu().numpy()
 
         n_levels = y_pred_proba.shape[-1]
-        y_pred_proba = th.masked_select(y_pred_proba, mask.unsqueeze(-1))
+        y_pred_proba = th.masked_select(
+            y_pred_proba, mask.unsqueeze(-1)
+        )
         y_pred_proba = y_pred_proba.reshape(-1, n_levels)
         y_pred_proba = y_pred_proba.detach().cpu().numpy()
 
+        head_label = {"head": head} if head else {}
         metrics += [
             {
                 "name": "mean_absolute_error",
                 "value": mean_absolute_error(y_true, y_pred),
                 "strategy": strategy,
+                **head_label,
             },
             {
                 "name": "accuracy",
                 "value": accuracy_score(y_true, y_pred),
                 "strategy": strategy,
+                **head_label,
             },
         ]
-    # log loss is independent of the sampling strategy
     metrics += [
         {
             "name": "log_loss",
-            "value": log_loss(y_true, y_pred_proba, labels=list(range(n_levels))),
+            "value": log_loss(
+                y_true, y_pred_proba,
+                labels=list(range(n_levels)),
+            ),
+            **head_label,
         },
     ]
+    return metrics
+
+
+def eval_model(model, data, validity_target=None, validity_mask=None):
+    metrics = _eval_single_head(
+        model, data, data["mask"], data["y"],
+        head="contribution" if validity_target is not None else None,
+    )
+    if validity_target is not None:
+        metrics += _eval_single_head(
+            model, data, validity_mask, validity_target,
+            head="contribution_valid",
+        )
     return metrics
 
 

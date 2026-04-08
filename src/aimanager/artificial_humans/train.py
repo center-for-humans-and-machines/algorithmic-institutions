@@ -17,6 +17,14 @@ from itertools import permutations
 from tqdm import tqdm
 
 
+def _extract_validity_data(data, device):
+    """Extract validity target and mask from raw data for joint eval."""
+    return (
+        data["contribution_valid"].long().to(device).flatten(0, 1),
+        data["autoreg_mask"].to(device).flatten(0, 1),
+    )
+
+
 def shuffle_feature(data, feature_name):
     data = {**data}
     data[feature_name] = data[feature_name][th.randperm(len(data[feature_name]))]
@@ -300,16 +308,22 @@ def main(config):
                     _d = apply_mask_pattern(
                         train_data, mask[np.newaxis], y_name, mask_name, default_values
                     )
+                    vt, vm = (
+                        _extract_validity_data(_d, th_device)
+                        if is_joint
+                        else (None, None)
+                    )
                     _d = model.encode(
                         _d,
                         mask=mask_name,
                         edge_index=train_edge_index,
                         device=th_device,
                     )
-                    metrics = eval_model(model, _d)
+                    metrics = eval_model(model, _d, vt, vm)
                     rec.rec_many(metrics, set="train", n_pred=n_pred, mask=j)
 
                 test_log_loss = None
+                postfix_heads = {}
                 if test_data is not None:
                     # evalute on test data for all possible mask patterns
                     for j, mask in enumerate(test_mask_pattern):
@@ -321,18 +335,29 @@ def main(config):
                             mask_name,
                             default_values,
                         )
+                        vt, vm = (
+                            _extract_validity_data(_d, th_device)
+                            if is_joint
+                            else (None, None)
+                        )
                         _d = model.encode(
                             _d,
                             mask=mask_name,
                             edge_index=test_edge_index,
                             device=th_device,
                         )
-                        metrics = eval_model(model, _d)
+                        metrics = eval_model(model, _d, vt, vm)
                         rec.rec_many(metrics, set="test", n_pred=n_pred, mask=j)
                         if j == 0:
+                            test_log_loss = 0
                             for m in metrics:
                                 if m["name"] == "log_loss":
-                                    test_log_loss = m["value"]
+                                    test_log_loss += m["value"]
+                                    head = m.get("head")
+                                    if head:
+                                        postfix_heads[head] = (
+                                            m["value"]
+                                        )
                         for feats, fn, lbl in [
                             (shuffle_features, shuffle_feature, "shuffle_feature"),
                             (ablate_features, ablate_feature, "ablate_feature"),
@@ -346,13 +371,22 @@ def main(config):
                                     default_values,
                                 )
                                 _d = fn(_d, feat)
+                                pvt, pvm = (
+                                    _extract_validity_data(
+                                        _d, th_device
+                                    )
+                                    if is_joint
+                                    else (None, None)
+                                )
                                 _d = model.encode(
                                     _d,
                                     mask=mask_name,
                                     edge_index=test_edge_index,
                                     device=th_device,
                                 )
-                                metrics = eval_model(model, _d)
+                                metrics = eval_model(
+                                    model, _d, pvt, pvm
+                                )
                                 rec.rec_many(
                                     metrics,
                                     set="test",
@@ -364,6 +398,8 @@ def main(config):
                 postfix = {"loss": f"{avg_loss:.4f}"}
                 if test_log_loss is not None:
                     postfix["test_loss"] = f"{test_log_loss:.4f}"
+                    for h, v in postfix_heads.items():
+                        postfix[f"t_{h}"] = f"{v:.4f}"
                     if early_stopping_patience is not None:
                         if test_log_loss < best_test_loss:
                             best_test_loss = test_log_loss
