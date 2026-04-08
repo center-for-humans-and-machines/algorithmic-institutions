@@ -277,25 +277,47 @@ class ArtificialHumanEnv:
         self.reward = self.group_payoff
 
     def update_contribution(self):
-        contribution = self.artifical_humans.predict(
-            self.state,
+        predict_kwargs = dict(
             reset_rnn=self.round_number[0, 0, 0] == 0,
             edge_index=self.batch_edge_index,
-        )[0]
+        )
+        preds = self.artifical_humans.predict(
+            self.state, **predict_kwargs
+        )
 
-        # artificial humans valid
-        if self.artifical_humans_valid is not None:
-            contribution_valid = self.artifical_humans_valid.predict(
-                self.state,
-                reset_rnn=self.round_number[0, 0, 0] == 0,
-                edge_index=self.batch_edge_index,
-            )[0]
-            contribution_valid = contribution_valid.to(th.bool)
-            contribution[~contribution_valid] = self.artifical_humans.default_values[
-                "contribution"
-            ]
+        is_joint = getattr(
+            self.artifical_humans, "joint_output", None
+        )
+        if is_joint:
+            y_pred = preds[0]
+            contribution = y_pred["contribution"]
+            contribution_valid = y_pred[
+                "contribution_valid"
+            ].to(th.bool)
+            default = (
+                self.artifical_humans.default_values[
+                    "contribution"
+                ]
+            )
+            contribution[~contribution_valid] = default
+        elif self.artifical_humans_valid is not None:
+            contribution = preds[0]
+            contribution_valid = (
+                self.artifical_humans_valid.predict(
+                    self.state, **predict_kwargs
+                )[0].to(th.bool)
+            )
+            default = (
+                self.artifical_humans.default_values[
+                    "contribution"
+                ]
+            )
+            contribution[~contribution_valid] = default
         else:
-            contribution_valid = th.ones_like(self.contribution_valid)
+            contribution = preds[0]
+            contribution_valid = th.ones_like(
+                self.contribution_valid
+            )
 
         self.contribution = contribution
         self.contribution_valid = contribution_valid

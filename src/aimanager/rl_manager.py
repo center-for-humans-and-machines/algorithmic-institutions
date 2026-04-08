@@ -109,25 +109,36 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
 
     # Model paths
     basedir = config["basedir"]
-    artificial_humans_path = os.path.join(basedir, config["artificial_humans"])
-    artificial_humans_valid_path = os.path.join(
-        basedir, config["artificial_humans_valid"]
-    )
+    ah_model_cls = AH_MODELS[config["artificial_humans_model"]]
 
-    print(
-        f"Loading artificial humans from {artificial_humans_path}"
-        f" and {artificial_humans_valid_path}"
-    )
-    ah = (
-        AH_MODELS[config["artificial_humans_model"]]
-        .load(artificial_humans_path, device=device)
-        .to(device)
-    )
-    ahv = (
-        AH_MODELS[config["artificial_humans_model"]]
-        .load(artificial_humans_valid_path, device=device)
-        .to(device)
-    )
+    if "artificial_humans_joint" in config:
+        joint_path = os.path.join(
+            basedir, config["artificial_humans_joint"]
+        )
+        print(
+            f"Loading joint artificial humans from {joint_path}"
+        )
+        ah = ah_model_cls.load(joint_path, device=device).to(
+            device
+        )
+        ahv = None
+    else:
+        ah_path = os.path.join(
+            basedir, config["artificial_humans"]
+        )
+        ahv_path = os.path.join(
+            basedir, config["artificial_humans_valid"]
+        )
+        print(
+            f"Loading artificial humans from {ah_path}"
+            f" and {ahv_path}"
+        )
+        ah = ah_model_cls.load(ah_path, device=device).to(
+            device
+        )
+        ahv = ah_model_cls.load(ahv_path, device=device).to(
+            device
+        )
 
     env_args = config["env_args"].copy()
     if env_args.pop("reward_formula", None) is not None:

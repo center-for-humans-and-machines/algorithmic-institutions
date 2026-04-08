@@ -70,8 +70,21 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
         columns=columns,
         value_name="agent_group",
     )
+    contribution_valid = using_multiindex(
+        recorder.memory["contribution_valid"]
+        .squeeze(1)
+        .float()
+        .numpy(),
+        columns=columns,
+        value_name="contribution_valid",
+    )
 
-    df_sim = punishments.merge(common_good).merge(contributions).merge(agent_group)
+    df_sim = (
+        punishments.merge(common_good)
+        .merge(contributions)
+        .merge(agent_group)
+        .merge(contribution_valid)
+    )
 
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
     df_sim["payoff"] = (
@@ -156,20 +169,28 @@ def run_simulation(config: dict, output_dir: str) -> list:
         groups = run["groups"]
 
         # Load artificial humans
-        hm_path = os.path.join(
-            basedir, artificial_humans[run["humans"]]["contribution_model"]
-        )
-        hmv_path = os.path.join(
-            basedir, artificial_humans[run["humans"]]["valid_model"]
-        )
-
-        ah = GraphNetwork.load(hm_path, device=device)
-        ah_val = GraphNetwork.load(hmv_path, device=device)
+        ah_config = artificial_humans[run["humans"]]
+        if "joint_model" in ah_config:
+            hm_path = os.path.join(
+                basedir, ah_config["joint_model"]
+            )
+            ah = GraphNetwork.load(hm_path, device=device)
+            ah_val = None
+        else:
+            hm_path = os.path.join(
+                basedir, ah_config["contribution_model"]
+            )
+            hmv_path = os.path.join(
+                basedir, ah_config["valid_model"]
+            )
+            ah = GraphNetwork.load(hm_path, device=device)
+            ah_val = GraphNetwork.load(
+                hmv_path, device=device
+            )
 
         # Load optional switch predictor
         ah_switch = None
         switch_every = config.get("switch_every", None)
-        ah_config = artificial_humans[run["humans"]]
         if "switch_model" in ah_config:
             hms_path = os.path.join(basedir, ah_config["switch_model"])
             ah_switch = GraphNetwork.load(hms_path, device=device)
@@ -446,6 +467,7 @@ def create_plots(
                 "contribution": "mean",
                 "common_good": "mean",
                 "payoff": "mean",
+                "contribution_valid": "mean",
             }
         )
         .reset_index()

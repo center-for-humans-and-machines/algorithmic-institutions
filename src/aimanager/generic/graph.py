@@ -307,11 +307,12 @@ class GraphNetwork(th.nn.Module):
         self.eval()
         y_logit = self(data, reset_rnn)
 
-        if self.joint_output is not None:
+        joint = getattr(self, "joint_output", None)
+        if joint is not None:
             heads = self.split_output(y_logit)
             y_pred = {}
             y_pred_proba = {}
-            for head in self.joint_output:
+            for head in joint:
                 name = head["name"]
                 logit = heads[name]
                 proba = th.nn.functional.softmax(logit, dim=-1)
@@ -336,8 +337,25 @@ class GraphNetwork(th.nn.Module):
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
-        predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
-        predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
+        predict = self.predict_encoded(
+            encoded, sample=sample, reset_rnn=reset_rnn
+        )
+        if getattr(self, "joint_output", None) is not None:
+            shape = (n_batch, n_nodes)
+            return (
+                {
+                    k: v.reshape((*shape, *v.shape[1:]))
+                    for k, v in predict[0].items()
+                },
+                {
+                    k: v.reshape((*shape, *v.shape[1:]))
+                    for k, v in predict[1].items()
+                },
+            )
+        predict = tuple(
+            t.reshape((n_batch, n_nodes, *t.shape[1:]))
+            for t in predict
+        )
         return predict
 
     def predict_autoreg(self, data, sample=True):
