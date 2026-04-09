@@ -57,19 +57,36 @@ def _preprocess_single(in_path: str, n_agents: int):
 
         round_number = round_raw - 1
         global_group_id = f"{session} #{competition_idx}"
-        common_good = float(sum(contributions))
         manager_no_input = int(
             bool(row.get("missing_governor_input", False))
         )
 
+        # Compute per-group common good pool using game formula:
+        # sum_contrib * 1.6 - sum_punishment (total pool, not per-capita)
+        # data.py divides by n_valid later to get per-capita value
+        group_contrib = {}
+        group_punish = {}
+        for pid in range(n_agents):
+            gidx = group_label_to_idx[groups_list[pid]]
+            is_valid = not bool(missing_inputs[pid])
+            if is_valid:
+                group_contrib.setdefault(gidx, 0.0)
+                group_punish.setdefault(gidx, 0.0)
+                group_contrib[gidx] += contributions[pid]
+                group_punish[gidx] += punishments[pid]
+        common_good_per_group = {}
+        for gidx in group_label_to_idx.values():
+            sc = group_contrib.get(gidx, 0.0)
+            sp = group_punish.get(gidx, 0.0)
+            common_good_per_group[gidx] = sc * 1.6 - sp
+
         for player_id in range(n_agents):
+            gidx = group_label_to_idx[groups_list[player_id]]
             rows.append(
                 {
                     "session": session,
                     "global_group_id": global_group_id,
-                    "group_id": group_label_to_idx[
-                        groups_list[player_id]
-                    ],
+                    "group_id": gidx,
                     "episode": competition_idx,
                     "episode_id": episode_id,
                     "experiment_name": "ah_group_switching",
@@ -83,7 +100,7 @@ def _preprocess_single(in_path: str, n_agents: int):
                     "contribution": float(contributions[player_id]),
                     "punishment": float(punishments[player_id]),
                     "payoff": 0.0,
-                    "common_good": common_good,
+                    "common_good": common_good_per_group[gidx],
                 }
             )
 

@@ -70,11 +70,11 @@ def parse_agent_rounds(df, switch_every=None):
         episode_group.rank(method="dense").astype(int) - 1
     )
 
-    # rescale common good by the total number of participants in round
-    round_player_input = df.groupby(["episode_id", "round_number"])[
-        "contribution_valid"
-    ].transform("sum")
-    df["common_good"] = (df["common_good"] / round_player_input).fillna(0)
+    # rescale common good by the number of valid participants in group
+    group_player_input = df.groupby(
+        ["episode_id", "round_number", "group_id"]
+    )["contribution_valid"].transform("sum")
+    df["common_good"] = (df["common_good"] / group_player_input).fillna(0)
     df["recorded"] = True
 
     df.drop(
