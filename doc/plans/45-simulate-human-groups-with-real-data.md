@@ -7,10 +7,10 @@ todos:
     status: completed
   - id: align-simulation-artifacts
     content: "Update simulation configs to the artifact paths specified in issue #45 comments and use human manager type."
-    status: pending
+    status: completed
   - id: fix-dynamic-group-wiring
     content: Ensure simulation passes current env group memberships to manager after switching.
-    status: pending
+    status: completed
   - id: build-validation-metrics
     content: Implement/extend comparison outputs for all requested group-dynamics metrics vs pilot data.
     status: pending
@@ -63,14 +63,41 @@ Primary files:
 - Ensure the manager entry is `type: human` and references the supervised punishment model artifact, not RL.
 - Keep current switching cadence/round structure unless issue acceptance criteria says otherwise.
 
+Status: **DONE**
+- Added dedicated AH testing config:
+  - `configs/simulation/ah_testing/group_switching_ah_punishment.yml`
+- Added RL baseline companion config:
+  - `configs/simulation/ah_testing/group_switching_rl_punishment.yml`
+- Wired issue #45 artifact set:
+  - contribution: `artifacts/artificial_humans/group_switching_contribution/...`
+  - switch: `artifacts/artificial_humans/switch_pred_mlp_rnn/...`
+  - validity: `artifacts/artificial_humans/raven_script_22/...`
+- Human manager path:
+  - `artifacts/artificial_humans/punishment_autoregressive/model/architecture_node+edge+autoregressive__dataset_full.pt`
+
 Primary files:
-- [configs/simulation/ah_testing/group_switching.yml](/Users/cemerturkan/Desktop/mpi/mpi-projects/algorithmic-institutions/configs/simulation/ah_testing/group_switching.yml)
-- [configs/simulation/manager_testing/04_group_switching.yml](/Users/cemerturkan/Desktop/mpi/mpi-projects/algorithmic-institutions/configs/simulation/manager_testing/04_group_switching.yml)
+- [configs/simulation/ah_testing/group_switching_ah_punishment.yml](/Users/cemerturkan/Desktop/mpi/mpi-projects/algorithmic-institutions/configs/simulation/ah_testing/group_switching_ah_punishment.yml)
+- [configs/simulation/ah_testing/group_switching_rl_punishment.yml](/Users/cemerturkan/Desktop/mpi/mpi-projects/algorithmic-institutions/configs/simulation/ah_testing/group_switching_rl_punishment.yml)
 - [src/aimanager/manager/api_manager.py](/Users/cemerturkan/Desktop/mpi/mpi-projects/algorithmic-institutions/src/aimanager/manager/api_manager.py)
 
 ### 3) Fix simulation-group assignment consistency during switching
 - Validate and patch simulation so manager inputs use **current** dynamic group assignment from env state after switches, not static initial grouping.
 - Confirm this flows correctly into punishment generation each decision round.
+
+Status: **DONE**
+- Initial simulation run failed with:
+  - `KeyError: 'agent_group'` in manager inference.
+- Root cause:
+  - `agent_group` was not passed through round records and manager data tensors.
+- Fix implemented:
+  - `src/aimanager/simulation/simulate.py`: include current `state["agent_group"]` in `make_round(...)`.
+  - `src/aimanager/manager/api_manager.py`: add `agent_group` to `Round` and `create_data(...)`.
+- Validation:
+  - rerun completed and produced:
+    - `plots/simulation/ah_group_switching_punishment/comparison_manager.jpg`
+    - `plots/simulation/ah_group_switching_punishment/comparison_pilot.jpg`
+    - `plots/simulation/ah_group_switching_punishment/ah_group_switching_managed_by_punishment_human_manager_groups.png`
+    - `plots/simulation/ah_group_switching_punishment/aggregates.csv`
 
 Primary files:
 - [src/aimanager/simulation/simulate.py](/Users/cemerturkan/Desktop/mpi/mpi-projects/algorithmic-institutions/src/aimanager/simulation/simulate.py)

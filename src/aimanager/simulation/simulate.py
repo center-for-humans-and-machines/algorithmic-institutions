@@ -86,14 +86,19 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
     return df_sim
 
 
-def make_round(contributions, round_num, groups, episode_group_idx):
+def make_round(
+    contributions, round_num, groups, episode_group_idx, agent_group=None
+):
     """Create a round dictionary."""
+    if agent_group is None:
+        agent_group = [0] * len(contributions)
     return {
         "contribution": contributions,
         "contribution_valid": [c is not None for c in contributions],
         "punishment_valid": [False] * len(contributions),
         "punishment": [None] * len(contributions),
         "group": groups,
+        "agent_group": agent_group,
         "round": round_num,
         "episode_group_idx": episode_group_idx,
     }
@@ -208,8 +213,17 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
             for round_number in count():
                 contributions = state["contribution"].squeeze().tolist()
+                current_agent_group = (
+                    state["agent_group"].squeeze().tolist()
+                    if "agent_group" in state
+                    else None
+                )
                 round_dict = make_round(
-                    contributions, round_number, groups, episode_group_idx
+                    contributions,
+                    round_number,
+                    groups,
+                    episode_group_idx,
+                    agent_group=current_agent_group,
                 )
                 punishments = mm.get_punishments(rounds + [round_dict])[0]
                 round_dict = add_punishments(round_dict, punishments)
