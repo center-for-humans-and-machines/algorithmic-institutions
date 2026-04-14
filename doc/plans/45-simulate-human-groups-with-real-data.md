@@ -4,7 +4,7 @@ overview: "Implement issue #45 by extending the artificial-human simulation pipe
 todos:
   - id: define-supervised-manager-config
     content: Create AH training config for supervised punishment manager and map legacy behavioral-cloning fields.
-    status: pending
+    status: completed
   - id: align-simulation-artifacts
     content: "Update simulation configs to the artifact paths specified in issue #45 comments and use human manager type."
     status: pending
@@ -43,6 +43,14 @@ isProject: false
   - `/train ah <config>`
   - underlying command: `scripts/train_cluster.sh ah <config>`
 - Model after the legacy config at `run/behavioral_cloning/11_punishment_autoregressive.yml` while changing the training data to up to date `data_file: experiments/group_switching_human_human_group_switching_8_agents.csv`. 
+
+Status: **DONE**
+- Added config: `configs/training/artificial_humans/punishment/autoregressive.yml`.
+- Executed on Raven via `/train ah configs/training/artificial_humans/punishment/autoregressive.yml`.
+- Final successful run used `n_cross_val: 5` and produced artifacts under:
+  - `artifacts/artificial_humans/punishment_autoregressive/`
+  - `.log/training/artificial_humans/punishment/autoregressive/architecture_node+edge+autoregressive__dataset_full/`
+- Metrics summary (mask=0): test `log_loss` converged from `3.467` to `1.226` (best mean `1.170`), which is sufficient to mark Step 1 complete.
 
 Primary files:
 - [src/aimanager/artificial_humans/train.py](/Users/cemerturkan/Desktop/mpi/mpi-projects/algorithmic-institutions/src/aimanager/artificial_humans/train.py)
