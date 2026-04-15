@@ -25,15 +25,15 @@ params:
   n_groups: 2
   data_file: experiments/group_switching_human_human_group_switching_8_agents.csv
   model_name: graph
-  shuffle_features: []
+  shuffle_features: [prev_contribution, prev_common_good, prev_punishment, agent_group]
   basedir: .
   output_dir: artifacts/artificial_humans/switch_pred_mlp_rnn
   model_args:
     y_levels: 2
     y_name: does_switch
-    hidden_size: 10
+    hidden_size: 5
     add_rnn: True
-    add_edge_model: False
+    add_edge_model: True
     add_global_model: False
     x_encoding:
       - name: prev_contribution
@@ -52,7 +52,7 @@ params:
     lr: 3.e-3
   train_args:
     epochs: 120
-    batch_size: 10
+    batch_size: 4
     eval_period: 5
     l1_entropy: 0
   device: cuda
