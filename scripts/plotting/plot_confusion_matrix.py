@@ -23,9 +23,11 @@ import seaborn as sns
 from sklearn.metrics import confusion_matrix, classification_report
 
 
-def load_predictions(artifact_dir):
+def load_predictions(artifact_dir, job_id=None):
     cm_dir = os.path.join(artifact_dir, "confusion_matrix")
     files = [f for f in os.listdir(cm_dir) if f.endswith(".parquet")]
+    if job_id is not None:
+        files = [f for f in files if f == f"{job_id}.parquet"]
     if not files:
         print(f"No parquet files in {cm_dir}", file=sys.stderr)
         sys.exit(1)
@@ -137,14 +139,23 @@ def main():
         default=None,
         help="Output plot path (default: plots/group_selection/<model_name>.png)",
     )
+    parser.add_argument(
+        "--job-id",
+        default=None,
+        help=(
+            "Filter to a single grid-search job id "
+            "(matches <job_id>.parquet under confusion_matrix/)."
+        ),
+    )
     args = parser.parse_args()
 
-    pred, target_name = load_predictions(args.artifact_dir)
+    pred, target_name = load_predictions(args.artifact_dir, job_id=args.job_id)
 
     if args.output:
         output_path = args.output
     else:
-        model_name = os.path.basename(args.artifact_dir.rstrip("/"))
+        base_name = os.path.basename(args.artifact_dir.rstrip("/"))
+        model_name = f"{base_name}__{args.job_id}" if args.job_id else base_name
         output_path = os.path.join(
             "plots", "group_selection", f"{model_name}.png"
         )

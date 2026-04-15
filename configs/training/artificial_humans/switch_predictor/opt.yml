@@ -1,6 +1,14 @@
 description: >-
-  MLP + RNN switch predictor. Adds temporal information over rounds.
-  agent_group included (meaningful with temporal context).
+  Optimised switch predictor: winning configuration from the grid search
+  in grid_search.yml. mlp+rnn+edge architecture with hidden_size=20 and
+  lr=3e-3 achieved the lowest mean test log-loss (0.529 +/- 0.059, 8-fold
+  CV) among 18 configurations. Epochs trimmed to 75 to stop before the
+  test-loss plateau starts rising (best_epoch_mean was ~79).
+  Note: round_number is kept despite ~0 shuffle/ablate deltas; an
+  earlier attempt to drop it degraded test log-loss to 0.569 and switch
+  recall to 15%. Mean-imputation and permutation both preserve the value
+  distribution of a position variable, so neither perturbation destroys
+  its signal reliably -- the importance methods under-rate it.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -16,22 +24,21 @@ params:
   switch_every: 4
   experiment_names: [ah_group_switching]
   labels:
-    architecture: mlp+rnn
-    dataset: full
+    architecture: mlp+rnn+edge
+    dataset: feat
   n_contributions: 21
   n_punishments: 31
-  n_cross_val: 5
+  n_cross_val: 8
   n_player: 8
   n_groups: 2
   data_file: experiments/group_switching_human_human_group_switching_8_agents.csv
   model_name: graph
-  shuffle_features: [prev_contribution, prev_common_good, prev_punishment, agent_group]
   basedir: .
-  output_dir: artifacts/artificial_humans/switch_pred_mlp_rnn
+  output_dir: artifacts/artificial_humans/switch_pred_opt
   model_args:
     y_levels: 2
     y_name: does_switch
-    hidden_size: 5
+    hidden_size: 20
     add_rnn: True
     add_edge_model: True
     add_global_model: False
@@ -48,11 +55,18 @@ params:
       - name: agent_group
         n_levels: 2
         encoding: numeric
+      - etype: bool
+        name: prev_does_switch
+      - etype: bool
+        name: prev_contribution_valid
+      - name: round_number
+        n_levels: 24
+        encoding: numeric
   optimizer_args:
     lr: 3.e-3
   train_args:
-    epochs: 120
-    batch_size: 4
+    epochs: 75
+    batch_size: 10
     eval_period: 5
     l1_entropy: 0
   device: cuda

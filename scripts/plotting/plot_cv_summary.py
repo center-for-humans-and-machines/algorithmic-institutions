@@ -23,9 +23,11 @@ import numpy as np
 import pandas as pd
 
 
-def load_metrics(artifact_dir):
+def load_metrics(artifact_dir, job_id=None):
     metrics_dir = os.path.join(artifact_dir, "metrics")
     files = [f for f in os.listdir(metrics_dir) if f.endswith(".parquet")]
+    if job_id is not None:
+        files = [f for f in files if f == f"{job_id}.parquet"]
     if not files:
         print(f"No parquet files in {metrics_dir}", file=sys.stderr)
         sys.exit(1)
@@ -34,9 +36,11 @@ def load_metrics(artifact_dir):
     )
 
 
-def load_confusion_matrix(artifact_dir):
+def load_confusion_matrix(artifact_dir, job_id=None):
     cm_dir = os.path.join(artifact_dir, "confusion_matrix")
     files = [f for f in os.listdir(cm_dir) if f.endswith(".parquet")]
+    if job_id is not None:
+        files = [f for f in files if f == f"{job_id}.parquet"]
     if not files:
         print(f"No parquet files in {cm_dir}", file=sys.stderr)
         sys.exit(1)
@@ -271,17 +275,24 @@ def main():
         default=None,
         help="Title for loss curve plot",
     )
+    parser.add_argument(
+        "--job-id",
+        default=None,
+        help=(
+            "Filter to a single grid-search job id "
+            "(matches <job_id>.parquet under metrics/ and confusion_matrix/)."
+        ),
+    )
     args = parser.parse_args()
 
-    model_name = os.path.basename(
-        args.artifact_dir.rstrip("/")
-    )
+    base_name = os.path.basename(args.artifact_dir.rstrip("/"))
+    model_name = f"{base_name}__{args.job_id}" if args.job_id else base_name
     output_dir = args.output_dir or os.path.join(
         "plots", "group_selection"
     )
 
     # Loss curves
-    metrics = load_metrics(args.artifact_dir)
+    metrics = load_metrics(args.artifact_dir, job_id=args.job_id)
     loss_path = os.path.join(
         output_dir, f"{model_name}_loss_cv.png"
     )
@@ -290,7 +301,7 @@ def main():
     )
 
     # Per-class metrics
-    cm_df = load_confusion_matrix(args.artifact_dir)
+    cm_df = load_confusion_matrix(args.artifact_dir, job_id=args.job_id)
     class_metrics = compute_class_metrics(cm_df)
     print_summary(class_metrics)
 

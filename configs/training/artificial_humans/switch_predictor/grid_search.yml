@@ -1,6 +1,8 @@
 description: >-
-  MLP + RNN switch predictor with all available features.
-  Includes shuffle and ablation importance analysis.
+  Mild grid search for the group-switching predictor. Sweeps architecture
+  (mlp, mlp+rnn, mlp+rnn+edge), hidden_size, and learning rate on the
+  full feature set, with 8-fold cross-validation. Motivated by issue #78:
+  current switch predictor collapses to the majority class.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -16,11 +18,10 @@ params:
   switch_every: 4
   experiment_names: [ah_group_switching]
   labels:
-    architecture: mlp+rnn
     dataset: feat
   n_contributions: 21
   n_punishments: 31
-  n_cross_val: 5
+  n_cross_val: 8
   n_player: 8
   n_groups: 2
   data_file: experiments/group_switching_human_human_group_switching_8_agents.csv
@@ -42,7 +43,7 @@ params:
     - prev_contribution_valid
     - round_number
   basedir: .
-  output_dir: artifacts/artificial_humans/switch_pred_mlp_rnn_feat
+  output_dir: artifacts/artificial_humans/switch_pred_grid_search
   model_args:
     y_levels: 2
     y_name: does_switch
@@ -79,3 +80,11 @@ params:
     l1_entropy: 0
   device: cuda
   autoregression: False
+grid:
+  - labels.architecture: [mlp, mlp+rnn, mlp+rnn+edge]
+    model_args.add_rnn: [false, true, true]
+    model_args.add_edge_model: [false, false, true]
+  - model_args.hidden_size: [5, 10, 20]
+    labels.hidden_size: ['5', '10', '20']
+  - optimizer_args.lr: [1.e-3, 3.e-3]
+    labels.lr: ['1e-3', '3e-3']
