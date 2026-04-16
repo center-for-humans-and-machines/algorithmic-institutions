@@ -1,9 +1,12 @@
 description: >-
-  Optimised switch predictor: winning configuration from the grid search
-  in grid_search.yml. mlp+rnn+edge architecture with hidden_size=20 and
-  lr=3e-3 achieved the lowest mean test log-loss (0.529 +/- 0.059, 8-fold
-  CV) among 18 configurations. Epochs trimmed to 75 to stop before the
-  test-loss plateau starts rising (best_epoch_mean was ~79).
+  Optimised switch predictor. Starts from the grid_search.yml winner
+  (mlp+rnn+edge, hidden_size=20, lr=3e-3) and adds add_global_model=True
+  based on grid_search_v2.yml, which lifted mean test log-loss from
+  0.529 to 0.520 (8-fold CV) and accuracy from 0.723 to 0.750. v2 also
+  ruled out weight_decay and l1_entropy as net-zero levers and showed
+  hidden_size=40 overfits earlier without improving test loss.
+  Epochs capped at 75 -- best_epoch_mean was ~79, so we stop just before
+  the test-loss plateau starts drifting up.
   Note: round_number is kept despite ~0 shuffle/ablate deltas; an
   earlier attempt to drop it degraded test log-loss to 0.569 and switch
   recall to 15%. Mean-imputation and permutation both preserve the value
@@ -33,6 +36,22 @@ params:
   n_groups: 2
   data_file: experiments/group_switching_human_human_group_switching_8_agents.csv
   model_name: graph
+  shuffle_features:
+    - prev_contribution
+    - prev_common_good
+    - prev_punishment
+    - agent_group
+    - prev_does_switch
+    - prev_contribution_valid
+    - round_number
+  ablate_features:
+    - prev_contribution
+    - prev_common_good
+    - prev_punishment
+    - agent_group
+    - prev_does_switch
+    - prev_contribution_valid
+    - round_number
   basedir: .
   output_dir: artifacts/artificial_humans/switch_pred_opt
   model_args:
@@ -41,7 +60,7 @@ params:
     hidden_size: 20
     add_rnn: True
     add_edge_model: True
-    add_global_model: False
+    add_global_model: True
     x_encoding:
       - name: prev_contribution
         n_levels: 21
