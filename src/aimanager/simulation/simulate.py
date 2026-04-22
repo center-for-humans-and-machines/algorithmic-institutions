@@ -280,7 +280,14 @@ def load_pilot_data(config: dict, basedir: str) -> pd.DataFrame:
         df_pilot["run"] = df_pilot["run"].fillna(df_pilot["experiment_name"])
     else:
         df_pilot["run"] = "pilot"
-    df_pilot["common_good"] = df_pilot["common_good"] / 4
+    # common_good is stored as per-group pool (sum_c*1.6 - sum_p).
+    # Divide by the number of valid contributors per group per round
+    # so per-capita stays correct even when groups become imbalanced.
+    valid = (df_pilot["player_no_input"] == 0).astype(int)
+    n_valid = valid.groupby(
+        [df_pilot["episode_id"], df_pilot["round_number"], df_pilot["group_id"]]
+    ).transform("sum").clip(lower=1)
+    df_pilot["common_good"] = df_pilot["common_good"] / n_valid
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
     df_pilot["payoff"] = (
         20 - df_pilot["contribution"] - df_pilot["punishment"] + df_pilot["common_good"]
