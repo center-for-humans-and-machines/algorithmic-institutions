@@ -49,60 +49,95 @@ def load_confusion_matrix(artifact_dir, job_id=None):
     )
 
 
-def plot_loss_curves(metrics, output_path, title=None):
-    """Plot train loss and test log loss across CV folds."""
-    # Train loss (strategy=None, shuffle_feature=None)
+def _extract_loss_curves(metrics):
+    """Return (train_pivot, test_pivot) with epoch index, cv_split cols."""
     has_shuffle = "shuffle_feature" in metrics.columns
     train = metrics[
         (metrics["set"] == "train")
         & (metrics["name"] == "loss")
         & (metrics["strategy"].isna())
     ]
-    if has_shuffle:
-        train = train[train["shuffle_feature"].isna()]
-
-    # Test log loss (strategy=None, shuffle_feature=None)
     test = metrics[
         (metrics["set"] == "test")
         & (metrics["name"] == "log_loss")
         & (metrics["strategy"].isna())
     ]
     if has_shuffle:
+        train = train[train["shuffle_feature"].isna()]
         test = test[test["shuffle_feature"].isna()]
+    train_pivot = train.pivot_table(
+        index="epoch", columns="cv_split", values="value"
+    )
+    test_pivot = test.pivot_table(
+        index="epoch", columns="cv_split", values="value"
+    )
+    return train_pivot, test_pivot
 
+
+def _plot_series(ax, pivot, color, label, linestyle="-"):
+    mean = pivot.mean(axis=1)
+    std = pivot.std(axis=1)
+    for col in pivot.columns:
+        ax.plot(
+            pivot.index,
+            pivot[col],
+            color=color,
+            alpha=0.15,
+            linewidth=0.8,
+            linestyle=linestyle,
+        )
+    ax.plot(
+        mean.index,
+        mean.values,
+        color=color,
+        label=label,
+        linewidth=2,
+        linestyle=linestyle,
+    )
+    ax.fill_between(
+        mean.index,
+        (mean - std).values,
+        (mean + std).values,
+        color=color,
+        alpha=0.2,
+    )
+
+
+def plot_loss_curves(metrics, output_path, title=None, compare=None):
+    """Plot train loss and test log loss across CV folds.
+
+    If `compare` is given as (metrics_df, label_primary, label_compare),
+    overlays a second model's curves with dashed lines.
+    """
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    for label, data, color in [
-        ("Train loss", train, "tab:blue"),
-        ("Test log loss", test, "tab:orange"),
-    ]:
-        pivot = data.pivot_table(
-            index="epoch", columns="cv_split", values="value"
-        )
-        mean = pivot.mean(axis=1)
-        std = pivot.std(axis=1)
+    train_pivot, test_pivot = _extract_loss_curves(metrics)
 
-        # Individual folds (faded)
-        for col in pivot.columns:
-            ax.plot(
-                pivot.index,
-                pivot[col],
-                color=color,
-                alpha=0.15,
-                linewidth=0.8,
-            )
-
-        # Mean +/- std
-        ax.plot(
-            mean.index, mean.values, color=color, label=label,
-            linewidth=2,
+    if compare is None:
+        _plot_series(ax, train_pivot, "tab:blue", "Train loss")
+        _plot_series(ax, test_pivot, "tab:orange", "Test log loss")
+    else:
+        compare_metrics, label_primary, label_compare = compare
+        c_train, c_test = _extract_loss_curves(compare_metrics)
+        _plot_series(
+            ax, train_pivot, "tab:blue", f"Train ({label_primary})"
         )
-        ax.fill_between(
-            mean.index,
-            (mean - std).values,
-            (mean + std).values,
-            color=color,
-            alpha=0.2,
+        _plot_series(
+            ax, test_pivot, "tab:orange", f"Test ({label_primary})"
+        )
+        _plot_series(
+            ax,
+            c_train,
+            "tab:green",
+            f"Train ({label_compare})",
+            linestyle="--",
+        )
+        _plot_series(
+            ax,
+            c_test,
+            "tab:red",
+            f"Test ({label_compare})",
+            linestyle="--",
         )
 
     ax.set_xlabel("Epoch")
@@ -283,6 +318,14 @@ def main():
             "(matches <job_id>.parquet under metrics/ and confusion_matrix/)."
         ),
     )
+    parser.add_argument(
+        "--compare",
+        default=None,
+        help=(
+            "Second artifact directory to overlay on the loss plot "
+            "(dashed lines). Skips per-class summary."
+        ),
+    )
     args = parser.parse_args()
 
     base_name = os.path.basename(args.artifact_dir.rstrip("/"))
@@ -291,8 +334,24 @@ def main():
         "plots", "group_selection"
     )
 
-    # Loss curves
     metrics = load_metrics(args.artifact_dir, job_id=args.job_id)
+
+    if args.compare:
+        compare_name = os.path.basename(args.compare.rstrip("/"))
+        compare_metrics = load_metrics(args.compare)
+        loss_path = os.path.join(
+            output_dir,
+            f"{model_name}_vs_{compare_name}_loss_cv.png",
+        )
+        plot_loss_curves(
+            metrics,
+            loss_path,
+            title=args.title or f"{base_name} vs {compare_name}",
+            compare=(compare_metrics, base_name, compare_name),
+        )
+        return
+
+    # Loss curves
     loss_path = os.path.join(
         output_dir, f"{model_name}_loss_cv.png"
     )

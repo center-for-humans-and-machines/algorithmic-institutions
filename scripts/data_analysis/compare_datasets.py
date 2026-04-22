@@ -11,11 +11,14 @@ import pandas as pd
 import numpy as np
 
 
-LEGACY_PATH = "experiments/pilot_random1_player_round_slim.csv"
-NEW_PATH = (
-    "experiments/"
-    "group_switching_human_human_group_switching_8_agents.csv"
-)
+DATASETS = [
+    ("Legacy", "experiments/pilot_random1_player_round_slim.csv"),
+    (
+        "GS (13 ep)",
+        "experiments/group_switching_human_human_group_switching_8_agents.csv",
+    ),
+    ("GS (35 ep)", "experiments/2group_8agent_35ep.csv"),
+]
 
 
 def summarize(df, name):
@@ -61,54 +64,89 @@ def summarize(df, name):
     print()
 
 
-def main():
-    legacy = pd.read_csv(LEGACY_PATH)
-    new = pd.read_csv(NEW_PATH)
+def _trajectory(df):
+    """Return (first_round_mean, last_round_mean) of contribution."""
+    per_round = df.groupby("round_number")["contribution"].mean()
+    return per_round.iloc[0], per_round.iloc[-1]
 
-    summarize(legacy, "Legacy pilot data")
-    summarize(new, "Group switching data")
+
+def main():
+    dfs = [(name, pd.read_csv(p)) for name, p in DATASETS]
+
+    for name, df in dfs:
+        summarize(df, name)
 
     # Direct comparison
-    print("=== Comparison ===")
-    print(
-        f"{'Metric':<30s} {'Legacy':>10s} {'New':>10s}"
-    )
-    print("-" * 52)
+    def fmt(v, is_int=False):
+        if is_int:
+            return f"{int(v):,}"
+        return f"{v:.4f}"
+
+    def players(df):
+        return sorted(
+            df.groupby("episode_id")["player_id"].nunique().unique()
+        )[0]
+
+    traj = {name: _trajectory(df) for name, df in dfs}
+
     rows = [
+        ("Episodes", [df["episode_id"].nunique() for _, df in dfs], True),
+        ("Total rows", [len(df) for _, df in dfs], True),
+        ("Players/episode", [players(df) for _, df in dfs], True),
         (
-            "Episodes",
-            legacy["episode_id"].nunique(),
-            new["episode_id"].nunique(),
+            "Rounds",
+            [df["round_number"].nunique() for _, df in dfs],
+            True,
         ),
-        ("Total rows", len(legacy), len(new)),
         (
             "Mean contribution",
-            legacy["contribution"].mean(),
-            new["contribution"].mean(),
+            [df["contribution"].mean() for _, df in dfs],
+            False,
         ),
         (
-            "Std contribution",
-            legacy["contribution"].std(),
-            new["contribution"].std(),
+            "Contribution=20 share",
+            [(df["contribution"] == 20).mean() for _, df in dfs],
+            False,
+        ),
+        (
+            "Contribution entropy (bits)",
+            [_entropy(df["contribution"]) for _, df in dfs],
+            False,
+        ),
+        (
+            "Traj first-round mean",
+            [traj[name][0] for name, _ in dfs],
+            False,
+        ),
+        (
+            "Traj last-round mean",
+            [traj[name][1] for name, _ in dfs],
+            False,
         ),
         (
             "Mean common_good",
-            legacy["common_good"].mean(),
-            new["common_good"].mean(),
+            [df["common_good"].mean() for _, df in dfs],
+            False,
         ),
         (
             "player_no_input rate",
-            legacy["player_no_input"].mean(),
-            new["player_no_input"].mean(),
-        ),
-        (
-            "Contribution entropy",
-            _entropy(legacy["contribution"]),
-            _entropy(new["contribution"]),
+            [df["player_no_input"].mean() for _, df in dfs],
+            False,
         ),
     ]
-    for label, v1, v2 in rows:
-        print(f"{label:<30s} {v1:>10.4f} {v2:>10.4f}")
+
+    col_w = 14
+    header = f"{'Metric':<30s}" + "".join(
+        f"{name:>{col_w}s}" for name, _ in dfs
+    )
+    print("\n=== Comparison ===")
+    print(header)
+    print("-" * len(header))
+    for label, vals, is_int in rows:
+        line = f"{label:<30s}"
+        for v in vals:
+            line += f"{fmt(v, is_int):>{col_w}s}"
+        print(line)
 
 
 def _entropy(series):
