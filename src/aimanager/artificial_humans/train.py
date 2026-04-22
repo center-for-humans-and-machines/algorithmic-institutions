@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import random
 import torch as th
+import wandb
 from aimanager.generic.data import create_torch_data, get_cross_validations
 from aimanager.artificial_humans import AH_MODELS
 from aimanager.artificial_humans.evaluation import (
@@ -146,6 +147,10 @@ def main(config):
 
     rec = Recorder()
 
+    wandb_enabled = bool(os.environ.get("WANDB_API_KEY"))
+    if wandb_enabled:
+        wandb.init(config=config)
+
     th_device = th.device(device)
 
     if autoregression:
@@ -272,6 +277,7 @@ def main(config):
                     rec.rec_many(metrics, set="train", n_pred=n_pred, mask=j)
 
                 test_log_loss = None
+                perturb_log_loss = {}
                 if test_data is not None:
                     # evalute on test data for all possible mask patterns
                     for j, mask in enumerate(test_mask_pattern):
@@ -322,6 +328,24 @@ def main(config):
                                     n_pred=n_pred,
                                     mask=j,
                                 )
+                                if j == 0:
+                                    for m in metrics:
+                                        if m["name"] == "log_loss":
+                                            perturb_log_loss[
+                                                f"{lbl}_{feat}"
+                                            ] = m["value"]
+
+                if wandb_enabled:
+                    wandb_log = {
+                        "epoch": e,
+                        "fold": i,
+                        f"fold_{i}/train/loss": avg_loss,
+                    }
+                    if test_log_loss is not None:
+                        wandb_log[f"fold_{i}/test/log_loss"] = test_log_loss
+                        for key, val in perturb_log_loss.items():
+                            wandb_log[f"fold_{i}/test/log_loss__{key}"] = val
+                    wandb.log(wandb_log)
 
                 postfix = {"loss": f"{avg_loss:.4f}"}
                 if test_log_loss is not None:
@@ -392,6 +416,9 @@ def main(config):
             conf_m = pd.concat(conf_m_all)
             conf_m.to_parquet(conf_path)
         rec.save(output_dir, labels, job_id=job_id)
+
+    if wandb_enabled:
+        wandb.finish()
 
 
 if __name__ == "__main__":
