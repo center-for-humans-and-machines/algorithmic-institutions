@@ -344,17 +344,17 @@ class ArtificialHumanEnv:
             if k[:4] == "prev":
                 self.state[k] = self.state[k[5:]]
 
-        # Group switching at decision rounds
-        if (
-            self.artifical_humans_switch is not None
-            and self.switch_every is not None
-            and self.round_number[0, 0, 0] % self.switch_every == 0
-        ):
-            self.update_groups_from_switch_predictor()
-
         if self.round_number[0, 0] == (self.n_rounds):
             self.done = True
         else:
+            # Group switching at decision rounds
+            if (
+                self.artifical_humans_switch is not None
+                and self.switch_every is not None
+                and self.round_number[0, 0, 0] % self.switch_every == 0
+            ):
+                self.update_groups_from_switch_predictor()
+
             self.update_contribution()
         self.update_reward()
         return self.state, self.reward, self.done
