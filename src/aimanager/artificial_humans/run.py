@@ -57,6 +57,8 @@ def queue_job(job):
     output_path = f"{run_dir}"
     job_only = job["exec"].get("job_only", False)
 
+    experiment_name = os.path.splitext(job.get("exp_name", ""))[0] or job_id
+
     script_str = create_script(
         **job["exec"],
         job_id=job_id,
@@ -64,6 +66,7 @@ def queue_job(job):
         log_file=log_file,
         output_path=output_path,
         run_dir=run_dir,
+        experiment_name=experiment_name,
     )
 
     if job.get("params_only"):

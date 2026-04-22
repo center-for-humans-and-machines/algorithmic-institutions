@@ -22,4 +22,12 @@ source .venv/bin/activate
 
 module load cuda/11.4
 
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+export WANDB_RUN_GROUP={experiment_name}
+export WANDB_NAME={job_id}
+
 python -m aimanager train-manager {config_path}
