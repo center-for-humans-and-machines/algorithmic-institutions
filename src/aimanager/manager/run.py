@@ -71,6 +71,7 @@ def run(config_path):
         log_file=log_file,
         job_id=job_id,
         config_path=config_path,
+        experiment_name=config_name,
     )
     write_file(script_str, script_file)
 
