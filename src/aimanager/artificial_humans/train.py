@@ -149,7 +149,12 @@ def main(config):
 
     wandb_enabled = bool(os.environ.get("WANDB_API_KEY"))
     if wandb_enabled:
-        wandb.init(config=config)
+        wandb.init(
+            config=config,
+            name=job_id,
+            group=os.path.basename(output_dir),
+            tags=[f"{k}={v}" for k, v in labels.items()],
+        )
 
     th_device = th.device(device)
 
