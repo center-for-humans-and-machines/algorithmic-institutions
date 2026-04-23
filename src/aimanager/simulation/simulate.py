@@ -241,6 +241,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
                         for k, v in state.items()
                     },
                     episode_step=round_number,
+                    episode=e,
                 )
 
                 state, reward, done = env.step()

@@ -50,10 +50,11 @@ class Memory:
         self.current_row = (self.current_row + 1) % self.n_episodes
         self.episode_queue.appendleft(self.current_row)
 
-    def add(self, episode_step, **state):
+    def add(self, episode_step, episode=None, **state):
         if self.memory is None:
             self.init_store(state)
-        self.memory["episode"][self.current_row, episode_step] = self.episode
+        label = self.episode if episode is None else episode
+        self.memory["episode"][self.current_row, episode_step] = label
         self.memory["episode_steps"][self.current_row, episode_step] = episode_step
         for k, t in state.items():
             self.memory[k][self.current_row, :, :, [episode_step]] = t.to(self.device)
