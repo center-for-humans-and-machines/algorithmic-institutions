@@ -73,7 +73,6 @@ def apply_mask_pattern(data, mask_pattern, y_name, mask_name, default_values):
 def create_fully_connected(
     n_nodes, n_groups=1, n_agent_groups=1, device=th.device("cpu")
 ):
-    agents_per_grp = n_nodes // n_agent_groups
     return th.tensor(
         [
             [i + k * n_nodes, j + k * n_nodes]
@@ -81,7 +80,6 @@ def create_fully_connected(
             for i in range(n_nodes)
             for j in range(n_nodes)
             if i != j
-            and (i // agents_per_grp == j // agents_per_grp)
         ],
         device=device,
     ).T
@@ -149,7 +147,12 @@ def main(config):
 
     wandb_enabled = bool(os.environ.get("WANDB_API_KEY"))
     if wandb_enabled:
-        wandb.init(config=config)
+        wandb.init(
+            config=config,
+            name=job_id,
+            group=os.path.basename(output_dir),
+            tags=[f"{k}={v}" for k, v in labels.items()],
+        )
 
     th_device = th.device(device)
 

@@ -66,7 +66,11 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
         state, reward, done = env.step()
         if replay_mem is not None:
             replay_mem.add(
-                episode_step=round_number, action=action, reward=reward, **statecopy
+                episode_step=round_number,
+                episode=update_step,
+                action=action,
+                reward=reward,
+                **statecopy,
             )
 
         metrics["next_reward"] = reward.mean().item()
