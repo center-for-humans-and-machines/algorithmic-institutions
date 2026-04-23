@@ -116,7 +116,7 @@ class ArtificialHumanEnv:
                 for i in range(self.batch_size)
                 for a in range(self.n_agents)
                 for b in range(self.n_agents)
-                if (a != b) and (agent_groups[i, a] == agent_groups[i, b])
+                if a != b
             ],
             device=self.device,
             dtype=th.int64,
