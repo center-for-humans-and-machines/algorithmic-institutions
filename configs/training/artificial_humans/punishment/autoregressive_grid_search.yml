@@ -1,10 +1,9 @@
 description: >-
-  Train autoregressive punishment predictor on the 35-episode group
-  switching data. Best grid-search config compatible with autoregressive
-  inference (predict_autoreg requires no RNN): node+edge, hidden=20,
-  best test log-loss 0.801 +/- 0.264 at ep ~4800. batch_size=7 so 28
-  train episodes per fold divide cleanly. 5000 epochs covers the slowest
-  folds which are still climbing at the end of the grid-search window.
+  Grid search for the autoregressive punishment predictor on the
+  35-episode dataset. Sweeps architecture (node+edge, node+edge+rnn,
+  node+edge+rnn+global) x hidden_size (5, 10, 20). batch_size=7 so 28
+  train episodes divide cleanly (4 batches per epoch, no drops).
+  5-fold CV, 5000 epochs.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -20,7 +19,6 @@ params:
   switch_every: 4
   experiment_names: [ah_group_switching]
   labels:
-    architecture: node+edge+autoregressive
     dataset: 35ep
   n_contributions: 21
   n_punishments: 31
@@ -29,13 +27,21 @@ params:
   n_groups: 2
   data_file: experiments/2group_8agent_35ep.csv
   model_name: graph
-  shuffle_features: []
+  shuffle_features:
+    - prev_contribution
+    - prev_punishment
+    - punishment_masked
+    - agent_group
+    - prev_contribution_valid
+    - prev_punishment_valid
+    - autoreg_mask
+    - is_first
   basedir: .
-  output_dir: artifacts/artificial_humans/punishment_autoregressive
+  output_dir: artifacts/artificial_humans/punishment_autoregressive_grid_search
   model_args:
     y_levels: 31
     y_name: punishment
-    hidden_size: 20
+    hidden_size: 10
     add_rnn: False
     add_edge_model: True
     add_global_model: False
@@ -73,3 +79,10 @@ params:
   autoregression: true
   min_predicted: 1
   max_predicted: 8
+grid:
+  - labels.architecture: [node+edge, node+edge+rnn, node+edge+rnn+global]
+    model_args.add_rnn: [false, true, true]
+    model_args.add_edge_model: [true, true, true]
+    model_args.add_global_model: [false, false, true]
+  - model_args.hidden_size: [5, 10, 20]
+    labels.hidden_size: ['5', '10', '20']
