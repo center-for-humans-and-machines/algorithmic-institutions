@@ -1,8 +1,9 @@
 description: >-
-  Grid search for contribution predictor on the 35-episode dataset.
-  Sweeps architecture variants (node+rnn, node+edge+rnn,
-  node+edge+rnn+global) and hidden_size (5, 10, 20) with lr fixed at
-  3e-4. 5-fold cross-validation.
+  Epoch sweep for the 35-episode contribution model after the
+  fully-connected edge fix. Architecture node+edge+rnn, hidden=20,
+  lr=3e-4, wd=1e-5 locked in. Runs at 1000, 1250, 1500 epochs to see
+  where the fully-connected training actually plateaus (previous 900ep
+  run had 4/5 folds still improving at the final epoch).
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -17,6 +18,7 @@ params:
   mask_name: contribution_valid
   experiment_names: [ah_group_switching]
   labels:
+    architecture: node+edge+rnn
     dataset: 35ep
   n_contributions: 21
   n_punishments: 31
@@ -25,17 +27,13 @@ params:
   n_groups: 2
   data_file: experiments/2group_8agent_35ep.csv
   model_name: graph
-  shuffle_features:
-    - prev_contribution
-    - prev_punishment
-    - agent_group
-    - round_number
+  shuffle_features: [prev_contribution, prev_punishment]
   basedir: .
   output_dir: artifacts/artificial_humans/group_switching_contribution_35ep_grid_search
   model_args:
     y_levels: 21
     y_name: contribution
-    hidden_size: 10
+    hidden_size: 20
     add_rnn: True
     add_edge_model: True
     add_global_model: False
@@ -46,17 +44,11 @@ params:
       - name: prev_punishment
         n_levels: 31
         encoding: numeric
-      - name: agent_group
-        n_levels: 2
-        encoding: numeric
-      - name: round_number
-        n_levels: 24
-        encoding: numeric
   optimizer_args:
     lr: 3.e-4
     weight_decay: 1.e-5
   train_args:
-    epochs: 5000
+    epochs: 1000
     batch_size: 4
     clamp_grad: 1
     eval_period: 50
@@ -64,8 +56,5 @@ params:
   device: cuda
   autoregression: False
 grid:
-  - labels.architecture: [node+rnn, node+edge+rnn, node+edge+rnn+global]
-    model_args.add_rnn: [true, true, true]
-    model_args.add_edge_model: [false, true, true]
-  - model_args.hidden_size: [5, 10, 20]
-    labels.hidden_size: ['5', '10', '20']
+  - train_args.epochs: [1500, 2000, 3000]
+    labels.epochs: ['1500', '2000', '3000']
