@@ -96,6 +96,7 @@ class ArtificialHumanEnv:
             ).clamp(
                 max=n_groups - 1
             ).unsqueeze(0).expand(batch_size, -1)
+        self.initial_agent_groups = agent_groups.clone()
         self.update_groups(agent_groups)
         self.reset_state()
 
@@ -303,6 +304,7 @@ class ArtificialHumanEnv:
     def reset(self):
         self.round_number = th.zeros_like(self.round_number)
         self.done = False
+        self.update_groups(self.initial_agent_groups.clone())
         self.reset_state()
         self.update_contribution()
         return self.state
