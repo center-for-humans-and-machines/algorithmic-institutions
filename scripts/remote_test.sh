@@ -72,6 +72,7 @@ check_ssh() {
 sync_files() {
     info "Syncing files to ${REMOTE_HOST}:${REMOTE_PROJECT_DIR}..."
     rsync -azP --delete \
+        --filter='P /.env' \
         --filter=':- .gitignore' \
         --exclude='.git/' \
         --exclude='.venv/' \

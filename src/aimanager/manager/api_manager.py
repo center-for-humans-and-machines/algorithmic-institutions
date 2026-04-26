@@ -10,6 +10,7 @@ from aimanager.generic.data import shift
 class Round(BaseModel):
     round: int
     group: List[Union[str, int]]
+    agent_group: Optional[List[int]] = None
     contribution: List[int]
     punishment: List[int]
     contribution_valid: List[bool]
@@ -92,6 +93,13 @@ def create_data(rounds, groups, default_values):
         [[[r["round"]] * group_size for r in rounds] for _ in range(len(groups))],
         dtype=th.int64,
     )
+    agent_group = th.tensor(
+        [
+            [r.get("agent_group", [0] * group_size) for r in rounds]
+            for _ in range(len(groups))
+        ],
+        dtype=th.int64,
+    )
 
     data = {
         "contribution": contribution.permute(0, 2, 1),
@@ -99,6 +107,7 @@ def create_data(rounds, groups, default_values):
         "punishment": punishment.permute(0, 2, 1),
         "punishment_valid": punishment_valid.permute(0, 2, 1),
         "round_number": round_number.permute(0, 2, 1),
+        "agent_group": agent_group.permute(0, 2, 1),
         "is_first": round_number.permute(0, 2, 1) == 0,
         "in_group": in_group.permute(0, 2, 1),
     }

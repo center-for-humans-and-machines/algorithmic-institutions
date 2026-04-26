@@ -48,6 +48,19 @@ Install `djx` sub-module in editable mode:
 uv pip install -e djx
 ```
 
+### 4. Secrets (`.env`)
+
+Copy `.env.example` to `.env` and fill in the API keys:
+
+```bash
+cp .env.example .env
+```
+
+To log training runs to Weights & Biases, set `WANDB_API_KEY`. On Raven, copy the
+key from an existing project (e.g. the `collectively-grounded-llms` repo) or grab
+it from https://wandb.ai/authorize. `.env` is gitignored; SLURM templates source
+it to export `WANDB_*` variables into the job environment.
+
 ### Alternative: Manual virtual environment setup
 If you prefer to set up the virtual environment manually without `uv`, you can follow these steps:
 

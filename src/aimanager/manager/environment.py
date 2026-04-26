@@ -96,6 +96,7 @@ class ArtificialHumanEnv:
             ).clamp(
                 max=n_groups - 1
             ).unsqueeze(0).expand(batch_size, -1)
+        self.initial_agent_groups = agent_groups.clone()
         self.update_groups(agent_groups)
         self.reset_state()
 
@@ -116,7 +117,7 @@ class ArtificialHumanEnv:
                 for i in range(self.batch_size)
                 for a in range(self.n_agents)
                 for b in range(self.n_agents)
-                if (a != b) and (agent_groups[i, a] == agent_groups[i, b])
+                if a != b
             ],
             device=self.device,
             dtype=th.int64,
@@ -303,8 +304,14 @@ class ArtificialHumanEnv:
     def reset(self):
         self.round_number = th.zeros_like(self.round_number)
         self.done = False
+        self.update_groups(self.initial_agent_groups.clone())
         self.reset_state()
         self.update_contribution()
+        # Prime the switch predictor at round 0 so its RNN processes
+        # every round's features (matches training-time full-sequence
+        # RNN semantics). Output is discarded; no switches at round 0.
+        if self.artifical_humans_switch is not None:
+            self._run_switch_predictor()
         return self.state
 
     def punish(self, punishment):
@@ -317,14 +324,18 @@ class ArtificialHumanEnv:
         self.update_payoff()
         return self.state
 
-    def update_groups_from_switch_predictor(self):
-        """Use the switch predictor to update group assignments."""
-        does_switch = self.artifical_humans_switch.predict(
+    def _run_switch_predictor(self):
+        """Forward pass through switch predictor; keeps RNN state warm."""
+        does_switch, _ = self.artifical_humans_switch.predict(
             self.state,
             reset_rnn=self.round_number[0, 0, 0] == 0,
             edge_index=self.batch_edge_index,
-        )[0]
-        does_switch = does_switch.squeeze(-1).to(th.bool)
+        )
+        return does_switch.squeeze(-1).to(th.bool)
+
+    def update_groups_from_switch_predictor(self):
+        """Use the switch predictor to update group assignments."""
+        does_switch = self._run_switch_predictor()
 
         # Flip group: 0->1, 1->0
         current_groups = self.agent_groups.squeeze(-1)
@@ -344,17 +355,21 @@ class ArtificialHumanEnv:
             if k[:4] == "prev":
                 self.state[k] = self.state[k[5:]]
 
-        # Group switching at decision rounds
-        if (
-            self.artifical_humans_switch is not None
-            and self.switch_every is not None
-            and self.round_number[0, 0, 0] % self.switch_every == 0
-        ):
-            self.update_groups_from_switch_predictor()
-
         if self.round_number[0, 0] == (self.n_rounds):
             self.done = True
         else:
+            # Switch predictor: keep its RNN warm by calling every round.
+            # Only USE the output to flip groups at decision rounds.
+            if self.artifical_humans_switch is not None:
+                is_decision_round = (
+                    self.switch_every is not None
+                    and self.round_number[0, 0, 0] % self.switch_every == 0
+                )
+                if is_decision_round:
+                    self.update_groups_from_switch_predictor()
+                else:
+                    self._run_switch_predictor()
+
             self.update_contribution()
         self.update_reward()
         return self.state, self.reward, self.done

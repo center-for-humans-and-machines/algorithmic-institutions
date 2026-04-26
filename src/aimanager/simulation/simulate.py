@@ -81,19 +81,25 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
     df_sim["participant_code"] = (
         df_sim["participant_code"].astype(str) + "_" + df_sim["episode"].astype(str)
     )
+    df_sim["group_id"] = df_sim["agent_group"].astype(int)
 
     df_sim["run"] = name
     return df_sim
 
 
-def make_round(contributions, round_num, groups, episode_group_idx):
+def make_round(
+    contributions, round_num, groups, episode_group_idx, agent_group=None
+):
     """Create a round dictionary."""
+    if agent_group is None:
+        agent_group = [0] * len(contributions)
     return {
         "contribution": contributions,
         "contribution_valid": [c is not None for c in contributions],
         "punishment_valid": [False] * len(contributions),
         "punishment": [None] * len(contributions),
         "group": groups,
+        "agent_group": agent_group,
         "round": round_num,
         "episode_group_idx": episode_group_idx,
     }
@@ -208,8 +214,17 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
             for round_number in count():
                 contributions = state["contribution"].squeeze().tolist()
+                current_agent_group = (
+                    state["agent_group"].squeeze().tolist()
+                    if "agent_group" in state
+                    else None
+                )
                 round_dict = make_round(
-                    contributions, round_number, groups, episode_group_idx
+                    contributions,
+                    round_number,
+                    groups,
+                    episode_group_idx,
+                    agent_group=current_agent_group,
                 )
                 punishments = mm.get_punishments(rounds + [round_dict])[0]
                 round_dict = add_punishments(round_dict, punishments)
@@ -226,6 +241,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
                         for k, v in state.items()
                     },
                     episode_step=round_number,
+                    episode=e,
                 )
 
                 state, reward, done = env.step()
@@ -239,9 +255,11 @@ def run_simulation(config: dict, output_dir: str) -> list:
     return dfs
 
 
-def load_pilot_data(basedir: str) -> pd.DataFrame:
+def load_pilot_data(config: dict, basedir: str) -> pd.DataFrame:
     """Load pilot experiment data."""
-    data_file = "experiments/pilot_random1_player_round_slim.csv"
+    data_file = config.get(
+        "pilot_data_file", "experiments/pilot_random1_player_round_slim.csv"
+    )
     data_file = os.path.join(basedir, data_file)
 
     if not os.path.exists(data_file):
@@ -250,13 +268,27 @@ def load_pilot_data(basedir: str) -> pd.DataFrame:
 
     df_pilot = pd.read_csv(data_file)
 
-    experiment_name_map = {
-        "trail_rounds_2": "pilot human manager",
-        "random_1": "pilot rule based manager",
-    }
+    experiment_name_map = config.get(
+        "pilot_experiment_name_map",
+        {
+            "trail_rounds_2": "pilot human manager",
+            "random_1": "pilot rule based manager",
+        },
+    )
 
-    df_pilot["run"] = df_pilot["experiment_name"].map(experiment_name_map)
-    df_pilot["common_good"] = df_pilot["common_good"] / 4
+    if "experiment_name" in df_pilot.columns:
+        df_pilot["run"] = df_pilot["experiment_name"].map(experiment_name_map)
+        df_pilot["run"] = df_pilot["run"].fillna(df_pilot["experiment_name"])
+    else:
+        df_pilot["run"] = "pilot"
+    # common_good is stored as per-group pool (sum_c*1.6 - sum_p).
+    # Divide by the number of valid contributors per group per round
+    # so per-capita stays correct even when groups become imbalanced.
+    valid = (df_pilot["player_no_input"] == 0).astype(int)
+    n_valid = valid.groupby(
+        [df_pilot["episode_id"], df_pilot["round_number"], df_pilot["group_id"]]
+    ).transform("sum").clip(lower=1)
+    df_pilot["common_good"] = df_pilot["common_good"] / n_valid
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
     df_pilot["payoff"] = (
         20 - df_pilot["contribution"] - df_pilot["punishment"] + df_pilot["common_good"]
@@ -271,6 +303,7 @@ def load_pilot_data(basedir: str) -> pd.DataFrame:
             "payoff",
             "run",
             "global_group_id",
+            "group_id",
         ]
     ]
 
@@ -352,7 +385,117 @@ def create_plots(
         plt.close()
         print(f"Saved: {os.path.join(output_dir, 'comparison_pilot.jpg')}")
 
-    # Plot 3: Group switching heatmap (if agent_group data exists)
+    # Plot 3: Pilot + simulation overlay (direct comparison)
+    sim_runs = [r for r in dfm["run"].unique() if r.startswith("ah ")]
+    overlay_runs = pilot_runs + sim_runs
+    w_overlay = dfm["run"].isin(overlay_runs)
+
+    if w_overlay.any():
+        dfg = dfm[w_overlay].copy()
+        g = sns.relplot(
+            data=dfg,
+            x="round_number",
+            y="value",
+            col="variable",
+            hue="run",
+            kind="line",
+            facet_kws={"sharey": False, "sharex": True},
+            height=3,
+            aspect=1,
+        )
+        g.fig.suptitle(f"Pilot vs Simulation: {figure_name}", y=1.02)
+        g.set(ylim=(0, None))
+        g.savefig(os.path.join(output_dir, "comparison_pilot_vs_sim.jpg"))
+        plt.close()
+        print(f"Saved: {os.path.join(output_dir, 'comparison_pilot_vs_sim.jpg')}")
+
+    # Plot 4: Group-size evolution per run (sim + pilot comparison)
+    if "group_id" in df.columns:
+        per_episode_sizes = (
+            df.groupby(
+                ["run", "episode", "round_number", "group_id"],
+                as_index=False,
+            )["participant_code"]
+            .nunique()
+            .rename(columns={"participant_code": "group_size"})
+        )
+        max_agents = (
+            df.groupby(["run", "episode", "round_number"])[
+                "participant_code"
+            ]
+            .nunique()
+            .max()
+        )
+
+        g = sns.relplot(
+            data=per_episode_sizes,
+            x="round_number",
+            y="group_size",
+            col="group_id",
+            hue="run",
+            kind="line",
+            facet_kws={"sharey": True, "sharex": True},
+            height=4,
+            aspect=1.3,
+        )
+        g.fig.suptitle(
+            f"Group size per round: {figure_name}", y=1.02
+        )
+        g.set(ylim=(0, max_agents))
+        g.set_axis_labels("round_number", "group_size")
+        global_group_size_path = os.path.join(
+            output_dir, "group_size_evolution_global.jpg"
+        )
+        g.savefig(global_group_size_path, bbox_inches="tight")
+        plt.close()
+        print(f"Saved: {global_group_size_path}")
+
+    # Plot 5: Number of switches per round (mean over episodes)
+    if "group_id" in df.columns:
+        switch_df = df.sort_values(
+            ["run", "episode", "participant_code", "round_number"]
+        ).copy()
+        player_key = (
+            switch_df["participant_code"].astype(str)
+            + "__"
+            + switch_df["episode"].astype(str)
+        )
+        switch_df["player_episode"] = player_key
+        switch_df["prev_group_id"] = switch_df.groupby(
+            ["run", "player_episode"]
+        )["group_id"].shift(1)
+        switch_df["switched"] = (
+            (switch_df["group_id"] != switch_df["prev_group_id"])
+            & switch_df["prev_group_id"].notna()
+        )
+        per_episode_switches = (
+            switch_df.groupby(
+                ["run", "episode", "round_number"], as_index=False
+            )["switched"]
+            .sum()
+            .rename(columns={"switched": "switch_count"})
+        )
+        switch_counts = (
+            per_episode_switches.groupby(["run", "round_number"], as_index=False)[
+                "switch_count"
+            ]
+            .mean()
+        )
+        plt.figure(figsize=(9, 4))
+        sns.lineplot(
+            data=switch_counts,
+            x="round_number",
+            y="switch_count",
+            hue="run",
+        )
+        plt.title("Number of switches per round")
+        plt.tight_layout()
+        switch_path = os.path.join(output_dir, "switch_count_per_round.jpg")
+        plt.savefig(switch_path)
+        plt.close()
+        print(f"Saved: {switch_path}")
+
+    # Plot 6: Group switching heatmap (if agent_group data exists)
     if "agent_group" in df.columns:
         # Only use simulation runs (not pilot data)
         sim_runs = [r for r in df["run"].unique() if r.startswith("ah ")]
@@ -475,7 +618,7 @@ def run_cli(config, config_path):
     dfs = run_simulation(config, output_dir)
 
     # Load pilot data if available
-    df_pilot = load_pilot_data(basedir)
+    df_pilot = load_pilot_data(config, basedir)
 
     # Combine dataframes
     if df_pilot is not None:

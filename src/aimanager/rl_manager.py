@@ -9,6 +9,7 @@ from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import torch as th
+import wandb
 
 from aimanager.manager.memory import Memory
 from aimanager.manager.environment import ArtificialHumanEnv
@@ -65,7 +66,11 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
         state, reward, done = env.step()
         if replay_mem is not None:
             replay_mem.add(
-                episode_step=round_number, action=action, reward=reward, **statecopy
+                episode_step=round_number,
+                episode=update_step,
+                action=action,
+                reward=reward,
+                **statecopy,
             )
 
         metrics["next_reward"] = reward.mean().item()
@@ -98,6 +103,10 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     th.random.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
+
+    wandb_enabled = bool(os.environ.get("WANDB_API_KEY"))
+    if wandb_enabled:
+        wandb.init(config=config)
 
     # Output directories
     output_dir = data_dir or config["output_dir"]
@@ -210,15 +219,32 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                 metrics_list.extend(
                     [{**m, "loss": loss.item()} for m in off_policy_metrics]
                 )
-            metrics_list.extend(
-                run_batch(
-                    manager,
-                    env,
-                    replay_mem=None,
-                    on_policy=True,
-                    update_step=update_step,
-                )
+            on_policy_metrics = run_batch(
+                manager,
+                env,
+                replay_mem=None,
+                on_policy=True,
+                update_step=update_step,
             )
+            metrics_list.extend(on_policy_metrics)
+
+            if wandb_enabled:
+                log = {"update_step": update_step}
+                if sample is not None:
+                    log["train/loss"] = loss.item()
+                for k in [
+                    "next_reward",
+                    "common_good",
+                    "contribution",
+                    "punishment",
+                    "group_payoff",
+                    "q_mean",
+                ]:
+                    log[f"eval/{k}"] = (
+                        sum(m[k] for m in on_policy_metrics)
+                        / len(on_policy_metrics)
+                    )
+                wandb.log(log)
 
     model_file = os.path.join(model_dir, f"{config['job_id']}_manager.pt")
     print(f"Saving manager to {model_file}")
@@ -250,6 +276,9 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     df = df.melt(id_vars=id_vars, value_vars=value_vars, var_name="metric")
     df = add_labels(df, {**labels, "job_id": config["job_id"]})
     df.to_parquet(metrics_path)
+
+    if wandb_enabled:
+        wandb.finish()
 
     return model_file
 
