@@ -338,6 +338,38 @@ def main(config):
                                                 f"{lbl}_{feat}"
                                             ] = m["value"]
 
+                            # Leave-one-in: keep one feature intact,
+                            # perturb all others
+                            if len(feats) > 1:
+                                loi_lbl = f"leave_one_in_{lbl}"
+                                for feat in feats:
+                                    others = [
+                                        f for f in feats if f != feat
+                                    ]
+                                    _d = apply_mask_pattern(
+                                        test_data,
+                                        mask[np.newaxis],
+                                        y_name,
+                                        mask_name,
+                                        default_values,
+                                    )
+                                    for o in others:
+                                        _d = fn(_d, o)
+                                    _d = model.encode(
+                                        _d,
+                                        mask=mask_name,
+                                        edge_index=test_edge_index,
+                                        device=th_device,
+                                    )
+                                    metrics = eval_model(model, _d)
+                                    rec.rec_many(
+                                        metrics,
+                                        set="test",
+                                        **{loi_lbl: feat},
+                                        n_pred=n_pred,
+                                        mask=j,
+                                    )
+
                 if wandb_enabled:
                     wandb_log = {
                         "epoch": e,

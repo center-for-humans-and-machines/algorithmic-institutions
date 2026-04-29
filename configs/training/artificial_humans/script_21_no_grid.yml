@@ -18,13 +18,13 @@ params:
     dataset: full
   n_contributions: 21
   n_punishments: 31
-  n_cross_val: null
+  n_cross_val: 5
   n_player: 4
   data_file: experiments/pilot_random1_player_round_slim.csv
   model_name: graph
   shuffle_features: [prev_punishment, prev_contribution, contribution_valid]
   basedir: .
-  output_dir: artifacts/artificial_humans/raven_script_test
+  output_dir: artifacts/artificial_humans/raven_script_21
   model_args:
     y_levels: 21
     y_name: contribution
