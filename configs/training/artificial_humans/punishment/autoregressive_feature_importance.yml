@@ -1,0 +1,89 @@
+description: >-
+  Retrain autoregressive punishment predictor with shuffle and ablation
+  feature importance evaluation. Same config as autoregressive.yml but
+  with shuffle_features and ablate_features populated.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 8
+  memory: 32
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: recorded
+  switch_every: 4
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+autoregressive
+    dataset: 35ep
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_35ep.csv
+  model_name: graph
+  shuffle_features:
+    - prev_contribution
+    - prev_punishment
+    - punishment_masked
+    - agent_group
+    - prev_contribution_valid
+    - prev_punishment_valid
+    - autoreg_mask
+    - is_first
+  ablate_features:
+    - prev_contribution
+    - prev_punishment
+    - punishment_masked
+    - agent_group
+    - prev_contribution_valid
+    - prev_punishment_valid
+    - autoreg_mask
+    - is_first
+  basedir: .
+  output_dir: artifacts/artificial_humans/punishment_autoregressive_fi
+  model_args:
+    y_levels: 31
+    y_name: punishment
+    hidden_size: 20
+    add_rnn: False
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: punishment_masked
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: numeric
+      - etype: bool
+        name: prev_contribution_valid
+      - etype: bool
+        name: prev_punishment_valid
+      - etype: bool
+        name: autoreg_mask
+      - etype: bool
+        name: is_first
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 5000
+    batch_size: 7
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: true
+  min_predicted: 1
+  max_predicted: 8
