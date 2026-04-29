@@ -1,3 +1,10 @@
+---
+name: fetch-cluster
+description: Fetch files or folders from the Raven HPC cluster to local.
+disable-model-invocation: true
+argument-hint: <remote_path>
+---
+
 Fetch files or folders from the Raven HPC cluster to local.
 
 Usage: /fetch-cluster <remote_path> [local_destination]

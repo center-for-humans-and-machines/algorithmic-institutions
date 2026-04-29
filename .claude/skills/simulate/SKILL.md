@@ -1,3 +1,10 @@
+---
+name: simulate
+description: Submit a simulation run on the Raven HPC cluster.
+disable-model-invocation: true
+argument-hint: <config_file>
+---
+
 Submit a simulation run on the Raven HPC cluster.
 
 Usage: /simulate <config_file>

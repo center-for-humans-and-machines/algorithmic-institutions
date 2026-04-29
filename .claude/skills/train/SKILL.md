@@ -1,3 +1,10 @@
+---
+name: train
+description: Submit a training run on the Raven HPC cluster.
+disable-model-invocation: true
+argument-hint: <ah|manager> <config_file>
+---
+
 Submit a training run on the Raven HPC cluster.
 
 Usage: /train <ah|manager> <config_file>

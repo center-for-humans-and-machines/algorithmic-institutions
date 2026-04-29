@@ -1,3 +1,10 @@
+---
+name: test
+description: Run tests on the Raven HPC cluster.
+disable-model-invocation: true
+argument-hint: [pytest args]
+---
+
 Run tests on the Raven HPC cluster. Arguments are passed through to pytest.
 
 Usage: /test [pytest args]
