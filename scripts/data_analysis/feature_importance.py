@@ -1,243 +1,321 @@
-"""Analyze feature importance for a target variable.
+"""Model-level feature importance from shuffle/ablation metrics.
 
 Usage:
-    python scripts/data_analysis/feature_importance.py <config_yaml>
-    python scripts/data_analysis/feature_importance.py <config_yaml> \
-        --output-dir plots/data_analysis
+    python scripts/data_analysis/feature_importance.py <metrics_parquet>
+    python scripts/data_analysis/feature_importance.py <metrics_parquet> \
+        --metric log_loss --method shuffle --save-fig out.png
 
-Reads the training config YAML to extract:
-- data_file: path to the CSV dataset
-- model_args.x_encoding: feature names
-- model_args.y_name: target variable
+Reads a metrics parquet file produced by the AH training pipeline
+and computes feature importance as the change in a metric when a
+feature is shuffled or ablated, compared to the unperturbed baseline.
 
-Derives prev_* features from the raw CSV the same way the
-training pipeline does (lag-1 shift per episode and player).
+Importance = metric_perturbed - metric_baseline  (for loss/error metrics)
 
-Runs:
-1. Mutual information (discrete target)
-2. Random forest feature importance
-3. Spearman correlation
-4. Overall ranking table
+Reports the final-epoch, test-set, CV-averaged importance per feature.
 """
 
 import argparse
 from pathlib import Path
 
-import numpy as np
+import matplotlib.pyplot as plt
 import pandas as pd
-import yaml
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_selection import mutual_info_classif
-from scipy.stats import spearmanr
 
 
-def derive_features(df):
-    """Add prev_* columns matching the training pipeline."""
-    df = df.sort_values(
-        ["episode_id", "player_id", "round_number"]
-    ).copy()
+PERTURB_COLS = [
+    "shuffle_feature",
+    "ablate_feature",
+    "leave_one_in_shuffle_feature",
+    "leave_one_in_ablate_feature",
+]
 
-    grp = df.groupby(["episode_id", "player_id"])
 
-    df["prev_contribution"] = grp["contribution"].shift(1)
-    df["prev_punishment"] = grp["punishment"].shift(1)
-    df["prev_contribution_valid"] = (
-        grp["player_no_input"].shift(1).map({0: 1, 1: 0})
+def load_metrics(path):
+    df = pd.read_parquet(path)
+    available = {
+        col: col in df.columns and df[col].notna().any()
+        for col in PERTURB_COLS
+    }
+    if not any(available.values()):
+        raise ValueError(
+            "No feature importance data found in "
+            f"{path}"
+        )
+    return df, available
+
+
+def compute_total_improvement(df, metric, strategy):
+    """Compute avg test loss improvement from epoch 0 to final."""
+    final_epoch = int(df["epoch"].max())
+
+    filt = (df["set"] == "test") & (df["name"] == metric)
+    if strategy is not None:
+        filt = filt & (df["strategy"] == strategy)
+
+    # Exclude perturbed rows
+    for col in PERTURB_COLS:
+        if col in df.columns:
+            filt = filt & df[col].isna()
+
+    sub = df[filt]
+    epoch0 = sub[sub["epoch"] == 0].groupby("cv_split")["value"].mean()
+    final = sub[sub["epoch"] == final_epoch].groupby("cv_split")[
+        "value"
+    ].mean()
+    improvement = epoch0 - final
+    return improvement.mean(), improvement.std(), epoch0.mean(), final.mean()
+
+
+def compute_importance(df, method_col, metric, strategy):
+    """Compute per-feature importance as delta from baseline.
+
+    Returns a DataFrame with columns:
+        feature, baseline, perturbed, delta, cv_split
+    averaged across CV splits at the final epoch, on test set.
+    """
+    final_epoch = int(df["epoch"].max())
+
+    # Filter to test set, final epoch, chosen metric/strategy
+    filt = (
+        (df["set"] == "test")
+        & (df["epoch"] == final_epoch)
+        & (df["name"] == metric)
     )
+    if strategy is not None:
+        filt = filt & (df["strategy"] == strategy)
+    sub = df[filt].copy()
 
-    if "group_id" in df.columns:
-        df["agent_group"] = df["group_id"].astype(int)
-        df["prev_agent_group"] = grp["group_id"].shift(1)
+    # Baseline: rows where ALL perturbation columns are null
+    base_filt = pd.Series(True, index=sub.index)
+    for col in PERTURB_COLS:
+        if col in sub.columns:
+            base_filt = base_filt & sub[col].isna()
+    baseline = sub[base_filt]
+    # Perturbed: rows where the method column is set
+    perturbed = sub[sub[method_col].notna()]
 
-    # Fill first-round NaNs with defaults
-    c_med = df.loc[
-        df["player_no_input"] == 0, "contribution"
-    ].median()
-    p_med = df.loc[
-        df["player_no_input"] == 0, "punishment"
-    ].median()
-    df["prev_contribution"] = df["prev_contribution"].fillna(
-        c_med
-    )
-    df["prev_punishment"] = df["prev_punishment"].fillna(p_med)
-    df["prev_contribution_valid"] = (
-        df["prev_contribution_valid"].fillna(0).astype(int)
-    )
-    if "prev_agent_group" in df.columns:
-        df["prev_agent_group"] = (
-            df["prev_agent_group"].fillna(0).astype(int)
+    if baseline.empty:
+        raise ValueError(
+            f"No baseline rows for metric={metric}, "
+            f"strategy={strategy}, epoch={final_epoch}"
+        )
+    if perturbed.empty:
+        raise ValueError(
+            f"No {method_col} rows for metric={metric}, "
+            f"strategy={strategy}, epoch={final_epoch}"
         )
 
-    return df
-
-
-def run_analysis(df, features, target):
-    """Run feature importance analyses and print results."""
-    valid = df[df["player_no_input"] == 0].copy()
-    X = valid[features].values
-    y = valid[target].astype(int).values
-
-    print(f"Samples: {len(valid)}, Features: {features}")
-    print(f"Target: {target} ({len(np.unique(y))} classes)")
-    print()
-
-    # 1. Mutual information
-    mi = mutual_info_classif(
-        X, y, discrete_features="auto", random_state=42
+    # Average baseline per CV split
+    base_avg = (
+        baseline.groupby("cv_split")["value"]
+        .mean()
+        .rename("baseline")
     )
-    mi_df = pd.DataFrame(
-        {"feature": features, "mutual_info": mi}
-    ).sort_values("mutual_info", ascending=False)
-    print("=== Mutual Information ===")
-    for _, row in mi_df.iterrows():
-        bar = "#" * int(row["mutual_info"] * 40)
-        print(
-            f"  {row['feature']:<30s} "
-            f"{row['mutual_info']:.4f}  {bar}"
+
+    # Average perturbed per (cv_split, feature)
+    pert_avg = (
+        perturbed.groupby(["cv_split", method_col])["value"]
+        .mean()
+        .rename("perturbed")
+        .reset_index()
+        .rename(columns={method_col: "feature"})
+    )
+
+    pert_avg = pert_avg.join(base_avg, on="cv_split")
+    pert_avg["delta"] = pert_avg["perturbed"] - pert_avg["baseline"]
+
+    return pert_avg
+
+
+def print_importance(imp_df, method_label, metric):
+    """Print a ranked importance table."""
+    summary = (
+        imp_df.groupby("feature")
+        .agg(
+            baseline=("baseline", "mean"),
+            perturbed=("perturbed", "mean"),
+            delta_mean=("delta", "mean"),
+            delta_std=("delta", "std"),
         )
-    print()
+        .sort_values("delta_mean", ascending=False)
+    )
 
-    # 2. Random forest importance
-    rf = RandomForestClassifier(
-        n_estimators=200,
-        max_depth=10,
-        random_state=42,
-        n_jobs=-1,
-    )
-    rf.fit(X, y)
-    rf_imp = rf.feature_importances_
-    rf_df = pd.DataFrame(
-        {"feature": features, "rf_importance": rf_imp}
-    ).sort_values("rf_importance", ascending=False)
-    print("=== Random Forest Importance ===")
-    for _, row in rf_df.iterrows():
-        bar = "#" * int(row["rf_importance"] * 80)
-        print(
-            f"  {row['feature']:<30s} "
-            f"{row['rf_importance']:.4f}  {bar}"
-        )
-    print(f"  OOB-like train accuracy: {rf.score(X, y):.4f}")
-    print()
-
-    # 3. Spearman correlation
-    print("=== Spearman Correlation ===")
-    sp_rows = []
-    for i, feat in enumerate(features):
-        rho, pval = spearmanr(X[:, i], y)
-        sp_rows.append(
-            {"feature": feat, "rho": rho, "p_value": pval}
-        )
-    sp_df = pd.DataFrame(sp_rows).sort_values(
-        "rho", ascending=False, key=abs
-    )
-    for _, row in sp_df.iterrows():
-        sig = "***" if row["p_value"] < 0.001 else (
-            "**" if row["p_value"] < 0.01 else (
-                "*" if row["p_value"] < 0.05 else ""
-            )
-        )
-        print(
-            f"  {row['feature']:<30s} "
-            f"rho={row['rho']:+.4f}  p={row['p_value']:.2e} "
-            f"{sig}"
-        )
-    print()
-
-    # 4. Summary table
-    summary = mi_df.merge(rf_df).merge(sp_df)
-    summary["rank_mi"] = (
-        summary["mutual_info"]
-        .rank(ascending=False)
-        .astype(int)
-    )
-    summary["rank_rf"] = (
-        summary["rf_importance"]
-        .rank(ascending=False)
-        .astype(int)
-    )
-    summary["rank_sp"] = (
-        summary["rho"]
-        .abs()
-        .rank(ascending=False)
-        .astype(int)
-    )
-    summary["avg_rank"] = (
-        summary[["rank_mi", "rank_rf", "rank_sp"]].mean(axis=1)
-    )
-    summary = summary.sort_values("avg_rank")
-    print("=== Overall Ranking ===")
+    print(f"=== {method_label} Feature Importance ({metric}) ===")
     print(
-        summary[
-            [
-                "feature",
-                "mutual_info",
-                "rf_importance",
-                "rho",
-                "avg_rank",
-            ]
-        ].to_string(index=False, float_format="{:.4f}".format)
+        f"  {'feature':<30s} {'baseline':>10s} "
+        f"{'perturbed':>10s} {'delta':>10s} {'std':>8s}"
     )
+    for feat, row in summary.iterrows():
+        bar = "#" * max(0, int(row["delta_mean"] * 40))
+        print(
+            f"  {feat:<30s} {row['baseline']:>10.4f} "
+            f"{row['perturbed']:>10.4f} "
+            f"{row['delta_mean']:>+10.4f} "
+            f"{row['delta_std']:>8.4f}  {bar}"
+        )
     print()
+    return summary
 
 
-def parse_config(config_path):
-    """Extract data_file, features, and target from a YAML
-    training config."""
-    with open(config_path) as f:
-        cfg = yaml.safe_load(f)
+def plot_importance(rows, metric, save_path, total_improvement=None):
+    """Plot horizontal bar charts of feature importance.
 
-    params = cfg.get("params", cfg)
-    data_file = params["data_file"]
-    model_args = params["model_args"]
-    target = model_args["y_name"]
+    Parameters
+    ----------
+    rows : list of list of (label, summary_df) tuples
+        Each inner list is one row of panels.
+    metric : str
+    save_path : str or Path
+    total_improvement : tuple (mean, std, loss_0, loss_final) or None
+    """
+    n_rows = len(rows)
+    n_cols = max(len(row) for row in rows)
+    n_feats = max(
+        len(s) for row in rows for _, s in row
+    )
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(6 * n_cols, max(3, 0.5 * n_feats) * n_rows),
+        squeeze=False,
+    )
 
-    # Extract feature names from x_encoding
-    features = []
-    for enc in model_args["x_encoding"]:
-        name = enc.get("name", enc.get("etype"))
-        if name:
-            features.append(name)
+    for r, row in enumerate(rows):
+        for c, (label, summary) in enumerate(row):
+            ax = axes[r][c]
+            summary = summary.sort_values("delta_mean")
+            ax.barh(
+                summary.index,
+                summary["delta_mean"],
+                xerr=summary["delta_std"],
+                capsize=3,
+                color="#4c72b0",
+                edgecolor="white",
+            )
+            ax.axvline(0, color="black", linewidth=0.8)
+            ax.set_xlabel(f"\u0394 {metric}")
+            ax.set_title(f"{label} importance")
 
-    return data_file, features, target
+            if total_improvement is not None:
+                imp_mean = total_improvement[0]
+                ax.axvline(
+                    imp_mean,
+                    color="#c44e52",
+                    linewidth=1.5,
+                    linestyle="--",
+                    label=f"total gain ({imp_mean:.3f})",
+                )
+                ax.legend(fontsize=8, loc="lower right")
+
+        # Hide unused axes in this row
+        for c in range(len(row), n_cols):
+            axes[r][c].set_visible(False)
+
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    print(f"Saved figure to {save_path}")
+    plt.close(fig)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Feature importance analysis"
+        description="Model-level feature importance from "
+        "shuffle/ablation metrics"
     )
     parser.add_argument(
-        "config",
-        help="Path to training config YAML",
+        "metrics",
+        help="Path to metrics parquet file",
+    )
+    parser.add_argument(
+        "--metric",
+        default="log_loss",
+        help="Metric name to use (default: log_loss)",
+    )
+    parser.add_argument(
+        "--method",
+        choices=["shuffle", "ablate", "both"],
+        default="both",
+        help="Which perturbation method to report "
+        "(default: both)",
+    )
+    parser.add_argument(
+        "--strategy",
+        default=None,
+        help="Prediction strategy filter "
+        "(default: None = use log_loss rows)",
+    )
+    parser.add_argument(
+        "--save-fig",
+        default=None,
+        metavar="PATH",
+        help="Save a bar-chart figure to PATH",
     )
     args = parser.parse_args()
 
-    data_file, features, target = parse_config(args.config)
+    df, available = load_metrics(args.metrics)
 
-    # Resolve data_file relative to repo root
-    repo_root = Path(__file__).resolve().parents[2]
-    csv_path = repo_root / data_file
-    if not csv_path.exists():
-        csv_path = Path(data_file)
+    final_epoch = int(df["epoch"].max())
+    n_splits = int(df["cv_split"].dropna().nunique())
 
-    print(f"Config: {args.config}")
-    print(f"Data: {csv_path}")
-    print(f"Target: {target}")
-    print(f"Features from config: {features}")
+    imp_mean, imp_std, loss_0, loss_final = compute_total_improvement(
+        df, args.metric, args.strategy
+    )
+
+    print(f"Metrics: {args.metrics}")
+    print(f"Final epoch: {final_epoch}, CV splits: {n_splits}")
+    print(f"Metric: {args.metric}, Strategy: {args.strategy}")
+    for col, present in available.items():
+        if present:
+            feats = sorted(df[col].dropna().unique())
+            print(f"{col}: {feats}")
+    print()
+    print(
+        f"Total test {args.metric} improvement: "
+        f"{loss_0:.4f} -> {loss_final:.4f} "
+        f"(delta={imp_mean:+.4f} +/- {imp_std:.4f})"
+    )
     print()
 
-    df = pd.read_csv(csv_path)
-    df = derive_features(df)
+    # Map (column, label) for each perturbation method
+    method_map = {
+        "shuffle": [
+            ("shuffle_feature", "Shuffle"),
+            ("leave_one_in_shuffle_feature", "Leave-one-in (shuffle)"),
+        ],
+        "ablate": [
+            ("ablate_feature", "Ablation"),
+            ("leave_one_in_ablate_feature", "Leave-one-in (ablation)"),
+        ],
+    }
 
-    # Also add round_number as a feature
-    if "round_number" not in features:
-        features.append("round_number")
+    rows = []
+    methods = (
+        ["shuffle", "ablate"]
+        if args.method == "both"
+        else [args.method]
+    )
+    for method in methods:
+        row = []
+        for col, label in method_map[method]:
+            if available.get(col):
+                imp = compute_importance(
+                    df, col, args.metric, args.strategy
+                )
+                summary = print_importance(
+                    imp, label, args.metric
+                )
+                row.append((label, summary))
+        if row:
+            rows.append(row)
 
-    missing = [f for f in features if f not in df.columns]
-    if missing:
-        print(f"Error: columns not found: {missing}")
-        return
-
-    run_analysis(df, features, target)
+    if args.save_fig and rows:
+        save_path = Path(args.save_fig)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        plot_importance(
+            rows,
+            args.metric,
+            save_path,
+            total_improvement=(imp_mean, imp_std, loss_0, loss_final),
+        )
 
 
 if __name__ == "__main__":
