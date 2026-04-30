@@ -13,13 +13,6 @@ import subprocess
 import sys
 import uuid
 
-import yaml
-
-
-def load_config(config_path):
-    with open(config_path, "r") as f:
-        return yaml.safe_load(f)
-
 
 def read_file(filename):
     with open(filename, "r") as f:
@@ -49,7 +42,6 @@ def config_name_from_path(config_path):
 
 
 def run(config_path):
-    config = load_config(config_path)
     config_name = config_name_from_path(config_path)
     job_id = str(uuid.uuid4())[:8]
 
@@ -75,9 +67,7 @@ def run(config_path):
     # Submit
     start_command = f"sbatch {script_file}"
     print(start_command)
-    subprocess.run(
-        start_command, stdout=subprocess.PIPE, shell=True, check=True
-    )
+    subprocess.run(start_command, stdout=subprocess.PIPE, shell=True, check=True)
 
 
 if __name__ == "__main__":
