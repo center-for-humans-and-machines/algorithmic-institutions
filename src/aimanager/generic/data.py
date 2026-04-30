@@ -1,9 +1,16 @@
+import hashlib
 import random
 
 import numpy as np
 import pandera as pa
 import torch as th
 from pandera.typing import Series
+
+from aimanager.utils.sanity import emit
+
+
+def _episode_ids_hash(ids):
+    return hashlib.sha256(",".join(map(str, sorted(ids))).encode()).hexdigest()[:16]
 
 
 class AgentRoundRaw(pa.DataFrameModel):
@@ -177,6 +184,14 @@ def get_cross_validations(data, n_splits, fraction_training=1.0, holdout_fold=No
 
             test_data = {k: t[test_idx] for k, t in data.items()}
             train_data = {k: t[train_idx] for k, t in data.items()}
+            emit(
+                "cv.episode_ids_hash",
+                {
+                    "train": _episode_ids_hash(train_idx),
+                    "test": _episode_ids_hash(test_idx),
+                },
+                fold=None,
+            )
             yield None, train_data, test_data
             return
 
@@ -196,6 +211,14 @@ def get_cross_validations(data, n_splits, fraction_training=1.0, holdout_fold=No
 
             test_data = {k: t[test_idx] for k, t in data.items()}
             train_data = {k: t[train_idx] for k, t in data.items()}
+            emit(
+                "cv.episode_ids_hash",
+                {
+                    "train": _episode_ids_hash(train_idx),
+                    "test": _episode_ids_hash(test_idx),
+                },
+                fold=i,
+            )
             yield i, train_data, test_data
 
     train_data = {k: t[episode_idx] for k, t in data.items()}

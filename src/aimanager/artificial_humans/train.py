@@ -13,6 +13,7 @@ from aimanager.artificial_humans.evaluation import (
     Recorder,
     create_confusion_matrix,
 )
+from aimanager.utils.sanity import emit
 from aimanager.utils.utils import make_dir
 from itertools import permutations
 from tqdm import tqdm
@@ -121,6 +122,38 @@ def main(config):
             min_predicted = 1
         if max_predicted is None:
             max_predicted = n_player
+        emit(
+            "autoreg.bounds",
+            {"min_predicted": min_predicted, "max_predicted": max_predicted},
+        )
+
+    switch_every = config.get("switch_every", None)
+
+    emit(
+        "config.snapshot",
+        {
+            "job_id": job_id,
+            "data_file": data_file,
+            "experiment_names": experiment_names,
+            "mask_name": mask_name,
+            "n_cross_val": n_cross_val,
+            "n_player": n_player,
+            "n_groups": n_agent_groups,
+            "switch_every": switch_every,
+            "model_name": model_name,
+            "autoregression": autoregression,
+            "y_name": model_args["y_name"],
+            "y_levels": model_args["y_levels"],
+            "hidden_size": model_args["hidden_size"],
+            "add_rnn": model_args.get("add_rnn"),
+            "add_edge_model": model_args.get("add_edge_model"),
+            "add_global_model": model_args.get("add_global_model"),
+            "x_features": [e["name"] for e in model_args["x_encoding"]],
+            "optimizer_args": optimizer_args,
+            "train_args": train_args,
+            "shuffle_features": shuffle_features,
+        },
+    )
 
     model_dir = os.path.join(output_dir, "model")
     conf_dir = os.path.join(output_dir, "confusion_matrix")
@@ -134,12 +167,82 @@ def main(config):
     np.random.seed(seed)
     random.seed(seed)
 
-    df = pd.read_csv(os.path.join(basedir, data_file))
+    df_raw = pd.read_csv(os.path.join(basedir, data_file))
+    raw_rows = len(df_raw)
+    raw_episodes = (
+        int(df_raw["episode_id"].nunique()) if "episode_id" in df_raw.columns else None
+    )
 
-    df = df[df["experiment_name"].isin(experiment_names)]
+    df = df_raw[df_raw["experiment_name"].isin(experiment_names)]
+    after_filter_rows = len(df)
+    after_filter_episodes = (
+        int(df["episode_id"].nunique()) if "episode_id" in df.columns else None
+    )
 
-    switch_every = config.get("switch_every", None)
+    emit(
+        "dataset.csv_summary",
+        {
+            "raw_rows": raw_rows,
+            "raw_episodes": raw_episodes,
+            "after_filter_rows": after_filter_rows,
+            "after_filter_episodes": after_filter_episodes,
+        },
+    )
+
     data, default_values = create_torch_data(df, switch_every=switch_every)
+
+    emit(
+        "dataset.tensor_shapes",
+        {name: [list(t.shape), str(t.dtype)] for name, t in data.items()},
+    )
+    emit(
+        "dataset.default_values",
+        {k: (v.item() if hasattr(v, "item") else v) for k, v in default_values.items()},
+    )
+
+    n_rounds = data["contribution"].shape[2]
+    if switch_every is not None:
+        switch_rounds = [r for r in range(n_rounds) if (r + 1) % switch_every == 0]
+    else:
+        switch_rounds = list(range(n_rounds))
+    emit("dataset.switch_rounds", switch_rounds)
+
+    y_name = model_args["y_name"]
+    mask_t = data[mask_name]
+    y_t = data[y_name]
+    if y_t.dtype == th.bool:
+        pos = int((y_t & mask_t).sum().item())
+        total = int(mask_t.sum().item())
+        emit(
+            "dataset.target_balance",
+            {
+                "positives": pos,
+                "total": total,
+                "fraction": round(pos / total, 6) if total else 0.0,
+            },
+        )
+    else:
+        counts = {}
+        for c in y_t.unique().tolist():
+            counts[int(c)] = int(((y_t == c) & mask_t).sum().item())
+        emit(
+            "dataset.target_balance",
+            {"class_counts": counts, "total": int(mask_t.sum().item())},
+        )
+
+    emit(
+        "dataset.first_episode_sample",
+        {
+            "contribution_ep0_p0_r0to5": data["contribution"][0, 0, :6].tolist(),
+            "prev_contribution_ep0_p0_r0to5": data["prev_contribution"][
+                0, 0, :6
+            ].tolist(),
+            "agent_group_ep0_p0_r0to5": data["agent_group"][0, 0, :6].tolist(),
+            "prev_agent_group_ep0_p0_r0to5": data["prev_agent_group"][
+                0, 0, :6
+            ].tolist(),
+        },
+    )
 
     rec = Recorder()
 
@@ -178,6 +281,7 @@ def main(config):
     test_mask_pattern = th.tensor(test_mask_pattern, dtype=th.bool)
 
     conf_m_all = []
+    final_test_losses = []
 
     for i, train_data, test_data in get_cross_validations(
         data, n_cross_val, fraction_training, holdout_fold=holdout_fold
@@ -202,6 +306,38 @@ def main(config):
             )
         y_name = model_args["y_name"]
 
+        n_train_episodes = int(train_data["contribution"].shape[0])
+        n_test_episodes = (
+            int(test_data["contribution"].shape[0]) if test_data is not None else 0
+        )
+        emit(
+            "cv.split_sizes",
+            {"n_train_episodes": n_train_episodes, "n_test_episodes": n_test_episodes},
+            fold=i,
+        )
+
+        if i == 0 or i is None:
+            emit(
+                "model.spec",
+                {"n_params": int(sum(p.numel() for p in model.parameters()))},
+            )
+            emit(
+                "cv.batch_edge_index_shape",
+                {
+                    "shape": list(batch_edge_index.shape),
+                    "expected_edges": n_player * (n_player - 1) * batch_size,
+                },
+                fold=i,
+            )
+            emit(
+                "train.loop_shape",
+                {
+                    "epochs": train_args["epochs"],
+                    "batches_per_epoch": n_train_episodes // batch_size,
+                },
+                fold=i,
+            )
+
         optimizer = th.optim.Adam(model.parameters(), **optimizer_args)
         loss_fn = th.nn.CrossEntropyLoss(reduction="none")
         sum_loss = 0
@@ -211,6 +347,7 @@ def main(config):
         best_test_loss = float("inf")
         best_model_state = None
         epochs_without_improvement = 0
+        last_test_log_loss = None
 
         pbar = tqdm(range(train_args["epochs"]))
         for e in pbar:
@@ -237,6 +374,18 @@ def main(config):
                 y_pred = y_logit.softmax(-1)
                 y_true = batch_data["y_enc"].flatten(end_dim=-2)
                 mask = batch_data["mask"].flatten()
+
+                if (i == 0 or i is None) and e == 0 and j == 0:
+                    emit(
+                        "cv.first_batch_shapes",
+                        {
+                            "y_logit_shape": list(y_logit.shape),
+                            "y_true_shape": list(y_true.shape),
+                            "mask_sum": int(mask.sum().item()),
+                            "mask_total": int(mask.numel()),
+                        },
+                        fold=i,
+                    )
 
                 loss = (
                     loss_fn(y_logit, y_true)
@@ -366,6 +515,9 @@ def main(config):
                                         mask=j,
                                     )
 
+                if test_log_loss is not None:
+                    last_test_log_loss = test_log_loss
+
                 if wandb_enabled:
                     wandb_log = {
                         "epoch": e,
@@ -444,6 +596,13 @@ def main(config):
             conf_m = pd.concat(conf_m_all)
             conf_m.to_parquet(conf_path)
         rec.save(output_dir, labels, job_id=job_id)
+
+        final_test_losses.append(last_test_log_loss)
+
+    emit(
+        "train.final_test_loss_per_fold",
+        [round(v, 4) if v is not None else None for v in final_test_losses],
+    )
 
     if wandb_enabled:
         wandb.finish()

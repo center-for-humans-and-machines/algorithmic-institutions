@@ -1,0 +1,48 @@
+description: >-
+  Tiny switch-predictor fixture for sanity-snapshot tests. Mirrors the
+  canonical 50ep switch config but with n_cross_val=2, epochs=2,
+  batch_size=5, device=cpu so the run completes in seconds on the
+  Raven login node.
+job_id: tiny_switch
+fraction_training: 1.0
+seed: 38381
+mask_name: switch_mask
+switch_every: 4
+experiment_names: [ah_group_switching]
+labels:
+  architecture: mlp+rnn+edge
+  dataset: tiny
+n_player: 8
+n_groups: 2
+n_cross_val: 2
+data_file: experiments/2group_8agent_50ep.csv
+model_name: graph
+basedir: .
+output_dir: src/aimanager/tests/fixtures/_artifacts/tiny_switch
+model_args:
+  y_levels: 2
+  y_name: does_switch
+  hidden_size: 20
+  add_rnn: True
+  add_edge_model: True
+  add_global_model: False
+  x_encoding:
+    - etype: float
+      name: prev_common_good
+      norm: 20
+    - name: prev_punishment
+      n_levels: 31
+      encoding: numeric
+    - name: agent_group
+      n_levels: 2
+      encoding: numeric
+optimizer_args:
+  lr: 1.e-3
+  weight_decay: 1.e-3
+train_args:
+  epochs: 2
+  batch_size: 5
+  eval_period: 1
+  l1_entropy: 0
+device: cpu
+autoregression: False
