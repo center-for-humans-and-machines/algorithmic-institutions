@@ -49,9 +49,7 @@ def parse_agent_rounds(df, switch_every=None):
 
     # does_switch: True if agent changes group_id next round
     df = df.sort_values(["episode_id", "player_id", "round_number"])
-    next_group = df.groupby(
-        ["episode_id", "player_id"]
-    )["group_id"].shift(-1)
+    next_group = df.groupby(["episode_id", "player_id"])["group_id"].shift(-1)
     df["does_switch"] = next_group.notna() & next_group.ne(df["group_id"])
 
     # Mask non-decision rounds when switch_every is set
@@ -63,17 +61,13 @@ def parse_agent_rounds(df, switch_every=None):
         df["switch_mask"] = True
 
     # episode-batch index (tensor's first dimension)
-    episode_group = (
-        df["global_group_id"] + "__" + df["episode_id"].astype(str)
-    )
-    df["group_idx"] = (
-        episode_group.rank(method="dense").astype(int) - 1
-    )
+    episode_group = df["global_group_id"] + "__" + df["episode_id"].astype(str)
+    df["group_idx"] = episode_group.rank(method="dense").astype(int) - 1
 
     # rescale common good by the number of valid participants in group
-    group_player_input = df.groupby(
-        ["episode_id", "round_number", "group_id"]
-    )["contribution_valid"].transform("sum")
+    group_player_input = df.groupby(["episode_id", "round_number", "group_id"])[
+        "contribution_valid"
+    ].transform("sum")
     df["common_good"] = (df["common_good"] / group_player_input).fillna(0)
     df["recorded"] = True
 
@@ -163,9 +157,7 @@ def create_torch_data(df, default_values=None, switch_every=None):
     return data, default_values
 
 
-def get_cross_validations(
-    data, n_splits, fraction_training=1.0, holdout_fold=None
-):
+def get_cross_validations(data, n_splits, fraction_training=1.0, holdout_fold=None):
     episode_idx = list(range(data["contribution"].shape[0]))
     random.shuffle(episode_idx)
 
@@ -174,17 +166,12 @@ def get_cross_validations(
 
         if holdout_fold is not None:
             assert 0 <= holdout_fold < n_splits, (
-                f"holdout_fold={holdout_fold} out of range "
-                f"for n_splits={n_splits}"
+                f"holdout_fold={holdout_fold} out of range " f"for n_splits={n_splits}"
             )
             test_idx = groups[holdout_fold]
-            train_idx = [
-                idx for idx in episode_idx if idx not in test_idx
-            ]
+            train_idx = [idx for idx in episode_idx if idx not in test_idx]
             random.shuffle(train_idx)
-            train_idx = train_idx[
-                : int(fraction_training * len(train_idx))
-            ]
+            train_idx = train_idx[: int(fraction_training * len(train_idx))]
 
             assert len(set(train_idx).intersection(set(test_idx))) == 0
 

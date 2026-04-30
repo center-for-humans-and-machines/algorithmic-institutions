@@ -208,9 +208,9 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
 
         if (update_step % eval_period) == 0:
             if sample is not None:
-                avg_reward = sum(
-                    m["next_reward"] for m in off_policy_metrics
-                ) / len(off_policy_metrics)
+                avg_reward = sum(m["next_reward"] for m in off_policy_metrics) / len(
+                    off_policy_metrics
+                )
                 print(
                     f"Step {update_step} |"
                     f" Loss {loss.item():.4f} |"
@@ -240,9 +240,8 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                     "group_payoff",
                     "q_mean",
                 ]:
-                    log[f"eval/{k}"] = (
-                        sum(m[k] for m in on_policy_metrics)
-                        / len(on_policy_metrics)
+                    log[f"eval/{k}"] = sum(m[k] for m in on_policy_metrics) / len(
+                        on_policy_metrics
                     )
                 wandb.log(log)
 

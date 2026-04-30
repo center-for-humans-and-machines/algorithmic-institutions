@@ -87,9 +87,7 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
     return df_sim
 
 
-def make_round(
-    contributions, round_num, groups, episode_group_idx, agent_group=None
-):
+def make_round(contributions, round_num, groups, episode_group_idx, agent_group=None):
     """Create a round dictionary."""
     if agent_group is None:
         agent_group = [0] * len(contributions)
@@ -285,9 +283,13 @@ def load_pilot_data(config: dict, basedir: str) -> pd.DataFrame:
     # Divide by the number of valid contributors per group per round
     # so per-capita stays correct even when groups become imbalanced.
     valid = (df_pilot["player_no_input"] == 0).astype(int)
-    n_valid = valid.groupby(
-        [df_pilot["episode_id"], df_pilot["round_number"], df_pilot["group_id"]]
-    ).transform("sum").clip(lower=1)
+    n_valid = (
+        valid.groupby(
+            [df_pilot["episode_id"], df_pilot["round_number"], df_pilot["group_id"]]
+        )
+        .transform("sum")
+        .clip(lower=1)
+    )
     df_pilot["common_good"] = df_pilot["common_good"] / n_valid
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
     df_pilot["payoff"] = (
@@ -420,9 +422,7 @@ def create_plots(
             .rename(columns={"participant_code": "group_size"})
         )
         max_agents = (
-            df.groupby(["run", "episode", "round_number"])[
-                "participant_code"
-            ]
+            df.groupby(["run", "episode", "round_number"])["participant_code"]
             .nunique()
             .max()
         )
@@ -438,9 +438,7 @@ def create_plots(
             height=4,
             aspect=1.3,
         )
-        g.fig.suptitle(
-            f"Group size per round: {figure_name}", y=1.02
-        )
+        g.fig.suptitle(f"Group size per round: {figure_name}", y=1.02)
         g.set(ylim=(0, max_agents))
         g.set_axis_labels("round_number", "group_size")
         global_group_size_path = os.path.join(
@@ -461,26 +459,22 @@ def create_plots(
             + switch_df["episode"].astype(str)
         )
         switch_df["player_episode"] = player_key
-        switch_df["prev_group_id"] = switch_df.groupby(
-            ["run", "player_episode"]
-        )["group_id"].shift(1)
+        switch_df["prev_group_id"] = switch_df.groupby(["run", "player_episode"])[
+            "group_id"
+        ].shift(1)
         switch_df["switched"] = (
-            (switch_df["group_id"] != switch_df["prev_group_id"])
-            & switch_df["prev_group_id"].notna()
-        )
+            switch_df["group_id"] != switch_df["prev_group_id"]
+        ) & switch_df["prev_group_id"].notna()
         per_episode_switches = (
-            switch_df.groupby(
-                ["run", "episode", "round_number"], as_index=False
-            )["switched"]
+            switch_df.groupby(["run", "episode", "round_number"], as_index=False)[
+                "switched"
+            ]
             .sum()
             .rename(columns={"switched": "switch_count"})
         )
-        switch_counts = (
-            per_episode_switches.groupby(["run", "round_number"], as_index=False)[
-                "switch_count"
-            ]
-            .mean()
-        )
+        switch_counts = per_episode_switches.groupby(
+            ["run", "round_number"], as_index=False
+        )["switch_count"].mean()
         plt.figure(figsize=(9, 4))
         sns.lineplot(
             data=switch_counts,
@@ -504,10 +498,7 @@ def create_plots(
         if len(df_sim) > 0:
             # Extract agent index from participant_code ("3_12" -> 3)
             df_sim["agent"] = (
-                df_sim["participant_code"]
-                .str.split("_")
-                .str[0]
-                .astype(int)
+                df_sim["participant_code"].str.split("_").str[0].astype(int)
             )
 
         for run_name in sim_runs:
@@ -516,30 +507,23 @@ def create_plots(
             # Sort numerically by episode suffix
             episodes = sorted(
                 episodes,
-                key=lambda e: int(str(e).rsplit("__", 1)[-1])
-                if "__" in str(e)
-                else e,
+                key=lambda e: int(str(e).rsplit("__", 1)[-1]) if "__" in str(e) else e,
             )
             n_show = min(4, len(episodes))
             show_episodes = episodes[:n_show]
 
-            fig, axes = plt.subplots(
-                1, n_show, figsize=(4 * n_show, 4), sharey=True
-            )
+            fig, axes = plt.subplots(1, n_show, figsize=(4 * n_show, 4), sharey=True)
             if n_show == 1:
                 axes = [axes]
 
             cmap = sns.color_palette(["#4393c3", "#d6604d"], as_cmap=True)
             for ax, ep in zip(axes, show_episodes):
                 ep_df = run_df[run_df["episode"] == ep]
-                heatmap_data = (
-                    ep_df.pivot(
-                        index="agent",
-                        columns="round_number",
-                        values="agent_group",
-                    )
-                    .astype(int)
-                )
+                heatmap_data = ep_df.pivot(
+                    index="agent",
+                    columns="round_number",
+                    values="agent_group",
+                ).astype(int)
                 sns.heatmap(
                     heatmap_data,
                     cmap=cmap,
@@ -550,11 +534,7 @@ def create_plots(
                     linewidths=0.5,
                     linecolor="white",
                 )
-                ep_label = (
-                    str(ep).rsplit("__", 1)[-1]
-                    if "__" in str(ep)
-                    else str(ep)
-                )
+                ep_label = str(ep).rsplit("__", 1)[-1] if "__" in str(ep) else str(ep)
                 ax.set_title(f"Episode {ep_label}")
                 ax.set_xlabel("Round")
                 if ax == axes[0]:
@@ -562,16 +542,10 @@ def create_plots(
                 else:
                     ax.set_ylabel("")
 
-            label = run_name.replace("ah ", "").replace(
-                " managed by ", " / "
-            )
+            label = run_name.replace("ah ", "").replace(" managed by ", " / ")
             fig.suptitle(f"Group Membership — {label}", y=1.02)
             fig.tight_layout()
-            fname = (
-                run_name.replace(" ", "_")
-                .replace("/", "_")
-                + "_groups.png"
-            )
+            fname = run_name.replace(" ", "_").replace("/", "_") + "_groups.png"
             fig.savefig(
                 os.path.join(output_dir, fname),
                 dpi=150,

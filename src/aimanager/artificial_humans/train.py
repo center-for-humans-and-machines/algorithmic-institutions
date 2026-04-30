@@ -139,9 +139,7 @@ def main(config):
     df = df[df["experiment_name"].isin(experiment_names)]
 
     switch_every = config.get("switch_every", None)
-    data, default_values = create_torch_data(
-        df, switch_every=switch_every
-    )
+    data, default_values = create_torch_data(df, switch_every=switch_every)
 
     rec = Recorder()
 
@@ -334,18 +332,16 @@ def main(config):
                                 if j == 0:
                                     for m in metrics:
                                         if m["name"] == "log_loss":
-                                            perturb_log_loss[
-                                                f"{lbl}_{feat}"
-                                            ] = m["value"]
+                                            perturb_log_loss[f"{lbl}_{feat}"] = m[
+                                                "value"
+                                            ]
 
                             # Leave-one-in: keep one feature intact,
                             # perturb all others
                             if len(feats) > 1:
                                 loi_lbl = f"leave_one_in_{lbl}"
                                 for feat in feats:
-                                    others = [
-                                        f for f in feats if f != feat
-                                    ]
+                                    others = [f for f in feats if f != feat]
                                     _d = apply_mask_pattern(
                                         test_data,
                                         mask[np.newaxis],
@@ -389,14 +385,11 @@ def main(config):
                         if test_log_loss < best_test_loss:
                             best_test_loss = test_log_loss
                             best_model_state = {
-                                k: v.clone()
-                                for k, v in model.state_dict().items()
+                                k: v.clone() for k, v in model.state_dict().items()
                             }
                             epochs_without_improvement = 0
                         else:
-                            epochs_without_improvement += (
-                                train_args["eval_period"]
-                            )
+                            epochs_without_improvement += train_args["eval_period"]
                         postfix["best"] = f"{best_test_loss:.4f}"
                         postfix["pat"] = (
                             f"{epochs_without_improvement}"

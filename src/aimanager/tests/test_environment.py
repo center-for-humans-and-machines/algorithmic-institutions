@@ -364,5 +364,3 @@ def test_reward_terminal():
     assert done
     # Terminal reward should be group_payoff, NOT -avg_punishment/32
     assert th.allclose(reward, group_payoff_after_punish)
-
-

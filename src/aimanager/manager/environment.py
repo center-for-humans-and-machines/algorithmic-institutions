@@ -85,17 +85,19 @@ class ArtificialHumanEnv:
         )
 
         if agent_groups is not None:
-            agent_groups = th.tensor(
-                agent_groups, device=device, dtype=th.int64
-            ).unsqueeze(0).expand(batch_size, -1)
+            agent_groups = (
+                th.tensor(agent_groups, device=device, dtype=th.int64)
+                .unsqueeze(0)
+                .expand(batch_size, -1)
+            )
         else:
-            agent_groups = th.arange(
-                n_agents, device=device
-            ).div(
-                n_agents // n_groups, rounding_mode="floor"
-            ).clamp(
-                max=n_groups - 1
-            ).unsqueeze(0).expand(batch_size, -1)
+            agent_groups = (
+                th.arange(n_agents, device=device)
+                .div(n_agents // n_groups, rounding_mode="floor")
+                .clamp(max=n_groups - 1)
+                .unsqueeze(0)
+                .expand(batch_size, -1)
+            )
         self.initial_agent_groups = agent_groups.clone()
         self.update_groups(agent_groups)
         self.reset_state()
@@ -141,9 +143,11 @@ class ArtificialHumanEnv:
             "reward": th.zeros(
                 (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
             ),
-            "agent_group": self.agent_groups.clone()
-            if hasattr(self, "agent_groups")
-            else th.zeros(size, dtype=th.int64, device=self.device),
+            "agent_group": (
+                self.agent_groups.clone()
+                if hasattr(self, "agent_groups")
+                else th.zeros(size, dtype=th.int64, device=self.device)
+            ),
             "group_payoff": th.zeros(
                 (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
             ),
@@ -339,9 +343,7 @@ class ArtificialHumanEnv:
 
         # Flip group: 0->1, 1->0
         current_groups = self.agent_groups.squeeze(-1)
-        new_groups = th.where(
-            does_switch, 1 - current_groups, current_groups
-        )
+        new_groups = th.where(does_switch, 1 - current_groups, current_groups)
         self.update_groups(new_groups)
         self.state["agent_group"] = self.agent_groups.clone()
 
