@@ -1,64 +1,76 @@
 description: >-
   Tiny punishment-autoregressive fixture for sanity-snapshot tests.
   Mirrors the canonical 50ep punishment config but with n_cross_val=2,
-  epochs=2, batch_size=5, max_predicted=2, device=cpu so the run
-  completes in seconds on the Raven login node. max_predicted is
-  reduced (8 -> 2) to keep the autoregressive permutation set small.
-job_id: tiny_punishment
-fraction_training: 1.0
-seed: 38381
-mask_name: recorded
-switch_every: 4
-experiment_names: [ah_group_switching]
-labels:
-  architecture: node+edge+autoregressive
-  dataset: tiny
-n_player: 8
-n_groups: 2
-n_cross_val: 2
-data_file: experiments/2group_8agent_50ep.csv
-model_name: graph
-shuffle_features: []
-basedir: .
-output_dir: src/aimanager/tests/fixtures/_artifacts/tiny_punishment
-model_args:
-  y_levels: 31
-  y_name: punishment
-  hidden_size: 20
-  add_rnn: False
-  add_edge_model: True
-  add_global_model: False
-  x_encoding:
-    - name: prev_contribution
-      n_levels: 21
-      encoding: numeric
-    - name: prev_punishment
-      n_levels: 31
-      encoding: numeric
-    - name: punishment_masked
-      n_levels: 31
-      encoding: numeric
-    - name: agent_group
-      n_levels: 2
-      encoding: numeric
-    - etype: bool
-      name: prev_contribution_valid
-    - etype: bool
-      name: prev_punishment_valid
-    - etype: bool
-      name: autoreg_mask
-    - etype: bool
-      name: is_first
-optimizer_args:
-  lr: 3.e-4
-  weight_decay: 1.e-5
-train_args:
-  epochs: 2
-  batch_size: 5
-  clamp_grad: 1
-  eval_period: 1
-  l1_entropy: 0
-device: cpu
-autoregression: true
-min_predicted: 1
-max_predicted: 2
+  epochs=2, batch_size=5, max_predicted=2 so the run finishes in
+  seconds on a GPU node. AIM_SANITY_LOG_FILE is set in exec.command
+  so the sbatch'd job writes a JSONL sanity log alongside the
+  artifacts.
+exec:
+  command: >-
+    AIM_SANITY_LOG=1
+    AIM_SANITY_LOG_FILE=src/aimanager/tests/fixtures/_logs/tiny_punishment.actual.jsonl
+    python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: recorded
+  switch_every: 4
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+autoregressive
+    dataset: tiny
+  n_player: 8
+  n_groups: 2
+  n_cross_val: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: []
+  basedir: .
+  output_dir: src/aimanager/tests/fixtures/_artifacts/tiny_punishment
+  model_args:
+    y_levels: 31
+    y_name: punishment
+    hidden_size: 20
+    add_rnn: False
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: punishment_masked
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: numeric
+      - etype: bool
+        name: prev_contribution_valid
+      - etype: bool
+        name: prev_punishment_valid
+      - etype: bool
+        name: autoreg_mask
+      - etype: bool
+        name: is_first
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 2
+    batch_size: 5
+    clamp_grad: 1
+    eval_period: 1
+    l1_entropy: 0
+  device: cuda
+  autoregression: true
+  min_predicted: 1
+  max_predicted: 2
