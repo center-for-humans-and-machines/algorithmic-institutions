@@ -1,4 +1,4 @@
-# [DRAFT] Retrain AH stack on 50-episode dataset and validate
+# [ACTIVE] Retrain AH stack on 50-episode dataset and validate
 
 Tracks issue #85.
 
