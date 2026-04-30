@@ -29,6 +29,8 @@ def analyze_parquet(path):
         mask &= df["shuffle_feature"].isna()
     if "ablate_feature" in df.columns:
         mask &= df["ablate_feature"].isna()
+    if "leave_one_in_shuffle_feature" in df.columns:
+        mask &= df["leave_one_in_shuffle_feature"].isna()
     base = df[mask]
     if base.empty:
         return None
