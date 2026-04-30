@@ -3,9 +3,10 @@
 ## Goal
 
 Add cheap, repository-wide regression tests that catch silent breakage of
-the AH-training and simulation pipelines. Each test runs a tiny fixture
-config end-to-end with sanity instrumentation enabled, captures the
-emitted log, and diffs it against a checked-in "golden" snapshot.
+the AH-training and simulation pipelines. Each tiny fixture config is
+run end-to-end on Raven with sanity instrumentation enabled, the resulting
+log file is fetched back to local, and `pytest` (running locally) diffs
+the fetched log against a checked-in "golden" snapshot.
 
 The instrumentation surfaces config-derived invariants
 (`n_player`, `n_groups`, `switch_every`, `seed`, `mask_name`,
@@ -28,23 +29,37 @@ model and data the way it says it should?".
 
 ## Design
 
-### Two-layer instrumentation
+### Three-stage flow
 
-1. **Emission** — `src/aimanager/utils/sanity.py` exposes a single
-   function:
+1. **Run on Raven** (skill: `/run-sanity-runs`) — submits the four tiny
+   fixtures via the existing SLURM pipeline with `AIM_SANITY_LOG=1` and
+   `AIM_SANITY_LOG_FILE=<path>` set, so each run writes a JSONL log to a
+   known artifact path on the cluster.
+2. **Fetch** (existing skill: `/fetch-cluster`) — pulls the log files
+   back to local under `src/aimanager/tests/fixtures/_logs/` (gitignored).
+3. **Test locally** (`pytest`) — pure-Python test code that opens the
+   fetched `*.actual.jsonl` and the committed `*.golden.jsonl`, applies
+   normalisation + float tolerance, and diffs. No torch / PyG imports in
+   the test path, so tests run natively on macOS.
 
-   ```python
-   def emit(name: str, value, **ctx): ...
-   ```
+### Emission API
 
-   Controlled by `AIM_SANITY_LOG` env var (default off → emit() is a
-   no-op return). When on, prints one JSON line per call:
-   `[SANITY] {"name": "...", "value": ..., "ctx": {...}}`.
+`src/aimanager/utils/sanity.py` exposes a single function:
 
-2. **Assertions** — there are none in production code. All
-   "expected behaviour" lives in golden log files. Tests compare
-   captured stdout to the golden after a normalisation pass that strips
-   timestamps and other non-deterministic noise.
+```python
+def emit(name: str, value, **ctx): ...
+```
+
+Controlled by `AIM_SANITY_LOG` env var (default off → emit() is a no-op
+return). When on:
+- If `AIM_SANITY_LOG_FILE=<path>` is set, append one JSON line per call
+  to that file.
+- Otherwise, print to stdout.
+
+Format: `[SANITY] {"name": "...", "value": ..., "ctx": {...}}`. The
+`[SANITY]` prefix lets the test parser ignore unrelated stdout noise
+when stdout fallback is used; in file mode the parser reads the whole
+file directly.
 
 ### Why this shape
 
@@ -55,8 +70,11 @@ model and data the way it says it should?".
   add an `emit()` and re-record the golden.
 - A failing snapshot is *informative* — the diff itself tells you what
   changed, no expected-value lookup needed.
-- All sanity-check semantics live in `sanity.py` + golden files, not
-  scattered through pipeline code.
+- Assertion logic lives entirely in golden files, not in production code.
+- Tests are pure log-diffing and don't import the pipeline; they run
+  natively on macOS without torch/PyG.
+- The cluster run is a one-shot per behaviour change — no permanent
+  CI wiring needed.
 
 ### Instrumentation points
 
@@ -118,45 +136,54 @@ Each fixture has a sibling golden:
 
 ### Test files
 
-- `src/aimanager/tests/test_sanity_training.py`:
-  one parametrised test per AH target. Each runs the fixture via
-  subprocess with `AIM_SANITY_LOG=1`, captures stdout, normalises, and
-  diffs against the golden.
+Pure-Python comparators — no pipeline imports. Each test reads the
+fetched `*.actual.jsonl` from `src/aimanager/tests/fixtures/_logs/` and
+diffs against its sibling `*.golden.jsonl` under
+`src/aimanager/tests/fixtures/`.
 
-- `src/aimanager/tests/test_sanity_simulation.py`: same shape for sim.
+- `src/aimanager/tests/test_sanity_training.py` — one parametrised test
+  per AH target.
+- `src/aimanager/tests/test_sanity_simulation.py` — same shape for sim.
 
-Comparison utility lives in
-`src/aimanager/tests/_sanity_diff.py`:
+Comparison utility lives in `src/aimanager/tests/_sanity_diff.py`:
 
-- Strips lines without the `[SANITY]` prefix
-- Normalises numeric fields with a tolerance (`atol=1e-4`) for floats
-  that legitimately wobble (param counts are exact; losses use atol)
-- Produces a unified diff on failure
+- Parses both files line-by-line into structured records.
+- Compares names + ctx exactly; values via float tolerance:
+  `atol=1e-4` for shape/loss values, `atol=1e-3` for
+  `train.final_test_loss_per_fold`, exact match for hashes / counts /
+  shapes.
+- Produces a unified diff on failure.
+
+If `_logs/` is empty (i.e. the user hasn't run + fetched yet), the
+test fails with a clear hint to invoke `/run-sanity-runs` and
+`/fetch-cluster`.
 
 ### Golden update workflow
 
-A pytest flag `--update-goldens` re-records all golden files. Reviewer
-sees the resulting git diff in the same PR that introduced the
-behaviour change. Without the flag, mismatches fail the test.
+After a behaviour change is merged that changes a sanity emission:
 
-### Why subprocess
+1. Invoke `/run-sanity-runs` to re-run the fixtures on Raven.
+2. `/fetch-cluster src/aimanager/tests/fixtures/_logs/`.
+3. `pytest` to confirm the diff is the expected one.
+4. If expected, copy each `_logs/<name>.actual.jsonl` over its
+   corresponding `<name>.golden.jsonl` and commit.
 
-Running the pipeline in-process risks bleeding torch/numpy RNG state
-across tests and hides import-time side effects. A subprocess is also
-the most realistic regression test — it catches CLI breakage too.
+A `pytest --update-goldens` flag is provided as a convenience that
+performs step 4 automatically (after step 2).
 
 ## Plan steps
 
 | # | Step | Optional |
 |---|------|----------|
-| 1 | Add `src/aimanager/utils/sanity.py` with `emit()` + env-var toggle | No |
+| 1 | Add `src/aimanager/utils/sanity.py` with `emit()` + env-var toggle (file or stdout) | No |
 | 2 | Wire `emit()` calls at the listed instrumentation points in train + sim | No |
 | 3 | Add 4 tiny fixture configs under `src/aimanager/tests/fixtures/` | No |
-| 4 | Add `_sanity_diff.py` comparison helper + `--update-goldens` pytest flag | No |
-| 5 | Manually run each fixture once, hand-validate the emitted log, save as golden | No |
-| 6 | Add `test_sanity_training.py` and `test_sanity_simulation.py` | No |
-| 7 | Wire into `scripts/remote_test.sh` (no extra flags needed — they run as part of `pytest`) | No |
-| 8 | Document the workflow in `CLAUDE.md` under Testing | No |
+| 4 | Add `scripts/run_sanity_fixtures.sh` + `.claude/skills/run-sanity-runs/SKILL.md` to drive the cluster runs | No |
+| 5 | Run all fixtures via the new skill, fetch logs locally, hand-validate, save as goldens | No |
+| 6 | Add `_sanity_diff.py` comparator + `--update-goldens` pytest flag | No |
+| 7 | Add `test_sanity_training.py` and `test_sanity_simulation.py` (pure Python, no torch import) | No |
+| 8 | Update `.gitignore` to exclude `src/aimanager/tests/fixtures/_logs/` | No |
+| 9 | Document the workflow in `CLAUDE.md` under Testing | No |
 
 ## Decisions locked in
 
@@ -180,7 +207,7 @@ the most realistic regression test — it catches CLI breakage too.
 ## References
 
 - Existing tests: `src/aimanager/tests/test_encoder.py`,
-  `test_environment.py`
-- Cluster test runner: `scripts/remote_test.sh`
-- Example of fixture-driven test logs already used:
-  `scripts/tests/test_remote_test.py`
+  `test_environment.py` (run remotely via `scripts/remote_test.sh` —
+  this work runs locally and is independent of that flow)
+- Existing skills the new flow leans on: `/train`, `/simulate`,
+  `/fetch-cluster`
