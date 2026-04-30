@@ -1,7 +1,10 @@
 description: >-
-  Investigation of the model architecture and the relevance of global features.
+  Train contribution predictor with extended feature set for feature
+  importance analysis. Same as group_switching_contribution_35ep.yml
+  but adds agent_group, round_number, and prev_contribution_valid,
+  with both shuffle and ablation evaluation.
 exec:
-  command: python src/aimanager/artificial_humans/train.py {job_file}
+  command: python -m aimanager train-ah {job_file}
   script_name: run_training
   data_dir: artifacts
   temp_dir: .log
@@ -12,23 +15,33 @@ params:
   fraction_training: 1.0
   seed: 38381
   mask_name: contribution_valid
-  experiment_names: [trail_rounds_2, random_1]
+  experiment_names: [ah_group_switching]
   labels:
     architecture: node+edge+rnn
-    dataset: full
+    dataset: 35ep
   n_contributions: 21
   n_punishments: 31
   n_cross_val: 5
-  n_player: 4
-  data_file: experiments/pilot_random1_player_round_slim.csv
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_35ep.csv
   model_name: graph
-  shuffle_features: [prev_punishment, prev_contribution, contribution_valid]
+  shuffle_features:
+    - prev_contribution
+    - prev_punishment
+    - prev_contribution_valid
+    - prev_does_switch
+  ablate_features:
+    - prev_contribution
+    - prev_punishment
+    - prev_contribution_valid
+    - prev_does_switch
   basedir: .
-  output_dir: artifacts/artificial_humans/raven_script_21
+  output_dir: artifacts/artificial_humans/group_switching_contribution_35ep_fi
   model_args:
     y_levels: 21
     y_name: contribution
-    hidden_size: 5
+    hidden_size: 20
     add_rnn: True
     add_edge_model: True
     add_global_model: False
@@ -41,15 +54,16 @@ params:
         encoding: numeric
       - etype: bool
         name: prev_contribution_valid
+      - etype: bool
+        name: prev_does_switch
   optimizer_args:
     lr: 3.e-4
     weight_decay: 1.e-5
   train_args:
-    epochs: 10000
-    batch_size: 10
+    epochs: 1000
+    batch_size: 4
     clamp_grad: 1
     eval_period: 50
     l1_entropy: 0
   device: cuda
   autoregression: False
-
