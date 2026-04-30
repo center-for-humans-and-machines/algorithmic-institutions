@@ -20,7 +20,7 @@ todos:
 isProject: false
 ---
 
-# [DRAFT] Issue #45: Group Switching Simulation + Validation
+# [DONE] Issue #45: Group Switching Simulation + Validation
 
 ## Scope and Decisions
 - Use **supervised AH training pipeline** for the manager punishment model (behavioral cloning style), not RL manager training.
@@ -28,7 +28,7 @@ isProject: false
   - contribution model: `artifacts/artificial_humans/group_switching_contribution/`
   - switch model: `artifacts/artificial_humans/switch_pred_mlp_rnn/`
   - validity model (legacy): `artifacts/artificial_humans/raven_script_22/`
-- Deliverables: 
+- Deliverables:
 1. ah punishment model
 2. comparison of simulation results with all the new models against the pilot data, comparison metrics/plots for contributions, switching, group sizes, post-switch adaptation, and punishment patterns.
 - All training/simulation runs are executed on Raven via the repo skills (`/train`, `/simulate`) that call cluster scripts, not as local Python runs.
@@ -42,7 +42,7 @@ isProject: false
 - Reuse existing AH training entrypoint (`python -m aimanager train-ah <config>`) through cluster submission with the training skill:
   - `/train ah <config>`
   - underlying command: `scripts/train_cluster.sh ah <config>`
-- Model after the legacy config at `run/behavioral_cloning/11_punishment_autoregressive.yml` while changing the training data to up to date `data_file: experiments/group_switching_human_human_group_switching_8_agents.csv`. 
+- Model after the legacy config at `run/behavioral_cloning/11_punishment_autoregressive.yml` while changing the training data to up to date `data_file: experiments/group_switching_human_human_group_switching_8_agents.csv`.
 
 Status: **DONE**
 - Added config: `configs/training/artificial_humans/punishment/autoregressive.yml`.
