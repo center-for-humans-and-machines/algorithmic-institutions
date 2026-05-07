@@ -96,8 +96,13 @@ def _run_seed(
             pilot_ref = int(data[f][ep, a, t_star].item())
             natural_prev = int(full[f"prev_{f}"][0, a, t_star + 1].item())
             v = intervention_value(intervention, pilot_ref, max_value=max_val)
+            # Mirror the override into both the prev_*[t*+1] slot the
+            # AH reads and the round-t* slot the common_good recompute
+            # below sums over, so prev_X = X-shifted-by-1 stays consistent.
             full[f"prev_{f}"][0, a, t_star + 1] = v
             full[f"prev_{f}_valid"][0, a, t_star + 1] = True
+            full[f][0, a, t_star] = v
+            full[f"{f}_valid"][0, a, t_star] = True
             _trace(
                 f"  [trace {label}] STEP 3 override agent={a}: "
                 f"pilot_ref={pilot_ref}  resolved={v}  "
@@ -107,6 +112,48 @@ def _run_seed(
         _trace(
             f"  [trace {label}] STEP 3 prev_{f}[t*+1] all-agents post-override: "
             f"{prev_all}"
+        )
+
+        # STEP 3.5: recompute common_good[t*] per sub-group with the
+        # overridden values, then propagate to prev_common_good[t*+1].
+        # Sub-groups are determined by agent_group at t* (switching is
+        # frozen within a block, so this is well-defined).
+        ag_at_t = full["agent_group"][0, :, t_star]
+        c_t = full["contribution"][0, :, t_star].float()
+        p_t = full["punishment"][0, :, t_star].float()
+        c_valid = full["contribution_valid"][0, :, t_star].float()
+        old_cg = full["common_good"][0, :, t_star].clone()
+        new_cg = th.zeros_like(old_cg)
+        per_group = {}
+        for g in ag_at_t.unique().tolist():
+            in_g = ag_at_t == g
+            n_valid = c_valid[in_g].sum().clamp(min=1)
+            pool = (1.6 * c_t[in_g] - p_t[in_g]).sum()
+            per_capita = pool / n_valid
+            new_cg = th.where(in_g, per_capita, new_cg)
+            per_group[g] = (
+                int(in_g.sum().item()),
+                int(c_valid[in_g].sum().item()),
+                float(c_t[in_g].sum().item()),
+                float(p_t[in_g].sum().item()),
+                float(per_capita.item()),
+            )
+        full["common_good"][0, :, t_star] = new_cg
+        full["prev_common_good"][0, :, t_star + 1] = new_cg
+        for g, (n, nv, sc, sp, pc) in per_group.items():
+            _trace(
+                f"  [trace {label}] STEP 3.5 cg group={g}: members={n} "
+                f"valid={nv}  sum_c={sc:.0f}  sum_p={sp:.0f}  "
+                f"new_cg={pc:.3f}"
+            )
+        cg_pairs = [
+            (int(ag_at_t[i].item()), float(new_cg[i].item()))
+            for i in range(new_cg.shape[0])
+        ]
+        old_pairs = [float(v) for v in old_cg.tolist()]
+        _trace(
+            f"  [trace {label}] STEP 3.5 prev_common_good[t*+1] per agent "
+            f"(group, new): {cg_pairs}  (was {old_pairs})"
         )
     else:
         _trace(f"  [trace {label}] STEP 3 baseline: no override applied")
