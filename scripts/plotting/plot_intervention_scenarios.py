@@ -314,6 +314,97 @@ def plot_factor_group(group, outpath):
     plt.close(fig)
 
 
+def plot_group_scenario(group, outpath):
+    """One figure per group-target scenario.
+
+    Aggregates across the K chosen episodes into a single bar group per
+    panel: baseline / treatment / real (mean ± across-episode std).
+    Layout matches plot_scenario: own@t*, own@t*+1, cross@t*+1, plus
+    switch@t*+1 when t*+1 is a decision round.
+    """
+    g = group
+    feature = g["feature"].iloc[0]
+    is_decision = bool(g["is_decision"].iloc[0])
+    t_star = int(g["t_star"].iloc[0])
+
+    if feature == "punishment":
+        own_unit, cross_unit = "punishment", "contribution"
+        own_t = ("pun_t", "real_pun_t")
+        own_t1 = ("pun_t1", "real_pun_t1")
+        cross_t1 = ("contrib_t1", "real_contrib_t1")
+    else:
+        own_unit, cross_unit = "contribution", "punishment"
+        own_t = ("contrib_t", "real_contrib_t")
+        own_t1 = ("contrib_t1", "real_contrib_t1")
+        cross_t1 = ("pun_t1", "real_pun_t1")
+
+    panels = [
+        (*own_t, f"{own_unit}(t*={t_star})", own_unit, None),
+        (*own_t1, f"{own_unit}(t*+1={t_star + 1})", own_unit, None),
+        (*cross_t1, f"{cross_unit}(t*+1={t_star + 1})", cross_unit, None),
+    ]
+    if is_decision:
+        panels.append(
+            (
+                "switch_t1",
+                "real_switch_t1",
+                f"P(switch)(t*+1={t_star + 1})",
+                "switch probability",
+                (0, 1),
+            )
+        )
+    n_panels = len(panels)
+    fig, axes = plt.subplots(1, n_panels, figsize=(4.0 * n_panels, 4.2))
+    x = np.array([0, 1, 2])
+    width = 0.6
+
+    for ax, (metric, real_col, title, unit, ylim) in zip(axes, panels):
+        b_mean = g[f"{metric}_baseline_mean"].mean()
+        b_std = g[f"{metric}_baseline_mean"].std() if len(g) > 1 else 0.0
+        t_mean = g[f"{metric}_treatment_mean"].mean()
+        t_std = g[f"{metric}_treatment_mean"].std() if len(g) > 1 else 0.0
+        r_mean = g[real_col].mean()
+        r_std = g[real_col].std() if len(g) > 1 else 0.0
+
+        ax.bar(0, b_mean, width, yerr=b_std, color="C0", capsize=4, label="baseline")
+        ax.bar(
+            1, t_mean, width, yerr=t_std, color="C1", capsize=4, label="treatment"
+        )
+        ax.bar(
+            2,
+            r_mean,
+            width,
+            yerr=r_std,
+            color="C2",
+            alpha=0.7,
+            capsize=4,
+            label="real (pilot)",
+        )
+        ax.set_xticks(x)
+        ax.set_xticklabels(["baseline", "treatment", "real"])
+        ax.set_title(title)
+        ax.set_ylabel(unit)
+        if ylim is not None:
+            ax.set_ylim(*ylim)
+
+    axes[0].legend(fontsize=8, loc="upper right")
+
+    gs = g["group_selector"].iloc[0] if "group_selector" in g.columns else None
+    factor = g["factor"].iloc[0] if "factor" in g.columns else None
+    new_value = g["new_value"].iloc[0] if "new_value" in g.columns else None
+    mod_str = f"factor={factor}" if pd.notna(factor) else f"new_value={new_value}"
+    fig.suptitle(
+        f"{g['scenario'].iloc[0]}  |  group target  |  "
+        f"feature={feature}  group_selector={gs}  {mod_str}  |  "
+        f"t*={t_star} ({'decision' if is_decision else 'NOT decision'})  |  "
+        f"averaged over {len(g)} teams × n_seeds",
+        y=1.02,
+    )
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=120, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--csv", required=True)
@@ -324,23 +415,35 @@ def main():
     df = pd.read_csv(args.csv)
     print(f"loaded {len(df)} rows from {args.csv}")
 
-    absolute_df = df[df["factor"].isna()] if "factor" in df.columns else df
-    factor_df = df[df["factor"].notna()] if "factor" in df.columns else df.iloc[0:0]
+    has_target = "target" in df.columns
+    group_df = df[df["target"] == "group"] if has_target else df.iloc[0:0]
+    rest = df[df["target"] != "group"] if has_target else df
 
-    # Per-scenario bar plots for absolute-mode scenarios.
+    absolute_df = rest[rest["factor"].isna()] if "factor" in rest.columns else rest
+    factor_df = (
+        rest[rest["factor"].notna()] if "factor" in rest.columns else rest.iloc[0:0]
+    )
+
+    # Per-scenario bar plots for absolute-mode individual scenarios.
     for name, g in absolute_df.groupby("scenario"):
         outpath = os.path.join(args.outdir, f"{name}.png")
         plot_scenario(g, outpath)
         print(f"saved {outpath}")
 
     # Per-(feature, selector, t_star) bar+trend plots for factor-mode
-    # scenarios — one figure aggregates the dose-response sweep.
+    # individual scenarios — one figure aggregates the dose-response sweep.
     for (feature, selector, t_star), g in factor_df.groupby(
         ["feature", "selector", "t_star"]
     ):
         name = f"dose_response_{feature}_{selector}_t{t_star}.png"
         outpath = os.path.join(args.outdir, name)
         plot_factor_group(g, outpath)
+        print(f"saved {outpath}")
+
+    # Per-scenario aggregated plots for group-target scenarios.
+    for name, g in group_df.groupby("scenario"):
+        outpath = os.path.join(args.outdir, f"{name}.png")
+        plot_group_scenario(g, outpath)
         print(f"saved {outpath}")
 
 

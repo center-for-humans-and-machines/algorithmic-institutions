@@ -1,9 +1,16 @@
-"""Focal-only intervention probe — multi-scenario.
+"""Intervention probe — multi-scenario.
 
-Per scenario × chosen_episode × n_seeds, runs the AH stack twice
-(baseline, treatment) and records the focal's metrics at rounds t* and
-t*+1: pun_t, pun_t1, contrib_t, contrib_t1, switch_t1. Aggregated
+Per scenario × episode × n_seeds, runs the AH stack twice (baseline,
+treatment) and records mean metrics over the targeted agents at rounds
+t* and t*+1: pun_t, pun_t1, contrib_t, contrib_t1, switch_t1. Aggregated
 mean ± std is written to ``<output_dir>/scenarios.csv``.
+
+Two targets:
+- ``individual`` — overrides one focal agent (selected per-episode by
+  ``agent_selector``); metrics are the focal's values.
+- ``group`` — overrides all agents in the team; metrics are averaged
+  across agents. Episodes can be auto-picked by ``group_selector`` +
+  ``n_groups`` (lowest/highest/random by full-game team contribution).
 
 Manifests support an explicit ``scenarios:`` list and/or a compact
 ``grids:`` form whose parameter cross-product is expanded at load time.
@@ -24,6 +31,7 @@ from aimanager.artificial_humans import GraphNetwork
 from aimanager.generic.data import create_torch_data
 from aimanager.simulation.counterfactual import (
     _select_focal_agents,
+    _select_focal_groups,
     intervention_value,
 )
 
@@ -44,33 +52,32 @@ def _trace(msg):
 
 
 def _run_seed(
-    ep, focal, t_star, data, models, device, intervention=None, label=""
+    ep, agents_idx, t_star, data, models, device, intervention=None, label=""
 ):
-    """One stochastic draw → focal's metrics at rounds t* and t*+1.
+    """One stochastic draw → mean metrics over ``agents_idx`` at rounds t* and t*+1.
 
-    Real-data backfill design:
-    - Round 0..t* values come from pilot data verbatim. No AH manager
-      prediction at t* — the human's actual action is the reference.
-      Treatment intervention overrides only the focal's slot at t* to
-      either ``new_value`` (absolute) or ``factor × real`` (factor mode).
-    - The intervened value lands as ``prev_<feature>[t*+1, focal]`` so the
-      AH at t*+1 reads the perturbation. Non-focals' prev_*[t*+1] stays
-      at the data's natural shift values.
-    - Round-t*+1 outputs come from a single AH-stack forward — that's
-      the response we're measuring. The punishment AH at t*+1 sees
-      AH-predicted round-t*+1 contributions plus the (intervened or
-      natural) prev_* values.
+    ``agents_idx`` is a 1-D int64 tensor of agent indices to intervene on
+    and average over. Pass a single index for individual mode, all
+    agents for group mode.
 
-    Under this design, baseline at round t* equals real pilot exactly
-    (no AH involvement at t*). The AH-vs-pilot fidelity gap only shows
-    up at round-t*+1 metrics.
+    Real-data backfill design (unchanged across modes):
+    - Round 0..t* values come from pilot data verbatim. Treatment
+      overrides each agent in ``agents_idx`` at t* to either
+      ``new_value`` or ``factor × pilot[agent, t*]``.
+    - Override lands as ``prev_<feature>[t*+1, agent]`` so the AH at
+      t*+1 reads the perturbation. Non-targeted prev_* stays at the
+      data's natural shift values.
+    - Round-t*+1 outputs come from a single AH-stack forward.
 
-    When module-level ``TRACE`` is enabled (via ``--trace`` on the CLI)
-    every step is logged to stdout so a small run can be eyeballed against
-    the design described above.
+    When module-level ``TRACE`` is enabled (via ``--trace``) every step
+    is logged so a small run can be eyeballed against the design.
     """
     contrib_ah, valid_ah, switch_ah, pun_ah = models
-    _trace(f"  [trace {label}] _run_seed begin: ep={ep} focal={focal} t*={t_star}")
+    agents_list = agents_idx.tolist()
+    _trace(
+        f"  [trace {label}] _run_seed begin: ep={ep} agents={agents_list} "
+        f"t*={t_star}"
+    )
 
     full = {
         k: t[ep : ep + 1, :, : t_star + 2].clone().to(device) for k, t in data.items()
@@ -80,45 +87,26 @@ def _run_seed(
         f"contribution shape={tuple(full['contribution'].shape)}"
     )
 
-    pun_t = int(data["punishment"][ep, focal, t_star].item())
-    contrib_t = int(data["contribution"][ep, focal, t_star].item())
-    _trace(
-        f"  [trace {label}] STEP 2 round-t* values from pilot data: "
-        f"pun_t={pun_t}  contrib_t={contrib_t}"
-    )
-
     if intervention is not None:
         f = intervention["feature"]
-        pilot_ref = int(data[f][ep, focal, t_star].item())
-        natural_prev = int(full[f"prev_{f}"][0, focal, t_star + 1].item())
-        if f == "punishment":
-            pun_t = intervention_value(
-                intervention, pilot_ref, max_value=pun_ah.y_levels - 1
-            )
-            full["prev_punishment"][0, focal, t_star + 1] = pun_t
-            full["prev_punishment_valid"][0, focal, t_star + 1] = True
+        max_val = (
+            pun_ah.y_levels - 1 if f == "punishment" else contrib_ah.y_levels - 1
+        )
+        for a in agents_list:
+            pilot_ref = int(data[f][ep, a, t_star].item())
+            natural_prev = int(full[f"prev_{f}"][0, a, t_star + 1].item())
+            v = intervention_value(intervention, pilot_ref, max_value=max_val)
+            full[f"prev_{f}"][0, a, t_star + 1] = v
+            full[f"prev_{f}_valid"][0, a, t_star + 1] = True
             _trace(
-                f"  [trace {label}] STEP 3 treatment override: "
-                f"feature={f}  pilot_ref={pilot_ref}  resolved={pun_t}; "
-                f"set full[prev_punishment][0,{focal},{t_star + 1}] "
-                f"{natural_prev} -> {pun_t}"
-            )
-        elif f == "contribution":
-            contrib_t = intervention_value(
-                intervention, pilot_ref, max_value=contrib_ah.y_levels - 1
-            )
-            full["prev_contribution"][0, focal, t_star + 1] = contrib_t
-            full["prev_contribution_valid"][0, focal, t_star + 1] = True
-            _trace(
-                f"  [trace {label}] STEP 3 treatment override: "
-                f"feature={f}  pilot_ref={pilot_ref}  resolved={contrib_t}; "
-                f"set full[prev_contribution][0,{focal},{t_star + 1}] "
-                f"{natural_prev} -> {contrib_t}"
+                f"  [trace {label}] STEP 3 override agent={a}: "
+                f"pilot_ref={pilot_ref}  resolved={v}  "
+                f"prev_{f}[t*+1] {natural_prev} -> {v}"
             )
         prev_all = [int(v) for v in full[f"prev_{f}"][0, :, t_star + 1].tolist()]
         _trace(
             f"  [trace {label}] STEP 3 prev_{f}[t*+1] all-agents post-override: "
-            f"{prev_all}  (only focal={focal} should differ from data shift)"
+            f"{prev_all}"
         )
     else:
         _trace(f"  [trace {label}] STEP 3 baseline: no override applied")
@@ -132,7 +120,6 @@ def _run_seed(
     )
 
     default_c = int(contrib_ah.default_values["contribution"])
-
     ah_contrib_t1 = contrib_pred[0, :, t_star + 1]
     ah_valid_t1 = valid_pred[0, :, t_star + 1].to(th.bool)
     ah_contrib_t1 = th.where(
@@ -142,24 +129,21 @@ def _run_seed(
     pun_input_t1 = {k: t[:, :, : t_star + 2].clone() for k, t in full.items()}
     pun_input_t1["contribution"][0, :, t_star + 1] = ah_contrib_t1.to(th.int64)
     pun_input_t1["contribution_valid"][0, :, t_star + 1] = ah_valid_t1
-    _trace(
-        f"  [trace {label}] STEP 5 pun AH inputs at t*+1={t_star + 1}: "
-        f"contribution[t*+1]=AH-predicted "
-        f"({[int(v) for v in ah_contrib_t1.tolist()]}); "
-        f"prev_punishment[t*+1, focal={focal}]="
-        f"{int(pun_input_t1['prev_punishment'][0, focal, t_star + 1].item())}; "
-        f"prev_contribution[t*+1, focal={focal}]="
-        f"{int(pun_input_t1['prev_contribution'][0, focal, t_star + 1].item())}"
-    )
     pun_pred_t1, _ = pun_ah.predict(pun_input_t1, sample=True)
-    pun_t1 = int(pun_pred_t1[0, focal, t_star + 1].item())
 
+    # pun_t / contrib_t read from full[prev_*][t*+1]: equals override for
+    # the intervened feature, equals pilot[t*] for the non-intervened one
+    # and for baseline runs.
+    pun_t = float(full["prev_punishment"][0, agents_idx, t_star + 1].float().mean())
+    contrib_t = float(
+        full["prev_contribution"][0, agents_idx, t_star + 1].float().mean()
+    )
     result = {
         "pun_t": pun_t,
-        "pun_t1": pun_t1,
+        "pun_t1": float(pun_pred_t1[0, agents_idx, t_star + 1].float().mean()),
         "contrib_t": contrib_t,
-        "contrib_t1": int(ah_contrib_t1[focal].item()),
-        "switch_t1": bool(switch_pred[0, focal, t_star + 1].item()),
+        "contrib_t1": float(ah_contrib_t1[agents_idx].float().mean()),
+        "switch_t1": float(switch_pred[0, agents_idx, t_star + 1].float().mean()),
     }
     _trace(f"  [trace {label}] result={result}")
     return result
@@ -180,13 +164,17 @@ _SELECTOR_SHORT = {
 def _auto_name(intervention_round, intervention):
     """Generate a scenario name from the parameter combo."""
     feat = _FEATURE_SHORT.get(intervention["feature"], intervention["feature"])
-    sel = intervention.get("agent_selector")
-    if isinstance(sel, int):
-        sel_s = f"a{sel}"
-    elif sel is None:
-        sel_s = intervention.get("target", "")
+    if intervention.get("target") == "group":
+        gs = intervention.get("group_selector", "group")
+        sel_s = "group" + _SELECTOR_SHORT.get(gs, gs)
     else:
-        sel_s = _SELECTOR_SHORT.get(sel, sel)
+        sel = intervention.get("agent_selector")
+        if isinstance(sel, int):
+            sel_s = f"a{sel}"
+        elif sel is None:
+            sel_s = intervention.get("target", "")
+        else:
+            sel_s = _SELECTOR_SHORT.get(sel, sel)
     if "factor" in intervention:
         mod = f"x{intervention['factor']}"
     else:
@@ -194,31 +182,32 @@ def _auto_name(intervention_round, intervention):
     return f"{feat}_{sel_s}_t{intervention_round}_{mod}"
 
 
+_INTERVENTION_KEYS = (
+    "feature",
+    "target",
+    "agent_selector",
+    "group_selector",
+    "n_groups",
+    "factor",
+    "new_value",
+)
+
+
 def _expand_grid(grid):
     """Cross-product of grid params → list of scenario dicts.
 
     Recognised keys (each maps to a list of values to sweep):
-      intervention_round, feature, target, agent_selector, factor, new_value
+      intervention_round, feature, target, agent_selector, group_selector,
+      n_groups, factor, new_value
     Either ``factor`` or ``new_value`` should be set, not both.
     """
-    keys = [
-        "intervention_round",
-        "feature",
-        "target",
-        "agent_selector",
-        "factor",
-        "new_value",
-    ]
+    keys = ["intervention_round", *_INTERVENTION_KEYS]
     sweep_keys = [k for k in keys if k in grid]
     sweep_values = [grid[k] for k in sweep_keys]
     out = []
     for combo in itertools.product(*sweep_values):
         params = dict(zip(sweep_keys, combo))
-        intervention = {
-            k: params[k]
-            for k in ("feature", "target", "agent_selector", "factor", "new_value")
-            if k in params
-        }
+        intervention = {k: params[k] for k in _INTERVENTION_KEYS if k in params}
         scenario = {
             "intervention_round": params["intervention_round"],
             "intervention": intervention,
@@ -241,30 +230,36 @@ def _run_scenario(scen, data, models, chosen, n_seeds, device, rng):
     feature = iv["feature"]
     selector = iv.get("agent_selector") if target == "individual" else None
     is_decision = bool(data["switch_mask"][0, 0, t_star + 1].item())
+    n_agents = data["contribution"].shape[1]
 
     rows = []
     for ep in chosen:
-        ep_prefix = {k: t[ep : ep + 1, :, : t_star + 1] for k, t in data.items()}
-        if selector is not None:
-            focal = int(
-                _select_focal_agents(ep_prefix, selector, t_star, 1, rng).item()
-            )
+        if target == "group":
+            focal = -1
+            agents_idx = th.arange(n_agents, dtype=th.int64)
         else:
-            focal = 0
+            ep_prefix = {k: t[ep : ep + 1, :, : t_star + 1] for k, t in data.items()}
+            if selector is not None:
+                focal = int(
+                    _select_focal_agents(ep_prefix, selector, t_star, 1, rng).item()
+                )
+            else:
+                focal = 0
+            agents_idx = th.tensor([focal], dtype=th.int64)
 
         baseline = {k: [] for k in METRICS}
         treatment = {k: [] for k in METRICS}
         for s in range(n_seeds):
             label_b = f"{scen['name']}|ep={ep}|seed={s}|baseline"
             label_t = f"{scen['name']}|ep={ep}|seed={s}|treatment"
-            r = _run_seed(ep, focal, t_star, data, models, device, label=label_b)
+            r = _run_seed(ep, agents_idx, t_star, data, models, device, label=label_b)
             for k in METRICS:
-                baseline[k].append(int(r[k]))
+                baseline[k].append(float(r[k]))
             r = _run_seed(
-                ep, focal, t_star, data, models, device, iv, label=label_t
+                ep, agents_idx, t_star, data, models, device, iv, label=label_t
             )
             for k in METRICS:
-                treatment[k].append(int(r[k]))
+                treatment[k].append(float(r[k]))
 
         row = {
             "scenario": scen["name"],
@@ -273,15 +268,26 @@ def _run_scenario(scen, data, models, chosen, n_seeds, device, rng):
             "feature": feature,
             "target": target,
             "selector": selector,
+            "group_selector": iv.get("group_selector"),
             "new_value": iv.get("new_value"),
             "factor": iv.get("factor"),
             "ep": ep,
             "focal": focal,
-            "real_pun_t": int(data["punishment"][ep, focal, t_star].item()),
-            "real_pun_t1": int(data["punishment"][ep, focal, t_star + 1].item()),
-            "real_contrib_t": int(data["contribution"][ep, focal, t_star].item()),
-            "real_contrib_t1": int(data["contribution"][ep, focal, t_star + 1].item()),
-            "real_switch_t1": bool(data["does_switch"][ep, focal, t_star + 1].item()),
+            "real_pun_t": float(
+                data["punishment"][ep, agents_idx, t_star].float().mean()
+            ),
+            "real_pun_t1": float(
+                data["punishment"][ep, agents_idx, t_star + 1].float().mean()
+            ),
+            "real_contrib_t": float(
+                data["contribution"][ep, agents_idx, t_star].float().mean()
+            ),
+            "real_contrib_t1": float(
+                data["contribution"][ep, agents_idx, t_star + 1].float().mean()
+            ),
+            "real_switch_t1": float(
+                data["does_switch"][ep, agents_idx, t_star + 1].float().mean()
+            ),
         }
         for k in METRICS:
             mb, sb = _mean_std(baseline[k])
@@ -321,7 +327,7 @@ def main():
             "manifest must have a `scenarios` list or a `grids` list (or both)"
         )
     base = yaml.safe_load(open(cfg["base_config"]))
-    chosen = cfg["chosen_episodes"]
+    chosen = cfg.get("chosen_episodes")
     n_seeds = args.n_seeds or cfg.get("n_seeds", base.get("n_episodes"))
     scenarios = list(cfg.get("scenarios", []))
     for grid in cfg.get("grids", []):
@@ -336,10 +342,7 @@ def main():
     device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
     print(f"[setup] device={device}  output_dir={output_dir}")
-    print(
-        f"[setup] {len(scenarios)} scenarios × {len(chosen)} episodes "
-        f"× {n_seeds} seeds (chosen={chosen})"
-    )
+    print(f"[setup] {len(scenarios)} scenarios × {n_seeds} seeds")
 
     print("[load] tensorizing pilot data...")
     df = pd.read_csv(os.path.join(basedir, base["pilot_data_file"]))
@@ -363,21 +366,45 @@ def main():
     if cf_seed is not None:
         rng.manual_seed(cf_seed)
 
+    group_cache = {}
+
+    def _episodes_for(iv):
+        # group_selector takes precedence; otherwise fall back to manifest's
+        # explicit chosen_episodes.
+        gs = iv.get("group_selector") if iv["target"] == "group" else None
+        if gs is not None:
+            n_groups = int(iv.get("n_groups", 5))
+            key = (gs, n_groups)
+            if key not in group_cache:
+                group_cache[key] = _select_focal_groups(data, gs, n_groups, rng)
+            return group_cache[key]
+        if chosen is None:
+            raise ValueError(
+                "manifest must set `chosen_episodes` or supply a "
+                "`group_selector` per group-target scenario"
+            )
+        return chosen
+
     all_rows = []
     for i, scen in enumerate(scenarios, start=1):
         iv = scen["intervention"]
-        sel = iv.get("agent_selector") if iv["target"] == "individual" else None
+        if iv["target"] == "group":
+            sel = iv.get("group_selector")
+        else:
+            sel = iv.get("agent_selector")
         mod = (
             f"factor={iv['factor']}"
             if "factor" in iv
             else f"new_value={iv['new_value']}"
         )
+        eps = _episodes_for(iv)
         print(
             f"[scenario {i}/{len(scenarios)}] {scen['name']}  "
             f"t*={scen['intervention_round']}  "
-            f"feature={iv['feature']}  selector={sel}  {mod}"
+            f"feature={iv['feature']}  target={iv['target']}  "
+            f"selector={sel}  {mod}  episodes={eps}"
         )
-        all_rows.extend(_run_scenario(scen, data, models, chosen, n_seeds, device, rng))
+        all_rows.extend(_run_scenario(scen, data, models, eps, n_seeds, device, rng))
 
     os.makedirs(output_dir, exist_ok=True)
     csv_path = os.path.join(output_dir, "scenarios.csv")

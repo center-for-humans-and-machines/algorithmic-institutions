@@ -104,3 +104,32 @@ def _select_focal_agents(
         )
 
     return focal_per_chosen.repeat_interleave(n_chains).to(th.int64)
+
+
+def _select_focal_groups(data: dict, rule, n_groups: int, rng=None) -> list:
+    """Pick episodes by team-level mean contribution over the full game.
+
+    Used by ``target=group`` interventions to select which episodes
+    (8-agent teams) to probe. Mean is over (agents, rounds) of valid
+    rows; deterministic given the data, so the same teams are reused
+    across all scenarios in a manifest.
+
+    Returns the K episode indices as a plain ``list[int]``.
+    """
+    contrib = data["contribution"].float()
+    valid = data["contribution_valid"].float()
+    team_mean = (contrib * valid).sum(dim=(1, 2)) / valid.sum(dim=(1, 2)).clamp(min=1)
+
+    if rule == "lowest_contributor":
+        return team_mean.argsort()[:n_groups].tolist()
+    if rule == "highest_contributor":
+        return team_mean.argsort(descending=True)[:n_groups].tolist()
+    if rule == "random":
+        if rng is None:
+            rng = th.Generator()
+        idx = th.randperm(team_mean.shape[0], generator=rng)[:n_groups]
+        return idx.tolist()
+    raise ValueError(
+        f"Unknown group_selector: {rule!r}; "
+        f"expected lowest_contributor, highest_contributor, or random"
+    )
