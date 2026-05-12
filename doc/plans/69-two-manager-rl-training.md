@@ -60,8 +60,11 @@ while not done:
     state = env.punish(final_p)
     state, reward, done = env.step()
 
-    # Only RL transitions stored; reward sliced to the RL manager's group
-    replay.add(prev_state, rl_action, reward[:, rl_group_id], state, rl_mask)
+    # Replay stores the full per-group reward for diagnostics; the loss
+    # in manager.update() slices to rl_group_id internally.
+    replay.add(prev_state, rl_action, reward, state)
+# ... in manager.update():
+#   loss = smooth_l1_loss(current_q_group[:, rl_group_id], expected_q_rl)
 ```
 
 The autoregressive vs non-autoregressive distinction lives inside
@@ -75,7 +78,7 @@ flag at load time); the calling code above is identical either way.
 | 1 | `src/aimanager/rl_manager.py` ~L140-160 (env construction area) | Load opponent manager via `GraphNetwork.load(config["opponent_manager"], device=device)` next to the existing AH loads. Read `rl_group_id = config.get("rl_group_id", 0)`. | new code |
 | 1b | `src/aimanager/rl_manager.py` (same area + env construction) | Load the switch AH via `config["switch_model"]` (same `AH_MODELS[...].load(...)` pattern), and pass it as `artifical_humans_switch=ah_switch` to the `ArtificialHumanEnv(...)` call. `switch_every` already flows through `**env_args`. Without this, the env never invokes the switch predictor and groups stay static — defeats the point of #69. | new code |
 | 2 | `src/aimanager/rl_manager.py` (training loop, after `manager.act`) | Insert merge logic: call `opponent_ah.predict(state, edge_index=env.batch_edge_index)`, build `rl_mask` from `env.agent_groups`, compute `final_p = th.where(rl_mask, rl_action, opp_action)`, pass `final_p` (not `rl_action`) to `env.punish(...)`. | new code |
-| 3 | `src/aimanager/rl_manager.py` (replay-add call) | Index reward as `reward[:, rl_group_id]` before passing to the replay buffer; also forward `rl_mask` so the loss only counts RL-group agents. | new code |
+| 3 | `src/aimanager/rl_manager.py` (manager.update call) + `src/aimanager/manager/manager.py::update()` | Pass `rl_group_id` into `manager.update(...)` as a new kwarg. In `manager.py::update()`, when `rl_group_id` is set, slice `current_q_group`, `next_v`, and `reward` to that group's index before the Huber loss, so the policy is trained only on its own group's TD error. Replay buffer keeps storing all groups' rewards (free, useful for diagnostics + sum/avg comparison plots). | new code |
 | 4 | `src/aimanager/manager/environment.py` | No change. `punish()`/`step()` split, per-round `agent_groups` mutation, and `(B, n_groups, 1)` reward already implemented in PRs #88/#90/#68. | no change |
 | 5 | `src/aimanager/generic/graph.py` `predict_autoreg` | No change. Approach A means we just call `predict` on the full 8-agent state. | no change |
 | 6 | `configs/training/rl_manager/03_2g8a_sum.yml` | New YAML. Keys: `artificial_humans`, `artificial_humans_valid`, `switch_model` (the three 50ep AH paths), `opponent_manager` (the autoreg punishment .pt), `rl_group_id: 0`, `env_args: {n_agents: 8, n_groups: 2, agent_groups: [0,0,0,0,1,1,1,1], n_rounds: 24, switch_every: 4, reward_mode: sum}` (values pulled from `configs/simulation/ah_testing/group_switching_ah_punishment_50ep.yml` and `configs/training/artificial_humans/punishment/autoregressive_50ep.yml`), `manager_args` mirroring `02_rnn_node_2groups.yml` (RNN + edge model, same hidden_size, output over 8 agents — optimisation is future work), `n_update_steps`, `eval_period`, `batch_size`, `replay_buffer_size`, `output_dir`. | new config |
@@ -132,7 +135,7 @@ checkpoint — not just the training-time reward curve. Concretely:
 - [x] Step 1: load opponent manager + `rl_group_id` in `src/aimanager/rl_manager.py`.
 - [x] Step 1b: load switch AH and pass it to `ArtificialHumanEnv(...)`.
 - [x] Step 2: merge logic in training loop (`run_batch` or its caller) — opponent.predict, mask, th.where, env.punish(final_p).
-- [ ] Step 3: index reward by `rl_group_id` and forward `rl_mask` to the replay buffer.
+- [x] Step 3: pass `rl_group_id` to `manager.update()`; slice Huber loss to that group inside `manager/manager.py::update()`.
 - [ ] Add `configs/training/rl_manager/03_2g8a_sum.yml` and `03_2g8a_avg.yml`.
 - [ ] Smoke run on Raven via `scripts/train_cluster.sh manager 03_2g8a_sum.yml` with reduced steps.
 - [ ] Launch full `sum` + `avg` training runs in parallel.

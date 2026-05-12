@@ -258,6 +258,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                 batch=env.batch,
                 edge_index=env.batch_edge_index,
                 agent_group_mask=env.agent_group_mask,
+                rl_group_id=rl_group_id if opponent_manager is not None else None,
             )
 
         if (update_step % eval_period) == 0:
