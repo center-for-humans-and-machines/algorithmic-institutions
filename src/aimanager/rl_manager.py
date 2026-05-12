@@ -317,12 +317,17 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                     "group_payoff",
                     "q_mean",
                 ]
-                if opponent_manager is not None:
-                    eval_keys.append("rl_group_size")
                 for k in eval_keys:
                     log[f"eval/{k}"] = sum(m[k] for m in on_policy_metrics) / len(
                         on_policy_metrics
                     )
+                if opponent_manager is not None:
+                    # End-of-episode group size: mean across the env batch
+                    # of agents in the RL manager's group at the last round.
+                    # Averaging across rounds would smear over the within-
+                    # episode dynamics; only the final composition reflects
+                    # net migration over the episode.
+                    log["eval/rl_group_size"] = on_policy_metrics[-1]["rl_group_size"]
                 wandb.log(log)
 
     model_file = os.path.join(model_dir, f"{config['job_id']}_manager.pt")
