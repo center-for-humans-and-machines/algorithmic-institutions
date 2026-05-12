@@ -99,8 +99,7 @@ def _select_focal_agents(
         )
     else:
         raise ValueError(
-            f"Unknown selector: {rule!r}; "
-            f"expected one of {SELECTOR_RULES} or int"
+            f"Unknown selector: {rule!r}; " f"expected one of {SELECTOR_RULES} or int"
         )
 
     return focal_per_chosen.repeat_interleave(n_chains).to(th.int64)
@@ -145,8 +144,7 @@ def _select_focal_group(
             scores[g] = 0.0  # unused
         else:
             raise ValueError(
-                f"Unknown selector: {rule!r}; "
-                f"expected one of {SELECTOR_RULES}"
+                f"Unknown selector: {rule!r}; " f"expected one of {SELECTOR_RULES}"
             )
 
     if rule == "lowest_contributor":

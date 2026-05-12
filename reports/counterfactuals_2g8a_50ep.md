@@ -101,4 +101,4 @@ with a feature-specific default at round 0 (taken from `get_default_values`).
 ## Results
 1. It is not as bad as shuffle shows.
 2. Prev version of the feature definitely dominates effect.
-3. If prev contribution is high then punishments have little to no effect. 
+3. If prev contribution is high then punishments have little to no effect.

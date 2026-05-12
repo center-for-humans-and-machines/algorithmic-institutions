@@ -90,9 +90,7 @@ def _run_seed(
 
     if intervention is not None:
         f = intervention["feature"]
-        max_val = (
-            pun_ah.y_levels - 1 if f == "punishment" else contrib_ah.y_levels - 1
-        )
+        max_val = pun_ah.y_levels - 1 if f == "punishment" else contrib_ah.y_levels - 1
         for a in agents_list:
             pilot_ref = int(data[f][ep, a, t_star].item())
             natural_prev = int(full[f"prev_{f}"][0, a, t_star + 1].item())
