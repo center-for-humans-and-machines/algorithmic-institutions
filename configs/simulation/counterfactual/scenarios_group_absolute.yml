@@ -1,0 +1,39 @@
+# Absolute-value group-target manifest. Per chosen episode, `selector`
+# picks one game-group at t* (4 of 8 agents) and the override is applied
+# to every member. Three conditions chosen so each has real headroom
+# against the pilot baseline:
+#   - lowest group × punish-hard   (new_value=30): pilot is already
+#     heavily punished, but pushing every member to the encoder cap
+#     maximises the direct prev_punishment shock and the CG drop.
+#   - lowest group × forgive       (new_value=0): zeros every member's
+#     prev_p, biggest possible CG bump for the group that needs it most.
+#   - highest group × harsh-punish (new_value=30): counter-intuitive —
+#     mass-punish a well-behaving group to see if it triggers contribution
+#     drop and switch-out. The "highest × forgive" mirror has no headroom
+#     (pilot prev_p ≈ 0) so we drop it.
+#
+# 4 timings (pre/post-switch × early/late) × 3 conditions = 12 scenarios.
+
+base_config: configs/simulation/counterfactual/punish_individual_late.yml
+chosen_episodes: [3, 7, 12, 19]
+n_seeds: 50
+output_dir: artifacts/counterfactual/group_absolute
+
+grids:
+  - intervention_round: [4, 6, 16, 18]
+    feature: [punishment]
+    target: [group]
+    selector: [lowest_contributor]
+    new_value: [30]
+
+  - intervention_round: [4, 6, 16, 18]
+    feature: [punishment]
+    target: [group]
+    selector: [lowest_contributor]
+    new_value: [0]
+
+  - intervention_round: [4, 6, 16, 18]
+    feature: [punishment]
+    target: [group]
+    selector: [highest_contributor]
+    new_value: [30]

@@ -1,0 +1,27 @@
+# Factor-mode dose-response manifest. Scales the focal's pilot round-t*
+# value by a factor before placing it as prev_<feature>[t*+1] for the
+# AH at the next round. Complement to absolute-mode scenarios.yml.
+#
+# Names auto-generated from each grid combo by intervention_probe.py:
+#   {feature_short}_{selector_short}_t{round}_x{factor}
+# e.g. pun_low_t6_x1.5, contrib_low_t18_x0.25
+#
+# Decision rounds for switch_every=4: 3, 7, 11, 15, 19, 23. Switch
+# predictions at t*+1 are only meaningful when t*+1 ∈ {decision rounds}.
+# Timings cover early/late × before-/after-switch:
+#   t* = 4  → early, t*+1 NOT a decision round
+#   t* = 6  → early, t*+1 = decision round (just before switch)
+#   t* = 16 → late,  t*+1 NOT a decision round
+#   t* = 18 → late,  t*+1 = decision round (just before switch)
+
+base_config: configs/simulation/counterfactual/punish_individual_late.yml
+chosen_episodes: [0, 3, 7, 11, 12, 15, 19, 23]
+n_seeds: 20
+output_dir: artifacts/counterfactual/factor_big
+
+grids:
+  - intervention_round: [4, 6, 16, 18]
+    feature: [punishment, contribution]
+    target: [individual]
+    selector: [lowest_contributor, highest_contributor, random]
+    factor: [0.33, 0.5, 0.75, 1.35, 2.0, 3.0]

@@ -1,0 +1,19 @@
+# Tiny absolute-mode manifest for tracing the probe mechanism end-to-end
+# with --trace. Two scenarios (one per feature), two episodes, two seeds.
+# Outputs go to artifacts/counterfactual/trace_absolute/ — kept separate
+# from production sweeps so this run never overwrites them.
+
+base_config: configs/simulation/counterfactual/punish_individual_late.yml
+chosen_episodes: [3, 7]
+n_seeds: 2
+output_dir: artifacts/counterfactual/trace_absolute
+
+scenarios:
+  - name: trace_pun_low_t6_v30
+    intervention_round: 6
+    intervention:
+      {feature: punishment, target: individual, selector: lowest_contributor, new_value: 30}
+  - name: trace_contrib_low_t16_v20
+    intervention_round: 16
+    intervention:
+      {feature: contribution, target: individual, selector: lowest_contributor, new_value: 20}

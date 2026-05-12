@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Counter-factual Response Probe — 2g8a 50ep</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reset.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/white.css" id="theme">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css">
+<style>
+  .reveal section img { max-height: 75vh; box-shadow: none; border: none; }
+  .reveal .img-row { display: flex; gap: 10px; justify-content: center; align-items: flex-start; }
+  .reveal .img-row figure { margin: 0; flex: 1; }
+  .reveal .img-row figcaption { font-size: 0.45em; color: #555; margin-top: 3px; }
+  .reveal .img-row img { max-height: 70vh; width: 100%; height: auto; object-fit: contain; }
+  .reveal table { font-size: 0.42em; margin: 0 auto; border-collapse: collapse; }
+  .reveal table td, .reveal table th { padding: 3px 6px; border: 1px solid #ddd; vertical-align: top; }
+  .reveal table th { background: #eee; }
+  .reveal pre { font-size: 0.42em; }
+  .reveal h1 { font-size: 1.4em; }
+  .reveal h2 { font-size: 1.05em; }
+  .reveal h3 { font-size: 0.9em; }
+  .reveal p, .reveal li { font-size: 0.65em; }
+  .reveal code { font-size: 0.95em; }
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<section>
+  <h1>Counter-factual Response Probe</h1>
+  <h3>2g8a · 50ep</h3>
+</section>
+
+<section>
+  <h2>Methodology</h2>
+  <p>For each (scenario, chosen episode, seed):</p>
+  <ol>
+    <li>Slice the experiment data tensor <code>[0..t*+1]</code> for the chosen episode. Round 0..t* values stay as real experiment — no AH prediction at the intervention round.</li>
+    <li>Resolve the override for the focal's slot at round t*:
+      <ul>
+        <li><code>new_value: v</code> → <code>v</code> (absolute)</li>
+        <li><code>factor: f</code> → <code>round(experiment[focal, t*] × f)</code> (relative, clamped to encoder y_levels)</li>
+      </ul>
+    </li>
+    <li>Treatment writes the override into <code>prev_&lt;feature&gt;[t*+1, focal]</code>. Non-focals stay at experiment shift values. Baseline has no override.</li>
+    <li>One AH-stack forward over <code>[0..t*+1]</code> with <code>reset_rnn=True</code> → focal's round-t*+1 contribution, valid, switch.</li>
+    <li>Punishment AH at round t*+1 with AH-predicted contributions and the (intervened-or-natural) <code>prev_*[t*+1]</code> from step 3 → focal's round-t*+1 punishment.</li>
+  </ol>
+</section>
+
+<section>
+  <h2>Example config</h2>
+  <pre><code class="yaml">base_config: configs/simulation/counterfactual/punish_individual_late.yml
+chosen_episodes: [0, 3, 7, 11, 12, 15, 19, 23]
+n_seeds: 20
+output_dir: artifacts/counterfactual/factor_big
+
+grids:
+  - intervention_round: [4, 6, 16, 18]
+    feature: [punishment, contribution]
+    target: [individual]
+    selector: [lowest_contributor, highest_contributor, random]
+    factor: [0.33, 0.5, 0.75, 1.35, 2.0, 3.0]
+</code></pre>
+</section>
+
+<section>
+  <h2>Model Features</h2>
+  <p style="font-size:0.7em;"><code>prev_X[t] = X[t-1]</code> (one-round shift in <code>data.py::shift</code>), with a feature-specific default at round 0.</p>
+  <table>
+    <tr><th>Feature</th><th>Definition</th></tr>
+    <tr><td><code>prev_contribution</code></td><td>Agent's own contribution at round t-1 (int 0–20).</td></tr>
+    <tr><td><code>prev_punishment</code></td><td>Punishment received from the manager at round t-1 (int 0–30).</td></tr>
+    <tr><td><code>prev_common_good</code></td><td>Per-capita pool from round t-1: <code>(1.6 × sum_c − sum_p) / n_valid</code> of the agent's group at t-1.</td></tr>
+    <tr><td><code>agent_group</code></td><td>Current group id (0/1 in 2g8a), refreshed at each switch decision.</td></tr>
+    <tr><td><code>prev_contribution_valid</code></td><td><code>True</code> iff the agent had input at t-1 (<code>player_no_input == 0</code>).</td></tr>
+    <tr><td><code>prev_punishment_valid</code></td><td>Same for the manager (<code>manager_no_input == 0</code>).</td></tr>
+    <tr><td><code>punishment_masked</code></td><td>Autoregressive feature: already-decided punishment for earlier agents in the within-round order, default for not-yet-decoded.</td></tr>
+    <tr><td><code>autoreg_mask</code></td><td><code>True</code> for agents still to be decoded in the current autoregressive pass.</td></tr>
+    <tr><td><code>is_first</code></td><td><code>True</code> only at round 0.</td></tr>
+  </table>
+</section>
+
+<section>
+  <h2>Absolute Interventions</h2>
+  <p>8 hand-coded scenarios on individual focals (lowest- or highest-contributing agent per chosen episode). Two timings: early (t*=4 or 6) and late (t*=16 or 18).</p>
+</section>
+
+<section>
+  <h2>Punish lowest contributor (<code>new_value=30</code>)</h2>
+  <ul>
+    <li>Clear upstick in contribution in the following round.</li>
+    <li>Motivates group switch in the following round.</li>
+    <li>Group switching is much less prevalent in later rounds.</li>
+  </ul>
+  <div class="img-row">
+    <figure><img src="../plots/counterfactual/absolute/H1_punish_lowest_early.png" alt="H1 early"><figcaption>early (t*=6)</figcaption></figure>
+    <figure><img src="../plots/counterfactual/absolute/H1_punish_lowest_late.png" alt="H1 late"><figcaption>late (t*=18)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Forgive lowest contributor (<code>new_value=0</code>)</h2>
+  <ul>
+    <li>Less motivation to switch teams.</li>
+    <li>Mixed response in contribution.</li>
+  </ul>
+  <div class="img-row">
+    <figure><img src="../plots/counterfactual/absolute/H2_forgive_lowest_early.png" alt="H2 early"><figcaption>early (t*=6)</figcaption></figure>
+    <figure><img src="../plots/counterfactual/absolute/H2_forgive_lowest_late.png" alt="H2 late"><figcaption>late (t*=18)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Force 0 contribution to highest contributor</h2>
+  <ul>
+    <li>Punishment increases.</li>
+  </ul>
+  <div class="img-row">
+    <figure><img src="../plots/counterfactual/absolute/H3_force_low_early.png" alt="H3 early"><figcaption>early (t*=4)</figcaption></figure>
+    <figure><img src="../plots/counterfactual/absolute/H3_force_low_late.png" alt="H3 late"><figcaption>late (t*=16)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Force 20 contribution to lowest contributor</h2>
+  <ul>
+    <li>Punishment decreases.</li>
+  </ul>
+  <div class="img-row">
+    <figure><img src="../plots/counterfactual/absolute/H4_force_high_early.png" alt="H4 early"><figcaption>early (t*=4)</figcaption></figure>
+    <figure><img src="../plots/counterfactual/absolute/H4_force_high_late.png" alt="H4 late"><figcaption>late (t*=16)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Factor Interventions</h2>
+  <ul>
+    <li>8 episodes × early/late rounds.</li>
+    <li>Selector: highest_contributor / lowest_contributor / random.</li>
+    <li>6 factor levels: 0.33, 0.5, 0.75, 1.35, 2.0, 3.0.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Contribution scaling</h2>
+  <ul>
+    <li>Self-dependence is clearly there.</li>
+    <li>Punishment decreases as contribution scales up.</li>
+    <li>Late-round switch probability is very low.</li>
+  </ul>
+  <div class="img-row">
+    <figure><img src="../plots/counterfactual/factor_big/dose_response_contribution_lowest_contributor_t6.png" alt="contrib lowest t6"><figcaption>early (t*=6)</figcaption></figure>
+    <figure><img src="../plots/counterfactual/factor_big/dose_response_contribution_lowest_contributor_t18.png" alt="contrib lowest t18"><figcaption>late (t*=18)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Punishment scaling</h2>
+  <ul>
+    <li>High-contributing focal punished a lot → almost no response in contribution or switching.</li>
+    <li>Punishment is more motivating for the low contributor's next contribution.</li>
+    <li>Punishment is more motivating for the low contributor to leave the group.</li>
+    <li>Punishment decreases as contribution scales up.</li>
+  </ul>
+  <div class="img-row">
+    <figure><img src="../plots/counterfactual/factor_big/dose_response_punishment_lowest_contributor_t6.png" alt="pun lowest t6"><figcaption>early (t*=6)</figcaption></figure>
+    <figure><img src="../plots/counterfactual/factor_big/dose_response_punishment_lowest_contributor_t18.png" alt="pun lowest t18"><figcaption>late (t*=18)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Group Interventions</h2>
+  <ul>
+    <li>Per chosen episode, <code>selector</code> picks one game-group at t* (4 of 8 agents); override applies to all members.</li>
+    <li>Timings: early/late × pre/post-switch.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Higher contributing group punished 30</h2>
+  <ul>
+    <li>Contribution increases consistently.</li>
+    <li>Switch probability increases consistently.</li>
+  </ul>
+  <div class="img-row">
+    <figure><img src="../plots/counterfactual/group_absolute/pun_grouphigh_t6_v30.png" alt="high v30 t6"><figcaption>early (t*=6)</figcaption></figure>
+    <figure><img src="../plots/counterfactual/group_absolute/pun_grouphigh_t18_v30.png" alt="high v30 t18"><figcaption>late (t*=18)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Lower contributing group forgiven (0)</h2>
+  <ul>
+    <li>Contribution does not change.</li>
+    <li>Less switch probability; late-round effect smaller.</li>
+    <li>Late-round contribution slightly decreases.</li>
+  </ul>
+  <div class="img-row">
+    <figure><img src="../plots/counterfactual/group_absolute/pun_grouplow_t6_v0.png" alt="low v0 t6"><figcaption>early (t*=6)</figcaption></figure>
+    <figure><img src="../plots/counterfactual/group_absolute/pun_grouplow_t18_v0.png" alt="low v0 t18"><figcaption>late (t*=18)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Lower contributing group punished 30</h2>
+  <ul>
+    <li>Contribution increases consistently.</li>
+    <li>Switch probability increases.</li>
+  </ul>
+  <div class="img-row">
+    <figure><img src="../plots/counterfactual/group_absolute/pun_grouplow_t6_v30.png" alt="low v30 t6"><figcaption>early (t*=6)</figcaption></figure>
+    <figure><img src="../plots/counterfactual/group_absolute/pun_grouplow_t18_v30.png" alt="low v30 t18"><figcaption>late (t*=18)</figcaption></figure>
+  </div>
+</section>
+
+<section>
+  <h2>Results</h2>
+  <ol>
+    <li>It is not as bad as shuffle shows.</li>
+    <li>Prev version of the feature definitely dominates effect.</li>
+    <li>If <code>prev_contribution</code> is high then punishments have little to no effect.</li>
+  </ol>
+</section>
+
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    controls: true,
+    progress: true,
+    plugins: [RevealHighlight],
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+# Absolute-mode scenario manifest for the focal-only intervention probe.
+#
+# Each scenario forces the focal's round-t* feature to the configured
+# `new_value` (rather than scaling by a factor — see scenarios_factor.yml
+# for the dose-response sweep).
+#
+# Decision rounds for switch_every=4: 3, 7, 11, 15, 19, 23. Switch
+# predictions at t*+1 are only meaningful when t*+1 is a decision round.
+
+base_config: configs/simulation/counterfactual/punish_individual_late.yml
+chosen_episodes: [3, 7, 12, 19]
+n_seeds: 50
+output_dir: artifacts/counterfactual/absolute
+
+scenarios:
+  # H1: heavy punish → switch ↑, contribution ↑ (just before switch round)
+  - name: H1_punish_lowest_early
+    intervention_round: 6
+    intervention:
+      {feature: punishment, target: individual, selector: lowest_contributor, new_value: 30}
+  - name: H1_punish_lowest_late
+    intervention_round: 18
+    intervention:
+      {feature: punishment, target: individual, selector: lowest_contributor, new_value: 30}
+
+  # H2: forgive (punish = 0) → switch ↓ (just before switch round)
+  - name: H2_forgive_lowest_early
+    intervention_round: 6
+    intervention:
+      {feature: punishment, target: individual, selector: lowest_contributor, new_value: 0}
+  - name: H2_forgive_lowest_late
+    intervention_round: 18
+    intervention:
+      {feature: punishment, target: individual, selector: lowest_contributor, new_value: 0}
+
+  # H3: force low contribution (top contributor → 0) → punishment ↑ (away from switch)
+  - name: H3_force_low_early
+    intervention_round: 4
+    intervention:
+      {feature: contribution, target: individual, selector: highest_contributor, new_value: 0}
+  - name: H3_force_low_late
+    intervention_round: 16
+    intervention:
+      {feature: contribution, target: individual, selector: highest_contributor, new_value: 0}
+
+  # H4: force high contribution (bottom contributor → 20) → punishment ↓ (away from switch)
+  - name: H4_force_high_early
+    intervention_round: 4
+    intervention:
+      {feature: contribution, target: individual, selector: lowest_contributor, new_value: 20}
+  - name: H4_force_high_late
+    intervention_round: 16
+    intervention:
+      {feature: contribution, target: individual, selector: lowest_contributor, new_value: 20}
