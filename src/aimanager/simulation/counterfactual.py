@@ -1,16 +1,16 @@
 """Counter-factual probe helpers — focal selection + override resolution.
 
-Used by ``aimanager.simulation.intervention_probe``. Two responsibilities:
+Used by ``aimanager.simulation.intervention_probe``. Three helpers:
 
-- ``_select_focal_agents`` picks one focal agent per chosen episode based
-  on a rule evaluated against the prefix history (``lowest_contributor``,
-  ``highest_contributor``, ``most_punished``, ``random``, or a literal
-  agent index).
-- ``intervention_value`` resolves the override for the focal's slot at
-  round t* — either an absolute ``new_value`` or a ``factor`` multiplied
-  against a per-episode reference (the pilot's actual round-t* value).
-  Result is rounded and clamped to a non-negative int so it stays a
-  valid encoder action level.
+- ``_select_focal_agents`` picks one focal agent per chosen episode for
+  ``target=individual`` (selector evaluated at agent level over the
+  prefix history).
+- ``_select_focal_group`` picks the agent indices in one group per
+  chosen episode for ``target=group`` (same selector rules but
+  evaluated at group level using ``agent_group`` at t*).
+- ``intervention_value`` resolves the override value for a single slot
+  — either ``new_value`` (absolute) or ``factor × pilot[..., t*]``
+  (relative, rounded, clamped to encoder y_levels).
 """
 
 import torch as th
@@ -79,7 +79,7 @@ def _select_focal_agents(
 
     if isinstance(rule, int):
         if not 0 <= rule < n_agents:
-            raise ValueError(f"agent_selector={rule} out of range [0, {n_agents})")
+            raise ValueError(f"selector={rule} out of range [0, {n_agents})")
         focal_per_chosen = th.full((n_chosen,), rule, dtype=th.int64)
     elif rule in ("lowest_contributor", "highest_contributor"):
         m = _masked_mean(
@@ -99,37 +99,62 @@ def _select_focal_agents(
         )
     else:
         raise ValueError(
-            f"Unknown agent_selector: {rule!r}; "
+            f"Unknown selector: {rule!r}; "
             f"expected one of {SELECTOR_RULES} or int"
         )
 
     return focal_per_chosen.repeat_interleave(n_chains).to(th.int64)
 
 
-def _select_focal_groups(data: dict, rule, n_groups: int, rng=None) -> list:
-    """Pick episodes by team-level mean contribution over the full game.
+def _select_focal_group(
+    prefix_data: dict,
+    rule,
+    intervention_round: int,
+    rng: th.Generator,
+) -> th.Tensor:
+    """Pick the agent indices belonging to the selected group at t*.
 
-    Used by ``target=group`` interventions to select which episodes
-    (8-agent teams) to probe. Mean is over (agents, rounds) of valid
-    rows; deterministic given the data, so the same teams are reused
-    across all scenarios in a manifest.
+    For ``target=group``: same selector rules as ``_select_focal_agents``,
+    but evaluated at group level (the ``agent_group`` partition at round
+    ``intervention_round``). Returns the int64 indices of every agent
+    currently in the chosen group; the caller overrides all of them.
 
-    Returns the K episode indices as a plain ``list[int]``.
+    Selector rules:
+      - lowest_contributor / highest_contributor: per group mean
+        contribution over rounds [0, intervention_round).
+      - most_punished: per group cumulative punishment over the prefix.
+      - random: uniform over groups.
     """
-    contrib = data["contribution"].float()
-    valid = data["contribution_valid"].float()
-    team_mean = (contrib * valid).sum(dim=(1, 2)) / valid.sum(dim=(1, 2)).clamp(min=1)
+    ag_at_t = prefix_data["agent_group"][0, :, intervention_round - 1]
+    contrib = prefix_data["contribution"][0, :, :intervention_round].float()
+    contrib_valid = prefix_data["contribution_valid"][0, :, :intervention_round].float()
+    pun = prefix_data["punishment"][0, :, :intervention_round].float()
+    pun_valid = prefix_data["punishment_valid"][0, :, :intervention_round].float()
+
+    group_ids = ag_at_t.unique().tolist()
+    scores = {}
+    for g in group_ids:
+        in_g = ag_at_t == g
+        if rule in ("lowest_contributor", "highest_contributor"):
+            c = contrib[in_g] * contrib_valid[in_g]
+            n = contrib_valid[in_g].sum().clamp(min=1)
+            scores[g] = (c.sum() / n).item()
+        elif rule == "most_punished":
+            scores[g] = (pun[in_g] * pun_valid[in_g]).sum().item()
+        elif rule == "random":
+            scores[g] = 0.0  # unused
+        else:
+            raise ValueError(
+                f"Unknown selector: {rule!r}; "
+                f"expected one of {SELECTOR_RULES}"
+            )
 
     if rule == "lowest_contributor":
-        return team_mean.argsort()[:n_groups].tolist()
-    if rule == "highest_contributor":
-        return team_mean.argsort(descending=True)[:n_groups].tolist()
-    if rule == "random":
-        if rng is None:
-            rng = th.Generator()
-        idx = th.randperm(team_mean.shape[0], generator=rng)[:n_groups]
-        return idx.tolist()
-    raise ValueError(
-        f"Unknown group_selector: {rule!r}; "
-        f"expected lowest_contributor, highest_contributor, or random"
-    )
+        chosen = min(scores, key=scores.get)
+    elif rule == "highest_contributor" or rule == "most_punished":
+        chosen = max(scores, key=scores.get)
+    elif rule == "random":
+        idx = th.randint(0, len(group_ids), (1,), generator=rng).item()
+        chosen = group_ids[idx]
+
+    return (ag_at_t == chosen).nonzero(as_tuple=False).flatten().to(th.int64)

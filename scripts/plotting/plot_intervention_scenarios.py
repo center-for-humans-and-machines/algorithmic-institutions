@@ -389,15 +389,15 @@ def plot_group_scenario(group, outpath):
 
     axes[0].legend(fontsize=8, loc="upper right")
 
-    gs = g["group_selector"].iloc[0] if "group_selector" in g.columns else None
+    sel = g["selector"].iloc[0] if "selector" in g.columns else None
     factor = g["factor"].iloc[0] if "factor" in g.columns else None
     new_value = g["new_value"].iloc[0] if "new_value" in g.columns else None
     mod_str = f"factor={factor}" if pd.notna(factor) else f"new_value={new_value}"
     fig.suptitle(
         f"{g['scenario'].iloc[0]}  |  group target  |  "
-        f"feature={feature}  group_selector={gs}  {mod_str}  |  "
+        f"feature={feature}  selector={sel}  {mod_str}  |  "
         f"t*={t_star} ({'decision' if is_decision else 'NOT decision'})  |  "
-        f"averaged over {len(g)} teams × n_seeds",
+        f"averaged over {len(g)} episodes × n_seeds",
         y=1.02,
     )
     fig.tight_layout()

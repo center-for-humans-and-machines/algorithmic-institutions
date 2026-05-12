@@ -5,17 +5,18 @@ treatment) and records mean metrics over the targeted agents at rounds
 t* and t*+1: pun_t, pun_t1, contrib_t, contrib_t1, switch_t1. Aggregated
 mean ± std is written to ``<output_dir>/scenarios.csv``.
 
-Two targets:
-- ``individual`` — overrides one focal agent (selected per-episode by
-  ``agent_selector``); metrics are the focal's values.
-- ``group`` — overrides all agents in the team; metrics are averaged
-  across agents. Episodes can be auto-picked by ``group_selector`` +
-  ``n_groups`` (lowest/highest/random by full-game team contribution).
+Two targets, common ``selector`` field:
+- ``individual`` — overrides one focal agent picked by ``selector`` from
+  every chosen episode; metrics are the focal's values.
+- ``group`` — overrides every agent in the group picked by ``selector``
+  at t* (the agent_group partition; in 2g8a runs, 4 of 8 agents);
+  metrics are averaged across the targeted group.
 
-Manifests support an explicit ``scenarios:`` list and/or a compact
-``grids:`` form whose parameter cross-product is expanded at load time.
-Treatment uses ``new_value`` (absolute) or ``factor`` (scales pilot's
-round-t* value, clamped to the encoder level count).
+Manifests give episodes via top-level ``chosen_episodes`` for both targets.
+They support an explicit ``scenarios:`` list and/or a compact ``grids:``
+form whose parameter cross-product is expanded at load time. Treatment
+uses ``new_value`` (absolute) or ``factor`` (scales pilot's round-t*
+value, clamped to the encoder level count).
 """
 
 import argparse
@@ -31,7 +32,7 @@ from aimanager.artificial_humans import GraphNetwork
 from aimanager.generic.data import create_torch_data
 from aimanager.simulation.counterfactual import (
     _select_focal_agents,
-    _select_focal_groups,
+    _select_focal_group,
     intervention_value,
 )
 
@@ -160,11 +161,30 @@ def _run_seed(
 
     contrib_pred, _ = contrib_ah.predict_independent(full, sample=True, reset_rnn=True)
     valid_pred, _ = valid_ah.predict_independent(full, sample=True, reset_rnn=True)
-    switch_pred, _ = switch_ah.predict_independent(full, sample=True, reset_rnn=True)
+    switch_pred, switch_proba = switch_ah.predict_independent(
+        full, sample=True, reset_rnn=True
+    )
     _trace(
         f"  [trace {label}] STEP 4 AH stack forward (contrib, valid, switch) "
         f"with reset_rnn=True over rounds [0..{t_star + 1}]"
     )
+    # Per-agent diagnostic for the switch panel: feature inputs the
+    # switch AH actually sees at t*+1 (prev_common_good, prev_punishment,
+    # agent_group) and the predicted P(switch=1). Probabilities are
+    # deterministic given inputs — sampling only adds Bernoulli noise.
+    if TRACE:
+        ag = full["agent_group"][0, :, t_star + 1].tolist()
+        p_p = full["prev_punishment"][0, :, t_star + 1].tolist()
+        p_cg = full["prev_common_good"][0, :, t_star + 1].tolist()
+        p_sw = switch_proba[0, :, t_star + 1, 1].tolist()
+        rows = [
+            f"a{i}: g={int(ag[i])}  prev_p={int(p_p[i])}  "
+            f"prev_cg={p_cg[i]:.3f}  P(sw)={p_sw[i]:.3f}"
+            for i in range(len(ag))
+        ]
+        _trace(f"  [trace {label}] STEP 4 switch inputs+P at t*+1:")
+        for r in rows:
+            _trace(f"    {r}")
 
     default_c = int(contrib_ah.default_values["contribution"])
     ah_contrib_t1 = contrib_pred[0, :, t_star + 1]
@@ -211,17 +231,16 @@ _SELECTOR_SHORT = {
 def _auto_name(intervention_round, intervention):
     """Generate a scenario name from the parameter combo."""
     feat = _FEATURE_SHORT.get(intervention["feature"], intervention["feature"])
-    if intervention.get("target") == "group":
-        gs = intervention.get("group_selector", "group")
-        sel_s = "group" + _SELECTOR_SHORT.get(gs, gs)
+    sel = intervention.get("selector")
+    target = intervention.get("target", "")
+    if isinstance(sel, int):
+        sel_s = f"a{sel}"
+    elif sel is None:
+        sel_s = target
     else:
-        sel = intervention.get("agent_selector")
-        if isinstance(sel, int):
-            sel_s = f"a{sel}"
-        elif sel is None:
-            sel_s = intervention.get("target", "")
-        else:
-            sel_s = _SELECTOR_SHORT.get(sel, sel)
+        sel_s = _SELECTOR_SHORT.get(sel, sel)
+    if target == "group":
+        sel_s = "group" + sel_s
     if "factor" in intervention:
         mod = f"x{intervention['factor']}"
     else:
@@ -232,9 +251,7 @@ def _auto_name(intervention_round, intervention):
 _INTERVENTION_KEYS = (
     "feature",
     "target",
-    "agent_selector",
-    "group_selector",
-    "n_groups",
+    "selector",
     "factor",
     "new_value",
 )
@@ -244,8 +261,7 @@ def _expand_grid(grid):
     """Cross-product of grid params → list of scenario dicts.
 
     Recognised keys (each maps to a list of values to sweep):
-      intervention_round, feature, target, agent_selector, group_selector,
-      n_groups, factor, new_value
+      intervention_round, feature, target, selector, factor, new_value
     Either ``factor`` or ``new_value`` should be set, not both.
     """
     keys = ["intervention_round", *_INTERVENTION_KEYS]
@@ -275,17 +291,16 @@ def _run_scenario(scen, data, models, chosen, n_seeds, device, rng):
     iv = scen["intervention"]
     target = iv["target"]
     feature = iv["feature"]
-    selector = iv.get("agent_selector") if target == "individual" else None
+    selector = iv.get("selector")
     is_decision = bool(data["switch_mask"][0, 0, t_star + 1].item())
-    n_agents = data["contribution"].shape[1]
 
     rows = []
     for ep in chosen:
+        ep_prefix = {k: t[ep : ep + 1, :, : t_star + 1] for k, t in data.items()}
         if target == "group":
+            agents_idx = _select_focal_group(ep_prefix, selector, t_star, rng)
             focal = -1
-            agents_idx = th.arange(n_agents, dtype=th.int64)
-        else:
-            ep_prefix = {k: t[ep : ep + 1, :, : t_star + 1] for k, t in data.items()}
+        elif target == "individual":
             if selector is not None:
                 focal = int(
                     _select_focal_agents(ep_prefix, selector, t_star, 1, rng).item()
@@ -293,6 +308,10 @@ def _run_scenario(scen, data, models, chosen, n_seeds, device, rng):
             else:
                 focal = 0
             agents_idx = th.tensor([focal], dtype=th.int64)
+        else:
+            raise ValueError(
+                f"Unknown target: {target!r}; expected 'individual' or 'group'"
+            )
 
         baseline = {k: [] for k in METRICS}
         treatment = {k: [] for k in METRICS}
@@ -315,11 +334,11 @@ def _run_scenario(scen, data, models, chosen, n_seeds, device, rng):
             "feature": feature,
             "target": target,
             "selector": selector,
-            "group_selector": iv.get("group_selector"),
             "new_value": iv.get("new_value"),
             "factor": iv.get("factor"),
             "ep": ep,
             "focal": focal,
+            "agents": agents_idx.tolist(),
             "real_pun_t": float(
                 data["punishment"][ep, agents_idx, t_star].float().mean()
             ),
@@ -375,6 +394,8 @@ def main():
         )
     base = yaml.safe_load(open(cfg["base_config"]))
     chosen = cfg.get("chosen_episodes")
+    if chosen is None:
+        raise ValueError("manifest must set `chosen_episodes`")
     n_seeds = args.n_seeds or cfg.get("n_seeds", base.get("n_episodes"))
     scenarios = list(cfg.get("scenarios", []))
     for grid in cfg.get("grids", []):
@@ -389,7 +410,10 @@ def main():
     device = th.device("cuda" if th.cuda.is_available() else "cpu")
 
     print(f"[setup] device={device}  output_dir={output_dir}")
-    print(f"[setup] {len(scenarios)} scenarios × {n_seeds} seeds")
+    print(
+        f"[setup] {len(scenarios)} scenarios × {len(chosen)} episodes "
+        f"× {n_seeds} seeds (chosen={chosen})"
+    )
 
     print("[load] tensorizing pilot data...")
     df = pd.read_csv(os.path.join(basedir, base["pilot_data_file"]))
@@ -413,45 +437,22 @@ def main():
     if cf_seed is not None:
         rng.manual_seed(cf_seed)
 
-    group_cache = {}
-
-    def _episodes_for(iv):
-        # group_selector takes precedence; otherwise fall back to manifest's
-        # explicit chosen_episodes.
-        gs = iv.get("group_selector") if iv["target"] == "group" else None
-        if gs is not None:
-            n_groups = int(iv.get("n_groups", 5))
-            key = (gs, n_groups)
-            if key not in group_cache:
-                group_cache[key] = _select_focal_groups(data, gs, n_groups, rng)
-            return group_cache[key]
-        if chosen is None:
-            raise ValueError(
-                "manifest must set `chosen_episodes` or supply a "
-                "`group_selector` per group-target scenario"
-            )
-        return chosen
-
     all_rows = []
     for i, scen in enumerate(scenarios, start=1):
         iv = scen["intervention"]
-        if iv["target"] == "group":
-            sel = iv.get("group_selector")
-        else:
-            sel = iv.get("agent_selector")
+        sel = iv.get("selector")
         mod = (
             f"factor={iv['factor']}"
             if "factor" in iv
             else f"new_value={iv['new_value']}"
         )
-        eps = _episodes_for(iv)
         print(
             f"[scenario {i}/{len(scenarios)}] {scen['name']}  "
             f"t*={scen['intervention_round']}  "
             f"feature={iv['feature']}  target={iv['target']}  "
-            f"selector={sel}  {mod}  episodes={eps}"
+            f"selector={sel}  {mod}"
         )
-        all_rows.extend(_run_scenario(scen, data, models, eps, n_seeds, device, rng))
+        all_rows.extend(_run_scenario(scen, data, models, chosen, n_seeds, device, rng))
 
     os.makedirs(output_dir, exist_ok=True)
     csv_path = os.path.join(output_dir, "scenarios.csv")
