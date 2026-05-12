@@ -138,6 +138,30 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         .to(device)
     )
 
+    # Fixed opponent that controls the non-RL group. Generic key so a later
+    # self-play setup can swap in an RL-manager checkpoint without renaming.
+    opponent_manager_path = os.path.join(basedir, config["opponent_manager"])
+    print(f"Loading opponent manager from {opponent_manager_path}")
+    opponent_manager = (
+        AH_MODELS[config["artificial_humans_model"]]
+        .load(opponent_manager_path, device=device)
+        .to(device)
+    )
+    rl_group_id = config.get("rl_group_id", 0)
+
+    # Switch predictor — required for group-switching dynamics. Optional
+    # for backwards compatibility with legacy single-group configs. Key name
+    # mirrors configs/simulation/ah_testing/group_switching_ah_punishment_50ep.yml.
+    switch_model = None
+    if "switch_model" in config:
+        switch_model_path = os.path.join(basedir, config["switch_model"])
+        print(f"Loading switch predictor from {switch_model_path}")
+        switch_model = (
+            AH_MODELS[config["artificial_humans_model"]]
+            .load(switch_model_path, device=device)
+            .to(device)
+        )
+
     env_args = config["env_args"].copy()
     if env_args.pop("reward_formula", None) is not None:
         warnings.warn(
@@ -151,6 +175,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     env = ArtificialHumanEnv(
         artifical_humans=ah,
         artifical_humans_valid=ahv,
+        artifical_humans_switch=switch_model,
         device=device,
         **env_args,
     )
