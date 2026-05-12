@@ -91,7 +91,7 @@ separate follow-up, not part of this plan.
 - [x] Step 2: payoff fn returns sum and avg in one pass
 - [x] Step 3: add `group_payoff_sum` to state dict
 - [x] Step 4: `update_payoff` writes both; `update_reward` selects via `reward_mode`
-- [ ] Step 5: wire `reward_mode` through `manager.py` and `simulate.py`
+- [x] Step 5: wire `reward_mode` through `simulate.py` (rl_manager already spreads `**env_args`); add `reward_mode: avg` to all 5 legacy RL manager YAMLs
 - [ ] Step 6: unit test in `src/aimanager/tests/test_environment.py`
 - [ ] Run `scripts/remote_test.sh` on Raven
 - [ ] Lint pass (`pre-commit run --all-files`) and commit via `/commit`
