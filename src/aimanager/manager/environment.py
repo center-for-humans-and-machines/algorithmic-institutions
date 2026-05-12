@@ -42,6 +42,7 @@ class ArtificialHumanEnv:
         n_groups=1,
         agent_groups=None,
         default_values=None,
+        reward_mode="sum",
     ):
         """
         Args:
@@ -78,6 +79,9 @@ class ArtificialHumanEnv:
         self.artifical_humans_switch = artifical_humans_switch
         self.switch_every = switch_every
         self.n_agents = n_agents
+        if reward_mode not in ("avg", "sum"):
+            raise ValueError(f"reward_mode must be 'avg' or 'sum', got {reward_mode!r}")
+        self.reward_mode = reward_mode
         self.batch = th.tensor(
             [i for i in range(self.batch_size) for a in range(self.n_agents)],
             device=self.device,
@@ -151,6 +155,9 @@ class ArtificialHumanEnv:
             "group_payoff": th.zeros(
                 (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
             ),
+            "group_payoff_sum": th.zeros(
+                (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
+            ),
             "does_switch": th.zeros(size, dtype=th.bool, device=self.device),
             "switch_mask": th.zeros(size, dtype=th.bool, device=self.device),
         }
@@ -213,7 +220,7 @@ class ArtificialHumanEnv:
         )
         return common_good_per_group
 
-    def compute_average_payoff_per_group(
+    def compute_payoff_per_group(
         self, contribution, punishment, contribution_valid, common_good
     ):
         # Used both with punishment and prev_punishment
@@ -226,21 +233,18 @@ class ArtificialHumanEnv:
             contribution_valid, contributor_payoff, th.zeros_like(contributor_payoff)
         )
 
-        # Compute the average payoff for each group
-        average_payoff_per_group = (
-            contributor_payoff.unsqueeze(-2) * self.agent_group_mask
-        )
+        # Per-group sum of valid contributor payoffs
+        payoff_per_group = contributor_payoff.unsqueeze(-2) * self.agent_group_mask
         contribution_valid = contribution_valid.unsqueeze(-2) * self.agent_group_mask
+        sum_payoff_per_group = payoff_per_group.sum(dim=1)
+        valid_per_group = contribution_valid.sum(dim=1)
 
-        average_payoff_per_group = average_payoff_per_group.sum(
-            dim=1
-        ) / contribution_valid.sum(dim=1)
         average_payoff_per_group = th.where(
-            contribution_valid.sum(dim=1) > 0,
-            average_payoff_per_group,
-            th.zeros_like(average_payoff_per_group),
+            valid_per_group > 0,
+            sum_payoff_per_group / valid_per_group.clamp(min=1),
+            th.zeros_like(sum_payoff_per_group),
         )
-        return contributor_payoff, average_payoff_per_group
+        return contributor_payoff, average_payoff_per_group, sum_payoff_per_group
 
     def compute_average_per_group(self, metric, valid=None):
         if valid is None:
@@ -269,8 +273,8 @@ class ArtificialHumanEnv:
 
     def update_payoff(self):
 
-        self.contributor_payoff, self.group_payoff = (
-            self.compute_average_payoff_per_group(
+        self.contributor_payoff, self.group_payoff, self.group_payoff_sum = (
+            self.compute_payoff_per_group(
                 self.contribution,
                 self.punishment,
                 self.contribution_valid,
@@ -279,7 +283,10 @@ class ArtificialHumanEnv:
         )
 
     def update_reward(self):
-        self.reward = self.group_payoff
+        if self.reward_mode == "sum":
+            self.reward = self.group_payoff_sum
+        else:
+            self.reward = self.group_payoff
 
     def update_contribution(self):
         contribution = self.artifical_humans.predict(

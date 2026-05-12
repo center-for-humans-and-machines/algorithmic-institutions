@@ -43,6 +43,7 @@ def test_multi_group_env():
         n_rounds=3,
         n_groups=2,
         device="cpu",
+        reward_mode="avg",
         default_values={
             "punishment": 0,
             "contribution": 0,
@@ -173,6 +174,7 @@ def test_artificial_human_env():
         n_punishments=3,
         n_rounds=2,
         device="cpu",
+        reward_mode="avg",
         default_values={
             "punishment": 0,
             "contribution": 0,
@@ -317,6 +319,7 @@ def _make_env(n_rounds=3):
         n_punishments=3,
         n_rounds=n_rounds,
         device="cpu",
+        reward_mode="avg",
         default_values={
             "punishment": 0,
             "contribution": 0,
@@ -364,3 +367,82 @@ def test_reward_terminal():
     assert done
     # Terminal reward should be group_payoff, NOT -avg_punishment/32
     assert th.allclose(reward, group_payoff_after_punish)
+
+
+def _make_two_group_env(reward_mode):
+    """6-agent env with asymmetric groups [4, 2] so sum != avg."""
+    default_values = {
+        "punishment": 1,
+        "contribution": 1,
+        "payoffs": 1,
+        "contribution_valid": True,
+        "common_good": 1,
+        "round_number": 1,
+        "player_id": 1,
+    }
+    env = ArtificialHumanEnv(
+        artifical_humans=MockArtificialHuman(default_values),
+        artifical_humans_valid=MockArtificialHumanValid(),
+        batch_size=1,
+        n_agents=6,
+        n_contributions=3,
+        n_punishments=3,
+        n_rounds=2,
+        n_groups=2,
+        device="cpu",
+        agent_groups=[0, 0, 0, 0, 1, 1],
+        reward_mode=reward_mode,
+        default_values={
+            "punishment": 0,
+            "contribution": 0,
+            "round_number": 0,
+            "is_first": False,
+            "contribution_valid": False,
+            "punishment_valid": False,
+            "common_good": 0,
+            "contributor_payoff": 0,
+            "manager_payoff": 0,
+            "reward": 0,
+        },
+    )
+    return env
+
+
+def test_reward_mode_sum_vs_avg():
+    """sum and avg paths log both fields; reward selects per mode."""
+    punishment = th.tensor([[[1], [0], [2], [1], [0], [2]]])
+
+    # group 0 (agents 0..3): 4 agents, contribution=1 each, punish=[1,0,2,1]
+    # group 1 (agents 4..5): 2 agents, contribution=1 each, punish=[0,2]
+    # common_good_g0 = (4*1.6 - 4) / 4 = 0.6
+    # common_good_g1 = (2*1.6 - 2) / 2 = 0.6
+    # contributor_payoff_i = 19 - p_i + cg
+    # group_0 payoffs: [18.6, 19.6, 17.6, 18.6] -> sum 74.4, avg 18.6
+    # group_1 payoffs: [19.6, 17.6]             -> sum 37.2, avg 18.6
+    expected_sum = th.tensor([[[74.4], [37.2]]])
+    expected_avg = th.tensor([[[18.6], [18.6]]])
+
+    for mode, expected_reward in (("avg", expected_avg), ("sum", expected_sum)):
+        env = _make_two_group_env(reward_mode=mode)
+        env.punish(punishment)
+
+        # Both fields logged regardless of mode
+        assert th.allclose(
+            env.group_payoff, expected_avg
+        ), f"avg field mismatch in mode={mode}"
+        assert th.allclose(
+            env.group_payoff_sum, expected_sum
+        ), f"sum field mismatch in mode={mode}"
+
+        # Reward picks the right field
+        _, reward, _ = env.step()
+        assert th.allclose(
+            reward, expected_reward
+        ), f"reward in mode={mode} expected {expected_reward}, got {reward}"
+
+
+def test_reward_mode_invalid_raises():
+    import pytest
+
+    with pytest.raises(ValueError, match="reward_mode"):
+        _make_two_group_env(reward_mode="median")

@@ -179,6 +179,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
             ah_switch = GraphNetwork.load(hms_path, device=device)
 
         agent_groups = config.get("agent_groups", None)
+        reward_mode = config.get("reward_mode", "sum")
 
         # Create environment
         env = ArtificialHumanEnv(
@@ -194,6 +195,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
             batch_size=1,
             device=device,
             agent_groups=agent_groups,
+            reward_mode=reward_mode,
         )
 
         # Create recorder
