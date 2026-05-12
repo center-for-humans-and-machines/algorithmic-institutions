@@ -49,7 +49,15 @@ def load_config(path: str = None) -> dict:
         return yaml.safe_load(f)
 
 
-def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
+def run_batch(
+    manager,
+    env,
+    replay_mem=None,
+    on_policy=True,
+    update_step=None,
+    opponent_manager=None,
+    rl_group_id=0,
+):
 
     state = env.reset()
     metric_list = []
@@ -58,7 +66,22 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
 
         action, q_values = manager.get_action(state, greedy=on_policy)
 
-        state = env.punish(action)
+        # Two-manager mode: RL produces (B, 8, 1) over all agents; opponent
+        # produces its own (B, 8, 1); mask keeps each manager's own group.
+        # agent_groups mutates per round via the switch predictor, so the
+        # mask is recomputed every step.
+        if opponent_manager is not None:
+            opp_action, _ = opponent_manager.predict(
+                state,
+                reset_rnn=round_number == 0,
+                edge_index=env.batch_edge_index,
+            )
+            rl_mask = (env.agent_groups.squeeze(-1) == rl_group_id).unsqueeze(-1)
+            final_punishment = th.where(rl_mask, action, opp_action)
+        else:
+            final_punishment = action
+
+        state = env.punish(final_punishment)
 
         metrics = {k: state[k].to(th.float).mean().item() for k in rec_keys}
 
@@ -214,7 +237,13 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     for update_step in tqdm(range(n_update_steps)):
         # here we sample one batch of episodes and add them to the replay buffer
         off_policy_metrics = run_batch(
-            manager, env, replay_mem, on_policy=False, update_step=update_step
+            manager,
+            env,
+            replay_mem,
+            on_policy=False,
+            update_step=update_step,
+            opponent_manager=opponent_manager,
+            rl_group_id=rl_group_id,
         )
 
         replay_mem.next_episode(update_step)
@@ -250,6 +279,8 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                 replay_mem=None,
                 on_policy=True,
                 update_step=update_step,
+                opponent_manager=opponent_manager,
+                rl_group_id=rl_group_id,
             )
             metrics_list.extend(on_policy_metrics)
 

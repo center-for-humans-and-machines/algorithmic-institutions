@@ -131,7 +131,7 @@ checkpoint — not just the training-time reward curve. Concretely:
 
 - [x] Step 1: load opponent manager + `rl_group_id` in `src/aimanager/rl_manager.py`.
 - [x] Step 1b: load switch AH and pass it to `ArtificialHumanEnv(...)`.
-- [ ] Step 2: merge logic in training loop (`run_batch` or its caller) — opponent.predict, mask, th.where, env.punish(final_p).
+- [x] Step 2: merge logic in training loop (`run_batch` or its caller) — opponent.predict, mask, th.where, env.punish(final_p).
 - [ ] Step 3: index reward by `rl_group_id` and forward `rl_mask` to the replay buffer.
 - [ ] Add `configs/training/rl_manager/03_2g8a_sum.yml` and `03_2g8a_avg.yml`.
 - [ ] Smoke run on Raven via `scripts/train_cluster.sh manager 03_2g8a_sum.yml` with reduced steps.
