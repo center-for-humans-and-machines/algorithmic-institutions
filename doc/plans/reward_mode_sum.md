@@ -1,4 +1,4 @@
-# [DRAFT] Reward mode: sum vs avg for group-switching RL manager
+# [ACTIVE] Reward mode: sum vs avg for group-switching RL manager
 
 ## Goal
 
@@ -87,8 +87,11 @@ separate follow-up, not part of this plan.
 
 ## Next Actions
 
-- [ ] Implement env changes (1-4) in `src/aimanager/manager/environment.py`
-- [ ] Wire `reward_mode` through in `src/aimanager/manager/manager.py`
-- [ ] Add unit test in `src/aimanager/tests/test_environment.py`
+- [x] Step 1: env constructor `reward_mode` kwarg + validation
+- [x] Step 2: payoff fn returns sum and avg in one pass
+- [ ] Step 3: add `group_payoff_sum` to state dict
+- [ ] Step 4: `update_payoff` writes both; `update_reward` selects via `reward_mode`
+- [ ] Step 5: wire `reward_mode` through `manager.py` and `simulate.py`
+- [ ] Step 6: unit test in `src/aimanager/tests/test_environment.py`
 - [ ] Run `scripts/remote_test.sh` on Raven
 - [ ] Lint pass (`pre-commit run --all-files`) and commit via `/commit`
