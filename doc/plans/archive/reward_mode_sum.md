@@ -1,4 +1,4 @@
-# [ACTIVE] Reward mode: sum vs avg for group-switching RL manager
+# [DONE] Reward mode: sum vs avg for group-switching RL manager
 
 ## Goal
 
