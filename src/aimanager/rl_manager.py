@@ -71,6 +71,9 @@ def run_batch(
         # agent_groups mutates per round via the switch predictor, so the
         # mask is recomputed every step.
         if opponent_manager is not None:
+            # reset_rnn only matters if the opponent has an RNN (non-autoreg
+            # variant). The autoreg punishment AH ignores it. We pass it
+            # uniformly so the same call site supports both opponents.
             opp_action, _ = opponent_manager.predict(
                 state,
                 reset_rnn=round_number == 0,
@@ -100,6 +103,13 @@ def run_batch(
         metrics["q_min"] = q_values.min().item()
         metrics["q_max"] = q_values.max().item()
         metrics["q_mean"] = q_values.mean().item()
+        if opponent_manager is not None:
+            # Mean count of agents currently in the RL manager's group.
+            # The headline metric for sum vs avg comparison: with sum the
+            # policy should learn to grow this number; with avg it should
+            # stay indifferent to size.
+            rl_in_group = (env.agent_groups.squeeze(-1) == rl_group_id).float()
+            metrics["rl_group_size"] = rl_in_group.sum(dim=1).mean().item()
         metrics["round_number"] = round_number
         metrics["sampling"] = "greedy" if on_policy else "eps-greedy"
         metrics["update_step"] = update_step
@@ -170,7 +180,6 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         .load(opponent_manager_path, device=device)
         .to(device)
     )
-    rl_group_id = config.get("rl_group_id", 0)
 
     # Switch predictor — required for group-switching dynamics. Optional
     # for backwards compatibility with legacy single-group configs. Key name
@@ -186,6 +195,10 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         )
 
     env_args = config["env_args"].copy()
+    # rl_group_id sits under env_args for organisation (it's a property of
+    # the multi-group setup) but is consumed by the training loop, not by
+    # the env constructor — pop it before the env build.
+    rl_group_id = env_args.pop("rl_group_id", 0)
     if env_args.pop("reward_formula", None) is not None:
         warnings.warn(
             "reward_formula is deprecated and ignored. "
@@ -234,6 +247,13 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     eval_period = config["eval_period"]
 
     print(f"Training manager for {n_update_steps} update steps")
+    if opponent_manager is not None:
+        print(
+            f"[two-manager] rl_group_id={rl_group_id}, "
+            f"env.n_groups={env.n_groups}, env.n_agents={env.n_agents}, "
+            f"reward_mode={env.reward_mode}, "
+            f"switch_predictor={'on' if switch_model is not None else 'off'}"
+        )
     for update_step in tqdm(range(n_update_steps)):
         # here we sample one batch of episodes and add them to the replay buffer
         off_policy_metrics = run_batch(
@@ -289,14 +309,17 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                 log = {"update_step": update_step}
                 if sample is not None:
                     log["train/loss"] = loss.item()
-                for k in [
+                eval_keys = [
                     "next_reward",
                     "common_good",
                     "contribution",
                     "punishment",
                     "group_payoff",
                     "q_mean",
-                ]:
+                ]
+                if opponent_manager is not None:
+                    eval_keys.append("rl_group_size")
+                for k in eval_keys:
                     log[f"eval/{k}"] = sum(m[k] for m in on_policy_metrics) / len(
                         on_policy_metrics
                     )
@@ -325,6 +348,10 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         "loss",
         "group_payoff",
     ]
+    # rl_group_size only present in two-manager runs; include in melt only
+    # when it's been recorded so legacy single-manager parquets are unchanged.
+    if metrics_list and "rl_group_size" in metrics_list[0]:
+        value_vars.append("rl_group_size")
 
     metrics_path = os.path.join(metrics_dir, f"{config['job_id']}.parquet")
     print(f"Saving metrics dataframe to {metrics_path}")
