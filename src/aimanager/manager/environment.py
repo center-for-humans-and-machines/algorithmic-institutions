@@ -80,9 +80,7 @@ class ArtificialHumanEnv:
         self.switch_every = switch_every
         self.n_agents = n_agents
         if reward_mode not in ("avg", "sum"):
-            raise ValueError(
-                f"reward_mode must be 'avg' or 'sum', got {reward_mode!r}"
-            )
+            raise ValueError(f"reward_mode must be 'avg' or 'sum', got {reward_mode!r}")
         self.reward_mode = reward_mode
         self.batch = th.tensor(
             [i for i in range(self.batch_size) for a in range(self.n_agents)],
