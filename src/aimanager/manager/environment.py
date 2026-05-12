@@ -157,6 +157,9 @@ class ArtificialHumanEnv:
             "group_payoff": th.zeros(
                 (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
             ),
+            "group_payoff_sum": th.zeros(
+                (self.batch_size, self.n_groups, 1), dtype=th.float, device=self.device
+            ),
             "does_switch": th.zeros(size, dtype=th.bool, device=self.device),
             "switch_mask": th.zeros(size, dtype=th.bool, device=self.device),
         }
@@ -272,7 +275,7 @@ class ArtificialHumanEnv:
 
     def update_payoff(self):
 
-        self.contributor_payoff, self.group_payoff, _ = (
+        self.contributor_payoff, self.group_payoff, self.group_payoff_sum = (
             self.compute_payoff_per_group(
                 self.contribution,
                 self.punishment,
@@ -282,7 +285,10 @@ class ArtificialHumanEnv:
         )
 
     def update_reward(self):
-        self.reward = self.group_payoff
+        if self.reward_mode == "sum":
+            self.reward = self.group_payoff_sum
+        else:
+            self.reward = self.group_payoff
 
     def update_contribution(self):
         contribution = self.artifical_humans.predict(
