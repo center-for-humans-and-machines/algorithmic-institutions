@@ -35,6 +35,7 @@ rec_keys = [
     "contributor_payoff",
     # "manager_payoff",
     "group_payoff",
+    "group_payoff_sum",
 ]
 
 # Will be set in train_manager based on the encoding config
@@ -315,6 +316,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                     "contribution",
                     "punishment",
                     "group_payoff",
+                    "group_payoff_sum",
                     "q_mean",
                 ]
                 for k in eval_keys:
@@ -352,6 +354,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         "q_mean",
         "loss",
         "group_payoff",
+        "group_payoff_sum",
     ]
     # rl_group_size only present in two-manager runs; include in melt only
     # when it's been recorded so legacy single-manager parquets are unchanged.

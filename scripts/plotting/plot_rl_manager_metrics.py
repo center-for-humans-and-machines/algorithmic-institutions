@@ -37,6 +37,7 @@ DEFAULT_METRICS = [
     "loss",
     "next_reward",
     "group_payoff",
+    "group_payoff_sum",
     "rl_group_size",
     "contribution",
     "punishment",
