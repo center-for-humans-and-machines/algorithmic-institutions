@@ -132,9 +132,14 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
     print(f"Using device: {device}")
 
-    # Add model_path to managers config
+    # Add model_path to managers config. Entries without a path
+    # (e.g. type: dummy) pass through untouched.
     managers = {
-        k: {**v, "model_path": os.path.join(basedir, v["path"])}
+        k: (
+            {**v, "model_path": os.path.join(basedir, v["path"])}
+            if "path" in v
+            else {**v}
+        )
         for k, v in managers_config.items()
     }
     print(f"Managers: {managers}")
@@ -623,14 +628,21 @@ def run_cli(config, config_path):
     # Run simulation
     dfs = run_simulation(config, output_dir)
 
+    # Persist per-agent per-round simulation frame for downstream
+    # trajectory plotting (manager-side / group_id decompositions).
+    df_sim = pd.concat(dfs).reset_index(drop=True)
+    per_round_path = os.path.join(output_dir, "per_round.parquet")
+    df_sim.to_parquet(per_round_path, index=False)
+    print(f"Saved: {per_round_path}")
+
     # Load pilot data if available
     df_pilot = load_pilot_data(config, basedir)
 
     # Combine dataframes
     if df_pilot is not None:
-        df = pd.concat([*dfs, df_pilot]).reset_index(drop=True)
+        df = pd.concat([df_sim, df_pilot]).reset_index(drop=True)
     else:
-        df = pd.concat(dfs).reset_index(drop=True)
+        df = df_sim
 
     # Create plots
     create_plots(df, output_dir, config["managers"], config["figure_name"])
