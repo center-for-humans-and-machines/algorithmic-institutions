@@ -147,17 +147,41 @@ def run_simulation(config: dict, output_dir: str) -> list:
         if "autoregressive" in managers[k]:
             man.model.autoregressive = managers[k]["autoregressive"]
 
-    # Create runs: all combinations of managers and artificial humans
-    runs = {
-        f"ah {h} managed by {m}": {"groups": [m] * n_agents, "humans": h}
-        for m in managers.keys()
-        for h in artificial_humans.keys()
-    }
+    # Create runs.
+    # Two modes:
+    #   - pairings (new): one run per (pairing, AH); per-agent manager
+    #     assignment is rebuilt each round from state["agent_group"]
+    #     (dynamic dispatch — matches training-time switch-predictor
+    #     semantics).
+    #   - legacy: one run per (manager, AH) with a static per-agent
+    #     manager list (same manager on every agent).
+    pairings = config.get("pairings")
+    if pairings is not None:
+        runs = {
+            f"ah {h} managed by {p['name']}": {
+                "pairing": p,
+                "groups": None,
+                "humans": h,
+            }
+            for p in pairings
+            for h in artificial_humans.keys()
+        }
+    else:
+        runs = {
+            f"ah {h} managed by {m}": {
+                "pairing": None,
+                "groups": [m] * n_agents,
+                "humans": h,
+            }
+            for m in managers.keys()
+            for h in artificial_humans.keys()
+        }
 
     dfs = []
     for name, run in runs.items():
         print(f"Start run {name}")
         groups = run["groups"]
+        pairing = run["pairing"]
 
         # Load artificial humans
         hm_path = os.path.join(
@@ -219,6 +243,12 @@ def run_simulation(config: dict, output_dir: str) -> list:
                     if "agent_group" in state
                     else None
                 )
+                if pairing is not None:
+                    # Dispatch each agent to its pairing-side manager based
+                    # on its *current* agent_group, so post-switch agents
+                    # are punished by the other side's manager.
+                    group_map = [pairing["group_0"], pairing["group_1"]]
+                    groups = [group_map[g] for g in current_agent_group]
                 round_dict = make_round(
                     contributions,
                     round_number,
