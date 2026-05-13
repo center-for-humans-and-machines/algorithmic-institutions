@@ -1,0 +1,49 @@
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_1000.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep/model/architecture_mlp+rnn+edge__dataset_50ep__epochs_375.pt
+
+managers:
+  trained_avg:
+    type: rl
+    path: artifacts/manager/03_2g8a_avg/model/03_2g8a_avg_manager.pt
+  trained_sum:
+    type: rl
+    path: artifacts/manager/03_2g8a_sum/model/03_2g8a_sum_manager.pt
+  ah_opponent:
+    type: human
+    path: artifacts/artificial_humans/punishment_autoregressive_50ep/model/architecture_node+edge+autoregressive__dataset_50ep__epochs_7500.pt
+  zero_punishment:
+    type: dummy
+
+pairings:
+  - name: avg_vs_ah
+    group_0: trained_avg
+    group_1: ah_opponent
+  - name: sum_vs_ah
+    group_0: trained_sum
+    group_1: ah_opponent
+  - name: ah_vs_ah
+    group_0: ah_opponent
+    group_1: ah_opponent
+  - name: zero_vs_ah
+    group_0: zero_punishment
+    group_1: ah_opponent
+  - name: dummy_vs_dummy
+    group_0: zero_punishment
+    group_1: zero_punishment
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/04_2g8a_trained_vs_ah
+figure_name: 2g8a_trained_vs_ah
+basedir: .
