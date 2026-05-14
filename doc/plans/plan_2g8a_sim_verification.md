@@ -12,7 +12,7 @@ Settle PR #92's open question — whether the `p ≈ 0` operating point reached 
 | 2 | `pairings:` + dynamic dispatch | Add config-driven manager pairings and rebuild per-agent manager assignment each round in `simulate.py` | |
 | 3 | `DummyManager` plumbing | Make `simulate.py` manager construction tolerant of `type: dummy` entries (no `path` field) | |
 | 4 | Persist per-round frame | Dump concatenated per-round/per-agent dataframe to parquet so trajectory plots can read it | |
-| 5 | Trajectory plotting script | New `scripts/plotting/plot_simulation_trajectories.py` for per-round / per-group / per-manager curves | |
+| 5 | Pairing-side plot in `create_plots` | New `comparison_pairing_side.jpg` inside the existing inline plotting pipeline — splits each pairing's group_0/group_1 lines | |
 | 6 | Run + post PR comment | Execute on Raven, fetch plots, comment on PR #92 with verdict | |
 
 ### 1. Sim config — `configs/simulation/manager_testing/04_2g8a_trained_vs_ah.yml`
@@ -38,10 +38,10 @@ Settle PR #92's open question — whether the `p ≈ 0` operating point reached 
 - **WHAT**: In `run_cli`, dump the concatenated `df` to `output_dir/per_round.parquet` before calling `create_plots`.
 - **WHY**: `simulate.py:572` only writes `aggregates.csv` (per-round means), but the trajectory script (§5) needs per-agent per-round data to compute manager-side decompositions and group-size traces.
 
-### 5. Trajectory plotting script — `scripts/plotting/plot_simulation_trajectories.py`
+### 5. Pairing-side plot inside `create_plots` — `src/aimanager/simulation/simulate.py:353`
 
-- **WHAT (interface)**: Mirror `scripts/plotting/plot_rl_manager_metrics.py` — positional `sim_output_dir`, optional `--out-dir`. Read `per_round.parquet` from §4.
-- **WHAT (plots)**: (a) **Headline — manager-side decomposition**: derive `manager_side = pairing.group_{current_agent_group}` (the manager controlling each agent in each round); facet contribution / punishment / payoff / common_good by variable, hue by `(run, manager_side)`. This is the "what does each manager produce on agents it controls" view. (b) Group-size dynamics: per-round count of agents per `group_id`, hue by run. (c) Same as (a) but hue by `(run, group_id)` for cross-reference; secondary panel.
+- **WHAT**: Add an optional `pairings` parameter to `create_plots` and a new plot (`comparison_pairing_side.jpg`) directly after Plot 1. For rows whose `run` matches a pairing, derive `manager_side = pairing.group_{group_id}` and hue by `f"{pairing_name} / {manager_side}"` — splitting each pairing's two sides into separate lines. Wire through `run_cli` with `pairings=config.get("pairings")`.
+- **WHY (vs new script)**: The existing `create_plots` already produces ~80% of the deliverables — per-run trajectories (plot 1), group-size evolution (plot 4), switch counts (plot 5), group-switching heatmap (plot 6). Only the within-pairing split (trained side vs opponent side) is missing. Adding one inline plot is ~50 LOC; a standalone script would duplicate most of `create_plots`.
 - **WHY (dynamic group_id)**: Under switching, the initial `agent_groups` value is only true for the first `switch_every` rounds. The `group_id` column from `mem_to_df` (`simulate.py:84`) already reflects the dynamic value — use it directly.
 
 ### 6. Execute on Raven + PR #92 comment

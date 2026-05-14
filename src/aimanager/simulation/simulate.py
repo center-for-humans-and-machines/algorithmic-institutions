@@ -351,7 +351,11 @@ def load_pilot_data(config: dict, basedir: str) -> pd.DataFrame:
 
 
 def create_plots(
-    df: pd.DataFrame, output_dir: str, managers_config: dict, figure_name: str = ""
+    df: pd.DataFrame,
+    output_dir: str,
+    managers_config: dict,
+    figure_name: str = "",
+    pairings: list = None,
 ) -> None:
     """Create and save comparison plots."""
     make_dir(output_dir)
@@ -401,6 +405,58 @@ def create_plots(
         g.savefig(os.path.join(output_dir, "comparison_manager.jpg"))
         plt.close()
         print(f"Saved: {os.path.join(output_dir, 'comparison_manager.jpg')}")
+
+    # Plot 1b: Pairing-side comparison.
+    # When the sim uses `pairings:`, each pairing's group_0 and group_1
+    # are controlled by different managers. Plot 1 hues by run only,
+    # averaging the two sides together; this plot splits them so the
+    # trained side and opponent side appear as separate lines.
+    if pairings and "group_id" in df.columns:
+        pairings_by_name = {p["name"]: p for p in pairings}
+
+        def _side(name, key):
+            return pairings_by_name[name][key] if name in pairings_by_name else None
+
+        df_p = df[df["run"].str.contains(" managed by ", na=False)].copy()
+        pairing_name = df_p["run"].str.rsplit(" managed by ", n=1).str[1]
+        df_p["pairing"] = pairing_name
+        g0 = pairing_name.map(lambda n: _side(n, "group_0"))
+        g1 = pairing_name.map(lambda n: _side(n, "group_1"))
+        df_p["manager_side"] = g0.where(df_p["group_id"] == 0, g1)
+        df_p = df_p[df_p["manager_side"].notna()]
+
+        if len(df_p):
+            df_p["label"] = df_p["pairing"] + " / " + df_p["manager_side"]
+            dfp_m = df_p.melt(
+                id_vars=[
+                    "episode",
+                    "round_number",
+                    "participant_code",
+                    "label",
+                ],
+                value_vars=["punishment", "contribution", "common_good", "payoff"],
+            )
+            g = sns.relplot(
+                data=dfp_m,
+                x="round_number",
+                y="value",
+                col="variable",
+                hue="label",
+                kind="line",
+                facet_kws={"sharey": False, "sharex": True},
+                height=3,
+                aspect=1.1,
+                col_wrap=2,
+            )
+            g.fig.suptitle(
+                f"Pairing-side Comparison: {figure_name}",
+                y=1.02,
+            )
+            g.set(ylim=(0, None))
+            out = os.path.join(output_dir, "comparison_pairing_side.jpg")
+            g.savefig(out, bbox_inches="tight")
+            plt.close()
+            print(f"Saved: {out}")
 
     # Plot 2: Pilot comparison (if pilot data exists)
     pilot_runs = ["pilot human manager", "pilot rule based manager"]
@@ -645,7 +701,13 @@ def run_cli(config, config_path):
         df = df_sim
 
     # Create plots
-    create_plots(df, output_dir, config["managers"], config["figure_name"])
+    create_plots(
+        df,
+        output_dir,
+        config["managers"],
+        config["figure_name"],
+        pairings=config.get("pairings"),
+    )
 
     print("Simulation complete!")
 
