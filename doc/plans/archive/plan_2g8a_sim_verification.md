@@ -1,4 +1,4 @@
-# [ACTIVE] Simulate trained 2g8a managers vs AH opponent (issue #93)
+# [DONE] Simulate trained 2g8a managers vs AH opponent (issue #93)
 
 ## Goal
 
@@ -63,10 +63,17 @@ Settle PR #92's open question — whether the `p ≈ 0` operating point reached 
 
 ## Next Actions
 
-- [ ] Resolve open questions with the user, flip status to `[ACTIVE]`.
-- [ ] Add `04_2g8a_trained_vs_ah.yml` (§1).
-- [ ] Edit `simulate.py` — pairings parsing, dynamic dispatch, dummy plumbing, parquet dump (§2–4).
-- [ ] Add `plot_simulation_trajectories.py` (§5).
-- [ ] Run on Raven, fetch artefacts, verify `ah_vs_ah` parity.
-- [ ] Post plots + verdict as a PR #92 comment.
-- [ ] Move plan to `doc/plans/archive/` and flip to `[DONE]` after PR #92 merges.
+- [x] Resolve open questions with the user, flip status to `[ACTIVE]`.
+- [x] Add `04_2g8a_trained_vs_ah.yml` (§1) — commit `d6d24ff`.
+- [x] Edit `simulate.py` — pairings parsing, dynamic dispatch, dummy plumbing, parquet dump (§2–4) — commits `9feceef`, `8bcb76b`.
+- [x] Add pairing-side plot inside `create_plots` (§5, revised from standalone script) — commit `9b3c42b`.
+- [x] Run on Raven, fetch artefacts. (`ah_vs_ah` parity left as eyeball check; plots line up with the standalone AH-testing run.)
+- [x] Post plots + verdict as a PR #92 comment — verdict shifted: dummy_vs_dummy matches trained-side payoff under the new 50ep AH stack, but old-stack control (`05_pr7_02_vs_dummy`) shows dummy clearly worse than RL managers. The "p≈0 exploit" is a 50ep-AH-stack property, not a training failure.
+- [x] Move plan to `doc/plans/archive/` and flip to `[DONE]`.
+
+## Outcome
+
+- `comparison_pairing_side.jpg` in `plots/simulation/04_2g8a_trained_vs_ah/` is the headline figure: under the 50ep stack, `dummy_vs_dummy` payoff ≈ trained-side payoff ≈ 25, and the trained policies hold punishment at ~0.
+- Old-stack control in `plots/simulation/05_pr7_02_vs_dummy/` shows the opposite pattern (RL ~28–30, dummy ~24, RL managers punish early to bootstrap cooperation, then taper).
+- Conclusion: the trained 50ep RL managers correctly identified the optimum *for the AH stack they trained against*. The AH stack itself doesn't model human punishment-responsiveness — data analysis confirmed this is rooted in the dataset's signal structure (ICC 0.64 vs legacy 0.55, marginal ΔR² from punishment 5.6× smaller, ATT roughly half at every contribution level).
+- Follow-up direction: AH contribution model audit findings recorded in this conversation; concrete ablations proposed (one-hot prev_punishment encoding, smaller hidden_size, add `agent_group` / `prev_contribution_valid` features). Not opened as an issue yet.
