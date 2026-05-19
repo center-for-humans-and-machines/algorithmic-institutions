@@ -124,6 +124,51 @@ split.
     data-coverage gap.
 - This PR closes #94.
 
+## Side tracks (added during execution)
+
+While running the original plan we found three rough edges in `simulate.py`
+that were cheap to fix and made the diagnostic outputs trustworthy. They
+shipped on this branch even though they sit outside the original step
+table.
+
+### `simulate.py` plot / data-output gating (commit `17fd712`)
+
+- `load_pilot_data` is opt-in via `pilot_data_file`. Previously it defaulted
+  to `experiments/pilot_random1_player_round_slim.csv` (the legacy 4-agent
+  pilot), which silently leaked the wrong baseline into
+  `comparison_pilot.jpg` for any 2g8a config.
+- Pilot-run detection in `create_plots` now keys off "anything not starting
+  with `ah `" instead of the hardcoded
+  `["pilot human manager", "pilot rule based manager"]`. Lets configs
+  supply their own pilot labels via `pilot_experiment_name_map`.
+- `create_plots` takes `n_groups` and gates the group-size / switch-count /
+  group-heatmap plots on `n_groups > 1` (meaningless for 1g4a).
+- `comparison_pilot_vs_sim.jpg` (plot 3) only fires when pilot rows
+  actually exist — previously it would emit a degenerate copy of plot 1
+  whenever any sim run was present.
+- `per_round.parquet` dump opt-in via `save_per_round` flag (default off).
+
+### `payoff_sum` plotted alongside `payoff` (commit `06c2724`)
+
+- After PR #91 made reward mode (`avg` vs `sum`) configurable, the
+  comparison plots only showed the per-agent average payoff. Added a
+  `payoff_sum` column that holds the per-(run, episode, round) sum of
+  per-agent payoffs, replicated to every agent row so seaborn's mean
+  collapses to the episode-level group sum.
+- Pairing-side plot recomputes per side (group by
+  `(run, episode, round, manager_side)`).
+- Adds a 5th column to every comparison plot and an extra mean to
+  `aggregates.csv`. Lets the report-grade plots be self-describing without
+  a reward-mode config knob.
+
+### Config 06 pilot overlay correctly wired (in `06_sustained_p_sweep_50ep.yml`)
+
+- After fixing the pilot-loading default, config 06 now explicitly sets
+  `pilot_data_file: experiments/2group_8agent_50ep.csv` and a
+  `pilot_experiment_name_map` mapping `ah_group_switching` to
+  `pilot 50ep human manager`, so the overlay finally compares to the
+  actual 50ep pilot rather than the legacy 4-agent random-manager run.
+
 ## Out of scope
 
 - Retraining any AH model.
@@ -135,10 +180,17 @@ split.
 
 Walk through with the user step-by-step — no engineer-agent handoff.
 
-- [ ] Flip status to `[ACTIVE]`.
-- [ ] Edit `DummyManager` in `src/aimanager/manager/api_manager.py`.
-- [ ] Write config 06 (50ep).
-- [ ] Write config 07 (v4 BC) — smoke-check v4 BC checkpoints load first.
-- [ ] Submit both sweeps on Raven; fetch artifacts.
-- [ ] Write overlay notebook / script; commit figure + parquets.
+- [x] Flip status to `[ACTIVE]`.
+- [x] Edit `DummyManager` in `src/aimanager/manager/api_manager.py`
+      (commit `4c875a1`).
+- [x] Write config 06 (50ep).
+- [x] Write config 07 (v4 BC) — v4 BC checkpoints loaded cleanly.
+- [x] Submit both sweeps on Raven; fetch artifacts (commit `685b275`).
+- [x] Side-track refactor: gate plots / per-round on flags
+      (commit `17fd712`); add `payoff_sum` to comparison plots
+      (commit `06c2724`); refresh 06 sweep with new plotting
+      (commit `0c5610c`).
+- [ ] Write overlay notebook / script; commit figure.
+      (`aggregates.csv` already settles the diagnostic — the overlay is
+      now mostly for the report figure, not for the verdict itself.)
 - [ ] Open PR referencing #94; post verdict comment with overlay.
