@@ -362,9 +362,23 @@ def create_plots(
 
     df["episode"] = df["run"] + "__" + df["episode"].astype(str)
 
+    # `payoff` rows are per-agent (mean across agents in seaborn lineplot
+    # = avg per-agent payoff). `payoff_sum` replicates the per-run group
+    # sum onto every agent row so seaborn's mean reduces back to the
+    # episode-level group sum.
+    df["payoff_sum"] = df.groupby(
+        ["run", "episode", "round_number"]
+    )["payoff"].transform("sum")
+
     dfm = df.melt(
         id_vars=["episode", "round_number", "participant_code", "run"],
-        value_vars=["punishment", "contribution", "common_good", "payoff"],
+        value_vars=[
+            "punishment",
+            "contribution",
+            "common_good",
+            "payoff",
+            "payoff_sum",
+        ],
     )
 
     # Plot 1: Manager comparison
@@ -427,6 +441,10 @@ def create_plots(
 
         if len(df_p):
             df_p["label"] = df_p["pairing"] + " / " + df_p["manager_side"]
+            # Per-side sum (overrides the per-run sum copied from df).
+            df_p["payoff_sum"] = df_p.groupby(
+                ["run", "episode", "round_number", "manager_side"]
+            )["payoff"].transform("sum")
             dfp_m = df_p.melt(
                 id_vars=[
                     "episode",
@@ -434,7 +452,13 @@ def create_plots(
                     "participant_code",
                     "label",
                 ],
-                value_vars=["punishment", "contribution", "common_good", "payoff"],
+                value_vars=[
+                    "punishment",
+                    "contribution",
+                    "common_good",
+                    "payoff",
+                    "payoff_sum",
+                ],
             )
             g = sns.relplot(
                 data=dfp_m,
@@ -659,6 +683,7 @@ def create_plots(
                 "contribution": "mean",
                 "common_good": "mean",
                 "payoff": "mean",
+                "payoff_sum": "mean",
             }
         )
         .reset_index()
