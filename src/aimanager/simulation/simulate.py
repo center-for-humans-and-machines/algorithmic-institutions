@@ -291,11 +291,10 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
 
 def load_pilot_data(config: dict, basedir: str) -> pd.DataFrame:
-    """Load pilot experiment data."""
-    data_file = config.get(
-        "pilot_data_file", "experiments/pilot_random1_player_round_slim.csv"
-    )
-    data_file = os.path.join(basedir, data_file)
+    """Load pilot experiment data — opt-in via `pilot_data_file`."""
+    if "pilot_data_file" not in config:
+        return None
+    data_file = os.path.join(basedir, config["pilot_data_file"])
 
     if not os.path.exists(data_file):
         print(f"Warning: Pilot data file not found: {data_file}")
@@ -356,6 +355,7 @@ def create_plots(
     managers_config: dict,
     figure_name: str = "",
     pairings: list = None,
+    n_groups: int = 1,
 ) -> None:
     """Create and save comparison plots."""
     make_dir(output_dir)
@@ -458,8 +458,9 @@ def create_plots(
             plt.close()
             print(f"Saved: {out}")
 
-    # Plot 2: Pilot comparison (if pilot data exists)
-    pilot_runs = ["pilot human manager", "pilot rule based manager"]
+    # Plot 2: Pilot comparison (if pilot data exists). Pilot rows are
+    # anything that isn't a simulation run (sim runs start with "ah ").
+    pilot_runs = [r for r in dfm["run"].unique() if not r.startswith("ah ")]
     w_pilot = dfm["run"].isin(pilot_runs)
 
     if w_pilot.any():
@@ -480,12 +481,14 @@ def create_plots(
         plt.close()
         print(f"Saved: {os.path.join(output_dir, 'comparison_pilot.jpg')}")
 
-    # Plot 3: Pilot + simulation overlay (direct comparison)
+    # Plot 3: Pilot + simulation overlay (direct comparison).
+    # Only emit if pilot data is actually present — otherwise this plot
+    # collapses to a copy of Plot 1.
     sim_runs = [r for r in dfm["run"].unique() if r.startswith("ah ")]
     overlay_runs = pilot_runs + sim_runs
     w_overlay = dfm["run"].isin(overlay_runs)
 
-    if w_overlay.any():
+    if pilot_runs and w_overlay.any():
         dfg = dfm[w_overlay].copy()
         g = sns.relplot(
             data=dfg,
@@ -505,7 +508,7 @@ def create_plots(
         print(f"Saved: {os.path.join(output_dir, 'comparison_pilot_vs_sim.jpg')}")
 
     # Plot 4: Group-size evolution per run (sim + pilot comparison)
-    if "group_id" in df.columns:
+    if n_groups > 1 and "group_id" in df.columns:
         per_episode_sizes = (
             df.groupby(
                 ["run", "episode", "round_number", "group_id"],
@@ -542,7 +545,7 @@ def create_plots(
         print(f"Saved: {global_group_size_path}")
 
     # Plot 5: Number of switches per round (mean over episodes)
-    if "group_id" in df.columns:
+    if n_groups > 1 and "group_id" in df.columns:
         switch_df = df.sort_values(
             ["run", "episode", "participant_code", "round_number"]
         ).copy()
@@ -583,7 +586,7 @@ def create_plots(
         print(f"Saved: {switch_path}")
 
     # Plot 6: Group switching heatmap (if agent_group data exists)
-    if "agent_group" in df.columns:
+    if n_groups > 1 and "agent_group" in df.columns:
         # Only use simulation runs (not pilot data)
         sim_runs = [r for r in df["run"].unique() if r.startswith("ah ")]
         df_sim = df[df["run"].isin(sim_runs)].copy()
@@ -684,12 +687,14 @@ def run_cli(config, config_path):
     # Run simulation
     dfs = run_simulation(config, output_dir)
 
-    # Persist per-agent per-round simulation frame for downstream
-    # trajectory plotting (manager-side / group_id decompositions).
     df_sim = pd.concat(dfs).reset_index(drop=True)
-    per_round_path = os.path.join(output_dir, "per_round.parquet")
-    df_sim.to_parquet(per_round_path, index=False)
-    print(f"Saved: {per_round_path}")
+
+    # Persist per-agent per-round simulation frame — opt-in via
+    # `save_per_round` for downstream trajectory plotting.
+    if config.get("save_per_round", False):
+        per_round_path = os.path.join(output_dir, "per_round.parquet")
+        df_sim.to_parquet(per_round_path, index=False)
+        print(f"Saved: {per_round_path}")
 
     # Load pilot data if available
     df_pilot = load_pilot_data(config, basedir)
@@ -707,6 +712,7 @@ def run_cli(config, config_path):
         config["managers"],
         config["figure_name"],
         pairings=config.get("pairings"),
+        n_groups=config.get("n_groups", 1),
     )
 
     print("Simulation complete!")
