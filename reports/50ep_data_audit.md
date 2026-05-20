@@ -87,6 +87,82 @@ sustained-`p` sweep is largely extrapolation. `p=5` (in or near the
 arguably the more trustworthy signal that the model has the elasticity
 direction wrong.
 
+## Joint `(prev_c, prev_p)` coverage
+
+`uv run python experiment_analysis/joint_coverage.py` derives per-player
+lag-1 `prev_contribution` and `prev_punishment`, then buckets both and
+prints the joint distribution.
+
+### Joint shares (% of all rows)
+
+| prev_c \ prev_p | p=0 (Leg) | p=0 (50ep) | Δ |
+|---|---:|---:|---:|
+| 0       | 3.15  | 7.85  | +4.70 |
+| 1-5     | 3.88  | 12.02 | +8.14 |
+| 6-10    | 5.81  | 18.79 | +12.99 |
+| 11-15   | 7.60  | 14.91 | +7.32 |
+| 16-19   | 6.83  | 4.27  | −2.55 |
+| **20**  | **31.24** | **12.33** | **−18.91** |
+
+**Read.** In legacy data, **31% of all rows are `(c=20, p=0)`** — the
+cooperative steady state where perfect cooperators are left
+unpunished. In 50ep that cell collapses to 12%; the freed mass
+migrates down to `(c=6-10, p=0)` (+13pp) and `(c=11-15, p=0)` (+7pp).
+The 50ep `p=0` rows live overwhelmingly at *mid-range* contribution,
+not at the cooperative ceiling.
+
+This is consistent with PR #96's finding that the 50ep AH starts at
+~8.5 (matching first-round mean 8.75) and stays there under sustained
+`p=0`. The model is faithful: at `(prev_c≈8, prev_p=0)` the empirical
+conditional behaviour in training is "stay around 8".
+
+## Manager-as-confound — conditional `P(prev_p | prev_c)`
+
+The joint distribution above mixes the contribution prior with the
+manager's response policy. Conditioning on `prev_c` isolates the
+policy.
+
+### Legacy manager (% of `prev_c` row)
+
+| prev_c | p=0 | p=1-3 | p=4-7 | p=8-15 | p=16+ |
+|---|---:|---:|---:|---:|---:|
+| 0     | 44 | 12 |  7 | 14 | **24** |
+| 1-5   | 31 | 14 | 17 | 20 | 17 |
+| 6-10  | 34 | 16 | 21 | 24 |  4 |
+| 11-15 | 38 | 30 | 22 |  9 |  1 |
+| 16-19 | 60 | 31 |  8 |  1 |  0 |
+| 20    | **98** |  1 |  0 |  1 |  0 |
+
+### 50ep manager (% of `prev_c` row)
+
+| prev_c | p=0 | p=1-3 | p=4-7 | p=8-15 | p=16+ |
+|---|---:|---:|---:|---:|---:|
+| 0     | **66** | 10 |  7 |  9 |  8 |
+| 1-5   | 56 | 19 | 13 |  7 |  4 |
+| 6-10  | 65 | 20 |  9 |  5 |  1 |
+| 11-15 | 76 | 15 |  5 |  3 |  1 |
+| 16-19 | 79 | 15 |  3 |  2 |  1 |
+| 20    | 96 |  1 |  1 |  1 |  0 |
+
+**Read.** Both managers reward `c=20` with virtually no punishment
+(96–98%) — that's the only cell where the policies agree.
+
+- **50ep managers are dramatically more lenient on free-riders.** At
+  `prev_c=0`, heavy punishment (`p=16+`) drops from 24% (legacy) to
+  8% (50ep). Choosing `p=0` for the same free-rider jumps from 44% to
+  **66%**.
+- **Conditional elasticity weakened.** Legacy
+  `P(p=0 | c=20) − P(p=0 | c=0)` ≈ 98% − 44% = **54pp gradient** — a
+  sharp manager response. 50ep is 96% − 66% = **30pp** — markedly
+  flatter. The 50ep human managers themselves were less elastic to
+  prior contribution.
+
+The contribution AH can't learn punishment-elasticity that wasn't
+demonstrated to it in training. PR #96's no-decay-at-`p=0` and
+wrong-direction-at-`p=5,10` both follow from this: the model is
+faithfully reproducing a regime where punishment doesn't correlate
+strongly with contribution shifts.
+
 ## Feature-target signal strength
 
 `uv run python experiment_analysis/feature_data_correlation.py <config>`
@@ -115,36 +191,46 @@ structure. The model is faithfully reflecting the data.
 
 ## What's still open
 
-Step 0 establishes the headline: punishment-related signal is roughly
-half as strong in 50ep as in legacy, the autoregressive trap is more
-entrenched, players contribute less on average, and `p=0` dominates
-70% of training rows. The naive "no-deterrent regime missing" version
-of the coverage hypothesis is dead, but **`p=0` imbalance** is now the
-leading explanation — most rows carry no variance in the punishment
-feature, so the loss-minimizing model treats it as low-information.
-
-Issue #97 lists five more angles:
+Three of five remaining angles are now closed:
 
 1. ~~Punishment regime coverage (marginal `p` histogram).~~ — **done.**
-   Headline: `p=0` is more common in 50ep than legacy (70.7% vs 59.6%);
-   the higher-`p` regimes (`p≥8`) are roughly half as frequent. Coverage
-   isn't the gap; the imbalance toward `p=0` is the candidate
-   mechanism.
-2. `(prev_c, prev_p)` joint coverage — find the empty cells. With `c=20`
-   share dropping from 32.5% to 13.1% in 50ep, the *(high-c, low-p)*
-   transition cell — where free-riding-emergence would be learned — may
-   be especially sparse even though both marginals are present.
-3. Manager-as-confound — `p[t] | prev_c[t-1]` joint. Even with 70%
-   `p=0` rows, if those rows sit predominantly at low `c` (the decay is
-   already complete by then), the model never sees a high-c→p=0
-   transition and can't learn "no punishment causes drop". Closely
-   related to (2).
+   `p=0` is more common in 50ep than legacy (70.7% vs 59.6%); the
+   higher-`p` regimes (`p≥8`) are roughly half as frequent. Coverage
+   isn't the gap.
+2. ~~`(prev_c, prev_p)` joint coverage.~~ — **done.** The `(c=20, p=0)`
+   cooperative-steady-state cell collapses from 31% (legacy) to 12%
+   (50ep). Mass migrates to mid-`c` + `p=0`, exactly the regime the AH
+   reproduces in PR #96.
+3. ~~Manager-as-confound.~~ — **done.** 50ep managers were dramatically
+   less elastic: `P(p=16+ | c=0)` 24% → 8%; conditional gradient
+   `P(p=0 | c=20) − P(p=0 | c=0)` 54pp → 30pp. The training data
+   simply doesn't demonstrate strong contribution-conditional
+   punishment to the model.
 4. Empirical decay-under-low-`p` — find sequences in 50ep with
-   sustained low `p` and measure Δc. Partitions data-vs-model failure
-   conclusively.
+   sustained low `p` and measure Δc. Would partition data-vs-model
+   conclusively, but the combined story from (1)–(3) is already
+   strong: the data lacks both the cooperative-ceiling anchor and the
+   free-rider deterrent the legacy AHs learned from.
 5. Switching-effect isolation — within-block vs post-switch rounds.
+   Less urgent given the manager-policy explanation; worth checking if
+   the policy weakness is concentrated post-switch.
 
-(2) and (3) together are the highest-value next step — both probe
-whether `p=0` dominance is structurally tied to low `c` (which would
-make the imbalance even more pernicious than the marginal numbers
-suggest).
+## Verdict so far
+
+The 50ep contribution AH's failure modes in PR #96 (no decay at `p=0`,
+wrong-direction elasticity at `p=5,10`) trace back to two structural
+properties of the training data:
+
+- **Cooperative ceiling missing.** Legacy data anchors on the `(c=20,
+  p=0)` cell (31% of rows). 50ep has 12%. There's no dense
+  "stay-at-top" steady state for the model to lean on under sustained
+  no-punishment.
+- **Manager elasticity weakened.** 50ep human managers were ~2× more
+  lenient on free-riders and showed half the conditional-policy
+  gradient. Punishment-elasticity wasn't demonstrated in training.
+
+Retraining the contribution AH on the 50ep data alone won't fix this —
+the signal isn't there. Candidate next steps: (a) collect additional
+data with stricter human-manager policies, (b) mix legacy + 50ep
+during training, (c) constrain the AH architecture to enforce
+monotone response to `prev_punishment`.
