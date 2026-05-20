@@ -13,11 +13,7 @@ import numpy as np
 
 DATASETS = [
     ("Legacy", "experiments/pilot_random1_player_round_slim.csv"),
-    (
-        "GS (13 ep)",
-        "experiments/group_switching_human_human_group_switching_8_agents.csv",
-    ),
-    ("GS (35 ep)", "experiments/2group_8agent_35ep.csv"),
+    ("GS (50 ep)", "experiments/2group_8agent_50ep.csv"),
 ]
 
 
