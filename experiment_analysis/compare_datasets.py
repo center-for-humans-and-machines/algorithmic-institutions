@@ -1,7 +1,7 @@
 """Compare legacy pilot data vs group switching data.
 
 Usage:
-    python scripts/data_analysis/compare_datasets.py
+    python experiment_analysis/compare_datasets.py
 
 Prints side-by-side statistics for the legacy and new datasets
 to identify structural differences that may explain training gaps.
@@ -17,6 +17,34 @@ DATASETS = [
 ]
 
 
+# Bucket specs for the aggregated coverage tables.
+# Buckets are inclusive on both ends.
+CONTRIBUTION_BUCKETS = [
+    ("0", (0, 0)),
+    ("1-5", (1, 5)),
+    ("6-10", (6, 10)),
+    ("11-15", (11, 15)),
+    ("16-19", (16, 19)),
+    ("20", (20, 20)),
+]
+PUNISHMENT_BUCKETS = [
+    ("0", (0, 0)),
+    ("1-3", (1, 3)),
+    ("4-7", (4, 7)),
+    ("8-15", (8, 15)),
+    ("16+", (16, 30)),
+]
+
+
+def _bucket_shares(series, buckets):
+    """Return {label: share} for the given bucket spec."""
+    out = {}
+    for label, (lo, hi) in buckets:
+        mask = (series >= lo) & (series <= hi)
+        out[label] = mask.mean()
+    return out
+
+
 def summarize(df, name):
     print(f"=== {name} ===")
     print(f"Shape: {df.shape}")
@@ -29,6 +57,10 @@ def summarize(df, name):
 
     print("contribution stats:")
     print(df["contribution"].describe().to_string())
+    print()
+
+    print("punishment stats:")
+    print(df["punishment"].describe().to_string())
     print()
 
     print("common_good stats:")
@@ -46,9 +78,15 @@ def summarize(df, name):
     print()
 
     # Contribution distribution
-    print("contribution value counts (top 10):")
+    print("contribution value counts:")
     vc = df["contribution"].value_counts().sort_index()
     print(vc.to_string())
+    print()
+
+    # Punishment distribution
+    print("punishment value counts:")
+    vp = df["punishment"].value_counts().sort_index()
+    print(vp.to_string())
     print()
 
     # Per-round mean contribution
@@ -143,6 +181,25 @@ def main():
         for v in vals:
             line += f"{fmt(v, is_int):>{col_w}s}"
         print(line)
+
+    # Bucket coverage — contribution and punishment side by side.
+    def _print_bucket_table(title, column, buckets):
+        print(f"\n=== {title} ===")
+        print(header)
+        print("-" * len(header))
+        per_ds = [_bucket_shares(df[column], buckets) for _, df in dfs]
+        for label, _ in buckets:
+            line = f"{label:<30s}"
+            for shares in per_ds:
+                line += f"{shares[label] * 100:>{col_w - 1}.1f}%"
+            print(line)
+
+    _print_bucket_table(
+        "Contribution bucket share", "contribution", CONTRIBUTION_BUCKETS
+    )
+    _print_bucket_table(
+        "Punishment bucket share", "punishment", PUNISHMENT_BUCKETS
+    )
 
 
 def _entropy(series):
