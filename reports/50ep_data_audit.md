@@ -206,31 +206,86 @@ Three of five remaining angles are now closed:
    `P(p=0 | c=20) − P(p=0 | c=0)` 54pp → 30pp. The training data
    simply doesn't demonstrate strong contribution-conditional
    punishment to the model.
-4. Empirical decay-under-low-`p` — find sequences in 50ep with
-   sustained low `p` and measure Δc. Would partition data-vs-model
-   conclusively, but the combined story from (1)–(3) is already
-   strong: the data lacks both the cooperative-ceiling anchor and the
-   free-rider deterrent the legacy AHs learned from.
+4. ~~Empirical decay-under-low-`p`.~~ — **done.** See section below.
 5. Switching-effect isolation — within-block vs post-switch rounds.
    Less urgent given the manager-policy explanation; worth checking if
    the policy weakness is concentrated post-switch.
 
+## Decay under sustained low punishment
+
+`uv run python experiment_analysis/decay_sequences.py` extracts per-player
+runs of ≥3 consecutive rounds with `prev_punishment ≤ 2`, records Δc
+across each run, and buckets by starting contribution.
+
+| Start c | Legacy n / Δc / mean_len / end_c | 50ep n / Δc / mean_len / end_c |
+|---|---|---|
+| 0     | 16 / +5.31 / 5.8 / 5.31  | 62  / +2.94 / 10.4 / 2.94 |
+| 1-5   | 33 / +0.33 / 6.0 / 4.33  | 101 / -0.49 / 10.4 / 3.12 |
+| 6-10  | 59 / -1.59 / 5.9 / 7.41  | **192 / -1.45 / 10.8 / 7.02** |
+| 11-15 | 87 / -2.18 / 6.6 / 11.66 | 151 / -3.16 / 12.5 / 10.01 |
+| 16-19 | 69 / -2.33 / 6.8 / 15.35 | 29  / -4.00 / 13.7 / 13.48 |
+| 20    | **202 / -2.22 / 7.4 / 17.78** | 77 / -7.22 / 11.9 / 12.78 |
+
+**Where sustained low-p sequences actually live, by dataset.** The two
+datasets differ sharply in *which* contributors end up in
+sustained-low-punishment runs:
+
+- **Legacy is dominated by `c=20` starts** — 202 of 466 runs (43%)
+  begin at perfect cooperation. The legacy human manager rewarded
+  perfect cooperators with sustained no-punishment, and players in
+  that state mostly *stayed* there (mean end_c = 17.78). The training
+  signal is "if you're already at the top and nobody's punishing
+  you, drift down only slightly".
+- **50ep is dominated by `c=6-10` starts** — 192 of 612 runs (31%)
+  begin at mid-range contribution. The 50ep manager extended the same
+  no-punishment treatment to half-cooperators, who then stayed in the
+  mid-range (mean end_c = 7.02). The training signal becomes "if
+  you're at mid-`c` and nobody's punishing you, stay around mid-`c`".
+
+This explains the PR #96 operating point cleanly: the AH inherits the
+modal "anchor" of its training data. Legacy data anchors at the
+cooperative ceiling under no-punishment; 50ep data anchors at the
+mid-level plateau under no-punishment. The 50ep AH in PR #96 starts
+~8.5 and stays there because that *is* what its training data
+overwhelmingly demonstrates is what happens in that regime.
+
+50ep does also contain `c=20`-start decay sequences (77 of them, Δc =
+-7.22), but they're a 12.5% minority and at a contribution level the
+AH can't reach from its own dynamics. Asking the model "what would
+happen if we forced you to c=20 first" tests in-vitro behaviour
+decoupled from operational use.
+
 ## Verdict so far
 
-The 50ep contribution AH's failure modes in PR #96 (no decay at `p=0`,
-wrong-direction elasticity at `p=5,10`) trace back to two structural
-properties of the training data:
+PR #96 documented two failure modes for the 50ep contribution AH: no
+decay at `p=0` and wrong-direction elasticity at `p=5,10`. The audit
+refines this:
 
-- **Cooperative ceiling missing.** Legacy data anchors on the `(c=20,
-  p=0)` cell (31% of rows). 50ep has 12%. There's no dense
-  "stay-at-top" steady state for the model to lean on under sustained
-  no-punishment.
+- **No-decay-at-`p=0` is mostly faithful behaviour** in the regime
+  the AH actually operates in. At c=6-10 starting state, data shows
+  Δc ≈ -1.45 over ~11 rounds; the model shows ≈ 0. A mild
+  underestimate, not a structural failure. The much stronger decay
+  the data contains (Δc = -7.22 from c=20) sits at contribution
+  levels the AH can't reach on its own, so it doesn't surface in
+  practice.
+- **Wrong-direction elasticity at `p=5,10` is the more telling
+  divergence** — the data shows contribution drift down or flat with
+  moderate punishment; the model has it rising. That's not faithful.
+
+Two structural properties of the training data make these failures
+predictable:
+
+- **Cooperative ceiling collapsed.** Legacy data anchors on the
+  `(c=20, p=0)` cell (31% of rows). 50ep has 12%. The AH has no dense
+  stay-at-top steady state to draw on, and naturally settles at
+  mid-`c` where decay is shallow.
 - **Manager elasticity weakened.** 50ep human managers were ~2× more
   lenient on free-riders and showed half the conditional-policy
-  gradient. Punishment-elasticity wasn't demonstrated in training.
+  gradient (54pp → 30pp from `c=0` to `c=20`). The
+  contribution-punishment relationship wasn't strongly demonstrated.
 
-Retraining the contribution AH on the 50ep data alone won't fix this —
-the signal isn't there. Candidate next steps: (a) collect additional
-data with stricter human-manager policies, (b) mix legacy + 50ep
-during training, (c) constrain the AH architecture to enforce
-monotone response to `prev_punishment`.
+Retraining the contribution AH on the 50ep data alone won't fix the
+elasticity-direction issue — the signal in the data is weak. Candidate
+next steps: (a) collect additional data with stricter human-manager
+policies, (b) mix legacy + 50ep during training, (c) constrain the AH
+architecture to enforce monotone response to `prev_punishment`.
