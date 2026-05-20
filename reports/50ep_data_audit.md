@@ -163,6 +163,78 @@ wrong-direction-at-`p=5,10` both follow from this: the model is
 faithfully reproducing a regime where punishment doesn't correlate
 strongly with contribution shifts.
 
+## What did the best episodes do?
+
+The conditional policy above averages all episodes together. A natural
+follow-up: are there *subpopulations* of episodes in 50ep where the
+manager used a more elastic policy and outperformed laissez-faire?
+Compared to PR #96's dummy-at-`p=0` baseline:
+
+| Dataset | Episodes | Mean payoff | Std | % above baseline |
+|---|---:|---:|---:|---:|
+| Legacy | 135 | 22.52 | 5.67 | 43% (58/135) |
+| GS 50ep | 50 | 22.48 | 3.39 | 24% (12/50) |
+
+Legacy has nearly twice the rate of "good-management" episodes and
+much wider outcome spread. The 50ep training data has fewer
+high-leverage examples and a more compressed outcome distribution.
+
+### Top-quartile policy fingerprint
+
+`uv run python experiment_analysis/top_episode_policy.py` splits each
+dataset by per-episode mean payoff and computes the conditional
+policy `P(prev_p | prev_c)` separately on the top and bottom
+quartiles, **filtering out `player_no_input` rows** (imputed-zero
+contributions where there was no decision for the manager to respond
+to).
+
+**Real-free-rider response — `prev_c=0` row of the conditional table:**
+
+| | P(p=0) | P(p=16+) |
+|---|---:|---:|
+| **Legacy top** | **0%** | **100%** |
+| Legacy bottom | 12% | 43% |
+| **50ep top** | **74%** | **14.5%** |
+| 50ep bottom | 61% | 7.6% |
+
+Top-quartile legacy managers punish **100% of real free-riders with
+heavy strikes** — literally no exceptions. The same managers used 0%
+punishment for `prev_c=20` (99.6% `p=0`). That is a textbook
+strict-but-targeted policy.
+
+Top-quartile 50ep managers, by contrast, leave **74% of real
+free-riders unpunished** and only hit 14.5% with heavy strikes. Same
+pattern at `prev_c=1-5`: legacy top hits 87% with `p≥8`, 50ep top
+hits 26%.
+
+**Mid-contribution response (`prev_c=6-10`):**
+
+| | P(p=0) | P(p≥8) |
+|---|---:|---:|
+| Legacy top | 30% | 45% |
+| 50ep top | 70% | 5% |
+
+Top legacy managers punish mid-contributors 70% of the time. Top
+50ep managers punish them 30% of the time — and almost never with
+heavy strikes (5% vs legacy's 45%).
+
+### Implication
+
+Even the **best** 50ep managers — the top 13 episodes by payoff — do
+not demonstrate strict-but-targeted punishment. The signal isn't just
+*rarer* in 50ep; it's *absent at every subpopulation level*, including
+the high-performing tail. Legacy's top quartile alone could plausibly
+teach an AH the strict policy via loss reweighting. 50ep has no
+analogous teacher subset — neither the full dataset, nor the
+high-performing slice, nor any other split demonstrates strong
+contribution-conditional severity.
+
+This pushes the verdict beyond "retrain on 50ep with better loss":
+the data itself doesn't contain the policy regime that produces
+punishment-elastic AHs. Recovering it requires either mixing in
+legacy data, collecting new pilot data with stricter human-manager
+policies, or imposing the structure architecturally.
+
 ## Feature-target signal strength
 
 `uv run python experiment_analysis/feature_data_correlation.py <config>`
@@ -285,7 +357,11 @@ predictable:
   contribution-punishment relationship wasn't strongly demonstrated.
 
 Retraining the contribution AH on the 50ep data alone won't fix the
-elasticity-direction issue — the signal in the data is weak. Candidate
-next steps: (a) collect additional data with stricter human-manager
-policies, (b) mix legacy + 50ep during training, (c) constrain the AH
+elasticity-direction issue — and the top-quartile analysis shows that
+loss reweighting toward "good" 50ep episodes won't fix it either,
+because even those episodes lack a strict-but-targeted policy. The
+signal genuinely isn't in 50ep at any subpopulation. Candidate next
+steps: (a) collect additional data with stricter human-manager
+policies, (b) mix legacy + 50ep during training (legacy's top
+quartile shows a clean strict-policy signal), (c) constrain the AH
 architecture to enforce monotone response to `prev_punishment`.
