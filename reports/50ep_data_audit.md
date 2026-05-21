@@ -168,16 +168,32 @@ strongly with contribution shifts.
 The conditional policy above averages all episodes together. A natural
 follow-up: are there *subpopulations* of episodes in 50ep where the
 manager used a more elastic policy and outperformed laissez-faire?
-Compared to PR #96's dummy-at-`p=0` baseline:
+Both metrics are computed on the **focus group (`group_id == 0`)** to
+match the per-side framing PR #96's fixed-aggregation plots use:
 
-| Dataset | Episodes | Mean payoff | Std | % above baseline |
+- **avg**: mean per-agent payoff within group 0
+- **sum**: mean per-round group-0 payoff sum (captures group size — a
+  manager who attracts agents from the other side can score higher
+  even at modest per-agent welfare)
+
+Compared to PR #96's `p0_vs_p0` dummy baseline (avg=25.18, sum=122.87):
+
+| Dataset | Episodes | Mean avg | Above avg baseline | Above sum baseline |
 |---|---:|---:|---:|---:|
-| Legacy | 135 | 22.52 | 5.67 | 43% (58/135) |
-| GS 50ep | 50 | 22.48 | 3.39 | 24% (12/50) |
+| Legacy | 135 | 22.52 | **43%** (58/135) | 43% (58/135) — same set, 1g4a |
+| GS 50ep | 50 | 21.83 | **18%** (9/50) | **22%** (11/50) |
 
-Legacy has nearly twice the rate of "good-management" episodes and
-much wider outcome spread. The 50ep training data has fewer
-high-leverage examples and a more compressed outcome distribution.
+In legacy (1g4a, no switching) `sum = 4 × avg` trivially, so both
+criteria pick the same episodes. In 50ep the criteria identify
+**largely disjoint sets**: only 2 episodes (`ep 7`, `ep 31`) clear
+both bars. Eight episodes excel on per-agent welfare without growing
+their group; eight others bulk their group at lower per-agent payoff.
+Union: **18 episodes** with some form of "good management" signal
+(full per-episode breakdown in `reports/50ep_top_episodes.md` and
+`reports/legacy_top_episodes.md`).
+
+Legacy still demonstrates "good management" at roughly twice the rate
+of 50ep across either metric.
 
 ### Top-quartile policy fingerprint
 
