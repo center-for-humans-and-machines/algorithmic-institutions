@@ -1,0 +1,73 @@
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_1000.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep/model/architecture_mlp+rnn+edge__dataset_50ep__epochs_375.pt
+
+managers:
+  ah_opponent:
+    type: human
+    path: artifacts/artificial_humans/punishment_autoregressive_50ep/model/architecture_node+edge+autoregressive__dataset_50ep__epochs_7500.pt
+  dummy_p0:
+    type: dummy
+    constant_punishment: 0
+  # Calibrated to 50ep above-sum-baseline episodes — see issue #99.
+  strict_low_c:
+    # ep 13 style: punish c<=7 around p=10, leave c>=8 alone.
+    type: rule
+    rule: prev_c_threshold
+    c_threshold: 7
+    p_high: 10
+    p_low: 0
+  moderate_low_c:
+    # ep 25 / ep 28 style: light nudges at low c (~p=2).
+    type: rule
+    rule: prev_c_threshold
+    c_threshold: 3
+    p_high: 2
+    p_low: 0
+  tactical_heavy_early:
+    # ep 41 style: heavy first 4 rounds (~p=18), then nothing.
+    type: rule
+    rule: tactical_early
+    n_early: 3
+    p_high: 18
+    p_low: 0
+  tactical_moderate_early:
+    # ep 8 style: moderate first 4 rounds (~p=10), then near-zero.
+    type: rule
+    rule: tactical_early
+    n_early: 3
+    p_high: 10
+    p_low: 0
+
+pairings:
+  - name: dummy_vs_ah
+    group_0: dummy_p0
+    group_1: ah_opponent
+  - name: strict_low_c_vs_ah
+    group_0: strict_low_c
+    group_1: ah_opponent
+  - name: moderate_low_c_vs_ah
+    group_0: moderate_low_c
+    group_1: ah_opponent
+  - name: tactical_heavy_early_vs_ah
+    group_0: tactical_heavy_early
+    group_1: ah_opponent
+  - name: tactical_moderate_early_vs_ah
+    group_0: tactical_moderate_early
+    group_1: ah_opponent
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/08_rule_strategies_vs_ah
+figure_name: rule_strategies_vs_ah
+basedir: .
