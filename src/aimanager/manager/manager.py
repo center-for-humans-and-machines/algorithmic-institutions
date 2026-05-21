@@ -121,7 +121,7 @@ class ArtificalManager:
         }
         return obs_group
 
-    def update(self, update_step, action, reward, **obs):
+    def update(self, update_step, action, reward, rl_group_id=None, **obs):
         if update_step % self.target_update_freq == 0:
             # copy policy net to target net
             self.target_model.load_state_dict(self.policy_model.state_dict())
@@ -169,6 +169,13 @@ class ArtificalManager:
 
         # Compute the expected Q values
         expected_q = (next_v * self.gamma) + reward  # episodes, groups, round
+
+        # Two-manager training: restrict the TD-error to the RL manager's
+        # own group. Replay still stores per-group reward for diagnostics;
+        # we only train on the slice we control.
+        if rl_group_id is not None:
+            current_q_group = current_q_group[:, rl_group_id : rl_group_id + 1]
+            expected_q = expected_q[:, rl_group_id : rl_group_id + 1]
 
         # Compute Huber loss
         loss = th.nn.functional.smooth_l1_loss(

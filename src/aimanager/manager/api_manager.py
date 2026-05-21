@@ -163,7 +163,59 @@ class DummyManager:
         return th.full_like(data["punishment"], self.constant_punishment)
 
 
-MANAGER_CLASS = {"human": HumanManager, "rl": RLManager, "dummy": DummyManager}
+class RuleBasedManager:
+    """Configurable rule-based manager for strategy testing (issue #99).
+
+    Supported rules:
+      - ``prev_c_threshold``: apply ``p_high`` if
+        ``prev_contribution <= c_threshold``, else ``p_low``.
+      - ``tactical_early``: apply ``p_high`` while
+        ``round_number <= n_early``, else ``p_low``.
+    """
+
+    def __init__(
+        self,
+        rule,
+        c_threshold=None,
+        n_early=None,
+        p_high=0,
+        p_low=0,
+        **_,
+    ):
+        self.rule = rule
+        self.c_threshold = int(c_threshold) if c_threshold is not None else None
+        self.n_early = int(n_early) if n_early is not None else None
+        self.p_high = int(p_high)
+        self.p_low = int(p_low)
+        self.model = None
+        self.default_values = {
+            "contribution": 0,
+            "punishment": 0,
+            "contribution_valid": False,
+            "punishment_valid": False,
+            "in_group": False,
+        }
+
+    def get_punishments(self, data):
+        if self.rule == "prev_c_threshold":
+            assert self.c_threshold is not None, "c_threshold required"
+            mask = data["prev_contribution"] <= self.c_threshold
+        elif self.rule == "tactical_early":
+            assert self.n_early is not None, "n_early required"
+            mask = data["round_number"] <= self.n_early
+        else:
+            raise ValueError(f"Unknown rule: {self.rule!r}")
+        out = th.full_like(data["punishment"], self.p_low)
+        out = th.where(mask, th.full_like(out, self.p_high), out)
+        return out
+
+
+MANAGER_CLASS = {
+    "human": HumanManager,
+    "rl": RLManager,
+    "dummy": DummyManager,
+    "rule": RuleBasedManager,
+}
 
 
 class MultiManager:
