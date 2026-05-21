@@ -116,6 +116,10 @@ This is consistent with PR #96's finding that the 50ep AH starts at
 `p=0`. The model is faithful: at `(prev_c≈8, prev_p=0)` the empirical
 conditional behaviour in training is "stay around 8".
 
+**Takeaway.** `p=0` is more uniformly distributed across contribution
+buckets in 50ep, meaning it lost its incentive role of driving
+contribution higher — mediocre contribution is OK now.
+
 ## Manager-as-confound — conditional `P(prev_p | prev_c)`
 
 The joint distribution above mixes the contribution prior with the
@@ -163,6 +167,12 @@ wrong-direction-at-`p=5,10` both follow from this: the model is
 faithfully reproducing a regime where punishment doesn't correlate
 strongly with contribution shifts.
 
+**Takeaway.** What counts as "good contribution" has shifted left in
+50ep, leading to underutilization of both the contribution and
+punishment spectrums — general leniency on both sides. The result is
+a more constricted contribution regime than legacy, which likely
+contributes to training difficulty.
+
 ## What did the best episodes do?
 
 The conditional policy above averages all episodes together. A natural
@@ -194,6 +204,12 @@ Union: **18 episodes** with some form of "good management" signal
 
 Legacy still demonstrates "good management" at roughly twice the rate
 of 50ep across either metric.
+
+**Takeaway.** It's harder to beat the no-punishment baseline in 50ep
+than in legacy — or equivalently, human managers (50ep) are worse at
+it than rule-based ones (legacy includes `random_1`, the rule-based
+protocol). The gap reflects how the experiments were performed, not
+just manager skill.
 
 ### Top-quartile policy fingerprint
 
@@ -260,6 +276,7 @@ for legacy (`script_21_no_grid.yml`) and 50ep
 | Feature → contribution     | Metric         | Legacy  | 50ep    | Δ (×)   |
 |----------------------------|----------------|--------:|--------:|--------:|
 | **`prev_contribution`**    | Mutual info    | 0.6305  | 0.8028  | +27% stronger |
+|                            | RF importance  | 0.6690  | 0.7638  | +14% stronger |
 |                            | Spearman ρ     | +0.7333 | +0.7638 | similar |
 | **`prev_punishment`**      | Mutual info    | 0.0801  | 0.0418  | −48% weaker |
 |                            | RF importance  | 0.1620  | 0.1120  | −31% weaker |
@@ -276,28 +293,6 @@ So the model's behaviour in PR #96 isn't an architecture failure: the
 training data itself has substantially less of the punishment-elasticity
 signal that the legacy AH learned, plus more "stay where you are"
 structure. The model is faithfully reflecting the data.
-
-## What's still open
-
-Three of five remaining angles are now closed:
-
-1. ~~Punishment regime coverage (marginal `p` histogram).~~ — **done.**
-   `p=0` is more common in 50ep than legacy (70.7% vs 59.6%); the
-   higher-`p` regimes (`p≥8`) are roughly half as frequent. Coverage
-   isn't the gap.
-2. ~~`(prev_c, prev_p)` joint coverage.~~ — **done.** The `(c=20, p=0)`
-   cooperative-steady-state cell collapses from 31% (legacy) to 12%
-   (50ep). Mass migrates to mid-`c` + `p=0`, exactly the regime the AH
-   reproduces in PR #96.
-3. ~~Manager-as-confound.~~ — **done.** 50ep managers were dramatically
-   less elastic: `P(p=16+ | c=0)` 24% → 8%; conditional gradient
-   `P(p=0 | c=20) − P(p=0 | c=0)` 54pp → 30pp. The training data
-   simply doesn't demonstrate strong contribution-conditional
-   punishment to the model.
-4. ~~Empirical decay-under-low-`p`.~~ — **done.** See section below.
-5. Switching-effect isolation — within-block vs post-switch rounds.
-   Less urgent given the manager-policy explanation; worth checking if
-   the policy weakness is concentrated post-switch.
 
 ## Decay under sustained low punishment
 
@@ -372,12 +367,3 @@ predictable:
   gradient (54pp → 30pp from `c=0` to `c=20`). The
   contribution-punishment relationship wasn't strongly demonstrated.
 
-Retraining the contribution AH on the 50ep data alone won't fix the
-elasticity-direction issue — and the top-quartile analysis shows that
-loss reweighting toward "good" 50ep episodes won't fix it either,
-because even those episodes lack a strict-but-targeted policy. The
-signal genuinely isn't in 50ep at any subpopulation. Candidate next
-steps: (a) collect additional data with stricter human-manager
-policies, (b) mix legacy + 50ep during training (legacy's top
-quartile shows a clean strict-policy signal), (c) constrain the AH
-architecture to enforce monotone response to `prev_punishment`.
