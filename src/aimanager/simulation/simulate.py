@@ -362,15 +362,22 @@ def create_plots(
 
     df["episode"] = df["run"] + "__" + df["episode"].astype(str)
 
-    # `payoff` rows are per-agent (mean across agents in seaborn lineplot
-    # = avg per-agent payoff). `payoff_sum` replicates the per-run group
-    # sum onto every agent row so seaborn's mean reduces back to the
-    # episode-level group sum.
+    # `payoff_sum` is the per-group sum of per-agent payoffs, replicated
+    # to each agent row so seaborn's mean over rows reduces back to the
+    # episode-level per-group sum. Plot 1 / pilot plots / aggregates
+    # then restrict to group_id==0 (the focus manager's group) so all
+    # reported numbers reflect a single manager's perspective rather
+    # than mixing two competing groups in pairing-mode runs.
     df["payoff_sum"] = df.groupby(
-        ["run", "episode", "round_number"]
+        ["run", "episode", "round_number", "group_id"]
     )["payoff"].transform("sum")
 
-    dfm = df.melt(
+    if "group_id" in df.columns:
+        df_focus = df[df["group_id"] == 0]
+    else:
+        df_focus = df
+
+    dfm = df_focus.melt(
         id_vars=["episode", "round_number", "participant_code", "run"],
         value_vars=[
             "punishment",
@@ -441,10 +448,9 @@ def create_plots(
 
         if len(df_p):
             df_p["label"] = df_p["pairing"] + " / " + df_p["manager_side"]
-            # Per-side sum (overrides the per-run sum copied from df).
-            df_p["payoff_sum"] = df_p.groupby(
-                ["run", "episode", "round_number", "manager_side"]
-            )["payoff"].transform("sum")
+            # `payoff_sum` already per (run, episode, round, group_id)
+            # from the top of create_plots, which is the correct
+            # per-side sum here too (group_id distinguishes sides).
             dfp_m = df_p.melt(
                 id_vars=[
                     "episode",
@@ -674,9 +680,10 @@ def create_plots(
             plt.close(fig)
             print(f"Saved: {os.path.join(output_dir, fname)}")
 
-    # Save aggregates
+    # Save aggregates — restricted to the focus manager's group (id 0)
+    # so reported numbers match the displayed lines in Plot 1.
     aggregates = (
-        df.groupby(["run", "round_number"])
+        df_focus.groupby(["run", "round_number"])
         .agg(
             {
                 "punishment": "mean",
