@@ -1,0 +1,33 @@
+artificial_humans:
+  full:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+
+managers:
+  dummy_p0:
+    type: dummy
+    constant_punishment: 0
+  dummy_p5:
+    type: dummy
+    constant_punishment: 5
+  dummy_p10:
+    type: dummy
+    constant_punishment: 10
+  dummy_p20:
+    type: dummy
+    constant_punishment: 20
+  dummy_p30:
+    type: dummy
+    constant_punishment: 30
+
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/07_sustained_p_sweep_v4bc
+figure_name: sustained_p_sweep_v4bc
+basedir: .

@@ -132,9 +132,14 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
     print(f"Using device: {device}")
 
-    # Add model_path to managers config
+    # Add model_path to managers config. Entries without a path
+    # (e.g. type: dummy) pass through untouched.
     managers = {
-        k: {**v, "model_path": os.path.join(basedir, v["path"])}
+        k: (
+            {**v, "model_path": os.path.join(basedir, v["path"])}
+            if "path" in v
+            else {**v}
+        )
         for k, v in managers_config.items()
     }
     print(f"Managers: {managers}")
@@ -147,17 +152,41 @@ def run_simulation(config: dict, output_dir: str) -> list:
         if "autoregressive" in managers[k]:
             man.model.autoregressive = managers[k]["autoregressive"]
 
-    # Create runs: all combinations of managers and artificial humans
-    runs = {
-        f"ah {h} managed by {m}": {"groups": [m] * n_agents, "humans": h}
-        for m in managers.keys()
-        for h in artificial_humans.keys()
-    }
+    # Create runs.
+    # Two modes:
+    #   - pairings (new): one run per (pairing, AH); per-agent manager
+    #     assignment is rebuilt each round from state["agent_group"]
+    #     (dynamic dispatch — matches training-time switch-predictor
+    #     semantics).
+    #   - legacy: one run per (manager, AH) with a static per-agent
+    #     manager list (same manager on every agent).
+    pairings = config.get("pairings")
+    if pairings is not None:
+        runs = {
+            f"ah {h} managed by {p['name']}": {
+                "pairing": p,
+                "groups": None,
+                "humans": h,
+            }
+            for p in pairings
+            for h in artificial_humans.keys()
+        }
+    else:
+        runs = {
+            f"ah {h} managed by {m}": {
+                "pairing": None,
+                "groups": [m] * n_agents,
+                "humans": h,
+            }
+            for m in managers.keys()
+            for h in artificial_humans.keys()
+        }
 
     dfs = []
     for name, run in runs.items():
         print(f"Start run {name}")
         groups = run["groups"]
+        pairing = run["pairing"]
 
         # Load artificial humans
         hm_path = os.path.join(
@@ -219,6 +248,12 @@ def run_simulation(config: dict, output_dir: str) -> list:
                     if "agent_group" in state
                     else None
                 )
+                if pairing is not None:
+                    # Dispatch each agent to its pairing-side manager based
+                    # on its *current* agent_group, so post-switch agents
+                    # are punished by the other side's manager.
+                    group_map = [pairing["group_0"], pairing["group_1"]]
+                    groups = [group_map[g] for g in current_agent_group]
                 round_dict = make_round(
                     contributions,
                     round_number,
@@ -256,11 +291,10 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
 
 def load_pilot_data(config: dict, basedir: str) -> pd.DataFrame:
-    """Load pilot experiment data."""
-    data_file = config.get(
-        "pilot_data_file", "experiments/pilot_random1_player_round_slim.csv"
-    )
-    data_file = os.path.join(basedir, data_file)
+    """Load pilot experiment data — opt-in via `pilot_data_file`."""
+    if "pilot_data_file" not in config:
+        return None
+    data_file = os.path.join(basedir, config["pilot_data_file"])
 
     if not os.path.exists(data_file):
         print(f"Warning: Pilot data file not found: {data_file}")
@@ -316,16 +350,42 @@ def load_pilot_data(config: dict, basedir: str) -> pd.DataFrame:
 
 
 def create_plots(
-    df: pd.DataFrame, output_dir: str, managers_config: dict, figure_name: str = ""
+    df: pd.DataFrame,
+    output_dir: str,
+    managers_config: dict,
+    figure_name: str = "",
+    pairings: list = None,
+    n_groups: int = 1,
 ) -> None:
     """Create and save comparison plots."""
     make_dir(output_dir)
 
     df["episode"] = df["run"] + "__" + df["episode"].astype(str)
 
-    dfm = df.melt(
+    # `payoff_sum` is the per-group sum of per-agent payoffs, replicated
+    # to each agent row so seaborn's mean over rows reduces back to the
+    # episode-level per-group sum. Plot 1 / pilot plots / aggregates
+    # then restrict to group_id==0 (the focus manager's group) so all
+    # reported numbers reflect a single manager's perspective rather
+    # than mixing two competing groups in pairing-mode runs.
+    df["payoff_sum"] = df.groupby(
+        ["run", "episode", "round_number", "group_id"]
+    )["payoff"].transform("sum")
+
+    if "group_id" in df.columns:
+        df_focus = df[df["group_id"] == 0]
+    else:
+        df_focus = df
+
+    dfm = df_focus.melt(
         id_vars=["episode", "round_number", "participant_code", "run"],
-        value_vars=["punishment", "contribution", "common_good", "payoff"],
+        value_vars=[
+            "punishment",
+            "contribution",
+            "common_good",
+            "payoff",
+            "payoff_sum",
+        ],
     )
 
     # Plot 1: Manager comparison
@@ -367,8 +427,70 @@ def create_plots(
         plt.close()
         print(f"Saved: {os.path.join(output_dir, 'comparison_manager.jpg')}")
 
-    # Plot 2: Pilot comparison (if pilot data exists)
-    pilot_runs = ["pilot human manager", "pilot rule based manager"]
+    # Plot 1b: Pairing-side comparison.
+    # When the sim uses `pairings:`, each pairing's group_0 and group_1
+    # are controlled by different managers. Plot 1 hues by run only,
+    # averaging the two sides together; this plot splits them so the
+    # trained side and opponent side appear as separate lines.
+    if pairings and "group_id" in df.columns:
+        pairings_by_name = {p["name"]: p for p in pairings}
+
+        def _side(name, key):
+            return pairings_by_name[name][key] if name in pairings_by_name else None
+
+        df_p = df[df["run"].str.contains(" managed by ", na=False)].copy()
+        pairing_name = df_p["run"].str.rsplit(" managed by ", n=1).str[1]
+        df_p["pairing"] = pairing_name
+        g0 = pairing_name.map(lambda n: _side(n, "group_0"))
+        g1 = pairing_name.map(lambda n: _side(n, "group_1"))
+        df_p["manager_side"] = g0.where(df_p["group_id"] == 0, g1)
+        df_p = df_p[df_p["manager_side"].notna()]
+
+        if len(df_p):
+            df_p["label"] = df_p["pairing"] + " / " + df_p["manager_side"]
+            # `payoff_sum` already per (run, episode, round, group_id)
+            # from the top of create_plots, which is the correct
+            # per-side sum here too (group_id distinguishes sides).
+            dfp_m = df_p.melt(
+                id_vars=[
+                    "episode",
+                    "round_number",
+                    "participant_code",
+                    "label",
+                ],
+                value_vars=[
+                    "punishment",
+                    "contribution",
+                    "common_good",
+                    "payoff",
+                    "payoff_sum",
+                ],
+            )
+            g = sns.relplot(
+                data=dfp_m,
+                x="round_number",
+                y="value",
+                col="variable",
+                hue="label",
+                kind="line",
+                facet_kws={"sharey": False, "sharex": True},
+                height=3,
+                aspect=1.1,
+                col_wrap=2,
+            )
+            g.fig.suptitle(
+                f"Pairing-side Comparison: {figure_name}",
+                y=1.02,
+            )
+            g.set(ylim=(0, None))
+            out = os.path.join(output_dir, "comparison_pairing_side.jpg")
+            g.savefig(out, bbox_inches="tight")
+            plt.close()
+            print(f"Saved: {out}")
+
+    # Plot 2: Pilot comparison (if pilot data exists). Pilot rows are
+    # anything that isn't a simulation run (sim runs start with "ah ").
+    pilot_runs = [r for r in dfm["run"].unique() if not r.startswith("ah ")]
     w_pilot = dfm["run"].isin(pilot_runs)
 
     if w_pilot.any():
@@ -389,12 +511,14 @@ def create_plots(
         plt.close()
         print(f"Saved: {os.path.join(output_dir, 'comparison_pilot.jpg')}")
 
-    # Plot 3: Pilot + simulation overlay (direct comparison)
+    # Plot 3: Pilot + simulation overlay (direct comparison).
+    # Only emit if pilot data is actually present — otherwise this plot
+    # collapses to a copy of Plot 1.
     sim_runs = [r for r in dfm["run"].unique() if r.startswith("ah ")]
     overlay_runs = pilot_runs + sim_runs
     w_overlay = dfm["run"].isin(overlay_runs)
 
-    if w_overlay.any():
+    if pilot_runs and w_overlay.any():
         dfg = dfm[w_overlay].copy()
         g = sns.relplot(
             data=dfg,
@@ -414,7 +538,7 @@ def create_plots(
         print(f"Saved: {os.path.join(output_dir, 'comparison_pilot_vs_sim.jpg')}")
 
     # Plot 4: Group-size evolution per run (sim + pilot comparison)
-    if "group_id" in df.columns:
+    if n_groups > 1 and "group_id" in df.columns:
         per_episode_sizes = (
             df.groupby(
                 ["run", "episode", "round_number", "group_id"],
@@ -451,7 +575,7 @@ def create_plots(
         print(f"Saved: {global_group_size_path}")
 
     # Plot 5: Number of switches per round (mean over episodes)
-    if "group_id" in df.columns:
+    if n_groups > 1 and "group_id" in df.columns:
         switch_df = df.sort_values(
             ["run", "episode", "participant_code", "round_number"]
         ).copy()
@@ -492,7 +616,7 @@ def create_plots(
         print(f"Saved: {switch_path}")
 
     # Plot 6: Group switching heatmap (if agent_group data exists)
-    if "agent_group" in df.columns:
+    if n_groups > 1 and "agent_group" in df.columns:
         # Only use simulation runs (not pilot data)
         sim_runs = [r for r in df["run"].unique() if r.startswith("ah ")]
         df_sim = df[df["run"].isin(sim_runs)].copy()
@@ -556,15 +680,17 @@ def create_plots(
             plt.close(fig)
             print(f"Saved: {os.path.join(output_dir, fname)}")
 
-    # Save aggregates
+    # Save aggregates — restricted to the focus manager's group (id 0)
+    # so reported numbers match the displayed lines in Plot 1.
     aggregates = (
-        df.groupby(["run", "round_number"])
+        df_focus.groupby(["run", "round_number"])
         .agg(
             {
                 "punishment": "mean",
                 "contribution": "mean",
                 "common_good": "mean",
                 "payoff": "mean",
+                "payoff_sum": "mean",
             }
         )
         .reset_index()
@@ -593,17 +719,33 @@ def run_cli(config, config_path):
     # Run simulation
     dfs = run_simulation(config, output_dir)
 
+    df_sim = pd.concat(dfs).reset_index(drop=True)
+
+    # Persist per-agent per-round simulation frame — opt-in via
+    # `save_per_round` for downstream trajectory plotting.
+    if config.get("save_per_round", False):
+        per_round_path = os.path.join(output_dir, "per_round.parquet")
+        df_sim.to_parquet(per_round_path, index=False)
+        print(f"Saved: {per_round_path}")
+
     # Load pilot data if available
     df_pilot = load_pilot_data(config, basedir)
 
     # Combine dataframes
     if df_pilot is not None:
-        df = pd.concat([*dfs, df_pilot]).reset_index(drop=True)
+        df = pd.concat([df_sim, df_pilot]).reset_index(drop=True)
     else:
-        df = pd.concat(dfs).reset_index(drop=True)
+        df = df_sim
 
     # Create plots
-    create_plots(df, output_dir, config["managers"], config["figure_name"])
+    create_plots(
+        df,
+        output_dir,
+        config["managers"],
+        config["figure_name"],
+        pairings=config.get("pairings"),
+        n_groups=config.get("n_groups", 1),
+    )
 
     print("Simulation complete!")
 
