@@ -1,0 +1,60 @@
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_1000.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep/model/architecture_mlp+rnn+edge__dataset_50ep__epochs_375.pt
+
+managers:
+  dummy_p0:
+    type: dummy
+    constant_punishment: 0
+  dummy_p5:
+    type: dummy
+    constant_punishment: 5
+  dummy_p10:
+    type: dummy
+    constant_punishment: 10
+  dummy_p20:
+    type: dummy
+    constant_punishment: 20
+  dummy_p30:
+    type: dummy
+    constant_punishment: 30
+
+pairings:
+  - name: p0_vs_p0
+    group_0: dummy_p0
+    group_1: dummy_p0
+  - name: p5_vs_p5
+    group_0: dummy_p5
+    group_1: dummy_p5
+  - name: p10_vs_p10
+    group_0: dummy_p10
+    group_1: dummy_p10
+  - name: p20_vs_p20
+    group_0: dummy_p20
+    group_1: dummy_p20
+  - name: p30_vs_p30
+    group_0: dummy_p30
+    group_1: dummy_p30
+  - name: p0_vs_p30
+    group_0: dummy_p0
+    group_1: dummy_p30
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+pilot_data_file: experiments/2group_8agent_50ep.csv
+pilot_experiment_name_map:
+  ah_group_switching: pilot 50ep human manager
+
+output_dir: plots/simulation/06_sustained_p_sweep_50ep
+figure_name: sustained_p_sweep_50ep
+basedir: .

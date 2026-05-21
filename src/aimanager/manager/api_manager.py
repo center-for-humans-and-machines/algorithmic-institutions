@@ -148,7 +148,8 @@ class RLManager:
 
 
 class DummyManager:
-    def __init__(self, **_):
+    def __init__(self, constant_punishment=0, **_):
+        self.constant_punishment = int(constant_punishment)
         self.model = None
         self.default_values = {
             "contribution": 0,
@@ -159,7 +160,7 @@ class DummyManager:
         }
 
     def get_punishments(self, data):
-        return data["punishment"]
+        return th.full_like(data["punishment"], self.constant_punishment)
 
 
 MANAGER_CLASS = {"human": HumanManager, "rl": RLManager, "dummy": DummyManager}
