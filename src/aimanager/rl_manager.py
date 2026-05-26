@@ -174,13 +174,18 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
 
     # Fixed opponent that controls the non-RL group. Generic key so a later
     # self-play setup can swap in an RL-manager checkpoint without renaming.
-    opponent_manager_path = os.path.join(basedir, config["opponent_manager"])
-    print(f"Loading opponent manager from {opponent_manager_path}")
-    opponent_manager = (
-        AH_MODELS[config["artificial_humans_model"]]
-        .load(opponent_manager_path, device=device)
-        .to(device)
-    )
+    # Optional for backwards compatibility with legacy single-group configs
+    # (e.g. configs/training/rl_manager/02_rnn_node_1group.yml); when absent
+    # the rollout runs single-manager and the TD-error covers all groups.
+    opponent_manager = None
+    if "opponent_manager" in config:
+        opponent_manager_path = os.path.join(basedir, config["opponent_manager"])
+        print(f"Loading opponent manager from {opponent_manager_path}")
+        opponent_manager = (
+            AH_MODELS[config["artificial_humans_model"]]
+            .load(opponent_manager_path, device=device)
+            .to(device)
+        )
 
     # Switch predictor — required for group-switching dynamics. Optional
     # for backwards compatibility with legacy single-group configs. Key name
