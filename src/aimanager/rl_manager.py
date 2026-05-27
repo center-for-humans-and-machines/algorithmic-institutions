@@ -65,7 +65,9 @@ def run_batch(
     for round_number in count():
         statecopy = {k: v.clone() for k, v in state.items() if k in replay_keys}
 
-        action, q_values = manager.get_action(state, greedy=on_policy)
+        action, q_values = manager.get_action(
+            state, first=round_number == 0, greedy=on_policy
+        )
 
         # Two-manager mode: RL produces (B, 8, 1) over all agents; opponent
         # produces its own (B, 8, 1); mask keeps each manager's own group.
