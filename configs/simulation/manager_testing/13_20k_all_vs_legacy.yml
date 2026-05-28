@@ -1,0 +1,27 @@
+artificial_humans:
+  full:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+
+# #101 final A/B: the 20k factorial winner (fix + lr 5e-4 + target_freq 50)
+# against the legacy 100k checkpoint (Mar 25 2026). Tests whether the tuned
+# 20k recipe matches or exceeds the legacy 100k in deployed sim.
+managers:
+  20k_all:
+    type: rl
+    path: artifacts/manager/02_rnn_node_1group_20k_e_all/model/02_rnn_node_1group_20k_e_all_manager.pt
+  100k_legacy:
+    type: rl
+    path: artifacts/manager/02_rnn_node_1group/model/02_rnn_node_1group_manager.pt
+
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/13_20k_all_vs_legacy
+figure_name: 20k_all_vs_legacy
+basedir: .

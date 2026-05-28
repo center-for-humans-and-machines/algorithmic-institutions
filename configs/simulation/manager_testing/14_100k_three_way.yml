@@ -1,0 +1,31 @@
+artificial_humans:
+  full:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+
+# #101 final 3-way: the legacy 100k checkpoint (Mar 25 2026, buggy training)
+# vs 100k_legacy_fix (same recipe + RNN-flush) vs 100k_all (fix + lr 5e-4 +
+# target_freq 200). All three converge to a punish-early policy; this races
+# them under identical deployment to size up the policy gap.
+managers:
+  100k_legacy:
+    type: rl
+    path: artifacts/manager/02_rnn_node_1group/model/02_rnn_node_1group_manager.pt
+  100k_legacy_fix:
+    type: rl
+    path: artifacts/manager/02_rnn_node_1group_100k_legacy_fix/model/02_rnn_node_1group_100k_legacy_fix_manager.pt
+  100k_all:
+    type: rl
+    path: artifacts/manager/02_rnn_node_1group_100k_all/model/02_rnn_node_1group_100k_all_manager.pt
+
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/14_100k_three_way
+figure_name: 100k_three_way
+basedir: .

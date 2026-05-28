@@ -35,6 +35,7 @@ rec_keys = [
     "contributor_payoff",
     # "manager_payoff",
     "group_payoff",
+    "group_payoff_sum",
 ]
 
 # Will be set in train_manager based on the encoding config
@@ -49,16 +50,44 @@ def load_config(path: str = None) -> dict:
         return yaml.safe_load(f)
 
 
-def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
+def run_batch(
+    manager,
+    env,
+    replay_mem=None,
+    on_policy=True,
+    update_step=None,
+    opponent_manager=None,
+    rl_group_id=0,
+):
 
     state = env.reset()
     metric_list = []
     for round_number in count():
         statecopy = {k: v.clone() for k, v in state.items() if k in replay_keys}
 
-        action, q_values = manager.get_action(state, greedy=on_policy)
+        action, q_values = manager.get_action(
+            state, first=round_number == 0, greedy=on_policy
+        )
 
-        state = env.punish(action)
+        # Two-manager mode: RL produces (B, 8, 1) over all agents; opponent
+        # produces its own (B, 8, 1); mask keeps each manager's own group.
+        # agent_groups mutates per round via the switch predictor, so the
+        # mask is recomputed every step.
+        if opponent_manager is not None:
+            # reset_rnn only matters if the opponent has an RNN (non-autoreg
+            # variant). The autoreg punishment AH ignores it. We pass it
+            # uniformly so the same call site supports both opponents.
+            opp_action, _ = opponent_manager.predict(
+                state,
+                reset_rnn=round_number == 0,
+                edge_index=env.batch_edge_index,
+            )
+            rl_mask = (env.agent_groups.squeeze(-1) == rl_group_id).unsqueeze(-1)
+            final_punishment = th.where(rl_mask, action, opp_action)
+        else:
+            final_punishment = action
+
+        state = env.punish(final_punishment)
 
         metrics = {k: state[k].to(th.float).mean().item() for k in rec_keys}
 
@@ -77,6 +106,13 @@ def run_batch(manager, env, replay_mem=None, on_policy=True, update_step=None):
         metrics["q_min"] = q_values.min().item()
         metrics["q_max"] = q_values.max().item()
         metrics["q_mean"] = q_values.mean().item()
+        if opponent_manager is not None:
+            # Mean count of agents currently in the RL manager's group.
+            # The headline metric for sum vs avg comparison: with sum the
+            # policy should learn to grow this number; with avg it should
+            # stay indifferent to size.
+            rl_in_group = (env.agent_groups.squeeze(-1) == rl_group_id).float()
+            metrics["rl_group_size"] = rl_in_group.sum(dim=1).mean().item()
         metrics["round_number"] = round_number
         metrics["sampling"] = "greedy" if on_policy else "eps-greedy"
         metrics["update_step"] = update_step
@@ -138,7 +174,39 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         .to(device)
     )
 
+    # Fixed opponent that controls the non-RL group. Generic key so a later
+    # self-play setup can swap in an RL-manager checkpoint without renaming.
+    # Optional for backwards compatibility with legacy single-group configs
+    # (e.g. configs/training/rl_manager/02_rnn_node_1group.yml); when absent
+    # the rollout runs single-manager and the TD-error covers all groups.
+    opponent_manager = None
+    if "opponent_manager" in config:
+        opponent_manager_path = os.path.join(basedir, config["opponent_manager"])
+        print(f"Loading opponent manager from {opponent_manager_path}")
+        opponent_manager = (
+            AH_MODELS[config["artificial_humans_model"]]
+            .load(opponent_manager_path, device=device)
+            .to(device)
+        )
+
+    # Switch predictor — required for group-switching dynamics. Optional
+    # for backwards compatibility with legacy single-group configs. Key name
+    # mirrors configs/simulation/ah_testing/group_switching_ah_punishment_50ep.yml.
+    switch_model = None
+    if "switch_model" in config:
+        switch_model_path = os.path.join(basedir, config["switch_model"])
+        print(f"Loading switch predictor from {switch_model_path}")
+        switch_model = (
+            AH_MODELS[config["artificial_humans_model"]]
+            .load(switch_model_path, device=device)
+            .to(device)
+        )
+
     env_args = config["env_args"].copy()
+    # rl_group_id sits under env_args for organisation (it's a property of
+    # the multi-group setup) but is consumed by the training loop, not by
+    # the env constructor — pop it before the env build.
+    rl_group_id = env_args.pop("rl_group_id", 0)
     if env_args.pop("reward_formula", None) is not None:
         warnings.warn(
             "reward_formula is deprecated and ignored. "
@@ -151,6 +219,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     env = ArtificialHumanEnv(
         artifical_humans=ah,
         artifical_humans_valid=ahv,
+        artifical_humans_switch=switch_model,
         device=device,
         **env_args,
     )
@@ -186,10 +255,23 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     eval_period = config["eval_period"]
 
     print(f"Training manager for {n_update_steps} update steps")
+    if opponent_manager is not None:
+        print(
+            f"[two-manager] rl_group_id={rl_group_id}, "
+            f"env.n_groups={env.n_groups}, env.n_agents={env.n_agents}, "
+            f"reward_mode={env.reward_mode}, "
+            f"switch_predictor={'on' if switch_model is not None else 'off'}"
+        )
     for update_step in tqdm(range(n_update_steps)):
         # here we sample one batch of episodes and add them to the replay buffer
         off_policy_metrics = run_batch(
-            manager, env, replay_mem, on_policy=False, update_step=update_step
+            manager,
+            env,
+            replay_mem,
+            on_policy=False,
+            update_step=update_step,
+            opponent_manager=opponent_manager,
+            rl_group_id=rl_group_id,
         )
 
         replay_mem.next_episode(update_step)
@@ -204,6 +286,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                 batch=env.batch,
                 edge_index=env.batch_edge_index,
                 agent_group_mask=env.agent_group_mask,
+                rl_group_id=rl_group_id if opponent_manager is not None else None,
             )
 
         if (update_step % eval_period) == 0:
@@ -225,6 +308,8 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                 replay_mem=None,
                 on_policy=True,
                 update_step=update_step,
+                opponent_manager=opponent_manager,
+                rl_group_id=rl_group_id,
             )
             metrics_list.extend(on_policy_metrics)
 
@@ -232,17 +317,26 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                 log = {"update_step": update_step}
                 if sample is not None:
                     log["train/loss"] = loss.item()
-                for k in [
+                eval_keys = [
                     "next_reward",
                     "common_good",
                     "contribution",
                     "punishment",
                     "group_payoff",
+                    "group_payoff_sum",
                     "q_mean",
-                ]:
+                ]
+                for k in eval_keys:
                     log[f"eval/{k}"] = sum(m[k] for m in on_policy_metrics) / len(
                         on_policy_metrics
                     )
+                if opponent_manager is not None:
+                    # End-of-episode group size: mean across the env batch
+                    # of agents in the RL manager's group at the last round.
+                    # Averaging across rounds would smear over the within-
+                    # episode dynamics; only the final composition reflects
+                    # net migration over the episode.
+                    log["eval/rl_group_size"] = on_policy_metrics[-1]["rl_group_size"]
                 wandb.log(log)
 
     model_file = os.path.join(model_dir, f"{config['job_id']}_manager.pt")
@@ -267,7 +361,12 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         "q_mean",
         "loss",
         "group_payoff",
+        "group_payoff_sum",
     ]
+    # rl_group_size only present in two-manager runs; include in melt only
+    # when it's been recorded so legacy single-manager parquets are unchanged.
+    if metrics_list and "rl_group_size" in metrics_list[0]:
+        value_vars.append("rl_group_size")
 
     metrics_path = os.path.join(metrics_dir, f"{config['job_id']}.parquet")
     print(f"Saving metrics dataframe to {metrics_path}")

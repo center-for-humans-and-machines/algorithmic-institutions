@@ -288,15 +288,18 @@ class GraphNetwork(th.nn.Module):
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
 
-    def predict_autoreg(self, data, sample=True):
+    def predict_autoreg(self, data, sample=True, reset_rnn=True, edge_index=None):
+        # `reset_rnn` accepted for signature parity with predict_independent
+        # (the autoreg model has no RNN). `edge_index` honoured if provided so
+        # batched callers don't pay to rebuild it per call.
         self.eval()
-        # print("predict autoreg")
         assert (
             self.rnn_n is None and self.rnn_g is None
         ), "Autoregressive predictions do not support RNN"
 
         n_batch, n_nodes, n_rounds = data["contribution"].shape
-        edge_index = self.create_fully_connected(n_nodes, n_batch=n_batch)
+        if edge_index is None:
+            edge_index = self.create_fully_connected(n_nodes, n_batch=n_batch)
 
         agent_order = np.arange(n_nodes)
         agent_order = np.random.permutation(agent_order)
