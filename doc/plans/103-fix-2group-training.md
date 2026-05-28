@@ -95,11 +95,30 @@ This is the experiment of #103. Run four trainings on the `sum` reward-mode, eac
 
 ## Next Actions
 
-- [ ] §1a: inspect the existing 4k-step run at `.log/training/manager/rl_manager/03_2g8a_sum/fce64a11/` on Raven; record seconds/step (from tqdm + `seff`) and derived `max_steps_per_job` in this plan / on #103.
-- [ ] §1b: read `rl_manager.py` + `manager.py` save/load; record a one-sentence finding on whether resume is already supported.
+- [x] §1a: inspect the existing 4k-step run at `.log/training/manager/rl_manager/03_2g8a_sum/fce64a11/` on Raven; record seconds/step and derived `max_steps_per_job` in this plan / on #103. **Result below.**
+- [x] §1b: read `rl_manager.py` + `manager.py` save/load; record a one-sentence finding on whether resume is already supported. **Result below.**
 - [ ] §2: add the four cell configs (`03_2g8a_sum_a_legacy.yml`, `..._b_lr5e4.yml`, `..._c_lr1e3.yml`, `..._d_lr1e3_freq500.yml`) with `n_update_steps = max_steps_per_job` from §1a.
 - [ ] §2 launch: submit the four trainings on Raven.
 - [ ] §3 monitoring: at update_step 20000 of each healthy cell, evaluate the tripwire; escalate to supervisors or continue.
 - [ ] §4: add `15_2g8a_factorial.yml` simulation; produce training-metrics and simulation-comparison plots over the four cells.
 - [ ] If sim shows all four cells inadequate: open a new issue for checkpoint/resume + longer-horizon training; do not extend #103's scope.
 - [ ] Open PR with the four configs + plots embedded; cross-link #103.
+
+## §1 Findings (recorded 2026-05-28)
+
+**§1a -- Runtime estimate from existing `fce64a11` run** (`.log/training/manager/rl_manager/03_2g8a_sum/fce64a11/`):
+
+- Job: SLURM id `27159387`, 4000 update steps on `gpu:a100:1`, 4 CPUs, 16 GB RAM.
+- Wall time: `05:33:08` (19988 s) per `sacct`.
+- Steady-state tqdm rate (end of run): **3.99 s/it**.
+- Wall-time amortized: 19988 s / 4000 steps = **4.997 s/step**. The extra ~1 s/step over the steady-state rate is the warm-up tail (first ~20 steps were 4-8 s/it -- torch lazy-init, CUDA kernel compile), eval-period rollouts every 20 steps, and the final save + parquet write. This overhead will recur in every run, so the **wall-time figure is the right unit for projecting `max_steps_per_job`**.
+- Derived `max_steps_per_job` at 22h budget: `floor(22 * 3600 / 4.997) ≈ 15850 steps` -> use **`n_update_steps = 15000`** for the four §2 cells (round down for a safety margin against eval/save tail and any per-job variability).
+- `target_update_freq` from #102's "~500 syncs" rule: `15000 / 500 = 30` -> would round to **50** as the floor; but cells B/C/D have explicit freqs (200, 200, 500) per the agreed factorial, so the rule only applies to cell A (legacy keeps 1000).
+
+**Implications:** a single Raven job at the legacy config reaches ~15k steps, comfortably above #92's 4k smoke but well short of #102's 100k. The four §2 cells fit in single jobs each. If the §4 sim verdict is "inadequate", checkpoint/resume + longer-horizon training is the natural next step -- separate issue per the agreed scope.
+
+**§1b -- Resume support audit:**
+
+- `manager.save` (`src/aimanager/manager/manager.py:193-201`) persists **only** `policy_model` + `n_contributions`, `n_punishments`, `n_groups`, `default_values`. No `target_model`, no `optimizer` state, no replay buffer, no `update_step` counter, no RNG state.
+- `rl_manager.py` calls `manager.save(model_file)` exactly once at the very end of `train_manager` (line 342). There is no mid-training checkpoint loop and no `resume_from` handling.
+- **Verdict:** zero existing resume support. Any longer-horizon work would have to design + implement checkpointing from scratch (model + target + optimizer + replay + step + RNG). That is **out of scope for #103** -- routed to a future issue.
