@@ -1,9 +1,13 @@
 description: >-
-  Train contribution predictor on extended group switching data
-  (50 episodes, 2 groups, 8 agents). Applies grid-search winner:
-  node+edge+rnn, hidden_size=20, lr=3e-4, best test ~2.12 at ep 850.
-  Drops agent_group and round_number (shuffle ablation showed ~0 delta;
-  the RNN captures temporal structure implicitly).
+  Train contribution predictor on the 50-episode group-switching data,
+  now pair-augmented in preprocessing (each competition appears with
+  both governorA→0 and governorA→1 label mappings; pair-aware CV keeps
+  copies in the same fold). Architecture is unchanged: node+edge+rnn,
+  hidden=20, lr=3e-4. Epochs reduced from 1000 to 575 — early-stop budget
+  chosen from the doubled-data convergence study: capping at ≤575 costs
+  only ~0.003 vs unrestricted best test log_loss while shaving ~40% of
+  the training time and avoiding the late-stage overfit drift visible in
+  3/5 folds when allowed to run to 999.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -20,6 +24,7 @@ params:
   labels:
     architecture: node+edge+rnn
     dataset: 50ep
+    epochs: 575
   n_contributions: 21
   n_punishments: 31
   n_cross_val: 5
@@ -27,7 +32,7 @@ params:
   n_groups: 2
   data_file: experiments/2group_8agent_50ep.csv
   model_name: graph
-  shuffle_features: [prev_contribution, prev_punishment]
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
   basedir: .
   output_dir: artifacts/artificial_humans/group_switching_contribution_50ep
   model_args:
@@ -44,11 +49,14 @@ params:
       - name: prev_punishment
         n_levels: 31
         encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: numeric
   optimizer_args:
     lr: 3.e-4
     weight_decay: 1.e-5
   train_args:
-    epochs: 1000
+    epochs: 575
     batch_size: 4
     clamp_grad: 1
     eval_period: 50
