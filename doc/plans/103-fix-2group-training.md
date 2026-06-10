@@ -97,8 +97,8 @@ This is the experiment of #103. Run four trainings on the `sum` reward-mode, eac
 
 - [x] §1a: inspect the existing 4k-step run at `.log/training/manager/rl_manager/03_2g8a_sum/fce64a11/` on Raven; record seconds/step and derived `max_steps_per_job` in this plan / on #103. **Result below.**
 - [x] §1b: read `rl_manager.py` + `manager.py` save/load; record a one-sentence finding on whether resume is already supported. **Result below.**
-- [ ] §2: add the four cell configs (`03_2g8a_sum_a_legacy.yml`, `..._b_lr5e4.yml`, `..._c_lr1e3.yml`, `..._d_lr1e3_freq500.yml`) with `n_update_steps = max_steps_per_job` from §1a.
-- [ ] §2 launch: submit the four trainings on Raven.
+- [x] §2: add the four cell configs (`03_2g8a_sum_a_legacy.yml`, `..._b_lr5e4.yml`, `..._c_lr1e3.yml`, `..._d_lr1e3_freq500.yml`) with `n_update_steps = 15000` from §1a.
+- [x] §2 launch: submit the four trainings on Raven. Submitted 2026-05-28; SLURM ids A=27529563 (uuid 02679843), B=27529565 (9258a977), C=27529566 (49e4b22f), D=27529574 (bdf446b4); all 20h time limit, pending at submission.
 - [ ] §3 monitoring: at update_step 20000 of each healthy cell, evaluate the tripwire; escalate to supervisors or continue.
 - [ ] §4: add `15_2g8a_factorial.yml` simulation; produce training-metrics and simulation-comparison plots over the four cells.
 - [ ] If sim shows all four cells inadequate: open a new issue for checkpoint/resume + longer-horizon training; do not extend #103's scope.
