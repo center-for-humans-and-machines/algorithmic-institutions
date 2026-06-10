@@ -14,6 +14,7 @@ import sys
 from itertools import count
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch as th
@@ -362,15 +363,17 @@ def create_plots(
 
     df["episode"] = df["run"] + "__" + df["episode"].astype(str)
 
-    # `payoff_sum` is the per-group sum of per-agent payoffs, replicated
-    # to each agent row so seaborn's mean over rows reduces back to the
-    # episode-level per-group sum. Plot 1 / pilot plots / aggregates
-    # then restrict to group_id==0 (the focus manager's group) so all
-    # reported numbers reflect a single manager's perspective rather
-    # than mixing two competing groups in pairing-mode runs.
-    df["payoff_sum"] = df.groupby(
-        ["run", "episode", "round_number", "group_id"]
-    )["payoff"].transform("sum")
+    # `payoff_sum` is the per-group sum of per-agent payoffs. Place the
+    # value on the first agent-row of each (episode, round, group) and
+    # NaN on the rest, so downstream means over agent-rows (seaborn
+    # line plots and aggregates) skip duplicates and reduce to one
+    # value per episode -- the correct unweighted per-episode mean.
+    _gkeys = ["run", "episode", "round_number", "group_id"]
+    df["payoff_sum"] = (
+        df.groupby(_gkeys)["payoff"]
+        .transform("sum")
+        .where(~df.duplicated(_gkeys))
+    )
 
     if "group_id" in df.columns:
         df_focus = df[df["group_id"] == 0]
@@ -712,6 +715,17 @@ def run_cli(config, config_path):
 
     print(f"Config: {config_path}")
     print(f"Output directory: {output_dir}")
+
+    # Optional seeding for reproducible sims (eps-greedy sampling,
+    # switch predictor sampling, episode_group_idx draw).
+    seed = config.get("seed")
+    if seed is not None:
+        print(f"Seeding with seed {seed}")
+        random.seed(seed)
+        np.random.seed(seed)
+        th.manual_seed(seed)
+        if th.cuda.is_available():
+            th.cuda.manual_seed_all(seed)
 
     # Create output directory
     make_dir(output_dir)
