@@ -91,6 +91,33 @@ def run_batch(
 
         metrics = {k: state[k].to(th.float).mean().item() for k in rec_keys}
 
+        # Pre-step agent_groups: mask reflects who received this round's
+        # punishment. Assumes n_groups == 2.
+        if opponent_manager is not None:
+            opp_group_id = 1 - rl_group_id
+            groups = env.agent_groups.squeeze(-1)
+            rl_mask = (groups == rl_group_id).float()
+            opp_mask = (groups == opp_group_id).float()
+            rl_count = rl_mask.sum(dim=1).clamp(min=1)
+            opp_count = opp_mask.sum(dim=1).clamp(min=1)
+            for k in (
+                "punishment",
+                "contribution",
+                "common_good",
+                "contributor_payoff",
+            ):
+                x = state[k].squeeze(-1).to(th.float)
+                metrics[k] = ((x * rl_mask).sum(dim=1) / rl_count).mean().item()
+            for k in ("group_payoff", "group_payoff_sum"):
+                metrics[k] = state[k][:, rl_group_id].to(th.float).mean().item()
+            opp_p = state["punishment"].squeeze(-1).to(th.float)
+            metrics["opp_punishment"] = (
+                ((opp_p * opp_mask).sum(dim=1) / opp_count).mean().item()
+            )
+            metrics["opp_sum_payoff"] = (
+                state["group_payoff_sum"][:, opp_group_id].to(th.float).mean().item()
+            )
+
         # pass actions to environment and advance by one step
         state, reward, done = env.step()
         if replay_mem is not None:
@@ -102,17 +129,30 @@ def run_batch(
                 **statecopy,
             )
 
-        metrics["next_reward"] = reward.mean().item()
+        if opponent_manager is not None:
+            metrics["next_reward"] = (
+                reward[:, rl_group_id].to(th.float).mean().item()
+            )
+        else:
+            metrics["next_reward"] = reward.mean().item()
         metrics["q_min"] = q_values.min().item()
         metrics["q_max"] = q_values.max().item()
         metrics["q_mean"] = q_values.mean().item()
         if opponent_manager is not None:
-            # Mean count of agents currently in the RL manager's group.
-            # The headline metric for sum vs avg comparison: with sum the
-            # policy should learn to grow this number; with avg it should
-            # stay indifferent to size.
-            rl_in_group = (env.agent_groups.squeeze(-1) == rl_group_id).float()
-            metrics["rl_group_size"] = rl_in_group.sum(dim=1).mean().item()
+            groups_after = env.agent_groups.squeeze(-1)
+            rl_size = (
+                (groups_after == rl_group_id).float().sum(dim=1).mean().item()
+            )
+            opp_size = (
+                (groups_after != rl_group_id).float().sum(dim=1).mean().item()
+            )
+            # Same per-round value; aggregator (last vs mean across rounds)
+            # differs downstream: end_* keys are taken at the final round,
+            # avg_* keys are averaged across the episode.
+            metrics["rl_end_group_size"] = rl_size
+            metrics["rl_avg_group_size"] = rl_size
+            metrics["opp_end_group_size"] = opp_size
+            metrics["opp_avg_group_size"] = opp_size
         metrics["round_number"] = round_number
         metrics["sampling"] = "greedy" if on_policy else "eps-greedy"
         metrics["update_step"] = update_step
@@ -331,12 +371,18 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                         on_policy_metrics
                     )
                 if opponent_manager is not None:
-                    # End-of-episode group size: mean across the env batch
-                    # of agents in the RL manager's group at the last round.
-                    # Averaging across rounds would smear over the within-
-                    # episode dynamics; only the final composition reflects
-                    # net migration over the episode.
-                    log["eval/rl_group_size"] = on_policy_metrics[-1]["rl_group_size"]
+                    last = on_policy_metrics[-1]
+                    log["eval/rl_end_group_size"] = last["rl_end_group_size"]
+                    log["eval/opp_end_group_size"] = last["opp_end_group_size"]
+                    for k in (
+                        "rl_avg_group_size",
+                        "opp_avg_group_size",
+                        "opp_punishment",
+                        "opp_sum_payoff",
+                    ):
+                        log[f"eval/{k}"] = sum(
+                            m[k] for m in on_policy_metrics
+                        ) / len(on_policy_metrics)
                 wandb.log(log)
 
     model_file = os.path.join(model_dir, f"{config['job_id']}_manager.pt")
@@ -363,10 +409,14 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
         "group_payoff",
         "group_payoff_sum",
     ]
-    # rl_group_size only present in two-manager runs; include in melt only
-    # when it's been recorded so legacy single-manager parquets are unchanged.
-    if metrics_list and "rl_group_size" in metrics_list[0]:
-        value_vars.append("rl_group_size")
+    # Two-manager-only metrics; melt only when recorded so legacy
+    # single-manager parquets are unchanged.
+    if metrics_list and "rl_end_group_size" in metrics_list[0]:
+        value_vars.extend(
+            k
+            for k in metrics_list[0]
+            if k.startswith("rl_") or k.startswith("opp_")
+        )
 
     metrics_path = os.path.join(metrics_dir, f"{config['job_id']}.parquet")
     print(f"Saving metrics dataframe to {metrics_path}")
