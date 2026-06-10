@@ -148,21 +148,59 @@ def create_torch_data_new(df, default_values=None):
         },
     }
 
-    return data, default_values
+    # Per-episode pair_id (group_key for fold-aware CV). Falls back to
+    # the tensor-row index when the column is absent (legacy datasets).
+    if "pair_id" in df.columns:
+        pair_id = (
+            df.drop_duplicates("group_idx")
+              .sort_values("group_idx")["pair_id"]
+              .to_numpy()
+        )
+    else:
+        pair_id = np.arange(n_groups)
+
+    return data, default_values, pair_id
 
 
 def create_torch_data(df, default_values=None, switch_every=None):
     df = parse_agent_rounds(df.copy(), switch_every=switch_every)
-    data, default_values = create_torch_data_new(df, default_values)
-    return data, default_values
+    data, default_values, pair_id = create_torch_data_new(df, default_values)
+    return data, default_values, pair_id
 
 
-def get_cross_validations(data, n_splits, fraction_training=1.0, holdout_fold=None):
+def get_cross_validations(
+    data, n_splits, fraction_training=1.0, holdout_fold=None, group_key=None
+):
+    """Yield (fold_id, train_data, test_data) tuples.
+
+    If `group_key` is provided (array of shape (n_episodes,)), episodes
+    sharing a key are always placed in the same fold. Used for the
+    doubled (pair-augmented) dataset so flipped copies can't leak across
+    train/test.
+    """
     episode_idx = list(range(data["contribution"].shape[0]))
     random.shuffle(episode_idx)
 
     if n_splits is not None:
-        groups = [episode_idx[i::n_splits] for i in range(n_splits)]
+        if group_key is not None:
+            # Collapse to unique groups (preserving shuffled order of
+            # first appearance), round-robin split groups into folds,
+            # then expand back to episode indices.
+            group_to_indices: dict = {}
+            order: list = []
+            for idx in episode_idx:
+                k = int(group_key[idx])
+                if k not in group_to_indices:
+                    group_to_indices[k] = []
+                    order.append(k)
+                group_to_indices[k].append(idx)
+            fold_groups = [order[i::n_splits] for i in range(n_splits)]
+            groups = [
+                [idx for k in fg for idx in group_to_indices[k]]
+                for fg in fold_groups
+            ]
+        else:
+            groups = [episode_idx[i::n_splits] for i in range(n_splits)]
 
         if holdout_fold is not None:
             assert 0 <= holdout_fold < n_splits, (
