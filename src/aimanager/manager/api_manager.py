@@ -163,7 +163,33 @@ class DummyManager:
         return th.full_like(data["punishment"], self.constant_punishment)
 
 
-MANAGER_CLASS = {"human": HumanManager, "rl": RLManager, "dummy": DummyManager}
+class RuleBasedManager:
+    # punish = clamp((20 - contribution - round_number) / k, 0, n_punishments - 1)
+    def __init__(self, k=1, n_punishments=31, **_):
+        self.k = int(k)
+        self.n_punishments = int(n_punishments)
+        self.model = None
+        self.default_values = {
+            "contribution": 0,
+            "punishment": 0,
+            "contribution_valid": False,
+            "punishment_valid": False,
+            "in_group": False,
+        }
+
+    def get_punishments(self, data):
+        contribution = data["contribution"]
+        round_number = data["round_number"]
+        raw = (20 - contribution - round_number).div(self.k, rounding_mode="floor")
+        return raw.clamp(0, self.n_punishments - 1).to(data["punishment"].dtype)
+
+
+MANAGER_CLASS = {
+    "human": HumanManager,
+    "rl": RLManager,
+    "dummy": DummyManager,
+    "rule_based": RuleBasedManager,
+}
 
 
 class MultiManager:

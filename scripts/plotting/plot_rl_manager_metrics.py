@@ -30,7 +30,7 @@ import pandas as pd
 
 
 # Metrics where the round-level aggregation is the LAST round, not the mean.
-LAST_ROUND_METRICS = {"rl_group_size"}
+LAST_ROUND_METRICS = {"rl_end_group_size", "opp_end_group_size"}
 
 # Default metric order for the subplot grid.
 DEFAULT_METRICS = [
@@ -38,9 +38,14 @@ DEFAULT_METRICS = [
     "next_reward",
     "group_payoff",
     "group_payoff_sum",
-    "rl_group_size",
+    "opp_sum_payoff",
+    "rl_end_group_size",
+    "opp_end_group_size",
+    "rl_avg_group_size",
+    "opp_avg_group_size",
     "contribution",
     "punishment",
+    "opp_punishment",
     "common_good",
     "contributor_payoff",
     "q_mean",

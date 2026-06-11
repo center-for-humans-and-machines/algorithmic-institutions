@@ -1,0 +1,56 @@
+# #103: simulate the trained RL manager (currently 03_2g8a_sum_c_lr1e3, lr 1e-3
+# / target_update_freq 200) against (i) the autoregressive punishment AH it was
+# trained against, (ii) a dummy zero-punishment manager, and (iii) zero vs the
+# AH opponent as the apples-to-apples baseline for the RL manager's policy.
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_1000.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep/model/architecture_mlp+rnn+edge__dataset_50ep__epochs_375.pt
+
+managers:
+  rl_manager:
+    type: rl
+    path: artifacts/manager/03_2g8a_sum_c_lr1e3/model/03_2g8a_sum_c_lr1e3_manager.pt
+  ah_opponent:
+    type: human
+    path: artifacts/artificial_humans/punishment_autoregressive_50ep/model/architecture_node+edge+autoregressive__dataset_50ep__epochs_7500.pt
+  zero_punishment:
+    type: dummy
+
+pairings:
+  - name: rl_manager_vs_ah
+    group_0: rl_manager
+    group_1: ah_opponent
+  - name: rl_manager_vs_zero
+    group_0: rl_manager
+    group_1: zero_punishment
+  - name: zero_vs_ah
+    group_0: zero_punishment
+    group_1: ah_opponent
+  - name: ah_vs_rl_manager
+    group_0: ah_opponent
+    group_1: rl_manager
+  - name: zero_vs_rl_manager
+    group_0: zero_punishment
+    group_1: rl_manager
+  - name: ah_vs_zero
+    group_0: ah_opponent
+    group_1: zero_punishment
+
+seed: 42
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/16_2g8a_rl_manager_vs_ah_and_zero
+figure_name: 2g8a_rl_manager_vs_ah_and_zero
+save_per_round: true
+basedir: .

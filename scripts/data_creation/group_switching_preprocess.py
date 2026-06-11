@@ -13,7 +13,15 @@ def _parse_list(value):
 
 
 def _preprocess_single(in_path: str, n_agents: int):
-    """Parse one wide-format CSV into long agent-round rows."""
+    """Parse one wide-format CSV into long agent-round rows.
+
+    Emits both label-to-group_id mappings for every episode (governorA→0
+    + governorA→1) as distinct episodes sharing a pair_id. This breaks
+    the alphabetical governorA→0 bias by data augmentation: any
+    behaviour observed under a given governor appears under both
+    group_id values, so models can't bind asymmetric behaviour to a
+    specific group_id.
+    """
     df = pd.read_csv(in_path)
 
     # Parse list-valued columns from their string representations.
@@ -27,8 +35,18 @@ def _preprocess_single(in_path: str, n_agents: int):
     has_n_agents = df["contributions_list"].apply(len) == n_agents
     df = df[has_n_agents].copy()
 
-    # We will assign a dense episode_id over (session, group_id, episode).
-    episode_id_lookup: dict[tuple[str, int, int], int] = {}
+    # Pre-pass: collect the union of group labels per competition, so the
+    # flipped mapping is well-defined even on rounds where every agent
+    # ended up in the same group (then a single-row sorted(set(...)) of
+    # length 1 would give a no-op flip).
+    pair_labels: dict[tuple[str, int], list[str]] = {}
+    for _, row in df.iterrows():
+        pair_key = (str(row["session"]), int(row["group_idx"]))
+        pair_labels.setdefault(pair_key, set()).update(row["groups_list"])
+    pair_labels = {k: sorted(v) for k, v in pair_labels.items()}
+
+    # pair_id is dense over the original episodes (one per competition).
+    pair_id_lookup: dict[tuple[str, int], int] = {}
 
     rows = []
 
@@ -42,67 +60,79 @@ def _preprocess_single(in_path: str, n_agents: int):
         participant_codes = row["participant_codes_list"]
         groups_list = row["groups_list"]
 
-        # Map each distinct group label to a stable integer.
-        unique_group_labels = sorted(set(groups_list))
-        group_label_to_idx = {
-            label: i for i, label in enumerate(unique_group_labels)
-        }
-
-        # One episode per competition (session + group_idx).
+        # One pair per competition (session + group_idx). Both
+        # augmentations of a competition share its pair_id.
         competition_idx = int(row["group_idx"])
-        episode_key = (str(session), competition_idx)
-        if episode_key not in episode_id_lookup:
-            episode_id_lookup[episode_key] = len(episode_id_lookup)
-        episode_id = episode_id_lookup[episode_key]
+        pair_key = (str(session), competition_idx)
+        if pair_key not in pair_id_lookup:
+            pair_id_lookup[pair_key] = len(pair_id_lookup)
+        pair_id = pair_id_lookup[pair_key]
+
+        labels = pair_labels[pair_key]
+        n_labels = len(labels)
+        # mapping[0]: alphabetical (governorA→0); mapping[1]: flipped.
+        mappings = [
+            {label: i for i, label in enumerate(labels)},
+            {label: n_labels - 1 - i for i, label in enumerate(labels)},
+        ]
 
         round_number = round_raw - 1
-        global_group_id = f"{session} #{competition_idx}"
         manager_no_input = int(
             bool(row.get("missing_governor_input", False))
         )
 
-        # Compute per-group common good pool using game formula:
-        # sum_contrib * 1.6 - sum_punishment (total pool, not per-capita)
-        # data.py divides by n_valid later to get per-capita value
-        group_contrib = {}
-        group_punish = {}
-        for pid in range(n_agents):
-            gidx = group_label_to_idx[groups_list[pid]]
-            is_valid = not bool(missing_inputs[pid])
-            if is_valid:
-                group_contrib.setdefault(gidx, 0.0)
-                group_punish.setdefault(gidx, 0.0)
-                group_contrib[gidx] += contributions[pid]
-                group_punish[gidx] += punishments[pid]
-        common_good_per_group = {}
-        for gidx in group_label_to_idx.values():
-            sc = group_contrib.get(gidx, 0.0)
-            sp = group_punish.get(gidx, 0.0)
-            common_good_per_group[gidx] = sc * 1.6 - sp
-
-        for player_id in range(n_agents):
-            gidx = group_label_to_idx[groups_list[player_id]]
-            rows.append(
-                {
-                    "session": session,
-                    "global_group_id": global_group_id,
-                    "group_id": gidx,
-                    "episode": competition_idx,
-                    "episode_id": episode_id,
-                    "experiment_name": "ah_group_switching",
-                    "round_number": round_number,
-                    "participant_code": participant_codes[player_id],
-                    "player_no_input": int(
-                        bool(missing_inputs[player_id])
-                    ),
-                    "manager_no_input": manager_no_input,
-                    "player_id": player_id,
-                    "contribution": float(contributions[player_id]),
-                    "punishment": float(punishments[player_id]),
-                    "payoff": 0.0,
-                    "common_good": common_good_per_group[gidx],
-                }
+        for aug_idx, group_label_to_idx in enumerate(mappings):
+            aug_suffix = "" if aug_idx == 0 else " (flipped)"
+            aug_global_group_id = (
+                f"{session} #{competition_idx}{aug_suffix}"
             )
+            # Distinct episode_id per augmentation; the global_group_id
+            # split alone is enough for downstream tensor-row uniqueness
+            # but giving each a unique episode_id keeps groupby keys
+            # clean.
+            aug_episode_id = pair_id * 2 + aug_idx
+
+            # Per-group common good (depends on the mapping).
+            group_contrib = {}
+            group_punish = {}
+            for pid in range(n_agents):
+                gidx = group_label_to_idx[groups_list[pid]]
+                is_valid = not bool(missing_inputs[pid])
+                if is_valid:
+                    group_contrib.setdefault(gidx, 0.0)
+                    group_punish.setdefault(gidx, 0.0)
+                    group_contrib[gidx] += contributions[pid]
+                    group_punish[gidx] += punishments[pid]
+            common_good_per_group = {}
+            for gidx in set(group_label_to_idx.values()):
+                sc = group_contrib.get(gidx, 0.0)
+                sp = group_punish.get(gidx, 0.0)
+                common_good_per_group[gidx] = sc * 1.6 - sp
+
+            for player_id in range(n_agents):
+                gidx = group_label_to_idx[groups_list[player_id]]
+                rows.append(
+                    {
+                        "session": session,
+                        "global_group_id": aug_global_group_id,
+                        "group_id": gidx,
+                        "episode": competition_idx,
+                        "episode_id": aug_episode_id,
+                        "pair_id": pair_id,
+                        "experiment_name": "ah_group_switching",
+                        "round_number": round_number,
+                        "participant_code": participant_codes[player_id],
+                        "player_no_input": int(
+                            bool(missing_inputs[player_id])
+                        ),
+                        "manager_no_input": manager_no_input,
+                        "player_id": player_id,
+                        "contribution": float(contributions[player_id]),
+                        "punishment": float(punishments[player_id]),
+                        "payoff": 0.0,
+                        "common_good": common_good_per_group[gidx],
+                    }
+                )
 
     return rows
 
@@ -113,6 +143,7 @@ COLS = [
     "group_id",
     "episode",
     "episode_id",
+    "pair_id",
     "experiment_name",
     "round_number",
     "participant_code",
@@ -126,7 +157,11 @@ COLS = [
 ]
 
 
-def main(in_paths: list[str], n_agents: int, out_path: str = None):
+def main(
+    in_paths: list[str],
+    n_agents: int,
+    out_path: str = None,
+):
     """Preprocess one or more wide-format CSVs into a single long CSV."""
     repo_root = Path(__file__).resolve().parents[2]
 
@@ -134,11 +169,13 @@ def main(in_paths: list[str], n_agents: int, out_path: str = None):
 
     for in_path in in_paths:
         rows = _preprocess_single(in_path, n_agents)
-        # Re-key episode_ids to avoid collisions across files
+        # Re-key episode_id and pair_id to avoid collisions across files.
         if all_rows:
-            max_id = max(r["episode_id"] for r in all_rows) + 1
+            max_eid = max(r["episode_id"] for r in all_rows) + 1
+            max_pid = max(r["pair_id"] for r in all_rows) + 1
             for r in rows:
-                r["episode_id"] += max_id
+                r["episode_id"] += max_eid
+                r["pair_id"] += max_pid
         all_rows.extend(rows)
 
     out_df = pd.DataFrame(all_rows)[COLS]

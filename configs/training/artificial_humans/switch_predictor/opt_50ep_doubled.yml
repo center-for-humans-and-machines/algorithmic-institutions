@@ -1,0 +1,60 @@
+description: >-
+  Switch predictor retrained on the pair-augmented (doubled) 50-episode
+  dataset to remove the alphabetical governorA→group_id=0 bias. Every
+  competition appears with both label-to-group_id mappings; CV groups
+  paired copies into the same fold (see get_cross_validations
+  group_key). All hyperparameters mirror opt_50ep.yml so test log-loss
+  is directly comparable.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: switch_mask
+  switch_every: 4
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: mlp+rnn+edge
+    dataset: 50ep_doubled
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  basedir: .
+  output_dir: artifacts/artificial_humans/switch_pred_opt_50ep_doubled
+  model_args:
+    y_levels: 2
+    y_name: does_switch
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - etype: float
+        name: prev_common_good
+        norm: 20
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: numeric
+  optimizer_args:
+    lr: 1.e-3
+    weight_decay: 1.e-3
+  train_args:
+    epochs: 375
+    batch_size: 10
+    eval_period: 5
+    l1_entropy: 0
+  device: cuda
+  autoregression: False

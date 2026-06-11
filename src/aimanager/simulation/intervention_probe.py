@@ -415,7 +415,7 @@ def main():
 
     print("[load] tensorizing pilot data...")
     df = pd.read_csv(os.path.join(basedir, base["pilot_data_file"]))
-    data, _ = create_torch_data(df, switch_every=switch_every)
+    data, _, _ = create_torch_data(df, switch_every=switch_every)
 
     print("[load] loading AH artifacts...")
     ahs = base["artificial_humans"]["group_switching"]

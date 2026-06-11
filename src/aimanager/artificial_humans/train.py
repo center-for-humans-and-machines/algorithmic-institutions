@@ -139,7 +139,7 @@ def main(config):
     df = df[df["experiment_name"].isin(experiment_names)]
 
     switch_every = config.get("switch_every", None)
-    data, default_values = create_torch_data(df, switch_every=switch_every)
+    data, default_values, pair_id = create_torch_data(df, switch_every=switch_every)
 
     rec = Recorder()
 
@@ -180,7 +180,8 @@ def main(config):
     conf_m_all = []
 
     for i, train_data, test_data in get_cross_validations(
-        data, n_cross_val, fraction_training, holdout_fold=holdout_fold
+        data, n_cross_val, fraction_training,
+        holdout_fold=holdout_fold, group_key=pair_id,
     ):
         model = AH_MODELS[model_name](
             default_values=default_values, autoregressive=autoregression, **model_args
