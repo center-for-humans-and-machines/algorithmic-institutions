@@ -1,13 +1,16 @@
 description: >-
   Train contribution predictor on the 50-episode group-switching data,
-  now pair-augmented in preprocessing (each competition appears with
-  both governorA→0 and governorA→1 label mappings; pair-aware CV keeps
-  copies in the same fold). Architecture is unchanged: node+edge+rnn,
-  hidden=20, lr=3e-4. Epochs reduced from 1000 to 575 — early-stop budget
-  chosen from the doubled-data convergence study: capping at ≤575 costs
-  only ~0.003 vs unrestricted best test log_loss while shaving ~40% of
-  the training time and avoiding the late-stage overfit drift visible in
-  3/5 folds when allowed to run to 999.
+  pair-augmented in preprocessing (each competition appears with both
+  governorA→0 and governorA→1 label mappings; pair-aware CV keeps
+  copies in the same fold). Architecture: node+edge+rnn, hidden=20,
+  lr=3e-4. agent_group node feature encoded onehot instead of numeric —
+  removes the spurious ordering/magnitude a single numeric scalar
+  imposes (group 1 entering at full weight, group 0 contributing
+  nothing) and gives each group an independent additive offset. Epochs
+  at the 575 early-stop budget from the doubled-data convergence study:
+  capping at ≤575 costs only ~0.003 vs unrestricted best test log_loss
+  while shaving ~40% of the training time and avoiding late-stage
+  overfit drift visible in 3/5 folds when allowed to run to 999.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -51,7 +54,7 @@ params:
         encoding: numeric
       - name: agent_group
         n_levels: 2
-        encoding: numeric
+        encoding: onehot
   optimizer_args:
     lr: 3.e-4
     weight_decay: 1.e-5
