@@ -77,9 +77,20 @@ def _preprocess_single(in_path: str, n_agents: int):
         ]
 
         round_number = round_raw - 1
-        manager_no_input = int(
-            bool(row.get("missing_governor_input", False))
-        )
+        # Per-governor missing-input flags. Each governor manages one
+        # group label; sorted labels map to the flag columns in order
+        # (governorA -> missing_governor_input, governorB ->
+        # missing_governor2_input). Verified against the raw data: when
+        # a governor's flag is set, his group's punishments are all 0
+        # while the other group's punishments are real.
+        governor_flag_cols = [
+            "missing_governor_input",
+            "missing_governor2_input",
+        ]
+        label_manager_no_input = {
+            label: int(bool(row.get(col, False)))
+            for label, col in zip(labels, governor_flag_cols)
+        }
 
         for aug_idx, group_label_to_idx in enumerate(mappings):
             aug_suffix = "" if aug_idx == 0 else " (flipped)"
@@ -125,7 +136,9 @@ def _preprocess_single(in_path: str, n_agents: int):
                         "player_no_input": int(
                             bool(missing_inputs[player_id])
                         ),
-                        "manager_no_input": manager_no_input,
+                        "manager_no_input": label_manager_no_input.get(
+                            groups_list[player_id], 0
+                        ),
                         "player_id": player_id,
                         "contribution": float(contributions[player_id]),
                         "punishment": float(punishments[player_id]),
