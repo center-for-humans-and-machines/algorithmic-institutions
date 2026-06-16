@@ -278,6 +278,12 @@ def main() -> None:
         default=8,
         help="Number of rounds to include in the breakdown plot (default 8)",
     )
+    parser.add_argument(
+        "--switch-every",
+        type=int,
+        default=4,
+        help="Rounds between switch decisions, for the dashed lines (default 4)",
+    )
     args = parser.parse_args()
 
     df = load_per_round(args.sim_dir)
@@ -335,6 +341,15 @@ def main() -> None:
     )
     axes[1].set_ylabel("switch-in rate")
     axes[1].set_xlabel("round_number")
+
+    # Dashed lines at switch-decision moments (between rounds R-1 and R,
+    # for R = switch_every, 2*switch_every, ...), so behaviour shifts can
+    # be read against when agents actually move groups.
+    max_round = int(contr["round_number"].max())
+    decision_rounds = range(args.switch_every, max_round + 1, args.switch_every)
+    for ax in axes:
+        for r in decision_rounds:
+            ax.axvline(r - 0.5, ls="--", color="gray", alpha=0.6, lw=0.9)
 
     fig.tight_layout()
     out = args.out or os.path.join(args.sim_dir, "opposition_behavior.jpg")
