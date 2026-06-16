@@ -1,10 +1,10 @@
 description: >-
-  Switch predictor retrained on the pair-augmented (doubled) 50-episode
-  dataset to remove the alphabetical governorA→group_id=0 bias. Every
-  competition appears with both label-to-group_id mappings; CV groups
-  paired copies into the same fold (see get_cross_validations
-  group_key). All hyperparameters mirror opt_50ep.yml so test log-loss
-  is directly comparable.
+  Switch predictor on the pair-augmented (doubled) 50-episode dataset.
+  #105 fixes: labels at the arrival round (aligned with env consumption),
+  prev_agent_group feature, mask_name=switch_valid (drops timeout stays).
+  Model hidden 10 + lr 5e-4 + round_number feature to balance the
+  overfitting (hidden 20 / lr 1e-3) and underfitting (hidden 5 / lr 1e-4)
+  extremes.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -16,7 +16,7 @@ params_only: true
 params:
   fraction_training: 1.0
   seed: 38381
-  mask_name: switch_mask
+  mask_name: switch_valid
   switch_every: 4
   experiment_names: [ah_group_switching]
   labels:
@@ -29,12 +29,14 @@ params:
   n_groups: 2
   data_file: experiments/2group_8agent_50ep.csv
   model_name: graph
+  shuffle_features:
+    [prev_common_good, prev_punishment, prev_agent_group, round_number]
   basedir: .
   output_dir: artifacts/artificial_humans/switch_pred_opt_50ep_doubled
   model_args:
     y_levels: 2
     y_name: does_switch
-    hidden_size: 20
+    hidden_size: 10
     add_rnn: True
     add_edge_model: True
     add_global_model: False
@@ -45,11 +47,14 @@ params:
       - name: prev_punishment
         n_levels: 31
         encoding: numeric
-      - name: agent_group
+      - name: prev_agent_group
         n_levels: 2
         encoding: numeric
+      - name: round_number
+        n_levels: 24
+        encoding: numeric
   optimizer_args:
-    lr: 1.e-3
+    lr: 5.e-4
     weight_decay: 1.e-3
   train_args:
     epochs: 375

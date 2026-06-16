@@ -32,6 +32,7 @@ class AgentRound(pa.DataFrameModel):
     agent_group: Series[int]
     does_switch: Series[bool]
     switch_mask: Series[bool]
+    switch_valid: Series[bool]
 
 
 def parse_agent_rounds(df, switch_every=None):
@@ -47,18 +48,31 @@ def parse_agent_rounds(df, switch_every=None):
     # sub-group membership (node feature for GNN)
     df["agent_group"] = df["group_id"].astype(int)
 
-    # does_switch: True if agent changes group_id next round
+    # does_switch labelled at the arrival round (group changed vs the
+    # previous round), so the supervised index matches where the env
+    # consumes the predictor. Pair with prev_agent_group in the model.
     df = df.sort_values(["episode_id", "player_id", "round_number"])
-    next_group = df.groupby(["episode_id", "player_id"])["group_id"].shift(-1)
-    df["does_switch"] = next_group.notna() & next_group.ne(df["group_id"])
+    prev_group = df.groupby(["episode_id", "player_id"])["group_id"].shift(1)
+    df["does_switch"] = prev_group.notna() & prev_group.ne(df["group_id"])
 
-    # Mask non-decision rounds when switch_every is set
+    # Decisions land on arrival rounds {switch_every, 2*switch_every, ...};
+    # round 0 is the initial assignment, not a decision.
     if switch_every is not None:
-        is_decision = (df["round_number"] + 1) % switch_every == 0
+        is_decision = (df["round_number"] % switch_every == 0) & (
+            df["round_number"] != 0
+        )
         df["does_switch"] = df["does_switch"] & is_decision
         df["switch_mask"] = is_decision
     else:
         df["switch_mask"] = True
+
+    # switch_valid: drop decisions whose group choice timed out.
+    if "selection_timeout" in df.columns:
+        df["switch_valid"] = df["switch_mask"] & (
+            df["selection_timeout"].fillna(0).astype(int) == 0
+        )
+    else:
+        df["switch_valid"] = df["switch_mask"]
 
     # episode-batch index (tensor's first dimension)
     episode_group = df["global_group_id"] + "__" + df["episode_id"].astype(str)
@@ -100,6 +114,7 @@ def get_default_values(df):
         "agent_group": 0,
         "does_switch": False,
         "switch_mask": False,
+        "switch_valid": False,
     }
     return default_values
 
@@ -120,6 +135,7 @@ def create_torch_data_new(df, default_values=None):
         "agent_group": th.int64,
         "does_switch": th.bool,
         "switch_mask": th.bool,
+        "switch_valid": th.bool,
     }
 
     n_groups = df["group_idx"].max() + 1
@@ -153,8 +169,8 @@ def create_torch_data_new(df, default_values=None):
     if "pair_id" in df.columns:
         pair_id = (
             df.drop_duplicates("group_idx")
-              .sort_values("group_idx")["pair_id"]
-              .to_numpy()
+            .sort_values("group_idx")["pair_id"]
+            .to_numpy()
         )
     else:
         pair_id = np.arange(n_groups)
@@ -196,8 +212,7 @@ def get_cross_validations(
                 group_to_indices[k].append(idx)
             fold_groups = [order[i::n_splits] for i in range(n_splits)]
             groups = [
-                [idx for k in fg for idx in group_to_indices[k]]
-                for fg in fold_groups
+                [idx for k in fg for idx in group_to_indices[k]] for fg in fold_groups
             ]
         else:
             groups = [episode_idx[i::n_splits] for i in range(n_splits)]

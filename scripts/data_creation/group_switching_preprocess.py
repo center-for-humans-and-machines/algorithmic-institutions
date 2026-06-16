@@ -30,6 +30,13 @@ def _preprocess_single(in_path: str, n_agents: int):
     df["missing_inputs_list"] = df["missing_inputs"].apply(_parse_list)
     df["participant_codes_list"] = df["participant_codes"].apply(_parse_list)
     df["groups_list"] = df["groups"].apply(_parse_list)
+    # Per-agent institution-choice timeout flag (True => the agent's
+    # group choice timed out and defaulted to "stay"). Logged at the
+    # choice/arrival round; downstream (data.py) aligns it to the
+    # does_switch label index to build switch_valid.
+    df["selection_timeout_list"] = df["institution_selection_timeout"].apply(
+        _parse_list
+    )
 
     # Keep only rounds with the expected number of agents.
     has_n_agents = df["contributions_list"].apply(len) == n_agents
@@ -59,6 +66,7 @@ def _preprocess_single(in_path: str, n_agents: int):
         missing_inputs = row["missing_inputs_list"]
         participant_codes = row["participant_codes_list"]
         groups_list = row["groups_list"]
+        selection_timeout = row["selection_timeout_list"]
 
         # One pair per competition (session + group_idx). Both
         # augmentations of a competition share its pair_id.
@@ -94,9 +102,7 @@ def _preprocess_single(in_path: str, n_agents: int):
 
         for aug_idx, group_label_to_idx in enumerate(mappings):
             aug_suffix = "" if aug_idx == 0 else " (flipped)"
-            aug_global_group_id = (
-                f"{session} #{competition_idx}{aug_suffix}"
-            )
+            aug_global_group_id = f"{session} #{competition_idx}{aug_suffix}"
             # Distinct episode_id per augmentation; the global_group_id
             # split alone is enough for downstream tensor-row uniqueness
             # but giving each a unique episode_id keeps groupby keys
@@ -133,11 +139,14 @@ def _preprocess_single(in_path: str, n_agents: int):
                         "experiment_name": "ah_group_switching",
                         "round_number": round_number,
                         "participant_code": participant_codes[player_id],
-                        "player_no_input": int(
-                            bool(missing_inputs[player_id])
-                        ),
+                        "player_no_input": int(bool(missing_inputs[player_id])),
                         "manager_no_input": label_manager_no_input.get(
                             groups_list[player_id], 0
+                        ),
+                        "selection_timeout": (
+                            int(bool(selection_timeout[player_id]))
+                            if selection_timeout
+                            else 0
                         ),
                         "player_id": player_id,
                         "contribution": float(contributions[player_id]),
@@ -162,6 +171,7 @@ COLS = [
     "participant_code",
     "player_no_input",
     "manager_no_input",
+    "selection_timeout",
     "player_id",
     "contribution",
     "punishment",
@@ -208,13 +218,12 @@ def main(
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument(
-        "in_paths", nargs="+", help="One or more wide-format CSVs"
-    )
+    parser.add_argument("in_paths", nargs="+", help="One or more wide-format CSVs")
     parser.add_argument(
         "--n_agents",
         help="Number of agents active in each round to filter for",
-        type=int, required=True,
+        type=int,
+        required=True,
     )
     parser.add_argument("--out_path", type=str, default=None)
     args = parser.parse_args()
