@@ -30,6 +30,13 @@ def _preprocess_single(in_path: str, n_agents: int):
     df["missing_inputs_list"] = df["missing_inputs"].apply(_parse_list)
     df["participant_codes_list"] = df["participant_codes"].apply(_parse_list)
     df["groups_list"] = df["groups"].apply(_parse_list)
+    # Per-agent institution-choice timeout flag (True => the agent's
+    # group choice timed out and defaulted to "stay"). Logged at the
+    # choice/arrival round; downstream (data.py) aligns it to the
+    # does_switch label index to build switch_valid.
+    df["selection_timeout_list"] = df["institution_selection_timeout"].apply(
+        _parse_list
+    )
 
     # Keep only rounds with the expected number of agents.
     has_n_agents = df["contributions_list"].apply(len) == n_agents
@@ -59,6 +66,7 @@ def _preprocess_single(in_path: str, n_agents: int):
         missing_inputs = row["missing_inputs_list"]
         participant_codes = row["participant_codes_list"]
         groups_list = row["groups_list"]
+        selection_timeout = row["selection_timeout_list"]
 
         # One pair per competition (session + group_idx). Both
         # augmentations of a competition share its pair_id.
@@ -77,24 +85,36 @@ def _preprocess_single(in_path: str, n_agents: int):
         ]
 
         round_number = round_raw - 1
-        manager_no_input = int(
-            bool(row.get("missing_governor_input", False))
-        )
+        # Per-governor missing-input flags. Each governor manages one
+        # group label; sorted labels map to the flag columns in order
+        # (governorA -> missing_governor_input, governorB ->
+        # missing_governor2_input). Verified against the raw data: when
+        # a governor's flag is set, his group's punishments are all 0
+        # while the other group's punishments are real.
+        governor_flag_cols = [
+            "missing_governor_input",
+            "missing_governor2_input",
+        ]
+        label_manager_no_input = {
+            label: int(bool(row.get(col, False)))
+            for label, col in zip(labels, governor_flag_cols)
+        }
 
         for aug_idx, group_label_to_idx in enumerate(mappings):
             aug_suffix = "" if aug_idx == 0 else " (flipped)"
-            aug_global_group_id = (
-                f"{session} #{competition_idx}{aug_suffix}"
-            )
+            aug_global_group_id = f"{session} #{competition_idx}{aug_suffix}"
             # Distinct episode_id per augmentation; the global_group_id
             # split alone is enough for downstream tensor-row uniqueness
             # but giving each a unique episode_id keeps groupby keys
             # clean.
             aug_episode_id = pair_id * 2 + aug_idx
 
-            # Per-group common good (depends on the mapping).
+            # Per-group common good (depends on the mapping). common_good
+            # is stored as the group pool; per-capita (pool / valid
+            # contributors) is used for the payoff.
             group_contrib = {}
             group_punish = {}
+            group_n_valid = {}
             for pid in range(n_agents):
                 gidx = group_label_to_idx[groups_list[pid]]
                 is_valid = not bool(missing_inputs[pid])
@@ -103,11 +123,16 @@ def _preprocess_single(in_path: str, n_agents: int):
                     group_punish.setdefault(gidx, 0.0)
                     group_contrib[gidx] += contributions[pid]
                     group_punish[gidx] += punishments[pid]
+                    group_n_valid[gidx] = group_n_valid.get(gidx, 0) + 1
             common_good_per_group = {}
+            common_good_per_capita = {}
             for gidx in set(group_label_to_idx.values()):
                 sc = group_contrib.get(gidx, 0.0)
                 sp = group_punish.get(gidx, 0.0)
-                common_good_per_group[gidx] = sc * 1.6 - sp
+                pool = sc * 1.6 - sp
+                nv = group_n_valid.get(gidx, 0)
+                common_good_per_group[gidx] = pool
+                common_good_per_capita[gidx] = pool / nv if nv > 0 else 0.0
 
             for player_id in range(n_agents):
                 gidx = group_label_to_idx[groups_list[player_id]]
@@ -122,14 +147,24 @@ def _preprocess_single(in_path: str, n_agents: int):
                         "experiment_name": "ah_group_switching",
                         "round_number": round_number,
                         "participant_code": participant_codes[player_id],
-                        "player_no_input": int(
-                            bool(missing_inputs[player_id])
+                        "player_no_input": int(bool(missing_inputs[player_id])),
+                        "manager_no_input": label_manager_no_input.get(
+                            groups_list[player_id], 0
                         ),
-                        "manager_no_input": manager_no_input,
+                        "selection_timeout": (
+                            int(bool(selection_timeout[player_id]))
+                            if selection_timeout
+                            else 0
+                        ),
                         "player_id": player_id,
                         "contribution": float(contributions[player_id]),
                         "punishment": float(punishments[player_id]),
-                        "payoff": 0.0,
+                        "payoff": (
+                            20
+                            - float(contributions[player_id])
+                            - float(punishments[player_id])
+                            + common_good_per_capita[gidx]
+                        ),
                         "common_good": common_good_per_group[gidx],
                     }
                 )
@@ -149,6 +184,7 @@ COLS = [
     "participant_code",
     "player_no_input",
     "manager_no_input",
+    "selection_timeout",
     "player_id",
     "contribution",
     "punishment",
@@ -195,13 +231,12 @@ def main(
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument(
-        "in_paths", nargs="+", help="One or more wide-format CSVs"
-    )
+    parser.add_argument("in_paths", nargs="+", help="One or more wide-format CSVs")
     parser.add_argument(
         "--n_agents",
         help="Number of agents active in each round to filter for",
-        type=int, required=True,
+        type=int,
+        required=True,
     )
     parser.add_argument("--out_path", type=str, default=None)
     args = parser.parse_args()
