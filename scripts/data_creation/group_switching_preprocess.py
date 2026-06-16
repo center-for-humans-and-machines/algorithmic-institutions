@@ -109,9 +109,12 @@ def _preprocess_single(in_path: str, n_agents: int):
             # clean.
             aug_episode_id = pair_id * 2 + aug_idx
 
-            # Per-group common good (depends on the mapping).
+            # Per-group common good (depends on the mapping). common_good
+            # is stored as the group pool; per-capita (pool / valid
+            # contributors) is used for the payoff.
             group_contrib = {}
             group_punish = {}
+            group_n_valid = {}
             for pid in range(n_agents):
                 gidx = group_label_to_idx[groups_list[pid]]
                 is_valid = not bool(missing_inputs[pid])
@@ -120,11 +123,16 @@ def _preprocess_single(in_path: str, n_agents: int):
                     group_punish.setdefault(gidx, 0.0)
                     group_contrib[gidx] += contributions[pid]
                     group_punish[gidx] += punishments[pid]
+                    group_n_valid[gidx] = group_n_valid.get(gidx, 0) + 1
             common_good_per_group = {}
+            common_good_per_capita = {}
             for gidx in set(group_label_to_idx.values()):
                 sc = group_contrib.get(gidx, 0.0)
                 sp = group_punish.get(gidx, 0.0)
-                common_good_per_group[gidx] = sc * 1.6 - sp
+                pool = sc * 1.6 - sp
+                nv = group_n_valid.get(gidx, 0)
+                common_good_per_group[gidx] = pool
+                common_good_per_capita[gidx] = pool / nv if nv > 0 else 0.0
 
             for player_id in range(n_agents):
                 gidx = group_label_to_idx[groups_list[player_id]]
@@ -151,7 +159,12 @@ def _preprocess_single(in_path: str, n_agents: int):
                         "player_id": player_id,
                         "contribution": float(contributions[player_id]),
                         "punishment": float(punishments[player_id]),
-                        "payoff": 0.0,
+                        "payoff": (
+                            20
+                            - float(contributions[player_id])
+                            - float(punishments[player_id])
+                            + common_good_per_capita[gidx]
+                        ),
                         "common_good": common_good_per_group[gidx],
                     }
                 )
