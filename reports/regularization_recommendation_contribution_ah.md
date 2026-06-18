@@ -118,10 +118,52 @@ Worst fit of the three for this architecture:
 | 3 | (optional) GRU-only param group with higher decay | does the rise flatten? |
 | keep | 575-epoch early stop as backstop | — |
 
-**If weight decay alone cannot beat 1.99,** the fallback capacity knob is a
-**smaller GRU hidden state** (e.g. 10–15, `hidden_size` in `model_args`) — same
-capacity-control effect as dropout but without the temporal-masking pitfalls.
+**If weight decay alone cannot beat 1.99,** the fallback capacity knob is width —
+see §6.
+
+---
+
+## 6. Capacity — should we change `hidden_size`?
+
+Short version: **don't increase it; decreasing is reasonable but blunt — prefer
+weight decay.** `hidden_size` is the wrong-resolution knob because, in this
+architecture, it sizes the **edge model, the node hidden, and the GRU all at
+once** (`graph.py`). The overfit lives in the GRU; the edge model is doing real
+work (it's why `edge+rnn` beats `node_*`). So any global width change drags the
+useful edge capacity along with the harmful GRU capacity.
+
+**Increasing — no.** The problem is *overfitting* (variance), and width adds
+variance. Worse, it scales the GRU, the exact overfit source. The `node_*`
+underfitting is about missing edge/RNN *structure*, not narrow width — that
+inductive bias is already present. And the ~1.99 floor (vs ln 21 ≈ 3.04 for
+uniform) looks data/noise-limited on ~100 episodes, so more capacity has little
+to buy. Only worth a *single* diagnostic arm (e.g. hidden 40 **with strong
+decay**) to confirm the floor isn't bias-limited; expectation: it won't move.
+
+**Decreasing — reasonable, but coarse.** It does reduce variance (right
+direction). The likely payoff is **not a lower floor but a flatter, more robust
+curve** — less sensitive to the exact early-stop epoch — since width-20 is
+already a bit rich for ~100 episodes. But a global cut also shrinks the edge
+model, risking trading GRU-variance for edge-bias.
+
+**Preference order (capacity control):**
+
+1. **Weight decay on the GRU (AdamW)** — continuous and *targetable* (param group
+   on the GRU only), so it shrinks the culprit without touching the edge model.
+2. **Quick `hidden_size ∈ {10, 15, 20}` sweep** — cheap; pick the smallest width
+   that holds ~1.99 with a flat curve (Occam / robustness check).
+3. **Decouple + shrink the GRU only** — the clean version of #2: give the GRU its
+   own `rnn_hidden_size` (small change in `graph.py`, currently it reuses
+   `hidden_size`) and reduce just that, leaving edge/node capacity intact.
+4. **Increasing width** — no.
+
+**More promising than either direction:** add *signal*, not capacity. The
+own-group average-contribution feature (+0.027 R² in the expressiveness report)
+gives the model something new to fit; width only refits what it already has.
+
+---
 
 **Summary:** weight decay (AdamW, RNN-focused) is the regularizer to add; early
 stopping stays as free insurance; dropout is not worth it for a single-layer,
-width-20 GRU.
+width-20 GRU; and on `hidden_size` — don't increase it, and only shrink it (ideally
+the GRU alone) as a secondary robustness check after weight decay.
