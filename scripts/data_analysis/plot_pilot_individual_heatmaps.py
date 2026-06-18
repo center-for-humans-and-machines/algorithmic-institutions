@@ -89,11 +89,11 @@ def plot_episode(e, episode, n_punishments, switch_every, out_path, payoff_type=
     ys, xs = np.where(sw.values)
 
     fig, axes = plt.subplots(
-        4,
+        5,
         1,
-        figsize=(13, 12),
+        figsize=(13, 14),
         sharex=True,
-        gridspec_kw={"height_ratios": [1, 1, 1, 0.7]},
+        gridspec_kw={"height_ratios": [1, 1, 1, 0.7, 0.7]},
     )
     for ax, (title, mat, cmap, vmin, vmax, annot, mask) in zip(axes[:3], panels):
         ax.set_facecolor(INVALID_COLOR)
@@ -132,6 +132,7 @@ def plot_episode(e, episode, n_punishments, switch_every, out_path, payoff_type=
     for g, color in ((0, GROUP_CMAP[0]), (1, GROUP_CMAP[1])):
         masked = pay.where(grp == g)
         series = masked.sum(axis=0) if payoff_type == "sum" else masked.mean(axis=0)
+        series = series.fillna(0.0)  # empty group-round -> 0 (matches win-rate metric)
         ax.plot(
             rounds + 0.5,
             series.values,
@@ -147,6 +148,40 @@ def plot_episode(e, episode, n_punishments, switch_every, out_path, payoff_type=
     ax.set_xlim(0, n_rounds)
     ax.set_title(f"group payoff ({payoff_type} per round)", fontsize=10, loc="left")
     ax.set_ylabel("payoff")
+    ax.set_xlabel("")
+    ax.legend(fontsize=8, ncol=2, loc="best")
+    ax.grid(axis="y", alpha=0.3)
+
+    # 5th panel: per-group common good per capita (pool / valid members),
+    # avg in a group; empty group -> 0. The pilot CSV stores common_good as
+    # the group pool, so divide by the valid-member count to match the sim
+    # heatmap's per-capita panel.
+    cg_pool = piv("common_good")
+    valid = ~no_input_player
+    ax = axes[4]
+    for g, color in ((0, GROUP_CMAP[0]), (1, GROUP_CMAP[1])):
+        in_g = grp == g
+        pool_g = cg_pool.where(in_g).mean(axis=0)  # pool (identical across members)
+        n_valid = (valid & in_g).sum(axis=0)
+        # per-capita; empty group / no valid members -> 0
+        series = (pool_g / n_valid.replace(0, np.nan)).fillna(0.0)
+        ax.plot(
+            rounds + 0.5,
+            series.values,
+            color=color,
+            marker="o",
+            ms=2.5,
+            lw=1.8,
+            label=f"group {g}",
+        )
+    if switch_every:
+        for r in range(switch_every, n_rounds, switch_every):
+            ax.axvline(r, color="gray", ls="--", lw=0.8, alpha=0.7)
+    ax.set_xlim(0, n_rounds)
+    ax.set_title(
+        "group common good (avg in a group per round)", fontsize=10, loc="left"
+    )
+    ax.set_ylabel("common good")
     ax.set_xlabel("round")
     ax.legend(fontsize=8, ncol=2, loc="best")
     ax.grid(axis="y", alpha=0.3)
