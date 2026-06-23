@@ -207,7 +207,8 @@ wired and tested now.
       behaviour.
 - [x] Populate `edge_attr` in `encode` (section 3); fix `forward` to feed `op2`
       an empty edge_attr (section 4 — needed a change, see above).
-- [ ] Add `edge_encoding` to `save` `to_save` list (section 5).
+- [x] Add `edge_encoding` to `save` `to_save` list (section 5). `load` defaults
+      missing key to `[]` (old `.pt` files still load).
 - [ ] Edit `group_switching_contribution_50ep.yml` (section 6).
 - [ ] Add unit tests in `src/aimanager/tests/` (section 7): (a) `same_group`
       correctness for a hand-built 2-group assignment incl. a mid-episode switch;

@@ -433,6 +433,7 @@ class GraphNetwork(th.nn.Module):
             "autoregressive",
             "x_encoding",
             "u_encoding",
+            "edge_encoding",
             "b_encoding",
             "default_values",
         ]
