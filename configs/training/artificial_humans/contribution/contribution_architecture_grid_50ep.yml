@@ -1,0 +1,117 @@
+description: >-
+  Architecture / feature ablation grid for the contribution model on the
+  50-episode group-switching data (pair-augmented, pair-aware CV). Six
+  conditions sweeping two axes: the input feature set
+  (prev_contribution only vs + prev_punishment) and the architecture
+  (plain node MLP, +rnn, +edge, +edge+rnn). agent_group is intentionally
+  excluded from every condition (its ablation barely moved test
+  log-loss). All conditions share hidden=20, lr=3e-4, 2000 epochs (long
+  enough to guarantee convergence even for the slowest condition; best
+  epoch is reported per run so late overfit drift is handled), 5-fold
+  pair-aware CV, and one output_dir, so analyze_ah_metrics.py ranks all
+  six in a single pass. Launch with:
+  scripts/train_cluster.sh ah configs/training/artificial_humans/contribution/contribution_architecture_grid_50ep.yml
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: edge+rnn_cp
+    dataset: 50ep
+    epochs: 2000
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/contribution_architecture_grid_50ep
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 2000
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: False
+grid:
+  # Single list-of-dicts dimension -> 6 heterogeneous jobs. Each entry
+  # overrides the feature set (x_encoding + shuffle_features) and the
+  # architecture flags, with a unique architecture label so job_ids
+  # (built from labels) stay distinct in the shared metrics/ dir.
+  -
+    # 1. prev_contr only, no edge, no rnn  (base)
+    - labels.architecture: node_c
+      model_args.add_rnn: false
+      model_args.add_edge_model: false
+      model_args.x_encoding:
+        - {name: prev_contribution, n_levels: 21, encoding: numeric}
+      shuffle_features: [prev_contribution]
+    # 2. prev_contr + punishment, no edge, no rnn
+    - labels.architecture: node_cp
+      model_args.add_rnn: false
+      model_args.add_edge_model: false
+      model_args.x_encoding:
+        - {name: prev_contribution, n_levels: 21, encoding: numeric}
+        - {name: prev_punishment, n_levels: 31, encoding: numeric}
+      shuffle_features: [prev_contribution, prev_punishment]
+    # 3. prev_contr + punishment, rnn
+    - labels.architecture: rnn_cp
+      model_args.add_rnn: true
+      model_args.add_edge_model: false
+      model_args.x_encoding:
+        - {name: prev_contribution, n_levels: 21, encoding: numeric}
+        - {name: prev_punishment, n_levels: 31, encoding: numeric}
+      shuffle_features: [prev_contribution, prev_punishment]
+    # 4. prev_contr + punishment, edge
+    - labels.architecture: edge_cp
+      model_args.add_rnn: false
+      model_args.add_edge_model: true
+      model_args.x_encoding:
+        - {name: prev_contribution, n_levels: 21, encoding: numeric}
+        - {name: prev_punishment, n_levels: 31, encoding: numeric}
+      shuffle_features: [prev_contribution, prev_punishment]
+    # 5. prev_contr + punishment, edge + rnn
+    - labels.architecture: edge+rnn_cp
+      model_args.add_rnn: true
+      model_args.add_edge_model: true
+      model_args.x_encoding:
+        - {name: prev_contribution, n_levels: 21, encoding: numeric}
+        - {name: prev_punishment, n_levels: 31, encoding: numeric}
+      shuffle_features: [prev_contribution, prev_punishment]
+    # 6. prev_contr only, edge + rnn  (feature axis at the other end)
+    - labels.architecture: edge+rnn_c
+      model_args.add_rnn: true
+      model_args.add_edge_model: true
+      model_args.x_encoding:
+        - {name: prev_contribution, n_levels: 21, encoding: numeric}
+      shuffle_features: [prev_contribution]
