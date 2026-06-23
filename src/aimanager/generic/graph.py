@@ -272,7 +272,15 @@ class GraphNetwork(th.nn.Module):
             x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
         if self.rnn_g is not None:
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
-        x, _, _ = self.op2(x, edge_index, edge_attr, u, batch)
+        # op2 is a readout with no edge model (edge_features=0), but NodeModel
+        # always aggregates edge_attr -- feed it an empty one so a non-empty
+        # edge feature consumed by op1 does not leak into the readout's widths.
+        op2_edge_attr = th.empty(
+            (edge_index.shape[1], x.shape[1], 0),
+            dtype=edge_attr.dtype,
+            device=edge_attr.device,
+        )
+        x, _, _ = self.op2(x, edge_index, op2_edge_attr, u, batch)
         if self.bias:
             x = x + self.bias(data["b"])
         return x
@@ -314,6 +322,16 @@ class GraphNetwork(th.nn.Module):
             edge_index = self.create_fully_connected(n_player, n_batch=n_batch)
         encoded["edge_index"] = edge_index
         encoded = {k: v.to(device) for k, v in encoded.items() if v is not None}
+        # Per-edge features (e.g. same_group). agent_group is flattened to
+        # (N, n_rounds) so edge_index gathers endpoints directly; only passed
+        # when present, so empty edge_encoding (punishment / legacy models)
+        # never requires it. Empty edge_encoding -> (E, n_rounds, 0).
+        edge_state = {}
+        if "agent_group" in data:
+            edge_state["agent_group"] = data["agent_group"].flatten(0, 1).to(device)
+        encoded["edge_attr"] = self.edge_encoder(
+            edge_index=encoded["edge_index"], n_rounds=n_rounds, **edge_state
+        )
         return encoded
 
     def predict_encoded(self, data, sample=True, reset_rnn=True):

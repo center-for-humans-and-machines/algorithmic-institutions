@@ -113,16 +113,18 @@ wired and tested now.
   line 270; ensure `edge_attr` is included in that `.to(device)` sweep or built
   on-device).
 
-### 4. `forward` — verify, do not change
+### 4. `forward` — DID need a change (op2 edge_attr leak)
 
-- **Where:** `GraphNetwork.forward`, lines 211-232. It already does
-  `if "edge_attr" in data: edge_attr = data["edge_attr"]` else builds the empty
-  `(E, n_rounds, 0)` tensor. With the feature on, `encode` supplies a non-empty
-  `edge_attr` that flows untouched into `op1` → `EdgeModel.forward` (line 17-24).
-- **Action:** confirm no edit is required; the only risk is a width mismatch
-  between `edge_attr.shape[-1]` and the `EdgeModel` linear's expected
-  `edge_features` — guaranteed consistent because both derive from
-  `self.edge_encoder.size`.
+- `op1` correctly consumes the non-empty `edge_attr` via `EdgeModel`.
+- **Bug the plan missed:** `forward` reuses the same `edge_attr` for `op2`
+  (`op1`'s updated edge output is discarded to `_`), and `NodeModel.forward`
+  *always* `scatter_mean`s `edge_attr` (graph.py:47). `op2`'s `NodeModel` is
+  built with `edge_features=0`, so a non-empty `same_group` (width 1) makes its
+  `cat([x, agg, u])` one column too wide → matmul shape error. It only ever
+  "worked" because `edge_attr` was always width 0.
+- **Fix applied:** feed `op2` a freshly-built empty `(E, n_rounds, 0)` edge_attr
+  (`op2_edge_attr`), so the edge feature reaches the message-passing `op1` but
+  not the readout `op2`. Backward compatible (empty case unchanged).
 
 ### 5. save / load
 
@@ -203,8 +205,8 @@ wired and tested now.
 - [x] Thread `edge_encoding` through `__init__`, replacing `EmptyEncoder`
       (section 1). `EmptyEncoder` removed; empty `edge_encoding` keeps prior
       behaviour.
-- [ ] Populate `edge_attr` in `encode` (section 3); verify `forward` fallback
-      (section 4).
+- [x] Populate `edge_attr` in `encode` (section 3); fix `forward` to feed `op2`
+      an empty edge_attr (section 4 — needed a change, see above).
 - [ ] Add `edge_encoding` to `save` `to_save` list (section 5).
 - [ ] Edit `group_switching_contribution_50ep.yml` (section 6).
 - [ ] Add unit tests in `src/aimanager/tests/` (section 7): (a) `same_group`
