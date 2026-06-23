@@ -137,17 +137,25 @@ wired and tested now.
 
 ### 6. Config change
 
-- **Where:** `configs/training/artificial_humans/contribution/group_switching_contribution_50ep.yml`,
-  under `model_args` (after `x_encoding`, lines 48-57).
-- Add:
-  ```yaml
-  edge_encoding:
-    - name: same_group
-      etype: bool
-  ```
+- **New config, not an in-place edit:** the M0 config
+  `group_switching_contribution_50ep.yml` *is* the baseline artifact
+  (`output_dir: .../group_switching_contribution_50ep`, test log_loss 1.9897).
+  Editing it in place would overwrite M0 on the next run and break the
+  comparison. So M1 is a sibling config (matches the repo's one-file-per-variant
+  convention).
+- **Where:** new file
+  `configs/training/artificial_humans/contribution/group_switching_contribution_50ep_same_group.yml`,
+  a copy of M0 with: `edge_encoding: [{name: same_group, etype: bool}]` under
+  `model_args`; a distinct `output_dir`
+  (`.../group_switching_contribution_50ep_same_group`); a `same_group: true`
+  label. Everything else (data, CV, seed 38381, 575 epochs) identical to M0.
 - **Keep `agent_group` as a node feature (default).** Report §8 argues it is
   likely droppable once `same_group` exists (M5 arm), but defaults to keeping it;
   the drop is a separate ablation arm, not part of this change.
+- **Note:** `same_group` is derived (not a stored data tensor), so it can't be
+  added to `shuffle_features` for feature-importance via the current
+  `shuffle_feature` mechanism (which permutes a `data` key). Edge-feature
+  importance would need a separate mechanism — out of scope here.
 
 ### 7. Backward compatibility
 
@@ -209,7 +217,8 @@ wired and tested now.
       an empty edge_attr (section 4 — needed a change, see above).
 - [x] Add `edge_encoding` to `save` `to_save` list (section 5). `load` defaults
       missing key to `[]` (old `.pt` files still load).
-- [ ] Edit `group_switching_contribution_50ep.yml` (section 6).
+- [x] Add new M1 config `group_switching_contribution_50ep_same_group.yml`
+      (section 6) — separate `output_dir`, M0 preserved.
 - [ ] Add unit tests in `src/aimanager/tests/` (section 7): (a) `same_group`
       correctness for a hand-built 2-group assignment incl. a mid-episode switch;
       (b) `edge_attr` shape `(E, n_rounds, 1)`; (c) backward-compat: no
