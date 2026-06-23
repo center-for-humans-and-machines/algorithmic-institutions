@@ -224,5 +224,6 @@ wired and tested now.
       + dispatch + etype guard; (c) end-to-end forward with and without
       `edge_encoding` (exercises the op2 fix); (d) save/load round-trip incl.
       legacy checkpoint missing the key.
-- [ ] Run tests on Raven: `scripts/remote_test.sh -- -k edge -v`.
+- [x] Run tests on Raven: 7 edge tests pass; full suite 17/17 pass (no
+      regression in environment/manager paths).
 - [ ] Retrain M1 on Raven; record CV test log-loss vs 1.9897 (section 8).
