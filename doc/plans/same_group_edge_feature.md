@@ -199,9 +199,10 @@ wired and tested now.
 
 ## Next Actions
 
-- [ ] Add `EdgeEncoder` + `SameGroupEdgeEncoder` to `graph.py` (section 2).
-- [ ] Thread `edge_encoding` through `__init__`, replacing `EmptyEncoder`
-      (section 1).
+- [x] Add `EdgeEncoder` + `SameGroupEdgeEncoder` to `graph.py` (section 2).
+- [x] Thread `edge_encoding` through `__init__`, replacing `EmptyEncoder`
+      (section 1). `EmptyEncoder` removed; empty `edge_encoding` keeps prior
+      behaviour.
 - [ ] Populate `edge_attr` in `encode` (section 3); verify `forward` fallback
       (section 4).
 - [ ] Add `edge_encoding` to `save` `to_save` list (section 5).

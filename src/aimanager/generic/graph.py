@@ -68,15 +68,59 @@ class GlobalModel(th.nn.Module):
         return self.global_mlp(out)
 
 
-class EmptyEncoder(th.nn.Module):
-    def __init__(self, refrence):
-        super(EmptyEncoder, self).__init__()
-        self.size = 0
-        self.refrence = refrence
+class SameGroupEdgeEncoder(th.nn.Module):
+    """Derived per-edge feature: 1.0 if the two endpoints share a sub-group.
 
-    def forward(self, *, n_edges, **state):
-        n_episodes, n_agents, n_rounds = state[self.refrence].shape
-        return th.empty((n_episodes, n_edges, n_rounds, 0), dtype=th.float)
+    Relational, so it cannot use the per-node encoders in ``encoder.py`` (those
+    map one named node tensor to a feature axis). It reads ``agent_group`` at
+    both endpoints via ``edge_index``. ``agent_group`` is time-varying (agents
+    switch groups), so the bit is computed per round.
+    """
+
+    def __init__(self, name="same_group", etype="bool", **_):
+        super().__init__()
+        assert etype == "bool", f"same_group must be etype 'bool', got {etype}"
+        self.name = name
+        self.size = 1
+
+    def forward(self, *, edge_index, **state):
+        # agent_group: (N, n_rounds) int64, flattened with per-batch node offsets
+        # so edge_index entries gather directly into dim 0 (no batch handling).
+        ag = state["agent_group"]
+        row, col = edge_index
+        same = ag[row] == ag[col]  # (E, n_rounds) bool
+        return same.float().unsqueeze(-1)  # (E, n_rounds, 1)
+
+
+EDGE_ENCODERS = {"same_group": SameGroupEdgeEncoder}
+
+
+class EdgeEncoder(th.nn.Module):
+    """Builds per-edge features from an ``edge_encoding`` config list.
+
+    Each entry is dispatched by ``name`` to a derived edge encoder (see
+    ``EDGE_ENCODERS``). An empty list reports ``size == 0`` and emits an empty
+    ``(E, n_rounds, 0)`` tensor, so configs/models without ``edge_encoding``
+    behave exactly as before (the edge MLP receives no edge features).
+    """
+
+    def __init__(self, edge_encoding, refrence):
+        super().__init__()
+        self.refrence = refrence
+        self.encoder = th.nn.ModuleList(
+            [EDGE_ENCODERS[e["name"]](**e) for e in edge_encoding]
+        )
+        self.size = sum(e.size for e in self.encoder)
+
+    def forward(self, *, edge_index, n_rounds, **state):
+        if len(self.encoder) == 0:
+            return th.empty(
+                (edge_index.shape[1], n_rounds, 0),
+                dtype=th.float,
+                device=edge_index.device,
+            )
+        encoding = [e(edge_index=edge_index, **state) for e in self.encoder]
+        return th.cat(encoding, dim=-1)
 
 
 class GraphNetwork(th.nn.Module):
@@ -94,6 +138,7 @@ class GraphNetwork(th.nn.Module):
         autoregressive=False,
         x_encoding=[],
         u_encoding=[],
+        edge_encoding=[],
         add_rnn=True,
         add_edge_model=True,
         add_global_model=True,
@@ -108,7 +153,7 @@ class GraphNetwork(th.nn.Module):
         self.bias_encoder = (
             Encoder(b_encoding, refrence=y_name) if b_encoding is not None else None
         )
-        self.edge_encoder = EmptyEncoder(refrence=y_name)
+        self.edge_encoder = EdgeEncoder(edge_encoding or [], refrence=y_name)
 
         x_features = self.x_encoder.size
         u_features = self.u_encoder.size
@@ -116,6 +161,7 @@ class GraphNetwork(th.nn.Module):
         edge_features = self.edge_encoder.size
         self.x_encoding = x_encoding
         self.u_encoding = u_encoding
+        self.edge_encoding = edge_encoding
         self.b_encoding = b_encoding
         self.default_values = default_values
         self.y_levels = y_levels
