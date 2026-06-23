@@ -219,10 +219,10 @@ wired and tested now.
       missing key to `[]` (old `.pt` files still load).
 - [x] Add new M1 config `group_switching_contribution_50ep_same_group.yml`
       (section 6) — separate `output_dir`, M0 preserved.
-- [ ] Add unit tests in `src/aimanager/tests/` (section 7): (a) `same_group`
-      correctness for a hand-built 2-group assignment incl. a mid-episode switch;
-      (b) `edge_attr` shape `(E, n_rounds, 1)`; (c) backward-compat: no
-      `edge_encoding` → empty `(E, n_rounds, 0)` edge_attr and model runs; (d)
-      save/load round-trips `edge_encoding`.
+- [x] Add unit tests in `src/aimanager/tests/test_edge_encoder.py` (section 7):
+      (a) `same_group` correctness incl. a mid-episode switch; (b) encoder shapes
+      + dispatch + etype guard; (c) end-to-end forward with and without
+      `edge_encoding` (exercises the op2 fix); (d) save/load round-trip incl.
+      legacy checkpoint missing the key.
 - [ ] Run tests on Raven: `scripts/remote_test.sh -- -k edge -v`.
 - [ ] Retrain M1 on Raven; record CV test log-loss vs 1.9897 (section 8).
