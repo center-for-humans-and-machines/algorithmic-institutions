@@ -1,4 +1,4 @@
-# [ACTIVE] Train RL Manager with Group-Switching Artificial Humans (Issue #69)
+# [DONE] Train RL Manager with Group-Switching Artificial Humans (Issue #69)
 
 ## Goal
 

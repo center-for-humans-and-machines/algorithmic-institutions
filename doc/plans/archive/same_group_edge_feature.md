@@ -1,4 +1,4 @@
-# [ACTIVE] same_group edge feature for the contribution AH GNN
+# [DONE] same_group edge feature for the contribution AH GNN
 
 ## Goal
 

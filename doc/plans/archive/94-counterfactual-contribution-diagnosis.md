@@ -1,4 +1,4 @@
-# [ACTIVE] Counterfactual contribution diagnosis under sustained punishment
+# [DONE] Counterfactual contribution diagnosis under sustained punishment
 
 Tracks GitHub issue #94. Branch: `94-counterfactual-contribution-diagnosis`.
 
