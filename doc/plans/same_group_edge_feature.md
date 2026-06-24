@@ -242,7 +242,9 @@ out of scope here.
       (a) `same_group` correctness incl. a mid-episode switch; (b) encoder shapes
       + dispatch + etype guard; (c) end-to-end forward with and without
       `edge_encoding` (exercises the op2 fix); (d) save/load round-trip incl.
-      legacy checkpoint missing the key.
+      legacy checkpoint missing the key; (e) **env-level**: after a switch the
+      `same_group` edge_attr the contribution model receives tracks the new
+      membership (proves the sim recomputes it per round, not stale).
 - [x] Run tests on Raven: 7 edge tests pass; full suite 17/17 pass (no
       regression in environment/manager paths).
 - [x] Retrained M1 on Raven: best-mean test log-loss 1.9968 vs M0 1.9892 —

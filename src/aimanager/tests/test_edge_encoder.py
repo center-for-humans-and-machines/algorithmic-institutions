@@ -9,6 +9,7 @@ from aimanager.generic.graph import (
     GraphNetwork,
     SameGroupEdgeEncoder,
 )
+from aimanager.manager.environment import ArtificialHumanEnv
 
 
 @pytest.fixture
@@ -120,6 +121,85 @@ def test_forward_without_edge_encoding_is_backward_compatible():
     assert encoded["edge_attr"].shape == (n_edges, 3, 0)
     out = model(encoded)
     assert out.shape == (2 * 4, 3, 21)
+
+
+class _OnesContribution:
+    """Stand-in contribution AH: lets the env step without a real GNN."""
+
+    def __init__(self):
+        self.default_values = {"contribution": 0}
+
+    def predict(self, state, reset_rnn, edge_index):
+        return (th.ones_like(state["contribution"]),)
+
+
+class _FlipAgent0Switch:
+    """Switch predictor that always flips agent 0's group."""
+
+    def predict(self, state, reset_rnn, edge_index):
+        ds = th.zeros_like(state["contribution"], dtype=th.bool)
+        ds[:, 0, :] = True
+        return ds, None
+
+
+def _edge_attr_seen_by_model(env, edge_encoder):
+    """Reproduce exactly what GraphNetwork.encode does: same_group from the
+    env's current agent_group + the (fully-connected) batch_edge_index."""
+    ag = env.state["agent_group"].flatten(0, 1)  # (N, n_rounds)
+    return edge_encoder(
+        edge_index=env.batch_edge_index, n_rounds=ag.shape[1], agent_group=ag
+    )
+
+
+def test_env_recomputes_same_group_after_switch():
+    """In sim, when an agent switches groups the same_group edge feature the
+    contribution model receives must update to the new membership."""
+    env = ArtificialHumanEnv(
+        artifical_humans=_OnesContribution(),
+        artifical_humans_valid=None,
+        artifical_humans_switch=_FlipAgent0Switch(),
+        switch_every=4,
+        batch_size=1,
+        n_agents=8,
+        n_contributions=3,
+        n_punishments=3,
+        n_rounds=5,
+        n_groups=2,
+        device="cpu",
+        reward_mode="avg",
+        agent_groups=[0, 0, 0, 0, 1, 1, 1, 1],
+        default_values={
+            "punishment": 0,
+            "contribution": 0,
+            "round_number": 0,
+            "is_first": False,
+            "contribution_valid": False,
+            "punishment_valid": False,
+            "common_good": 0,
+            "contributor_payoff": 0,
+            "manager_payoff": 0,
+            "reward": 0,
+        },
+    )
+    ee = EdgeEncoder([{"name": "same_group", "etype": "bool"}], refrence="contribution")
+
+    env.reset()
+    assert env.state["agent_group"].flatten().tolist() == [0, 0, 0, 0, 1, 1, 1, 1]
+    before = _edge_attr_seen_by_model(env, ee)
+
+    # real switch path: flips agent 0 from group 0 -> 1 and syncs state
+    env.update_groups_from_switch_predictor()
+    assert env.state["agent_group"].flatten().tolist() == [1, 0, 0, 0, 1, 1, 1, 1]
+    after = _edge_attr_seen_by_model(env, ee)
+
+    row, col = env.batch_edge_index
+    e01 = int(((row == 0) & (col == 1)).nonzero()[0])  # agent0 - a group-0 peer
+    e04 = int(((row == 0) & (col == 4)).nonzero()[0])  # agent0 - a group-1 peer
+    # before: agent0 in g0 -> same as agent1, different from agent4
+    assert before[e01, 0, 0] == 1.0 and before[e04, 0, 0] == 0.0
+    # after the switch: agent0 in g1 -> different from agent1, same as agent4
+    assert after[e01, 0, 0] == 0.0 and after[e04, 0, 0] == 1.0
+    assert not th.equal(before, after)
 
 
 def test_save_load_round_trips_edge_encoding():
