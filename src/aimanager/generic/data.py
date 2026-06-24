@@ -138,6 +138,9 @@ def get_default_values(df):
         "does_switch": False,
         "switch_mask": False,
         "switch_valid": False,
+        # round-0 / absent cells inherit the contribution default (see #114):
+        # the own-group prev mean of all-c_def previous contributions is c_def.
+        "own_grp_prev_mean_contr": c_def,
     }
     return default_values
 
@@ -159,6 +162,7 @@ def create_torch_data_new(df, default_values=None):
         "does_switch": th.bool,
         "switch_mask": th.bool,
         "switch_valid": th.bool,
+        "own_grp_prev_mean_contr": th.float,
     }
 
     n_groups = df["group_idx"].max() + 1
