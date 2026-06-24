@@ -185,6 +185,25 @@ wired and tested now.
   lands, more than a large standalone gain. Report the delta either way; the CV
   number is the verdict.
 
+### Result (M1 vs M0)
+
+Trained on Raven, 5-fold, seed 38381. Mean best test log-loss:
+
+| arm | best-mean test log-loss |
+|---|---|
+| **M0** baseline | **1.9892** |
+| **M1** + `same_group` | **1.9968** (re-run 2.0110) |
+
+**No significant impact.** M1 − M0 = +0.0076 — *within* the per-fold std (~0.06)
+and barely above the run-to-run noise (~0.014, measured from two same-seed M1
+runs). A feature-importance check confirms the feature is *wired and lightly
+used* (shuffling `agent_group`, which also corrupts `same_group`, degrades
+log-loss by 0.0033 in M1 vs 0.0009 in M0), but the own-group peer signal is tiny
+next to self-autocorrelation (`prev_contribution` shuffle Δ ≈ +1.8). This matches
+the report's prior: `same_group` is an **enabler**, not a standalone win. The
+arm expected to carry signal is **M3** (own-group avg as a node feature),
+out of scope here.
+
 ## Implementation notes
 
 - The edge encoder's `forward` needs `edge_index` and `n_rounds`, which are not
@@ -226,4 +245,6 @@ wired and tested now.
       legacy checkpoint missing the key.
 - [x] Run tests on Raven: 7 edge tests pass; full suite 17/17 pass (no
       regression in environment/manager paths).
-- [ ] Retrain M1 on Raven; record CV test log-loss vs 1.9897 (section 8).
+- [x] Retrained M1 on Raven: best-mean test log-loss 1.9968 vs M0 1.9892 —
+      within fold std and run-to-run noise. No significant impact (section 8);
+      consistent with the report's "enabler, not standalone win" prior.
