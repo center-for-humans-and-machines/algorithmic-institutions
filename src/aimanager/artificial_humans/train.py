@@ -244,7 +244,10 @@ def main(config):
                     + (y_pred * y_pred.log()).sum(-1) * train_args["l1_entropy"]
                 )
 
-                loss = (loss * mask).sum() / mask.sum()
+                # upweight switch-arrival rounds (#117); switch_weight=0 -> unchanged
+                sw = b_data["does_switch"].flatten(0, 1).flatten().to(loss.device)
+                weight = 1.0 + train_args.get("switch_weight", 0.0) * sw.float()
+                loss = (loss * mask * weight).sum() / (mask * weight).sum()
 
                 loss.backward(retain_graph=True)
 
