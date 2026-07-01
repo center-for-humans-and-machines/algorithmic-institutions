@@ -33,7 +33,7 @@ params:
   n_groups: 2
   data_file: experiments/2group_8agent_50ep.csv
   model_name: graph
-  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  shuffle_features: [prev_contribution, prev_punishment]
   basedir: .
   output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_same_group
   model_args:
@@ -50,9 +50,6 @@ params:
       - name: prev_punishment
         n_levels: 31
         encoding: numeric
-      - name: agent_group
-        n_levels: 2
-        encoding: onehot
     edge_encoding:
       - name: same_group
         etype: bool
