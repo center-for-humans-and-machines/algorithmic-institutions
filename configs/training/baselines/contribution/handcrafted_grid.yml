@@ -1,0 +1,72 @@
+data:
+  data_file: experiments/2group_8agent_50ep.csv
+  experiment_names: [ah_group_switching]
+  target: contribution        # switch config sets: does_switch
+  mask: contribution_valid    # switch config sets: switch_valid
+
+cv:
+  seed: 38381
+  n_folds: 5
+  holdout_fold: 0             # locked test set; nested CV runs over folds 1-4
+  select_rule: one_std_error  # simplest config within 1 SE of best inner-CV score
+
+# Contribution model runs both; compared separately (log-loss vs RMSE/MAE).
+targets: [categorical, continuous]
+
+# Global toggle: how every active measure-block is represented.
+#   components -> raw pieces: contribution + punishment + common_good
+#   compact    -> lean signal: payoff summary (payoff = 20 - c - p + cg); B1 also
+#                 keeps contribution, and the group blocks (B2/B3/B4) add group size.
+encodings: [compact, components]
+
+# Regularisation sweep (categorical -> LogisticRegression C; continuous -> Ridge alpha)
+regularization:
+  C:     [0.03, 0.1, 0.3, 1.0, 3.0, 10.0]
+  alpha: [100.0, 30.0, 10.0, 3.0, 1.0, 0.3]
+
+# Feature blocks. Each toggled on/off. The `encodings` axis picks the compact vs
+# components list per block. All behavioural features are previous-round (t-1);
+# B7 is structural (known at t). Group size is sourced from B7 in components runs
+# and from B2/B3/B4 in compact runs, so each encoding sees it exactly once.
+blocks:
+  B1_self:                    # own inertia
+    components: [prev_contribution, prev_punishment, prev_common_good]
+    compact:    [prev_contribution, prev_payoff]
+
+  B2_own_group:               # current group-mates, leave-one-out (cg omitted: = B1 prev_common_good)
+    components: [prev_contribution_mean_peers, prev_punishment_mean_peers]
+    compact:    [prev_payoff_mean_peers, prev_group_size]
+
+  B3_other_group:             # the other group
+    components: [prev_contribution_mean_other, prev_punishment_mean_other, prev_common_good_mean_other]
+    compact:    [prev_payoff_mean_other, prev_group_size_other]
+
+  B4_gap:                     # own - other
+    components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_mean_gap]
+    compact:    [prev_payoff_mean_gap, prev_group_size_delta]
+
+  B5_own_since_switch:        # own-group running mean over current tenure
+    components: [win_contribution_mean_peers, win_punishment_mean_peers, win_common_good_mean_peers]
+    compact:    [win_payoff_mean_peers]
+
+  B6_other_since_switch:      # other-group running mean over current tenure
+    components: [win_contribution_mean_other, win_punishment_mean_other, win_common_good_mean_other]
+    compact:    [win_payoff_mean_other]
+
+  B7_structural:              # structural (known at t); group_size only in the
+                              # components list (compact gets it from B2/B3/B4)
+    components: [round_number, prev_does_switch, rounds_since_switch, group_size]
+    compact: [round_number, prev_does_switch, rounds_since_switch]
+
+# Constraint on the comparison blocks (B2/B3/B4):
+#   if B2 on -> exactly one of B3/B4 on;  B3 and B4 never both on.
+# Enumerated as the 5 valid (B2, B3, B4) on/off triples:
+comparison_triples:
+  - [0, 0, 0]   # no comparison
+  - [0, 0, 1]   # gap only
+  - [0, 1, 0]   # other-raw only
+  - [1, 0, 1]   # own + gap
+  - [1, 1, 0]   # own + other-raw
+
+# Grid size: 5 triples x B1 x B5 x B6 x B7 (2^4) = 80 block configs
+#            x 2 encodings = 160 x 6 reg x 2 targets ~= 1920 cells (see feature_blocks.md)
