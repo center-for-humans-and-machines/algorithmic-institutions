@@ -74,6 +74,29 @@ def parse_agent_rounds(df, switch_every=None):
     else:
         df["switch_valid"] = df["switch_mask"]
 
+    # own-group average contribution (node feature, #114 / M3): leave-one-out
+    # mean of the agent's CURRENT-group members' PREVIOUS-round contribution.
+    # Computed directly (current-group membership x t-1 contribution) so a
+    # switched agent gets its NEW group's prior mean -- the auto prev_ shift
+    # would give the OLD group's mean instead. Invalid (no-input) contributions
+    # are excluded; round-0 / no-valid-peer cells fall back to the median valid
+    # contribution (c_def), matching prev_contribution's round-0 default.
+    c_def = np.rint(df.loc[df["contribution_valid"], "contribution"].median())
+    prev_c = df.groupby(["episode_id", "player_id"])["contribution"].shift(1)
+    prev_valid = (
+        df.groupby(["episode_id", "player_id"])["contribution_valid"]
+        .shift(1)
+        .fillna(False)
+    )
+    valid_prev_c = prev_c.where(prev_valid)  # invalid / round-0 -> NaN (skipped)
+    grp = [df["episode_id"], df["round_number"], df["group_id"]]
+    gsum = valid_prev_c.groupby(grp).transform("sum")
+    gcnt = valid_prev_c.groupby(grp).transform("count")
+    loo_sum = gsum - valid_prev_c.fillna(0.0)  # subtract self only if it counted
+    loo_cnt = gcnt - prev_valid.astype(int)  # drop self from the count if valid
+    loo = (loo_sum / loo_cnt).where(loo_cnt > 0)  # NaN if no valid peers / round 0
+    df["own_grp_prev_mean_contr"] = loo.fillna(float(c_def)).astype(float)
+
     # episode-batch index (tensor's first dimension)
     episode_group = df["global_group_id"] + "__" + df["episode_id"].astype(str)
     df["group_idx"] = episode_group.rank(method="dense").astype(int) - 1
@@ -115,6 +138,9 @@ def get_default_values(df):
         "does_switch": False,
         "switch_mask": False,
         "switch_valid": False,
+        # round-0 / absent cells inherit the contribution default (see #114):
+        # the own-group prev mean of all-c_def previous contributions is c_def.
+        "own_grp_prev_mean_contr": c_def,
     }
     return default_values
 
@@ -136,6 +162,7 @@ def create_torch_data_new(df, default_values=None):
         "does_switch": th.bool,
         "switch_mask": th.bool,
         "switch_valid": th.bool,
+        "own_grp_prev_mean_contr": th.float,
     }
 
     n_groups = df["group_idx"].max() + 1

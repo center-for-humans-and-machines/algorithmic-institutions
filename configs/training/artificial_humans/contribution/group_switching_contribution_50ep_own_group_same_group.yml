@@ -1,13 +1,10 @@
 description: >-
-  M1 arm (#112): the M0 contribution predictor
-  (group_switching_contribution_50ep.yml) plus a same_group EDGE feature, so the
-  edge MLP can route own- vs other-group messages directly instead of having to
-  learn the agent_group equality (M0 leaves agent_group importance ≈0 — a
-  learnability gap, not a capacity one). Identical data / CV / seed / epochs to
-  M0; the ONLY change is `edge_encoding: [same_group]`. agent_group is kept as a
-  node feature (the agent_group-drop ablation is a separate arm). Writes to a new
-  output_dir so the M0 baseline artifact (test log_loss 1.9897) is preserved for
-  comparison.
+  M4 arm (#114): M3 (own_grp_prev_mean_contr node feature) PLUS the same_group
+  edge feature from #112 (merged on main, so config-only — no model change). The
+  combined arm where same_group finally has a real own-group contribution signal
+  to route: M0 / M3 / M4 isolates the node feature alone vs. node feature + edge
+  routing. Identical data / CV / seed / epochs to M0; separate output_dir so the
+  M0 and M3 artifacts are preserved.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -25,6 +22,7 @@ params:
     architecture: node+edge+rnn
     dataset: 50ep
     epochs: 575
+    own_group: true
     same_group: true
   n_contributions: 21
   n_punishments: 31
@@ -35,7 +33,7 @@ params:
   model_name: graph
   shuffle_features: [prev_contribution, prev_punishment]
   basedir: .
-  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_same_group
+  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_own_group_same_group
   model_args:
     y_levels: 21
     y_name: contribution
@@ -50,6 +48,9 @@ params:
       - name: prev_punishment
         n_levels: 31
         encoding: numeric
+      - name: own_grp_prev_mean_contr
+        etype: float
+        norm: 20
     edge_encoding:
       - name: same_group
         etype: bool

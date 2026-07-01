@@ -1,13 +1,13 @@
 description: >-
-  M1 arm (#112): the M0 contribution predictor
-  (group_switching_contribution_50ep.yml) plus a same_group EDGE feature, so the
-  edge MLP can route own- vs other-group messages directly instead of having to
-  learn the agent_group equality (M0 leaves agent_group importance ≈0 — a
-  learnability gap, not a capacity one). Identical data / CV / seed / epochs to
-  M0; the ONLY change is `edge_encoding: [same_group]`. agent_group is kept as a
-  node feature (the agent_group-drop ablation is a separate arm). Writes to a new
-  output_dir so the M0 baseline artifact (test log_loss 1.9897) is preserved for
-  comparison.
+  M3 arm (#114): the M0 contribution predictor
+  (group_switching_contribution_50ep.yml) plus own_grp_prev_mean_contr as a
+  float NODE feature — the leave-one-out mean of the agent's current-group
+  members' previous-round contribution. This is the explicit own-group peer
+  signal the report (#109 §8) expects to actually move behaviour; #112's
+  same_group edge feature was an enabler with no standalone impact because the
+  model had no peer-contribution level to route. Identical data / CV / seed /
+  epochs to M0; the ONLY change is the added node feature. Separate output_dir
+  so the M0 baseline artifact (test log_loss 1.9892) is preserved.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -25,7 +25,7 @@ params:
     architecture: node+edge+rnn
     dataset: 50ep
     epochs: 575
-    same_group: true
+    own_group: true
   n_contributions: 21
   n_punishments: 31
   n_cross_val: 5
@@ -33,9 +33,9 @@ params:
   n_groups: 2
   data_file: experiments/2group_8agent_50ep.csv
   model_name: graph
-  shuffle_features: [prev_contribution, prev_punishment]
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
   basedir: .
-  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_same_group
+  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_own_group
   model_args:
     y_levels: 21
     y_name: contribution
@@ -50,9 +50,12 @@ params:
       - name: prev_punishment
         n_levels: 31
         encoding: numeric
-    edge_encoding:
-      - name: same_group
-        etype: bool
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+      - name: own_grp_prev_mean_contr
+        etype: float
+        norm: 20
   optimizer_args:
     lr: 3.e-4
     weight_decay: 1.e-5

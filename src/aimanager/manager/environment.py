@@ -288,7 +288,33 @@ class ArtificialHumanEnv:
         else:
             self.reward = self.group_payoff
 
+    def update_own_grp_prev_mean_contr(self):
+        """Provide the own_grp_prev_mean_contr node feature for the contribution
+        AH (#114): leave-one-out mean of the CURRENT group's members'
+        previous-round contribution (valid only), broadcast back to each agent.
+        Mirrors data.py's training-time column so sim matches training. Must run
+        each round after groups are set and before update_contribution."""
+        prev_c = self.state["prev_contribution"].to(th.float)
+        prev_valid = self.state.get("prev_contribution_valid")
+        if prev_valid is None:
+            prev_valid = th.ones_like(self.state["prev_contribution"], dtype=th.bool)
+        prev_valid = prev_valid.to(th.float)
+        valid_c = prev_c * prev_valid
+        # per-group sum / count of valid previous contributions -> (B, n_groups, 1)
+        grp_sum = (valid_c.unsqueeze(-2) * self.agent_group_mask).sum(dim=1)
+        grp_cnt = (prev_valid.unsqueeze(-2) * self.agent_group_mask).sum(dim=1)
+        # broadcast each agent's own-group totals back, then leave-one-out
+        own_sum = grp_sum.gather(1, self.agent_groups) - valid_c
+        own_cnt = grp_cnt.gather(1, self.agent_groups) - prev_valid
+        default = float(self.artifical_humans.default_values["contribution"])
+        self.state["own_grp_prev_mean_contr"] = th.where(
+            own_cnt > 0,
+            own_sum / own_cnt.clamp(min=1),
+            th.full_like(own_sum, default),
+        )
+
     def update_contribution(self):
+        self.update_own_grp_prev_mean_contr()
         contribution = self.artifical_humans.predict(
             self.state,
             reset_rnn=self.round_number[0, 0, 0] == 0,
