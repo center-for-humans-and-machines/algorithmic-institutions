@@ -1,4 +1,4 @@
-# [DRAFT] Hand-crafted linear baselines for contribution & switch (issue #119)
+# [ACTIVE] Hand-crafted linear baselines for contribution & switch (issue #119)
 
 ## Goal
 
@@ -15,13 +15,19 @@ Reference bars (both from `reports/ah_baseline_log_loss.md`):
 The search is a **block-level grid** exploiting the measure×frame factorial structure of the
 feature pool, run under **nested CV with a locked holdout** and **1-SE selection** — not an
 exhaustive subset search and not regularization-only pruning. This plan fully supersedes the
-root scratch file `feature_blocks.md`, which is to be **deleted**.
+root scratch file `feature_blocks.md` (already **deleted** in the first commit).
 
 Decisions in this plan are settled (they answer the issue's four open questions); do not
 re-litigate them:
 - **CV granularity:** pair/episode level via `get_cross_validations(group_key=pair_id)`,
-  seed 38381. Training rows are per-(episode, agent, round); the split stays pair-level because
-  lagged features + the pair-flip doubling would leak otherwise.
+  seed 38381. Training rows are per-(episode, agent, round); the split stays pair-level so
+  lagged features can't leak across train/test.
+- **Undoubled data:** train on the **50 real episodes**, not the 100 doubled — `data.exclude_flipped`
+  drops the `global_group_id` "(flipped)" pair-flip copies before `create_torch_data`. The flip is
+  a group-swapped mirror that adds no signal to a linear model (and would double-count each real
+  observation). With one episode per pair, pair-level CV coincides with episode-level.
+  **Caveat:** the GNN reference numbers (1.9897 / 0.5163) were computed on the *doubled* data, so
+  the baseline's holdout loss is not strictly apples-to-apples with them; note this in the report.
 - **Model:** linear only — multinomial `LogisticRegression` (categorical target) and `Ridge`
   (continuous target). Tune regularization only (`C` / `alpha`). No trees / XGB.
 - **Contribution target:** produce BOTH categorical (21-level log-loss, comparable to GNN) and
@@ -96,9 +102,12 @@ tensors; ~24 are derived but collapse to **4 real helpers**. All behavioural fea
 previous-round (t−1); B7 is structural (known at t). WHERE: helper functions in the module.
 
 - **Direct from tensors** (`create_torch_data`): `prev_contribution`, `prev_punishment`,
-  `prev_common_good`, `round_number`, `does_switch`→`prev_does_switch` (via existing `shift`),
-  `agent_group`/`prev_agent_group` (for grouping only, not a feature). `prev_contribution_mean_peers`
-  can reuse the existing `own_grp_prev_mean_contr` tensor.
+  `prev_common_good`, `round_number`; `does_switch` / `agent_group` / `prev_agent_group`
+  feed the derived features below (grouping, tenure, decision cadence), not used raw.
+- **`switched_last_choice`** ("did I switch last time I had the choice?"): forward-fill of
+  `does_switch` over decision rounds (`r % switch_every == 0`, `r != 0`, `r <= t`); `switch_every`
+  comes from the config. NOT a t-1 shift. `rounds_since_switch` is tenure since the last *actual*
+  switch (resets on `does_switch`), not since the last option.
 - **Helper 1 — group means** (generalize `group_prev_means` from `contribution_baseline.py`):
   compute leave-one-out own-group mean and other-group mean for **each** of {contribution,
   punishment, common_good}. Yields `prev_{measure}_mean_peers` and `prev_{measure}_mean_other`.
@@ -183,4 +192,4 @@ feature×encoding configs (1 duplicate), which the enumerator should collapse.
       `does_switch` / `switch_valid`, categorical only, `switch_every: 4`).
 - [ ] Add `scripts/baselines/switch_handcrafted.py` (loads switch config).
 - [ ] Run both locally; write `reports/handcrafted_baseline.md` with grid table + holdout number.
-- [ ] Delete root `feature_blocks.md` (content absorbed into this plan).
+- [x] Delete root `feature_blocks.md` (content absorbed into this plan) — done in first commit.

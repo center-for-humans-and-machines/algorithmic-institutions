@@ -3,6 +3,13 @@ data:
   experiment_names: [ah_group_switching]
   target: contribution        # switch config sets: does_switch
   mask: contribution_valid    # switch config sets: switch_valid
+  exclude_flipped: true       # train on the 50 real episodes, not the 100 doubled:
+                              # the pair-flip is a group-swapped mirror that adds no
+                              # signal to a linear model (drops global_group_id
+                              # rows tagged "(flipped)")
+  switch_every: 4             # decision cadence: switching options occur every 4
+                              # rounds. Used to build switched_last_choice (and by
+                              # create_torch_data for the switch target's masks)
 
 cv:
   seed: 38381
@@ -55,8 +62,8 @@ blocks:
 
   B7_structural:              # structural (known at t); group_size only in the
                               # components list (compact gets it from B2/B3/B4)
-    components: [round_number, prev_does_switch, rounds_since_switch, group_size]
-    compact: [round_number, prev_does_switch, rounds_since_switch]
+    components: [round_number, switched_last_choice, rounds_since_switch, group_size]
+    compact: [round_number, switched_last_choice, rounds_since_switch]
 
 # Constraint on the comparison blocks (B2/B3/B4):
 #   if B2 on -> exactly one of B3/B4 on;  B3 and B4 never both on.
