@@ -1,0 +1,294 @@
+"""Integration test for the hand-crafted baseline feature pipeline (issue #119).
+
+Verifies that build_feature_pool (src) produces exactly the features it claims,
+by comparing every feature (blocks B1-B7) for one agent across a whole episode
+against an INDEPENDENT pandas reference computed here from frozen raw fixtures --
+no src code is used to build the reference, so this is a genuine cross-check.
+
+Target: episode 70 (global_group_id 'rokqh2fp #2'), player 6, from the non-flipped
+originals of experiments/2group_8agent_50ep.csv. The fixtures under fixtures/ were
+extracted with pure pandas (see git history for the one-off extract scripts):
+  * episode_raw.csv        -- all 8 agents' raw per-round fields (wide)
+  * episode_peers_p6.csv   -- player 6's t-1 own-group roster per round
+  * episode_other_p6.csv   -- player 6's t-1 other-group roster per round
+
+Run:  .venv/bin/python -m pytest tests/baselines/test_baseline_features.py
+Eyeball:  .venv/bin/python tests/baselines/test_baseline_features.py
+"""
+import os
+import sys
+from pathlib import Path
+
+os.environ.setdefault("DISABLE_PANDERA_IMPORT_WARNING", "True")
+import numpy as np
+import pandas as pd
+import pytest
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]              # tests/baselines -> repo root
+DATA = HERE / "fixtures"
+RAW = ROOT / "experiments/2group_8agent_50ep.csv"
+TARGET, EPISODE_ID, EXPERIMENT, SWITCH_EVERY = 6, 70, "ah_group_switching", 4
+
+B1 = ["prev_contribution", "prev_punishment"]
+B2 = ["prev_contribution_mean_peers", "prev_punishment_mean_peers",
+      "prev_group_size", "prev_common_good", "prev_payoff_mean_group"]
+B3 = ["prev_contribution_mean_other", "prev_punishment_mean_other",
+      "prev_common_good_mean_other", "prev_payoff_mean_other",
+      "prev_group_size_other"]
+B4 = ["prev_contribution_mean_gap", "prev_punishment_mean_gap",
+      "prev_common_good_mean_gap", "prev_payoff_mean_gap", "prev_group_size_delta"]
+_WIN5 = ["win_contribution_mean_peers", "win_punishment_mean_peers",
+         "win_common_good_mean_peers", "win_payoff_mean_peers"]
+_WIN6 = ["win_contribution_mean_other", "win_punishment_mean_other",
+         "win_common_good_mean_other", "win_payoff_mean_other"]
+B5 = _WIN5 + [f"prev_{w}" for w in _WIN5]
+B6 = _WIN6 + [f"prev_{w}" for w in _WIN6]
+B7 = ["round_number", "group_size", "rounds_since_switch",
+      "switched_last_choice", "prev_switched_last_choice"]
+ALL_FEATURES = B1 + B2 + B3 + B4 + B5 + B6 + B7
+
+
+# --------------------------------------------------------------------------- #
+# independent (pandas-only) reference
+# --------------------------------------------------------------------------- #
+def _dataset_defaults():
+    df = pd.read_csv(RAW)
+    df = df[df["experiment_name"] == EXPERIMENT]
+    df = df[~df["global_group_id"].str.contains("(flipped)", regex=False)].copy()
+    valid = df["player_no_input"] == 0
+    c_def = float(np.rint(df.loc[valid, "contribution"].median()))
+    p_def = float(np.rint(df.loc[df["manager_no_input"] == 0, "punishment"].median()))
+    n_valid = df.assign(cv=valid.astype(int)).groupby(
+        ["episode_id", "round_number", "group_id"])["cv"].transform("sum")
+    cg_def = float((df["common_good"] / n_valid)[valid].median())
+    return c_def, p_def, cg_def
+
+
+def _add_b1(ref, bank, c_def, p_def):
+    c = bank[f"p{TARGET}_contribution"].to_numpy(float)
+    p = bank[f"p{TARGET}_punishment"].to_numpy(float)
+    ref["ref_prev_contribution"] = np.concatenate([[c_def], c[:-1]])
+    ref["ref_prev_punishment"] = np.concatenate([[p_def], p[:-1]])
+
+
+def _add_b2(ref, peers, bank, c_def, p_def, cg_def):
+    per = {}
+    for t, grp in peers.groupby("round_number"):
+        pe = grp[grp["is_self"] == 0]
+        nv = int((grp["noinput_tm1"] == 0).sum())
+        percap = float(grp["common_good_pool_tm1"].iloc[0]) / nv if nv else 0.0
+        mc, mp = grp["contribution_tm1"].mean(), grp["punishment_tm1"].mean()
+        per[int(t)] = {
+            "prev_contribution_mean_peers":
+                float(pe["contribution_tm1"].mean()) if len(pe) else 0.0,
+            "prev_punishment_mean_peers":
+                float(pe["punishment_tm1"].mean()) if len(pe) else 0.0,
+            "prev_group_size": float(len(grp)), "prev_common_good": percap,
+            "prev_payoff_mean_group": 20.0 - mc - mp + percap,
+        }
+    r0 = bank[bank["round_number"] == 0].iloc[0]
+    g0 = r0[f"p{TARGET}_grp"]
+    gsize0 = int(sum(r0[f"p{j}_grp"] == g0 for j in range(8)))
+    per[0] = {"prev_contribution_mean_peers": c_def, "prev_punishment_mean_peers": p_def,
+              "prev_group_size": float(gsize0), "prev_common_good": cg_def,
+              "prev_payoff_mean_group": 20.0 - c_def - p_def + cg_def}
+    for name in B2:
+        ref[f"ref_{name}"] = ref["round_number"].map(lambda t: per[int(t)][name])
+
+
+def _add_b3(ref, other, bank, c_def, p_def, cg_def):
+    per = {}
+    for t in range(1, 24):
+        grp = other[other["round_number"] == t]
+        if len(grp) == 0:
+            per[t] = {"prev_contribution_mean_other": 0.0, "prev_punishment_mean_other": 0.0,
+                      "prev_common_good_mean_other": 0.0, "prev_payoff_mean_other": 20.0,
+                      "prev_group_size_other": 0.0}
+            continue
+        nv = int((grp["noinput_tm1"] == 0).sum())
+        percap = float(grp["common_good_pool_tm1"].iloc[0]) / nv if nv else 0.0
+        mc, mp = grp["contribution_tm1"].mean(), grp["punishment_tm1"].mean()
+        per[t] = {"prev_contribution_mean_other": float(mc),
+                  "prev_punishment_mean_other": float(mp),
+                  "prev_common_good_mean_other": percap,
+                  "prev_payoff_mean_other": 20.0 - mc - mp + percap,
+                  "prev_group_size_other": float(len(grp))}
+    r0 = bank[bank["round_number"] == 0].iloc[0]
+    g0 = r0[f"p{TARGET}_grp"]
+    gsize0 = int(sum(r0[f"p{j}_grp"] == g0 for j in range(8)))
+    per[0] = {"prev_contribution_mean_other": c_def, "prev_punishment_mean_other": p_def,
+              "prev_common_good_mean_other": cg_def,
+              "prev_payoff_mean_other": 20.0 - c_def - p_def + cg_def,
+              "prev_group_size_other": float(8 - gsize0)}
+    for name in B3:
+        ref[f"ref_{name}"] = ref["round_number"].map(lambda t: per[int(t)][name])
+
+
+def _add_b4(ref, peers, other):
+    per = {}
+    for t in range(1, 24):
+        pg = peers[peers["round_number"] == t]
+        og = other[other["round_number"] == t]
+        pe = pg[pg["is_self"] == 0]
+        own_nv = int((pg["noinput_tm1"] == 0).sum())
+        own_cg = float(pg["common_good_pool_tm1"].iloc[0]) / own_nv if own_nv else 0.0
+        peers_c = float(pe["contribution_tm1"].mean()) if len(pe) else 0.0
+        peers_p = float(pe["punishment_tm1"].mean()) if len(pe) else 0.0
+        peers_payoff = 20.0 - peers_c - peers_p + own_cg
+        if len(og):
+            oth_nv = int((og["noinput_tm1"] == 0).sum())
+            oth_cg = float(og["common_good_pool_tm1"].iloc[0]) / oth_nv if oth_nv else 0.0
+            oth_c, oth_p, oth_size = (float(og["contribution_tm1"].mean()),
+                                      float(og["punishment_tm1"].mean()), len(og))
+        else:
+            oth_cg = oth_c = oth_p = 0.0
+            oth_size = 0
+        oth_payoff = 20.0 - oth_c - oth_p + oth_cg
+        per[t] = {"prev_contribution_mean_gap": peers_c - oth_c,
+                  "prev_punishment_mean_gap": peers_p - oth_p,
+                  "prev_common_good_mean_gap": own_cg - oth_cg,
+                  "prev_payoff_mean_gap": peers_payoff - oth_payoff,
+                  "prev_group_size_delta": float(len(pg) - oth_size)}
+    per[0] = {n: 0.0 for n in B4}
+    for name in B4:
+        ref[f"ref_{name}"] = ref["round_number"].map(lambda t: per[int(t)][name])
+
+
+def _switch_series(bank):
+    g = bank[f"p{TARGET}_grp"].to_numpy()
+    ds = np.zeros(len(g), bool)
+    ds[1:] = g[1:] != g[:-1]
+    return ds
+
+
+def _window(series, ds):
+    out = np.zeros(len(series))
+    s, c = 0.0, 0
+    for t in range(len(series)):
+        if ds[t]:
+            s, c = 0.0, 0
+        s += series[t]
+        c += 1
+        out[t] = s / c
+    return out
+
+
+def _shift1(a):
+    out = np.roll(a, 1)
+    out[0] = a[0]
+    return out
+
+
+def _add_windows(ref, ds, side):
+    """Shared window builder for B5/B6. side='peers' (own) or 'other'. Running
+    mean of the per-round B2/B3 means over the tenure (resets on the target's
+    switches ds); payoff = 20 - win_c - win_p + win_cg; prev_win = one-round shift."""
+    cg = "ref_prev_common_good" if side == "peers" else "ref_prev_common_good_mean_other"
+    wc = _window(ref[f"ref_prev_contribution_mean_{side}"].to_numpy(float), ds)
+    wp = _window(ref[f"ref_prev_punishment_mean_{side}"].to_numpy(float), ds)
+    wcg = _window(ref[cg].to_numpy(float), ds)
+    for name, arr in {f"win_contribution_mean_{side}": wc,
+                      f"win_punishment_mean_{side}": wp,
+                      f"win_common_good_mean_{side}": wcg,
+                      f"win_payoff_mean_{side}": 20.0 - wc - wp + wcg}.items():
+        ref[f"ref_{name}"] = arr
+        ref[f"ref_prev_{name}"] = _shift1(arr)
+
+
+def _add_b5(ref, ds):   # own-group since-switch window (peers)
+    _add_windows(ref, ds, "peers")
+
+
+def _add_b6(ref, ds):   # other-group since-switch window
+    _add_windows(ref, ds, "other")
+
+
+def _add_b7(ref, bank, ds):
+    b = bank.set_index("round_number")
+    T = len(b)
+    ref["ref_round_number"] = np.arange(T, dtype=float)
+    ref["ref_group_size"] = [
+        float(sum(b.loc[t, f"p{j}_grp"] == b.loc[t, f"p{TARGET}_grp"] for j in range(8)))
+        for t in range(T)]
+    rss = np.zeros(T)
+    cnt = 0
+    for t in range(T):
+        cnt = 0 if (t == 0 or ds[t]) else cnt + 1
+        rss[t] = cnt
+    ref["ref_rounds_since_switch"] = rss
+
+    def slc(strict):
+        out = np.zeros(T)
+        for t in range(T):
+            last_dec = ((t - 1 if strict else t) // SWITCH_EVERY) * SWITCH_EVERY
+            if last_dec > 0:
+                out[t] = float(ds[last_dec])
+        return out
+    ref["ref_switched_last_choice"] = slc(False)
+    ref["ref_prev_switched_last_choice"] = slc(True)
+
+
+def build_reference():
+    bank = pd.read_csv(DATA / "episode_raw.csv")
+    peers = pd.read_csv(DATA / "episode_peers_p6.csv")
+    other = pd.read_csv(DATA / "episode_other_p6.csv")
+    c_def, p_def, cg_def = _dataset_defaults()
+    ref = pd.DataFrame({"round_number": bank["round_number"]})
+    _add_b1(ref, bank, c_def, p_def)
+    _add_b2(ref, peers, bank, c_def, p_def, cg_def)
+    _add_b3(ref, other, bank, c_def, p_def, cg_def)
+    _add_b4(ref, peers, other)
+    ds = _switch_series(bank)
+    _add_b5(ref, ds)
+    _add_b6(ref, ds)
+    _add_b7(ref, bank, ds)
+    return ref
+
+
+# --------------------------------------------------------------------------- #
+# pipeline side (src)
+# --------------------------------------------------------------------------- #
+def pipeline_features():
+    import random
+    import torch as th
+    sys.path.insert(0, str(ROOT / "scripts/baselines"))
+    from handcrafted_grid import build_feature_pool
+    from aimanager.generic.data import create_torch_data
+
+    random.seed(38381); np.random.seed(38381); th.manual_seed(38381)
+    df = pd.read_csv(RAW)
+    df = df[df["experiment_name"] == EXPERIMENT]
+    df = df[~df["global_group_id"].str.contains("(flipped)", regex=False)]
+    pair = int(df.loc[df["episode_id"] == EPISODE_ID, "pair_id"].iloc[0])
+    data, _, pair_id = create_torch_data(df, switch_every=SWITCH_EVERY)
+    pool = build_feature_pool(data, SWITCH_EVERY)
+    g = int(np.where(np.asarray(pair_id) == pair)[0][0])
+    return {name: np.asarray(pool[name][g, TARGET, :], float) for name in ALL_FEATURES}
+
+
+@pytest.fixture(scope="module")
+def compared():
+    ref = build_reference()
+    pipe = pipeline_features()
+    return {name: (ref[f"ref_{name}"].to_numpy(float), pipe[name]) for name in ALL_FEATURES}
+
+
+@pytest.mark.parametrize("feature", ALL_FEATURES)
+def test_feature_matches_pipeline(compared, feature):
+    ref, pipe = compared[feature]
+    bad = np.where(~np.isclose(ref, pipe, atol=1e-6))[0]
+    assert len(bad) == 0, f"{feature} mismatch at rounds {bad.tolist()}"
+
+
+if __name__ == "__main__":  # manual eyeball: dump ref vs pipe side by side
+    ref = build_reference()
+    pipe = pipeline_features()
+    for name in ALL_FEATURES:
+        ref[f"pipe_{name}"] = pipe[name]
+    out = HERE / "reference_features_p6.csv"
+    ref.to_csv(out, index=False)
+    fails = [n for n in ALL_FEATURES
+             if not np.allclose(ref[f"ref_{n}"], ref[f"pipe_{n}"], atol=1e-6)]
+    print(f"wrote {out}  ({len(ALL_FEATURES)} features, "
+          f"{'ALL MATCH' if not fails else 'FAILS: ' + str(fails)})")
