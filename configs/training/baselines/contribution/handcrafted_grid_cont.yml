@@ -1,0 +1,49 @@
+data:
+  # TRAIN split only (folds 1-4). The locked test fold lives in
+  # experiments/baseline/2group_8agent_50ep_bline_test.csv and is NOT touched
+  # during selection -- opened once, at the very end. See split_baseline_holdout.py.
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: contribution        # switch config sets: does_switch
+  target_type: continuous    # categorical/continuous
+  mask: contribution_valid    # switch config sets: switch_valid
+  exclude_flipped: true       # train file is already undoubled; no-op safety filter
+  switch_every: 4             # decision cadence
+
+cv:
+  seed: 38381
+  n_folds: 8
+  output: data/baselines/baseline_cv_output_cont.csv          # the combination of reg param and feature set with its loss ordered from best to worst in csv format
+
+# Regularisation sweep (categorical -> LogisticRegression C; continuous -> Ridge alpha)
+regularization:
+  alpha: [3.0, 1.0, 0.3]
+
+blocks:
+  B1_self:                    # own inertia
+    components: [prev_contribution, prev_punishment]
+    sets: [[prev_contribution, prev_punishment], [prev_contribution]]
+
+  B2_own_group:               # current group-mates, leave-one-out (cg omitted: = B1 prev_common_good)
+    components: [prev_contribution_mean_peers, prev_punishment_mean_peers, prev_payoff_mean_group, prev_group_size, prev_common_good]
+    sets:    [[prev_contribution_mean_peers, prev_punishment_mean_peers, prev_group_size], [prev_payoff_mean_group, prev_group_size], [prev_common_good, prev_group_size], [prev_contribution_mean_peers, prev_group_size], [prev_contribution_mean_peers]]
+  
+  B3_other_group:             # the other group
+    components: [prev_contribution_mean_other, prev_punishment_mean_other, prev_common_good_mean_other, prev_payoff_mean_other, prev_group_size_other]
+    sets:    [[prev_contribution_mean_other, prev_punishment_mean_other, prev_group_size_other], [prev_payoff_mean_other, prev_group_size_other], [prev_common_good_mean_other, prev_group_size_other], [prev_contribution_mean_other, prev_group_size_other], [prev_contribution_mean_other]]
+
+  B4_gap:                     # own - other
+    components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_mean_gap, prev_payoff_mean_gap, prev_group_size_delta]
+    sets:    [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_common_good_mean_gap, prev_group_size_delta]]
+
+  B5_own_since_switch:        # own-group running mean over current tenure
+    components: [win_contribution_mean_peers, win_punishment_mean_peers, win_common_good_mean_peers, win_payoff_mean_peers]
+    sets:    [[win_contribution_mean_peers, win_punishment_mean_peers], [win_payoff_mean_peers], [win_common_good_mean_peers]]
+
+  B6_other_since_switch:      # other-group running mean over current tenure
+    components: [win_contribution_mean_other, win_punishment_mean_other, win_common_good_mean_other, win_payoff_mean_other]
+    sets:    [[win_contribution_mean_other, win_punishment_mean_other], [win_common_good_mean_other], [win_payoff_mean_other]]
+
+  B7_structural:              
+    components: [round_number, switched_last_choice, rounds_since_switch, group_size]
+    sets: [[round_number, switched_last_choice, rounds_since_switch], [switched_last_choice, rounds_since_switch, group_size], [round_number], [switched_last_choice], [group_size]]
