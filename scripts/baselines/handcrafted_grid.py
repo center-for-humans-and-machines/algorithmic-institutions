@@ -1,24 +1,22 @@
-"""Shared harness for the hand-crafted linear AH baselines (issue #119).
+"""Feature engineering + data preparation for the hand-crafted linear AH
+baselines (issue #119).
 
-Builds the 30-feature hand-crafted pool from the `create_torch_data` tensors and
-(TODO, next checkpoint) runs the block-level nested-CV grid search with a locked
-holdout and 1-SE selection. Imported by the thin per-target entrypoints
-`contribution_handcrafted.py` / `switch_handcrafted.py`; the minimal
-`contribution_baseline.py` / `switch_logit_baseline.py` are left untouched.
+Builds the hand-crafted feature pool from the `create_torch_data` tensors and
+flattens the TRAIN split into a single [N, n_features] matrix with per-row CV
+folds. Consumed by:
+  * scripts/baselines/run_baseline_cv.py     -- the CV grid driver
+  * scripts/baselines/inspect_best_model.py  -- coefficient inspection
 
 Design (see doc/plans/119-handcrafted-linear-baselines.md):
   * No src/ changes -- only create_torch_data + get_cross_validations are used;
     every derived feature is computed here from the raw [G, A, T] tensors.
   * All behavioural features are previous-round (t-1). Group-mean / gap / window
-    features use PREVIOUS-round group membership (prev_agent_group), matching the
-    `prev_*_mean_*` naming and the existing `group_prev_means` helper. Structural
-    `group_size` (B7) uses current membership; `prev_group_size*` use prev.
+    features use PREVIOUS-round group membership (prev_agent_group); structural
+    `group_size` uses current membership, `prev_group_size*` use previous.
   * payoff = 20 - contribution - punishment + common_good (reports/basics.md;
-    common_good is already the per-capita share). Linear in {c, p, cg}, hence
-    only ever used in the `compact` encoding, never alongside its components.
+    common_good is already the per-capita share).
 
-Runs locally (CPU torch, no PyG). Self-test:
-    .venv/bin/python scripts/baselines/handcrafted_grid.py
+Runs locally (CPU torch, no PyG).
 """
 import os
 
@@ -30,25 +28,16 @@ ENDOWMENT = 20.0  # per-round private endowment (reports/basics.md)
 
 
 # --------------------------------------------------------------------------- #
-# config
+# config / data loading
 # --------------------------------------------------------------------------- #
 def load_config(path):
     with open(path) as fh:
         return yaml.safe_load(fh)
 
 
-def config_feature_names(cfg):
-    """Every distinct feature name referenced by any block/encoding in cfg."""
-    names = set()
-    for block in cfg["blocks"].values():
-        for enc in ("components", "compact"):
-            names.update(block.get(enc, []))
-    return names
-
-
 def load_episodes(cfg, root):
     """Load the experiment rows, dropping the pair-flip copies when
-    `data.exclude_flipped` is set (train on the 50 real episodes, not 100)."""
+    `data.exclude_flipped` is set (train on the real episodes, not the doubled)."""
     import pandas as pd
 
     df = pd.read_csv(root / cfg["data"]["data_file"])
@@ -67,15 +56,13 @@ def _payoff(c, p, cg):
 
 def _group_prev_means(measure, group):
     """Leave-one-out own-group mean (`peers`) and other-group mean (`other`) of
-    `measure`, grouped by `group` membership. Generalizes group_prev_means from
-    contribution_baseline.py to any measure; both inputs are t-1 tensors, so the
+    `measure`, grouped by `group` membership. Both inputs are t-1 tensors, so the
     result is the previous-round peers' mean.
 
     A genuinely empty other group (everyone merged into one sub-group mid-game)
     is treated as a 0-sized, all-zero group -> `other = 0`, so the gap (peers -
     other) reflects the real 'other group emptied out' asymmetry. The round-0
-    symmetric default (no real previous round) is handled separately in
-    build_feature_pool."""
+    symmetric default (no real previous round) is handled in build_feature_pool."""
     m = measure.astype(float)
     gp = group.astype(int)
     G, _, T = m.shape
@@ -94,6 +81,24 @@ def _group_prev_means(measure, group):
                 if oth.any():
                     other[g, oth, t] = x[sel].mean()
     return peers, other
+
+
+def _group_full_mean(measure, group):
+    """Full own-group mean of `measure` (INCLUDES self): each member gets their
+    group's t-1 mean. Used for group-level payoff -- payoff is a group quantity
+    (shared common_good), so a leave-one-out peer mean is not meaningful."""
+    m = measure.astype(float)
+    gp = group.astype(int)
+    G, _, T = m.shape
+    out = np.zeros_like(m)
+    for g in range(G):
+        for t in range(T):
+            grp, x = gp[g, :, t], m[g, :, t]
+            for s in (0, 1):
+                sel = grp == s
+                if sel.any():
+                    out[g, sel, t] = x[sel].mean()
+    return out
 
 
 def _since_switch_window(per_round_mean, does_switch):
@@ -145,18 +150,23 @@ def _rounds_since_switch(does_switch):
     return out
 
 
-def _switched_last_choice(does_switch, switch_every):
-    """'Did I switch last time I had the choice?' -- the agent's does_switch
-    value at its most recent decision round (r % switch_every == 0, r != 0,
-    r <= t), forward-filled. 0 before the first decision round. Uses the
-    current round when t is itself a decision round (group membership is known
-    before contributions, so this is a valid covariate, not leakage)."""
+def _switched_last_choice(does_switch, switch_every, strict_prev=False):
+    """'Did I switch last time I had the choice?' -- the agent's does_switch at
+    its most recent decision round, forward-filled.
+
+    strict_prev=False (default): most recent decision r <= t. At a decision round
+      t this is does_switch[t] itself -- valid for the contribution target (group
+      membership is known before contributing), but it LEAKS the switch target.
+    strict_prev=True: most recent decision STRICTLY before t. At a decision round
+      t this is does_switch[t - switch_every] (the previous opportunity) -- the
+      leakage-safe version for predicting does_switch[t]."""
     ds = does_switch.astype(int)
     _, _, T = ds.shape
     out = np.zeros_like(ds, dtype=float)
     for t in range(T):
-        last_dec = (t // switch_every) * switch_every  # largest multiple <= t
-        if last_dec != 0:  # 0 => no decision has happened yet
+        ref = (t - 1) if strict_prev else t
+        last_dec = (ref // switch_every) * switch_every  # largest multiple <= ref
+        if last_dec > 0:  # <= 0 => no earlier decision
             out[:, :, t] = ds[:, :, last_dec]
     return out
 
@@ -165,12 +175,12 @@ def _switched_last_choice(does_switch, switch_every):
 # feature pool
 # --------------------------------------------------------------------------- #
 def build_feature_pool(d, switch_every):
-    """Return {feature_name: [G, A, T] float array} for the full 30-feature pool.
+    """Return {feature_name: [G, A, T] float array} for the full feature pool.
 
     `d` is a create_torch_data data dict of tensors; `switch_every` is the
     decision cadence (for switched_last_choice). prev_common_good_mean_peers is
-    computed internally (for peer payoff) but not exposed -- B2 omits it since
-    group-level cg equals B1's prev_common_good."""
+    computed internally (for peer payoff) but not exposed -- group-level cg
+    equals the own-group prev_common_good."""
     npd = {
         k: d[k].numpy()
         for k in (
@@ -202,7 +212,7 @@ def build_feature_pool(d, switch_every):
         f[f"prev_{m}_mean_other"] = other[m]
         f[f"prev_{m}_mean_gap"] = peers[m] - other[m]
 
-    # -- payoff (self / peers / other / gap) --
+    # -- payoff (self / peers / other / gap / full group) --
     f["prev_payoff"] = _payoff(
         f["prev_contribution"], f["prev_punishment"], f["prev_common_good"]
     )
@@ -213,6 +223,13 @@ def build_feature_pool(d, switch_every):
         other["contribution"], other["punishment"], other["common_good"]
     )
     f["prev_payoff_mean_gap"] = f["prev_payoff_mean_peers"] - f["prev_payoff_mean_other"]
+    # full own-group mean payoff (incl self): payoff is group-level (shared cg),
+    # so the whole group's mean is meaningful where a peer LOO mean is not.
+    f["prev_payoff_mean_group"] = _payoff(
+        _group_full_mean(npd["prev_contribution"], gp),
+        _group_full_mean(npd["prev_punishment"], gp),
+        f["prev_common_good"],
+    )
 
     # -- since-switch windows --
     ds = npd["does_switch"]
@@ -247,54 +264,72 @@ def build_feature_pool(d, switch_every):
     f["rounds_since_switch"] = _rounds_since_switch(ds)
     f["switched_last_choice"] = _switched_last_choice(ds, switch_every)
 
+    # Leakage-safe (strictly t-1) variants for the SWITCH target: the current-round
+    # decision / window-reset above encode does_switch[t] (the target), so provide
+    # variants that only ever use does_switch[<t].
+    f["prev_switched_last_choice"] = _switched_last_choice(
+        ds, switch_every, strict_prev=True)  # switch at the PREVIOUS decision
+
+    def _shift1(a):  # value as of t-1 (round 0 keeps its own value; masked anyway)
+        out = np.roll(a, 1, axis=2)
+        out[:, :, 0] = a[:, :, 0]
+        return out
+
+    for name in ("win_contribution_mean_peers", "win_punishment_mean_peers",
+                 "win_common_good_mean_peers", "win_payoff_mean_peers",
+                 "win_contribution_mean_other", "win_punishment_mean_other",
+                 "win_common_good_mean_other", "win_payoff_mean_other"):
+        f[f"prev_{name}"] = _shift1(f[name])  # window as of t-1 (reset uses <t)
+
     return f
 
 
 # --------------------------------------------------------------------------- #
-# self-test: build the pool on the real data and validate against the config
+# data preparation: build the pool once, flatten to rows, assign folds
 # --------------------------------------------------------------------------- #
-def _self_test():
+def prepare_data(cfg, root):
+    """Build the feature pool once on the (train) data, flatten valid rows to a
+    single [N, n_features] matrix, and tag each row with its pair-level CV fold.
+
+    Returns dict(X, col_of, y_cat, y_cont, fold_row)."""
     import random
-    from pathlib import Path
 
     import torch as th
 
-    from aimanager.generic.data import create_torch_data
+    from aimanager.generic.data import create_torch_data, get_cross_validations
 
-    root = Path(__file__).resolve().parents[2]
-    cfg = load_config(
-        root / "configs/training/baselines/contribution/handcrafted_grid.yml"
-    )
     seed = cfg["cv"]["seed"]
     th.random.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
     df = load_episodes(cfg, root)
-    data, _, pair_id = create_torch_data(df)
-    G, A, T = data["contribution"].shape
-    print(f"episodes={G} (exclude_flipped={cfg['data'].get('exclude_flipped')}), "
-          f"agents={A}, rounds={T}, pairs={len(set(pair_id.tolist()))}")
+    switch_every = cfg["data"].get("switch_every")
+    data, _, pair_id = create_torch_data(df, switch_every=switch_every)
+    G = data["contribution"].shape[0]
 
-    pool = build_feature_pool(data, cfg["data"]["switch_every"])
-    wanted = config_feature_names(cfg)
-    missing = wanted - set(pool)
-    extra = set(pool) - wanted
-    assert not missing, f"config features not built: {sorted(missing)}"
-    print(f"\nbuilt {len(pool)} features; config references {len(wanted)}; "
-          f"internal-only (not in config): {sorted(extra) or 'none'}")
+    pool = build_feature_pool(data, switch_every)
+    feats = sorted(pool)
+    col_of = {f: i for i, f in enumerate(feats)}
 
-    print("\n{:<30} {:>8} {:>8} {:>8}  {}".format(
-        "feature", "min", "max", "mean", "finite?"))
-    for name in sorted(pool):
-        a = pool[name]
-        ok = np.isfinite(a).all()
-        flag = "OK" if ok else "!! NON-FINITE"
-        print("{:<30} {:>8.2f} {:>8.2f} {:>8.2f}  {}".format(
-            name, a.min(), a.max(), a.mean(), flag))
-        assert ok, f"{name} has non-finite values"
-    print("\nall features finite and shape [G, A, T] =", pool["prev_contribution"].shape)
+    mask = data[cfg["data"]["mask"]].numpy().astype(bool)
+    sel = mask.reshape(-1)
+    X = np.stack([pool[f].reshape(-1)[sel] for f in feats], axis=1)
+    tgt = data[cfg["data"]["target"]].numpy().reshape(-1)[sel]
 
+    # per-episode CV fold: always decided here from the cv args (seed + n_folds),
+    # grouped by pair_id. The locked test set is a separate file, so every fold
+    # produced here is a train fold. Changing cv.seed / cv.n_folds re-partitions.
+    data["_eid"] = th.arange(G)
+    fold_of_ep = np.full(G, -1, int)
+    for i, _, te in get_cross_validations(
+        data, cfg["cv"]["n_folds"], 1.0, group_key=pair_id
+    ):
+        if i is None:  # get_cross_validations emits a trailing (None, .., None)
+            continue
+        for e in te["_eid"].tolist():
+            fold_of_ep[e] = i
+    fold_row = np.broadcast_to(fold_of_ep[:, None, None], mask.shape).reshape(-1)[sel]
 
-if __name__ == "__main__":
-    _self_test()
+    return dict(X=X, col_of=col_of, y_cat=tgt.astype(int),
+                y_cont=tgt.astype(float), fold_row=fold_row)
