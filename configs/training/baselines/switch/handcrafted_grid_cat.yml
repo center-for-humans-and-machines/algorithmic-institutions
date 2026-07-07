@@ -29,21 +29,21 @@ regularization:
 #   * B7 uses prev_switched_last_choice (switch at the PREVIOUS decision) instead
 #     of switched_last_choice; prev_group_size (t-1) already carries size info.
 blocks:
-  B1_self:                    # own inertia (t-1)
+  B1_self:                    # own inertia
     components: [prev_contribution, prev_punishment]
     sets: [[prev_contribution, prev_punishment], [prev_contribution]]
 
-  B2_own_group:               # current group-mates, leave-one-out (prev-round membership)
+  B2_own_group:               # current group-mates, leave-one-out (cg omitted: = B1 prev_common_good)
     components: [prev_contribution_mean_peers, prev_punishment_mean_peers, prev_payoff_mean_group, prev_group_size, prev_common_good]
-    sets:    [[prev_contribution_mean_peers, prev_punishment_mean_peers, prev_group_size], [prev_payoff_mean_group, prev_group_size], [prev_common_good, prev_group_size], [prev_contribution_mean_peers, prev_group_size], [prev_contribution_mean_peers]]
-
-  B3_other_group:             # the other group (t-1)
+    sets:    [[prev_contribution_mean_peers, prev_punishment_mean_peers, prev_group_size], [prev_payoff_mean_group, prev_group_size], [prev_common_good, prev_group_size], [prev_payoff_mean_group], [prev_common_good], [prev_contribution_mean_peers, prev_group_size], [prev_contribution_mean_peers]]
+  
+  B3_other_group:             # the other group
     components: [prev_contribution_mean_other, prev_punishment_mean_other, prev_common_good_mean_other, prev_payoff_mean_other, prev_group_size_other]
-    sets:    [[prev_contribution_mean_other, prev_punishment_mean_other, prev_group_size_other], [prev_payoff_mean_other, prev_group_size_other], [prev_common_good_mean_other, prev_group_size_other], [prev_contribution_mean_other, prev_group_size_other], [prev_contribution_mean_other]]
+    sets:    [[prev_contribution_mean_other, prev_punishment_mean_other, prev_group_size_other], [prev_payoff_mean_other, prev_group_size_other], [prev_common_good_mean_other, prev_group_size_other], [prev_contribution_mean_other, prev_group_size_other], [prev_contribution_mean_other], [prev_payoff_mean_other], [prev_common_good_mean_other]]
 
-  B4_gap:                     # own - other (t-1); the switch literature's key driver
+  B4_gap:                     # own - other
     components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_mean_gap, prev_payoff_mean_gap, prev_group_size_delta]
-    sets:    [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_common_good_mean_gap, prev_group_size_delta]]
+    sets:    [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_common_good_mean_gap, prev_group_size_delta], [prev_contribution_mean_gap, prev_group_size_delta], [prev_common_good_mean_gap], [prev_payoff_mean_gap], [prev_group_size_delta]]
 
   B5_own_since_switch:        # own-group window as of t-1 (leakage-safe: reset uses does_switch[<t], not [t])
     components: [prev_win_contribution_mean_peers, prev_win_punishment_mean_peers, prev_win_common_good_mean_peers, prev_win_payoff_mean_peers]

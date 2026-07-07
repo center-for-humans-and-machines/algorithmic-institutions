@@ -14,6 +14,7 @@ Usage:
         --config configs/training/baselines/contribution/handcrafted_grid_cont.yml
 """
 import argparse
+import copy
 import os
 import sys
 import warnings
@@ -32,6 +33,72 @@ sys.path.insert(0, str(ROOT / "scripts/baselines"))
 from handcrafted_grid import load_config, prepare_data  # noqa: E402
 
 DEFAULT_CFG = ROOT / "configs/training/baselines/contribution/handcrafted_grid_cont.yml"
+ARTIFACTS = ROOT / "artifacts/baselines"
+
+
+def _fit_full(prep, cat, n_levels, feats, reg):
+    """Refit the model on ALL of prep's rows; return (model, scaler, cols)."""
+    y = prep["y_cat"] if cat else prep["y_cont"]
+    cols = [prep["col_of"][f] for f in feats]
+    sc = StandardScaler().fit(prep["X"][:, cols])
+    Xs = sc.transform(prep["X"][:, cols])
+    m = (LogisticRegression(C=reg, max_iter=2000).fit(Xs, y) if cat
+         else Ridge(alpha=reg).fit(Xs, y))
+    return m, sc, cols
+
+
+def _score(m, sc, cols, prep, cat, n_levels):
+    """log_loss (categorical) or mse (continuous) of the model on prep's rows."""
+    y = prep["y_cat"] if cat else prep["y_cont"]
+    Xs = sc.transform(prep["X"][:, cols])
+    if cat:
+        p = np.full((len(y), n_levels), 1e-12)
+        p[:, m.classes_] = m.predict_proba(Xs)
+        return float(log_loss(y, p / p.sum(1, keepdims=True), labels=list(range(n_levels))))
+    return float(np.mean((m.predict(Xs) - y) ** 2))
+
+
+def _floor(prep_tr, prep_te, cat, n_levels):
+    ytr = prep_tr["y_cat"] if cat else prep_tr["y_cont"]
+    yte = prep_te["y_cat"] if cat else prep_te["y_cont"]
+    if cat:
+        c = np.bincount(ytr, minlength=n_levels) + 1.0
+        return float(log_loss(yte, np.tile(c / c.sum(), (len(yte), 1)),
+                              labels=list(range(n_levels))))
+    return float(np.mean((ytr.mean() - yte) ** 2))
+
+
+def save_best(args, df, cfg, cat, n_levels, metric_col, prep_tr):
+    """Refit the CV-best model on all train, evaluate on the locked test split,
+    save the fitted model + metadata under artifacts/."""
+    import joblib
+
+    row = df[df["rank"] == args.rank].iloc[0]
+    feats, reg = _feats_of(row), float(row["reg"])
+    m, sc, cols = _fit_full(prep_tr, cat, n_levels, feats, reg)
+    train_m = _score(m, sc, cols, prep_tr, cat, n_levels)
+
+    cfg_te = copy.deepcopy(cfg)
+    cfg_te["data"]["data_file"] = cfg["data"]["data_file"].replace("_train", "_test")
+    prep_te = prepare_data(cfg_te, ROOT)
+    test_m = _score(m, sc, cols, prep_te, cat, n_levels)
+    floor = _floor(prep_tr, prep_te, cat, n_levels)
+
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
+    name = f"{cfg['data']['target']}_{cfg['data']['target_type']}_best.joblib"
+    bundle = {"model": m, "scaler": sc, "features": feats, "reg": reg,
+              "target": cfg["data"]["target"], "target_type": cfg["data"]["target_type"],
+              "n_levels": n_levels, "config": str(args.config),
+              "cv_metric": float(row[metric_col]), "train_metric": train_m,
+              "test_metric": test_m, "test_floor": floor, "metric": metric_col}
+    joblib.dump(bundle, ARTIFACTS / name)
+
+    print(f"\nbest model: [{row['config']}]  reg={reg}  n_features={len(feats)}")
+    print(f"  cv    {metric_col} = {row[metric_col]:.4f}")
+    print(f"  train {metric_col} = {train_m:.4f}  ({len(prep_tr['fold_row'])} rows)")
+    print(f"  TEST  {metric_col} = {test_m:.4f}  ({len(prep_te['fold_row'])} rows)  "
+          f"[floor {floor:.4f}]")
+    print(f"  saved -> {(ARTIFACTS / name).relative_to(ROOT)}")
 
 
 def _fit_betas(prep, cat, n_levels, feats, reg, cat_metric="perm", n_repeats=10):
@@ -97,6 +164,9 @@ def main():
     ap.add_argument("--cat-metric", choices=["perm", "l2", "absmag"], default="absmag",
                     help="categorical importance: absmag (mean |coef|) / "
                          "l2 (coef norm) / perm (delta log-loss on shuffle)")
+    ap.add_argument("--save-best", action="store_true",
+                    help="refit the best (rank) model on all train, save under "
+                         "artifacts/, and evaluate on the locked test split")
     args = ap.parse_args()
 
     df = pd.read_csv(args.csv)
@@ -105,6 +175,9 @@ def main():
     cat = cfg["data"]["target_type"] == "categorical"
     n_levels = cfg["data"].get("categorical_levels", 0)
     prep = prepare_data(cfg, ROOT)
+    if args.save_best:
+        save_best(args, df, cfg, cat, n_levels, metric_col, prep)
+        return
     cm = args.cat_metric
     value_name = {"perm": "perm_dloss", "l2": "coef_l2",
                   "absmag": "coef_absmag"}[cm] if cat else "std_beta"
