@@ -1,21 +1,23 @@
-"""Hand-crafted linear baseline: CV sweep over block/feature-set combinations
-(issue #119).
+"""Hand-crafted linear baseline: CV sweep over block/feature-set x hyper-parameter
+combinations (issue #119).
 
-New config idea (configs/training/baselines/*/handcrafted_grid.yml): each block
-lists a `components` pool and a set of candidate feature `sets`. Every block is
-independently OFF or set to one of its `sets`; the Cartesian product over blocks
-gives the feature sets to evaluate. Each (feature-set x regularization) is scored
-by k-fold CV on the TRAIN split (the test fold lives in a separate locked file
-and is never opened here). Results are written best-to-worst to `cv.output`.
+Each block lists a `components` pool and candidate feature `sets`; every block is
+independently OFF or set to one of its `sets`, and the Cartesian product over
+blocks gives the feature sets. Orthogonally, `setting:` lists the model's
+hyper-parameters, each griddable (scalar or list). Every (feature-set x setting)
+is scored by k-fold CV on the TRAIN split (the test fold lives in a separate
+locked file and is never opened here); results are written best-to-worst to
+`cv.output`.
 
-No new data engineering: features come from handcrafted_grid.build_feature_pool
-(the existing, validated pool). This script only enumerates, fits, and ranks.
-
-Parallelized across CPU cores (12k+ feature-sets x reg x folds).
+The estimator is chosen by data.target_type + data.model (see baseline_models):
+categorical -> multinomial logistic; continuous -> ridge (fast MSE) or gaussian
+(heteroscedastic N(mu, sigma) by MLE). With cv.show_ce, the gaussian run also
+reports a binned 21-way cross-entropy alongside its NLL.
 
 Usage:
     .venv/bin/python scripts/baselines/run_baseline_cv.py [config.yml]
 """
+
 import itertools
 import os
 import sys
@@ -27,21 +29,32 @@ os.environ.setdefault("DISABLE_PANDERA_IMPORT_WARNING", "True")
 # One BLAS thread per process -- we parallelize across processes, so multi-threaded
 # BLAS would oversubscribe the cores. Set before numpy imports (also in spawned
 # children, which re-import this module).
-for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
-           "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS"):
+for _v in (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+):
     os.environ.setdefault(_v, "1")
 import numpy as np
 import pandas as pd
+import torch as th
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.linear_model import LogisticRegression, Ridge
-from sklearn.metrics import log_loss
 from sklearn.preprocessing import StandardScaler
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/baselines"))
 from handcrafted_grid import load_config, prepare_data  # noqa: E402
-
-MAX_ITER = 1000
+from baseline_models import (  # noqa: E402
+    build_model,
+    build_settings,
+    floor_score,
+    metric_name,
+    predict_scores,
+    resolve_model,
+    setting_keys,
+)
 
 # --------------------------------------------------------------------------- #
 # worker: read-only data shared once per process via the initializer
@@ -49,49 +62,68 @@ MAX_ITER = 1000
 _W = {}
 
 
-def _init(X, y, fold_row, cat, n_levels, regs, dev_folds):
-    _W.update(X=X, y=y, fr=fold_row, cat=cat, nl=n_levels,
-              regs=regs, dev=dev_folds)
+def _init(
+    X, y, fold_row, model, n_levels, settings, dev_folds, seed, show_ce, ce_levels
+):
+    th.set_num_threads(1)  # we parallelize across processes; keep torch single-threaded
+    _W.update(
+        X=X,
+        y=y,
+        fr=fold_row,
+        model=model,
+        nl=n_levels,
+        settings=settings,
+        dev=dev_folds,
+        seed=seed,
+        show_ce=show_ce,
+        ce_levels=ce_levels,
+    )
 
 
 def _score(Xtr, ytr, Xte, yte):
-    """CV score for one train/val split (log_loss if categorical else mse)."""
-    scores = []
-    cat, nl, regs = _W["cat"], _W["nl"], _W["regs"]
-    for reg in regs:
-        if Xtr.shape[1] == 0:  # intercept-only floor
-            if cat:
-                c = np.bincount(ytr, minlength=nl) + 1.0
-                proba = np.tile(c / c.sum(), (len(yte), 1))
-                scores.append(log_loss(yte, proba, labels=list(range(nl))))
-            else:
-                scores.append(float(np.mean((ytr.mean() - yte) ** 2)))
-            continue
-        sc = StandardScaler().fit(Xtr)
-        Ztr, Zte = sc.transform(Xtr), sc.transform(Xte)
-        if cat:
-            m = LogisticRegression(C=reg, max_iter=MAX_ITER).fit(Ztr, ytr)
-            p = np.full((len(yte), nl), 1e-12)
-            p[:, m.classes_] = m.predict_proba(Zte)
-            scores.append(log_loss(yte, p / p.sum(1, keepdims=True),
-                                   labels=list(range(nl))))
-        else:
-            m = Ridge(alpha=reg).fit(Ztr, ytr)
-            scores.append(float(np.mean((m.predict(Zte) - yte) ** 2)))
-    return scores  # one score per reg
+    """(primary, ce) per setting for one train/val split. Standardisation is fit
+    once on the fold's train; the floor (no features) is setting-independent."""
+    model, nl, settings = _W["model"], _W["nl"], _W["settings"]
+    seed, show_ce, k = _W["seed"], _W["show_ce"], _W["ce_levels"]
+    if Xtr.shape[1] == 0:
+        return [floor_score(model, ytr, yte, nl, show_ce, k) for _ in settings]
+    sc = StandardScaler().fit(Xtr)
+    Ztr, Zte = sc.transform(Xtr), sc.transform(Xte)
+    out = []
+    for s in settings:
+        m = build_model(model, s, seed).fit(Ztr, ytr)
+        out.append(predict_scores(model, m, Zte, yte, nl, show_ce, k))
+    return out
 
 
 def _worker(cols):
-    """Return, per reg, the mean & se of the CV score across folds."""
+    """Return, per setting, (setting, mean, se, ce_mean, ce_se) across folds.
+    ce_* are None unless cv.show_ce is set (gaussian only)."""
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
-    X, y, fr, regs, dev = _W["X"], _W["y"], _W["fr"], _W["regs"], _W["dev"]
+    X, y, fr, settings, dev = (_W["X"], _W["y"], _W["fr"], _W["settings"], _W["dev"])
     cols = list(cols)
-    per_fold = []  # [n_folds][n_regs]
-    for vf in dev:
-        tr, te = fr != vf, fr == vf
-        per_fold.append(_score(X[tr][:, cols], y[tr], X[te][:, cols], y[te]))
-    arr = np.array(per_fold)  # [n_folds, n_regs]
-    return list(zip(regs, arr.mean(0), arr.std(0) / np.sqrt(len(dev))))
+    n = np.sqrt(len(dev))
+    per_fold = [
+        _score(X[fr != vf][:, cols], y[fr != vf], X[fr == vf][:, cols], y[fr == vf])
+        for vf in dev
+    ]
+    prim = np.array([[t[0] for t in fold] for fold in per_fold])  # [folds, settings]
+    if per_fold[0][0][1] is not None:
+        ce = np.array([[t[1] for t in fold] for fold in per_fold])
+        return [
+            (
+                s,
+                prim[:, j].mean(),
+                prim[:, j].std() / n,
+                ce[:, j].mean(),
+                ce[:, j].std() / n,
+            )
+            for j, s in enumerate(settings)
+        ]
+    return [
+        (s, prim[:, j].mean(), prim[:, j].std() / n, None, None)
+        for j, s in enumerate(settings)
+    ]
 
 
 # --------------------------------------------------------------------------- #
@@ -125,30 +157,45 @@ def enumerate_feature_sets(cfg):
 # main
 # --------------------------------------------------------------------------- #
 def main():
-    cfg_path = Path(sys.argv[1]) if len(sys.argv) > 1 else (
-        ROOT / "configs/training/baselines/contribution/handcrafted_grid_cont.yml")
+    cfg_path = (
+        Path(sys.argv[1])
+        if len(sys.argv) > 1
+        else (
+            ROOT / "configs/training/baselines/contribution/ridge.yml"
+        )
+    )
     cfg = load_config(cfg_path)
-    cat = cfg["data"]["target_type"] == "categorical"
+    model = resolve_model(cfg)
+    cat = model == "multinomial"
     n_levels = cfg["data"].get("categorical_levels", 0)
-    regs = cfg["regularization"]["C" if cat else "alpha"]
+    seed = cfg["cv"]["seed"]  # gaussian init seed reuses cv.seed
+    settings = build_settings(cfg, model)  # validated + Cartesian expanded
+    metric = metric_name(model)
+    show_ce = bool(cfg["cv"].get("show_ce", False)) and model == "gaussian"
+    ce_levels = int(cfg["data"].get("categorical_levels", 21))
 
     prep = prepare_data(cfg, ROOT)
     X = np.ascontiguousarray(prep["X"])
     y = prep["y_cat"] if cat else prep["y_cont"]
     fr = prep["fold_row"]
     dev_folds = sorted(set(fr.tolist()))
-    print(f"target={cfg['data']['target']} ({'categorical' if cat else 'continuous'}), "
-          f"rows={len(y)}, folds={dev_folds}, reg={regs}")
-    # prove the training pool: rows kept by the mask, and the per-fold CV split
-    # (each fit trains on all-but-one fold, validates on the held-out fold)
-    print(f"masked rows (mask={cfg['data']['mask']}) = {len(fr)}  "
-          f"-- these are the ONLY data points used")
+    print(
+        f"target={cfg['data']['target']} model={model}, rows={len(y)}, "
+        f"folds={dev_folds}, settings={len(settings)}"
+    )
+    print(
+        f"masked rows (mask={cfg['data']['mask']}) = {len(fr)}  "
+        f"-- these are the ONLY data points used"
+    )
     for vf in dev_folds:
         n_val = int((fr == vf).sum())
         print(f"  fold {vf}: validate on {n_val:5d}  |  train on {len(fr) - n_val:5d}")
 
     combos = list(enumerate_feature_sets(cfg))
-    print(f"feature-sets={len(combos)}  ->  {len(combos) * len(regs)} (set x reg) rows")
+    print(
+        f"feature-sets={len(combos)}  ->  {len(combos) * len(settings)} "
+        f"(set x setting) rows"
+    )
 
     col_of = prep["col_of"]
     tasks = [tuple(col_of[f] for f in feats) for _, feats in combos]
@@ -156,6 +203,7 @@ def main():
     try:
         from tqdm import tqdm
     except ImportError:
+
         def tqdm(x, **_):
             return x
 
@@ -163,27 +211,54 @@ def main():
     print(f"parallel fits across {n_workers} workers")
     results = [None] * len(tasks)
     with ProcessPoolExecutor(
-        max_workers=n_workers, initializer=_init,
-        initargs=(X, y, fr, cat, n_levels, regs, dev_folds),
+        max_workers=n_workers,
+        initializer=_init,
+        initargs=(
+            X,
+            y,
+            fr,
+            model,
+            n_levels,
+            settings,
+            dev_folds,
+            seed,
+            show_ce,
+            ce_levels,
+        ),
     ) as ex:
         futs = {ex.submit(_worker, t): i for i, t in enumerate(tasks)}
-        for fut in tqdm(as_completed(futs), total=len(futs),
-                        desc="feature-sets", unit="set"):
+        for fut in tqdm(
+            as_completed(futs), total=len(futs), desc="feature-sets", unit="set"
+        ):
             results[futs[fut]] = fut.result()  # per-task -> responsive bar
 
+    keys = setting_keys(model)
     rows = []
     for (label, feats), res in zip(combos, results):
-        for reg, mean, se in res:
-            rows.append({
-                "mean_loss": mean, "se_loss": se, "reg": reg,
-                "n_features": len(feats), "config": label,
+        for setting, mean, se, ce_mean, ce_se in res:
+            row = {
+                **setting,
+                "mean_loss": mean,
+                "se_loss": se,
+                "n_features": len(feats),
+                "config": label,
                 "features": ";".join(feats),
-            })
+            }
+            if ce_mean is not None:
+                row["ce"], row["ce_se"] = ce_mean, ce_se
+            rows.append(row)
 
-    metric = "log_loss" if cat else "mse"
     df = pd.DataFrame(rows).sort_values("mean_loss").reset_index(drop=True)
     df.insert(0, "rank", df.index + 1)
     df = df.rename(columns={"mean_loss": metric})
+    # column order: rank, metric, se, [ce, ce_se], swept settings, n, config, features
+    order = (
+        ["rank", metric, "se_loss"]
+        + (["ce", "ce_se"] if "ce" in df.columns else [])
+        + keys
+        + ["n_features", "config", "features"]
+    )
+    df = df[order]
     out_path = ROOT / cfg["cv"]["output"]
     df.to_csv(out_path, index=False)
 

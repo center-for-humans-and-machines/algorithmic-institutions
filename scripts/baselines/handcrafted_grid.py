@@ -18,6 +18,7 @@ Design (see doc/plans/119-handcrafted-linear-baselines.md):
 
 Runs locally (CPU torch, no PyG).
 """
+
 import os
 
 os.environ.setdefault("DISABLE_PANDERA_IMPORT_WARNING", "True")
@@ -184,9 +185,15 @@ def build_feature_pool(d, switch_every):
     npd = {
         k: d[k].numpy()
         for k in (
-            "prev_contribution", "prev_punishment", "prev_common_good",
-            "round_number", "does_switch",
-            "prev_agent_group", "agent_group", "recorded", "prev_recorded",
+            "prev_contribution",
+            "prev_punishment",
+            "prev_common_good",
+            "round_number",
+            "does_switch",
+            "prev_agent_group",
+            "agent_group",
+            "recorded",
+            "prev_recorded",
         )
     }
     f = {}
@@ -222,7 +229,9 @@ def build_feature_pool(d, switch_every):
     f["prev_payoff_mean_other"] = _payoff(
         other["contribution"], other["punishment"], other["common_good"]
     )
-    f["prev_payoff_mean_gap"] = f["prev_payoff_mean_peers"] - f["prev_payoff_mean_other"]
+    f["prev_payoff_mean_gap"] = (
+        f["prev_payoff_mean_peers"] - f["prev_payoff_mean_other"]
+    )
     # full own-group mean payoff (incl self): payoff is group-level (shared cg),
     # so the whole group's mean is meaningful where a peer LOO mean is not.
     f["prev_payoff_mean_group"] = _payoff(
@@ -268,17 +277,24 @@ def build_feature_pool(d, switch_every):
     # decision / window-reset above encode does_switch[t] (the target), so provide
     # variants that only ever use does_switch[<t].
     f["prev_switched_last_choice"] = _switched_last_choice(
-        ds, switch_every, strict_prev=True)  # switch at the PREVIOUS decision
+        ds, switch_every, strict_prev=True
+    )  # switch at the PREVIOUS decision
 
     def _shift1(a):  # value as of t-1 (round 0 keeps its own value; masked anyway)
         out = np.roll(a, 1, axis=2)
         out[:, :, 0] = a[:, :, 0]
         return out
 
-    for name in ("win_contribution_mean_peers", "win_punishment_mean_peers",
-                 "win_common_good_mean_peers", "win_payoff_mean_peers",
-                 "win_contribution_mean_other", "win_punishment_mean_other",
-                 "win_common_good_mean_other", "win_payoff_mean_other"):
+    for name in (
+        "win_contribution_mean_peers",
+        "win_punishment_mean_peers",
+        "win_common_good_mean_peers",
+        "win_payoff_mean_peers",
+        "win_contribution_mean_other",
+        "win_punishment_mean_other",
+        "win_common_good_mean_other",
+        "win_payoff_mean_other",
+    ):
         f[f"prev_{name}"] = _shift1(f[name])  # window as of t-1 (reset uses <t)
 
     return f
@@ -305,7 +321,7 @@ def prepare_data(cfg, root):
 
     df = load_episodes(cfg, root)
     switch_every = cfg["data"].get("switch_every")
-    data, _, pair_id = create_torch_data(df, switch_every=switch_every)
+    data, default_values, pair_id = create_torch_data(df, switch_every=switch_every)
     G = data["contribution"].shape[0]
 
     pool = build_feature_pool(data, switch_every)
@@ -331,5 +347,12 @@ def prepare_data(cfg, root):
             fold_of_ep[e] = i
     fold_row = np.broadcast_to(fold_of_ep[:, None, None], mask.shape).reshape(-1)[sel]
 
-    return dict(X=X, col_of=col_of, y_cat=tgt.astype(int),
-                y_cont=tgt.astype(float), fold_row=fold_row)
+    return dict(
+        X=X,
+        col_of=col_of,
+        y_cat=tgt.astype(int),
+        y_cont=tgt.astype(float),
+        fold_row=fold_row,
+        default_values=default_values,
+        switch_every=switch_every,
+    )
