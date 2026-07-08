@@ -1,0 +1,46 @@
+data:
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: contribution
+  target_type: categorical
+  categorical_levels: 21        # contribution is an integer 0..20
+  mask: contribution_valid
+  exclude_flipped: True
+  switch_every: 4
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/contr_cat.csv
+
+setting:              # multinomial logistic; only C is valid here
+  C: [0.3, 1.0, 3.0]
+
+blocks:
+  B1_self:                    # own inertia  (top-100 sets: ['s1'])
+    components: [prev_contribution, prev_punishment]
+    sets: [[prev_contribution]]
+
+  B2_own_group:                    # current group-mates  (top-100 sets: ['s2', 's4'])
+    components: [prev_contribution_mean_peers, prev_punishment_mean_peers, prev_payoff_mean_group, prev_group_size, prev_common_good]
+    sets: [[prev_common_good, prev_group_size], [prev_common_good]]
+
+  B3_other_group:                    # the other group  (top-100 sets: ['s0', 's1', 's5'])
+    components: [prev_contribution_mean_other, prev_punishment_mean_other, prev_common_good_mean_other, prev_payoff_mean_other, prev_group_size_other]
+    sets: [[prev_contribution_mean_other, prev_punishment_mean_other, prev_group_size_other], [prev_payoff_mean_other, prev_group_size_other], [prev_payoff_mean_other]]
+
+  B4_gap:                    # own - other  (top-100 sets: ['s0', 's1', 's5'])
+    components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_mean_gap, prev_payoff_mean_gap, prev_group_size_delta]
+    sets: [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap]]
+
+  B5_own_since_switch:                    # own-group running mean over current tenure  (top-100 sets: ['s2'])
+    components: [win_contribution_mean_peers, win_punishment_mean_peers, win_common_good_mean_peers, win_payoff_mean_peers]
+    sets: [[win_common_good_mean_peers]]
+
+  B6_other_since_switch:                    # other-group running mean over current tenure  (top-100 sets: ['s0', 's1', 's2'])
+    components: [win_contribution_mean_other, win_punishment_mean_other, win_common_good_mean_other, win_payoff_mean_other]
+    sets: [[win_contribution_mean_other, win_punishment_mean_other], [win_common_good_mean_other], [win_payoff_mean_other]]
+
+  B7_structural:                    # structural / switch context  (top-100 sets: ['s2', 's3'])
+    components: [round_number, switched_last_choice, rounds_since_switch, group_size]
+    sets: [[round_number], [switched_last_choice]]

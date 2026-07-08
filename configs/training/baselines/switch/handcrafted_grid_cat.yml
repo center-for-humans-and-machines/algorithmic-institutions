@@ -16,7 +16,7 @@ cv:
   n_folds: 8
   output: data/baselines/switch_cv_output_cat_prev.csv
 
-regularization:
+setting:              # multinomial logistic; only C is valid here
   C: [0.3, 1.0, 3.0]
 
 # LEAKAGE NOTE: we predict does_switch[t] (the group choice at round t). Any

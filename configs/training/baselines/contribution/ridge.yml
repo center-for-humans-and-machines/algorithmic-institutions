@@ -6,6 +6,7 @@ data:
   experiment_names: [ah_group_switching]
   target: contribution        # switch config sets: does_switch
   target_type: continuous    # categorical/continuous
+  model: ridge                # ridge (fast MSE) shrinks the full grid; gaussian for the shortlist
   mask: contribution_valid    # switch config sets: switch_valid
   exclude_flipped: true       # train file is already undoubled; no-op safety filter
   switch_every: 4             # decision cadence
@@ -13,11 +14,13 @@ data:
 cv:
   seed: 38381
   n_folds: 8
-  output: data/baselines/contr_baseline_cv_output_cont.csv          # the combination of reg param and feature set with its loss ordered from best to worst in csv format
+  output: data/baselines/large_set_ridge_cv.csv          # the combination of reg param and feature set with its loss ordered from best to worst in csv format
 
-# Regularisation sweep (categorical -> LogisticRegression C; continuous -> Ridge alpha)
-regularization:
-  alpha: [3.0, 1.0, 0.3]
+# Hyper-parameter sweep for the chosen model; every key is griddable (scalar or
+# list -> Cartesian). Allowed keys: ridge -> alpha; gaussian -> weight_decay, lr,
+# epochs; multinomial -> C. A key that does not fit the model is an error.
+setting:
+  alpha: [1.0, 3.0]   # Ridge L2
 
 blocks:
   B1_self:                    # own inertia
@@ -35,7 +38,6 @@ blocks:
   B4_gap:                     # own - other
     components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_mean_gap, prev_payoff_mean_gap, prev_group_size_delta]
     sets:    [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_common_good_mean_gap, prev_group_size_delta], [prev_contribution_mean_gap, prev_group_size_delta], [prev_common_good_mean_gap], [prev_payoff_mean_gap], [prev_group_size_delta]]
-
 
   B5_own_since_switch:        # own-group running mean over current tenure
     components: [win_contribution_mean_peers, win_punishment_mean_peers, win_common_good_mean_peers, win_payoff_mean_peers]
