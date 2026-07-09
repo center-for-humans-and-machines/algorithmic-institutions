@@ -69,10 +69,10 @@ class LinearAHAdapter:
         self.target = bundle["target"]
         self.is_switch = self.target == "does_switch"
         self.n_levels = int(bundle.get("n_levels", 0))
-        # Contribution sampling keeps human-like spread instead of collapsing onto
-        # the mean (#121): gaussian draws N(mu(x), sigma(x)) from its trained head;
-        # ridge (point model) draws N(mu(x), sigma) with this homoscedastic scalar.
+        # contribution sampling: ridge N(mu, sigma), gaussian N(mu, sigma(x)),
+        # multinomial = predict_proba tempered by `temperature` (T=1 as-is).
         self.sigma = float(bundle.get("sigma") or 0.0)
+        self.temperature = float(bundle.get("temperature", 1.0))
         self.default_values = dict(bundle["default_values"])
         self.switch_every = bundle.get("switch_every")
         self.n_agents = int(n_agents)
@@ -183,6 +183,19 @@ class LinearAHAdapter:
                 sw = p1 >= 0.5
             pred = th.tensor(sw, dtype=th.bool, device=dev).reshape(1, -1, 1)
             return pred, None
+
+        if self.model_type == "multinomial":  # sample the 21-way predict_proba
+            proba = self.estimator.predict_proba(Xs)
+            P = np.full((len(Xs), self.n_contributions), 1e-12)
+            P[:, self.estimator.classes_] = proba
+            if self.temperature != 1.0:
+                P = P ** (1.0 / self.temperature)
+            P /= P.sum(1, keepdims=True)
+            lvl = np.array(
+                [np.random.choice(self.n_contributions, p=P[i]) for i in range(len(P))],
+                dtype=np.int64,
+            )
+            return th.tensor(lvl, dtype=th.int64, device=dev).reshape(1, -1, 1), None
 
         # contribution: sample from the conditional Gaussian, then discretise.
         mu = self.estimator.predict(Xs)
