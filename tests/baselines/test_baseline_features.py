@@ -5,6 +5,13 @@ by comparing every feature (blocks B1-B7) for one agent across a whole episode
 against an INDEPENDENT pandas reference computed here from frozen raw fixtures --
 no src code is used to build the reference, so this is a genuine cross-check.
 
+Two src sides are checked against that one reference:
+  * build_feature_pool  -- the batch pipeline (CV / training).
+  * LinearAHAdapter      -- the simulation adapter, which rebuilds features ONE
+    ROUND AT A TIME from env state (#121); the episode is replayed through it and
+    the per-round features collected, confirming the incremental reconstruction
+    matches the batch pipeline / reference.
+
 Target: episode 70 (global_group_id 'rokqh2fp #2'), player 6, from the non-flipped
 originals of experiments/2group_8agent_50ep.csv. The fixtures under fixtures/ were
 extracted with pure pandas (see git history for the one-off extract scripts):
@@ -279,6 +286,79 @@ def test_feature_matches_pipeline(compared, feature):
     ref, pipe = compared[feature]
     bad = np.where(~np.isclose(ref, pipe, atol=1e-6))[0]
     assert len(bad) == 0, f"{feature} mismatch at rounds {bad.tolist()}"
+
+
+# --------------------------------------------------------------------------- #
+# sim-adapter side (src): the simulation feeds the LinearAHAdapter ONE ROUND AT
+# A TIME from env state, and the adapter rebuilds features incrementally from the
+# accumulated history. Replay the episode through it (states derived from the
+# realised per-round values, as the env would provide) and collect the per-round
+# feature vector, to confirm the incremental reconstruction matches the pipeline.
+# --------------------------------------------------------------------------- #
+def adapter_features():
+    import random
+
+    import torch as th
+
+    sys.path.insert(0, str(ROOT / "scripts/baselines"))
+    from aimanager.generic.data import create_torch_data
+    from aimanager.simulation.linear_ah import LinearAHAdapter
+
+    random.seed(38381)
+    np.random.seed(38381)
+    th.manual_seed(38381)
+    df = pd.read_csv(RAW)
+    df = df[df["experiment_name"] == EXPERIMENT]
+    df = df[~df["global_group_id"].str.contains("(flipped)", regex=False)]
+    pair = int(df.loc[df["episode_id"] == EPISODE_ID, "pair_id"].iloc[0])
+    data, default_values, pair_id = create_torch_data(df, switch_every=SWITCH_EVERY)
+    g = int(np.where(np.asarray(pair_id) == pair)[0][0])
+    A, T = data["contribution"].shape[1], data["contribution"].shape[2]
+
+    # only the fields LinearAHAdapter reads to rebuild features are needed
+    bundle = {
+        "model": "ridge", "estimator": None, "scaler": None, "features": [],
+        "target": "contribution", "n_levels": 0, "switch_every": SWITCH_EVERY,
+        "default_values": {k: (float(v) if hasattr(v, "__float__") else v)
+                           for k, v in default_values.items()},
+    }
+    ad = LinearAHAdapter(bundle, n_agents=A, n_contributions=21,
+                         device=th.device("cpu"))
+
+    collected = {name: np.zeros(T) for name in ALL_FEATURES}
+    for t in range(T):
+        state = {  # env-like state: prev_* = realised t-1, agent_group = current
+            "round_number": th.full((1, A, 1), t, dtype=th.int64),
+            "prev_contribution": data["prev_contribution"][g, :, t].reshape(1, A, 1),
+            "prev_punishment": data["prev_punishment"][g, :, t].reshape(1, A, 1),
+            "prev_common_good": data["prev_common_good"][g, :, t].reshape(1, A, 1),
+            "prev_agent_group": data["prev_agent_group"][g, :, t].reshape(1, A, 1),
+            "agent_group": data["agent_group"][g, :, t].reshape(1, A, 1),
+        }
+        if t == 0:
+            ad._reset_history()
+        ad._record(state, t)
+        pool = ad._build_pool(t)
+        for name in ALL_FEATURES:
+            collected[name][t] = pool[name][0, TARGET, t]
+    return collected
+
+
+@pytest.fixture(scope="module")
+def adapter_compared():
+    ref = build_reference()
+    ada = adapter_features()
+    return {name: (ref[f"ref_{name}"].to_numpy(float), ada[name])
+            for name in ALL_FEATURES}
+
+
+@pytest.mark.parametrize("feature", ALL_FEATURES)
+def test_adapter_matches_reference(adapter_compared, feature):
+    # atol=1e-4: the adapter rebuilds via float32 tensors + float64 round-0
+    # defaults, so common_good-derived features differ by ~1e-7 (float32 eps).
+    ref, ada = adapter_compared[feature]
+    bad = np.where(~np.isclose(ref, ada, atol=1e-4))[0]
+    assert len(bad) == 0, f"adapter {feature} mismatch at rounds {bad.tolist()}"
 
 
 if __name__ == "__main__":  # manual eyeball: dump ref vs pipe side by side
