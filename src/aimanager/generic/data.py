@@ -48,28 +48,34 @@ def parse_agent_rounds(df, switch_every=None):
     # sub-group membership (node feature for GNN)
     df["agent_group"] = df["group_id"].astype(int)
 
-    # does_switch labelled at the arrival round (group changed vs the
-    # previous round), so the supervised index matches where the env
-    # consumes the predictor. Pair with prev_agent_group in the model.
+    # does_switch labelled at the DECISION round s (#123): the group choice
+    # made after round s is played, realised as the membership change between
+    # s and s+1. Round-s features are legal for this target; arrivals still
+    # physically happen at s+1 (derive arrival markers from membership change,
+    # not from this label).
     df = df.sort_values(["episode_id", "player_id", "round_number"])
-    prev_group = df.groupby(["episode_id", "player_id"])["group_id"].shift(1)
-    df["does_switch"] = prev_group.notna() & prev_group.ne(df["group_id"])
+    by_player = df.groupby(["episode_id", "player_id"])
+    next_group = by_player["group_id"].shift(-1)
+    df["does_switch"] = next_group.notna() & next_group.ne(df["group_id"])
 
-    # Decisions land on arrival rounds {switch_every, 2*switch_every, ...};
-    # round 0 is the initial assignment, not a decision.
+    # Decision rows are {switch_every-1, 2*switch_every-1, ...}: the round
+    # played right before each arrival. The episode's last round has no
+    # following arrival (next_group is NaN), so it is never a decision row.
     if switch_every is not None:
-        is_decision = (df["round_number"] % switch_every == 0) & (
-            df["round_number"] != 0
-        )
+        is_decision = (
+            (df["round_number"] + 1) % switch_every == 0
+        ) & next_group.notna()
         df["does_switch"] = df["does_switch"] & is_decision
         df["switch_mask"] = is_decision
     else:
-        df["switch_mask"] = True
+        df["switch_mask"] = next_group.notna()
 
-    # switch_valid: drop decisions whose group choice timed out.
+    # switch_valid: drop decisions whose group choice timed out. The timeout
+    # is logged at the arrival round s+1 -> align it back to the decision row.
     if "selection_timeout" in df.columns:
+        next_timeout = by_player["selection_timeout"].shift(-1)
         df["switch_valid"] = df["switch_mask"] & (
-            df["selection_timeout"].fillna(0).astype(int) == 0
+            next_timeout.fillna(0).astype(int) == 0
         )
     else:
         df["switch_valid"] = df["switch_mask"]
