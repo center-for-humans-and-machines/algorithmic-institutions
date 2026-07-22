@@ -446,3 +446,89 @@ def test_reward_mode_invalid_raises():
 
     with pytest.raises(ValueError, match="reward_mode"):
         _make_two_group_env(reward_mode="median")
+
+
+class _RecordingSwitch:
+    """Switch predictor stub: records what it sees per call, flips agent 0."""
+
+    def __init__(self):
+        self.calls = []
+
+    def predict(self, state, reset_rnn, edge_index):
+        self.calls.append(
+            {
+                "round": int(state["round_number"][0, 0, 0]),
+                "pun": int(state["punishment"][0, 0, 0]),
+                "group0": int(state["agent_group"][0, 0, 0]),
+                "reset": bool(reset_rnn),
+            }
+        )
+        ds = th.zeros_like(state["contribution"], dtype=th.bool)
+        ds[:, 0, :] = True
+        return ds, None
+
+
+def test_switch_predictor_end_of_round_anchoring():
+    """#123: the switch predictor is queried at the END of round s -- after
+    punish(), with round-s outcomes in the CURRENT state keys and membership
+    still pre-decision -- and the change applies at s+1. It runs every round
+    (RNN warm-up); only decision-round outputs flip groups, and the episode's
+    last round is never a decision."""
+    default_values = {
+        "punishment": 1,
+        "contribution": 1,
+        "payoffs": 1,
+        "contribution_valid": True,
+        "common_good": 1,
+        "round_number": 1,
+        "player_id": 1,
+    }
+    switch = _RecordingSwitch()
+    env = ArtificialHumanEnv(
+        artifical_humans=MockArtificialHuman(default_values),
+        artifical_humans_valid=MockArtificialHumanValid(),
+        artifical_humans_switch=switch,
+        switch_every=2,
+        batch_size=1,
+        n_agents=4,
+        n_contributions=3,
+        n_punishments=3,
+        n_rounds=6,
+        n_groups=2,
+        device="cpu",
+        agent_groups=[0, 0, 1, 1],
+        reward_mode="avg",
+        default_values={
+            "punishment": 0,
+            "contribution": 0,
+            "round_number": 0,
+            "is_first": False,
+            "contribution_valid": False,
+            "punishment_valid": False,
+            "common_good": 0,
+            "contributor_payoff": 0,
+            "manager_payoff": 0,
+            "reward": 0,
+        },
+    )
+
+    group_of_a0 = [int(env.state["agent_group"][0, 0, 0])]
+    done = False
+    r = 0
+    while not done:
+        env.punish(th.full((1, 4, 1), r % 3, dtype=th.int64))
+        _, _, done = env.step()
+        if not done:
+            group_of_a0.append(int(env.state["agent_group"][0, 0, 0]))
+        r += 1
+
+    # one call at the end of every round; RNN reset only on the first
+    assert [c["round"] for c in switch.calls] == [0, 1, 2, 3, 4, 5]
+    assert [c["reset"] for c in switch.calls] == [True] + [False] * 5
+    # each call saw the JUST-PLAYED round's punishment (current key, not prev)
+    assert [c["pun"] for c in switch.calls] == [r % 3 for r in range(6)]
+    # and the pre-decision membership of that round
+    assert [c["group0"] for c in switch.calls] == group_of_a0
+    # decisions at s=1,3 -> agent 0 flips at arrivals 2 and 4; s=5 is the
+    # last round (no round 6), so its output is never applied
+    assert group_of_a0 == [0, 0, 1, 1, 0, 0]
