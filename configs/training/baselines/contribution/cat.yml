@@ -33,9 +33,9 @@ blocks:
     components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_gap, prev_payoff_mean_gap, prev_group_size_delta]
     sets:    [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_common_good_gap, prev_group_size_delta], [prev_contribution_mean_gap, prev_group_size_delta], [prev_common_good_gap], [prev_payoff_mean_gap], [prev_group_size_delta]]
 
-  B5_own_since_switch:        # own-group running mean over current tenure
-    components: [win_contribution_mean_peers, win_punishment_mean_peers, win_common_good_peers, win_payoff_mean_peers]
-    sets:    [[win_contribution_mean_peers, win_punishment_mean_peers], [win_payoff_mean_peers], [win_common_good_peers]]
+  B5_own_since_switch:        # own-group window as of t-1
+    components: [prev_win_contribution_mean_group, prev_win_punishment_mean_group, prev_win_common_good, prev_win_payoff_mean_group]
+    sets:    [[prev_win_contribution_mean_group, prev_win_punishment_mean_group], [prev_win_payoff_mean_group], [prev_win_common_good]]
 
   B7_structural:              
     components: [round_number, switched_last_choice, rounds_since_switch, group_size]
