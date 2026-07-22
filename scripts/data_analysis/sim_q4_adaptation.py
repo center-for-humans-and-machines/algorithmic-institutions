@@ -3,16 +3,18 @@
 Q4 event study on a sim's per_round.parquet: for every switch (agent_group
 changes between rounds), regress the switcher's post-switch contribution on
 their own pre-switch contribution and the new group's mean contribution at the
-PREVIOUS round (t-1) -- the level the switcher could actually observe when
-choosing at arrival -- both standardised. A positive new-group peer coefficient
-means the AHs adopt the new group's norm (conditional cooperation), as humans do.
+PREVIOUS round (t-1) -- the level the switcher could observe when choosing at
+arrival. Coefficients are RAW (non-standardised): pre / new_peers / post are all
+contribution on the same 0-20 scale, so the betas read directly as mixing weights
+in contribution units -- new_peers is how far (per contribution point) a switcher
+moves toward the new group's norm (conditional cooperation), as humans do.
 
 The new-group peer term is the strictly-causal lagged level (t-1), not the
-concurrent arrival-round mean; the human 50ep reference below is recomputed on
-the same lagged definition (the report's concurrent Q4 was +0.18).
+concurrent arrival-round mean.
 
-The human 50ep reference is printed alongside for comparison:
-  own pre-switch +0.45, new-group peers +0.25 (raw 7.73 -> 10.50 -> 9.46).
+The human 50ep reference below is recomputed with THIS event study (same lagged
+peer definition, raw OLS) on the real undoubled data (2group_8agent_50ep.csv,
+flipped copies dropped): own pre-switch +0.46, new-group peers +0.28.
 
 Pools all switches across runs/episodes in each sim dir, unless --per-matchup
 is given, in which case Q4 is reported separately for each run (matchup) -- e.g.
@@ -35,29 +37,27 @@ import sys
 import numpy as np
 import pandas as pd
 
-# Human 50ep reference, recomputed on the lagged (t-1) new-group peer mean
-# (own pre-switch and post unchanged from the concurrent Q4; only the peer term
-# and its raw level move: +0.18 -> +0.25, raw peers 9.70 -> 10.50).
+# Human 50ep reference: raw (non-standardised) betas from this event study on the
+# real undoubled data (flipped copies dropped, N=539). post ~= 2.85 + 0.46*own_pre
+# + 0.28*new_peers -- switchers move ~0.28 contribution units toward the new
+# group's level per point (partial adoption of the new norm).
 HUMAN = {
     "n": 539,
-    "own_pre": 0.446,
-    "new_peers": 0.247,
-    "raw_pre": 7.73,
+    "own_pre": 0.464,
+    "new_peers": 0.284,
+    "raw_pre": 7.76,
     "raw_peers": 10.50,
-    "raw_post": 9.46,
+    "raw_post": 9.43,
 }
 
 
-def stdz(x):
-    return (x - x.mean()) / x.std()
-
-
 def ols(df, feats, tgt):
-    """Standardised OLS; returns (coef dict, n)."""
+    """Raw (non-standardised) OLS; returns (coef dict, n). Coefficients are in
+    contribution units -- post-switch mixing weights on the same 0-20 scale."""
     a = df.dropna(subset=feats + [tgt])
-    x = stdz(a[feats]).copy()
+    x = a[feats].copy()
     x.insert(0, "const", 1.0)
-    y = stdz(a[tgt]).values
+    y = a[tgt].values
     b, *_ = np.linalg.lstsq(x.values, y, rcond=None)
     return dict(zip(feats, b[1:])), len(a)
 
@@ -126,7 +126,8 @@ def main():
     )
     args = parser.parse_args()
 
-    print(f"{'source':<26} {'N':>6}  own_pre   new_peers   raw: pre -> peers -> post")
+    print(f"{'source':<26} {'N':>6}  own_pre   new_peers   "
+          f"mean: pre -> peers -> post   (raw OLS betas, contribution units)")
     print(fmt("HUMAN (50ep)", HUMAN))
     for d in args.sim_dirs:
         path = os.path.join(d, "per_round.parquet")
