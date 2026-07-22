@@ -14,33 +14,29 @@ cv:
   output: data/baselines/contr_cat.csv
 
 setting:              # multinomial logistic; only C is valid here
-  C: [0.3, 1.0, 3.0]
+  C: 1.0
 
 blocks:
-  B1_self:                    # own inertia  (top-100 sets: ['s1'])
-    components: [prev_contribution, prev_punishment]
-    sets: [[prev_contribution]]
+  B1_self:                    # own inertia
+    components: [prev_contribution, prev_punishment, prev_payoff]
+    sets: [[prev_contribution, prev_punishment], [prev_contribution, prev_payoff]]
 
-  B2_own_group:                    # current group-mates  (top-100 sets: ['s2', 's4'])
-    components: [prev_contribution_mean_peers, prev_punishment_mean_peers, prev_payoff_mean_group, prev_group_size, prev_common_good]
-    sets: [[prev_common_good, prev_group_size], [prev_common_good]]
+  B2_own_group:               # own group, self excluded (observational: t-1 roster of the CURRENT group id)
+    components: [prev_contribution_mean_group, prev_punishment_mean_group, prev_payoff_mean_group, prev_group_size, prev_common_good]
+    sets:    [[prev_contribution_mean_group, prev_punishment_mean_group, prev_group_size], [prev_payoff_mean_group, prev_group_size], [prev_common_good, prev_group_size], [prev_payoff_mean_group], [prev_common_good], [prev_contribution_mean_group, prev_group_size], [prev_contribution_mean_group]]
+  
+  B3_other_group:             # the other group
+    components: [prev_contribution_mean_other, prev_punishment_mean_other, prev_common_good_other, prev_payoff_mean_other, prev_group_size_other]
+    sets:    [[prev_contribution_mean_other, prev_punishment_mean_other, prev_group_size_other], [prev_payoff_mean_other, prev_group_size_other], [prev_common_good_other, prev_group_size_other], [prev_contribution_mean_other, prev_group_size_other], [prev_contribution_mean_other], [prev_payoff_mean_other], [prev_common_good_other]]
 
-  B3_other_group:                    # the other group  (top-100 sets: ['s0', 's1', 's5'])
-    components: [prev_contribution_mean_other, prev_punishment_mean_other, prev_common_good_mean_other, prev_payoff_mean_other, prev_group_size_other]
-    sets: [[prev_contribution_mean_other, prev_punishment_mean_other, prev_group_size_other], [prev_payoff_mean_other, prev_group_size_other], [prev_payoff_mean_other]]
+  B4_gap:                     # own - other
+    components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_gap, prev_payoff_mean_gap, prev_group_size_delta]
+    sets:    [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_common_good_gap, prev_group_size_delta], [prev_contribution_mean_gap, prev_group_size_delta], [prev_common_good_gap], [prev_payoff_mean_gap], [prev_group_size_delta]]
 
-  B4_gap:                    # own - other  (top-100 sets: ['s0', 's1', 's5'])
-    components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_mean_gap, prev_payoff_mean_gap, prev_group_size_delta]
-    sets: [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap]]
+  B5_own_since_switch:        # own-group running mean over current tenure
+    components: [win_contribution_mean_peers, win_punishment_mean_peers, win_common_good_peers, win_payoff_mean_peers]
+    sets:    [[win_contribution_mean_peers, win_punishment_mean_peers], [win_payoff_mean_peers], [win_common_good_peers]]
 
-  B5_own_since_switch:                    # own-group running mean over current tenure  (top-100 sets: ['s2'])
-    components: [win_contribution_mean_peers, win_punishment_mean_peers, win_common_good_mean_peers, win_payoff_mean_peers]
-    sets: [[win_common_good_mean_peers]]
-
-  B6_other_since_switch:                    # other-group running mean over current tenure  (top-100 sets: ['s0', 's1', 's2'])
-    components: [win_contribution_mean_other, win_punishment_mean_other, win_common_good_mean_other, win_payoff_mean_other]
-    sets: [[win_contribution_mean_other, win_punishment_mean_other], [win_common_good_mean_other], [win_payoff_mean_other]]
-
-  B7_structural:                    # structural / switch context  (top-100 sets: ['s2', 's3'])
+  B7_structural:              
     components: [round_number, switched_last_choice, rounds_since_switch, group_size]
-    sets: [[round_number], [switched_last_choice]]
+    sets: [[round_number, switched_last_choice, rounds_since_switch], [switched_last_choice, rounds_since_switch, group_size], [round_number], [switched_last_choice], [group_size]]

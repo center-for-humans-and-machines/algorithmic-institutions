@@ -7,14 +7,10 @@ folds. Consumed by:
   * scripts/baselines/run_baseline_cv.py     -- the CV grid driver
   * scripts/baselines/inspect_best_model.py  -- coefficient inspection
 
-Design (see doc/plans/119-handcrafted-linear-baselines.md):
-  * No src/ changes -- only create_torch_data + get_cross_validations are used;
-    every derived feature is computed here from the raw [G, A, T] tensors.
-  * All behavioural features are previous-round (t-1). Group-mean / gap / window
-    features use PREVIOUS-round group membership (prev_agent_group); structural
-    `group_size` uses current membership, `prev_group_size*` use previous.
-  * payoff = 20 - contribution - punishment + common_good (reports/basics.md;
-    common_good is already the per-capita share).
+Feature semantics are specified in notes/baseline_feature_defs.md. Only
+create_torch_data + get_cross_validations are used from src/; every derived
+feature is computed here from the raw [G, A, T] tensors. payoff = 20 -
+contribution - punishment + common_good (per-capita, reports/basics.md).
 
 Runs locally (CPU torch, no PyG).
 """
@@ -56,14 +52,9 @@ def _payoff(c, p, cg):
 
 
 def _group_prev_means(measure, group):
-    """Leave-one-out own-group mean (`peers`) and other-group mean (`other`) of
-    `measure`, grouped by `group` membership. Both inputs are t-1 tensors, so the
-    result is the previous-round peers' mean.
-
-    A genuinely empty other group (everyone merged into one sub-group mid-game)
-    is treated as a 0-sized, all-zero group -> `other = 0`, so the gap (peers -
-    other) reflects the real 'other group emptied out' asymmetry. The round-0
-    symmetric default (no real previous round) is handled in build_feature_pool."""
+    """LOO own-group mean (`peers`) and other-group mean (`other`) of a t-1
+    measure, grouped by t-1 membership. Used for the lag_* switch twins.
+    Empty other group -> 0."""
     m = measure.astype(float)
     gp = group.astype(int)
     G, _, T = m.shape
@@ -84,10 +75,53 @@ def _group_prev_means(measure, group):
     return peers, other
 
 
+def _obs_group_means(measure, prev_group, cur_group, loo):
+    """Observational Group/Other means: t-1 values over the t-1 roster of the
+    agent's CURRENT group ids. loo=True drops the agent's own value when they
+    were in that roster (per-member measures); loo=False takes the full roster
+    mean (group-level measures like common_good). Empty t-1 roster -> 0."""
+    m = measure.astype(float)
+    pg = prev_group.astype(int)
+    cg = cur_group.astype(int)
+    G, A, T = m.shape
+    grp = np.zeros_like(m)
+    oth = np.zeros_like(m)
+    for g in range(G):
+        for t in range(T):
+            roster, x, cur = pg[g, :, t], m[g, :, t], cg[g, :, t]
+            for a in range(A):
+                for out, gid in ((grp, cur[a]), (oth, 1 - cur[a])):
+                    sel = roster == gid
+                    n = sel.sum()
+                    if n == 0:
+                        val = 0.0
+                    elif out is grp and loo and roster[a] == gid:
+                        val = (x[sel].sum() - x[a]) / (n - 1) if n > 1 else 0.0
+                    else:
+                        val = x[sel].mean()
+                    out[g, a, t] = val
+    return grp, oth
+
+
+def _obs_group_size(prev_group, cur_group, prev_recorded):
+    """t-1 head-count of the agent's CURRENT group id / the opponent id."""
+    pg = prev_group.astype(int)
+    cg = cur_group.astype(int)
+    rec = prev_recorded.astype(bool)
+    G, A, T = pg.shape
+    own = np.zeros((G, A, T), float)
+    oth = np.zeros((G, A, T), float)
+    for g in range(G):
+        for t in range(T):
+            roster, r, cur = pg[g, :, t], rec[g, :, t], cg[g, :, t]
+            for a in range(A):
+                own[g, a, t] = np.sum(r & (roster == cur[a]))
+                oth[g, a, t] = np.sum(r & (roster == 1 - cur[a]))
+    return own, oth
+
+
 def _group_full_mean(measure, group):
-    """Full own-group mean of `measure` (INCLUDES self): each member gets their
-    group's t-1 mean. Used for group-level payoff -- payoff is a group quantity
-    (shared common_good), so a leave-one-out peer mean is not meaningful."""
+    """Full own-group mean (INCLUDES self). Used for lag_payoff_mean_group."""
     m = measure.astype(float)
     gp = group.astype(int)
     G, _, T = m.shape
@@ -102,10 +136,11 @@ def _group_full_mean(measure, group):
     return out
 
 
-def _since_switch_window(per_round_mean, does_switch):
-    """Running mean of a per-round (t-1) group-mean feature over the agent's
-    current tenure, resetting the accumulator whenever the agent switches
-    (does_switch). Leakage-safe: it averages only t-1-and-earlier group means."""
+def _since_switch_window(per_round_mean, does_switch, include_reset=True):
+    """Running mean of a per-round (t-1) series over the agent's tenure,
+    resetting on the agent's switches. include_reset=False (value windows):
+    the arrival round outputs 0 and is not accumulated; include_reset=True
+    (size windows): the arrival round keeps its value."""
     x = per_round_mean
     ds = does_switch.astype(bool)
     G, A, T = x.shape
@@ -116,6 +151,9 @@ def _since_switch_window(per_round_mean, does_switch):
             for t in range(T):
                 if ds[g, a, t]:  # arrived in a new group -> new tenure
                     s, c = 0.0, 0
+                    if not include_reset:
+                        out[g, a, t] = 0.0
+                        continue
                 s += x[g, a, t]
                 c += 1
                 out[g, a, t] = s / c
@@ -179,9 +217,7 @@ def build_feature_pool(d, switch_every):
     """Return {feature_name: [G, A, T] float array} for the full feature pool.
 
     `d` is a create_torch_data data dict of tensors; `switch_every` is the
-    decision cadence (for switched_last_choice). prev_common_good_mean_peers is
-    computed internally (for peer payoff) but not exposed -- group-level cg
-    equals the own-group prev_common_good."""
+    decision cadence. Semantics per notes/baseline_feature_defs.md."""
     npd = {
         k: d[k].numpy()
         for k in (
@@ -201,71 +237,110 @@ def build_feature_pool(d, switch_every):
     # -- direct from tensors --
     f["prev_contribution"] = npd["prev_contribution"].astype(float)
     f["prev_punishment"] = npd["prev_punishment"].astype(float)
-    f["prev_common_good"] = npd["prev_common_good"].astype(float)
     f["round_number"] = npd["round_number"].astype(float)
+    own_cg = npd["prev_common_good"].astype(float)  # own EXPERIENCED t-1 cg
+    f["prev_payoff"] = _payoff(f["prev_contribution"], f["prev_punishment"], own_cg)
 
-    # -- group means (prev-round membership) --
+    # -- Group / Other (observational: t-1 values over the t-1 roster of the
+    #    agent's CURRENT group ids; prev_common_good = the current group's
+    #    t-1 cg, own experienced cg stays in prev_payoff only) --
+    ga = npd["agent_group"]
     gp = npd["prev_agent_group"]
-    peers, other = {}, {}
-    for m in ("contribution", "punishment", "common_good"):
-        peers[m], other[m] = _group_prev_means(npd[f"prev_{m}"], gp)
-        # Round 0 has no real previous round (prev_agent_group defaults everyone
-        # to group 0 -> empty other). Use the symmetric start default: other =
-        # peers, so every gap is 0 (both groups look identical at kick-off).
-        other[m][:, :, 0] = peers[m][:, :, 0]
-    for m in ("contribution", "punishment"):
-        f[f"prev_{m}_mean_peers"] = peers[m]
-    for m in ("contribution", "punishment", "common_good"):
-        f[f"prev_{m}_mean_other"] = other[m]
-        f[f"prev_{m}_mean_gap"] = peers[m] - other[m]
-
-    # -- payoff (self / peers / other / gap / full group) --
-    f["prev_payoff"] = _payoff(
-        f["prev_contribution"], f["prev_punishment"], f["prev_common_good"]
-    )
-    f["prev_payoff_mean_peers"] = _payoff(
-        peers["contribution"], peers["punishment"], peers["common_good"]
+    grp, oth = {}, {}
+    for m, loo in (
+        ("contribution", True),
+        ("punishment", True),
+        ("common_good", False),
+    ):
+        grp[m], oth[m] = _obs_group_means(npd[f"prev_{m}"], gp, ga, loo=loo)
+        # round 0: every t-1 value is the same default -> both sides read it
+        grp[m][:, :, 0] = npd[f"prev_{m}"][:, :, 0]
+        oth[m][:, :, 0] = npd[f"prev_{m}"][:, :, 0]
+    f["prev_contribution_mean_group"] = grp["contribution"]
+    f["prev_punishment_mean_group"] = grp["punishment"]
+    f["prev_common_good"] = grp["common_good"]
+    f["prev_contribution_mean_other"] = oth["contribution"]
+    f["prev_punishment_mean_other"] = oth["punishment"]
+    f["prev_common_good_other"] = oth["common_good"]
+    f["prev_payoff_mean_group"] = _payoff(
+        grp["contribution"], grp["punishment"], grp["common_good"]
     )
     f["prev_payoff_mean_other"] = _payoff(
-        other["contribution"], other["punishment"], other["common_good"]
-    )
-    f["prev_payoff_mean_gap"] = (
-        f["prev_payoff_mean_peers"] - f["prev_payoff_mean_other"]
-    )
-    # full own-group mean payoff (incl self): payoff is group-level (shared cg),
-    # so the whole group's mean is meaningful where a peer LOO mean is not.
-    f["prev_payoff_mean_group"] = _payoff(
-        _group_full_mean(npd["prev_contribution"], gp),
-        _group_full_mean(npd["prev_punishment"], gp),
-        f["prev_common_good"],
+        oth["contribution"], oth["punishment"], oth["common_good"]
     )
 
-    # -- since-switch windows --
-    ds = npd["does_switch"]
-    for m in ("contribution", "punishment", "common_good"):
-        f[f"win_{m}_mean_peers"] = _since_switch_window(peers[m], ds)
-        f[f"win_{m}_mean_other"] = _since_switch_window(other[m], ds)
-    f["win_payoff_mean_peers"] = _payoff(
-        f["win_contribution_mean_peers"],
-        f["win_punishment_mean_peers"],
-        f["win_common_good_mean_peers"],
+    # -- Gap/Delta (Group - Other) --
+    f["prev_contribution_mean_gap"] = grp["contribution"] - oth["contribution"]
+    f["prev_punishment_mean_gap"] = grp["punishment"] - oth["punishment"]
+    f["prev_common_good_gap"] = grp["common_good"] - oth["common_good"]
+    f["prev_payoff_mean_gap"] = (
+        f["prev_payoff_mean_group"] - f["prev_payoff_mean_other"]
     )
-    f["win_payoff_mean_other"] = _payoff(
-        f["win_contribution_mean_other"],
-        f["win_punishment_mean_other"],
-        f["win_common_good_mean_other"],
+
+    # -- observational sizes (t-1 head-count of the current / opponent id) --
+    own_cur = _group_size(ga, npd["recorded"])
+    total_cur = npd["recorded"].astype(float).sum(axis=1, keepdims=True)
+    own_prev, oth_prev = _obs_group_size(gp, ga, npd["prev_recorded"])
+    # round 0 has no real previous round (prev_recorded all False -> sizes 0);
+    # default the prev sizes to the round-0 current sizes (balanced 4/4 start).
+    own_prev[:, :, 0] = own_cur[:, :, 0]
+    oth_prev[:, :, 0] = (total_cur - own_cur)[:, :, 0]
+
+    # -- since-switch windows (0 at arrival; payoff windowed as its own
+    #    series so it is 0 there too; size windows keep the arrival value) --
+    ds = npd["does_switch"]
+    f["win_contribution_mean_peers"] = _since_switch_window(
+        grp["contribution"], ds, include_reset=False
+    )
+    f["win_punishment_mean_peers"] = _since_switch_window(
+        grp["punishment"], ds, include_reset=False
+    )
+    f["win_common_good_peers"] = _since_switch_window(
+        grp["common_good"], ds, include_reset=False
+    )
+    f["win_payoff_mean_peers"] = _since_switch_window(
+        f["prev_payoff_mean_group"], ds, include_reset=False
+    )
+    f["win_group_size"] = _since_switch_window(own_prev, ds)
+    f["win_contribution_mean_other"] = _since_switch_window(
+        oth["contribution"], ds, include_reset=False
+    )
+    f["win_punishment_mean_other"] = _since_switch_window(
+        oth["punishment"], ds, include_reset=False
+    )
+    f["win_common_good_other"] = _since_switch_window(
+        oth["common_good"], ds, include_reset=False
+    )
+    f["win_payoff_mean_other"] = _since_switch_window(
+        f["prev_payoff_mean_other"], ds, include_reset=False
+    )
+    f["win_group_size_other"] = _since_switch_window(oth_prev, ds)
+
+    # -- lag_* twins (SWITCH target): t-1 values over t-1 membership; the
+    #    standard means aggregate over agent_group[t], which IS the target --
+    lpeers, lother = {}, {}
+    for m in ("contribution", "punishment", "common_good"):
+        lpeers[m], lother[m] = _group_prev_means(npd[f"prev_{m}"], gp)
+        lother[m][:, :, 0] = lpeers[m][:, :, 0]  # symmetric round-0 default
+    for m in ("contribution", "punishment"):
+        f[f"lag_{m}_mean_peers"] = lpeers[m]
+    for m in ("contribution", "punishment", "common_good"):
+        f[f"lag_{m}_mean_other"] = lother[m]
+        f[f"lag_{m}_mean_gap"] = lpeers[m] - lother[m]
+    f["lag_payoff_mean_other"] = _payoff(
+        lother["contribution"], lother["punishment"], lother["common_good"]
+    )
+    f["lag_payoff_mean_gap"] = (
+        _payoff(lpeers["contribution"], lpeers["punishment"], lpeers["common_good"])
+        - f["lag_payoff_mean_other"]
+    )
+    f["lag_payoff_mean_group"] = _payoff(
+        _group_full_mean(npd["prev_contribution"], gp),
+        _group_full_mean(npd["prev_punishment"], gp),
+        own_cg,  # t-1 group-mates shared the agent's own experienced cg
     )
 
     # -- structural sizes / counters --
-    own_cur = _group_size(npd["agent_group"], npd["recorded"])
-    total_cur = npd["recorded"].astype(float).sum(axis=1, keepdims=True)
-    own_prev = _group_size(gp, npd["prev_recorded"])
-    prev_total = npd["prev_recorded"].astype(float).sum(axis=1, keepdims=True)
-    oth_prev = prev_total - own_prev
-    # round 0 has no real previous round (prev_recorded all False -> sizes 0);
-    # default the prev sizes to the round-0 current sizes (the balanced 4/4 start).
-    own_prev[:, :, 0] = own_cur[:, :, 0]
-    oth_prev[:, :, 0] = (total_cur - own_cur)[:, :, 0]
     f["group_size"] = own_cur
     f["prev_group_size"] = own_prev
     f["prev_group_size_other"] = oth_prev
@@ -273,12 +348,10 @@ def build_feature_pool(d, switch_every):
     f["rounds_since_switch"] = _rounds_since_switch(ds)
     f["switched_last_choice"] = _switched_last_choice(ds, switch_every)
 
-    # Leakage-safe (strictly t-1) variants for the SWITCH target: the current-round
-    # decision / window-reset above encode does_switch[t] (the target), so provide
-    # variants that only ever use does_switch[<t].
+    # switch-target variant: only ever reads does_switch[<t]
     f["prev_switched_last_choice"] = _switched_last_choice(
         ds, switch_every, strict_prev=True
-    )  # switch at the PREVIOUS decision
+    )
 
     def _shift1(a):  # value as of t-1 (round 0 keeps its own value; masked anyway)
         out = np.roll(a, 1, axis=2)
@@ -288,12 +361,14 @@ def build_feature_pool(d, switch_every):
     for name in (
         "win_contribution_mean_peers",
         "win_punishment_mean_peers",
-        "win_common_good_mean_peers",
+        "win_common_good_peers",
         "win_payoff_mean_peers",
+        "win_group_size",
         "win_contribution_mean_other",
         "win_punishment_mean_other",
-        "win_common_good_mean_other",
+        "win_common_good_other",
         "win_payoff_mean_other",
+        "win_group_size_other",
     ):
         f[f"prev_{name}"] = _shift1(f[name])  # window as of t-1 (reset uses <t)
 
