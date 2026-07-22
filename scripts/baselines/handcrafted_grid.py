@@ -7,7 +7,9 @@ folds. Consumed by:
   * scripts/baselines/run_baseline_cv.py     -- the CV grid driver
   * scripts/baselines/inspect_best_model.py  -- coefficient inspection
 
-Feature semantics are specified in notes/baseline_feature_defs.md. Only
+Feature semantics are specified in notes/baseline_feature_defs.md: a current
+family (no prefix) for the switch target -- anchored at the pre-switch round
+since #123 -- and a prev family for the contribution target. Only
 create_torch_data + get_cross_validations are used from src/; every derived
 feature is computed here from the raw [G, A, T] tensors. payoff = 20 -
 contribution - punishment + common_good (per-capita, reports/basics.md).
@@ -51,37 +53,15 @@ def _payoff(c, p, cg):
     return ENDOWMENT - c - p + cg
 
 
-def _group_prev_means(measure, group):
-    """LOO own-group mean (`peers`) and other-group mean (`other`) of a t-1
-    measure, grouped by t-1 membership. Used for the lag_* switch twins.
-    Empty other group -> 0."""
+def _obs_group_means(measure, roster_group, cur_group, loo):
+    """Group/Other means of `measure` over the `roster_group` membership, keyed
+    to the agent's CURRENT group ids. Prev family: t-1 values over the t-1
+    roster (roster_group=prev). Current family: round-t values over the round-t
+    roster (roster_group=cur). loo=True drops the agent's own value when they
+    are in that roster (per-member measures); loo=False takes the full roster
+    mean (group-level measures like common_good). Empty roster -> 0."""
     m = measure.astype(float)
-    gp = group.astype(int)
-    G, _, T = m.shape
-    peers = np.zeros_like(m)
-    other = np.zeros_like(m)
-    for g in range(G):
-        for t in range(T):
-            grp, x = gp[g, :, t], m[g, :, t]
-            for s in (0, 1):
-                sel = grp == s
-                if not sel.any():
-                    continue
-                n = sel.sum()
-                peers[g, sel, t] = (x[sel].sum() - x[sel]) / (n - 1) if n > 1 else 0.0
-                oth = grp == (1 - s)
-                if oth.any():
-                    other[g, oth, t] = x[sel].mean()
-    return peers, other
-
-
-def _obs_group_means(measure, prev_group, cur_group, loo):
-    """Observational Group/Other means: t-1 values over the t-1 roster of the
-    agent's CURRENT group ids. loo=True drops the agent's own value when they
-    were in that roster (per-member measures); loo=False takes the full roster
-    mean (group-level measures like common_good). Empty t-1 roster -> 0."""
-    m = measure.astype(float)
-    pg = prev_group.astype(int)
+    pg = roster_group.astype(int)
     cg = cur_group.astype(int)
     G, A, T = m.shape
     grp = np.zeros_like(m)
@@ -103,11 +83,13 @@ def _obs_group_means(measure, prev_group, cur_group, loo):
     return grp, oth
 
 
-def _obs_group_size(prev_group, cur_group, prev_recorded):
-    """t-1 head-count of the agent's CURRENT group id / the opponent id."""
-    pg = prev_group.astype(int)
+def _obs_group_size(roster_group, cur_group, recorded):
+    """Head-count of the agent's CURRENT group id / the opponent id over the
+    `roster_group` membership (prev roster for the prev family, current roster
+    for the current sizes)."""
+    pg = roster_group.astype(int)
     cg = cur_group.astype(int)
-    rec = prev_recorded.astype(bool)
+    rec = recorded.astype(bool)
     G, A, T = pg.shape
     own = np.zeros((G, A, T), float)
     oth = np.zeros((G, A, T), float)
@@ -120,29 +102,14 @@ def _obs_group_size(prev_group, cur_group, prev_recorded):
     return own, oth
 
 
-def _group_full_mean(measure, group):
-    """Full own-group mean (INCLUDES self). Used for lag_payoff_mean_group."""
-    m = measure.astype(float)
-    gp = group.astype(int)
-    G, _, T = m.shape
-    out = np.zeros_like(m)
-    for g in range(G):
-        for t in range(T):
-            grp, x = gp[g, :, t], m[g, :, t]
-            for s in (0, 1):
-                sel = grp == s
-                if sel.any():
-                    out[g, sel, t] = x[sel].mean()
-    return out
-
-
-def _since_switch_window(per_round_mean, does_switch, include_reset=True):
-    """Running mean of a per-round (t-1) series over the agent's tenure,
-    resetting on the agent's switches. include_reset=False (value windows):
-    the arrival round outputs 0 and is not accumulated; include_reset=True
-    (size windows): the arrival round keeps its value."""
+def _since_switch_window(per_round_mean, arrival, include_reset=True):
+    """Running mean of a per-round series over the agent's tenure, resetting
+    at the agent's arrival rounds. include_reset=True (current family + size
+    windows): the arrival round's value starts the new window; include_reset=
+    False (prev value windows): the arrival round outputs 0 and is not
+    accumulated (its prev-observed value belongs to the left group)."""
     x = per_round_mean
-    ds = does_switch.astype(bool)
+    ds = arrival.astype(bool)
     G, A, T = x.shape
     out = np.zeros_like(x)
     for g in range(G):
@@ -160,24 +127,10 @@ def _since_switch_window(per_round_mean, does_switch, include_reset=True):
     return out
 
 
-def _group_size(group, recorded):
-    """Per-(g, a, t) count of recorded agents sharing a's group membership."""
-    gp = group.astype(int)
-    rec = recorded.astype(bool)
-    G, A, T = gp.shape
-    out = np.zeros((G, A, T), float)
-    for g in range(G):
-        for t in range(T):
-            grp, r = gp[g, :, t], rec[g, :, t]
-            for a in range(A):
-                out[g, a, t] = np.sum(r & (grp == grp[a]))
-    return out
-
-
-def _rounds_since_switch(does_switch):
+def _rounds_since_switch(arrival):
     """Rounds since the agent last actually switched groups (tenure; 0 on the
-    switch round). NB: 'since last actual switch', not 'since last option'."""
-    ds = does_switch.astype(bool)
+    arrival round). NB: 'since last actual switch', not 'since last option'."""
+    ds = arrival.astype(bool)
     G, A, T = ds.shape
     out = np.zeros((G, A, T), float)
     for g in range(G):
@@ -189,43 +142,92 @@ def _rounds_since_switch(does_switch):
     return out
 
 
-def _switched_last_choice(does_switch, switch_every, strict_prev=False):
-    """'Did I switch last time I had the choice?' -- the agent's does_switch at
-    its most recent decision round, forward-filled.
-
-    strict_prev=False (default): most recent decision r <= t. At a decision round
-      t this is does_switch[t] itself -- valid for the contribution target (group
-      membership is known before contributing), but it LEAKS the switch target.
-    strict_prev=True: most recent decision STRICTLY before t. At a decision round
-      t this is does_switch[t - switch_every] (the previous opportunity) -- the
-      leakage-safe version for predicting does_switch[t]."""
-    ds = does_switch.astype(int)
+def _switched_last_choice(arrival, switch_every):
+    """'Did I switch at my most recent decision?' -- the arrival marker at the
+    most recent arrival round <= t, forward-filled. Reads only decisions
+    resolved by row t, so it is legal for both targets."""
+    ds = arrival.astype(int)
     _, _, T = ds.shape
     out = np.zeros_like(ds, dtype=float)
     for t in range(T):
-        ref = (t - 1) if strict_prev else t
-        last_dec = (ref // switch_every) * switch_every  # largest multiple <= ref
-        if last_dec > 0:  # <= 0 => no earlier decision
-            out[:, :, t] = ds[:, :, last_dec]
+        last_arr = (t // switch_every) * switch_every  # largest multiple <= t
+        if last_arr > 0:  # <= 0 => no arrival yet
+            out[:, :, t] = ds[:, :, last_arr]
     return out
 
 
 # --------------------------------------------------------------------------- #
 # feature pool
 # --------------------------------------------------------------------------- #
+# Current-family features that read round-t contributions/punishments/common
+# good -- the round the contribution target is drawn in. ILLEGAL for the
+# contribution target (hard error at config validation); membership-derived
+# current features (sizes, tenure counters) are legal for both targets.
+CURRENT_VALUED = frozenset(
+    [
+        "contribution",
+        "punishment",
+        "payoff",
+        "common_good",
+        "common_good_other",
+        "common_good_gap",
+        "contribution_mean_group",
+        "contribution_mean_other",
+        "contribution_mean_gap",
+        "punishment_mean_group",
+        "punishment_mean_other",
+        "punishment_mean_gap",
+        "payoff_mean_group",
+        "payoff_mean_other",
+        "payoff_mean_gap",
+        "win_contribution_mean_group",
+        "win_punishment_mean_group",
+        "win_common_good",
+        "win_payoff_mean_group",
+        "win_contribution_mean_other",
+        "win_punishment_mean_other",
+        "win_common_good_other",
+        "win_payoff_mean_other",
+    ]
+)
+
+
+def validate_feature_legality(cfg):
+    """Hard error if a contribution-target config selects a current-valued
+    feature (issue #123 leak rule)."""
+    if cfg["data"]["target"] != "contribution":
+        return
+    used = {
+        feat
+        for blk in cfg.get("blocks", {}).values()
+        for s in blk["sets"]
+        for feat in s
+    }
+    illegal = sorted(used & CURRENT_VALUED)
+    if illegal:
+        raise ValueError(
+            "current-valued features are illegal for the contribution target "
+            f"(they read the target's round): {illegal}"
+        )
+
+
 def build_feature_pool(d, switch_every):
     """Return {feature_name: [G, A, T] float array} for the full feature pool.
 
     `d` is a create_torch_data data dict of tensors; `switch_every` is the
-    decision cadence. Semantics per notes/baseline_feature_defs.md."""
+    decision cadence. Semantics per notes/baseline_feature_defs.md: current
+    family (no prefix) for the switch target at decision rows, prev family for
+    the contribution target."""
     npd = {
         k: d[k].numpy()
         for k in (
+            "contribution",
+            "punishment",
+            "common_good",
             "prev_contribution",
             "prev_punishment",
             "prev_common_good",
             "round_number",
-            "does_switch",
             "prev_agent_group",
             "agent_group",
             "recorded",
@@ -233,19 +235,70 @@ def build_feature_pool(d, switch_every):
         )
     }
     f = {}
+    ga = npd["agent_group"]
+    gp = npd["prev_agent_group"]
 
-    # -- direct from tensors --
+    # arrival marker: the agent's membership changed vs the previous round.
+    # NOT the does_switch label (which sits at the decision row s = arrival-1);
+    # window resets and tenure counters key on the physical arrival.
+    arrival = np.zeros(ga.shape, dtype=bool)
+    arrival[:, :, 1:] = ga[:, :, 1:] != ga[:, :, :-1]
+
+    # ---------------- current family (switch target) ---------------- #
+    c = npd["contribution"].astype(float)
+    p = npd["punishment"].astype(float)
+    cg = npd["common_good"].astype(float)  # own group's per-capita cg
+    f["contribution"] = c
+    f["punishment"] = p
+    f["common_good"] = cg
+    f["payoff"] = _payoff(c, p, cg)
+
+    cgrp, coth = {}, {}
+    for m, x, loo in (("contribution", c, True), ("punishment", p, True)):
+        cgrp[m], coth[m] = _obs_group_means(x, ga, ga, loo=loo)
+    cg_oth = _obs_group_means(cg, ga, ga, loo=False)[1]
+    f["contribution_mean_group"] = cgrp["contribution"]
+    f["punishment_mean_group"] = cgrp["punishment"]
+    f["contribution_mean_other"] = coth["contribution"]
+    f["punishment_mean_other"] = coth["punishment"]
+    f["common_good_other"] = cg_oth
+    f["payoff_mean_group"] = _payoff(cgrp["contribution"], cgrp["punishment"], cg)
+    f["payoff_mean_other"] = _payoff(coth["contribution"], coth["punishment"], cg_oth)
+    f["contribution_mean_gap"] = cgrp["contribution"] - coth["contribution"]
+    f["punishment_mean_gap"] = cgrp["punishment"] - coth["punishment"]
+    f["common_good_gap"] = cg - cg_oth
+    f["payoff_mean_gap"] = f["payoff_mean_group"] - f["payoff_mean_other"]
+
+    own_cur, oth_cur = _obs_group_size(ga, ga, npd["recorded"])
+    f["group_size"] = own_cur
+    f["group_size_other"] = oth_cur
+    f["group_size_delta"] = own_cur - oth_cur
+
+    # current windows: tenure mean INCLUDING the current round; the arrival
+    # round starts the new window with the joined group's own outcome.
+    for name, series in (
+        ("win_contribution_mean_group", cgrp["contribution"]),
+        ("win_punishment_mean_group", cgrp["punishment"]),
+        ("win_common_good", cg),
+        ("win_payoff_mean_group", f["payoff_mean_group"]),
+        ("win_group_size", own_cur),
+        ("win_contribution_mean_other", coth["contribution"]),
+        ("win_punishment_mean_other", coth["punishment"]),
+        ("win_common_good_other", cg_oth),
+        ("win_payoff_mean_other", f["payoff_mean_other"]),
+        ("win_group_size_other", oth_cur),
+    ):
+        f[name] = _since_switch_window(series, arrival)
+
+    # ---------------- prev family (contribution target) ---------------- #
     f["prev_contribution"] = npd["prev_contribution"].astype(float)
     f["prev_punishment"] = npd["prev_punishment"].astype(float)
-    f["round_number"] = npd["round_number"].astype(float)
     own_cg = npd["prev_common_good"].astype(float)  # own EXPERIENCED t-1 cg
     f["prev_payoff"] = _payoff(f["prev_contribution"], f["prev_punishment"], own_cg)
 
-    # -- Group / Other (observational: t-1 values over the t-1 roster of the
-    #    agent's CURRENT group ids; prev_common_good = the current group's
-    #    t-1 cg, own experienced cg stays in prev_payoff only) --
-    ga = npd["agent_group"]
-    gp = npd["prev_agent_group"]
+    # observational: t-1 values over the t-1 roster of the agent's CURRENT
+    # group ids; prev_common_good = the current group's t-1 cg, own
+    # experienced cg stays in prev_payoff only.
     grp, oth = {}, {}
     for m, loo in (
         ("contribution", True),
@@ -268,8 +321,6 @@ def build_feature_pool(d, switch_every):
     f["prev_payoff_mean_other"] = _payoff(
         oth["contribution"], oth["punishment"], oth["common_good"]
     )
-
-    # -- Gap/Delta (Group - Other) --
     f["prev_contribution_mean_gap"] = grp["contribution"] - oth["contribution"]
     f["prev_punishment_mean_gap"] = grp["punishment"] - oth["punishment"]
     f["prev_common_good_gap"] = grp["common_good"] - oth["common_good"]
@@ -277,100 +328,37 @@ def build_feature_pool(d, switch_every):
         f["prev_payoff_mean_group"] - f["prev_payoff_mean_other"]
     )
 
-    # -- observational sizes (t-1 head-count of the current / opponent id) --
-    own_cur = _group_size(ga, npd["recorded"])
-    total_cur = npd["recorded"].astype(float).sum(axis=1, keepdims=True)
+    # observational sizes (t-1 head-count of the current / opponent id)
     own_prev, oth_prev = _obs_group_size(gp, ga, npd["prev_recorded"])
     # round 0 has no real previous round (prev_recorded all False -> sizes 0);
     # default the prev sizes to the round-0 current sizes (balanced 4/4 start).
     own_prev[:, :, 0] = own_cur[:, :, 0]
-    oth_prev[:, :, 0] = (total_cur - own_cur)[:, :, 0]
-
-    # -- since-switch windows (0 at arrival; payoff windowed as its own
-    #    series so it is 0 there too; size windows keep the arrival value) --
-    ds = npd["does_switch"]
-    f["win_contribution_mean_peers"] = _since_switch_window(
-        grp["contribution"], ds, include_reset=False
-    )
-    f["win_punishment_mean_peers"] = _since_switch_window(
-        grp["punishment"], ds, include_reset=False
-    )
-    f["win_common_good_peers"] = _since_switch_window(
-        grp["common_good"], ds, include_reset=False
-    )
-    f["win_payoff_mean_peers"] = _since_switch_window(
-        f["prev_payoff_mean_group"], ds, include_reset=False
-    )
-    f["win_group_size"] = _since_switch_window(own_prev, ds)
-    f["win_contribution_mean_other"] = _since_switch_window(
-        oth["contribution"], ds, include_reset=False
-    )
-    f["win_punishment_mean_other"] = _since_switch_window(
-        oth["punishment"], ds, include_reset=False
-    )
-    f["win_common_good_other"] = _since_switch_window(
-        oth["common_good"], ds, include_reset=False
-    )
-    f["win_payoff_mean_other"] = _since_switch_window(
-        f["prev_payoff_mean_other"], ds, include_reset=False
-    )
-    f["win_group_size_other"] = _since_switch_window(oth_prev, ds)
-
-    # -- lag_* twins (SWITCH target): t-1 values over t-1 membership; the
-    #    standard means aggregate over agent_group[t], which IS the target --
-    lpeers, lother = {}, {}
-    for m in ("contribution", "punishment", "common_good"):
-        lpeers[m], lother[m] = _group_prev_means(npd[f"prev_{m}"], gp)
-        lother[m][:, :, 0] = lpeers[m][:, :, 0]  # symmetric round-0 default
-    for m in ("contribution", "punishment"):
-        f[f"lag_{m}_mean_peers"] = lpeers[m]
-    for m in ("contribution", "punishment", "common_good"):
-        f[f"lag_{m}_mean_other"] = lother[m]
-        f[f"lag_{m}_mean_gap"] = lpeers[m] - lother[m]
-    f["lag_payoff_mean_other"] = _payoff(
-        lother["contribution"], lother["punishment"], lother["common_good"]
-    )
-    f["lag_payoff_mean_gap"] = (
-        _payoff(lpeers["contribution"], lpeers["punishment"], lpeers["common_good"])
-        - f["lag_payoff_mean_other"]
-    )
-    f["lag_payoff_mean_group"] = _payoff(
-        _group_full_mean(npd["prev_contribution"], gp),
-        _group_full_mean(npd["prev_punishment"], gp),
-        own_cg,  # t-1 group-mates shared the agent's own experienced cg
-    )
-
-    # -- structural sizes / counters --
-    f["group_size"] = own_cur
+    oth_prev[:, :, 0] = oth_cur[:, :, 0]
     f["prev_group_size"] = own_prev
     f["prev_group_size_other"] = oth_prev
     f["prev_group_size_delta"] = own_prev - oth_prev
-    f["rounds_since_switch"] = _rounds_since_switch(ds)
-    f["switched_last_choice"] = _switched_last_choice(ds, switch_every)
 
-    # switch-target variant: only ever reads does_switch[<t]
-    f["prev_switched_last_choice"] = _switched_last_choice(
-        ds, switch_every, strict_prev=True
-    )
-
-    def _shift1(a):  # value as of t-1 (round 0 keeps its own value; masked anyway)
-        out = np.roll(a, 1, axis=2)
-        out[:, :, 0] = a[:, :, 0]
-        return out
-
-    for name in (
-        "win_contribution_mean_peers",
-        "win_punishment_mean_peers",
-        "win_common_good_peers",
-        "win_payoff_mean_peers",
-        "win_group_size",
-        "win_contribution_mean_other",
-        "win_punishment_mean_other",
-        "win_common_good_other",
-        "win_payoff_mean_other",
-        "win_group_size_other",
+    # prev windows: the win_* windows as of t-1 -- tenure mean of the
+    # prev-observed series (0 at arrival; payoff windowed as its own series
+    # so it is 0 there too; size windows keep the arrival value).
+    for name, series, inc in (
+        ("prev_win_contribution_mean_group", grp["contribution"], False),
+        ("prev_win_punishment_mean_group", grp["punishment"], False),
+        ("prev_win_common_good", grp["common_good"], False),
+        ("prev_win_payoff_mean_group", f["prev_payoff_mean_group"], False),
+        ("prev_win_group_size", own_prev, True),
+        ("prev_win_contribution_mean_other", oth["contribution"], False),
+        ("prev_win_punishment_mean_other", oth["punishment"], False),
+        ("prev_win_common_good_other", oth["common_good"], False),
+        ("prev_win_payoff_mean_other", f["prev_payoff_mean_other"], False),
+        ("prev_win_group_size_other", oth_prev, True),
     ):
-        f[f"prev_{name}"] = _shift1(f[name])  # window as of t-1 (reset uses <t)
+        f[name] = _since_switch_window(series, arrival, include_reset=inc)
+
+    # ---------------- structural (shared) ---------------- #
+    f["round_number"] = npd["round_number"].astype(float)
+    f["rounds_since_switch"] = _rounds_since_switch(arrival)
+    f["switched_last_choice"] = _switched_last_choice(arrival, switch_every)
 
     return f
 
@@ -388,6 +376,8 @@ def prepare_data(cfg, root):
     import torch as th
 
     from aimanager.generic.data import create_torch_data, get_cross_validations
+
+    validate_feature_legality(cfg)
 
     seed = cfg["cv"]["seed"]
     th.random.manual_seed(seed)
