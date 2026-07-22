@@ -15,16 +15,17 @@ only ever holds the current round + its ``prev_`` sibling) and rebuilds the same
 ``[G, A, T]`` tensors ``create_torch_data`` would, then calls the *same*
 ``build_feature_pool`` used in training -- parity by construction.
 
-Timing / leakage (mirrors handcrafted_grid):
-  * No feature reads the current round's own contribution/punishment/common_good,
-    so features at round t need only realised values through t-1 plus the current
-    membership -- all available when the env calls ``predict``.
-  * ``does_switch`` is never written back to ``state`` by the env, so we derive it
-    from the membership timeline (``prev_agent_group`` vs ``agent_group``) exactly
-    like ``parse_agent_rounds``. The contribution model legitimately sees
-    ``does_switch[t]`` (groups are set before contributing); the switch model's
-    features only ever use ``does_switch[<t]`` (``prev_win_*`` /
-    ``prev_switched_last_choice``), so a placeholder ``does_switch[t]`` is unused.
+Timing / leakage (mirrors handcrafted_grid, re-anchored per #123):
+  * Contribution model: called before round t is played; its prev-family
+    features need only realised values through t-1 plus the current membership.
+    Current-valued features are illegal for it (asserted against
+    ``CURRENT_VALUED`` at load).
+  * Switch model: the env calls it at the END of round s (outcomes complete,
+    membership still pre-decision), so the current family at row s is fully
+    realised -- exactly the training-time anchoring of ``does_switch[s]``.
+  * Arrival markers (window resets, tenure counters) are derived inside
+    ``build_feature_pool`` from the membership timeline; no ``does_switch``
+    input is needed.
 """
 
 import sys
@@ -38,7 +39,7 @@ import torch as th
 # tests/baselines). Import it so sim features can never drift from training.
 _ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_ROOT / "scripts" / "baselines"))
-from handcrafted_grid import build_feature_pool  # noqa: E402
+from handcrafted_grid import CURRENT_VALUED, build_feature_pool  # noqa: E402
 
 
 def _shift(a, default):
@@ -81,6 +82,12 @@ class LinearAHAdapter:
         # match the GNN switch predictor (sample=True); set False for a
         # deterministic proba>0.5 threshold.
         self.switch_sample = switch_sample
+        if not self.is_switch:
+            illegal = sorted(set(self.features) & CURRENT_VALUED)
+            assert not illegal, (
+                "contribution bundle contains current-valued features "
+                f"(illegal, they read the target's round): {illegal}"
+            )
         self._reset_history()
 
     def to(self, device):
@@ -97,8 +104,11 @@ class LinearAHAdapter:
     def _record(self, state, t):
         """Fold the current env state into the episode history.
 
-        prev_* holds the realised values of round t-1; the current membership is
-        state["agent_group"]. Re-recording the same round is idempotent."""
+        Contribution model (called before round t is played): prev_* holds the
+        realised values of round t-1, membership is post-arrival. Switch model
+        (called at the END of round t): the current keys additionally hold
+        round t's realised outcomes, membership is still pre-decision.
+        Re-recording the same round is idempotent."""
         A = self.n_agents
 
         def col(key):
@@ -107,12 +117,11 @@ class LinearAHAdapter:
         if t > 0:
             for m in self._MEASURES:
                 self._measure[m][t - 1] = col(f"prev_{m}").astype(float)
-            # prev_agent_group is the actual (post-switch) membership at t-1;
-            # this corrects any placeholder written for t-1 at its own round.
             self._group[t - 1] = col("prev_agent_group").astype(int)
-        # current-round membership (post-switch for the contribution model;
-        # a t-1 placeholder for the switch model -> does_switch[t] unused).
         self._group[t] = col("agent_group").astype(int)
+        if self.is_switch:
+            for m in self._MEASURES:
+                self._measure[m][t] = col(m).astype(float)
 
     def _build_pool(self, t):
         """Reconstruct the [1, A, t+1] create_torch_data tensors from history and
@@ -134,19 +143,17 @@ class LinearAHAdapter:
         rec = np.ones((A, T), dtype=float)  # every agent is present in the sim
         rounds = np.tile(np.arange(T, dtype=float), (A, 1))
 
-        # does_switch: membership change at a decision round, masked exactly as
-        # parse_agent_rounds does.
-        ds = np.zeros((A, T), dtype=bool)
-        if self.switch_every:
-            for r in range(1, T):
-                if r % self.switch_every == 0:
-                    ds[:, r] = ag[:, r] != ag[:, r - 1]
-
         # -> contiguous [1, A, T] torch tensor (build_feature_pool .numpy()s it)
         def b(x):
             return th.from_numpy(np.ascontiguousarray(x[None]))
 
+        # Current tensors carry defaults at the not-yet-played round for the
+        # contribution model; only the (asserted prev-family) features it was
+        # trained on are read, so those cells are never consumed.
         d = {
+            "contribution": b(c),
+            "punishment": b(p),
+            "common_good": b(cg),
             "prev_contribution": b(_shift(c[None], dv["contribution"])[0]),
             "prev_punishment": b(_shift(p[None], dv["punishment"])[0]),
             "prev_common_good": b(_shift(cg[None], dv["common_good"])[0]),
@@ -155,7 +162,6 @@ class LinearAHAdapter:
             "agent_group": b(ag.astype(int)),
             "recorded": b(rec.astype(bool)),
             "round_number": b(rounds),
-            "does_switch": b(ds),
         }
         return build_feature_pool(d, self.switch_every)
 

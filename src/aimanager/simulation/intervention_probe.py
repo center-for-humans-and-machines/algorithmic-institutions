@@ -167,20 +167,21 @@ def _run_seed(
         f"with reset_rnn=True over rounds [0..{t_star + 1}]"
     )
     # Per-agent diagnostic for the switch panel: feature inputs the
-    # switch AH actually sees at t*+1 (prev_common_good, prev_punishment,
-    # agent_group) and the predicted P(switch=1). Probabilities are
-    # deterministic given inputs — sampling only adds Bernoulli noise.
+    # switch AH actually sees at the decision row t* (#123 anchoring:
+    # current-round common_good, punishment, agent_group) and the predicted
+    # P(switch=1). Probabilities are deterministic given inputs — sampling
+    # only adds Bernoulli noise.
     if TRACE:
-        ag = full["agent_group"][0, :, t_star + 1].tolist()
-        p_p = full["prev_punishment"][0, :, t_star + 1].tolist()
-        p_cg = full["prev_common_good"][0, :, t_star + 1].tolist()
-        p_sw = switch_proba[0, :, t_star + 1, 1].tolist()
+        ag = full["agent_group"][0, :, t_star].tolist()
+        p_p = full["punishment"][0, :, t_star].tolist()
+        p_cg = full["common_good"][0, :, t_star].tolist()
+        p_sw = switch_proba[0, :, t_star, 1].tolist()
         rows = [
-            f"a{i}: g={int(ag[i])}  prev_p={int(p_p[i])}  "
-            f"prev_cg={p_cg[i]:.3f}  P(sw)={p_sw[i]:.3f}"
+            f"a{i}: g={int(ag[i])}  pun={int(p_p[i])}  "
+            f"cg={p_cg[i]:.3f}  P(sw)={p_sw[i]:.3f}"
             for i in range(len(ag))
         ]
-        _trace(f"  [trace {label}] STEP 4 switch inputs+P at t*+1:")
+        _trace(f"  [trace {label}] STEP 4 switch inputs+P at t*:")
         for r in rows:
             _trace(f"    {r}")
 
@@ -208,7 +209,8 @@ def _run_seed(
         "pun_t1": float(pun_pred_t1[0, agents_idx, t_star + 1].float().mean()),
         "contrib_t": contrib_t,
         "contrib_t1": float(ah_contrib_t1[agents_idx].float().mean()),
-        "switch_t1": float(switch_pred[0, agents_idx, t_star + 1].float().mean()),
+        # decision row is t* (#123); the membership change realises at t*+1
+        "switch_t1": float(switch_pred[0, agents_idx, t_star].float().mean()),
     }
     _trace(f"  [trace {label}] result={result}")
     return result
@@ -290,7 +292,7 @@ def _run_scenario(scen, data, models, chosen, n_seeds, device, rng):
     target = iv["target"]
     feature = iv["feature"]
     selector = iv.get("selector")
-    is_decision = bool(data["switch_mask"][0, 0, t_star + 1].item())
+    is_decision = bool(data["switch_mask"][0, 0, t_star].item())
 
     rows = []
     for ep in chosen:
@@ -350,7 +352,7 @@ def _run_scenario(scen, data, models, chosen, n_seeds, device, rng):
                 data["contribution"][ep, agents_idx, t_star + 1].float().mean()
             ),
             "real_switch_t1": float(
-                data["does_switch"][ep, agents_idx, t_star + 1].float().mean()
+                data["does_switch"][ep, agents_idx, t_star].float().mean()
             ),
         }
         for k in METRICS:

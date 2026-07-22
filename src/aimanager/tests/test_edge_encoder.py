@@ -188,7 +188,7 @@ def test_env_recomputes_same_group_after_switch():
     before = _edge_attr_seen_by_model(env, ee)
 
     # real switch path: flips agent 0 from group 0 -> 1 and syncs state
-    env.update_groups_from_switch_predictor()
+    env.apply_switch(env._run_switch_predictor())
     assert env.state["agent_group"].flatten().tolist() == [1, 0, 0, 0, 1, 1, 1, 1]
     after = _edge_attr_seen_by_model(env, ee)
 

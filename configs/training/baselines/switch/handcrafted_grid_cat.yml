@@ -7,56 +7,49 @@ data:
   target: does_switch
   target_type: categorical
   categorical_levels: 2         # does_switch is binary (0/1)
-  mask: switch_valid            # decision rounds only (needs switch_every)
+  mask: switch_valid            # decision rows only (needs switch_every)
   exclude_flipped: true         # train file is already undoubled; no-op safety filter
   switch_every: 4               # decision cadence -> sets switch_mask/switch_valid
 
 cv:
   seed: 38381
   n_folds: 8
-  output: data/baselines/switch_cv_output_cat_prev.csv
+  output: data/baselines/switch_cv_output_cat.csv
 
 setting:              # multinomial logistic; only C is valid here
   C: [0.3, 1.0, 3.0]
 
-# LEAKAGE NOTE: we predict does_switch[t] (the group choice at round t). Any
-# feature built from round-t quantities encodes that choice, so we use only
-# strictly t-1 (or exogenous) features. In particular:
-#   * switched_last_choice / group_size (current) / rounds_since_switch are
-#     EXCLUDED -- they read does_switch[t] / agent_group[t].
-#   * B5/B6 use the prev_win_* variants (window value as of t-1, whose reset uses
-#     does_switch[<t]) instead of win_* (which reset on does_switch[t]).
-#   * B2/B3/B4 use the lag_* twins (t-1 values over t-1 membership -- the group
-#     as it stood before the decision). The standard prev_*_mean_* features
-#     aggregate over agent_group[t], i.e. the post-decision membership (the
-#     target itself).
-#   * B7 uses prev_switched_last_choice (switch at the PREVIOUS decision) instead
-#     of switched_last_choice; prev_group_size (t-1) already carries size info.
+# ANCHORING (#123): does_switch[s] is the decision taken at the END of round s
+# (rounds 3, 7, ... 0-indexed) -- the membership change materialises at s+1.
+# Round-s outcomes are therefore fully observed before the decision, so the
+# CURRENT (no-prefix) family is the natural, leak-free feature set here. The
+# lag_* / prev_win_* twins that the old arrival-round anchoring required are
+# gone. Semantics per notes/baseline_feature_defs.md.
 blocks:
-  B1_self:                    # own inertia
-    components: [prev_contribution, prev_punishment]
-    sets: [[prev_contribution, prev_punishment], [prev_contribution]]
+  B1_self:                    # own round-s outcome
+    components: [contribution, punishment, payoff]
+    sets: [[contribution, punishment], [contribution, payoff], [contribution]]
 
-  B2_own_group:               # group-mates as of t-1, leave-one-out (cg omitted: = B1 prev_common_good)
-    components: [lag_contribution_mean_peers, lag_punishment_mean_peers, lag_payoff_mean_group, prev_group_size, prev_common_good]
-    sets:    [[lag_contribution_mean_peers, lag_punishment_mean_peers, prev_group_size], [lag_payoff_mean_group, prev_group_size], [prev_common_good, prev_group_size], [lag_payoff_mean_group], [prev_common_good], [lag_contribution_mean_peers, prev_group_size], [lag_contribution_mean_peers]]
-  
-  B3_other_group:             # the other group
-    components: [lag_contribution_mean_other, lag_punishment_mean_other, lag_common_good_mean_other, lag_payoff_mean_other, prev_group_size_other]
-    sets:    [[lag_contribution_mean_other, lag_punishment_mean_other, prev_group_size_other], [lag_payoff_mean_other, prev_group_size_other], [lag_common_good_mean_other, prev_group_size_other], [lag_contribution_mean_other, prev_group_size_other], [lag_contribution_mean_other], [lag_payoff_mean_other], [lag_common_good_mean_other]]
+  B2_own_group:               # own group this round, self excluded
+    components: [contribution_mean_group, punishment_mean_group, payoff_mean_group, group_size, common_good]
+    sets:    [[contribution_mean_group, punishment_mean_group, group_size], [payoff_mean_group, group_size], [common_good, group_size], [payoff_mean_group], [common_good], [contribution_mean_group, group_size], [contribution_mean_group]]
+
+  B3_other_group:             # the other group this round
+    components: [contribution_mean_other, punishment_mean_other, common_good_other, payoff_mean_other, group_size_other]
+    sets:    [[contribution_mean_other, punishment_mean_other, group_size_other], [payoff_mean_other, group_size_other], [common_good_other, group_size_other], [contribution_mean_other, group_size_other], [contribution_mean_other], [payoff_mean_other], [common_good_other]]
 
   B4_gap:                     # own - other
-    components: [lag_contribution_mean_gap, lag_punishment_mean_gap, lag_common_good_mean_gap, lag_payoff_mean_gap, prev_group_size_delta]
-    sets:    [[lag_contribution_mean_gap, lag_punishment_mean_gap, prev_group_size_delta], [lag_payoff_mean_gap, prev_group_size_delta], [lag_common_good_mean_gap, prev_group_size_delta], [lag_contribution_mean_gap, prev_group_size_delta], [lag_common_good_mean_gap], [lag_payoff_mean_gap], [prev_group_size_delta]]
+    components: [contribution_mean_gap, punishment_mean_gap, common_good_gap, payoff_mean_gap, group_size_delta]
+    sets:    [[contribution_mean_gap, punishment_mean_gap, group_size_delta], [payoff_mean_gap, group_size_delta], [common_good_gap, group_size_delta], [contribution_mean_gap, group_size_delta], [common_good_gap], [payoff_mean_gap], [group_size_delta]]
 
-  B5_own_since_switch:        # own-group window as of t-1 (leakage-safe: reset uses does_switch[<t], not [t])
-    components: [prev_win_contribution_mean_peers, prev_win_punishment_mean_peers, prev_win_common_good_peers, prev_win_payoff_mean_peers]
-    sets:    [[prev_win_contribution_mean_peers, prev_win_punishment_mean_peers], [prev_win_payoff_mean_peers], [prev_win_common_good_peers]]
+  B5_own_since_switch:        # own-group tenure window through round s
+    components: [win_contribution_mean_group, win_punishment_mean_group, win_common_good, win_payoff_mean_group]
+    sets:    [[win_contribution_mean_group, win_punishment_mean_group], [win_payoff_mean_group], [win_common_good]]
 
-  B6_other_since_switch:      # other-group window as of t-1 (leakage-safe)
-    components: [prev_win_contribution_mean_other, prev_win_punishment_mean_other, prev_win_common_good_other, prev_win_payoff_mean_other]
-    sets:    [[prev_win_contribution_mean_other, prev_win_punishment_mean_other], [prev_win_common_good_other], [prev_win_payoff_mean_other]]
+  B6_other_since_switch:      # other-group tenure window through round s
+    components: [win_contribution_mean_other, win_punishment_mean_other, win_common_good_other, win_payoff_mean_other]
+    sets:    [[win_contribution_mean_other, win_punishment_mean_other], [win_common_good_other], [win_payoff_mean_other]]
 
-  B7_structural:              # exogenous / t-1 context (round_number + prev-decision switch)
-    components: [round_number, prev_switched_last_choice]
-    sets: [[round_number], [round_number, prev_switched_last_choice], [prev_switched_last_choice]]
+  B7_structural:              # exogenous / past-decision context
+    components: [round_number, switched_last_choice, rounds_since_switch]
+    sets: [[round_number], [round_number, switched_last_choice], [switched_last_choice], [rounds_since_switch], [round_number, rounds_since_switch]]

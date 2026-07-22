@@ -344,11 +344,6 @@ class ArtificialHumanEnv:
         self.update_groups(self.initial_agent_groups.clone())
         self.reset_state()
         self.update_contribution()
-        # Prime the switch predictor at round 0 so its RNN processes
-        # every round's features (matches training-time full-sequence
-        # RNN semantics). Output is discarded; no switches at round 0.
-        if self.artifical_humans_switch is not None:
-            self._run_switch_predictor()
         return self.state
 
     def punish(self, punishment):
@@ -370,11 +365,8 @@ class ArtificialHumanEnv:
         )
         return does_switch.squeeze(-1).to(th.bool)
 
-    def update_groups_from_switch_predictor(self):
-        """Use the switch predictor to update group assignments."""
-        does_switch = self._run_switch_predictor()
-
-        # Flip group: 0->1, 1->0
+    def apply_switch(self, does_switch):
+        """Apply a switch decision: flip group 0<->1 for the switchers."""
         current_groups = self.agent_groups.squeeze(-1)
         new_groups = th.where(does_switch, 1 - current_groups, current_groups)
         self.update_groups(new_groups)
@@ -382,10 +374,27 @@ class ArtificialHumanEnv:
 
     def step(self):
         assert self.state is not None
-        self.round_number += 1
-        self.is_first = th.zeros_like(self.is_first)
         if self.done:
             raise ValueError("Environment is done already.")
+
+        # End of the current round s: punish() has run, so round-s outcomes
+        # are complete. The switch decision is taken NOW (#123, re-anchored at
+        # the pre-switch round) and the membership change applied at s+1.
+        # Call the predictor every round so its RNN sees every round's
+        # features; only use the output when s+1 is an arrival round.
+        pending_switch = None
+        if self.artifical_humans_switch is not None:
+            does_switch = self._run_switch_predictor()
+            next_round = int(self.round_number[0, 0, 0]) + 1
+            if (
+                self.switch_every is not None
+                and next_round % self.switch_every == 0
+                and next_round < self.n_rounds
+            ):
+                pending_switch = does_switch
+
+        self.round_number += 1
+        self.is_first = th.zeros_like(self.is_first)
         for k in self.state:
             if k[:4] == "prev":
                 self.state[k] = self.state[k[5:]]
@@ -393,18 +402,8 @@ class ArtificialHumanEnv:
         if self.round_number[0, 0] == (self.n_rounds):
             self.done = True
         else:
-            # Switch predictor: keep its RNN warm by calling every round.
-            # Only USE the output to flip groups at decision rounds.
-            if self.artifical_humans_switch is not None:
-                is_decision_round = (
-                    self.switch_every is not None
-                    and self.round_number[0, 0, 0] % self.switch_every == 0
-                )
-                if is_decision_round:
-                    self.update_groups_from_switch_predictor()
-                else:
-                    self._run_switch_predictor()
-
+            if pending_switch is not None:
+                self.apply_switch(pending_switch)
             self.update_contribution()
         self.update_reward()
         return self.state, self.reward, self.done
