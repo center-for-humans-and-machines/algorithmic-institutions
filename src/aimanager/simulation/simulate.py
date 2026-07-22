@@ -20,7 +20,7 @@ import seaborn as sns
 import torch as th
 import yaml
 
-from aimanager.artificial_humans import GraphNetwork
+from aimanager.simulation.linear_ah import load_ah_model
 from aimanager.manager.api_manager import MultiManager
 from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.manager.memory import Memory
@@ -197,8 +197,20 @@ def run_simulation(config: dict, output_dir: str) -> list:
             basedir, artificial_humans[run["humans"]]["valid_model"]
         )
 
-        ah = GraphNetwork.load(hm_path, device=device)
-        ah_val = GraphNetwork.load(hmv_path, device=device)
+        # .joblib -> linear-baseline adapter, .pt -> GNN (a config may mix both,
+        # e.g. GNN valid_model + linear contribution/switch models). See #121.
+        ah = load_ah_model(
+            hm_path,
+            device=device,
+            n_agents=n_agents,
+            n_contributions=n_contributions,
+        )
+        ah_val = load_ah_model(
+            hmv_path,
+            device=device,
+            n_agents=n_agents,
+            n_contributions=n_contributions,
+        )
 
         # Load optional switch predictor
         ah_switch = None
@@ -206,7 +218,12 @@ def run_simulation(config: dict, output_dir: str) -> list:
         ah_config = artificial_humans[run["humans"]]
         if "switch_model" in ah_config:
             hms_path = os.path.join(basedir, ah_config["switch_model"])
-            ah_switch = GraphNetwork.load(hms_path, device=device)
+            ah_switch = load_ah_model(
+                hms_path,
+                device=device,
+                n_agents=n_agents,
+                n_contributions=n_contributions,
+            )
 
         agent_groups = config.get("agent_groups", None)
         reward_mode = config.get("reward_mode", "sum")
@@ -370,9 +387,7 @@ def create_plots(
     # value per episode -- the correct unweighted per-episode mean.
     _gkeys = ["run", "episode", "round_number", "group_id"]
     df["payoff_sum"] = (
-        df.groupby(_gkeys)["payoff"]
-        .transform("sum")
-        .where(~df.duplicated(_gkeys))
+        df.groupby(_gkeys)["payoff"].transform("sum").where(~df.duplicated(_gkeys))
     )
 
     if "group_id" in df.columns:
