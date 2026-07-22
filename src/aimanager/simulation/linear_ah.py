@@ -33,9 +33,9 @@ from pathlib import Path
 import numpy as np
 import torch as th
 
-# build_feature_pool is the single source of truth for the feature engineering
-# (kept in scripts/baselines with the CV driver + the parity test). Import it
-# rather than re-derive, so sim features can never drift from training.
+# build_feature_pool (scripts/baselines) is the single source of truth for the
+# feature engineering (spec: notes/baseline_feature_defs.md; parity test:
+# tests/baselines). Import it so sim features can never drift from training.
 _ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_ROOT / "scripts" / "baselines"))
 from handcrafted_grid import build_feature_pool  # noqa: E402

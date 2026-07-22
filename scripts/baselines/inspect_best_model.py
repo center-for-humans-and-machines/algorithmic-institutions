@@ -157,7 +157,7 @@ def save_best(args, df, cfg, model, n_levels, metric_col, prep_tr):
         )
 
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
-    name = f"{cfg['data']['target']}_{model}_best.joblib"
+    name = args.name or f"{cfg['data']['target']}_{model}_best.joblib"
     joblib.dump(bundle, ARTIFACTS / name)
 
     print(f"\nbest model [{model}]: {row['config']}  ({label})  n={len(feats)}")
@@ -244,6 +244,12 @@ def main():
         action="store_true",
         help="refit the best (rank) model on all train, save under "
         "artifacts/, and evaluate on the locked test split",
+    )
+    ap.add_argument(
+        "--name",
+        default=None,
+        help="bundle filename for --save-best "
+        "(default <target>_<model>_best.joblib)",
     )
     args = ap.parse_args()
 

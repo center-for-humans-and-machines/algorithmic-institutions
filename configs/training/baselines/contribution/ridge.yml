@@ -15,6 +15,7 @@ cv:
   seed: 38381
   n_folds: 8
   output: data/baselines/large_set_ridge_cv.csv          # the combination of reg param and feature set with its loss ordered from best to worst in csv format
+  show_ce: true
 
 # Hyper-parameter sweep for the chosen model; every key is griddable (scalar or
 # list -> Cartesian). Allowed keys: ridge -> alpha; gaussian -> weight_decay, lr,
@@ -24,28 +25,32 @@ setting:
 
 blocks:
   B1_self:                    # own inertia
-    components: [prev_contribution, prev_punishment]
-    sets: [[prev_contribution, prev_punishment], [prev_contribution]]
+    components: [prev_contribution, prev_punishment, prev_payoff]
+    sets: [[prev_contribution, prev_punishment], [prev_contribution, prev_payoff], [prev_contribution]]
 
-  B2_own_group:               # current group-mates, leave-one-out (cg omitted: = B1 prev_common_good)
-    components: [prev_contribution_mean_peers, prev_punishment_mean_peers, prev_payoff_mean_group, prev_group_size, prev_common_good]
-    sets:    [[prev_contribution_mean_peers, prev_punishment_mean_peers, prev_group_size], [prev_payoff_mean_group, prev_group_size], [prev_common_good, prev_group_size], [prev_payoff_mean_group], [prev_common_good], [prev_contribution_mean_peers, prev_group_size], [prev_contribution_mean_peers]]
-  
+  # Semantics per baseline_feature_defs.md: *_mean_group / *_other are
+  # OBSERVATIONAL -- t-1 values over the t-1 roster of the CURRENT group ids,
+  # so at an arrival round `group` is the joined group as observed before
+  # joining. The switch grid uses the lag_* twins.
+  B2_own_group:               # own group, self excluded
+    components: [prev_contribution_mean_group, prev_punishment_mean_group, prev_payoff_mean_group, prev_group_size, prev_common_good]
+    sets:    [[prev_contribution_mean_group, prev_punishment_mean_group, prev_group_size], [prev_contribution_mean_group, prev_group_size], [prev_contribution_mean_group], [prev_payoff_mean_group, prev_group_size], [prev_common_good, prev_group_size], [prev_payoff_mean_group], [prev_common_good]]
+
   B3_other_group:             # the other group
-    components: [prev_contribution_mean_other, prev_punishment_mean_other, prev_common_good_mean_other, prev_payoff_mean_other, prev_group_size_other]
-    sets:    [[prev_contribution_mean_other, prev_punishment_mean_other, prev_group_size_other], [prev_payoff_mean_other, prev_group_size_other], [prev_common_good_mean_other, prev_group_size_other], [prev_contribution_mean_other, prev_group_size_other], [prev_contribution_mean_other], [prev_payoff_mean_other], [prev_common_good_mean_other]]
+    components: [prev_contribution_mean_other, prev_punishment_mean_other, prev_common_good_other, prev_payoff_mean_other, prev_group_size_other]
+    sets:    [[prev_contribution_mean_other, prev_punishment_mean_other, prev_group_size_other], [prev_payoff_mean_other, prev_group_size_other], [prev_common_good_other, prev_group_size_other], [prev_contribution_mean_other, prev_group_size_other], [prev_contribution_mean_other], [prev_payoff_mean_other], [prev_common_good_other]]
 
   B4_gap:                     # own - other
-    components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_mean_gap, prev_payoff_mean_gap, prev_group_size_delta]
-    sets:    [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_common_good_mean_gap, prev_group_size_delta], [prev_contribution_mean_gap, prev_group_size_delta], [prev_common_good_mean_gap], [prev_payoff_mean_gap], [prev_group_size_delta]]
+    components: [prev_contribution_mean_gap, prev_punishment_mean_gap, prev_common_good_gap, prev_payoff_mean_gap, prev_group_size_delta]
+    sets:    [[prev_contribution_mean_gap, prev_punishment_mean_gap, prev_group_size_delta], [prev_payoff_mean_gap, prev_group_size_delta], [prev_common_good_gap, prev_group_size_delta], [prev_contribution_mean_gap, prev_group_size_delta], [prev_common_good_gap], [prev_payoff_mean_gap], [prev_group_size_delta]]
 
-  B5_own_since_switch:        # own-group running mean over current tenure
-    components: [win_contribution_mean_peers, win_punishment_mean_peers, win_common_good_mean_peers, win_payoff_mean_peers]
-    sets:    [[win_contribution_mean_peers, win_punishment_mean_peers], [win_payoff_mean_peers], [win_common_good_mean_peers]]
+  B5_own_since_switch:        # current group's running mean over the agent's tenure (starts on the joined group)
+    components: [win_contribution_mean_peers, win_punishment_mean_peers, win_common_good_peers, win_payoff_mean_peers]
+    sets:    [[win_contribution_mean_peers, win_punishment_mean_peers], [win_payoff_mean_peers], [win_common_good_peers]]
 
-  B6_other_since_switch:      # other-group running mean over current tenure
-    components: [win_contribution_mean_other, win_punishment_mean_other, win_common_good_mean_other, win_payoff_mean_other]
-    sets:    [[win_contribution_mean_other, win_punishment_mean_other], [win_common_good_mean_other], [win_payoff_mean_other]]
+  B6_other_since_switch:      # other-group running mean over the agent's tenure
+    components: [win_contribution_mean_other, win_punishment_mean_other, win_common_good_other, win_payoff_mean_other]
+    sets:    [[win_contribution_mean_other, win_punishment_mean_other], [win_common_good_other], [win_payoff_mean_other]]
 
   B7_structural:              
     components: [round_number, switched_last_choice, rounds_since_switch, group_size]

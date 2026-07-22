@@ -25,9 +25,7 @@ import pandas as pd
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SOURCE = (
-    ROOT / "configs/training/baselines/contribution/ridge.yml"
-)
+DEFAULT_SOURCE = ROOT / "configs/training/baselines/contribution/ridge.yml"
 CONFIG_DIR = ROOT / "configs/training/baselines/contribution"
 
 # gaussian defaults baked into the generated config (all griddable -- edit freely)
@@ -42,12 +40,15 @@ def _fmt(x):
 
 
 def used_sets(df, top_n):
-    """{block: sorted set-indices} appearing among the top-N unique feature-sets."""
-    top = df[df["rank"] <= top_n].drop_duplicates("config")
+    """{block: sorted set-indices} appearing among the top-N unique feature-sets.
+
+    Dedup BEFORE the rank cut: setting sweeps put near-tied duplicates of the
+    same feature-set in the top ranks, so filtering `rank <= top_n` first would
+    silently shrink the candidate pool (~half of top_n)."""
+    uniq = df.sort_values("rank").drop_duplicates("config")
+    top = uniq[uniq["config"] != "floor"].head(top_n)
     used = defaultdict(set)
     for cfg_label in top["config"]:
-        if cfg_label == "floor":
-            continue
         for part in cfg_label.split("+"):
             blk, s = part.split(":")
             used[blk].add(int(s[1:]))  # 'sN' -> N
