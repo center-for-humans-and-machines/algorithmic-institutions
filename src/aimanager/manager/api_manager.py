@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
 from aimanager.generic.data import shift
+from aimanager.simulation.linear_ah import LinearAHAdapter
 
 
 class Round(BaseModel):
@@ -184,11 +185,26 @@ class RuleBasedManager:
         return raw.clamp(0, self.n_punishments - 1).to(data["punishment"].dtype)
 
 
+class LinearManager:
+    # consumes the raw two-group round history instead of the create_data view
+    needs_rounds = True
+
+    def __init__(self, model_path, sample=True, **_):
+        import joblib
+
+        self.model = LinearAHAdapter(joblib.load(model_path), sample=sample)
+        self.default_values = self.model.default_values
+
+    def get_punishments(self, rounds):
+        return self.model.get_punishments(rounds)
+
+
 MANAGER_CLASS = {
     "human": HumanManager,
     "rl": RLManager,
     "dummy": DummyManager,
     "rule_based": RuleBasedManager,
+    "linear": LinearManager,
 }
 
 
@@ -216,9 +232,20 @@ class MultiManager:
         data = {
             k: create_data(rounds, self.groups, m.default_values)
             for k, m in self.managers.items()
+            if not getattr(m, "needs_rounds", False)
         }
 
-        punishment = {k: m.get_punishments(data[k]) for k, m in self.managers.items()}
+        punishment = {}
+        for k, m in self.managers.items():
+            if getattr(m, "needs_rounds", False):
+                # raw round history in, per-agent [A] out; expand to the
+                # [groups, A, T] shape the selection below slices
+                pred = m.get_punishments(rounds)
+                punishment[k] = pred.view(1, -1, 1).expand(
+                    len(self.groups), -1, len(rounds)
+                )
+            else:
+                punishment[k] = m.get_punishments(data[k])
 
         # we select from the model responds only those matching the right group
         # this is the same for all models and independent of the actual model of

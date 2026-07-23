@@ -117,7 +117,7 @@ C6 = [
     "win_group_size_other",
 ]
 # structural (shared)
-B7 = ["round_number", "rounds_since_switch", "switched_last_choice"]
+B7 = ["round_number", "rounds_since_switch", "switched_last_choice", "is_first"]
 
 PREV_FAMILY = B1 + B2 + B3 + B4 + B5 + B6
 CUR_FAMILY = C1 + C2 + C3 + C4 + C5 + C6
@@ -447,6 +447,7 @@ def _add_b7(ref, ds):
         if last_arr > 0:
             slc[t] = float(ds[last_arr])
     ref["ref_switched_last_choice"] = slc
+    ref["ref_is_first"] = (np.arange(T) == 0).astype(float)
 
 
 def build_reference():
@@ -614,6 +615,80 @@ def test_switch_adapter_matches_reference(switch_adapter_compared, feature):
     ref, ada = switch_adapter_compared[feature]
     bad = np.where(~np.isclose(ref, ada, atol=1e-4))[0]
     assert len(bad) == 0, f"switch adapter {feature} mismatch at rounds {bad.tolist()}"
+
+
+# --------------------------------------------------------------------------- #
+# punishment-manager side (src): the rounds-driven LinearAHAdapter entry (#127).
+# Replay the episode as the sim would (rounds < t complete, round t punishments
+# still None); this path also RECOMPUTES per-capita common good (env formula),
+# so the replay cross-checks that reconstruction against the recorded data.
+# --------------------------------------------------------------------------- #
+def manager_features():
+    import torch as th  # noqa: F401  (linear_ah imports torch)
+
+    sys.path.insert(0, str(ROOT / "scripts/baselines"))
+    from aimanager.simulation.linear_ah import LinearAHAdapter
+
+    bank = pd.read_csv(DATA / "episode_raw.csv").set_index("round_number")
+    T = len(bank)
+    c_def, p_def, cg_def = _dataset_defaults()
+    bundle = {  # only the fields the adapter reads to rebuild features
+        "model": "ridge",
+        "estimator": None,
+        "scaler": None,
+        "features": [],
+        "target": "punishment",
+        "n_levels": 31,
+        "switch_every": SWITCH_EVERY,
+        "default_values": {
+            "contribution": c_def,
+            "punishment": p_def,
+            "common_good": cg_def,
+        },
+    }
+    mgr = LinearAHAdapter(bundle)
+
+    def cell(t, j, field):
+        v = bank.loc[t, f"p{j}_{field}"]
+        return None if pd.isna(v) else float(v)
+
+    full = [
+        {
+            "contribution": [cell(t, j, "contribution") for j in range(8)],
+            "contribution_valid": [
+                bool(bank.loc[t, f"p{j}_noinput"] == 0) for j in range(8)
+            ],
+            "punishment": [cell(t, j, "punishment") for j in range(8)],
+            "punishment_valid": [True] * 8,
+            "agent_group": [int(bank.loc[t, f"p{j}_grp"]) for j in range(8)],
+            "round": t,
+        }
+        for t in range(T)
+    ]
+
+    collected = {name: np.zeros(T) for name in CONTRIB_SAFE}
+    for t in range(T):
+        cur = {**full[t], "punishment": [None] * 8, "punishment_valid": [False] * 8}
+        pool = mgr._pool_from_rounds(full[:t] + [cur])
+        for name in CONTRIB_SAFE:
+            collected[name][t] = pool[name][0, TARGET, t]
+    return collected
+
+
+@pytest.fixture(scope="module")
+def manager_compared():
+    ref = build_reference()
+    man = manager_features()
+    return {
+        name: (ref[f"ref_{name}"].to_numpy(float), man[name]) for name in CONTRIB_SAFE
+    }
+
+
+@pytest.mark.parametrize("feature", CONTRIB_SAFE)
+def test_punishment_manager_matches_reference(manager_compared, feature):
+    ref, man = manager_compared[feature]
+    bad = np.where(~np.isclose(ref, man, atol=1e-4))[0]
+    assert len(bad) == 0, f"manager {feature} mismatch at rounds {bad.tolist()}"
 
 
 if __name__ == "__main__":  # manual eyeball: dump ref vs pipe side by side
