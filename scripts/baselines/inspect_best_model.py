@@ -153,7 +153,7 @@ def save_best(args, df, cfg, model, n_levels, metric_col, prep_tr):
         bundle["test_logloss_binned"] = test_ll
         extra.append(
             f"  TEST binned log-loss = {test_ll:.4f}   "
-            f"(21-way; comparable to the GNN contribution log-loss)"
+            f"({k}-way; comparable to the GNN's categorical log-loss)"
         )
 
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
