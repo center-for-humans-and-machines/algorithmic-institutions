@@ -4,10 +4,11 @@ Q4 event study on a sim's per_round.parquet: for every switch (agent_group
 changes between rounds), regress the switcher's post-switch contribution on
 their own pre-switch contribution and the new group's mean contribution at the
 PREVIOUS round (t-1) -- the level the switcher could observe when choosing at
-arrival. Coefficients are RAW (non-standardised): pre / new_peers / post are all
-contribution on the same 0-20 scale, so the betas read directly as mixing weights
-in contribution units -- new_peers is how far (per contribution point) a switcher
-moves toward the new group's norm (conditional cooperation), as humans do.
+arrival. Coefficients are RAW (non-standardised): own_prev_contr /
+new_group_prev_contr_mean / post are all contribution on the same 0-20 scale,
+so the betas read directly as mixing weights in contribution units --
+new_group_prev_contr_mean is how far (per contribution point) a switcher moves
+toward the new group's norm (conditional cooperation), as humans do.
 
 The new-group peer term is the strictly-causal lagged level (t-1), not the
 concurrent arrival-round mean.
@@ -37,14 +38,15 @@ import sys
 import numpy as np
 import pandas as pd
 
-# Human 50ep reference: raw (non-standardised) betas from this event study on the
-# real undoubled data (flipped copies dropped, N=539). post ~= 2.85 + 0.46*own_pre
-# + 0.28*new_peers -- switchers move ~0.28 contribution units toward the new
-# group's level per point (partial adoption of the new norm).
+# Human 50ep reference: raw (non-standardised) betas from this event study on
+# the real undoubled data (flipped copies dropped, N=539). post ~= 2.85
+# + 0.46*own_prev_contr + 0.28*new_group_prev_contr_mean -- switchers move
+# ~0.28 contribution units toward the new group's level per point (partial
+# adoption of the new norm).
 HUMAN = {
     "n": 539,
-    "own_pre": 0.464,
-    "new_peers": 0.284,
+    "own_prev_contr": 0.464,
+    "new_group_prev_contr_mean": 0.284,
     "raw_pre": 7.76,
     "raw_peers": 10.50,
     "raw_post": 9.43,
@@ -63,7 +65,8 @@ def ols(df, feats, tgt):
 
 
 def build_switches(per_round_path):
-    """Per-switch frame: one row per arrival round, with pre/post/new_peers."""
+    """Per-switch frame: one row per arrival round, with
+    pre/post/new_group_prev_contr_mean."""
     df = pd.read_parquet(per_round_path)
     df = df.sort_values(["run", "episode", "participant_code", "round_number"])
     g = df.groupby(["run", "episode", "participant_code"])
@@ -78,25 +81,25 @@ def build_switches(per_round_path):
         .mean()
         .to_dict()
     )
-    df["new_peers"] = [
+    df["new_group_prev_contr_mean"] = [
         gmean.get((run, ep, rn - 1, ag), np.nan)
         for run, ep, rn, ag in df[
             ["run", "episode", "round_number", "agent_group"]
         ].values
     ]
     sw = df[df["switch"]].rename(columns={"contribution": "post"})
-    return sw.dropna(subset=["pre", "post", "new_peers"])
+    return sw.dropna(subset=["pre", "post", "new_group_prev_contr_mean"])
 
 
 def q4_betas(sw):
     """Standardised Q4 regression on a switch frame -> result dict."""
-    betas, n = ols(sw, ["pre", "new_peers"], "post")
+    betas, n = ols(sw, ["pre", "new_group_prev_contr_mean"], "post")
     return {
         "n": n,
-        "own_pre": betas["pre"],
-        "new_peers": betas["new_peers"],
+        "own_prev_contr": betas["pre"],
+        "new_group_prev_contr_mean": betas["new_group_prev_contr_mean"],
         "raw_pre": sw["pre"].mean(),
-        "raw_peers": sw["new_peers"].mean(),
+        "raw_peers": sw["new_group_prev_contr_mean"].mean(),
         "raw_post": sw["post"].mean(),
     }
 
@@ -107,8 +110,9 @@ def q4(per_round_path):
 
 def fmt(label, r):
     return (
-        f"{label:<26} {r['n']:>6}  {r['own_pre']:+.3f}     {r['new_peers']:+.3f}"
-        f"      {r['raw_pre']:.2f} -> {r['raw_peers']:.2f} -> {r['raw_post']:.2f}"
+        f"{label:<26} {r['n']:>6}  {r['own_prev_contr']:>+14.3f}  "
+        f"{r['new_group_prev_contr_mean']:>+25.3f}      "
+        f"{r['raw_pre']:.2f} -> {r['raw_peers']:.2f} -> {r['raw_post']:.2f}"
     )
 
 
@@ -126,8 +130,10 @@ def main():
     )
     args = parser.parse_args()
 
-    print(f"{'source':<26} {'N':>6}  own_pre   new_peers   "
-          f"mean: pre -> peers -> post   (raw OLS betas, contribution units)")
+    print(
+        f"{'source':<26} {'N':>6}  own_prev_contr   new_group_prev_contr_mean   "
+        f"mean: pre -> peers -> post   (raw OLS betas, contribution units)"
+    )
     print(fmt("HUMAN (50ep)", HUMAN))
     for d in args.sim_dirs:
         path = os.path.join(d, "per_round.parquet")
