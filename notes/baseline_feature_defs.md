@@ -9,6 +9,8 @@ Group/Other is always keyed to the agent's CURRENT group id at the row being rea
 
 Leak rule: any current-family feature that reads round-t contributions/punishments/common good (self values, group/other/gap means, win_* windows) is ILLEGAL for the contribution target and rejected with a hard error at config validation.
 
+- **Punishment target (#127).** Prev-anchored like the contribution target: the punishment predictor at row t conditions on round t-1 only, matching its GNN's feature convention (`prev_contribution`, `prev_punishment`). The whole current family is ILLEGAL for it, rejected with the same hard error.
+
 ## Current -- Self
 
 **contribution:** own contribution this round
@@ -113,5 +115,6 @@ Leak rule: any current-family feature that reads round-t contributions/punishmen
 ## Structural (shared, legal for both targets)
 
 **round_number:** current round number
+**is_first:** whether this is round 0 -- there the prev_* cells hold imputed dataset medians, not observations, and this flag lets a linear model discount them (GNN parity)
 **switched_last_choice:** whether the agent switched at the most recent decision round before this row
 **rounds_since_switch:** the number of rounds since the last switch of the agent (0 at the arrival round)

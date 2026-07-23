@@ -193,9 +193,12 @@ CURRENT_VALUED = frozenset(
 
 
 def validate_feature_legality(cfg):
-    """Hard error if a contribution-target config selects a current-valued
-    feature (issue #123 leak rule)."""
-    if cfg["data"]["target"] != "contribution":
+    """Hard error if a contribution- or punishment-target config selects a
+    current-valued feature (leak rules #123 / #127). Both targets are
+    prev-anchored -- the punishment predictor conditions on round t-1 only,
+    like its GNN (prev_contribution, prev_punishment); only the switch target
+    may read the current family."""
+    if cfg["data"]["target"] not in ("contribution", "punishment"):
         return
     used = {
         feat
@@ -206,8 +209,9 @@ def validate_feature_legality(cfg):
     illegal = sorted(used & CURRENT_VALUED)
     if illegal:
         raise ValueError(
-            "current-valued features are illegal for the contribution target "
-            f"(they read the target's round): {illegal}"
+            f"current-valued features are illegal for the "
+            f"{cfg['data']['target']} target (they read the target's round): "
+            f"{illegal}"
         )
 
 
@@ -357,6 +361,9 @@ def build_feature_pool(d, switch_every):
 
     # ---------------- structural (shared) ---------------- #
     f["round_number"] = npd["round_number"].astype(float)
+    # round 0's prev_* cells hold imputed dataset medians, not observations;
+    # this boolean lets a linear model discount them (GNN parity: is_first).
+    f["is_first"] = (npd["round_number"] == 0).astype(float)
     f["rounds_since_switch"] = _rounds_since_switch(arrival)
     f["switched_last_choice"] = _switched_last_choice(arrival, switch_every)
 
