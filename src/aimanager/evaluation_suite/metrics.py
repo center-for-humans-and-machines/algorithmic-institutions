@@ -239,6 +239,7 @@ class ResponseMetrics(MetricGroup):
         "RCA": "stratified_distribution",
         "RCB": "statistic",
         "RCC": "statistic",
+        "RCD": "statistic",
     }
 
     def rca(self, df):
@@ -281,6 +282,18 @@ class ResponseMetrics(MetricGroup):
 
     def rcc_weights(self, df=None):
         return pd.Series({"contrast": 1.0})
+
+    def rcd(self, df):
+        """Switching pull: the OLS slope of dc on the gap to the receiving
+        group over switch events (C_{n+1} - C_n ~ Chat - C_n) -- how far
+        switchers move toward their new group's level."""
+        events = self._switch_events(df).dropna(subset=["dc", "receiving_mean"])
+        gap = events["receiving_mean"] - events["contribution"]
+        slope = gap.cov(events["dc"]) / gap.var()
+        return pd.Series({"pull": slope}, name="RCD")
+
+    def rcd_weights(self, df=None):
+        return pd.Series({"pull": 1.0})
 
     def _rcb_population(self, df):
         d = self._with_dc(df)

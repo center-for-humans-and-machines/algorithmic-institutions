@@ -224,6 +224,10 @@ def test_human_response_pins(human):
         ">1": 277,
     }
     assert R.rcc(human).loc["contrast"] == pytest.approx(-7.035, abs=1e-3)
+    assert R.rcd(human).loc["pull"] == pytest.approx(0.430247, abs=1e-5)
+    # 539 Q4-study events minus 26 tainted by no-input masking
+    events = R._switch_events(human).dropna(subset=["dc", "receiving_mean"])
+    assert len(events) == 513
     assert R.weights("RCA", human).to_dict() == {
         "no_switch_allowed": 6902,
         "stayed_comp_changed": 1102,
@@ -394,6 +398,50 @@ def test_rcc_contrast(response_frame):
         "contribution",
     ] = 20.0
     assert R.d("RCC", response_frame, bumped) == pytest.approx(2.0)
+
+
+@pytest.fixture()
+def pull_frame():
+    """Two episodes, one switch each, engineered for an exact pull slope:
+    event 1 gap +4 with dc +2, event 2 gap -2 with dc -1 -> slope 0.5."""
+    rows = [
+        (0, "s1", 3, 0, 6.0, 0.0, True, True, True),
+        (0, "p", 3, 1, 10.0, 0.0, False, True, True),
+        (0, "s1", 4, 1, 8.0, 0.0, False, False, False),
+        (0, "p", 4, 1, 10.0, 0.0, False, False, False),
+        (1, "s2", 3, 0, 8.0, 0.0, True, True, True),
+        (1, "q", 3, 1, 6.0, 0.0, False, True, True),
+        (1, "s2", 4, 1, 7.0, 0.0, False, False, False),
+        (1, "q", 4, 1, 6.0, 0.0, False, False, False),
+    ]
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "episode_id",
+            "participant_code",
+            "round_number",
+            "group_id",
+            "contribution",
+            "punishment",
+            "does_switch",
+            "switch_mask",
+            "switch_valid",
+        ],
+    )
+
+
+def test_rcd_pull_slope(pull_frame):
+    assert R.rcd(pull_frame).loc["pull"] == pytest.approx(0.5)
+
+
+def test_rcd_d(pull_frame):
+    # s2 lands on 5 instead of 7: dc -1 -> -3, slope (2+3)/(4+2) = 5/6
+    moved = pull_frame.copy()
+    moved.loc[
+        (moved["participant_code"] == "s2") & (moved["round_number"] == 4),
+        "contribution",
+    ] = 5.0
+    assert R.d("RCD", pull_frame, moved) == pytest.approx(1 / 3)
 
 
 def test_switch_events(response_frame):
