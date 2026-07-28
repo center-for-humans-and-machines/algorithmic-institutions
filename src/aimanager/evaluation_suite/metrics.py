@@ -110,4 +110,32 @@ class SwitchingMetrics(MetricGroup):
         return obs.rename("SC")
 
 
-GROUPS = {"C": ContributionMetrics(), "S": SwitchingMetrics()}
+class PunishmentMetrics(MetricGroup):
+    KINDS = {
+        "PA": "distribution",
+        "PB": "statistic",
+        "PC": "statistic",
+    }
+
+    def pa(self, df):
+        """Raw received punishments, zeros included."""
+        return df["punishment"].dropna().rename("PA")
+
+    def pb(self, df):
+        """Round mean punishments."""
+        stat = df.groupby("round_number")["punishment"].mean()
+        return stat.rename("PB")
+
+    def pc(self, df):
+        """Share of players receiving zero punishment per round (the
+        extensive margin: whether to punish, as against how much)."""
+        valid = df.dropna(subset=["punishment"])
+        stat = valid.groupby("round_number")["punishment"].agg(lambda p: p.eq(0).mean())
+        return stat.rename("PC")
+
+
+GROUPS = {
+    "C": ContributionMetrics(),
+    "S": SwitchingMetrics(),
+    "P": PunishmentMetrics(),
+}

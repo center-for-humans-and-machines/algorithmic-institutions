@@ -17,12 +17,17 @@ from aimanager.evaluation_suite.convert import (
     load_human,
     load_sim,
 )
-from aimanager.evaluation_suite.metrics import ContributionMetrics, SwitchingMetrics
+from aimanager.evaluation_suite.metrics import (
+    ContributionMetrics,
+    PunishmentMetrics,
+    SwitchingMetrics,
+)
 
 REPO = Path(__file__).resolve().parents[3]
 
 C = ContributionMetrics()
 S = SwitchingMetrics()
+P = PunishmentMetrics()
 
 
 @pytest.fixture(scope="module")
@@ -33,20 +38,21 @@ def human():
 @pytest.fixture()
 def frame():
     """One episode, four participants. Round 1: participant a gave no
-    input. Round 2: everyone congregates in group 0 (group 1 empty)."""
+    input (and their manager no punishment input). Round 2: everyone
+    congregates in group 0 (group 1 empty)."""
     rows = [
-        (0, "a", 0, 0, 0.0),
-        (0, "b", 0, 0, 10.0),
-        (0, "c", 0, 1, 20.0),
-        (0, "d", 0, 1, 20.0),
-        (0, "a", 1, 0, np.nan),
-        (0, "b", 1, 0, 10.0),
-        (0, "c", 1, 1, 0.0),
-        (0, "d", 1, 1, 20.0),
-        (0, "a", 2, 0, 5.0),
-        (0, "b", 2, 0, 10.0),
-        (0, "c", 2, 0, 15.0),
-        (0, "d", 2, 0, 20.0),
+        (0, "a", 0, 0, 0.0, 0.0),
+        (0, "b", 0, 0, 10.0, 5.0),
+        (0, "c", 0, 1, 20.0, 0.0),
+        (0, "d", 0, 1, 20.0, 10.0),
+        (0, "a", 1, 0, np.nan, np.nan),
+        (0, "b", 1, 0, 10.0, 0.0),
+        (0, "c", 1, 1, 0.0, 30.0),
+        (0, "d", 1, 1, 20.0, 0.0),
+        (0, "a", 2, 0, 5.0, 0.0),
+        (0, "b", 2, 0, 10.0, 0.0),
+        (0, "c", 2, 0, 15.0, 0.0),
+        (0, "d", 2, 0, 20.0, 0.0),
     ]
     return pd.DataFrame(
         rows,
@@ -56,6 +62,7 @@ def frame():
             "round_number",
             "group_id",
             "contribution",
+            "punishment",
         ],
     )
 
@@ -151,6 +158,22 @@ def test_sc_larger_group_keeps_empty_rounds(switch_frame):
     assert (0, 3) not in obs.index  # rounds < 4 excluded
 
 
+def test_pa_raw_punishments(frame):
+    obs = P.pa(frame)
+    assert len(obs) == 11  # the manager-no-input NaN drops
+    assert obs.sum() == pytest.approx(45.0)
+
+
+def test_pb_round_means(frame):
+    stat = P.pb(frame)
+    assert stat.tolist() == pytest.approx([3.75, 10.0, 0.0])  # r1: of 3 valid
+
+
+def test_pc_zero_shares(frame):
+    stat = P.pc(frame)
+    assert stat.tolist() == pytest.approx([0.5, 2 / 3, 1.0])
+
+
 def test_human_reference_pins(human):
     extractions = C.extract_all(human)
     assert {k: len(v) for k, v in extractions.items()} == {
@@ -178,10 +201,20 @@ def test_human_switching_pins(human):
     assert sc.mean() == pytest.approx(6.088, abs=1e-5)
 
 
+def test_human_punishment_pins(human):
+    extractions = P.extract_all(human)
+    pa = extractions["PA"]
+    assert len(pa) == 9193  # 9600 rows - 407 manager-no-input
+    assert pa.mean() == pytest.approx(1.791254, abs=1e-5)
+    assert pa.eq(0).mean() == pytest.approx(0.694224, abs=1e-5)
+    assert extractions["PB"].loc[0] == pytest.approx(4.090659, abs=1e-5)
+    assert extractions["PC"].loc[0] == pytest.approx(0.445055, abs=1e-5)
+
+
 def test_all_metrics_extract_from_sim():
     sims = load_sim(REPO / SIM_EXAMPLE_FILE)
     sim = sims[sorted(sims)[0]]
-    for group in [C, S]:
+    for group in [C, S, P]:
         for name, e in group.extract_all(sim).items():
             assert len(e) > 0, name
             assert not e.isna().any(), name
