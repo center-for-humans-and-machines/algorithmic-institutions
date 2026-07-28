@@ -33,18 +33,20 @@ Each metric has exactly one canonical score. Three score types exist:
 
 1. **abs Δ statistic** -- absolute difference between the human value and the sim
    value of a statistic. When the metric is "per X" (round, opportunity, bin),
-   the difference is computed per stratum and the strata are averaged with
-   weights equal to each stratum's human frequency, fixed once from the full
-   deduped human data (issue #132's scoring schema; for round strata this is
-   close to uniform because rounds are roughly equally populated).
+   the difference is computed per stratum and the strata are averaged. Strata
+   fixed by the game design (rounds, boundary cells, switching opportunities --
+   every C/S/P statistic row) use uniform precomputed weights; strata
+   conditioned on behaviour (the R bins) use weights equal to each stratum's
+   human frequency, fixed once from the full deduped human data (issue #132).
 2. **signed Δ std** -- sim standard deviation minus human standard deviation,
    reported signed and in raw units. Diagnostic only, never a canonical score;
    kept for exactly three rows (CA, CC, CE).
 3. **EMD** -- earth mover's distance between the human and sim distributions
    (`scipy.stats.wasserstein_distance`).
 
-Whenever a canonical score says "per X, averaged", the average uses the same
-human-frequency stratum weights, regardless of whether the per-stratum value is
+Whenever a canonical score says "per X, averaged", the average uses the row's
+weight scheme (uniform for design-fixed strata, human-frequency for
+behaviour-conditioned strata), regardless of whether the per-stratum value is
 an abs Δ or an EMD.
 
 ## Contribution distributions (C)

@@ -19,21 +19,66 @@ count. See notes/evaluation_metric_defs.md for the row definitions.
 """
 
 import pandas as pd
+from scipy.stats import wasserstein_distance
 
 PARTICIPANT = ["episode_id", "participant_code"]
 GROUP_CELL = ["episode_id", "round_number", "group_id"]
+
+ROUNDS = pd.RangeIndex(24, name="round_number")
+DECISION_ROUNDS = pd.Index([3, 7, 11, 15, 19], name="round_number")
+
+
+def _uniform(index):
+    return pd.Series(1.0, index=index)
 
 
 class MetricGroup:
     """Subclasses define KINDS ({row name: 'distribution' | 'statistic'})
     and one extraction method per row, named after the row in lowercase.
     Every method returns a named pd.Series -- observations for
-    distributions, per-stratum values for statistics."""
+    distributions, per-stratum values for statistics. Statistic rows also
+    define a <row>_weights method returning the number of observations
+    underlying each stratum's value."""
 
     KINDS = {}
 
     def extract_all(self, df):
         return {name: getattr(self, name.lower())(df) for name in self.KINDS}
+
+    def weights(self, name, df):
+        """Stratum weights for a statistic row. Strata fixed by the game
+        design (rounds, boundary cells, switching opportunities -- all of
+        C/S/P) carry uniform precomputed weights and ignore df; strata
+        conditioned on behaviour (the R rows, later branch) carry
+        human-frequency weights computed once on the human reference and
+        reused for every comparison (#132)."""
+        return getattr(self, f"{name.lower()}_weights")(df)
+
+    def d(self, name, df_a, df_b, weights=None):
+        """Discrepancy between two datasets on one row, callable on any
+        episode subset (#132's scoring pipeline consumes this directly).
+        Distribution rows: EMD (1-Wasserstein on the empirical samples,
+        no binning). Statistic rows: weighted mean absolute per-stratum
+        difference under the row's weight scheme (see weights()); pass
+        precomputed weights or let them default to weights(name, df_a).
+        Strata missing from either side drop out and the weights
+        renormalise over the rest."""
+        extract = getattr(self, name.lower())
+        a, b = extract(df_a), extract(df_b)
+        if self.KINDS[name] == "distribution":
+            return wasserstein_distance(a, b)
+        if weights is None:
+            weights = self.weights(name, df_a)
+        aligned = pd.concat({"a": a, "b": b, "w": weights}, axis=1).dropna()
+        return ((aligned["a"] - aligned["b"]).abs() * aligned["w"]).sum() / aligned[
+            "w"
+        ].sum()
+
+    def std_diff(self, name, df, reference_df):
+        """Signed std difference in raw units (df minus reference) -- the
+        retained diagnostic for CA/CC/CE, reported unnormalised."""
+        extract = getattr(self, name.lower())
+        return extract(df).std() - extract(reference_df).std()
 
 
 class ContributionMetrics(MetricGroup):
@@ -81,6 +126,13 @@ class ContributionMetrics(MetricGroup):
         )
         return shares.stack().rename("CF")
 
+    def cb_weights(self, df=None):
+        return _uniform(ROUNDS)
+
+    def cf_weights(self, df=None):
+        cells = pd.MultiIndex.from_product([ROUNDS, ["share_at_0", "share_at_20"]])
+        return _uniform(cells)
+
 
 class SwitchingMetrics(MetricGroup):
     KINDS = {
@@ -109,6 +161,12 @@ class SwitchingMetrics(MetricGroup):
         obs = sizes.groupby(["episode_id", "round_number"]).max()
         return obs.rename("SC")
 
+    def sa_weights(self, df=None):
+        return pd.Series({"switch_rate": 1.0})
+
+    def sb_weights(self, df=None):
+        return _uniform(DECISION_ROUNDS)
+
 
 class PunishmentMetrics(MetricGroup):
     KINDS = {
@@ -132,6 +190,11 @@ class PunishmentMetrics(MetricGroup):
         valid = df.dropna(subset=["punishment"])
         stat = valid.groupby("round_number")["punishment"].agg(lambda p: p.eq(0).mean())
         return stat.rename("PC")
+
+    def pb_weights(self, df=None):
+        return _uniform(ROUNDS)
+
+    pc_weights = pb_weights
 
 
 GROUPS = {
