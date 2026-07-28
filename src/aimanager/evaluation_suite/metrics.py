@@ -204,6 +204,75 @@ class PunishmentMetrics(MetricGroup):
     pc_weights = pb_weights
 
 
+class ResponseMetrics(MetricGroup):
+    """R rows (#134): responses conditioned on the stimulus they react to.
+    Rows are added step by step; the helpers below are the shared
+    derivations. Contribution change dc = c_{t+1} - c_t sits at the
+    stimulus round t and is NaN unless both contributions are valid."""
+
+    KINDS = {}
+
+    def _with_dc(self, df):
+        df = df.sort_values(PARTICIPANT + ["round_number"]).copy()
+        by_player = df.groupby(PARTICIPANT)
+        df["next_contribution"] = by_player["contribution"].shift(-1)
+        df["dc"] = df["next_contribution"] - df["contribution"]
+        return df
+
+    def _round_types(self, df):
+        """Label each agent-round with its RCA round type. Timed-out
+        choices at decision rounds are no choice at all and stay
+        unlabelled (NA), like every row the taxonomy does not cover."""
+        df = df.sort_values(PARTICIPANT + ["round_number"]).copy()
+        members = df.groupby(GROUP_CELL)["participant_code"].agg(frozenset)
+        now = members.reindex(
+            list(zip(df["episode_id"], df["round_number"], df["group_id"]))
+        ).to_numpy()
+        nxt = members.reindex(
+            list(zip(df["episode_id"], df["round_number"] + 1, df["group_id"]))
+        ).to_numpy()
+        unchanged = pd.Series([a == b for a, b in zip(now, nxt)], index=df.index)
+
+        round_type = pd.Series(pd.NA, index=df.index, dtype="object")
+        round_type[~df["switch_mask"]] = "no_switch_allowed"
+        round_type[df["switch_valid"] & df["does_switch"]] = "switched"
+        stayed = df["switch_valid"] & ~df["does_switch"]
+        round_type[stayed & unchanged] = "chose_to_stay"
+        round_type[stayed & ~unchanged] = "stayed_comp_changed"
+        df["round_type"] = round_type
+        return df
+
+    def _switch_events(self, df):
+        """One row per switch event, anchored at the decision round n:
+        own contribution at n and n+1 (dc), and the receiving group's
+        mean contribution at n -- the roster the switcher saw, which
+        they are not part of. NaN receiving_mean when the receiving
+        group was empty at n."""
+        df = self._with_dc(df)
+        by_player = df.groupby(PARTICIPANT)
+        df["next_group"] = by_player["group_id"].shift(-1)
+        events = df[df["does_switch"]].copy()
+        means = df.groupby(GROUP_CELL)["contribution"].mean()
+        keys = list(
+            zip(
+                events["episode_id"],
+                events["round_number"],
+                events["next_group"].astype(int),
+            )
+        )
+        events["receiving_mean"] = means.reindex(keys).to_numpy()
+        return events[
+            PARTICIPANT
+            + [
+                "round_number",
+                "contribution",
+                "next_contribution",
+                "dc",
+                "receiving_mean",
+            ]
+        ]
+
+
 GROUPS = {
     "C": ContributionMetrics(),
     "S": SwitchingMetrics(),

@@ -20,6 +20,7 @@ from aimanager.evaluation_suite.convert import (
 from aimanager.evaluation_suite.metrics import (
     ContributionMetrics,
     PunishmentMetrics,
+    ResponseMetrics,
     SwitchingMetrics,
 )
 
@@ -28,6 +29,7 @@ REPO = Path(__file__).resolve().parents[3]
 C = ContributionMetrics()
 S = SwitchingMetrics()
 P = PunishmentMetrics()
+R = ResponseMetrics()
 
 
 @pytest.fixture(scope="module")
@@ -218,6 +220,88 @@ def test_all_metrics_extract_from_sim():
         for name, e in group.extract_all(sim).items():
             assert len(e) > 0, name
             assert not e.isna().any(), name
+
+
+@pytest.fixture()
+def response_frame():
+    """Two episodes, decision round 3, arrival round 4. Episode 0: a
+    switches g0 -> g1 (b's group shrinks, c/d's group grows). Episode 1:
+    nobody switches (pure chose-to-stay), h's choice timed out, e gave
+    no input at round 4."""
+    rows = [
+        # episode 0, rounds 2-5
+        (0, "a", 2, 0, 10.0, 0.0, False, False, False),
+        (0, "b", 2, 0, 8.0, 0.0, False, False, False),
+        (0, "c", 2, 1, 4.0, 0.0, False, False, False),
+        (0, "d", 2, 1, 6.0, 0.0, False, False, False),
+        (0, "a", 3, 0, 12.0, 0.0, True, True, True),
+        (0, "b", 3, 0, 8.0, 0.0, False, True, True),
+        (0, "c", 3, 1, 4.0, 0.0, False, True, True),
+        (0, "d", 3, 1, 6.0, 0.0, False, True, True),
+        (0, "a", 4, 1, 5.0, 0.0, False, False, False),
+        (0, "b", 4, 0, 9.0, 0.0, False, False, False),
+        (0, "c", 4, 1, 3.0, 0.0, False, False, False),
+        (0, "d", 4, 1, 7.0, 0.0, False, False, False),
+        (0, "a", 5, 1, 5.0, 0.0, False, False, False),
+        (0, "b", 5, 0, 9.0, 0.0, False, False, False),
+        (0, "c", 5, 1, 3.0, 0.0, False, False, False),
+        (0, "d", 5, 1, 7.0, 0.0, False, False, False),
+        # episode 1, rounds 3-4
+        (1, "e", 3, 0, 11.0, 0.0, False, True, True),
+        (1, "f", 3, 0, 12.0, 0.0, False, True, True),
+        (1, "g", 3, 1, 13.0, 0.0, False, True, True),
+        (1, "h", 3, 1, 14.0, 0.0, False, True, False),
+        (1, "e", 4, 0, np.nan, 0.0, False, False, False),
+        (1, "f", 4, 0, 12.0, 0.0, False, False, False),
+        (1, "g", 4, 1, 13.0, 0.0, False, False, False),
+        (1, "h", 4, 1, 14.0, 0.0, False, False, False),
+    ]
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "episode_id",
+            "participant_code",
+            "round_number",
+            "group_id",
+            "contribution",
+            "punishment",
+            "does_switch",
+            "switch_mask",
+            "switch_valid",
+        ],
+    )
+
+
+def test_dc_values(response_frame):
+    df = R._with_dc(response_frame).set_index(
+        ["episode_id", "participant_code", "round_number"]
+    )
+    assert df.loc[(0, "a", 2), "dc"] == 2.0  # 12 - 10
+    assert df.loc[(0, "a", 3), "dc"] == -7.0  # 5 - 12, across the switch
+    assert pd.isna(df.loc[(1, "e", 3), "dc"])  # next contribution invalid
+    assert pd.isna(df.loc[(0, "a", 5), "dc"])  # last round: no next
+
+
+def test_round_types(response_frame):
+    df = R._round_types(response_frame).set_index(
+        ["episode_id", "participant_code", "round_number"]
+    )
+    assert df.loc[(0, "a", 2), "round_type"] == "no_switch_allowed"
+    assert df.loc[(0, "a", 3), "round_type"] == "switched"
+    assert df.loc[(0, "b", 3), "round_type"] == "stayed_comp_changed"  # a left
+    assert df.loc[(0, "c", 3), "round_type"] == "stayed_comp_changed"  # a joined
+    assert df.loc[(1, "f", 3), "round_type"] == "chose_to_stay"
+    assert pd.isna(df.loc[(1, "h", 3), "round_type"])  # timed out: no choice
+
+
+def test_switch_events(response_frame):
+    events = R._switch_events(response_frame)
+    assert len(events) == 1
+    e = events.iloc[0]
+    assert e["participant_code"] == "a"
+    assert e["contribution"] == 12.0
+    assert e["dc"] == -7.0
+    assert e["receiving_mean"] == 5.0  # (4 + 6) / 2, roster a saw at round 3
 
 
 def test_d_self_comparison_is_zero(human):
