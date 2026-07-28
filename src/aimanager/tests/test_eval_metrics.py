@@ -213,6 +213,25 @@ def test_human_punishment_pins(human):
     assert extractions["PC"].loc[0] == pytest.approx(0.445055, abs=1e-5)
 
 
+def test_human_response_pins(human):
+    rcb = R.rcb(human)
+    assert rcb.loc["(0,0.25]"] == pytest.approx(0.892, abs=1e-3)
+    assert rcb.loc[">1"] == pytest.approx(2.014, abs=1e-3)
+    assert R.weights("RCB", human).to_dict() == {
+        "(0,0.25]": 1238,
+        "(0.25,0.5]": 672,
+        "(0.5,1]": 473,
+        ">1": 277,
+    }
+    assert R.rcc(human).loc["contrast"] == pytest.approx(-7.035, abs=1e-3)
+    assert R.weights("RCA", human).to_dict() == {
+        "no_switch_allowed": 6902,
+        "stayed_comp_changed": 1102,
+        "switched": 538,
+        "chose_to_stay": 182,
+    }
+
+
 def test_all_metrics_extract_from_sim():
     sims = load_sim(REPO / SIM_EXAMPLE_FILE)
     sim = sims[sorted(sims)[0]]
@@ -225,19 +244,21 @@ def test_all_metrics_extract_from_sim():
 @pytest.fixture()
 def response_frame():
     """Two episodes, decision round 3, arrival round 4. Episode 0: a
-    switches g0 -> g1 (b's group shrinks, c/d's group grows). Episode 1:
+    switches g0 -> g1 (b's group shrinks, c/d's group grows); a, c, b, d
+    are punished with shortfall rates 0.5, 0.125, 13/12, 9/14. Episode 1:
     nobody switches (pure chose-to-stay), h's choice timed out, e gave
-    no input at round 4."""
+    no input at round 4 (their round-3 punishment drops from RCB), i is
+    a punished full contributor and j an unpunished one (RCC)."""
     rows = [
         # episode 0, rounds 2-5
-        (0, "a", 2, 0, 10.0, 0.0, False, False, False),
+        (0, "a", 2, 0, 10.0, 5.0, False, False, False),
         (0, "b", 2, 0, 8.0, 0.0, False, False, False),
-        (0, "c", 2, 1, 4.0, 0.0, False, False, False),
+        (0, "c", 2, 1, 4.0, 2.0, False, False, False),
         (0, "d", 2, 1, 6.0, 0.0, False, False, False),
         (0, "a", 3, 0, 12.0, 0.0, True, True, True),
-        (0, "b", 3, 0, 8.0, 0.0, False, True, True),
+        (0, "b", 3, 0, 8.0, 13.0, False, True, True),
         (0, "c", 3, 1, 4.0, 0.0, False, True, True),
-        (0, "d", 3, 1, 6.0, 0.0, False, True, True),
+        (0, "d", 3, 1, 6.0, 9.0, False, True, True),
         (0, "a", 4, 1, 5.0, 0.0, False, False, False),
         (0, "b", 4, 0, 9.0, 0.0, False, False, False),
         (0, "c", 4, 1, 3.0, 0.0, False, False, False),
@@ -247,14 +268,18 @@ def response_frame():
         (0, "c", 5, 1, 3.0, 0.0, False, False, False),
         (0, "d", 5, 1, 7.0, 0.0, False, False, False),
         # episode 1, rounds 3-4
-        (1, "e", 3, 0, 11.0, 0.0, False, True, True),
+        (1, "e", 3, 0, 11.0, 6.0, False, True, True),
         (1, "f", 3, 0, 12.0, 0.0, False, True, True),
         (1, "g", 3, 1, 13.0, 0.0, False, True, True),
         (1, "h", 3, 1, 14.0, 0.0, False, True, False),
+        (1, "i", 3, 0, 20.0, 4.0, False, True, True),
+        (1, "j", 3, 1, 20.0, 0.0, False, True, True),
         (1, "e", 4, 0, np.nan, 0.0, False, False, False),
         (1, "f", 4, 0, 12.0, 0.0, False, False, False),
         (1, "g", 4, 1, 13.0, 0.0, False, False, False),
         (1, "h", 4, 1, 14.0, 0.0, False, False, False),
+        (1, "i", 4, 0, 14.0, 0.0, False, False, False),
+        (1, "j", 4, 1, 18.0, 0.0, False, False, False),
     ]
     return pd.DataFrame(
         rows,
@@ -299,7 +324,8 @@ def test_rca_observations(response_frame):
     by_type = {k: sorted(v.tolist()) for k, v in obs.groupby(level=0)}
     assert by_type["switched"] == [-7.0]
     assert by_type["stayed_comp_changed"] == [-1.0, 1.0, 1.0]
-    assert by_type["chose_to_stay"] == [0.0, 0.0]  # e's NaN dc drops
+    # e's NaN dc drops; i and j (full contributors) fall by -6 and -2
+    assert by_type["chose_to_stay"] == [-6.0, -2.0, 0.0, 0.0]
     # ep0 rounds 2 and 4 only: ep0 r5 and all ep1 r4 rows have no next round
     assert len(by_type["no_switch_allowed"]) == 8
 
@@ -309,20 +335,20 @@ def test_rca_weights_are_human_frequencies(response_frame):
     assert w.to_dict() == {
         "no_switch_allowed": 8,
         "stayed_comp_changed": 3,
-        "chose_to_stay": 2,
+        "chose_to_stay": 4,
         "switched": 1,
     }
 
 
 def test_rca_d_weighted_stratum_emd(response_frame):
     # bump a's round-5 contribution: only one no_switch_allowed dc moves
-    # 0 -> 4, so EMD(nsa) = 4/8 and d = (4/8) * 8/14 = 2/7
+    # 0 -> 4, so EMD(nsa) = 4/8 and d = (4/8) * 8/16 = 1/4
     bumped = response_frame.copy()
     bumped.loc[
         (bumped["participant_code"] == "a") & (bumped["round_number"] == 5),
         "contribution",
     ] = 9.0
-    assert R.d("RCA", response_frame, bumped) == pytest.approx(2 / 7)
+    assert R.d("RCA", response_frame, bumped) == pytest.approx(1 / 4)
     assert R.d("RCA", response_frame, response_frame) == pytest.approx(0)
 
 
@@ -331,6 +357,43 @@ def test_rca_d_raises_on_empty_stratum(response_frame):
     no_switch = response_frame.assign(does_switch=False)
     with pytest.raises(ValueError, match="RCA: empty strata \\['switched'\\]"):
         R.d("RCA", response_frame, no_switch)
+
+
+def test_rcb_stat_and_weights(response_frame):
+    # a: rate 5/10=0.5 dc +2 | c: 2/16=0.125 dc 0 | b: 13/12>1 dc +1 |
+    # d: 9/14 dc +1; e is punished but dc-invalid, i is full -> both out
+    stat = R.rcb(response_frame)
+    assert stat.to_dict() == pytest.approx(
+        {"(0,0.25]": 0.0, "(0.25,0.5]": 2.0, "(0.5,1]": 1.0, ">1": 1.0}
+    )
+    assert R.weights("RCB", response_frame).to_dict() == {
+        "(0,0.25]": 1,
+        "(0.25,0.5]": 1,
+        "(0.5,1]": 1,
+        ">1": 1,
+    }
+
+
+def test_rcb_d(response_frame):
+    # bump b's round-4 contribution 9 -> 11: only the ">1" bin's mean
+    # moves (+1 -> +3), so d = 2/4 with equal bin counts
+    bumped = response_frame.copy()
+    bumped.loc[
+        (bumped["participant_code"] == "b") & (bumped["round_number"] == 4),
+        "contribution",
+    ] = 11.0
+    assert R.d("RCB", response_frame, bumped) == pytest.approx(0.5)
+
+
+def test_rcc_contrast(response_frame):
+    # punished full contributor i falls -6, unpunished j falls -2
+    assert R.rcc(response_frame).loc["contrast"] == pytest.approx(-4.0)
+    bumped = response_frame.copy()
+    bumped.loc[
+        (bumped["participant_code"] == "j") & (bumped["round_number"] == 4),
+        "contribution",
+    ] = 20.0
+    assert R.d("RCC", response_frame, bumped) == pytest.approx(2.0)
 
 
 def test_switch_events(response_frame):

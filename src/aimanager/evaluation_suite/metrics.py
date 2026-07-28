@@ -30,6 +30,9 @@ GROUP_CELL = ["episode_id", "round_number", "group_id"]
 ROUNDS = pd.RangeIndex(24, name="round_number")
 DECISION_ROUNDS = pd.Index([3, 7, 11, 15, 19], name="round_number")
 
+RCB_EDGES = [0.0, 0.25, 0.5, 1.0, float("inf")]
+RCB_LABELS = ["(0,0.25]", "(0.25,0.5]", "(0.5,1]", ">1"]
+
 
 def _uniform(index):
     return pd.Series(1.0, index=index)
@@ -52,9 +55,9 @@ class MetricGroup:
         """Stratum weights for a statistic row. Strata fixed by the game
         design (rounds, boundary cells, switching opportunities -- all of
         C/S/P) carry uniform precomputed weights and ignore df; strata
-        conditioned on behaviour (the R rows, later branch) carry
-        human-frequency weights computed once on the human reference and
-        reused for every comparison (#132)."""
+        conditioned on behaviour (the R rows) carry human-frequency
+        weights computed once on the human reference and reused for
+        every comparison (#132)."""
         return getattr(self, f"{name.lower()}_weights")(df)
 
     def d(self, name, df_a, df_b, weights=None):
@@ -234,6 +237,8 @@ class ResponseMetrics(MetricGroup):
 
     KINDS = {
         "RCA": "stratified_distribution",
+        "RCB": "statistic",
+        "RCC": "statistic",
     }
 
     def rca(self, df):
@@ -246,6 +251,45 @@ class ResponseMetrics(MetricGroup):
     def rca_weights(self, df):
         """Human frequency of each round type over dc-valid rows."""
         return self.rca(df).groupby(level=0).size()
+
+    def rcb(self, df):
+        """Mean contribution change of punished non-full contributors per
+        punishment-rate bin; rate = punishment / (20 - contribution),
+        punishment per point of shortfall."""
+        pop = self._rcb_population(df)
+        stat = pop.groupby("rate_bin", observed=False)["dc"].mean()
+        stat.index = stat.index.astype(str)
+        return stat.rename("RCB")
+
+    def rcb_weights(self, df):
+        """Human frequency of each punishment-rate bin."""
+        w = self._rcb_population(df).groupby("rate_bin", observed=False).size()
+        w.index = w.index.astype(str)
+        return w
+
+    def rcc(self, df):
+        """Contribution change of full contributors, punished minus
+        unpunished -- reaction at the ceiling, where RCB's rate is
+        undefined."""
+        d = self._with_dc(df)
+        full = d[(d["contribution"] == 20) & d["dc"].notna() & d["punishment"].notna()]
+        contrast = (
+            full.loc[full["punishment"] > 0, "dc"].mean()
+            - full.loc[full["punishment"] == 0, "dc"].mean()
+        )
+        return pd.Series({"contrast": contrast}, name="RCC")
+
+    def rcc_weights(self, df=None):
+        return pd.Series({"contrast": 1.0})
+
+    def _rcb_population(self, df):
+        d = self._with_dc(df)
+        pop = d[
+            (d["punishment"] > 0) & (d["contribution"] < 20) & d["dc"].notna()
+        ].copy()
+        rate = pop["punishment"] / (20 - pop["contribution"])
+        pop["rate_bin"] = pd.cut(rate, RCB_EDGES, labels=RCB_LABELS)
+        return pop
 
     def _with_dc(self, df):
         df = df.sort_values(PARTICIPANT + ["round_number"]).copy()
