@@ -294,6 +294,45 @@ def test_round_types(response_frame):
     assert pd.isna(df.loc[(1, "h", 3), "round_type"])  # timed out: no choice
 
 
+def test_rca_observations(response_frame):
+    obs = R.rca(response_frame)
+    by_type = {k: sorted(v.tolist()) for k, v in obs.groupby(level=0)}
+    assert by_type["switched"] == [-7.0]
+    assert by_type["stayed_comp_changed"] == [-1.0, 1.0, 1.0]
+    assert by_type["chose_to_stay"] == [0.0, 0.0]  # e's NaN dc drops
+    # ep0 rounds 2 and 4 only: ep0 r5 and all ep1 r4 rows have no next round
+    assert len(by_type["no_switch_allowed"]) == 8
+
+
+def test_rca_weights_are_human_frequencies(response_frame):
+    w = R.weights("RCA", response_frame)
+    assert w.to_dict() == {
+        "no_switch_allowed": 8,
+        "stayed_comp_changed": 3,
+        "chose_to_stay": 2,
+        "switched": 1,
+    }
+
+
+def test_rca_d_weighted_stratum_emd(response_frame):
+    # bump a's round-5 contribution: only one no_switch_allowed dc moves
+    # 0 -> 4, so EMD(nsa) = 4/8 and d = (4/8) * 8/14 = 2/7
+    bumped = response_frame.copy()
+    bumped.loc[
+        (bumped["participant_code"] == "a") & (bumped["round_number"] == 5),
+        "contribution",
+    ] = 9.0
+    assert R.d("RCA", response_frame, bumped) == pytest.approx(2 / 7)
+    assert R.d("RCA", response_frame, response_frame) == pytest.approx(0)
+
+
+def test_rca_d_raises_on_empty_stratum(response_frame):
+    # a comparison side that never switches has no "switched" stratum
+    no_switch = response_frame.assign(does_switch=False)
+    with pytest.raises(ValueError, match="RCA: empty strata \\['switched'\\]"):
+        R.d("RCA", response_frame, no_switch)
+
+
 def test_switch_events(response_frame):
     events = R._switch_events(response_frame)
     assert len(events) == 1

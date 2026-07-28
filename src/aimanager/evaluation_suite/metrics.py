@@ -7,9 +7,12 @@ differencing happens here, so human and simulation extractions can be
 inspected side by side. Two kinds of rows:
 
 - distribution: the method returns the observations whose distribution the
-  row compares (scored with EMD in a later step)
+  row compares (scored with EMD)
 - statistic: the method returns the row's statistic, one value per stratum
-  (scored as weighted absolute differences in a later step)
+  (scored as weighted absolute differences)
+- stratified_distribution: the method returns observations with the stratum
+  as the index's first level (scored as the weighted mean of per-stratum
+  EMDs)
 
 Empty groups produce no rows in the canonical frame, so group-level
 extractions lose exactly the empty cell (CC) or the whole game-round where
@@ -66,10 +69,29 @@ class MetricGroup:
         candidate model ever triggers this (#134)."""
         extract = getattr(self, name.lower())
         a, b = extract(df_a), extract(df_b)
-        if self.KINDS[name] == "distribution":
+        kind = self.KINDS[name]
+        if kind == "distribution":
             return wasserstein_distance(a, b)
         if weights is None:
             weights = self.weights(name, df_a)
+        if kind == "stratified_distribution":
+            a_strata = dict(iter(a.groupby(level=0)))
+            b_strata = dict(iter(b.groupby(level=0)))
+            missing = [
+                s for s in weights.index if s not in a_strata or s not in b_strata
+            ]
+            if missing:
+                raise ValueError(
+                    f"{name}: empty strata {missing} -- "
+                    "no empty-stratum policy exists, see #134"
+                )
+            emd = pd.Series(
+                {
+                    s: wasserstein_distance(a_strata[s], b_strata[s])
+                    for s in weights.index
+                }
+            )
+            return (emd * weights).sum() / weights.sum()
         aligned = pd.concat({"a": a, "b": b, "w": weights}, axis=1)
         empty = aligned["a"].isna() | aligned["b"].isna()
         if empty.any():
@@ -210,7 +232,20 @@ class ResponseMetrics(MetricGroup):
     derivations. Contribution change dc = c_{t+1} - c_t sits at the
     stimulus round t and is NaN unless both contributions are valid."""
 
-    KINDS = {}
+    KINDS = {
+        "RCA": "stratified_distribution",
+    }
+
+    def rca(self, df):
+        """Contribution change by round type: how contributions move after
+        the four kinds of round."""
+        labelled = self._round_types(self._with_dc(df))
+        valid = labelled[labelled["dc"].notna() & labelled["round_type"].notna()]
+        return valid.set_index("round_type")["dc"].rename("RCA")
+
+    def rca_weights(self, df):
+        """Human frequency of each round type over dc-valid rows."""
+        return self.rca(df).groupby(level=0).size()
 
     def _with_dc(self, df):
         df = df.sort_values(PARTICIPANT + ["round_number"]).copy()
