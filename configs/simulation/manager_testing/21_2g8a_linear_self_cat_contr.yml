@@ -1,0 +1,49 @@
+# #130: as 20_2g8a_linear_punishment_self.yml (three linear punishment
+# bundles, each in self-play) but with the CATEGORICAL (multinomial)
+# contribution bundle -- full-linear AH stack; valid stays GNN (no linear
+# valid model exists).
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/baselines/contribution_categorical_best.joblib
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/baselines/does_switch_multinomial_best.joblib
+
+managers:
+  lin_multinomial:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_best_with_contr.joblib
+  lin_ridge:
+    type: linear
+    path: artifacts/baselines/punishment_ridge_best.joblib
+  lin_gaussian:
+    type: linear
+    path: artifacts/baselines/punishment_gaussian_best_with_contr.joblib
+
+pairings:
+  - name: lin_multinomial_self
+    group_0: lin_multinomial
+    group_1: lin_multinomial
+  - name: lin_ridge_self
+    group_0: lin_ridge
+    group_1: lin_ridge
+  - name: lin_gaussian_self
+    group_0: lin_gaussian
+    group_1: lin_gaussian
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/21_2g8a_linear_self_cat_contr
+figure_name: 2g8a_linear_self_cat_contr
+save_per_round: true
+basedir: .
