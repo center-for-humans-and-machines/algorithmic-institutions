@@ -176,6 +176,7 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Train AH models**: `python -m aimanager train-ah <config>`
 - **Train RL manager**: `python -m aimanager train-manager <config>`
 - **Run simulation**: `python -m aimanager simulate <config>`
+- **Evaluate sim vs human**: `python -m aimanager evaluate <config>` (needs the simulation's `per_round.parquet`)
 - **Plot confusion matrix**: `python scripts/plotting/plot_confusion_matrix.py <artifact_dir>`
 
 ### Where to Find Things

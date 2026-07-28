@@ -4,6 +4,7 @@ Usage:
     python -m aimanager train-ah <config>
     python -m aimanager train-manager <config>
     python -m aimanager simulate <config>
+    python -m aimanager evaluate <config>
 """
 
 import argparse
@@ -29,6 +30,14 @@ REQUIRED_KEYS = {
         "n_update_steps",
     ],
     "simulate": [
+        "artificial_humans",
+        "managers",
+        "n_episodes",
+        "n_episode_steps",
+    ],
+    # evaluate reads a finished simulation's output, so it takes the
+    # same simulation config
+    "evaluate": [
         "artificial_humans",
         "managers",
         "n_episodes",
@@ -100,10 +109,17 @@ def dispatch_simulate(config, config_path):
     run_cli(config, config_path)
 
 
+def dispatch_evaluate(config, config_path):
+    from aimanager.evaluation_suite.evaluate import run_cli
+
+    run_cli(config, config_path)
+
+
 DISPATCH = {
     "train-ah": dispatch_train_ah,
     "train-manager": dispatch_train_manager,
     "simulate": dispatch_simulate,
+    "evaluate": dispatch_evaluate,
 }
 
 
