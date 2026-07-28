@@ -18,6 +18,8 @@ surviving group's rows. NaN (no-input) values drop out of every mean and
 count. See notes/evaluation_metric_defs.md for the row definitions.
 """
 
+import pandas as pd
+
 PARTICIPANT = ["episode_id", "participant_code"]
 GROUP_CELL = ["episode_id", "round_number", "group_id"]
 
@@ -80,4 +82,32 @@ class ContributionMetrics(MetricGroup):
         return shares.stack().rename("CF")
 
 
-GROUPS = {"C": ContributionMetrics()}
+class SwitchingMetrics(MetricGroup):
+    KINDS = {
+        "SA": "statistic",
+        "SB": "statistic",
+        "SC": "distribution",
+    }
+
+    def sa(self, df):
+        """Overall switch rate over valid switching opportunities."""
+        valid = df[df["switch_valid"]]
+        rate = valid["does_switch"].mean()
+        return pd.Series({"switch_rate": rate}, name="SA")
+
+    def sb(self, df):
+        """Switch rate per switching opportunity (decision round)."""
+        valid = df[df["switch_valid"]]
+        stat = valid.groupby("round_number")["does_switch"].mean()
+        return stat.rename("SB")
+
+    def sc(self, df):
+        """Size of the larger group per (game, round), rounds 4 onward.
+        Empty-group rounds are kept: larger-group size 8 is the maximal
+        segregation observation this row exists to measure."""
+        sizes = df[df["round_number"] >= 4].groupby(GROUP_CELL).size()
+        obs = sizes.groupby(["episode_id", "round_number"]).max()
+        return obs.rename("SC")
+
+
+GROUPS = {"C": ContributionMetrics(), "S": SwitchingMetrics()}

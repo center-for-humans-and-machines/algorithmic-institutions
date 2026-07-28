@@ -17,11 +17,12 @@ from aimanager.evaluation_suite.convert import (
     load_human,
     load_sim,
 )
-from aimanager.evaluation_suite.metrics import ContributionMetrics
+from aimanager.evaluation_suite.metrics import ContributionMetrics, SwitchingMetrics
 
 REPO = Path(__file__).resolve().parents[3]
 
 C = ContributionMetrics()
+S = SwitchingMetrics()
 
 
 @pytest.fixture(scope="module")
@@ -94,6 +95,62 @@ def test_cf_boundary_shares(frame):
     assert stat.loc[(2, "share_at_20")] == pytest.approx(0.25)
 
 
+@pytest.fixture()
+def switch_frame():
+    """One episode, four participants. Decision rounds 3 and 7: a switches
+    at 3 (c's choice timed out), b switches at 7. Round 5: everyone in
+    group 1 (group 0 empty)."""
+    rows = [
+        (0, "a", 3, 0, True, True, True),
+        (0, "b", 3, 0, False, True, True),
+        (0, "c", 3, 1, False, True, False),
+        (0, "d", 3, 1, False, True, True),
+        (0, "a", 4, 1, False, False, False),
+        (0, "b", 4, 0, False, False, False),
+        (0, "c", 4, 1, False, False, False),
+        (0, "d", 4, 1, False, False, False),
+        (0, "a", 5, 1, False, False, False),
+        (0, "b", 5, 1, False, False, False),
+        (0, "c", 5, 1, False, False, False),
+        (0, "d", 5, 1, False, False, False),
+        (0, "a", 7, 1, False, True, True),
+        (0, "b", 7, 1, True, True, True),
+        (0, "c", 7, 1, False, True, True),
+        (0, "d", 7, 1, False, True, True),
+    ]
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "episode_id",
+            "participant_code",
+            "round_number",
+            "group_id",
+            "does_switch",
+            "switch_mask",
+            "switch_valid",
+        ],
+    )
+
+
+def test_sa_overall_switch_rate(switch_frame):
+    # 7 valid opportunities (c's round-3 timeout drops), 2 switches
+    assert S.sa(switch_frame).loc["switch_rate"] == pytest.approx(2 / 7)
+
+
+def test_sb_rate_per_opportunity(switch_frame):
+    stat = S.sb(switch_frame)
+    assert stat.loc[3] == pytest.approx(1 / 3)  # a of {a, b, d}
+    assert stat.loc[7] == pytest.approx(1 / 4)
+    assert list(stat.index) == [3, 7]
+
+
+def test_sc_larger_group_keeps_empty_rounds(switch_frame):
+    obs = S.sc(switch_frame)
+    assert obs.loc[(0, 4)] == 3  # groups split 1-3
+    assert obs.loc[(0, 5)] == 4  # group 0 empty: kept as max segregation
+    assert (0, 3) not in obs.index  # rounds < 4 excluded
+
+
 def test_human_reference_pins(human):
     extractions = C.extract_all(human)
     assert {k: len(v) for k, v in extractions.items()} == {
@@ -109,9 +166,22 @@ def test_human_reference_pins(human):
     assert extractions["CF"].loc[(0, "share_at_0")] == pytest.approx(0.051813, abs=1e-5)
 
 
+def test_human_switching_pins(human):
+    extractions = S.extract_all(human)
+    assert extractions["SA"].loc["switch_rate"] == pytest.approx(0.296668, abs=1e-5)
+    assert list(extractions["SB"].index) == [3, 7, 11, 15, 19]
+    assert extractions["SB"].loc[3] == pytest.approx(0.44186, abs=1e-5)
+    sc = extractions["SC"]
+    assert len(sc) == 1000  # 50 episodes x rounds 4..23
+    # the 144 empty-group rounds appear as larger-group size 8
+    assert sc.value_counts().loc[8] == 144
+    assert sc.mean() == pytest.approx(6.088, abs=1e-5)
+
+
 def test_all_metrics_extract_from_sim():
     sims = load_sim(REPO / SIM_EXAMPLE_FILE)
     sim = sims[sorted(sims)[0]]
-    for name, e in C.extract_all(sim).items():
-        assert len(e) > 0, name
-        assert not e.isna().any(), name
+    for group in [C, S]:
+        for name, e in group.extract_all(sim).items():
+            assert len(e) > 0, name
+            assert not e.isna().any(), name
