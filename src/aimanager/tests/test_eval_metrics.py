@@ -232,6 +232,19 @@ def test_human_response_pins(human):
     assert rsa.loc["1-3"] == pytest.approx(0.2966, abs=1e-4)
     assert rsa.loc["16+"] == pytest.approx(0.7347, abs=1e-4)
     assert R.weights("RSA", human).to_dict() == {"1-3": 290, "4-15": 250, "16+": 49}
+    assert R.weights("RPA", human).to_dict() == {
+        "{0}": 809,
+        "1-5": 1955,
+        "6-10": 2614,
+        "11-15": 1794,
+        "16-19": 510,
+        "{20}": 1232,
+    }
+    assert R.weights("RPB", human).to_dict() == {
+        "1-3": 1462,
+        "4-5": 1940,
+        "6-8": 4331,
+    }
     assert R.weights("RCA", human).to_dict() == {
         "no_switch_allowed": 6902,
         "stayed_comp_changed": 1102,
@@ -468,6 +481,71 @@ def test_rsa_d(pull_frame):
         "punishment",
     ] = 3.0
     assert R.d("RSA", pull_frame, other) == pytest.approx(1 / 6)
+
+
+def test_rpa_observations(frame):
+    # bins from the C/P fixture: {0}: [0, 30], 1-5: [0], 6-10: [5, 0, 0],
+    # 11-15: [0], {20}: [0, 10, 0, 0]; a's all-NaN round 1 drops; the
+    # 16-19 bin has no observations in this frame
+    obs = R.rpa(frame)
+    by_bin = {k: sorted(v.tolist()) for k, v in obs.groupby(level=0)}
+    assert by_bin == {
+        "{0}": [0.0, 30.0],
+        "1-5": [0.0],
+        "6-10": [0.0, 0.0, 5.0],
+        "11-15": [0.0],
+        "{20}": [0.0, 0.0, 0.0, 10.0],
+    }
+    assert R.weights("RPA", frame).to_dict() == {
+        "{0}": 2,
+        "1-5": 1,
+        "6-10": 3,
+        "11-15": 1,
+        "{20}": 4,
+    }
+
+
+def test_rpa_d(frame):
+    # raise d's round-0 punishment 10 -> 14: only the {20} bin moves,
+    # EMD = 4/4, weighted by 4 of 11 observations
+    bumped = frame.copy()
+    bumped.loc[
+        (bumped["participant_code"] == "d") & (bumped["round_number"] == 0),
+        "punishment",
+    ] = 14.0
+    assert R.d("RPA", frame, bumped) == pytest.approx(4 / 11)
+    assert R.d("RPA", frame, frame) == pytest.approx(0)
+
+
+def test_rpb_group_size_bins():
+    # 8 players: round 4 split 6-2, round 5 split 4-4; round 3 excluded
+    players = list("abcdefgh")
+    rows = [(0, p, 3, 0, 99.0) for p in players]
+    rows += [
+        (0, p, 4, 0 if p < "g" else 1, float(i))
+        for i, p in enumerate(players)  # g0 {a..f} p 0..5, g1 {g,h} p 6,7
+    ]
+    rows += [
+        (0, p, 5, 0 if p < "e" else 1, 1.0)
+        for p in players  # 4-4 split, all punished 1
+    ]
+    df = pd.DataFrame(
+        rows,
+        columns=[
+            "episode_id",
+            "participant_code",
+            "round_number",
+            "group_id",
+            "punishment",
+        ],
+    )
+    obs = R.rpb(df)
+    by_bin = {k: sorted(v.tolist()) for k, v in obs.groupby(level=0)}
+    assert by_bin["6-8"] == [0.0, 1.0, 2.0, 3.0, 4.0, 5.0]
+    assert by_bin["1-3"] == [6.0, 7.0]
+    assert by_bin["4-5"] == [1.0] * 8
+    assert 99.0 not in obs.tolist()  # rounds < 4 excluded
+    assert R.weights("RPB", df).to_dict() == {"1-3": 2, "4-5": 8, "6-8": 6}
 
 
 def test_switch_events(response_frame):

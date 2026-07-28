@@ -36,6 +36,12 @@ RCB_LABELS = ["(0,0.25]", "(0.25,0.5]", "(0.5,1]", ">1"]
 RSA_EDGES = [0.0, 3.0, 15.0, float("inf")]
 RSA_LABELS = ["1-3", "4-15", "16+"]
 
+RPA_EDGES = [-1.0, 0.0, 5.0, 10.0, 15.0, 19.0, 20.0]
+RPA_LABELS = ["{0}", "1-5", "6-10", "11-15", "16-19", "{20}"]
+
+RPB_EDGES = [0.0, 3.0, 5.0, 8.0]
+RPB_LABELS = ["1-3", "4-5", "6-8"]
+
 
 def _uniform(index):
     return pd.Series(1.0, index=index)
@@ -244,6 +250,8 @@ class ResponseMetrics(MetricGroup):
         "RCC": "statistic",
         "RCD": "statistic",
         "RSA": "statistic",
+        "RPA": "stratified_distribution",
+        "RPB": "stratified_distribution",
     }
 
     def rca(self, df):
@@ -313,6 +321,32 @@ class ResponseMetrics(MetricGroup):
         w = self._rsa_population(df).groupby("punishment_bin", observed=False).size()
         w.index = w.index.astype(str)
         return w
+
+    def rpa(self, df):
+        """Punishment distribution per contribution bin -- the manager's
+        policy: how punishment depends on what the player contributed."""
+        valid = df.dropna(subset=["punishment", "contribution"])
+        bins = pd.cut(valid["contribution"], RPA_EDGES, labels=RPA_LABELS)
+        return valid.set_index(bins.astype(str))["punishment"].rename("RPA")
+
+    def rpa_weights(self, df):
+        """Human frequency of each contribution bin."""
+        return self.rpa(df).groupby(level=0).size()
+
+    def rpb(self, df):
+        """Punishment distribution per group-size bin, rounds 4 onward;
+        empty groups drop out by construction (no rows)."""
+        late = df[df["round_number"] >= 4].copy()
+        late["group_size"] = late.groupby(GROUP_CELL)["participant_code"].transform(
+            "size"
+        )
+        valid = late.dropna(subset=["punishment"])
+        bins = pd.cut(valid["group_size"], RPB_EDGES, labels=RPB_LABELS)
+        return valid.set_index(bins.astype(str))["punishment"].rename("RPB")
+
+    def rpb_weights(self, df):
+        """Human frequency of each group-size bin."""
+        return self.rpb(df).groupby(level=0).size()
 
     def _rsa_population(self, df):
         pop = df[df["switch_valid"] & (df["punishment"] > 0)].copy()
