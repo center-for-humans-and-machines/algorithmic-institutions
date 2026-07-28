@@ -234,20 +234,13 @@ def test_d_distribution_is_emd(frame):
     assert C.d("CD", frame, shifted) == pytest.approx(2.0)
 
 
-def test_d_statistic_uniform_over_present_strata(frame):
-    # +2 only in round 0: per-round |diff| = [2, 0, 0], uniform weights
-    # renormalise over the 3 rounds present (of the 24 fixed strata)
+def test_d_statistic_weighted_mean(frame):
+    # +2 only in round 0: per-round |diff| = [2, 0, 0]; explicit uniform
+    # weights over the synthetic frame's 3 rounds
     bumped = frame.copy()
     bumped.loc[bumped["round_number"] == 0, "contribution"] += 2
-    assert C.d("CB", frame, bumped) == pytest.approx(2 / 3)
-
-
-def test_d_statistic_renormalises_over_missing_strata(frame):
-    # comparison side lacks round 2: weights renormalise over rounds 0-1
-    bumped = frame.copy()
-    bumped.loc[bumped["round_number"] == 0, "contribution"] += 2
-    bumped = bumped[bumped["round_number"] < 2]
-    assert C.d("CB", frame, bumped) == pytest.approx(1.0)
+    w = pd.Series({0: 1.0, 1: 1.0, 2: 1.0})
+    assert C.d("CB", frame, bumped, weights=w) == pytest.approx(2 / 3)
 
 
 def test_d_accepts_precomputed_weights(frame):
@@ -256,6 +249,17 @@ def test_d_accepts_precomputed_weights(frame):
     bumped.loc[bumped["round_number"] == 0, "contribution"] += 2
     w = pd.Series({0: 1.0, 1: 3.0, 2: 4.0})
     assert C.d("CB", frame, bumped, weights=w) == pytest.approx(2 / 8)
+
+
+def test_d_raises_on_empty_stratum(frame):
+    # comparison side lacks round 2 entirely
+    other = frame[frame["round_number"] < 2]
+    w = pd.Series({0: 1.0, 1: 1.0, 2: 1.0})
+    with pytest.raises(ValueError, match="CB: empty strata \\[2\\]"):
+        C.d("CB", frame, other, weights=w)
+    # default weights span all 24 rounds, so a 3-round frame raises too
+    with pytest.raises(ValueError, match="empty strata"):
+        C.d("CB", frame, frame)
 
 
 def test_uniform_precomputed_weights():

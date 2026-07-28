@@ -61,15 +61,22 @@ class MetricGroup:
         no binning). Statistic rows: weighted mean absolute per-stratum
         difference under the row's weight scheme (see weights()); pass
         precomputed weights or let them default to weights(name, df_a).
-        Strata missing from either side drop out and the weights
-        renormalise over the rest."""
+        Every weighted stratum must be present on both sides -- an empty
+        stratum raises, and a policy only gets designed if a real
+        candidate model ever triggers this (#134)."""
         extract = getattr(self, name.lower())
         a, b = extract(df_a), extract(df_b)
         if self.KINDS[name] == "distribution":
             return wasserstein_distance(a, b)
         if weights is None:
             weights = self.weights(name, df_a)
-        aligned = pd.concat({"a": a, "b": b, "w": weights}, axis=1).dropna()
+        aligned = pd.concat({"a": a, "b": b, "w": weights}, axis=1)
+        empty = aligned["a"].isna() | aligned["b"].isna()
+        if empty.any():
+            raise ValueError(
+                f"{name}: empty strata {aligned.index[empty].tolist()} -- "
+                "no empty-stratum policy exists, see #134"
+            )
         return ((aligned["a"] - aligned["b"]).abs() * aligned["w"]).sum() / aligned[
             "w"
         ].sum()
