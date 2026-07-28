@@ -256,7 +256,7 @@ def test_human_response_pins(human):
 def test_all_metrics_extract_from_sim():
     sims = load_sim(REPO / SIM_EXAMPLE_FILE)
     sim = sims[sorted(sims)[0]]
-    for group in [C, S, P]:
+    for group in [C, S, P, R]:
         for name, e in group.extract_all(sim).items():
             assert len(e) > 0, name
             assert not e.isna().any(), name
@@ -560,7 +560,7 @@ def test_switch_events(response_frame):
 
 def test_d_self_comparison_is_zero(human):
     half = human[human["episode_id"] < human["episode_id"].median()]
-    for group in [C, S, P]:
+    for group in [C, S, P, R]:
         for name in group.KINDS:
             assert group.d(name, human, human) == pytest.approx(0), name
             # callable on episode subsets, still zero against itself

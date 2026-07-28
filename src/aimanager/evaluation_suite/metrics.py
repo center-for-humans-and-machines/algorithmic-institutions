@@ -1,7 +1,7 @@
-"""Metric extraction for the evaluation suite (#128).
+"""Metric extraction for the evaluation suite (#128, #134).
 
-One class per metric group (contribution / switching / punishment), one
-method per metric row. Each method turns a canonical agent-round frame
+One class per metric group (contribution / switching / punishment /
+response), one method per metric row. Each method turns a canonical agent-round frame
 (see convert.py) into the raw material its score is computed from -- no
 differencing happens here, so human and simulation extractions can be
 inspected side by side. Two kinds of rows:
@@ -427,4 +427,5 @@ GROUPS = {
     "C": ContributionMetrics(),
     "S": SwitchingMetrics(),
     "P": PunishmentMetrics(),
+    "R": ResponseMetrics(),
 }
