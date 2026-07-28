@@ -33,6 +33,9 @@ DECISION_ROUNDS = pd.Index([3, 7, 11, 15, 19], name="round_number")
 RCB_EDGES = [0.0, 0.25, 0.5, 1.0, float("inf")]
 RCB_LABELS = ["(0,0.25]", "(0.25,0.5]", "(0.5,1]", ">1"]
 
+RSA_EDGES = [0.0, 3.0, 15.0, float("inf")]
+RSA_LABELS = ["1-3", "4-15", "16+"]
+
 
 def _uniform(index):
     return pd.Series(1.0, index=index)
@@ -240,6 +243,7 @@ class ResponseMetrics(MetricGroup):
         "RCB": "statistic",
         "RCC": "statistic",
         "RCD": "statistic",
+        "RSA": "statistic",
     }
 
     def rca(self, df):
@@ -294,6 +298,26 @@ class ResponseMetrics(MetricGroup):
 
     def rcd_weights(self, df=None):
         return pd.Series({"pull": 1.0})
+
+    def rsa(self, df):
+        """Switch share at valid opportunities per received-punishment
+        bin, over punished contributors -- who leaves after being
+        punished, not how many."""
+        pop = self._rsa_population(df)
+        stat = pop.groupby("punishment_bin", observed=False)["does_switch"].mean()
+        stat.index = stat.index.astype(str)
+        return stat.rename("RSA")
+
+    def rsa_weights(self, df):
+        """Human frequency of each punishment bin."""
+        w = self._rsa_population(df).groupby("punishment_bin", observed=False).size()
+        w.index = w.index.astype(str)
+        return w
+
+    def _rsa_population(self, df):
+        pop = df[df["switch_valid"] & (df["punishment"] > 0)].copy()
+        pop["punishment_bin"] = pd.cut(pop["punishment"], RSA_EDGES, labels=RSA_LABELS)
+        return pop
 
     def _rcb_population(self, df):
         d = self._with_dc(df)

@@ -228,6 +228,10 @@ def test_human_response_pins(human):
     # 539 Q4-study events minus 26 tainted by no-input masking
     events = R._switch_events(human).dropna(subset=["dc", "receiving_mean"])
     assert len(events) == 513
+    rsa = R.rsa(human)
+    assert rsa.loc["1-3"] == pytest.approx(0.2966, abs=1e-4)
+    assert rsa.loc["16+"] == pytest.approx(0.7347, abs=1e-4)
+    assert R.weights("RSA", human).to_dict() == {"1-3": 290, "4-15": 250, "16+": 49}
     assert R.weights("RCA", human).to_dict() == {
         "no_switch_allowed": 6902,
         "stayed_comp_changed": 1102,
@@ -403,13 +407,15 @@ def test_rcc_contrast(response_frame):
 @pytest.fixture()
 def pull_frame():
     """Two episodes, one switch each, engineered for an exact pull slope:
-    event 1 gap +4 with dc +2, event 2 gap -2 with dc -1 -> slope 0.5."""
+    event 1 gap +4 with dc +2, event 2 gap -2 with dc -1 -> slope 0.5.
+    Decision-round punishments hit each RSA bin once: s1 (2, switches),
+    p (5, stays), s2 (17, switches); q is unpunished and drops out."""
     rows = [
-        (0, "s1", 3, 0, 6.0, 0.0, True, True, True),
-        (0, "p", 3, 1, 10.0, 0.0, False, True, True),
+        (0, "s1", 3, 0, 6.0, 2.0, True, True, True),
+        (0, "p", 3, 1, 10.0, 5.0, False, True, True),
         (0, "s1", 4, 1, 8.0, 0.0, False, False, False),
         (0, "p", 4, 1, 10.0, 0.0, False, False, False),
-        (1, "s2", 3, 0, 8.0, 0.0, True, True, True),
+        (1, "s2", 3, 0, 8.0, 17.0, True, True, True),
         (1, "q", 3, 1, 6.0, 0.0, False, True, True),
         (1, "s2", 4, 1, 7.0, 0.0, False, False, False),
         (1, "q", 4, 1, 6.0, 0.0, False, False, False),
@@ -442,6 +448,26 @@ def test_rcd_d(pull_frame):
         "contribution",
     ] = 5.0
     assert R.d("RCD", pull_frame, moved) == pytest.approx(1 / 3)
+
+
+def test_rsa_shares_and_weights(pull_frame):
+    stat = R.rsa(pull_frame)
+    assert stat.to_dict() == pytest.approx({"1-3": 1.0, "4-15": 0.0, "16+": 1.0})
+    assert R.weights("RSA", pull_frame).to_dict() == {
+        "1-3": 1,
+        "4-15": 1,
+        "16+": 1,
+    }
+
+
+def test_rsa_d(pull_frame):
+    # punish q with 3: the 1-3 bin gains a stayer, share 1.0 -> 0.5
+    other = pull_frame.copy()
+    other.loc[
+        (other["participant_code"] == "q") & (other["round_number"] == 3),
+        "punishment",
+    ] = 3.0
+    assert R.d("RSA", pull_frame, other) == pytest.approx(1 / 6)
 
 
 def test_switch_events(response_frame):
