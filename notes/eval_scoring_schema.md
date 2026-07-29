@@ -44,7 +44,11 @@ One repeat:
 
 One split is itself random, so repeat ~500 times with fresh shuffles
 (one fixed seed, so every model sees identical splits and draws).
-Average the model pieces, average the floor pieces, divide:
+If a draw cannot support every stratum of a row (a rare behaviour the
+sim almost never shows), that repeat is dropped for that row and the
+count of surviving repeats is reported; below half surviving, the score
+is NaN with a warning. Average the model pieces, average the floor
+pieces, divide:
 
     score = typical human-vs-sim distance / typical human-vs-human distance
 

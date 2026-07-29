@@ -8,6 +8,7 @@ import pytest
 from aimanager.evaluation_suite.convert import HUMAN_DATA_FILE, load_human
 from aimanager.evaluation_suite.metrics import (
     ContributionMetrics,
+    ResponseMetrics,
     SwitchingMetrics,
 )
 from aimanager.evaluation_suite.scoring import (
@@ -23,6 +24,7 @@ SIM_IDS = list(range(100))
 
 C = ContributionMetrics()
 S = SwitchingMetrics()
+R = ResponseMetrics()
 
 
 @pytest.fixture(scope="module")
@@ -83,17 +85,48 @@ def test_human_as_sim_scores_near_one(human, human_repeats):
     # drawing the "sim" from the human pool itself must sit at the
     # noise ceiling for every row kind
     for group, name in [(C, "CD"), (C, "CB"), (S, "SA")]:
-        s = score_row(group, name, human, human, human_repeats)
-        assert 0.7 < s < 1.3, (name, s)
+        r = score_row(group, name, human, human, human_repeats)
+        assert 0.7 < r["score"] < 1.3, (name, r)
+        assert r["repeats_used"] == r["n_repeats"] == 40
 
 
 def test_shifted_pool_scores_far_above_one(human, human_repeats):
     shifted = human.assign(contribution=human["contribution"] + 5)
-    assert score_row(C, "CD", human, shifted, human_repeats) > 5
+    assert score_row(C, "CD", human, shifted, human_repeats)["score"] > 5
 
 
 def test_precomputed_denominators_match(human, human_repeats):
     denoms = denominators(C, "CD", human, human_repeats)
     direct = score_row(C, "CD", human, human, human_repeats)
     reused = score_row(C, "CD", human, human, human_repeats, denoms=denoms)
-    assert direct == pytest.approx(reused)
+    assert direct["score"] == pytest.approx(reused["score"])
+
+
+def test_unsupported_repeats_are_dropped(human, human_repeats):
+    # a "sim" that never punishes >= 16 empties RSA's 16+ bin in every
+    # draw: no repeat survives, score NaN, warning emitted
+    capped = human.assign(punishment=human["punishment"].clip(upper=15))
+    with pytest.warns(UserWarning, match="RSA: no repeat supports"):
+        r = score_row(R, "RSA", human, capped, human_repeats)
+    assert np.isnan(r["score"])
+    assert r["repeats_used"] == 0
+
+
+def test_lin_ridge_rsa_partial_support(human):
+    # the one real #134 case: 6 of 100 lin_ridge episodes carry a 16+
+    # punishment event, so ~17% of draws cannot support the bin -- the
+    # score averages over the surviving repeats and reports the count
+    from aimanager.evaluation_suite.convert import SIM_EXAMPLE_FILE, load_sim
+
+    sim = load_sim(REPO / SIM_EXAMPLE_FILE)[
+        "ah group_switching managed by lin_ridge_self"
+    ]
+    repeats = make_repeats(
+        human["episode_id"].unique(),
+        sim["episode_id"].unique(),
+        n_repeats=100,
+        seed=42,
+    )
+    r = score_row(R, "RSA", human, sim, repeats)
+    assert r["repeats_used"] == 83
+    assert not np.isnan(r["score"])
