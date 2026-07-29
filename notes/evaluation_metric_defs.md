@@ -115,9 +115,13 @@ Canonical: abs Δ per round, averaged over the 24 rounds. Empty groups: not affe
 A response is conditioned on the stimulus it reacts to: these check whether the
 models have the right mechanisms, not just the right states. Contribution change
 means next round's contribution minus this round's, with the stimulus taken this
-round. The R rows can have empty strata (a sim that never punishes or never
-switches produces no observations in some bins); how to handle that is decided
-on the R branch.
+round; it requires a valid contribution in both rounds.
+
+The R rows could in principle have empty strata (a sim that never punishes
+hard or never switches produces no observations in some bins). We assume this
+does not happen: the discrepancy raises an error when an expected stratum is
+empty on either side, naming the row and the missing strata. If a real
+candidate model ever triggers it, a policy gets designed then (issue #134).
 
 **RCA -- contribution change by round type:** how contributions change after four
 kinds of round: no switch was allowed, the player switched, the player chose to
@@ -126,7 +130,10 @@ Canonical: EMD per round type, averaged over the 4 types.
 
 **RCB -- reaction to punishment:** the average contribution change of punished
 non-full contributors, split by punishment rate bins (0, 0.25], (0.25, 0.5],
-(0.5, 1], > 1; how strongly people respond to being punished.
+(0.5, 1], > 1; how strongly people respond to being punished. Punishment rate
+= punishment / (20 − contribution), punishment per point of shortfall: "> 1"
+means punished more than the entire shortfall, and the rate is undefined at
+contribution 20 -- exactly the ceiling case RCC exists for.
 Canonical: abs Δ per bin, averaged over the 4 bins.
 
 **RCC -- reaction at the ceiling:** among full contributors (gave 20), the average
