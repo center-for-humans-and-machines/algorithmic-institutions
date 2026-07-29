@@ -1,12 +1,33 @@
 """Tests for the evaluation-suite scoring schema (#132)."""
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
-from aimanager.evaluation_suite.scoring import make_repeats, subset
+from aimanager.evaluation_suite.convert import HUMAN_DATA_FILE, load_human
+from aimanager.evaluation_suite.metrics import (
+    ContributionMetrics,
+    SwitchingMetrics,
+)
+from aimanager.evaluation_suite.scoring import (
+    denominators,
+    make_repeats,
+    score_row,
+    subset,
+)
 
+REPO = Path(__file__).resolve().parents[3]
 HUMAN_IDS = list(range(0, 100, 2))  # 50 episodes, even ids
 SIM_IDS = list(range(100))
+
+C = ContributionMetrics()
+S = SwitchingMetrics()
+
+
+@pytest.fixture(scope="module")
+def human():
+    return load_human(REPO / HUMAN_DATA_FILE)
 
 
 def test_repeats_are_deterministic():
@@ -50,3 +71,29 @@ def test_subset_filters_episodes():
     df = pd.DataFrame({"episode_id": [0, 0, 2, 4], "x": [1, 2, 3, 4]})
     out = subset(df, np.array([0, 4]))
     assert out["x"].tolist() == [1, 2, 4]
+
+
+@pytest.fixture(scope="module")
+def human_repeats(human):
+    ids = human["episode_id"].unique()
+    return make_repeats(ids, ids, n_repeats=40, seed=7)
+
+
+def test_human_as_sim_scores_near_one(human, human_repeats):
+    # drawing the "sim" from the human pool itself must sit at the
+    # noise ceiling for every row kind
+    for group, name in [(C, "CD"), (C, "CB"), (S, "SA")]:
+        s = score_row(group, name, human, human, human_repeats)
+        assert 0.7 < s < 1.3, (name, s)
+
+
+def test_shifted_pool_scores_far_above_one(human, human_repeats):
+    shifted = human.assign(contribution=human["contribution"] + 5)
+    assert score_row(C, "CD", human, shifted, human_repeats) > 5
+
+
+def test_precomputed_denominators_match(human, human_repeats):
+    denoms = denominators(C, "CD", human, human_repeats)
+    direct = score_row(C, "CD", human, human, human_repeats)
+    reused = score_row(C, "CD", human, human, human_repeats, denoms=denoms)
+    assert direct == pytest.approx(reused)

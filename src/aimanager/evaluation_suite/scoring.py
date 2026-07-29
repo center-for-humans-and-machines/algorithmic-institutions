@@ -42,3 +42,38 @@ def make_repeats(human_episode_ids, sim_episode_ids, n_repeats, seed):
 def subset(df, episode_ids):
     """Canonical-frame subset for one side of a comparison."""
     return df[df["episode_id"].isin(episode_ids)]
+
+
+def _row_weights(group, name, human):
+    """Stratum weights fixed once on the full human reference; plain
+    distribution rows have none."""
+    if group.KINDS[name] == "distribution":
+        return None
+    return group.weights(name, human)
+
+
+def denominators(group, name, human, repeats, weights=None):
+    """d(h_a, h_b) per repeat -- the human-vs-human noise ceiling. It
+    does not depend on the sim, so the driver computes it once per row
+    and reuses it across pairings."""
+    if weights is None:
+        weights = _row_weights(group, name, human)
+    return [
+        group.d(name, subset(human, h_a), subset(human, h_b), weights=weights)
+        for h_a, h_b, _ in repeats
+    ]
+
+
+def score_row(group, name, human, sim, repeats, weights=None, denoms=None):
+    """Normalised score for one metric row: mean_r d(h_a, s) over
+    mean_r d(h_a, h_b), the same h_a in both terms, numerator and
+    denominator averaged separately before dividing."""
+    if weights is None:
+        weights = _row_weights(group, name, human)
+    if denoms is None:
+        denoms = denominators(group, name, human, repeats, weights=weights)
+    nums = [
+        group.d(name, subset(human, h_a), subset(sim, s), weights=weights)
+        for h_a, _, s in repeats
+    ]
+    return (sum(nums) / len(nums)) / (sum(denoms) / len(denoms))
