@@ -5,7 +5,7 @@
 Reads the finished simulation's per_round.parquet from the config's
 output_dir (the simulation must have run with save_per_round: true),
 converts the human reference and every pairing into the canonical frame,
-and writes two files to the output_dir:
+and writes two files to <output_dir>/evaluation/:
 
 - metrics.csv: one row per (pairing, metric) with the raw discrepancy
   d(human, sim), the signed std diagnostic where retained (CA/CC/CE),
@@ -14,6 +14,8 @@ and writes two files to the output_dir:
   noise ceiling (score, numerator, denominator, repeats_used,
   n_repeats, seed); scoring_repeats and scoring_seed in the sim config
   override the 500 / 42 defaults
+
+plus one figure per metric-table row under evaluation/visuals/ (#137).
 """
 
 import os
@@ -28,6 +30,7 @@ from aimanager.evaluation_suite.convert import (
 )
 from aimanager.evaluation_suite.metrics import GROUPS
 from aimanager.evaluation_suite.scoring import score_all
+from aimanager.evaluation_suite.visuals import plot_all
 
 DIAGNOSTIC_ROWS = ["CA", "CC", "CE"]
 
@@ -77,8 +80,11 @@ def run_cli(config, config_path):
     human = load_human(HUMAN_DATA_FILE, switch_every=switch_every)
     sims = load_sim(parquet_path, switch_every=switch_every)
 
+    eval_dir = os.path.join(output_dir, "evaluation")
+    os.makedirs(eval_dir, exist_ok=True)
+
     result = evaluate(human, sims)
-    out_path = os.path.join(output_dir, "metrics.csv")
+    out_path = os.path.join(eval_dir, "metrics.csv")
     result.to_csv(out_path, index=False)
     print(f"{len(result)} rows ({len(sims)} pairings) -> {out_path}")
 
@@ -88,6 +94,9 @@ def run_cli(config, config_path):
         n_repeats=config.get("scoring_repeats", 500),
         seed=config.get("scoring_seed", 42),
     )
-    scores_path = os.path.join(output_dir, "scores.csv")
+    scores_path = os.path.join(eval_dir, "scores.csv")
     scores.to_csv(scores_path, index=False)
     print(f"{len(scores)} scores -> {scores_path}")
+
+    figures = plot_all(human, sims, os.path.join(eval_dir, "visuals"))
+    print(f"{len(figures)} figures -> {os.path.join(eval_dir, 'visuals')}")

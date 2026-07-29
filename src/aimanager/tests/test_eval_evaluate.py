@@ -47,9 +47,9 @@ def test_run_cli_writes_metrics_and_scores(tmp_path):
     output_dir.mkdir()
     (output_dir / "per_round.parquet").symlink_to(REPO / SIM_EXAMPLE_FILE)
     run_cli({"output_dir": str(output_dir), "scoring_repeats": 2}, "config.yml")
-    metrics = output_dir / "metrics.csv"
+    metrics = output_dir / "evaluation" / "metrics.csv"
     assert metrics.exists()
     assert sum(1 for _ in open(metrics)) == 3 * N_ROWS + 1  # pairings + header
-    scores = output_dir / "scores.csv"
+    scores = output_dir / "evaluation" / "scores.csv"
     assert scores.exists()
     assert sum(1 for _ in open(scores)) == 3 * N_ROWS + 1
