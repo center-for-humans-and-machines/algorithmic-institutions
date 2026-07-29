@@ -21,7 +21,10 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
-from aimanager.evaluation_suite.metrics import ContributionMetrics  # noqa: E402
+from aimanager.evaluation_suite.metrics import (  # noqa: E402
+    ContributionMetrics,
+    SwitchingMetrics,
+)
 
 # Okabe-Ito colorblind-safe hues, ordered so consecutive assignments are
 # maximally separated; pairwise distinctness (incl. against the black
@@ -93,11 +96,14 @@ def prob_hist(ax, human, sims, values, bins, xlabel, log_y=False):
     ax.set_ylabel("probability")
 
 
-def lineplot(ax, human, sims, stat, xlabel, ylabel):
-    """Overlaid lines of `stat(frame)` (a pd.Series, index -> value)."""
+def lineplot(ax, human, sims, stat, xlabel, ylabel, marker=None):
+    """Overlaid lines of `stat(frame)` (a pd.Series, index -> value);
+    pass a marker for sparse x-axes."""
     for label, df, color, lw in _sources(human, sims):
         s = stat(df)
-        ax.plot(s.index, s.values, color=color, linewidth=lw, label=label)
+        ax.plot(
+            s.index, s.values, color=color, linewidth=lw, label=label, marker=marker
+        )
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
 
@@ -207,6 +213,49 @@ def cf_line(ax, human, sims):
     ax.legend(handles, labels, frameon=False, fontsize=8)
     ax.set_xlabel("round")
     ax.set_ylabel("share of contributions")
+
+
+# -- Switching (S) ------------------------------------------------------
+
+_S = SwitchingMetrics()
+
+
+@plot("SB_line")
+def sb_line(ax, human, sims):
+    lineplot(
+        ax,
+        human,
+        sims,
+        _S.sb,
+        "switching opportunity (decision round)",
+        "switch rate",
+        marker="o",
+    )
+    ax.set_xticks([3, 7, 11, 15, 19])
+
+
+@plot("SC_hist")
+def sc_hist(ax, human, sims):
+    prob_hist(
+        ax,
+        human,
+        sims,
+        _S.sc,
+        bins=np.arange(3.5, 9.5),
+        xlabel="size of the larger group",
+    )
+
+
+@plot("SC_line")
+def sc_line(ax, human, sims):
+    lineplot(
+        ax,
+        human,
+        sims,
+        lambda df: _S.sc(df).groupby("round_number").mean(),
+        "round",
+        "size of the larger group (mean over games)",
+    )
 
 
 def plot_all(human, sims, out_dir):
