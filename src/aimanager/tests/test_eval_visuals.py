@@ -63,6 +63,13 @@ def test_registered_plots_render_on_real_data(tmp_path):
         "PA_hist",
         "PB_line",
         "PC_line",
+        "RCA_bar",
+        "RCB_line",
+        "RCC_bar",
+        "RCD_scatter",
+        "RSA_line",
+        "RPA_line",
+        "RPB_line",
     }
     for p in paths:
         assert Path(p).stat().st_size > 0

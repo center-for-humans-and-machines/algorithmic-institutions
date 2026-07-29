@@ -22,8 +22,13 @@ import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
 from aimanager.evaluation_suite.metrics import (  # noqa: E402
+    RCB_LABELS,
+    RPA_LABELS,
+    RPB_LABELS,
+    RSA_LABELS,
     ContributionMetrics,
     PunishmentMetrics,
+    ResponseMetrics,
     SwitchingMetrics,
 )
 
@@ -291,6 +296,171 @@ def pc_line(ax, human, sims):
         _P.pc,
         "round",
         "share of punishments at zero",
+    )
+
+
+# -- Responses (R) -------------------------------------------------------
+
+_R = ResponseMetrics()
+
+RCA_ORDER = [
+    "no_switch_allowed",
+    "switched",
+    "chose_to_stay",
+    "stayed_comp_changed",
+]
+
+
+def _stratum_stats(obs, order):
+    """median / q25 / q75 of observations per stratum (index level 0)."""
+    grouped = obs.groupby(level=0)
+    return (
+        grouped.median().reindex(order),
+        grouped.quantile(0.25).reindex(order),
+        grouped.quantile(0.75).reindex(order),
+    )
+
+
+def band_lineplot(ax, human, sims, obs, order, xlabel, ylabel):
+    """Median line with an IQR band per source over categorical strata;
+    sources are dodged slightly on x so integer-quantised medians that
+    coincide stay visible."""
+    x = np.arange(len(order))
+    sources = _sources(human, sims)
+    for i, (label, df, color, lw) in enumerate(sources):
+        dodge = (i - (len(sources) - 1) / 2) * 0.05
+        med, q25, q75 = _stratum_stats(obs(df), order)
+        ax.plot(
+            x + dodge, med.values, color=color, linewidth=lw, marker="o", label=label
+        )
+        ax.fill_between(
+            x + dodge, q25.values, q75.values, color=color, alpha=0.12, linewidth=0
+        )
+    ax.set_xticks(x)
+    ax.set_xticklabels(order, fontsize=8)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(f"{ylabel} (median, IQR band)")
+
+
+@plot("RCA_bar")
+def rca_bar(ax, human, sims):
+    sources = _sources(human, sims)
+    x = np.arange(len(RCA_ORDER))
+    width = 0.8 / len(sources)
+    for i, (label, df, color, _) in enumerate(sources):
+        med, q25, q75 = _stratum_stats(_R.rca(df), RCA_ORDER)
+        ax.bar(
+            x - 0.4 + width * (i + 0.5),
+            med.values,
+            width * 0.9,
+            color=color,
+            label=label,
+            yerr=[(med - q25).values, (q75 - med).values],
+            error_kw={"ecolor": color, "linewidth": 1.8, "alpha": 0.9},
+            capsize=3,
+        )
+    ax.axhline(0, color="gray", linewidth=0.8)
+    ax.set_xticks(x)
+    ax.set_xticklabels([o.replace("_", "\n") for o in RCA_ORDER], fontsize=8)
+    ax.set_xlabel("round type")
+    ax.set_ylabel("contribution change (median, IQR)")
+
+
+def _rcb_obs(df):
+    pop = _R._rcb_population(df)
+    return pop.set_index(pop["rate_bin"].astype(str))["dc"]
+
+
+@plot("RCB_line")
+def rcb_line(ax, human, sims):
+    band_lineplot(
+        ax,
+        human,
+        sims,
+        _rcb_obs,
+        RCB_LABELS,
+        "punishment rate (punishment per point of shortfall)",
+        "contribution change",
+    )
+
+
+@plot("RCC_bar")
+def rcc_bar(ax, human, sims):
+    sources = _sources(human, sims)
+    x = np.arange(2)
+    width = 0.8 / len(sources)
+    for i, (label, df, color, _) in enumerate(sources):
+        d = _R._with_dc(df)
+        full = d[(d["contribution"] == 20) & d["dc"].notna() & d["punishment"].notna()]
+        means = [
+            full.loc[full["punishment"] > 0, "dc"].mean(),
+            full.loc[full["punishment"] == 0, "dc"].mean(),
+        ]
+        ax.bar(
+            x - 0.4 + width * (i + 0.5), means, width * 0.9, color=color, label=label
+        )
+    ax.axhline(0, color="gray", linewidth=0.8)
+    ax.set_xticks(x)
+    ax.set_xticklabels(["punished", "unpunished"])
+    ax.set_xlabel("punishment status of full contributors")
+    ax.set_ylabel("mean contribution change")
+
+
+@plot("RCD_scatter")
+def rcd_scatter(ax, human, sims):
+    for label, df, color, lw in _sources(human, sims):
+        events = _R._switch_events(df).dropna(subset=["dc", "receiving_mean"])
+        gap = events["receiving_mean"] - events["contribution"]
+        ax.scatter(gap, events["dc"], s=6, alpha=0.15, color=color, edgecolors="none")
+        slope = gap.cov(events["dc"]) / gap.var()
+        intercept = events["dc"].mean() - slope * gap.mean()
+        xs = np.array([gap.min(), gap.max()])
+        ax.plot(
+            xs,
+            intercept + slope * xs,
+            color=color,
+            linewidth=lw,
+            label=f"{label} (pull {slope:.2f})",
+        )
+    ax.set_xlabel("gap to the receiving group ($\\hat{C} - C_n$)")
+    ax.set_ylabel("contribution change ($C_{n+1} - C_n$)")
+
+
+@plot("RSA_line")
+def rsa_line(ax, human, sims):
+    x = np.arange(len(RSA_LABELS))
+    for label, df, color, lw in _sources(human, sims):
+        rates = _R.rsa(df).reindex(RSA_LABELS)
+        ax.plot(x, rates.values, color=color, linewidth=lw, marker="o", label=label)
+    ax.set_xticks(x)
+    ax.set_xticklabels(RSA_LABELS)
+    ax.set_xlabel("punishment received at the decision round")
+    ax.set_ylabel("switch rate")
+
+
+@plot("RPA_line")
+def rpa_line(ax, human, sims):
+    band_lineplot(
+        ax,
+        human,
+        sims,
+        _R.rpa,
+        RPA_LABELS,
+        "contribution bin",
+        "punishment",
+    )
+
+
+@plot("RPB_line")
+def rpb_line(ax, human, sims):
+    band_lineplot(
+        ax,
+        human,
+        sims,
+        _R.rpb,
+        RPB_LABELS,
+        "group size",
+        "punishment",
     )
 
 
