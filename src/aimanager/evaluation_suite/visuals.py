@@ -23,6 +23,7 @@ from matplotlib.lines import Line2D  # noqa: E402
 
 from aimanager.evaluation_suite.metrics import (  # noqa: E402
     ContributionMetrics,
+    PunishmentMetrics,
     SwitchingMetrics,
 )
 
@@ -255,6 +256,41 @@ def sc_line(ax, human, sims):
         lambda df: _S.sc(df).groupby("round_number").mean(),
         "round",
         "size of the larger group (mean over games)",
+    )
+
+
+# -- Punishment (P) ------------------------------------------------------
+
+_P = PunishmentMetrics()
+
+
+@plot("PA_hist")
+def pa_hist(ax, human, sims):
+    prob_hist(
+        ax,
+        human,
+        sims,
+        _P.pa,
+        bins=np.arange(-0.5, 31.5),
+        xlabel="punishment",
+        log_y=True,
+    )
+
+
+@plot("PB_line")
+def pb_line(ax, human, sims):
+    lineplot(ax, human, sims, _P.pb, "round", "mean punishment")
+
+
+@plot("PC_line")
+def pc_line(ax, human, sims):
+    lineplot(
+        ax,
+        human,
+        sims,
+        _P.pc,
+        "round",
+        "share of punishments at zero",
     )
 
 

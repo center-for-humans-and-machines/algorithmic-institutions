@@ -60,6 +60,9 @@ def test_registered_plots_render_on_real_data(tmp_path):
         "SB_line",
         "SC_hist",
         "SC_line",
+        "PA_hist",
+        "PB_line",
+        "PC_line",
     }
     for p in paths:
         assert Path(p).stat().st_size > 0
