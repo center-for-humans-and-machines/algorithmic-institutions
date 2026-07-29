@@ -40,12 +40,16 @@ def test_run_cli_fails_clearly_without_parquet(tmp_path, capsys):
     assert "save_per_round" in capsys.readouterr().err
 
 
-def test_run_cli_writes_metrics_csv(tmp_path):
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_run_cli_writes_metrics_and_scores(tmp_path):
     # point a minimal config at the real per_round.parquet via a symlink
     output_dir = tmp_path / "run"
     output_dir.mkdir()
     (output_dir / "per_round.parquet").symlink_to(REPO / SIM_EXAMPLE_FILE)
-    run_cli({"output_dir": str(output_dir)}, "some_config.yml")
-    out = output_dir / "metrics.csv"
-    assert out.exists()
-    assert sum(1 for _ in open(out)) == 3 * N_ROWS + 1  # 3 pairings + header
+    run_cli({"output_dir": str(output_dir), "scoring_repeats": 2}, "config.yml")
+    metrics = output_dir / "metrics.csv"
+    assert metrics.exists()
+    assert sum(1 for _ in open(metrics)) == 3 * N_ROWS + 1  # pairings + header
+    scores = output_dir / "scores.csv"
+    assert scores.exists()
+    assert sum(1 for _ in open(scores)) == 3 * N_ROWS + 1

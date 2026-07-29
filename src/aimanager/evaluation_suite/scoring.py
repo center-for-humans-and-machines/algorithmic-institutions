@@ -18,6 +18,9 @@ model is scored on identical splits and simulation draws.
 import warnings
 
 import numpy as np
+import pandas as pd
+
+from aimanager.evaluation_suite.metrics import GROUPS
 
 
 def make_repeats(human_episode_ids, sim_episode_ids, n_repeats, seed):
@@ -114,3 +117,28 @@ def score_row(group, name, human, sim, repeats, weights=None, denoms=None):
         return result
     result["score"] = result["numerator"] / result["denominator"]
     return result
+
+
+def score_all(human, sims, n_repeats=500, seed=42, groups=None):
+    """Normalised scores for every metric row and pairing, as a long
+    frame. One resampling plan serves all pairings (their pools must
+    hold the same episode ids), and each row's noise ceiling is
+    computed once and shared."""
+    groups = GROUPS if groups is None else groups
+    pools = [frozenset(sim["episode_id"].unique()) for sim in sims.values()]
+    if len(set(pools)) > 1:
+        raise ValueError("sim pairings must share one episode pool")
+    repeats = make_repeats(
+        human["episode_id"].unique(), sorted(pools[0]), n_repeats, seed
+    )
+    rows = []
+    for group in groups.values():
+        for name in group.KINDS:
+            weights = _row_weights(group, name, human)
+            denoms = denominators(group, name, human, repeats, weights=weights)
+            for run, sim in sims.items():
+                result = score_row(
+                    group, name, human, sim, repeats, weights=weights, denoms=denoms
+                )
+                rows.append({"run": run, "metric": name, **result, "seed": seed})
+    return pd.DataFrame(rows)

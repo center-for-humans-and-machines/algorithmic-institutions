@@ -112,6 +112,21 @@ def test_unsupported_repeats_are_dropped(human, human_repeats):
     assert r["repeats_used"] == 0
 
 
+def test_score_all_shape(human):
+    # cheap smoke over the S group only: two pseudo-pairings from one pool
+    from aimanager.evaluation_suite.scoring import score_all
+
+    sims = {"self": human, "shifted": human.assign(does_switch=False)}
+    out = score_all(human, sims, n_repeats=4, seed=1, groups={"S": S})
+    assert len(out) == 3 * 2  # rows x pairings
+    assert set(out.columns) >= {"run", "metric", "score", "repeats_used", "seed"}
+    self_scores = out[out["run"] == "self"]
+    assert (self_scores["repeats_used"] == 4).all()
+    # identical seeds reproduce identical scores
+    again = score_all(human, sims, n_repeats=4, seed=1, groups={"S": S})
+    assert out["score"].equals(again["score"])
+
+
 def test_lin_ridge_rsa_partial_support(human):
     # the one real #134 case: 6 of 100 lin_ridge episodes carry a 16+
     # punishment event, so ~17% of draws cannot support the bin -- the
