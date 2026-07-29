@@ -5,11 +5,15 @@
 Reads the finished simulation's per_round.parquet from the config's
 output_dir (the simulation must have run with save_per_round: true),
 converts the human reference and every pairing into the canonical frame,
-and writes metrics.csv to the output_dir -- one row per (pairing, metric)
-with the raw discrepancy d(human, sim), the signed std diagnostic where
-retained (CA/CC/CE), and the observation counts. These are raw-unit
-quick-look values; the comparable normalised scores come from #132's
-scoring pipeline, which consumes the metric objects directly.
+and writes two files to the output_dir:
+
+- metrics.csv: one row per (pairing, metric) with the raw discrepancy
+  d(human, sim), the signed std diagnostic where retained (CA/CC/CE),
+  and the observation counts -- raw-unit quick-look values
+- scores.csv: the #132 normalised scores against the human-vs-human
+  noise ceiling (score, numerator, denominator, repeats_used,
+  n_repeats, seed); scoring_repeats and scoring_seed in the sim config
+  override the 500 / 42 defaults
 """
 
 import os
@@ -23,6 +27,7 @@ from aimanager.evaluation_suite.convert import (
     load_sim,
 )
 from aimanager.evaluation_suite.metrics import GROUPS
+from aimanager.evaluation_suite.scoring import score_all
 
 DIAGNOSTIC_ROWS = ["CA", "CC", "CE"]
 
@@ -76,3 +81,13 @@ def run_cli(config, config_path):
     out_path = os.path.join(output_dir, "metrics.csv")
     result.to_csv(out_path, index=False)
     print(f"{len(result)} rows ({len(sims)} pairings) -> {out_path}")
+
+    scores = score_all(
+        human,
+        sims,
+        n_repeats=config.get("scoring_repeats", 500),
+        seed=config.get("scoring_seed", 42),
+    )
+    scores_path = os.path.join(output_dir, "scores.csv")
+    scores.to_csv(scores_path, index=False)
+    print(f"{len(scores)} scores -> {scores_path}")

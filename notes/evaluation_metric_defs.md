@@ -117,11 +117,16 @@ models have the right mechanisms, not just the right states. Contribution change
 means next round's contribution minus this round's, with the stimulus taken this
 round; it requires a valid contribution in both rounds.
 
-The R rows could in principle have empty strata (a sim that never punishes
-hard or never switches produces no observations in some bins). We assume this
-does not happen: the discrepancy raises an error when an expected stratum is
-empty on either side, naming the row and the missing strata. If a real
-candidate model ever triggers it, a policy gets designed then (issue #134).
+The R rows can have empty strata (a sim that never punishes hard or never
+switches produces no observations in some bins). The discrepancy raises an
+error when an expected stratum is empty on either side, naming the row and
+the missing strata. At the scoring level (#132) the settled policy is: a
+resampling repeat whose draw cannot support every stratum is dropped, both
+score terms average over the same surviving repeats, and repeats_used is
+reported; if fewer than half the repeats survive, the score is NaN and a
+warning is emitted. Settled on the one real case that triggered it:
+lin_ridge's RSA 16+ bin (6 events in 100 episodes, 17% of draws
+unsupported).
 
 **RCA -- contribution change by round type:** how contributions change after four
 kinds of round: no switch was allowed, the player switched, the player chose to
