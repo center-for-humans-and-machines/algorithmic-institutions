@@ -278,13 +278,15 @@ def fig_slot_concordance(scores, out_dir):
 
 def fig_switch_unrolled(scores, out_dir):
     fig, axes = plt.subplots(1, len(SWITCH_ROWS), figsize=(14, 4.2))
+
+    hi = 6
+    lo = 0
+
     for ax, metric in zip(axes, SWITCH_ROWS):
         sub = scores[scores["metric"] == metric]
         wide = sub.pivot_table(
             index=["contr", "punisher"], columns="switch", values="score"
         )
-        lo = min(wide.min().min(), 0.4)
-        hi = wide.max().max() * 1.08
         ax.plot([lo, hi], [lo, hi], color="gray", linewidth=0.8, zorder=1)
         for (contr, punisher), row in wide.iterrows():
             ax.scatter(
@@ -303,6 +305,9 @@ def fig_switch_unrolled(scores, out_dir):
         ax.set_ylim(lo, hi)
         ax.set_aspect("equal")
         ax.grid(alpha=0.25, linewidth=0.5)
+        for b in [1,2,5]:
+            ax.vlines(x=b, ymin=lo, ymax=hi, colors='k', alpha=0.5, linestyles='dashed')
+            ax.hlines(y=b, xmin=lo, xmax=hi, colors='k', alpha=0.5, linestyles='dashed')
         ax.spines[["top", "right"]].set_visible(False)
     axes[0].set_ylabel("score with gnn switch")
     handles = [
