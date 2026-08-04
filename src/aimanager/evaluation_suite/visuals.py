@@ -311,27 +311,29 @@ RCA_ORDER = [
 ]
 
 
-def _stratum_stats(obs, order):
-    """median / q25 / q75 of observations per stratum (index level 0)."""
+def _stratum_stats(obs, order, center="median"):
+    """center (median or mean) / q25 / q75 of observations per stratum
+    (index level 0)."""
     grouped = obs.groupby(level=0)
+    mid = grouped.mean() if center == "mean" else grouped.median()
     return (
-        grouped.median().reindex(order),
+        mid.reindex(order),
         grouped.quantile(0.25).reindex(order),
         grouped.quantile(0.75).reindex(order),
     )
 
 
-def band_lineplot(ax, human, sims, obs, order, xlabel, ylabel):
-    """Median line with an IQR band per source over categorical strata;
-    sources are dodged slightly on x so integer-quantised medians that
+def band_lineplot(ax, human, sims, obs, order, xlabel, ylabel, center="median"):
+    """Central line with an IQR band per source over categorical strata;
+    sources are dodged slightly on x so integer-quantised centers that
     coincide stay visible."""
     x = np.arange(len(order))
     sources = _sources(human, sims)
     for i, (label, df, color, lw) in enumerate(sources):
         dodge = (i - (len(sources) - 1) / 2) * 0.05
-        med, q25, q75 = _stratum_stats(obs(df), order)
+        mid, q25, q75 = _stratum_stats(obs(df), order, center)
         ax.plot(
-            x + dodge, med.values, color=color, linewidth=lw, marker="o", label=label
+            x + dodge, mid.values, color=color, linewidth=lw, marker="o", label=label
         )
         ax.fill_between(
             x + dodge, q25.values, q75.values, color=color, alpha=0.12, linewidth=0
@@ -339,7 +341,7 @@ def band_lineplot(ax, human, sims, obs, order, xlabel, ylabel):
     ax.set_xticks(x)
     ax.set_xticklabels(order, fontsize=8)
     ax.set_xlabel(xlabel)
-    ax.set_ylabel(f"{ylabel} (median, IQR band)")
+    ax.set_ylabel(f"{ylabel} ({center}, IQR band)")
 
 
 @plot("RCA_bar")
@@ -373,6 +375,7 @@ def _rcb_obs(df):
 
 @plot("RCB_line")
 def rcb_line(ax, human, sims):
+    # mean center: matches the RCB metric, which compares bin means
     band_lineplot(
         ax,
         human,
@@ -381,6 +384,7 @@ def rcb_line(ax, human, sims):
         RCB_LABELS,
         "punishment rate (punishment per point of shortfall)",
         "contribution change",
+        center="mean",
     )
 
 
