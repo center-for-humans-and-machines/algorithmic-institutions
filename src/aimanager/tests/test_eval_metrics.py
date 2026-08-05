@@ -96,6 +96,46 @@ def test_ce_drops_empty_group_rounds(frame):
     assert list(obs.index.get_level_values("round_number")) == [0, 1]
 
 
+def test_cg_group_spread_ratio(frame):
+    # the group means are CC's cells; the divisor is CD's pooled spread
+    expected = np.std([5.0, 20.0, 10.0, 10.0, 12.5], ddof=1) / np.std(
+        frame["contribution"].dropna(), ddof=1
+    )
+    assert C.cg(frame).loc["spread_ratio"] == pytest.approx(expected)
+
+
+def test_pd_group_spread_ratio(frame):
+    expected = np.std([2.5, 5.0, 0.0, 15.0, 0.0], ddof=1) / np.std(
+        frame["punishment"].dropna(), ddof=1
+    )
+    assert P.pd(frame).loc["spread_ratio"] == pytest.approx(expected)
+
+
+def test_spread_ratio_sits_at_the_independence_floor():
+    """The claim CG/PD rest on: drawing every player independently puts the
+    ratio at one over the square root of the group size (0.5 at groups of 4),
+    so distance above the floor is group-level agreement."""
+    rng = np.random.default_rng(0)
+    rows = [
+        (ep, f"p{i}", r, i // 4, float(rng.integers(0, 21)), 0.0)
+        for ep in range(200)
+        for r in range(24)
+        for i in range(8)
+    ]
+    independent = pd.DataFrame(
+        rows,
+        columns=[
+            "episode_id",
+            "participant_code",
+            "round_number",
+            "group_id",
+            "contribution",
+            "punishment",
+        ],
+    )
+    assert C.cg(independent).loc["spread_ratio"] == pytest.approx(0.5, abs=0.02)
+
+
 def test_cf_boundary_shares(frame):
     stat = C.cf(frame)
     assert stat.loc[(0, "share_at_0")] == pytest.approx(0.25)
@@ -185,10 +225,13 @@ def test_human_reference_pins(human):
         "CD": 9320,  # 9600 rows - 280 no-input
         "CE": 1039,  # 1200 game-rounds - 144 empty-group - 17 all-no-input
         "CF": 48,
+        "CG": 1,  # one ratio, one stratum
     }
     assert extractions["CB"].loc[0] == pytest.approx(9.067358, abs=1e-5)
     assert extractions["CE"].mean() == pytest.approx(-0.383599, abs=1e-5)
     assert extractions["CF"].loc[(0, "share_at_0")] == pytest.approx(0.051813, abs=1e-5)
+    # humans sit far above the independence floor (~0.58 at these group sizes)
+    assert extractions["CG"].loc["spread_ratio"] == pytest.approx(0.848016, abs=1e-5)
 
 
 def test_human_switching_pins(human):
@@ -211,6 +254,7 @@ def test_human_punishment_pins(human):
     assert pa.eq(0).mean() == pytest.approx(0.694224, abs=1e-5)
     assert extractions["PB"].loc[0] == pytest.approx(4.090659, abs=1e-5)
     assert extractions["PC"].loc[0] == pytest.approx(0.445055, abs=1e-5)
+    assert extractions["PD"].loc["spread_ratio"] == pytest.approx(0.738904, abs=1e-5)
 
 
 def test_human_response_pins(human):

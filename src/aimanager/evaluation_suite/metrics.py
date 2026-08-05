@@ -47,6 +47,24 @@ def _uniform(index):
     return pd.Series(1.0, index=index)
 
 
+SPREAD_STRATUM = "spread_ratio"
+
+
+def _spread_ratio(df, measure, row):
+    """Spread of group means over spread of individual values (CG, PD): how far
+    apart groups drift, scaled by how variable single players are. Independent
+    draws put this at the independence floor, one over the square root of the
+    group size; real groups run well above it because members read the same
+    situation alike. See notes/evaluation_metric_defs.md."""
+    valid = df.dropna(subset=[measure])
+    grouped = valid.groupby(GROUP_CELL)[measure].mean()
+    return pd.Series({SPREAD_STRATUM: grouped.std() / valid[measure].std()}, name=row)
+
+
+def _spread_weights(df=None):
+    return pd.Series({SPREAD_STRATUM: 1.0})
+
+
 class MetricGroup:
     """Subclasses define KINDS ({row name: 'distribution' | 'statistic'})
     and one extraction method per row, named after the row in lowercase.
@@ -130,6 +148,7 @@ class ContributionMetrics(MetricGroup):
         "CD": "distribution",
         "CE": "distribution",
         "CF": "statistic",
+        "CG": "statistic",
     }
 
     def ca(self, df):
@@ -167,12 +186,19 @@ class ContributionMetrics(MetricGroup):
         )
         return shares.stack().rename("CF")
 
+    def cg(self, df):
+        """Group contribution spread ratio: CC asks where the group means sit,
+        this asks how wide they scatter."""
+        return _spread_ratio(df, "contribution", "CG")
+
     def cb_weights(self, df=None):
         return _uniform(ROUNDS)
 
     def cf_weights(self, df=None):
         cells = pd.MultiIndex.from_product([ROUNDS, ["share_at_0", "share_at_20"]])
         return _uniform(cells)
+
+    cg_weights = staticmethod(_spread_weights)
 
 
 class SwitchingMetrics(MetricGroup):
@@ -214,6 +240,7 @@ class PunishmentMetrics(MetricGroup):
         "PA": "distribution",
         "PB": "statistic",
         "PC": "statistic",
+        "PD": "statistic",
     }
 
     def pa(self, df):
@@ -232,10 +259,19 @@ class PunishmentMetrics(MetricGroup):
         stat = valid.groupby("round_number")["punishment"].agg(lambda p: p.eq(0).mean())
         return stat.rename("PC")
 
+    # named for the row, as every extraction is; the module's pandas alias is
+    # looked up at call time and so is unaffected
+    def pd(self, df):
+        """Group punishment spread ratio: whether the manager's allocation makes
+        groups differ, given that a group's punishments are one joint decision.
+        The only P row that looks at groups rather than pooling them."""
+        return _spread_ratio(df, "punishment", "PD")
+
     def pb_weights(self, df=None):
         return _uniform(ROUNDS)
 
     pc_weights = pb_weights
+    pd_weights = staticmethod(_spread_weights)
 
 
 class ResponseMetrics(MetricGroup):

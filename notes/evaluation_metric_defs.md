@@ -26,6 +26,16 @@ RL manager they describe the policy rather than score it.
   need both groups drop the round; SC keeps these rounds on purpose.
 - **`common_good`** is not used by any metric and is excluded from the common
   data format.
+- **Group-spread ratio and the independence floor:** two rows (CG, PD) ask
+  whether a *group* behaves like a human group, not whether one player does.
+  Both divide the spread of group means by the spread of individual values.
+  Because we draw every player independently, that ratio comes out at one over
+  the square root of the group size -- the **independence floor**, about 0.58 at
+  the group sizes this game produces. Real groups sit well above it: members read
+  the same situation the same way and act alike without ever observing each
+  other. A source at the floor has no group-level agreement at all, however well
+  its individual behavior is calibrated. The floor is reported alongside as
+  context and is not part of either score.
 
 ## Score types
 
@@ -78,6 +88,13 @@ equal to 20, per round; how much behavior polarizes at the extremes.
 Canonical: abs Δ per (round, boundary) cell, averaged over the 48 cells.
 Empty groups: not affected.
 
+**CG -- group contribution spread ratio:** the spread of group mean
+contributions over the spread of individual contributions; how far apart groups
+drift, measured against how variable single players are. CC asks where the group
+means sit, this asks how wide they scatter.
+Canonical: abs Δ of the two ratios. Empty groups: an empty group has no mean and
+produces no observation; the surviving group's mean is kept, as in CC.
+
 ## Switching distributions (S)
 
 **SA -- overall switch rate:** the share of valid switching opportunities where
@@ -109,6 +126,13 @@ Canonical: abs Δ per round, averaged over the 24 rounds. Empty groups: not affe
 no punishment in each round; whether the manager punishes at all, as opposed to
 how much.
 Canonical: abs Δ per round, averaged over the 24 rounds. Empty groups: not affected.
+
+**PD -- group punishment spread ratio:** the spread of group mean punishments
+over the spread of individual punishments; whether the manager's allocation makes
+groups differ from each other, given that a group's punishments are one manager's
+joint decision rather than four separate ones. The only P row that looks at
+groups rather than pooling them.
+Canonical: abs Δ of the two ratios. Empty groups: as CG.
 
 ## Responses (R) -- documented here, implemented on a later branch
 
