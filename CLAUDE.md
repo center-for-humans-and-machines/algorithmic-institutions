@@ -62,7 +62,6 @@ scripts/                          # Executable shell/python scripts
   simulate_cluster.sh             # Submit simulation on Raven cluster
   fetch_cluster.sh                # Fetch files from Raven cluster
   run_simulation.sh               # Batch GPU simulation SLURM template
-notebooks/                        # Jupyter notebooks (legacy analyses; excluded from linting)
 configs/                          # YAML experiment configurations
   training/artificial_humans/     # AH (GNN) training configs
   training/baselines/             # Linear baseline training configs
@@ -77,7 +76,6 @@ artifacts/                        # Trained model artifacts (GNN dirs with .pt f
 reports/                          # Research documentation and reports
 notes/                            # Normative definitions (evaluation metrics, scoring schema)
 run/                              # Legacy DJX run definitions (djx no longer used)
-djx/                              # Git submodule (legacy experiment framework, unused)
 doc/plans/                        # Implementation plans (status in title)
   archive/                        # Completed plans (DONE, ABANDONED)
 ```
@@ -244,7 +242,6 @@ scripts/remote_test.sh -- -k test_encoder -v
 - Experiment configs: `configs/` (YAML)
 - Plots and figures: `plots/`
 - Legacy DJX run definitions: `run/` (djx no longer used)
-- Notebooks: `notebooks/` (legacy analyses)
 - Trained artifacts: `artifacts/` (GNN dirs; linear joblib bundles in `artifacts/baselines/`)
 - Human reference data: `experiments/2group_8agent_50ep.csv`
 - Metric and scoring definitions: `notes/`
