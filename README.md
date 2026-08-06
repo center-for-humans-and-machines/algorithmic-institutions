@@ -1,12 +1,9 @@
 # Setup
 
-## Clone repository with sub-modules on Tardis Cluster
+## Clone repository
 
-> You need to run this command on Tardis Cluster.
-
-To clone the repository along with its sub-modules, use the following command:
 ```bash
-git clone --recurse-submodules git@github.com:center-for-humans-and-machines/algorithmic-institutions.git
+git clone git@github.com:center-for-humans-and-machines/algorithmic-institutions.git
 ```
 
 ## Install main package
@@ -79,10 +76,6 @@ pip install torch==1.11.0
 pip install -e ".[dev]"
 ```
 
-# Development Workflow
-
-See [doc/claude_code_workflow.md](doc/claude_code_workflow.md) for the AI-assisted development workflow using Claude Code agents.
-
 # Training, Simulation, Evaluation
 
 All pipelines are config-driven (YAML in `configs/`) behind one CLI:
@@ -114,9 +107,9 @@ scripts/fetch_cluster.sh <remote_path>      # bring results back (no trailing sl
 ## Skill-based workflow
 
 In Claude Code the same operations are exposed as skills -- `/train`,
-`/simulate`, `/test`, `/fetch-cluster`, plus `/commit` and `/pr`. See
-[doc/claude_code_workflow.md](doc/claude_code_workflow.md) for the agentic
-development workflow around them (issue labels, plans, review).
+`/simulate`, `/test`, `/fetch-cluster`, plus `/commit` and `/pr` (see
+`.claude/skills/`). Issue labels steering the agent workflow are documented
+in `CLAUDE.md`.
 
 ## Directly on the cluster
 

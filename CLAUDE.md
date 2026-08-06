@@ -11,9 +11,9 @@ A research project exploring AI-driven group management dynamics. Uses supervise
 ### Implementation Remarks
 
 - **Stack**: Python 3.9, uv (package manager), PyTorch + PyTorch Geometric, pandas, seaborn
-- **Clusters**: Tardis and Raven GPU clusters via SLURM
-- **Code style**: Black formatter, flake8 -- enforced via pre-commit hooks on `src/` only. **88-char line limit**. Extend-ignore: `E203, W503`
-- **Config-driven**: Experiments defined via YAML configs in `configs/`; notebooks parameterized via Papermill
+- **Cluster**: Raven GPU cluster via SLURM
+- **Code style**: Black formatter, flake8 -- enforced via pre-commit hooks on `src/` only. **88-char line limit**. Extend-ignore: `E203, W503`. Repo-wide hooks (trailing-whitespace, end-of-file-fixer, check-yaml) also run at commit and can mutate staged non-Python files
+- **Config-driven**: Experiments defined via YAML configs in `configs/`
 - **Key pattern**: Artificial humans (supervised learning on pilot data) + RL manager (reinforcement learning to maximize common good) + simulation (testing managers against artificial humans)
 
 ---
@@ -52,6 +52,7 @@ src/aimanager/                    # Main Python package
 scripts/                          # Executable shell/python scripts
   artificial_humans/              # AH training SLURM templates
   baselines/                      # Linear baseline training + CV (joblib bundles)
+  data_analysis/                  # Analysis scripts (incl. evaluation_sweep.py)
   manager/                        # Manager training SLURM templates
   data_creation/                  # Data preprocessing scripts
   plotting/                       # Reusable plotting scripts
@@ -61,18 +62,15 @@ scripts/                          # Executable shell/python scripts
   simulate_cluster.sh             # Submit simulation on Raven cluster
   fetch_cluster.sh                # Fetch files from Raven cluster
   run_simulation.sh               # Batch GPU simulation SLURM template
-notebooks/                        # Jupyter notebooks (excluded from linting)
-  artificial_humans/              # AH-related notebooks
-  evalutation/                    # Evaluation notebooks
-  reports/                        # Report-generating notebooks
-  test_manager/                   # Manager testing/simulation notebooks
+notebooks/                        # Jupyter notebooks (legacy analyses; excluded from linting)
 configs/                          # YAML experiment configurations
-  training/artificial_humans/     # AH training configs
+  training/artificial_humans/     # AH (GNN) training configs
+  training/baselines/             # Linear baseline training configs
   training/rl_manager/            # RL manager training configs
-  simulation/                     # Simulation configs
+  simulation/                     # Simulation configs (current family: manager_testing/23_*)
 plots/                            # Generated plots and figures
-  group_selection/                # AH model evaluation plots
   simulation/                     # Simulation result plots (incl. per-run evaluation/)
+  data_analysis/                  # Cross-run analysis outputs (incl. sweep score matrices)
 experiments/                      # Human experiment data
 artifacts/                        # Trained model artifacts (GNN dirs with .pt files;
                                   #   linear .joblib bundles under baselines/)
@@ -121,12 +119,11 @@ Labels control the workflow for GitHub issues:
 - `src/aimanager/rl_manager.py` -- RL manager training logic
 - `src/aimanager/evaluation_suite/evaluate.py` -- Evaluation entry point (metrics, scores, visuals)
 - `src/aimanager/evaluation_suite/metrics.py` -- Metric row extractions, in code
+- `scripts/data_analysis/evaluation_sweep.py` -- Cross-stack score matrix and sweep figures
 - `notes/evaluation_metric_defs.md` -- Normative definitions of every metric row
 - `notes/eval_scoring_schema.md` -- The noise-ceiling scoring schema
 - `scripts/plotting/plot_confusion_matrix.py` -- Reusable confusion matrix plot
 - `scripts/data_creation/group_switching_preprocess.py` -- Group switching data preprocessing
-- `scripts/data_creation/pilot_pseudo_group_matching.py` -- Old 4-player to 8-player data transform
-- `run.py` -- Notebook runner using Papermill with YAML parameter files
 - `reports/basics.md` -- Game rules and experimental setup reference
 
 ### Evaluation Suite
@@ -150,6 +147,12 @@ evaluation suite likewise keeps one copy per game.
 - Simulation configs reference model artifacts by path and dispatch on
   extension: `.joblib` -> linear-baseline adapter, `.pt` -> GNN; one config may
   mix both (see `simulation/simulate.py`).
+- A sim run directory looks like `plots/simulation/<name>/{per_round.parquet,
+  evaluation/{metrics.csv, scores.csv, visuals/}}`.
+- `scripts/data_analysis/evaluation_sweep.py` aggregates a sweep's `scores.csv`
+  files into a score matrix and slot-level figures under
+  `plots/data_analysis/evaluation/<name>/`; it parses the sim-dir naming
+  convention `..._self_<contr>_contr_<switch>_switch`.
 
 ### Git Workflow
 
@@ -227,8 +230,7 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Format**: `black src/`
 - **Lint**: `flake8 src/ --max-line-length=88 --extend-ignore=E203,W503`
 - **Run tests**: `scripts/remote_test.sh`
-- **Fetch from cluster**: `scripts/fetch_cluster.sh <remote_path>` (path relative to `~/algorithmic-institutions`)
-- **Run notebook**: `python run.py run <yaml_config>`
+- **Fetch from cluster**: `scripts/fetch_cluster.sh <remote_path>` (path relative to `~/algorithmic-institutions`, no trailing slash)
 - **Train AH models**: `python -m aimanager train-ah <config>`
 - **Train RL manager**: `python -m aimanager train-manager <config>`
 - **Run simulation**: `python -m aimanager simulate <config>` (set `save_per_round: true` if the run will be evaluated)
@@ -242,7 +244,7 @@ scripts/remote_test.sh -- -k test_encoder -v
 - Experiment configs: `configs/` (YAML)
 - Plots and figures: `plots/`
 - Legacy DJX run definitions: `run/` (djx no longer used)
-- Notebooks: `notebooks/`
+- Notebooks: `notebooks/` (legacy analyses)
 - Trained artifacts: `artifacts/` (GNN dirs; linear joblib bundles in `artifacts/baselines/`)
 - Human reference data: `experiments/2group_8agent_50ep.csv`
 - Metric and scoring definitions: `notes/`
