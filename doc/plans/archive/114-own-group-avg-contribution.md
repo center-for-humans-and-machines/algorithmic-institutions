@@ -1,4 +1,4 @@
-# [ACTIVE] Own-group average contribution as a node feature (M3)
+# [DONE] Own-group average contribution as a node feature (M3)
 
 ## Goal
 

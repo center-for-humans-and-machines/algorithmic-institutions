@@ -1,4 +1,4 @@
-# [ACTIVE] Fix 2-group RL manager training (Issue #103)
+# [DONE] Fix 2-group RL manager training (Issue #103)
 
 Tracking issue: [#103](https://github.com/cemrtkn/algorithmic-institutions/issues/103). Follow-on to the 100k 1-group tuning landed in [#102](https://github.com/cemrtkn/algorithmic-institutions/pull/102) and the 2g8a infrastructure landed in [#69 plan](doc/plans/69-two-manager-rl-training.md).
 

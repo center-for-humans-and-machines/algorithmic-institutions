@@ -1,4 +1,4 @@
-# [ACTIVE] Hand-crafted linear baselines for contribution & switch (issue #119)
+# [DONE] Hand-crafted linear baselines for contribution & switch (issue #119)
 
 ## Goal
 
