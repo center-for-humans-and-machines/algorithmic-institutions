@@ -22,10 +22,12 @@ import numpy as np  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
 
 from aimanager.evaluation_suite.metrics import (  # noqa: E402
+    GROUP_CELL,
     RCB_LABELS,
     RPA_LABELS,
     RPB_LABELS,
     RSA_LABELS,
+    SPREAD_STRATUM,
     ContributionMetrics,
     PunishmentMetrics,
     ResponseMetrics,
@@ -119,6 +121,73 @@ def _sources(human, sims):
     out = [("human", human, HUMAN_COLOR, 2.2)]
     out += [(label, df, color, 1.4) for label, df, color in series(sims)]
     return out
+
+
+# -- Group-spread ratio (CG, PD) -----------------------------------------
+
+
+def independence_floor(df, measure):
+    """Spread ratio under independent draws: sqrt(mean(1 / n)) over the group
+    cells, 0.5 at the 4-4 split and higher once groups split unevenly."""
+    sizes = df.dropna(subset=[measure]).groupby(GROUP_CELL)[measure].size()
+    return float(np.sqrt((1.0 / sizes).mean()))
+
+
+def spread_bar(ax, human, sims, extract, measure, ylabel):
+    """Pooled spread ratio per source; height above the dashed floor is the
+    group-level agreement."""
+    sources = _sources(human, sims)
+    for i, (_, df, color, _lw) in enumerate(sources):
+        ratio = float(extract(df).loc[SPREAD_STRATUM])
+        ax.bar(i, ratio, 0.62, color=color)
+        ax.text(i, ratio + 0.012, f"{ratio:.2f}", ha="center", fontsize=8)
+        floor = independence_floor(df, measure)
+        ax.plot(
+            [i - 0.34, i + 0.34],
+            [floor, floor],
+            color="#777777",
+            linestyle="--",
+            linewidth=1.4,
+        )
+    ax.set_xticks(range(len(sources)))
+    ax.set_xticklabels([label for label, _, _, _ in sources], fontsize=7, rotation=15)
+    ax.set_ylabel(ylabel)
+    ax.legend(
+        handles=[Line2D([], [], color="#777777", linestyle="--")],
+        labels=["independence floor"],
+        frameon=False,
+        fontsize=8,
+    )
+
+
+def spread_excess(df, measure, block=1):
+    """Spread ratio over its own floor per block of `block` rounds; 1 means
+    indistinguishable from independent draws. Dividing is what makes blocks
+    comparable -- the floor itself moves with the group sizes."""
+    valid = df.dropna(subset=[measure]).copy()
+    valid["block"] = valid["round_number"] // block
+    cells = valid.groupby(["block"] + GROUP_CELL)[measure].agg(["mean", "size"])
+    across = cells.groupby("block")["mean"].std()
+    within = valid.groupby("block")[measure].std().replace(0.0, np.nan)
+    floor = np.sqrt((1.0 / cells["size"]).groupby("block").mean())
+    return across / within / floor
+
+
+def spread_excess_line(ax, human, sims, measure, ylabel, block=1):
+    """Excess over the floor across the game, one line per source."""
+    for label, df, color, lw in _sources(human, sims):
+        excess = spread_excess(df, measure, block)
+        ax.plot(
+            excess.index * block + (block - 1) / 2,
+            excess.values,
+            color=color,
+            linewidth=lw,
+            label=label,
+            marker="o" if block > 1 else None,
+        )
+    ax.axhline(1.0, color="#777777", linestyle="--", linewidth=1.2)
+    ax.set_xlabel("round" if block == 1 else f"round ({block}-round blocks)")
+    ax.set_ylabel(ylabel)
 
 
 # -- Contribution (C) --------------------------------------------------
@@ -221,6 +290,29 @@ def cf_line(ax, human, sims):
     ax.set_ylabel("share of contributions")
 
 
+@plot("CG_bar")
+def cg_bar(ax, human, sims):
+    spread_bar(
+        ax,
+        human,
+        sims,
+        _C.cg,
+        "contribution",
+        "group contribution spread ratio",
+    )
+
+
+@plot("CG_excess_line")
+def cg_excess_line(ax, human, sims):
+    spread_excess_line(
+        ax,
+        human,
+        sims,
+        "contribution",
+        "contribution spread ratio / floor",
+    )
+
+
 # -- Switching (S) ------------------------------------------------------
 
 _S = SwitchingMetrics()
@@ -296,6 +388,32 @@ def pc_line(ax, human, sims):
         _P.pc,
         "round",
         "share of punishments at zero",
+    )
+
+
+@plot("PD_bar")
+def pd_bar(ax, human, sims):
+    spread_bar(
+        ax,
+        human,
+        sims,
+        _P.pd,
+        "punishment",
+        "group punishment spread ratio",
+    )
+
+
+@plot("PD_excess_line")
+def pd_excess_line(ax, human, sims):
+    # blocked: punishment is skewed enough that a per-round ratio swings by
+    # 0.5 between neighbours and buries the difference between sources
+    spread_excess_line(
+        ax,
+        human,
+        sims,
+        "punishment",
+        "punishment spread ratio / floor",
+        block=6,
     )
 
 
