@@ -57,12 +57,16 @@ def test_registered_plots_render_on_real_data(tmp_path):
         "CE_hist",
         "CE_std_line",
         "CF_line",
+        "CG_bar",
+        "CG_excess_line",
         "SB_line",
         "SC_hist",
         "SC_line",
         "PA_hist",
         "PB_line",
         "PC_line",
+        "PD_bar",
+        "PD_excess_line",
         "RCA_bar",
         "RCB_line",
         "RCC_bar",
@@ -73,6 +77,48 @@ def test_registered_plots_render_on_real_data(tmp_path):
     }
     for p in paths:
         assert Path(p).stat().st_size > 0
+
+
+def _independent_frame(seed=0, n_episodes=200):
+    """Every player drawn independently of their group."""
+    import numpy as np
+
+    rng = np.random.default_rng(seed)
+    rows = [
+        (ep, f"p{i}", r, i // 4, float(rng.integers(0, 21)), float(rng.integers(0, 31)))
+        for ep in range(n_episodes)
+        for r in range(24)
+        for i in range(8)
+    ]
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "episode_id",
+            "participant_code",
+            "round_number",
+            "group_id",
+            "contribution",
+            "punishment",
+        ],
+    )
+
+
+def test_independence_floor_follows_group_size():
+    frame = _independent_frame(n_episodes=2)
+    # every cell holds 4 players, so sqrt(mean(1 / n)) is exactly 1/2
+    assert visuals.independence_floor(frame, "contribution") == pytest.approx(0.5)
+    # drop a player from one cell: that cell's 1/n rises and so does the floor
+    smaller = frame.drop(frame.index[0])
+    assert visuals.independence_floor(smaller, "contribution") > 0.5
+
+
+def test_spread_excess_is_one_under_independence():
+    """The claim the dashed 1.0 line makes."""
+    frame = _independent_frame()
+    for measure in ("contribution", "punishment"):
+        excess = visuals.spread_excess(frame, measure, block=6)
+        assert len(excess) == 4
+        assert excess.min() > 0.9 and excess.max() < 1.1
 
 
 def _oklab(hex_color):
