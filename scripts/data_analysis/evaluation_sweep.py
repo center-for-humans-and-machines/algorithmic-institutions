@@ -37,12 +37,14 @@ METRIC_ORDER = [
     "CD",
     "CE",
     "CF",
+    "CG",
     "SA",
     "SB",
     "SC",
     "PA",
     "PB",
     "PC",
+    "PD",
     "RCA",
     "RCB",
     "RCC",
@@ -53,9 +55,9 @@ METRIC_ORDER = [
 ]
 
 # metric family each slot owns (the rows of its report-card panel)
-CONTR_ROWS = ["CA", "CB", "CC", "CD", "CE", "CF", "RCA", "RCB", "RCC", "RCD"]
+CONTR_ROWS = ["CA", "CB", "CC", "CD", "CE", "CF", "CG", "RCA", "RCB", "RCC", "RCD"]
 SWITCH_ROWS = ["SA", "SB", "SC", "RSA"]
-PUNISHER_ROWS = ["PA", "PB", "PC", "RPA", "RPB"]
+PUNISHER_ROWS = ["PA", "PB", "PC", "PD", "RPA", "RPB"]
 
 CONTR_ORDER = ["gnn", "cat", "gaussian", "ridge"]
 SWITCH_ORDER = ["lin", "gnn"]
