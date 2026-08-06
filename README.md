@@ -42,13 +42,7 @@ For automated checks to keep codebase structure and code format one needs to ins
 pre-commit install
 ```
 
-### 3. Installing `djx` sub-module
-Install `djx` sub-module in editable mode:
-```bash
-uv pip install -e djx
-```
-
-### 4. Secrets (`.env`)
+### 3. Secrets (`.env`)
 
 Copy `.env.example` to `.env` and fill in the API keys:
 
@@ -73,7 +67,6 @@ pip install wheel
 pip install torch==1.11.0+cu113 -f https://download.pytorch.org/whl/cu113
 pip install torch-scatter torch-sparse torch-cluster torch-spline-conv torch-geometric -f https://data.pyg.org/whl/torch-1.11.0+cu113.html
 pip install -e ".[dev]"
-pip install -e djx
 ```
 
 **On macOS/Windows (CPU-only):**
@@ -84,116 +77,58 @@ pip install --upgrade pip
 pip install wheel
 pip install torch==1.11.0
 pip install -e ".[dev]"
-pip install -e djx
 ```
 
 # Development Workflow
 
 See [doc/claude_code_workflow.md](doc/claude_code_workflow.md) for the AI-assisted development workflow using Claude Code agents.
 
-# Up-to-date Docs for Cluster Runs
-- The up-to-date version of the pipeline is detailed [here](reports/up_to_date_docs.md).
+# Training, Simulation, Evaluation
 
-# Notebooks
-Tardis and Raven clusters use different slurm scripts. To run scripts on the GPU infrastructure one needs to modify the script field in the respective config file accordingly.
-```yaml
-# Tardis
-...
-exec:
-  command: python run.py run {job_file}
-  script_name: gpu
-  cores: 2
-...
+All pipelines are config-driven (YAML in `configs/`) behind one CLI:
 
-# Raven
-exec:
-  command: python run.py run {job_file}
-  script_name: gpu_raven
-  cores: 2
-...
+```bash
+python -m aimanager train-ah <config>       # artificial humans (supervised)
+python -m aimanager train-manager <config>  # RL manager
+python -m aimanager simulate <config>       # set save_per_round: true if the run will be evaluated
+python -m aimanager evaluate <config>       # sim vs human metrics, scores, visuals
 ```
 
-## Retrain Models
+Training and simulation need the full PyG environment and run on the Raven
+cluster; evaluation runs locally against the simulation's `per_round.parquet`.
 
+## From the local machine
 
-### Behavioral Clones
+With an SSH ControlMaster connection active (`ssh raven` in a separate
+terminal, persists 12h), the cluster scripts sync the repo and submit the job
+through the SLURM orchestrators:
 
-Contribution
-
-```
-djx run/behavioral_cloning/21_contribution_model_v4.yml
-```
-
-Contribution Is Valid
-
-```
-djx run/behavioral_cloning/22_contribution_valid_model_v4.yml
-```
-
-Punishments (not used)
-
-```
-djx run/behavioral_cloning/23_punishment_autoregressive_v4.yml
+```bash
+scripts/train_cluster.sh ah <config>        # artificial humans
+scripts/train_cluster.sh manager <config>   # RL manager
+scripts/simulate_cluster.sh <config>        # simulation
+scripts/remote_test.sh                      # PyG-dependent tests
+scripts/fetch_cluster.sh <remote_path>      # bring results back (no trailing slash)
 ```
 
-### RL Manager
+## Skill-based workflow
 
-```
-djx run/manager/07_exp2.yml
-```
+In Claude Code the same operations are exposed as skills -- `/train`,
+`/simulate`, `/test`, `/fetch-cluster`, plus `/commit` and `/pr`. See
+[doc/claude_code_workflow.md](doc/claude_code_workflow.md) for the agentic
+development workflow around them (issue labels, plans, review).
 
-## Evaluate Models
+## Directly on the cluster
 
-### Behavioral Clones
+From `~/algorithmic-institutions` on Raven with the remote `.venv` activated,
+run the SLURM orchestrators yourself:
 
-Contribution
-
-```
-python run.py run notebooks/evalutation/predictive_models_autoreg/21_contribution_model_v4.yml
-```
-
-Contribution Is Valid
-
-```
-python run.py run notebooks/evalutation/predictive_models_autoreg/22_contribution_valid_model_v4.yml
+```bash
+python src/aimanager/artificial_humans/run.py <config>  # submits AH training
+python src/aimanager/manager/run.py <config>            # submits manager training
+python src/aimanager/simulation/run.py <config>         # submits simulation
 ```
 
-Punishments (not used)
-
-```
-python run.py run notebooks/evalutation/predictive_models_autoreg/23_punishment_autoregressive_v4.yml
-```
-
-RL Manager
-
-```
-python run.py run notebooks/evalutation/rl_models/07_exp2.yml
-```
-
-### Run Simulations
-
-Should be run on a GPU node.
-```
-python run.py run notebooks/test_manager/simulate_mixed/03_all.yml
-```
-
-
-# Simulate existing models
-
-Should be run on a GPU node.
-```
-python run.py run notebooks/test_manager/simulate_mixed/02_all_artifacts.yml
-```
-
-
-# Reproducing Figures
-
-| Figure | Command                                                          |
-| ------ | ---------------------------------------------------------------- |
-| 1      | python run_notebook.py evaluation/predictive_models ahc_02_valid |
-
-# List of Runs
-
-| Run Name     | Run Folder        | Run File | Description                                                             |
-| ------------ | ----------------- | -------- | ----------------------------------------------------------------------- |
-| ahc_02_valid | artificial_humans | 02_valid | Model predicting if human contributors are making a valid contribution. |
+Each submits GPU batch jobs (see `scripts/run_simulation.sh` for the
+simulation template); single runs can also be executed in place with
+`python -m aimanager <command> <config>` on a GPU node.

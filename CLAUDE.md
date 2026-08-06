@@ -11,7 +11,7 @@ A research project exploring AI-driven group management dynamics. Uses supervise
 ### Implementation Remarks
 
 - **Stack**: Python 3.9, uv (package manager), PyTorch + PyTorch Geometric, pandas, seaborn
-- **Clusters**: Tardis and Raven GPU clusters via SLURM; `djx` submodule for reproducible experiment management
+- **Clusters**: Tardis and Raven GPU clusters via SLURM
 - **Code style**: Black formatter, flake8 -- enforced via pre-commit hooks on `src/` only. **88-char line limit**. Extend-ignore: `E203, W503`
 - **Config-driven**: Experiments defined via YAML configs in `configs/`; notebooks parameterized via Papermill
 - **Key pattern**: Artificial humans (supervised learning on pilot data) + RL manager (reinforcement learning to maximize common good) + simulation (testing managers against artificial humans)
@@ -42,9 +42,16 @@ src/aimanager/                    # Main Python package
   simulation/                     # Simulation framework
     simulate.py                   # Core simulation logic
     run.py                        # SLURM orchestrator for simulations
+  evaluation_suite/               # Sim-vs-human evaluation (metrics + scores + visuals)
+    convert.py                    # Canonical agent-round frame; loads human and sim data
+    metrics.py                    # Metric row extractions (C/S/P/R families)
+    scoring.py                    # Noise-ceiling normalised scores
+    evaluate.py                   # Entry point for `python -m aimanager evaluate`
+    visuals.py                    # One figure per metric row
   utils/                          # Shared utilities
 scripts/                          # Executable shell/python scripts
   artificial_humans/              # AH training SLURM templates
+  baselines/                      # Linear baseline training + CV (joblib bundles)
   manager/                        # Manager training SLURM templates
   data_creation/                  # Data preprocessing scripts
   plotting/                       # Reusable plotting scripts
@@ -65,11 +72,14 @@ configs/                          # YAML experiment configurations
   simulation/                     # Simulation configs
 plots/                            # Generated plots and figures
   group_selection/                # AH model evaluation plots
-  simulation/                     # Simulation result plots
-artifacts/                        # Trained model artifacts
+  simulation/                     # Simulation result plots (incl. per-run evaluation/)
+experiments/                      # Human experiment data
+artifacts/                        # Trained model artifacts (GNN dirs with .pt files;
+                                  #   linear .joblib bundles under baselines/)
 reports/                          # Research documentation and reports
-run/                              # DJX experiment run definitions
-djx/                              # Git submodule (experiment framework)
+notes/                            # Normative definitions (evaluation metrics, scoring schema)
+run/                              # Legacy DJX run definitions (djx no longer used)
+djx/                              # Git submodule (legacy experiment framework, unused)
 doc/plans/                        # Implementation plans (status in title)
   archive/                        # Completed plans (DONE, ABANDONED)
 ```
@@ -109,11 +119,37 @@ Labels control the workflow for GitHub issues:
 - `src/aimanager/simulation/simulate.py` -- Core simulation (manager vs artificial humans)
 - `src/aimanager/simulation/run.py` -- SLURM orchestrator for simulations
 - `src/aimanager/rl_manager.py` -- RL manager training logic
+- `src/aimanager/evaluation_suite/evaluate.py` -- Evaluation entry point (metrics, scores, visuals)
+- `src/aimanager/evaluation_suite/metrics.py` -- Metric row extractions, in code
+- `notes/evaluation_metric_defs.md` -- Normative definitions of every metric row
+- `notes/eval_scoring_schema.md` -- The noise-ceiling scoring schema
 - `scripts/plotting/plot_confusion_matrix.py` -- Reusable confusion matrix plot
 - `scripts/data_creation/group_switching_preprocess.py` -- Group switching data preprocessing
 - `scripts/data_creation/pilot_pseudo_group_matching.py` -- Old 4-player to 8-player data transform
 - `run.py` -- Notebook runner using Papermill with YAML parameter files
 - `reports/basics.md` -- Game rules and experimental setup reference
+
+### Evaluation Suite
+
+Compares finished simulations against the human reference data,
+`experiments/2group_8agent_50ep.csv`. Every game appears twice in the file with
+group labels mirrored -- the flip augmentation that removes group-label bias.
+The GNN models train on this doubled data (some artifact names carry a
+`_doubled` suffix); the linear baselines train on the single-copy data, and the
+evaluation suite likewise keeps one copy per game.
+
+- The simulation config must set `save_per_round: true` -- `evaluate` reads the
+  sim's `per_round.parquet` and hard-fails without it.
+- `python -m aimanager evaluate <sim config>` writes to the sim's output dir:
+  `evaluation/metrics.csv` (raw discrepancies), `evaluation/scores.csv`
+  (normalised scores), and `evaluation/visuals/*.jpg` (one figure per row).
+- A score is a multiple of the human-vs-human noise ceiling (500 resampling
+  repeats, master seed 42): <= 1 at the ceiling, 1-2 minor, 2-5 clear deviation,
+  \> 5 not reproduced. Row definitions: `notes/evaluation_metric_defs.md`;
+  schema: `notes/eval_scoring_schema.md`.
+- Simulation configs reference model artifacts by path and dispatch on
+  extension: `.joblib` -> linear-baseline adapter, `.pt` -> GNN; one config may
+  mix both (see `simulation/simulate.py`).
 
 ### Git Workflow
 
@@ -124,12 +160,26 @@ Labels control the workflow for GitHub issues:
 - PyG/CUDA packages are Linux-only (see `sys_platform` markers in `pyproject.toml`)
 - Local macOS has CPU-only `torch==1.11.0` without PyG subpackages
 - Full environment (torch + CUDA + PyG) only available on Raven cluster
+- `*.csv`, `*.parquet`, `*.pt` are Git LFS-tracked (`.gitattributes`): data and
+  artifact files are pointers until `git lfs pull`
+
+### Where Things Run
+
+| Stage | Where |
+|---|---|
+| `train-ah`, `train-manager`, `simulate` | Raven (SLURM; `train_cluster.sh` / `simulate_cluster.sh`) |
+| `evaluate`, plotting/analysis scripts | Local macOS |
+| PyG-dependent tests (encoder, environment, edge encoder, linear manager) | Raven (`remote_test.sh`) |
+| Evaluation-suite tests, `scripts/tests/` | Local |
+
+Results come back from the cluster via `scripts/fetch_cluster.sh`.
 
 ### Testing
 
-**IMPORTANT**: Tests MUST be run on the Raven HPC cluster, not locally.
-The test suite depends on `torch_scatter` and other PyG packages that are only
-available on Linux. Even tests that use `device="cpu"` will fail to import locally.
+PyG-dependent tests MUST be run on the Raven cluster: they import
+`torch_scatter` and other PyG packages that are only available on Linux, even
+with `device="cpu"`. The evaluation-suite tests (`test_eval_*.py`) and
+`scripts/tests/` have no PyG imports and run locally with plain `pytest`.
 
 ```bash
 # Run all tests (syncs code first):
@@ -150,9 +200,16 @@ scripts/remote_test.sh -- -k test_encoder -v
 **Test logs**: `.claude/test-logs/latest.log` (symlink to most recent run)
 
 **Test locations**:
-- `src/aimanager/tests/test_encoder.py` - Tensor encoder unit tests
-- `src/aimanager/tests/test_environment.py` - RL environment unit tests
-- `scripts/tests/test_remote_test.py` - Remote test script tests (runs locally)
+- `src/aimanager/tests/test_encoder.py` - Tensor encoder unit tests (Raven)
+- `src/aimanager/tests/test_edge_encoder.py` - Edge encoder unit tests (Raven)
+- `src/aimanager/tests/test_environment.py` - RL environment unit tests (Raven)
+- `src/aimanager/tests/test_linear_manager.py` - Linear manager unit tests (Raven)
+- `src/aimanager/tests/test_eval_convert.py` - Evaluation-suite canonical frame (local)
+- `src/aimanager/tests/test_eval_metrics.py` - Evaluation-suite metric rows (local)
+- `src/aimanager/tests/test_eval_scoring.py` - Evaluation-suite scoring (local)
+- `src/aimanager/tests/test_eval_evaluate.py` - Evaluation-suite end to end (local)
+- `src/aimanager/tests/test_eval_visuals.py` - Evaluation-suite figures (local)
+- `scripts/tests/test_remote_test.py` - Remote test script tests (local)
 
 ### Remote Cluster (Raven)
 
@@ -165,7 +222,6 @@ scripts/remote_test.sh -- -k test_encoder -v
 ### Commands
 
 - **Install**: `uv sync`
-- **Install djx**: `uv pip install -e djx`
 - **Pre-commit install**: `pre-commit install`
 - **Pre-commit run**: `pre-commit run --all-files`
 - **Format**: `black src/`
@@ -175,7 +231,7 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Run notebook**: `python run.py run <yaml_config>`
 - **Train AH models**: `python -m aimanager train-ah <config>`
 - **Train RL manager**: `python -m aimanager train-manager <config>`
-- **Run simulation**: `python -m aimanager simulate <config>`
+- **Run simulation**: `python -m aimanager simulate <config>` (set `save_per_round: true` if the run will be evaluated)
 - **Evaluate sim vs human**: `python -m aimanager evaluate <config>` (needs the simulation's `per_round.parquet`)
 - **Plot confusion matrix**: `python scripts/plotting/plot_confusion_matrix.py <artifact_dir>`
 
@@ -185,9 +241,11 @@ scripts/remote_test.sh -- -k test_encoder -v
 - Scripts: `scripts/` (cluster orchestration, data creation, plotting)
 - Experiment configs: `configs/` (YAML)
 - Plots and figures: `plots/`
-- DJX run definitions: `run/`
+- Legacy DJX run definitions: `run/` (djx no longer used)
 - Notebooks: `notebooks/`
-- Trained artifacts: `artifacts/`
+- Trained artifacts: `artifacts/` (GNN dirs; linear joblib bundles in `artifacts/baselines/`)
+- Human reference data: `experiments/2group_8agent_50ep.csv`
+- Metric and scoring definitions: `notes/`
 - Research docs: `reports/`
 - Game rules: `reports/basics.md`
 - Cluster setup: `README.md`
