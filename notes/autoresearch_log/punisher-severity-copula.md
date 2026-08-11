@@ -55,14 +55,14 @@ frozen surface per §8). Slug: `severity_copula`.
       printed diagnostic. Cluster bootstrap over 40 episodes for SE/CI;
       diagnostics-only splits; out-of-sample test-split check (never a
       selection criterion).
-- [ ] 5. Pre-flight (--preflight): replay human P matrices through
+- [x] 5. Pre-flight (--preflight): replay human P matrices through
       independent vs copula sampler, print group-spread ratios vs human
       (~0.739 human, ~0.578 independence floor). Go/no-go only; rho is never
       tuned to it.
-- [ ] 6. Save `artifacts/baselines/punishment_multinomial_severity_copula.joblib`
+- [x] 6. Save `artifacts/baselines/punishment_multinomial_severity_copula.joblib`
       = old bundle + `copula_rho` (+ provenance fields); assert no
       pre-existing key modified and predict_proba bit-identical on reload.
-- [ ] 7. Run calibration; record rho +/- SE, CI, pre-flight ratios in Notes.
+- [x] 7. Run calibration; record rho +/- SE, CI, pre-flight ratios in Notes.
       Escalate and stop if rho not clearly > 0 or pre-flight barely moves.
 - [ ] 8. Adapter gate in `linear_ah.py.__init__`: `copula_rho` from bundle,
       assert 0 <= rho < 1 and multinomial-punishment-only. `_sample_levels`
@@ -165,3 +165,20 @@ frozen surface per §8). Slug: `severity_copula`.
 7. Round decay observed: within-cell correlation 0.217 in rounds 0-7 vs
    ~0.10 later — constant rho kept (ties go to the simpler model, §5);
    a round-dependent severity latent is a candidate follow-up experiment.
+   (Superseded by the MLE splits in note 8: the decay was mostly an
+   attenuation artifact — MLE per round third is 0.36/0.33/0.35, stable.)
+8. Step 7 rerun with the pairwise MLE: **rho_hat = 0.3507588625344979**,
+   cluster-bootstrap SE 0.037686140204276034 (200 resamples), 95% CI
+   [0.2779642544867047, 0.42319106056672023]. Acceptance gate passed:
+   round-trip recovery at rho_true in {0.1..0.5} has max |bias|
+   0.006148711994136524 (tolerance 0.03); Phi_2 (Drezner-Wesolowsky, 32
+   nodes) agrees with scipy mvn to 3.3e-16 and pair_nll(0) matches the
+   closed-form independence value to 1e-10. Out-of-sample test split (10
+   episodes, check only): 0.24274527759925443. Pre-flight at the MLE rho:
+   independent 0.6270942235359207, copula 0.7039800602398409, human
+   0.7503476329282582 — 62% of the spread gap closed (vs 20% at the
+   attenuated rho). Not pushed further: matching the human ratio would
+   need rho ~0.52, outside the likelihood CI — per §5 the metric is not a
+   calibration target. Bundle re-saved with copula_rho = MLE,
+   copula_estimator='pairwise_mle', PIT fields kept as diagnostics
+   (copula_diag_pit). GO for the adapter step.
