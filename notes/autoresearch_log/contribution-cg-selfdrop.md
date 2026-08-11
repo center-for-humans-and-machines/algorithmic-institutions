@@ -89,11 +89,11 @@ stay as declared, and any reproduction mismatch is logged.
       `self_dropout: '0.10'`, `input_dropout.prev_contribution: 0.10`,
       `output_dir: artifacts/artificial_humans/auto_contribution_cg_selfdrop_10`.
       Commit.
-- [ ] 4. Train on Raven (`scripts/train_cluster.sh ah <config>`); poll.
+- [x] 4. Train on Raven (`scripts/train_cluster.sh ah <config>`); poll.
       Confirm: `.pt` with the exact expected name exists on Raven.
-- [ ] 5. Fetch the artifact; sanity-check fold-mean best test log-loss lands
+- [x] 5. Fetch the artifact; sanity-check fold-mean best test log-loss lands
       between p=0 (1.9899) and p=0.15 (2.0128). Notes entry; commit.
-- [ ] 6. Add Stage-1 sim config `configs/simulation/manager_testing/
+- [x] 6. Add Stage-1 sim config `configs/simulation/manager_testing/
       auto_cgselfdrop10_2g8a_self_gnn_contr_gnn_switch.yml` — 23-family
       template, only the contribution path + output_dir/figure_name changed;
       doubles as the Stage-2 gnn-switch cell. Commit.
@@ -136,3 +136,8 @@ stay as declared, and any reproduction mismatch is logged.
    (`train.py` + tests) is cherry-picked from that branch; the mechanism is
    config-gated and off by default, so the cherry-pick alone changes no
    behavior.
+2. 2026-08-11: p=0.10 trained (Raven, seed 38381, 5-fold + full, ~8 min).
+   Fold-mean best test log-loss **2.0005** (std 0.0654) — between p=0
+   (1.9899) and p=0.15 (2.0128), monotone in p as expected, confirming the
+   dropout rate took effect. Dropout-mechanism tests passed on Raven
+   before training (5 passed).
