@@ -43,7 +43,7 @@ the training tensor dict and the simulation state; no shared-code change):
 
 Steps:
 
-- [ ] 1. Write the four variant training configs in
+- [x] 1. Write the four variant training configs in
   `configs/training/artificial_humans/switch_predictor/switch_contrib_features_<variant>.yml`
   — byte-copies of `opt_50ep_doubled_reanchored.yml` except: description,
   `labels.features`, `output_dir`, the feature additions per the table, and
