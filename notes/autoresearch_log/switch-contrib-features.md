@@ -53,7 +53,7 @@ Steps:
   (needs `ssh raven` ControlMaster). Report final CV test log-loss per arm.
 - [x] 3. Fetch artifacts (`scripts/fetch_cluster.sh artifacts/artificial_humans/switch_contrib_features_<variant>`)
   and verify actual `.pt` filenames on disk.
-- [ ] 4. Write four Stage-1 sim configs
+- [x] 4. Write four Stage-1 sim configs
   `configs/simulation/manager_testing/switch_contrib_features_<variant>_2g8a_self_gnn_contr_gnnscf_switch.yml`
   — copies of `23_2g8a_self_gnn_contr_gnn_switch.yml` changing only
   `switch_model`, `output_dir`, `figure_name`.
