@@ -80,10 +80,10 @@ configs, seed 42 — not seed shopping); the Stage-1 prior-evidence numbers
 stay as declared, and any reproduction mismatch is logged.
 
 - [x] 1. Record this plan in the log; commit.
-- [ ] 2. Verify the cherry-picked dropout mechanism on Raven
+- [x] 2. Verify the cherry-picked dropout mechanism on Raven
       (`scripts/remote_test.sh -- -k input_dropout -v`; PyG import, cannot
       run locally). Confirm: 5 passed.
-- [ ] 3. Add `configs/training/artificial_humans/contribution/
+- [x] 3. Add `configs/training/artificial_humans/contribution/
       auto_cg_selfdrop_10.yml` — copy of the predecessor's
       `auto_selfdrop_15.yml` with exactly: description, label
       `self_dropout: '0.10'`, `input_dropout.prev_contribution: 0.10`,
