@@ -72,7 +72,7 @@ Steps:
   over 12 dirs (8 existing 23-family + 4 candidate) giving a 3-option switch
   axis; confirm only if the candidate beats `gnn` on SC in a clear majority
   of the 16 contexts (slot mean < 2.65) without losing SA/SB/RSA.
-- [ ] 11. Fill Results/Notes, batched pre-commit run, open the PR
+- [x] 11. Fill Results/Notes, batched pre-commit run, open the PR
   (`[SUCCESS]`/`[FAIL]`; body: Hypothesis, Results, Collateral).
 
 ## 3. Results
