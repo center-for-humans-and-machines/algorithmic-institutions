@@ -193,12 +193,17 @@ machine account may replace this later.
    then continue.
 5. Train, simulate, evaluate per §3 and §7; log every run (§10).
 6. Kept per §2 (targets improved, nothing regressed)? Run Stage 2.
-7. **Every experiment ends in a PR**, title prefixed:
-   - `[SUCCESS] ...` — confirmed by Stage 2; body carries both stages'
-     numbers.
-   - `[FAIL] ...` — targets did not move or Stage 2 did not confirm; body
-     states what was tried and the numbers that killed it. Never merged —
-     it exists so the next agent does not retry it. No silent abandonment.
+7. **Every experiment ends in a PR** — titled `[SUCCESS] ...` (Stage-2
+   confirmed) or `[FAIL] ...` (targets did not move or Stage 2 did not
+   confirm; never merged — it exists so the next agent does not retry it).
+   No silent abandonment. The body, in order:
+   1. **Hypothesis** — brief: the behavioral claim, the planned change, and
+      the targeted rows with their starting scores.
+   2. **Results** — the log file's results table (§10), both stages where
+      run.
+   3. **Collateral** — non-target rows that moved, grouped `+` / `-`. Only
+      the important ones: movements that could seed further experiments,
+      not every wiggle.
 8. Next hypothesis = new experiment: new branch, new worktree, new PR.
 
 ## 10. Results log
