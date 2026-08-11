@@ -57,12 +57,12 @@ Steps:
   `configs/simulation/manager_testing/switch_contrib_features_<variant>_2g8a_self_gnn_contr_gnnscf_switch.yml`
   — copies of `23_2g8a_self_gnn_contr_gnn_switch.yml` changing only
   `switch_model`, `output_dir`, `figure_name`.
-- [ ] 5. Simulate on Raven (`scripts/simulate_cluster.sh <config>`), fetch
+- [x] 5. Simulate on Raven (`scripts/simulate_cluster.sh <config>`), fetch
   each sim dir, confirm `per_round.parquet`.
-- [ ] 6. Evaluate all four locally (`python -m aimanager evaluate <config>`);
+- [x] 6. Evaluate all four locally (`python -m aimanager evaluate <config>`);
   judge on the `lin_multinomial_self` run's 21 rows: SC, rows <= 1, mean,
   plus SA/SB/RSA (must not degrade from 0.72/0.75/0.91).
-- [ ] 7. Gate: winner = lowest SC with rows <= 1 >= 11/21 and mean <= 1.7596;
+- [x] 7. Gate: winner = lowest SC with rows <= 1 >= 11/21 and mean <= 1.7596;
   ties go to the simpler arm. No arm below SC 3.2704 with guardrails held ->
   [FAIL], skip to step 11.
 - [ ] 8. Stage 2: three more sim configs for the winner (cat / gaussian /
@@ -79,6 +79,10 @@ Steps:
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-11 | arm A: + same_group edge feature | 1 | SC 2.8003 | 11/21 | 1.7395 | pass (winner) |
+| 2026-08-11 | arm B: + contribution node feature | 1 | SC 3.3653 | 11/21 | 1.7279 | fail: target regressed |
+| 2026-08-11 | arm C: + contribution + same_group | 1 | SC 3.3546 | 11/21 | 1.7584 | fail: target regressed |
+| 2026-08-11 | arm D: + contribution + own-grp mean + same_group | 1 | SC 3.3557 | 10/21 | 1.7234 | fail: target regressed, rows<=1 fell |
 
 ## 4. Notes
 
@@ -97,3 +101,14 @@ Steps:
    B 0.5102, C 0.5086, D 0.5091. Every arm beats the base; the contribution
    node feature carries most of the gain, same_group on top of it a little
    more (C best, D within noise of C).
+4. Stage 1 falsified the contribution half of the hypothesis: every arm
+   carrying the contribution node feature made SC slightly worse
+   (3.35-3.37 vs base 3.27) despite better CV test loss, while the
+   same_group edge feature alone cut SC to 2.80. The SC gain comes from
+   group-aware message routing (which also encodes own-group size), not
+   from cooperation signals. Winner: arm A, also the simplest arm.
+5. Collateral worth seeding later: the contribution arms consistently
+   lowered CG (9.03-9.28 vs 9.85) and CE (1.17-1.24 vs 1.35) - a
+   contribution-slot-adjacent effect routed through the switch model; and
+   arm D improved PD (2.78) and RCD (2.74) but broke SA (1.11). Not
+   pursued here.
