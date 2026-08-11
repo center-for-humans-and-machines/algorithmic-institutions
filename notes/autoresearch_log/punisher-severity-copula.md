@@ -29,7 +29,77 @@
 
 ## 2. Plan
 
-*(pending validation)*
+Validated by the orchestrator 2026-08-11 (targets per §2, legality per §5,
+frozen surface per §8). Slug: `severity_copula`.
+
+- [x] 1. Worktree + Claude commit identity (done at branch creation).
+- [ ] 2. Calibration script `scripts/baselines/punishment_copula_rho.py`
+      (local): load `punishment_multinomial_best_with_contr.joblib`, rebuild
+      its features on its own training data (`bundle["config"]` ->
+      `experiments/baseline/2group_8agent_50ep_bline_train.csv`, single-copy,
+      40 episodes) via `handcrafted_grid` utilities, keep (episode, round,
+      group) indices, build the class-probability matrix exactly as the
+      adapter does (1e-12 floor, classes_ scatter, renormalise).
+- [ ] 3. Randomized PIT (punishment is lumpy; mid-point PIT collapses ties
+      and attenuates rho): u_i = F_i(y_i - 1) + v_i * p_i(y_i), z = ndtri(u);
+      average rho over R=20 PIT replicates, fixed seed; mid-point PIT printed
+      as sensitivity only.
+- [ ] 4. rho = exchangeable moment estimator over within-(episode, round,
+      group) pairs (~1 736 cells / ~15 291 pairs); cluster bootstrap over 40
+      episodes for SE/CI; diagnostics-only splits; out-of-sample check on the
+      test split (never a selection criterion).
+- [ ] 5. Pre-flight (--preflight): replay human P matrices through
+      independent vs copula sampler, print group-spread ratios vs human
+      (~0.739 human, ~0.578 independence floor). Go/no-go only; rho is never
+      tuned to it.
+- [ ] 6. Save `artifacts/baselines/punishment_multinomial_severity_copula.joblib`
+      = old bundle + `copula_rho` (+ provenance fields); assert no
+      pre-existing key modified and predict_proba bit-identical on reload.
+- [ ] 7. Run calibration; record rho +/- SE, CI, pre-flight ratios in Notes.
+      Escalate and stop if rho not clearly > 0 or pre-flight barely moves.
+- [ ] 8. Adapter gate in `linear_ah.py.__init__`: `copula_rho` from bundle,
+      assert 0 <= rho < 1 and multinomial-punishment-only. `_sample_levels`
+      untouched (existing bundles keep exact RNG consumption).
+- [ ] 9. `_sample_levels_copula(Xs, n_levels, groups)`: P as in
+      `_sample_levels`; fixed 2A torch draws per call (zs, eps);
+      **per-group z** (D1: one manager call serves both groups in self
+      pairings; human data has one manager decision per group-round);
+      u = ndtr(sqrt(rho) z_g + sqrt(1-rho) eps); searchsorted on cumsum(P).
+- [ ] 10. Wire into `get_punishments`, groups from `rounds[-1]["agent_group"]`
+      (same source as the features); dispatch only when sample and rho > 0.
+- [ ] 11. Local unit tests `tests/baselines/test_punishment_copula.py`:
+      inverse-CDF correctness; marginals preserved vs independent sampler;
+      within-group correlation induced; cross-group ~0; rho-absent/rho=0
+      bit-identical to today's path under same seed; determinism; gate
+      assertion raises.
+- [ ] 12. Run local suites: `pytest tests/baselines` + the eval-suite tests
+      (frozen surface untouched proof).
+- [ ] 13. Stage-1 config
+      `23_2g8a_severity_copula_self_gnn_contr_gnn_switch.yml`: copy of the
+      reference config, single manager `lin_multinomial_copula` -> new
+      joblib, single self pairing, slugged output dir (slug BEFORE `_self_`
+      so `evaluation_sweep.py`'s DIR_PATTERN still parses); protocol
+      byte-identical.
+- [ ] 14. Push the joblib to Raven explicitly (simulate_cluster.sh excludes
+      `artifacts/`): rsync to `raven:~/algorithmic-institutions/artifacts/baselines/`.
+- [ ] 15. `scripts/simulate_cluster.sh <config>`; poll; confirm
+      per_round.parquet.
+- [ ] 16. `scripts/fetch_cluster.sh` + `python -m aimanager evaluate <config>`.
+- [ ] 17. Keep gate vs reference `lin_multinomial_self` row: PD < 2.934892;
+      rows <= 1 >= 11; mean <= 1.759557; P-guards ~unmoved (PA 0.634134,
+      PB 0.878167, PC 0.778075, RPA 1.268305, RPB 0.813541 — a P-family move
+      signals a sampler bug). Log unrounded.
+- [ ] 18. Gate fails -> Notes + `[FAIL]` PR, stop.
+- [ ] 19. Stage 2: 7 more slugged configs (the Stage-1 config is the
+      gnn x gnn cell), same single-pairing edits, no protocol change;
+      simulate, fetch, evaluate each.
+- [ ] 20. Add `multinomial_copula` to PUNISHER_ORDER / PUNISHER_COLORS in
+      `evaluation_sweep.py` (analysis script, not frozen; D5), then sweep
+      old 8 + new 8 dirs into `23_stack_sweep_severity_copula`.
+- [ ] 21. Confirm slot claim: copula beats multinomial on PD in (nearly) all
+      8 contexts, P-guards hold, check PD concordance panel.
+- [ ] 22. Complete log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis / Results /
+      Collateral; commits map to steps.
 
 ## 3. Results
 
@@ -45,3 +115,21 @@
    punisher context and belong to the other slots.
 2. No prior punisher experiments: `notes/autoresearch_log/` did not exist;
    the only `[FAIL]` PR (#144) is contribution-slot.
+3. Planner discrepancies, orchestrator rulings: (D1) one `get_punishments`
+   call serves BOTH groups in a self pairing -> latent keyed per
+   `agent_group`, not per call; human data confirms one manager decision per
+   (episode, round, group) cell (2256/2256 constant `manager_no_input`).
+   (D3) rho estimated on the locked train split
+   (`2group_8agent_50ep_bline_train.csv`, single-copy) instead of the full
+   human file — keeps the 10 holdout games closed, parity with the marginal
+   fit; test-split rho printed as out-of-sample confirmation only.
+   (D4) `simulate_cluster.sh` rsyncs with `--exclude='artifacts/'` — the new
+   joblib must be pushed to Raven explicitly. (D5) `evaluation_sweep.py`
+   needs the `multinomial_copula` label in PUNISHER_ORDER/PUNISHER_COLORS or
+   Stage 2 KeyErrors; analysis layer, not frozen surface. (D2) the bundle
+   carries no `temperature` field -> adapter default 1.0, no-op.
+4. Feasibility (planner, read-only): unconditional within-cell punishment
+   ICC ~0.35; human group-spread ratio ~0.739 vs sim ~0.578 (independence
+   floor), so the latent rho must land around/above ~0.3 after
+   discretisation attenuation — the step-5 pre-flight checks this before
+   any cluster run.
