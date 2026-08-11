@@ -59,7 +59,67 @@
 
 ## Plan
 
-(to be filled by the validated step list)
+Validated 2026-08-11. Constraints discovered during planning, binding on all
+steps: (A) `evaluation_sweep.py` hardcodes `CONTR_ORDER` and silently
+*averages* two dirs parsing to the same (contr, switch) key, so candidate sim
+dirs are named `..._self_gnn_contr_{gnn,lin}_switch` — in this experiment's
+Stage-2 matrix the label `gnn` means the candidate, not M0 — and the baseline
+`23_2g8a_self_gnn_contr_*` dirs must never be passed to the sweep alongside
+them. (B) Kendall's W is only rendered into `slot_concordance.jpg`; the log
+quotes it by recomputing from `score_matrix.csv` with the script's formula.
+(C) the `self_dropout` label must be a quoted string (`'0.10'`) — it is
+interpolated into the `.pt` filename. (D) the p=0 (M4) `.pt` exists only on
+Raven; fetch before committing if it wins. (E) all cluster scripts rsync
+`--delete` into the shared `~/algorithmic-institutions`; check no parallel
+experiment has jobs in flight before any sync, and re-sync from this worktree
+immediately before each submission. (F) `train_cluster.sh`/
+`simulate_cluster.sh` return at submission; every cluster step polls
+`squeue` + output files before being confirmed. (G) if p=0 or p=0.15 wins,
+both of its Stage-2 cells are simulated fresh under slug names (identical
+configs, seed 42 — not seed shopping); the Stage-1 prior-evidence numbers
+stay as declared, and any reproduction mismatch is logged.
+
+- [x] 1. Record this plan in the log; commit.
+- [ ] 2. Verify the cherry-picked dropout mechanism on Raven
+      (`scripts/remote_test.sh -- -k input_dropout -v`; PyG import, cannot
+      run locally). Confirm: 5 passed.
+- [ ] 3. Add `configs/training/artificial_humans/contribution/
+      auto_cg_selfdrop_10.yml` — copy of the predecessor's
+      `auto_selfdrop_15.yml` with exactly: description, label
+      `self_dropout: '0.10'`, `input_dropout.prev_contribution: 0.10`,
+      `output_dir: artifacts/artificial_humans/auto_contribution_cg_selfdrop_10`.
+      Commit.
+- [ ] 4. Train on Raven (`scripts/train_cluster.sh ah <config>`); poll.
+      Confirm: `.pt` with the exact expected name exists on Raven.
+- [ ] 5. Fetch the artifact; sanity-check fold-mean best test log-loss lands
+      between p=0 (1.9899) and p=0.15 (2.0128). Notes entry; commit.
+- [ ] 6. Add Stage-1 sim config `configs/simulation/manager_testing/
+      auto_cgselfdrop10_2g8a_self_gnn_contr_gnn_switch.yml` — 23-family
+      template, only the contribution path + output_dir/figure_name changed;
+      doubles as the Stage-2 gnn-switch cell. Commit.
+- [ ] 7. Simulate on Raven; fetch. Confirm: `per_round.parquet` +
+      `aggregates.csv` with all four pairings.
+- [ ] 8. Evaluate locally; read CG / rows<=1 / mean from the
+      `lin_multinomial_self` run (the reference stack). Results row; commit.
+- [ ] 9. Select the winner per the declaration (lowest Stage-1 CG, guards
+      rows<=1 >= 11/21 and mean <= 1.760, ties to simpler). No passing arm →
+      [FAIL], skip to 14. If p=0.15 wins, add its training config verbatim as
+      a provenance copy. Notes entry; commit.
+- [ ] 10. Add the winner's remaining Stage-2 sim config(s): always the
+      lin-switch cell; also the gnn-switch cell if the winner is p=0/p=0.15.
+      Commit.
+- [ ] 11. Simulate on Raven, fetch, evaluate each new cell. Confirm: every
+      candidate dir has `evaluation/scores.csv` (84 rows).
+- [ ] 12. Stage-2 sweep: `evaluation_sweep.py
+      auto_contribution_cg_selfdrop_stage2` over exactly 8 dirs — the 2
+      candidate cells + the 6 existing `23_*` cat/gaussian/ridge dirs, never
+      the baseline gnn dirs. Confirm: 32-row `score_matrix.csv`.
+- [ ] 13. Analyse Stage 2 vs `23_stack_sweep_updated/score_matrix.csv`:
+      per-context CG deltas, RCA/RCB cost, recomputed Kendall's W and
+      `best in n/8` for the contribution slot. Stage-2 Results row + Notes;
+      commit results, sim dirs, sweep outputs, and the winner's `.pt`.
+- [ ] 14. Open the PR (`[SUCCESS]`/`[FAIL]`), body per §9: Hypothesis /
+      Results / Collateral. Final Notes entry records the verdict.
 
 ## Results
 
