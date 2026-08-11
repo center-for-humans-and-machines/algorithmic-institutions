@@ -108,13 +108,13 @@ stay as declared, and any reproduction mismatch is logged.
 - [x] 10. Add the winner's remaining Stage-2 sim config(s): always the
       lin-switch cell; also the gnn-switch cell if the winner is p=0/p=0.15.
       Commit.
-- [ ] 11. Simulate on Raven, fetch, evaluate each new cell. Confirm: every
+- [x] 11. Simulate on Raven, fetch, evaluate each new cell. Confirm: every
       candidate dir has `evaluation/scores.csv` (84 rows).
-- [ ] 12. Stage-2 sweep: `evaluation_sweep.py
+- [x] 12. Stage-2 sweep: `evaluation_sweep.py
       auto_contribution_cg_selfdrop_stage2` over exactly 8 dirs — the 2
       candidate cells + the 6 existing `23_*` cat/gaussian/ridge dirs, never
       the baseline gnn dirs. Confirm: 32-row `score_matrix.csv`.
-- [ ] 13. Analyse Stage 2 vs `23_stack_sweep_updated/score_matrix.csv`:
+- [x] 13. Analyse Stage 2 vs `23_stack_sweep_updated/score_matrix.csv`:
       per-context CG deltas, RCA/RCB cost, recomputed Kendall's W and
       `best in n/8` for the contribution slot. Stage-2 Results row + Notes;
       commit results, sim dirs, sweep outputs, and the winner's `.pt`.
@@ -129,6 +129,9 @@ stay as declared, and any reproduction mismatch is logged.
 | 2026-08-11 | M4 features, p=0 (PR #144 run, prior evidence) | 1 | CG 7.587 | 11/21 | 1.621 | prior evidence |
 | 2026-08-11 | M4 + selfdrop p=0.15 (PR #144 run, prior evidence) | 1 | CG 5.961 | 12/21 | 1.585 | prior evidence |
 | 2026-08-11 | M4 + selfdrop p=0.10 (new arm) | 1 | CG 6.430 | 12/21 | 1.563 | passes guards; loses to p=0.15 on CG |
+| 2026-08-11 | M4 + selfdrop p=0.15, fresh gnn-switch cell | 2 | CG 5.961 | 12/21 | 1.585 | reproduces #144 exactly |
+| 2026-08-11 | M4 + selfdrop p=0.15, lin-switch cell | 2 | CG 6.191 | 9/21 | 1.700 | vs M0 cell: CG 9.66, 9/21, 1.84 |
+| 2026-08-11 | Stage-2 sweep (8 contexts vs M0 baseline) | 2 | CG better 8/8 (deltas -2.8..-4.1, mean 9.65 -> 6.15) | not worse 8/8 | not worse 8/8 | **kept** |
 
 ## Notes
 
@@ -157,3 +160,30 @@ stay as declared, and any reproduction mismatch is logged.
    constraint G, both Stage-2 cells are simulated fresh under slug names;
    the reproduced gnn-switch CG will be compared against the
    prior-evidence 5.961 and any mismatch logged.
+5. 2026-08-11: Plan constraint E materialized: the first submission of both
+   Stage-2 sims (15:43) died at job start with FileNotFoundError on the
+   config — a parallel experiment's rsync --delete (shared remote checkout)
+   landed between sbatch and job start and removed this branch's configs.
+   No results were produced, so nothing about the draw changed — this is a
+   resubmission of identical configs, not a re-run. Resubmitted after
+   re-syncing and coordinating with the parallel sessions (they hold syncs
+   while jobs are pending); both jobs confirmed RUNNING. For the
+   maintainer: the race is structural — a pending-job guard or
+   per-experiment remote checkouts would fix it; flagged in the PR.
+6. 2026-08-11: Stage-2 verdict analysis. The fresh gnn-switch cell
+   reproduces PR #144's Stage-1 numbers exactly (CG 5.961, 12/21, 1.585) —
+   the sim is deterministic under seed 42. Sweep vs the merged
+   `23_stack_sweep_updated` baseline (candidate labelled `gnn`, plan
+   constraint A): the candidate beats the incumbent M0 in **all 8
+   contexts** on CG (mean 9.65 -> 6.15, deltas -2.80..-4.11), with rows<=1
+   not worse in 8/8 (strictly better in 7) and mean score better in 8/8.
+   By the #143 stack criteria (rows<=1 desc, mean asc) the candidate is
+   the **best contribution option in all 8 contexts** — it strengthens the
+   slot win M0 already held. Read strictly at the CG row, cat is still
+   best in 8/8 (W=1.00) exactly as before the swap: no GNN-lineage change
+   clears that bar until it beats cat's ~1.9; disclosed, not hidden.
+   Collateral, concordant across contexts: **+** SC 3.22 -> 2.50, CC 1.60
+   -> 0.99, CE 1.27 -> 0.99; **-** RCA 2.85 -> 3.23 and RCB 2.08 -> 2.55
+   (the known dropout cost, worse in 8/8), CD 0.71 -> 0.91 (stays at the
+   ceiling). Verdict: **kept** — targets improved and neither stack
+   metric regressed, in the reference stack and in every context.
