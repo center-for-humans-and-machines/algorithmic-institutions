@@ -85,6 +85,22 @@ class LinearAHAdapter:
         # multinomial = predict_proba tempered by `temperature` (T=1 as-is).
         self.sigma = float(bundle.get("sigma") or 0.0)
         self.temperature = float(bundle.get("temperature", 1.0))
+        # Severity copula: a punishment bundle may carry `copula_rho`, the
+        # within-group correlation of the latent the sampler inverts (one human
+        # manager decides a whole group's punishments, so they co-move beyond
+        # what the shared features explain; calibrated by
+        # scripts/baselines/punishment_copula_rho.py). Absent or 0.0 keeps the
+        # independent path -- and its exact RNG consumption -- unchanged.
+        self.copula_rho = float(bundle.get("copula_rho", 0.0) or 0.0)
+        assert (
+            0.0 <= self.copula_rho < 1.0
+        ), f"copula_rho must lie in [0, 1), got {self.copula_rho}"
+        assert self.copula_rho == 0.0 or (
+            self.is_punishment and self.model_type == "multinomial"
+        ), (
+            "copula_rho is implemented for the multinomial punishment sampler "
+            f"only, got target={self.target!r} model={self.model_type!r}"
+        )
         self.default_values = dict(bundle["default_values"])
         self.switch_every = bundle.get("switch_every")
         # env-driven use (predict) needs both; the rounds-driven manager path
@@ -225,17 +241,25 @@ class LinearAHAdapter:
     # ------------------------------------------------------------------ #
     # level sampling (shared by contribution and punishment)
     # ------------------------------------------------------------------ #
+    def _class_probs(self, Xs, n_levels):
+        """The [n, n_levels] class-probability matrix of a multinomial bundle:
+        classes absent from the fit get a tiny floor, `temperature` flattens or
+        sharpens, rows renormalise. Shared by the independent and the copula
+        sampler so the two can never drift in their marginals."""
+        proba = self.estimator.predict_proba(Xs)
+        P = np.full((len(Xs), n_levels), 1e-12)
+        P[:, self.estimator.classes_] = proba
+        if self.temperature != 1.0:
+            P = P ** (1.0 / self.temperature)
+        P /= P.sum(1, keepdims=True)
+        return P
+
     def _sample_levels(self, Xs, n_levels):
         """Discrete levels [n]; sample=False -> deterministic. Randomness is
         drawn from the torch RNG so th.manual_seed governs linear and GNN
         sampling alike."""
         if self.model_type == "multinomial":
-            proba = self.estimator.predict_proba(Xs)
-            P = np.full((len(Xs), n_levels), 1e-12)
-            P[:, self.estimator.classes_] = proba
-            if self.temperature != 1.0:
-                P = P ** (1.0 / self.temperature)
-            P /= P.sum(1, keepdims=True)
+            P = self._class_probs(Xs, n_levels)
             if self.sample:
                 lvl = th.multinomial(th.from_numpy(P), 1).reshape(-1)
                 return lvl.numpy().astype(np.int64)
@@ -250,6 +274,43 @@ class LinearAHAdapter:
         else:  # no sigma stored / sample=False -> deterministic point prediction
             yhat = mu
         return np.clip(np.rint(yhat), 0, n_levels - 1).astype(np.int64)
+
+    def _sample_levels_copula(self, Xs, n_levels, groups):
+        """Discrete levels [A] whose latents share one severity draw per group.
+
+        Marginals are IDENTICAL to ``_sample_levels`` -- the same ``P`` -- but
+        the uniform each agent inverts is correlated inside a group:
+
+            u_i = Phi(sqrt(rho) * z_g(i) + sqrt(1 - rho) * eps_i)
+
+        with one ``z`` per distinct group id and independent per-agent ``eps``.
+        Inversion is the discrete quantile of the agent's own row,
+        ``level_i = min{a : F_i(a) >= u_i}`` (so ``F_i(a-1) < u <= F_i(a)``),
+        the convention the calibration script's sampler used.
+
+        Exactly 2A torch draws per call (``zs``, then ``eps``) whatever the
+        group composition is: the group latent is read from the slot of the
+        group's FIRST member, so a round with one group consumes the same
+        stream as a round with two."""
+        P = self._class_probs(Xs, n_levels)
+        if not self.sample:
+            return P.argmax(1).astype(np.int64)
+
+        n = len(Xs)
+        zs = th.randn(n, dtype=th.float64)  # fixed 2A draws, composition-stable
+        eps = th.randn(n, dtype=th.float64)
+        g = np.asarray(groups).reshape(-1)
+        assert len(g) == n, f"groups has {len(g)} entries for {n} agents"
+        first, pick = {}, np.empty(n, dtype=np.int64)
+        for i, gid in enumerate(g):
+            pick[i] = first.setdefault(int(gid), i)
+
+        a = float(np.sqrt(self.copula_rho))
+        b = float(np.sqrt(1.0 - self.copula_rho))
+        u = th.special.ndtr(a * zs[th.from_numpy(pick)] + b * eps)
+        cum = th.from_numpy(np.cumsum(P, axis=1))
+        lvl = th.searchsorted(cum.contiguous(), u.reshape(-1, 1).contiguous())
+        return lvl.reshape(-1).clamp(0, n_levels - 1).numpy().astype(np.int64)
 
     # ------------------------------------------------------------------ #
     # env-facing predict (contribution / switch)
@@ -290,7 +351,14 @@ class LinearAHAdapter:
         T = len(rounds)
         pool = self._pool_from_rounds(rounds)
         X = np.column_stack([pool[f][0, :, T - 1] for f in self.features])
-        lvl = self._sample_levels(self.scaler.transform(X), self.n_levels)
+        Xs = self.scaler.transform(X)
+        if self.sample and self.copula_rho > 0.0:
+            # membership from the same round dict the features come from
+            gid = rounds[-1].get("agent_group")
+            groups = np.zeros(len(X), np.int64) if gid is None else np.asarray(gid)
+            lvl = self._sample_levels_copula(Xs, self.n_levels, groups)
+        else:
+            lvl = self._sample_levels(Xs, self.n_levels)
         return th.tensor(lvl, dtype=th.int64)
 
 

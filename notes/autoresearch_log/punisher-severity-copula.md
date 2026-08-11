@@ -64,22 +64,22 @@ frozen surface per §8). Slug: `severity_copula`.
       pre-existing key modified and predict_proba bit-identical on reload.
 - [x] 7. Run calibration; record rho +/- SE, CI, pre-flight ratios in Notes.
       Escalate and stop if rho not clearly > 0 or pre-flight barely moves.
-- [ ] 8. Adapter gate in `linear_ah.py.__init__`: `copula_rho` from bundle,
+- [x] 8. Adapter gate in `linear_ah.py.__init__`: `copula_rho` from bundle,
       assert 0 <= rho < 1 and multinomial-punishment-only. `_sample_levels`
       untouched (existing bundles keep exact RNG consumption).
-- [ ] 9. `_sample_levels_copula(Xs, n_levels, groups)`: P as in
+- [x] 9. `_sample_levels_copula(Xs, n_levels, groups)`: P as in
       `_sample_levels`; fixed 2A torch draws per call (zs, eps);
       **per-group z** (D1: one manager call serves both groups in self
       pairings; human data has one manager decision per group-round);
       u = ndtr(sqrt(rho) z_g + sqrt(1-rho) eps); searchsorted on cumsum(P).
-- [ ] 10. Wire into `get_punishments`, groups from `rounds[-1]["agent_group"]`
+- [x] 10. Wire into `get_punishments`, groups from `rounds[-1]["agent_group"]`
       (same source as the features); dispatch only when sample and rho > 0.
-- [ ] 11. Local unit tests `tests/baselines/test_punishment_copula.py`:
+- [x] 11. Local unit tests `tests/baselines/test_punishment_copula.py`:
       inverse-CDF correctness; marginals preserved vs independent sampler;
       within-group correlation induced; cross-group ~0; rho-absent/rho=0
       bit-identical to today's path under same seed; determinism; gate
       assertion raises.
-- [ ] 12. Run local suites: `pytest tests/baselines` + the eval-suite tests
+- [x] 12. Run local suites: `pytest tests/baselines` + the eval-suite tests
       (frozen surface untouched proof).
 - [ ] 13. Stage-1 config
       `23_2g8a_severity_copula_self_gnn_contr_gnn_switch.yml`: copy of the
