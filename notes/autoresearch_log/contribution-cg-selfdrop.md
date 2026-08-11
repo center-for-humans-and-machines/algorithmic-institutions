@@ -97,15 +97,15 @@ stay as declared, and any reproduction mismatch is logged.
       auto_cgselfdrop10_2g8a_self_gnn_contr_gnn_switch.yml` — 23-family
       template, only the contribution path + output_dir/figure_name changed;
       doubles as the Stage-2 gnn-switch cell. Commit.
-- [ ] 7. Simulate on Raven; fetch. Confirm: `per_round.parquet` +
+- [x] 7. Simulate on Raven; fetch. Confirm: `per_round.parquet` +
       `aggregates.csv` with all four pairings.
-- [ ] 8. Evaluate locally; read CG / rows<=1 / mean from the
+- [x] 8. Evaluate locally; read CG / rows<=1 / mean from the
       `lin_multinomial_self` run (the reference stack). Results row; commit.
-- [ ] 9. Select the winner per the declaration (lowest Stage-1 CG, guards
+- [x] 9. Select the winner per the declaration (lowest Stage-1 CG, guards
       rows<=1 >= 11/21 and mean <= 1.760, ties to simpler). No passing arm →
       [FAIL], skip to 14. If p=0.15 wins, add its training config verbatim as
       a provenance copy. Notes entry; commit.
-- [ ] 10. Add the winner's remaining Stage-2 sim config(s): always the
+- [x] 10. Add the winner's remaining Stage-2 sim config(s): always the
       lin-switch cell; also the gnn-switch cell if the winner is p=0/p=0.15.
       Commit.
 - [ ] 11. Simulate on Raven, fetch, evaluate each new cell. Confirm: every
@@ -128,6 +128,7 @@ stay as declared, and any reproduction mismatch is logged.
 | 2026-08-11 | (baseline) reference stack, no change | 1 | CG 9.850 | 11/21 | 1.760 | baseline |
 | 2026-08-11 | M4 features, p=0 (PR #144 run, prior evidence) | 1 | CG 7.587 | 11/21 | 1.621 | prior evidence |
 | 2026-08-11 | M4 + selfdrop p=0.15 (PR #144 run, prior evidence) | 1 | CG 5.961 | 12/21 | 1.585 | prior evidence |
+| 2026-08-11 | M4 + selfdrop p=0.10 (new arm) | 1 | CG 6.430 | 12/21 | 1.563 | passes guards; loses to p=0.15 on CG |
 
 ## Notes
 
@@ -141,3 +142,18 @@ stay as declared, and any reproduction mismatch is logged.
    (1.9899) and p=0.15 (2.0128), monotone in p as expected, confirming the
    dropout rate took effect. Dropout-mechanism tests passed on Raven
    before training (5 passed).
+3. 2026-08-11: Stage-1 p=0.10 (reference stack): CG 6.430, rows<=1 12/21,
+   mean 1.563, RCA 2.513, RCB 2.565. The probe's question is answered
+   negatively: at p=0.10 the RCA/RCB cost is already mostly present
+   (RCA 2.513 vs 2.772 at p=0.15, both well above the 2.035 baseline)
+   while the CG gain is smaller (6.430 vs 5.961) — no knee between 0 and
+   0.15 where the gain outruns the cost.
+4. 2026-08-11: **Winner: p=0.15** — lowest Stage-1 CG (5.961 vs 6.430 vs
+   7.587), all three arms pass the guards (rows<=1 >= 11/21, mean <=
+   1.760); not a tie, so the simpler-model rule does not fire. Its
+   training config is added verbatim as a provenance copy
+   (`auto_selfdrop_15.yml`, pointing at the existing
+   `auto_contribution_selfdrop_15` artifact — not to be re-run). Per plan
+   constraint G, both Stage-2 cells are simulated fresh under slug names;
+   the reproduced gnn-switch CG will be compared against the
+   prior-evidence 5.961 and any mismatch logged.
