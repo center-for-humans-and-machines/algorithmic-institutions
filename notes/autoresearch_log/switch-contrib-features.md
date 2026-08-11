@@ -65,7 +65,7 @@ Steps:
 - [x] 7. Gate: winner = lowest SC with rows <= 1 >= 11/21 and mean <= 1.7596;
   ties go to the simpler arm. No arm below SC 3.2704 with guardrails held ->
   [FAIL], skip to step 11.
-- [ ] 8. Stage 2: three more sim configs for the winner (cat / gaussian /
+- [x] 8. Stage 2: three more sim configs for the winner (cat / gaussian /
   ridge contribution), switch_model swapped, reusing the Stage-1 gnn-contr run.
 - [ ] 9. Simulate, fetch, evaluate the three.
 - [ ] 10. Confirmation sweep: `evaluation_sweep.py switch_contrib_features_sweep`
