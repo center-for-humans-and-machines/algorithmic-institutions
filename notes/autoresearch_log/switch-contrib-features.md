@@ -49,9 +49,9 @@ Steps:
   `labels.features`, `output_dir`, the feature additions per the table, and
   new node features appended to `shuffle_features`. Architecture, optimiser,
   epochs, seed, data file unchanged.
-- [ ] 2. Train all four on Raven: `scripts/train_cluster.sh ah <config>`
+- [x] 2. Train all four on Raven: `scripts/train_cluster.sh ah <config>`
   (needs `ssh raven` ControlMaster). Report final CV test log-loss per arm.
-- [ ] 3. Fetch artifacts (`scripts/fetch_cluster.sh artifacts/artificial_humans/switch_contrib_features_<variant>`)
+- [x] 3. Fetch artifacts (`scripts/fetch_cluster.sh artifacts/artificial_humans/switch_contrib_features_<variant>`)
   and verify actual `.pt` filenames on disk.
 - [ ] 4. Write four Stage-1 sim configs
   `configs/simulation/manager_testing/switch_contrib_features_<variant>_2g8a_self_gnn_contr_gnnscf_switch.yml`
@@ -92,3 +92,8 @@ Steps:
    slot and picked the GNN; PR #143's known constraint places the SC deficit
    in the founding exodus (first decision round net flow, human 2.42 vs sim
    ~1.5), with rates (SA/SB) and post-exodus stickiness already matching.
+3. Training (2026-08-11, SLURM 29269847/54/55/56, ~3 min each, exit 0):
+   5-fold CV test log-loss at final epoch 374 -- base 0.5163, A 0.5151,
+   B 0.5102, C 0.5086, D 0.5091. Every arm beats the base; the contribution
+   node feature carries most of the gain, same_group on top of it a little
+   more (C best, D within noise of C).
