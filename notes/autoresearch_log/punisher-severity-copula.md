@@ -105,7 +105,7 @@ frozen surface per §8). Slug: `severity_copula`.
       old 8 + new 8 dirs into `23_stack_sweep_severity_copula`.
 - [x] 21. Confirm slot claim: copula beats multinomial on PD in (nearly) all
       8 contexts, P-guards hold, check PD concordance panel.
-- [ ] 22. Complete log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis / Results /
+- [x] 22. Complete log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis / Results /
       Collateral; commits map to steps.
 
 ## 3. Results
