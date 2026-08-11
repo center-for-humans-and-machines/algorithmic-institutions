@@ -112,6 +112,7 @@ frozen surface per §8). Slug: `severity_copula`.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-11 | copula sampling, rho=0.3507588625344979 (pairwise MLE) | 1 | PD 1.5324969616723312 (ref 2.934892) | 10/21 (ref 11/21) | 1.687998 (ref 1.759557) | boundary — escalated to maintainer |
 
 ## 4. Notes
 
@@ -182,3 +183,16 @@ frozen surface per §8). Slug: `severity_copula`.
    calibration target. Bundle re-saved with copula_rho = MLE,
    copula_estimator='pairwise_mle', PIT fields kept as diagnostics
    (copula_diag_pit). GO for the adapter step.
+9. Stage 1 (sim job 29270550, 2m40s): **PD 2.934892 -> 1.5324969616723312**
+   (48% above the ceiling, from 193%), mean 1.759557 -> 1.687998, and
+   collateral SC -0.454 (3.270 -> 2.816, the shared-root-cause row). But
+   rows<=1 fell 11 -> 10: RSA (switching after punishment) rose 0.9088 ->
+   1.0010089590803533 — its discrepancy 0.05764105278482986 vs ceiling
+   0.057582953940577955, i.e. 0.1% over, all 500 repeats used. P-guards
+   fine (PA 0.592, PB 0.951, PC 0.905, RPA 1.185, RPB 0.771). Strict §2
+   reading: not kept (rows<=1 regressed). Escalated to the human
+   maintainer instead of unilaterally declaring FAIL or proceeding:
+   PD improvement is decisive, the RSA crossing is razor-edge, and a
+   plausible real mechanism exists (correlated punishment changes the
+   joint exposure pattern feeding the switch response) — Stage 2's eight
+   contexts are the instrument that separates that from noise.
