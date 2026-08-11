@@ -33,21 +33,28 @@ Validated by the orchestrator 2026-08-11 (targets per §2, legality per §5,
 frozen surface per §8). Slug: `severity_copula`.
 
 - [x] 1. Worktree + Claude commit identity (done at branch creation).
-- [ ] 2. Calibration script `scripts/baselines/punishment_copula_rho.py`
+- [x] 2. Calibration script `scripts/baselines/punishment_copula_rho.py`
       (local): load `punishment_multinomial_best_with_contr.joblib`, rebuild
       its features on its own training data (`bundle["config"]` ->
       `experiments/baseline/2group_8agent_50ep_bline_train.csv`, single-copy,
       40 episodes) via `handcrafted_grid` utilities, keep (episode, round,
       group) indices, build the class-probability matrix exactly as the
       adapter does (1e-12 floor, classes_ scatter, renormalise).
-- [ ] 3. Randomized PIT (punishment is lumpy; mid-point PIT collapses ties
+- [x] 3. Randomized PIT (punishment is lumpy; mid-point PIT collapses ties
       and attenuates rho): u_i = F_i(y_i - 1) + v_i * p_i(y_i), z = ndtri(u);
       average rho over R=20 PIT replicates, fixed seed; mid-point PIT printed
       as sensitivity only.
-- [ ] 4. rho = exchangeable moment estimator over within-(episode, round,
-      group) pairs (~1 736 cells / ~15 291 pairs); cluster bootstrap over 40
-      episodes for SE/CI; diagnostics-only splits; out-of-sample check on the
-      test split (never a selection criterion).
+- [x] 4. ~~rho = exchangeable moment estimator over within-(episode, round,
+      group) pairs~~ **REVISED after step 7** (randomized-PIT moment
+      estimator proven ~2.3x attenuated by round-trip at this
+      discretisation — 69% mass at level 0): rho = pairwise-likelihood MLE
+      of the exchangeable Gaussian copula over within-cell pairs (rectangle
+      probabilities from the bivariate normal CDF with each observation's
+      own discrete marginal; grid + refine over rho), validated by
+      round-trip recovery of known rho_true; PIT moment estimator kept as
+      printed diagnostic. Cluster bootstrap over 40 episodes for SE/CI;
+      diagnostics-only splits; out-of-sample test-split check (never a
+      selection criterion).
 - [ ] 5. Pre-flight (--preflight): replay human P matrices through
       independent vs copula sampler, print group-spread ratios vs human
       (~0.739 human, ~0.578 independence floor). Go/no-go only; rho is never
@@ -133,3 +140,28 @@ frozen surface per §8). Slug: `severity_copula`.
    floor), so the latent rho must land around/above ~0.3 after
    discretisation attenuation — the step-5 pre-flight checks this before
    any cluster run.
+5. Step-7 first run (moment estimator): rho_hat = 0.13829097756981062,
+   bootstrap SE 0.018509224874473314, 95% CI [0.10219321599647306,
+   0.17397141462131743]; per-cell 0.1897, ICC(1) 0.1633, mid-point PIT
+   0.2154; out-of-sample test split 0.09482827476218403. Pre-flight
+   (train-split P, 50 repeats): independent 0.6271, copula@rho_hat 0.6514,
+   human 0.7503 — closes only 24% of the gap. Feature rebuild parity
+   proven: reconstructed train log loss 1.3007198112962215 == stored
+   train_metric, bit-identical. (Pre-flight baseline sits above the 1/sqrt(n)
+   floor because the human P matrices already carry feature-driven
+   correlation and 186+208 cells have size 1-2; human ratio 0.7503 not
+   ~0.739 because train split only.)
+6. Round-trip diagnostic (generate at known rho, re-estimate): the
+   randomized-PIT moment estimator is ~2.3-2.4x attenuated at this
+   discretisation (69% of mass at punishment 0 — the auxiliary uniform
+   carries most of z's variance). Human rho_hat 0.138 => latent rho ~0.32.
+   Plan step 4 revised to the pairwise-likelihood MLE (polychoric-style),
+   acceptance = round-trip recovery of rho_true. Rejected alternative:
+   moment-matching the group-spread ratio (~0.52 implied) — that is
+   calibration at PD's definition, illegal per §5. If the honest MLE closes
+   only part of the gap, that is the honest result; the exchangeable
+   Gaussian copula is evidently not the whole dependence story
+   (correlation-implied 0.32 vs spread-implied 0.52 disagree).
+7. Round decay observed: within-cell correlation 0.217 in rounds 0-7 vs
+   ~0.10 later — constant rho kept (ties go to the simpler model, §5);
+   a round-dependent severity latent is a candidate follow-up experiment.
