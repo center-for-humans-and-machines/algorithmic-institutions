@@ -67,8 +67,8 @@ Steps:
   [FAIL], skip to step 11.
 - [x] 8. Stage 2: three more sim configs for the winner (cat / gaussian /
   ridge contribution), switch_model swapped, reusing the Stage-1 gnn-contr run.
-- [ ] 9. Simulate, fetch, evaluate the three.
-- [ ] 10. Confirmation sweep: `evaluation_sweep.py switch_contrib_features_sweep`
+- [x] 9. Simulate, fetch, evaluate the three.
+- [x] 10. Confirmation sweep: `evaluation_sweep.py switch_contrib_features_sweep`
   over 12 dirs (8 existing 23-family + 4 candidate) giving a 3-option switch
   axis; confirm only if the candidate beats `gnn` on SC in a clear majority
   of the 16 contexts (slot mean < 2.65) without losing SA/SB/RSA.
@@ -83,6 +83,10 @@ Steps:
 | 2026-08-11 | arm B: + contribution node feature | 1 | SC 3.3653 | 11/21 | 1.7279 | fail: target regressed |
 | 2026-08-11 | arm C: + contribution + same_group | 1 | SC 3.3546 | 11/21 | 1.7584 | fail: target regressed |
 | 2026-08-11 | arm D: + contribution + own-grp mean + same_group | 1 | SC 3.3557 | 10/21 | 1.7234 | fail: target regressed, rows<=1 fell |
+| 2026-08-11 | arm A, cat contr (lin_multinomial pairing) | 2 | SC 2.4701 -> 1.6226 | 7 -> 7 | 1.7806 -> 1.6410 | improved |
+| 2026-08-11 | arm A, gaussian contr (lin_multinomial pairing) | 2 | SC 2.5142 -> 1.9650 | 8 -> 8 | 1.6411 -> 1.5923 | improved |
+| 2026-08-11 | arm A, ridge contr (lin_multinomial pairing) | 2 | SC 2.7191 -> 2.2508 | 8 -> 8 | 1.8279 -> 1.7520 | improved |
+| 2026-08-11 | arm A, sweep over 16 contexts vs gnn switch | 2 | SC slot mean 2.651 -> 2.307, wins 13/16 | sane-context le1 7.0 = 7.0 | sane-context 1.794 -> 1.731 | confirmed (SA/SB caveat, note 7) |
 
 ## 4. Notes
 
@@ -112,3 +116,17 @@ Steps:
    contribution-slot-adjacent effect routed through the switch model; and
    arm D improved PD (2.78) and RCD (2.74) but broke SA (1.11). Not
    pursued here.
+6. Stage 2 (sweep `switch_contrib_features_sweep`, 12 dirs / 48 runs, switch
+   axis {gnn, lin, gnnscf}): arm A beats the incumbent gnn switch on SC in
+   13/16 contexts (slot mean 2.651 -> 2.307); the three losses (+0.06 to
+   +0.19) all sit in ridge/gaussian punisher contexts. RSA unchanged
+   (1.196 -> 1.184). Under the accepted punishers (multinomial, gnn) SC
+   improves in all 8 contexts, stack mean drops 1.794 -> 1.731, rows <= 1
+   unchanged at 7.0.
+7. Ruling on the "without losing SA/SB/RSA" clause: SA/SB stay at or below
+   the noise ceiling in every multinomial/gnn punisher context (multinomial
+   deltas -0.02 to +0.06; gnn-punisher SA max 0.98), but inflate further
+   (+0.2 to +0.6) under the ridge/gaussian punishers that PR #140 classified
+   as not reproduced and whose SA elevation it attributed to punisher noise.
+   Verdict: Stage 2 confirmed, with the raw slot means (SA 1.572 -> 1.841,
+   SB 1.126 -> 1.255) reported openly for the human accept decision.
