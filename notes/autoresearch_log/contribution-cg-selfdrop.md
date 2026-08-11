@@ -118,7 +118,7 @@ stay as declared, and any reproduction mismatch is logged.
       per-context CG deltas, RCA/RCB cost, recomputed Kendall's W and
       `best in n/8` for the contribution slot. Stage-2 Results row + Notes;
       commit results, sim dirs, sweep outputs, and the winner's `.pt`.
-- [ ] 14. Open the PR (`[SUCCESS]`/`[FAIL]`), body per §9: Hypothesis /
+- [x] 14. Open the PR (`[SUCCESS]`/`[FAIL]`), body per §9: Hypothesis /
       Results / Collateral. Final Notes entry records the verdict.
 
 ## Results
@@ -187,3 +187,13 @@ stay as declared, and any reproduction mismatch is logged.
    (the known dropout cost, worse in 8/8), CD 0.71 -> 0.91 (stays at the
    ceiling). Verdict: **kept** — targets improved and neither stack
    metric regressed, in the reference stack and in every context.
+7. 2026-08-11: **Final verdict: SUCCESS.** Stage 2 confirmed the Stage-1
+   claim across all 8 contexts. If the maintainer accepts, the reference
+   stack's contribution artifact becomes
+   `auto_contribution_selfdrop_15/model/architecture_node+edge+rnn__dataset_50ep__epochs_575__own_group_True__same_group_True__self_dropout_0.15.pt`
+   (only the maintainer updates the reference definition, §3). Seeds for
+   further work: CG remains the stack's worst row at 5.96 (cat's ~1.9
+   shows the remaining headroom is real); the RCA/RCB cost suggests a
+   mechanism that adds peer-conditioning without noising the self-level —
+   e.g. a group-level latent or autoregressive within-round sampling —
+   as the next hypothesis family.
