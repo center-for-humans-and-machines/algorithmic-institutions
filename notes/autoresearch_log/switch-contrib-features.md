@@ -31,7 +31,49 @@
 
 ## 2. Plan
 
-(to be filled by the validated step list)
+Four feature variants, all config-only (every named feature already exists in
+the training tensor dict and the simulation state; no shared-code change):
+
+| variant | added node features | added edge feature | rationale |
+|---|---|---|---|
+| A `_a_same_group` | — | `same_group` | control arm: group-aware routing of existing features; per-node mean of the bit also encodes own-group size |
+| B `_b_contrib` | `contribution` | — | free-riders leave, high contributors stay: self-level cooperation signal |
+| C `_c_contrib_same_group` | `contribution` | `same_group` | central arm: group-aware routing of contributions lets the agent tell which group is worse -> directional founding exodus |
+| D `_d_contrib_owngrp_same_group` | `contribution`, `own_grp_prev_mean_contr` | `same_group` | as C, but own-group level given exactly so the other group's level is linearly recoverable (insurance against the single Lin+Tanh edge MLP) |
+
+Steps:
+
+- [ ] 1. Write the four variant training configs in
+  `configs/training/artificial_humans/switch_predictor/switch_contrib_features_<variant>.yml`
+  — byte-copies of `opt_50ep_doubled_reanchored.yml` except: description,
+  `labels.features`, `output_dir`, the feature additions per the table, and
+  new node features appended to `shuffle_features`. Architecture, optimiser,
+  epochs, seed, data file unchanged.
+- [ ] 2. Train all four on Raven: `scripts/train_cluster.sh ah <config>`
+  (needs `ssh raven` ControlMaster). Report final CV test log-loss per arm.
+- [ ] 3. Fetch artifacts (`scripts/fetch_cluster.sh artifacts/artificial_humans/switch_contrib_features_<variant>`)
+  and verify actual `.pt` filenames on disk.
+- [ ] 4. Write four Stage-1 sim configs
+  `configs/simulation/manager_testing/switch_contrib_features_<variant>_2g8a_self_gnn_contr_gnnscf_switch.yml`
+  — copies of `23_2g8a_self_gnn_contr_gnn_switch.yml` changing only
+  `switch_model`, `output_dir`, `figure_name`.
+- [ ] 5. Simulate on Raven (`scripts/simulate_cluster.sh <config>`), fetch
+  each sim dir, confirm `per_round.parquet`.
+- [ ] 6. Evaluate all four locally (`python -m aimanager evaluate <config>`);
+  judge on the `lin_multinomial_self` run's 21 rows: SC, rows <= 1, mean,
+  plus SA/SB/RSA (must not degrade from 0.72/0.75/0.91).
+- [ ] 7. Gate: winner = lowest SC with rows <= 1 >= 11/21 and mean <= 1.7596;
+  ties go to the simpler arm. No arm below SC 3.2704 with guardrails held ->
+  [FAIL], skip to step 11.
+- [ ] 8. Stage 2: three more sim configs for the winner (cat / gaussian /
+  ridge contribution), switch_model swapped, reusing the Stage-1 gnn-contr run.
+- [ ] 9. Simulate, fetch, evaluate the three.
+- [ ] 10. Confirmation sweep: `evaluation_sweep.py switch_contrib_features_sweep`
+  over 12 dirs (8 existing 23-family + 4 candidate) giving a 3-option switch
+  axis; confirm only if the candidate beats `gnn` on SC in a clear majority
+  of the 16 contexts (slot mean < 2.65) without losing SA/SB/RSA.
+- [ ] 11. Fill Results/Notes, batched pre-commit run, open the PR
+  (`[SUCCESS]`/`[FAIL]`; body: Hypothesis, Results, Collateral).
 
 ## 3. Results
 
