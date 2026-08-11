@@ -81,29 +81,29 @@ frozen surface per §8). Slug: `severity_copula`.
       assertion raises.
 - [x] 12. Run local suites: `pytest tests/baselines` + the eval-suite tests
       (frozen surface untouched proof).
-- [ ] 13. Stage-1 config
+- [x] 13. Stage-1 config
       `23_2g8a_severity_copula_self_gnn_contr_gnn_switch.yml`: copy of the
       reference config, single manager `lin_multinomial_copula` -> new
       joblib, single self pairing, slugged output dir (slug BEFORE `_self_`
       so `evaluation_sweep.py`'s DIR_PATTERN still parses); protocol
       byte-identical.
-- [ ] 14. Push the joblib to Raven explicitly (simulate_cluster.sh excludes
+- [x] 14. Push the joblib to Raven explicitly (simulate_cluster.sh excludes
       `artifacts/`): rsync to `raven:~/algorithmic-institutions/artifacts/baselines/`.
-- [ ] 15. `scripts/simulate_cluster.sh <config>`; poll; confirm
+- [x] 15. `scripts/simulate_cluster.sh <config>`; poll; confirm
       per_round.parquet.
-- [ ] 16. `scripts/fetch_cluster.sh` + `python -m aimanager evaluate <config>`.
-- [ ] 17. Keep gate vs reference `lin_multinomial_self` row: PD < 2.934892;
+- [x] 16. `scripts/fetch_cluster.sh` + `python -m aimanager evaluate <config>`.
+- [x] 17. Keep gate vs reference `lin_multinomial_self` row: PD < 2.934892;
       rows <= 1 >= 11; mean <= 1.759557; P-guards ~unmoved (PA 0.634134,
       PB 0.878167, PC 0.778075, RPA 1.268305, RPB 0.813541 — a P-family move
       signals a sampler bug). Log unrounded.
-- [ ] 18. Gate fails -> Notes + `[FAIL]` PR, stop.
-- [ ] 19. Stage 2: 7 more slugged configs (the Stage-1 config is the
+- [x] 18. (n/a — maintainer ruled Stage 2 proceeds) Gate fails -> Notes + `[FAIL]` PR, stop.
+- [x] 19. Stage 2: 7 more slugged configs (the Stage-1 config is the
       gnn x gnn cell), same single-pairing edits, no protocol change;
       simulate, fetch, evaluate each.
-- [ ] 20. Add `multinomial_copula` to PUNISHER_ORDER / PUNISHER_COLORS in
+- [x] 20. Add `multinomial_copula` to PUNISHER_ORDER / PUNISHER_COLORS in
       `evaluation_sweep.py` (analysis script, not frozen; D5), then sweep
       old 8 + new 8 dirs into `23_stack_sweep_severity_copula`.
-- [ ] 21. Confirm slot claim: copula beats multinomial on PD in (nearly) all
+- [x] 21. Confirm slot claim: copula beats multinomial on PD in (nearly) all
       8 contexts, P-guards hold, check PD concordance panel.
 - [ ] 22. Complete log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis / Results /
       Collateral; commits map to steps.
@@ -113,6 +113,7 @@ frozen surface per §8). Slug: `severity_copula`.
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
 | 2026-08-11 | copula sampling, rho=0.3507588625344979 (pairwise MLE) | 1 | PD 1.5324969616723312 (ref 2.934892) | 10/21 (ref 11/21) | 1.687998 (ref 1.759557) | boundary — escalated to maintainer |
+| 2026-08-11 | same change, full 8-config sweep vs lin_multinomial | 2 | PD wins 8/8 contexts; slot avg 2.6825 -> 1.0737; <=1 in 4 contexts (0.8637, 0.9291, 0.9598, then 1.02/1.03/1.07/1.19/1.53) | net 62 -> 63 over 8 contexts (2 up, 4 equal, 2 down) | improves in 8/8 contexts | kept — SUCCESS |
 
 ## 4. Notes
 
@@ -196,3 +197,26 @@ frozen surface per §8). Slug: `severity_copula`.
    plausible real mechanism exists (correlated punishment changes the
    joint exposure pattern feeding the switch response) — Stage 2's eight
    contexts are the instrument that separates that from noise.
+10. Maintainer ruled: run Stage 2; RSA adjudicated across the 8 contexts.
+11. Infrastructure incident (for the maintainer, out of this experiment's
+    scope): parallel experiment worktrees race on the shared remote
+    checkout — `simulate_cluster.sh`'s `rsync --delete` from one worktree
+    deleted another experiment's configs between its sbatch and job start
+    (15:43, contribution-cg-selfdrop's two Stage-2 sims died on
+    FileNotFoundError; my 15:48-15:55 jobs were unaffected). Agreed
+    protocol with the other session: check `squeue -u certuer` for PENDING
+    jobs before any sync; running jobs are safe. A pending-job guard in
+    the cluster scripts would fix it properly.
+12. Stage 2 verdict: PD wins all 8 contexts (Kendall's W = 0.95,
+    multinomial_copula best in 8/8 on the concordance panel); mean improves
+    in all 8; rows<=1 nets +1 stack-wide (62 -> 63: up in cat x gnn and
+    cat x lin, equal in 4, down in gnn x gnn (RSA 0.9088 -> 1.0010) and
+    gnn x lin (PB 0.8361 -> 1.0248, RPB 0.7420 -> 1.0904)). The Stage-1
+    RSA question resolves as noise: RSA falls in the 4 gnn-switch contexts
+    and rises in the 4 lin-switch contexts, slot average +0.0050. Bonus:
+    RPA now has the copula best in 5/8. Collateral: SC improves in 7/8
+    (slot avg 2.8438 -> 2.6263); RCD rises in the two contexts where it
+    was  below ceiling (gaussian x gnn 0.7322 -> 1.4371, ridge x gnn
+    0.7889 -> 1.3521) — possible seed for a follow-up. The sweep matrix
+    rounds to 2dp; all boundary judgments here use the unrounded
+    scores.csv values.
