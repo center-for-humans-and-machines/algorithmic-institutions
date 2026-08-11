@@ -74,7 +74,6 @@ sync_files() {
         --exclude='.log/' \
         --exclude='artifacts/' \
         --exclude='plots/' \
-        --exclude='notebooks/' \
         --exclude='temp/' \
         "${LOCAL_PROJECT_DIR}/" \
         "${REMOTE_HOST}:${REMOTE_PROJECT_DIR}/"

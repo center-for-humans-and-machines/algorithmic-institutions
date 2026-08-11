@@ -79,8 +79,10 @@ sync_files() {
         --exclude='.log/' \
         --exclude='artifacts/' \
         --exclude='plots/' \
-        --exclude='notebooks/' \
         --exclude='temp/' \
+        --exclude='data/' \
+        --exclude='__pycache__/' \
+        --exclude='.claude/test-logs/' \
         "${LOCAL_PROJECT_DIR}/" \
         "${REMOTE_HOST}:${REMOTE_PROJECT_DIR}/"
     info "Sync complete."

@@ -72,15 +72,15 @@ class TestConfiguration:
 class TestRsyncExcludes:
     """Verify critical directories are excluded from sync."""
 
+    # experiments/ is deliberately synced: the evaluation-suite tests read
+    # the human reference CSV when the remote suite runs them
     MUST_EXCLUDE = [
         ".venv/",
         ".git/",
         "artifacts/",
         "data/",
-        "notebooks/",
         "__pycache__/",
         ".claude/test-logs/",
-        "experiments/",
     ]
 
     def test_critical_excludes_present(self, script_content):

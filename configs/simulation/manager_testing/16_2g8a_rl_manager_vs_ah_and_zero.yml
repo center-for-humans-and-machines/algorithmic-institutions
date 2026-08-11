@@ -15,6 +15,9 @@ managers:
     path: artifacts/manager/03_2g8a_sum_c_lr1e3/model/03_2g8a_sum_c_lr1e3_manager.pt
   ah_opponent:
     type: human
+    # NOTE: the autoregressive punisher artifact was removed (kept on the
+    # includes-stale-work branch); point new runs at
+    # artifacts/artificial_humans/punishment_rnn_edge_50ep_doubled/.
     path: artifacts/artificial_humans/punishment_autoregressive_50ep/model/architecture_node+edge+autoregressive__dataset_50ep__epochs_7500.pt
   zero_punishment:
     type: dummy
