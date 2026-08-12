@@ -117,12 +117,14 @@ Slug: `cg_copula`.
       model.save(out)`; reload-assert logits bit-identical, rho
       round-trips, no other key changed. Arm A out:
       `artifacts/artificial_humans/group_switching_contribution_50ep_cg_copula/model/..._cg_copula.pt`.
-- [ ] 11. (Raven) Run arm-A calibration (+preflight +roundtrip). Escalate
-      and stop before any sim if rho CI touches 0, round-trip fails, or
-      preflight barely moves the ratio. Fetch + commit the `.pt`; log rho,
-      SE, CI, round-trip, preflight unrounded.
-- [ ] 12. (Raven) M4 arrived: fetch + commit; run arm-B calibration the
-      same way (own rho, never reuse arm A's); same gates; log.
+- [x] 11. (Raven) Run arm-A calibration (+preflight +roundtrip) — amended
+      to a SLURM CPU job (`calibrate_copula.slurm`; maintainer feedback:
+      no compute on login nodes). Estimator gates passed but preflight
+      moved the ratio only ~14% of the gap -> escalated per this step;
+      maintainer ruled STOP after calibration (Notes 8). Artifact +
+      sidecar fetched and committed; numbers in Notes 6.
+- [x] 12. (Raven) Arm-B calibration ran the same way (own rho); numbers
+      in Notes 9. The M4 `.pt` itself was already fetched at step 2.
 - [ ] 13. Stage-1 configs (single `lin_multinomial_self` pairing pointing
       at the severity-copula joblib — the re-baselined reference punisher,
       Notes 5 — protocol byte-identical):
@@ -152,8 +154,12 @@ Slug: `cg_copula`.
       dirs + 2 new into `23_stack_sweep_cg_copula`; confirm slot claim on
       CG across all 8 contexts, guards hold, band upgrade survives
       (unrounded scores.csv for boundary calls).
-- [ ] 21. Complete this log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis /
-      Results / Collateral; commits map to steps.
+- [x] 21. Complete this log; PR `[FAIL]`, body Hypothesis / Results /
+      Collateral; commits map to steps.
+
+Steps 13-20 not run: the maintainer stopped the experiment after
+calibration (step-11 escalation, Notes 8) — no Stage-1 simulation, no
+Stage 2.
 
 ## 3. Results
 
@@ -161,6 +167,8 @@ Slug: `cg_copula`.
 |---|---|---|---|---|---|---|
 | 2026-08-12 | (baseline) reference stack, old multinomial punisher | 1 | CG 9.850 | 11/21 | 1.760 | superseded baseline |
 | 2026-08-12 | (baseline) reference stack, severity-copula punisher (#146 Stage-1 run) | 1 | CG 9.808514 | 10/21 | 1.687998 | baseline (Notes 5) |
+| 2026-08-12 | arm A: M0 + copula, rho=0.06958238086256316 (calibration only, job 29302549) | — | preflight spread ratio 0.7837 -> 0.7928 (human 0.8473) | no sim | no sim | stopped at step-11 gate (Notes 6, 8) |
+| 2026-08-12 | arm B: M4 + copula, rho=0.06339366830297524 (calibration only, job 29302550) | — | preflight spread ratio 0.8016 -> 0.8100 (human 0.8473) | no sim | no sim | stopped at step-11 gate (Notes 8, 9) |
 
 ## 4. Notes
 
@@ -210,3 +218,50 @@ Slug: `cg_copula`.
    adjudicated as noise), mean 1.687998. Target unaffected (CG 9.85 →
    9.81); Stage-1 configs will point `lin_multinomial` at the copula
    joblib.
+6. Arm A (M0) calibration, SLURM job 29302549 (first submission 29302450
+   died only on an over-strict re-save assert — the June artifact predates
+   `edge_encoding` in `GraphNetwork.save`'s key list; fix committed,
+   064c442): **rho_hat = 0.06958238086256316**, cluster-bootstrap SE
+   0.010418260898762315, 95% CI [0.04592661278794028, 0.0854596547235886];
+   round-trip gate PASS (max |bias| 0.009462259703284237, tolerance 0.03);
+   PIT attenuated diagnostic 0.0457; holdout (10 episodes, check only)
+   0.13423231991344123. Preflight (50 repeats): independent
+   0.7837119164031583, copula 0.7928150641319318, human 0.8472681041593946
+   — the copula closes ~14% of the teacher-forced gap, matching PR #140's
+   ~1/6 sampler share almost exactly.
+7. The decisive structural finding: **teacher-forced, M0's independent
+   group-spread ratio is already 0.784** vs the free-running sim's ~0.59.
+   The CG deficit is therefore overwhelmingly free-running state-tracking
+   loss, not within-round sampling — the model tracks the group fine when
+   fed real histories and drifts off only under its own dynamics. Also:
+   residual dependence grows over the game (MLE by round thirds
+   0.0345 / 0.0736 / 0.1187) — late-game norm lock-in that a constant
+   within-round rho cannot represent.
+8. Step-11 escalation and maintainer ruling: rho clearly > 0 and gates
+   passed, but the preflight movement (+0.009 of a 0.064 gap) makes a CG
+   band upgrade (9.81 -> < 5) implausible; free-running amplification via
+   prev_contribution feedback was the one unknown a ~3-GPU-min Stage-1 sim
+   would have measured. Maintainer ruled: **stop after calibration, no
+   sims** — experiment closes `[FAIL]` on preflight evidence. Both stamped
+   artifacts + provenance sidecars committed for any future reuse (the
+   sampler, wiring, and tests are all merged-quality and stay on the
+   branch).
+9. Arm B (M4) calibration, job 29302550: rho_hat = 0.06339366830297524,
+   SE 0.009183923512964265, CI [0.04373197762808294, 0.07824941347179236];
+   gate PASS (max |bias| 0.008355831148281312); holdout
+   0.12209883905254384. Preflight: independent 0.8016186566630281, copula
+   0.80998791254259, human 0.8472681041593946. Confirms the mechanism:
+   M4's peer features raise the teacher-forced independent ratio (0.802 vs
+   M0's 0.784) and absorb a little of the residual dependence (rho 0.063
+   vs 0.070) — better conditioning, less left for the sampler.
+10. Directions this leaves for the next agent, ranked by what the data
+   here say: (i) attack free-running state tracking directly — the 0.784
+   vs 0.59 gap is the whole game; scheduled sampling / free-running-aware
+   training or stronger group-state features evaluated in free-run, not
+   teacher-forced fit; (ii) an episode-persistent shared latent (PR #140
+   Option 1, ensemble-per-episode) — unlike the within-round shock it
+   compounds, and the human early-late segregation correlation (0.38 vs
+   sim 0.03) is direct evidence for a persistent component; (iii) a
+   round-growing rho (0.035 -> 0.119 by thirds) is real but second-order
+   next to (i). A plain constant within-round copula on the contribution
+   slot is now measured and closed: do not retry it.

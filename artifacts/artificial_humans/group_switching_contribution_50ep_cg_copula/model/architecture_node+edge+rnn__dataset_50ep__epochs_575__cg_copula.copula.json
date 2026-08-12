@@ -1,0 +1,30 @@
+{
+  "copula_rho": 0.06958238086256316,
+  "copula_rho_se": 0.010418260898762315,
+  "copula_rho_ci": [
+    0.04592661278794028,
+    0.0854596547235886
+  ],
+  "copula_estimator": "pairwise_mle",
+  "copula_diag_pit": "randomized",
+  "copula_diag_pit_rho": 0.045726003288415626,
+  "copula_cell_key": "episode_round_agent_group",
+  "copula_data_file": "experiments/baseline/2group_8agent_50ep_bline_train.csv",
+  "copula_data_note": "create_torch_data on the full human file (training defaults), restricted to the 40 single-copy train episodes; teacher-forced marginals from the source model; rows where contribution_valid",
+  "copula_n_rows": 7457,
+  "copula_n_cells": 1608,
+  "copula_n_pairs": 15090,
+  "copula_n_episodes": 40,
+  "copula_roundtrip_max_bias": 0.009462259703284237,
+  "copula_preflight": {
+    "independent": 0.7837119164031583,
+    "copula": 0.7928150641319318,
+    "human": 0.8472681041593946
+  },
+  "copula_holdout_rho": 0.13423231991344123,
+  "source_model": "artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "model": "artifacts/artificial_humans/group_switching_contribution_50ep_cg_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575__cg_copula.pt",
+  "script": "scripts/artificial_humans/contribution_copula_rho.py",
+  "seed": 38381,
+  "date": "2026-08-12T14:38:01+00:00"
+}
