@@ -95,7 +95,7 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
       lin_multinomial_copula / ridge punishers; one gnn-switch, one
       lin-switch; exact names decided at the step) covering all 8 contexts
       with the candidate contribution artifact.
-- [ ] 16. squeue check, simulate, fetch, evaluate both Stage-2 configs.
+- [x] 16. squeue check, simulate, fetch, evaluate both Stage-2 configs.
 - [ ] 17. Add `cat_onehot` to CONTR_ORDER/CONTR_MARKERS in
       `evaluation_sweep.py` (analysis layer); sweep the candidate dirs
       against the per-context baselines (original 23_* dirs for
