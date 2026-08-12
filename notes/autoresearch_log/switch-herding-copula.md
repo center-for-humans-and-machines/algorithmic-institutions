@@ -125,13 +125,13 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       copula model preserves marginals, correlates within group not across;
       save/load round-trips the fields; old artifact loads with rho 0.0.
       Run `scripts/remote_test.sh` + local `pytest` (frozen-surface proof).
-- [ ] 15. `scripts/artificial_humans/make_switch_copula_artifact.py` (runs
+- [x] 15. `scripts/artificial_humans/make_switch_copula_artifact.py` (runs
       on Raven — the .pt unpickles torch_geometric modules): copy the base
       dict, assert no pre-existing key modified, insert `copula_*` fields
       from the params JSON, save to
       `artifacts/artificial_humans/switch_pred_herding_copula/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt`;
       verify state_dict tensors bit-identical on reload. Fetch and commit.
-- [ ] 16. Stage-1 config
+- [x] 16. Stage-1 config
       `configs/simulation/manager_testing/23_2g8a_herding_copula_self_gnn_contr_herdcopula_switch.yml`:
       copy of `23_2g8a_self_gnn_contr_gnn_switch.yml` with (a) `switch_model`
       swapped to the copula switch artifact, (b) the `lin_multinomial`
@@ -370,3 +370,14 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
     for 11 rounds: latent set at round 3, held 4-6, advanced at 7,
     cleared by reset. Step-14 run: 102 Raven tests pass (12 new), local
     suites 248 pass (frozen surface untouched).
+17. Steps 15-16 (orchestrator, inline): both arms' artifacts built on
+    Raven in one pass and verified (module state_dicts bit-identical to
+    the base, new fields round-trip, GraphNetwork.load carries them; base
+    dict never modified). Arm A: `switch_pred_herding_copula` (rho
+    0.116482333585783). Arm B: `switch_pred_herding_copula_ar1` (+ phi
+    0.70366020589033, copula_switch_every 4). Both Stage-1 configs
+    written; arm B differs from arm A only in switch_model and output
+    paths (diff-verified). Arm B's Stage-1 sim is submitted together with
+    arm A's (both arms were declared and calibrated; running them in one
+    cluster session avoids a second sync cycle) — selection stays
+    Stage-1-score-based per §5.
