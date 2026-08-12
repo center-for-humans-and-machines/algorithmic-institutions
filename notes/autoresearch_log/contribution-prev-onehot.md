@@ -90,21 +90,21 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
 - [x] 13. Keep gate (lin_multinomial_copula run): RCA < 5.744514189776296,
       rows<=1 >= 8, mean <= 1.560720754938168; band upgrade needs RCA < 5.
       Log unrounded + collateral C/RC rows.
-- [ ] 14. Not kept, or kept within-band: complete log, `[FAIL]` PR, stop.
+- [x] 14. (n/a — kept with a band upgrade; Stage 2 ran) Not kept, or kept within-band: complete log, `[FAIL]` PR, stop.
 - [x] 15. Band upgrade: two 4-pairing Stage-2 configs (gaussian / gnn /
       lin_multinomial_copula / ridge punishers; one gnn-switch, one
       lin-switch; exact names decided at the step) covering all 8 contexts
       with the candidate contribution artifact.
 - [x] 16. squeue check, simulate, fetch, evaluate both Stage-2 configs.
-- [ ] 17. Add `cat_onehot` to CONTR_ORDER/CONTR_MARKERS in
+- [x] 17. Add `cat_onehot` to CONTR_ORDER/CONTR_MARKERS in
       `evaluation_sweep.py` (analysis layer); sweep the candidate dirs
       against the per-context baselines (original 23_* dirs for
       gaussian/gnn/ridge cells, severity_copula dirs for the multinomial
       cells) into `23_stack_sweep_prev_onehot`.
-- [ ] 18. Confirm slot claim: candidate beats cat on RCA in (nearly) all
+- [x] 18. Confirm slot claim: candidate beats cat on RCA in (nearly) all
       8 contexts; concordance panel + Kendall's W; guards netted per
       context; unrounded scores.csv for all boundary judgments.
-- [ ] 19. Complete log; PR `[SUCCESS]`/`[FAIL]` per §9.7; commits map to
+- [x] 19. Complete log; PR `[SUCCESS]`/`[FAIL]` per §9.7; commits map to
       steps.
 
 ## 3. Results
@@ -113,6 +113,7 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
 |---|---|---|---|---|---|---|
 | 2026-08-12 | (baseline) copula reference cell, cat contr unchanged | 1 | RCA 5.744514189776296 | 8/21 | 1.560720754938168 | baseline |
 | 2026-08-12 | prev-contribution one-hot (C=0.03), same 5 other features | 1 | RCA 2.972152984061371 | 11/21 | 1.4242459459240815 | kept — band upgrade (>5 -> 2-5), run Stage 2 |
+| 2026-08-12 | same change, 8-context sweep vs cat baselines | 2 | RCA wins 8/8 (2.96-3.33 vs 5.54-5.99); slot avg 5.749 -> 3.116; < 5 in all 8 | net 33 -> 48 over 8 contexts (up in 7, down 1) | not worse in 7/8 (worst +0.0056) | kept — SUCCESS |
 
 ## 4. Notes
 
@@ -219,3 +220,28 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
     cell re-runs Stage 1's context inside the 4-pairing config — a free
     robustness replication under different RNG pre-consumption. Jobs
     29301963 (gnn) and 29301965 (lin).
+11. Stage 2 verdict: cat_onehot beats cat on RCA in all 8 contexts
+    (Kendall's W = 1.00 for the two-option ranking; per-context 2.96-3.33
+    vs 5.54-5.99), every context lands in the 2-5 band — the band upgrade
+    is fully concordant. rows<=1 nets +15 (33 -> 48; up in 7 contexts,
+    down only gnn x gaussian 5 -> 4); mean not worse in 7/8 (the miss is
+    gnn x gaussian, +0.0056). The 4-pairing gnn-switch copula cell
+    replicates Stage 1 under different RNG pre-consumption (RCA 3.0314 vs
+    2.9722). Slot-wide, cat_onehot closes most of the RCA gap to the gnn
+    contributor (slot avg 3.12 vs 2.86) while keeping the cat family's
+    C-marginal advantage.
+12. Concordant collateral, all 8 contexts: CG 1.92 -> 5.05 slot avg
+    (stickier individuals weaken group-mean convergence; still far below
+    the gnn contributor's 9.66) and RCB 1.88 -> 2.59 (the punished-change
+    statistic inherits the sharper self-anchor — the mirror image of PR
+    #144's finding that noising the anchor helps RCB's numerator but
+    destroys RCA). Candidate follow-ups: a group-level latent for CG (the
+    known independence-floor row), and a punishment-interaction feature
+    for RCB.
+13. Sweep artifacts in `plots/data_analysis/evaluation/
+    23_stack_sweep_prev_onehot/` (48 stacks: 16 baseline dirs + 2
+    candidate dirs; the baseline dirs contribute both plain-multinomial
+    and copula punisher cells, only the 8 candidate-comparable contexts
+    are used for the slot claim). `evaluation_sweep.py` gained the
+    `cat_onehot` label (analysis layer). All boundary judgments above use
+    unrounded scores.csv values.

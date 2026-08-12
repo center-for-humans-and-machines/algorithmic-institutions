@@ -59,7 +59,7 @@ CONTR_ROWS = ["CA", "CB", "CC", "CD", "CE", "CF", "CG", "RCA", "RCB", "RCC", "RC
 SWITCH_ROWS = ["SA", "SB", "SC", "RSA"]
 PUNISHER_ROWS = ["PA", "PB", "PC", "PD", "RPA", "RPB"]
 
-CONTR_ORDER = ["gnn", "cat", "gaussian", "ridge"]
+CONTR_ORDER = ["gnn", "cat", "cat_onehot", "gaussian", "ridge"]
 SWITCH_ORDER = ["lin", "gnn"]
 PUNISHER_ORDER = ["multinomial", "multinomial_copula", "gnn", "gaussian", "ridge"]
 
@@ -86,7 +86,13 @@ PUNISHER_COLORS = {
     "gaussian": "#CC79A7",
     "ridge": "#009E73",
 }
-CONTR_MARKERS = {"gnn": "o", "cat": "s", "gaussian": "^", "ridge": "D"}
+CONTR_MARKERS = {
+    "gnn": "o",
+    "cat": "s",
+    "cat_onehot": "P",
+    "gaussian": "^",
+    "ridge": "D",
+}
 
 DIR_PATTERN = re.compile(r"_self_(?P<contr>\w+?)_contr_(?P<switch>\w+?)_switch$")
 
