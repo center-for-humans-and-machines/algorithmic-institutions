@@ -31,6 +31,13 @@ An experiment is **kept** iff its target rows improve and neither stack
 metric regresses — you cannot buy your targets by quietly breaking the rest
 of the stack.
 
+**Success additionally requires a band upgrade.** The scoring bands
+(<= 1 / 1-2 / 2-5 / > 5) are the classes: at least one declared target row
+must finish in a better band than it started — from > 5 into 2-5, from 2-5
+into 1-2 or <= 1, from 1-2 into <= 1 — in the reference stack, confirmed by
+Stage 2. A within-band improvement, however large, is a `[FAIL]` with
+valuable notes, not a success.
+
 ## 3. Evaluation protocol (two-stage)
 
 The metrics are a property of a full stack, so candidates are always scored
@@ -192,10 +199,12 @@ machine account may replace this later.
    plan is wrong, revise the step list first (through validation again),
    then continue.
 5. Train, simulate, evaluate per §3 and §7; log every run (§10).
-6. Kept per §2 (targets improved, nothing regressed)? Run Stage 2.
-7. **Every experiment ends in a PR** — titled `[SUCCESS] ...` (Stage-2
-   confirmed) or `[FAIL] ...` (targets did not move or Stage 2 did not
-   confirm; never merged — it exists so the next agent does not retry it).
+6. Kept per §2 **with a band upgrade** on a target row? Run Stage 2. Kept
+   but within-band? Skip the sweep — it cannot become a success.
+7. **Every experiment ends in a PR** — titled `[SUCCESS] ...` (band upgrade,
+   Stage-2 confirmed) or `[FAIL] ...` (targets did not move, no band
+   upgrade, or Stage 2 did not confirm; never merged — it exists so the
+   next agent does not retry it).
    No silent abandonment. The body, in order:
    1. **Hypothesis** — brief: the behavioral claim, the planned change, and
       the targeted rows with their starting scores.
