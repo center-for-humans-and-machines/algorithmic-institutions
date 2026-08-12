@@ -48,11 +48,11 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
       (N_CONTRIBUTION_LEVELS = 21) from
       `clip(rint(prev_contribution), 0, 20)` in the prev family; NOT in
       CURRENT_VALUED; document in `notes/baseline_feature_defs.md`.
-- [ ] 3. `tests/baselines/test_baseline_features.py`: add the dummies to
+- [x] 3. `tests/baselines/test_baseline_features.py`: add the dummies to
       PREV_FAMILY with an independent pandas reference; explicit test that
       round 0 puts onehot_09 = 1 in both the pipeline and adapter paths and
       rows sum to 1.
-- [ ] 4. Run `pytest tests/baselines` + eval-suite tests (frozen surface
+- [x] 4. Run `pytest tests/baselines` + eval-suite tests (frozen surface
       untouched proof).
 - [ ] 5. New config `configs/training/baselines/contribution/
       cat_prev_onehot.yml`: data block identical to `cat.yml` (single-copy
