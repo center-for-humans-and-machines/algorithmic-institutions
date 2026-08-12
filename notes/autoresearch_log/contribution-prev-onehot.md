@@ -71,12 +71,12 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
       via `inspect_best_model.py` — selection by CV log loss within s0 rows
       only; verify bundle (26 features, coef shape (21, 26), defaults);
       incumbent joblib untouched. Exactly one variant goes to Stage 1.
-- [ ] 8. Offline pre-flight (go/no-go, never tuning): teacher-forced
+- [x] 8. Offline pre-flight (go/no-go, never tuning): teacher-forced
       sampling on train-split human features through LinearAHAdapter;
       report repeat rate / |change|<=1 / mean |change| vs human
       0.438 / 0.621 / 2.29 and cat sim 0.193 / 0.331 / 3.30. Escalate if
       the repeat spike does not appear.
-- [ ] 9. Stage-1 config `configs/simulation/manager_testing/
+- [x] 9. Stage-1 config `configs/simulation/manager_testing/
       23_2g8a_prev_onehot_self_cat_onehot_contr_gnn_switch.yml`: copy of
       `23_2g8a_severity_copula_self_cat_contr_gnn_switch.yml` (the new
       reference-punisher cell, single lin_multinomial_copula pairing),
@@ -188,3 +188,14 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
    incumbent joblib checksum unchanged. Adapter smoke: [1, 8, 1]
    int64 predictions, one-hot rows sum to 1, argmax recovers the
    previous level.
+8. Step-8 pre-flight (teacher-forced on the 7149 train rows with a real
+   previous round, R=20 replicates, seed 42; train log loss reproduces
+   both bundles' recorded train_metric exactly): repeat rate — human
+   0.414, incumbent 0.182, new bundle 0.401 (94.4% of the gap closed);
+   mean |change| — human 2.22, incumbent 3.19, new 2.52 (68.8% closed);
+   |change|<=1 — 0.612 / 0.336 / 0.586. Transition corner at prev in
+   {0,5,10,15,20}: the new bundle's diagonal lands within ~0.01 of the
+   human empirical values (in-sample caveat; out-of-sample support is
+   the test log loss 1.882 vs 2.273). Residual over-dispersion remains
+   in the tails, so RCA should improve substantially but need not reach
+   the ceiling. GO.
