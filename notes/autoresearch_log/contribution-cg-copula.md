@@ -85,7 +85,7 @@ Slug: `cg_copula`.
       `predict_independent` builds cells from `data["agent_group"]`.
       `predict_autoreg`, `encode`, `forward`, `encoder.decode` byte-
       identical; legacy `.pt` loads default to 0.0 (exact pre-change RNG).
-- [ ] 5. Local unit tests `tests/copula/test_contribution_copula.py` (pure
+- [x] 5. Local unit tests `tests/copula/test_contribution_copula.py` (pure
       torch): bin-edge inversion; marginal preservation vs independent
       draws; within-cell corr > 0, cross-cell ~ 0; determinism;
       composition-stable RNG consumption; parity vs
