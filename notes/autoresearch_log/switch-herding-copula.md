@@ -5,12 +5,13 @@
 - **Slot:** switch
 - **Base model:** `gnn` switch predictor
   (`artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt`)
-- **Target rows:** SC — reference stack 3.270439 (band 2-5); slot average
-  2.65 over the 16 gnn-switch contexts, >= 2 in 15/16 (range 1.77-3.45),
-  concordant. The only S-family deficit: SA 0.721349, SB 0.753990,
-  RSA 0.908837 in the reference stack — rates match, the group aggregate
-  does not. Success requires SC < 2 in the reference stack (band upgrade
-  2-5 -> 1-2), Stage-2 confirmed.
+- **Target rows:** SC — reference stack 2.816006 (band 2-5; 3.270439 under
+  the pre-copula punisher); slot average 2.65 over the 16 gnn-switch
+  contexts of the original sweep, >= 2 in 15/16 (range 1.77-3.45),
+  concordant. The only S-family deficit: SA/SB at or near the ceiling in
+  the reference stack — rates match, the group aggregate does not. Success
+  requires SC < 2 in the reference stack (band upgrade 2-5 -> 1-2),
+  Stage-2 confirmed.
 - **Hypothesis:** eligible players in a group see the same situation and
   their switch decisions co-move beyond what shared observable features
   explain (~40% of within-group co-movement survives conditioning on state —
@@ -35,10 +36,12 @@
   predicted marginals (the PR #146 estimator, adapted to binary outcomes);
   stored as a field on a copy of the switch artifact; artifacts without the
   field sample independently, bit-identical to today.
-- **Stack guards (must not regress):** rows <= 1 baseline 11/21; mean
-  baseline 1.759557 (reference stack `gnn x gnn x lin_multinomial`);
-  marginal guards SA 0.721349, SB 0.753990, RSA 0.908837 — an S-rate move
-  signals a sampler bug.
+- **Stack guards (must not regress):** rows <= 1 baseline 10/21; mean
+  baseline 1.6879978841849728 (reference stack `gnn x gnn x
+  lin_multinomial` where the multinomial bundle is now the severity-copula
+  one, `punishment_multinomial_severity_copula.joblib` — maintainer update
+  of 2026-08-12, note 8); marginal guards SA 0.773715, SB 0.848892,
+  RSA 1.001009 — an S-rate move signals a sampler bug.
 
 ## 2. Plan
 
@@ -130,17 +133,26 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       verify state_dict tensors bit-identical on reload. Fetch and commit.
 - [ ] 16. Stage-1 config
       `configs/simulation/manager_testing/23_2g8a_herding_copula_self_gnn_contr_herdcopula_switch.yml`:
-      copy of `23_2g8a_self_gnn_contr_gnn_switch.yml`, only `switch_model`
-      swapped + `output_dir`/`figure_name` slugged (slug before `_self_`);
-      all four pairings kept in reference order (lin_multinomial_self stays
-      RNG-identical to the reference; the dir doubles as the Stage-2
-      gnn-contribution cell); protocol untouched.
+      copy of `23_2g8a_self_gnn_contr_gnn_switch.yml` with (a) `switch_model`
+      swapped to the copula switch artifact, (b) the `lin_multinomial`
+      manager replaced by `lin_multinomial_copula` ->
+      `artifacts/baselines/punishment_multinomial_severity_copula.joblib`
+      (the updated reference punisher, note 8; pairing name kept as
+      `lin_multinomial_copula_self` to match the severity-copula rival
+      dirs in the sweep), (c) `output_dir`/`figure_name` slugged (slug
+      before `_self_`); four pairings in reference order (copula
+      multinomial first — same RNG position as the severity-copula
+      baseline run; ridge/gaussian/gnn at positions 2-4 as in the old
+      reference config); protocol untouched.
 - [ ] 17. `squeue` check, `scripts/simulate_cluster.sh <config>`, confirm
       `per_round.parquet`, fetch, `python -m aimanager evaluate <config>`.
-- [ ] 18. Keep gate on the `lin_multinomial_self` row: SC < 3.270439 with
-      band upgrade requiring SC < 2; rows <= 1 >= 11; mean <= 1.759557;
-      SA 0.721349 / SB 0.753990 / RSA 0.908837 essentially unmoved (a
-      marginal move signals a sampler bug). Log unrounded.
+- [ ] 18. Keep gate on the `lin_multinomial_copula_self` row vs the updated
+      reference baseline
+      (`23_2g8a_severity_copula_self_gnn_contr_gnn_switch`): SC < 2.816006
+      with band upgrade requiring SC < 2; rows <= 1 >= 10; mean <=
+      1.6879978841849728; SA 0.773715 / SB 0.848892 / RSA 1.001009
+      essentially unmoved (a marginal move signals a sampler bug). Log
+      unrounded.
 - [ ] 19. Arm B only if phi survived step 8: second artifact + config, slug
       `herding_copula_ar1` (switch token `herdcopar1`), identical protocol;
       Stage-1 evaluate; select the better SC under the same guards (§5
@@ -149,13 +161,17 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       `[FAIL]` PR, stop (no sweep).
 - [ ] 21. Stage 2 (only after a Stage-1 band upgrade): 3 more configs
       `23_2g8a_herding_copula_self_{cat,gaussian,ridge}_contr_herdcopula_switch.yml`
-      (copies of the reference configs, switch model + output dir only),
-      simulate, fetch, evaluate — with the Stage-1 dir: 4 dirs x 4
-      punishers = the 16 contexts mirroring the 16 gnn-switch contexts.
+      (same edits as step 16: copula switch artifact, copula multinomial
+      punisher, slugged output dir), simulate, fetch, evaluate — with the
+      Stage-1 dir: 4 dirs x 4 punishers = 16 contexts. Rival gnn-switch
+      values: the 4 severity-copula gnn-switch dirs for the
+      multinomial_copula contexts, the 4 original gnn-switch dirs for
+      ridge/gaussian/gnn.
 - [ ] 22. Add `herdcopula` to `SWITCH_ORDER` in
       `scripts/data_analysis/evaluation_sweep.py` (analysis layer;
       precedent D5 — no SWITCH_COLORS exists, `fig_switch_unrolled`
-      tolerates a third column), sweep the 8 existing dirs + 4 new into
+      tolerates a third column), sweep the 8 original dirs + the 8
+      severity-copula dirs + the 4 new dirs into
       `23_stack_sweep_herding_copula`.
 - [ ] 23. Confirm the slot claim: SC beats the gnn switch in (nearly) all
       16 contexts; check the SC concordance panel and switch slot report;
@@ -235,3 +251,20 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
    tetrachoric is a true 2x2 bivariate-normal MLE at marginal-MLE
    thresholds, built on the precedent's Drezner-Wesolowsky `bvn_cdf`
    (max abs err vs scipy 2.2e-16), reused verbatim for step 5.
+8. Maintainer update (2026-08-12, mid-experiment, before any Stage-1
+   config existed): the reference stack's punisher is now the
+   severity-copula multinomial bundle
+   (`artifacts/baselines/punishment_multinomial_severity_copula.joblib`) —
+   same `lin_multinomial` slot option, not a separate class; autoresearch.md
+   text to be updated by the maintainer. New reference baselines from
+   `plots/simulation/23_2g8a_severity_copula_self_gnn_contr_gnn_switch`:
+   SC 2.816006 (still band 2-5, success gate SC < 2 unchanged),
+   rows <= 1 = 10/21 (RSA 1.001009 sits 0.1% over the ceiling — the
+   Stage-2-adjudicated noise crossing of PR #146), mean
+   1.6879978841849728, guards SA 0.773715 / SB 0.848892 / RSA 1.001009.
+   Declaration and plan steps 16/18/21/22 updated accordingly. Pairing
+   label stays `lin_multinomial_copula` in the new configs so Stage-2
+   contexts match the existing severity-copula rival dirs; the naming
+   unification is cosmetic and the maintainer's to make. Calibration
+   steps 2-10 are unaffected (they involve only the switch GNN and human
+   data).
