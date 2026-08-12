@@ -69,18 +69,18 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
 - [x] 4. `squeue -u certuer` PENDING check (precedent note 11), sync, run the
       dump on the Raven login node, `scripts/fetch_cluster.sh` both parquets,
       commit.
-- [ ] 5. Binary pairwise-likelihood MLE in `switch_copula_rho.py`:
+- [x] 5. Binary pairwise-likelihood MLE in `switch_copula_rho.py`:
       t_i = Phi^-1(1 - p_i), bivariate-normal rectangle probabilities,
       reusing the Drezner-Wesolowsky `bvn_cdf` + grid/Brent structure of
       `punishment_copula_rho.py` adapted to 2 levels.
-- [ ] 6. Acceptance gate: round-trip recovery at rho_true in {0.05..0.5}
+- [x] 6. Acceptance gate: round-trip recovery at rho_true in {0.05..0.5}
       (max |bias| <= 0.03) and `pair_nll(0)` equal to the closed-form
       independence value to 1e-10. Abort and escalate on failure.
-- [ ] 7. rho_hat on the 40-game train split; cluster bootstrap over episodes
+- [x] 7. rho_hat on the 40-game train split; cluster bootstrap over episodes
       (200 resamples) for SE / 95% CI; 10-game holdout printed as
       out-of-sample check only; per-round and per-cell-size splits as
       diagnostics (constant rho kept — ties to the simpler model).
-- [ ] 8. Arm B: rho_lag1 by the same pairwise MLE over cross-round
+- [x] 8. Arm B: rho_lag1 by the same pairwise MLE over cross-round
       same-(episode, group) pairs at lag 1 (model implies corr = rho * phi);
       phi_hat = rho_lag1 / rho_hat with bootstrap CI. If the CI includes 0
       or phi_hat <= 0: arm B dropped with a Notes entry, never hand-tuned.
@@ -294,3 +294,32 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
     assumption was correct. Log loss 0.51241862 train / 0.44504137 test
     (10 holdout games, eligible 376, rate 0.30851064). Parquets fetched
     and committed (LFS).
+11. Steps 5-6 gates PASS: pair_nll(0) equals the closed-form independence
+    value exactly (diff 0.0, real — verified element-wise, accumulated
+    error below representable spacing at 2973); round-trip recovery max
+    |bias| 0.006690795337206679 (tolerance 0.03) — the binary MLE, unlike
+    the randomized-PIT moment estimator, is unattenuated by construction.
+12. Step 7: **rho_hat = 0.116482333585783**, cluster-bootstrap SE
+    0.049666098931839604 (200 resamples), 95% CI [0.035037571771319845,
+    0.21502476987895425]; pairwise LR 2*delta-nll = 10.04; out-of-sample
+    holdout (10 games, 741 pairs) rho = 0.1108348204265086 — agrees.
+    Conditional-on-GNN rho is ~33% of the unconditional 0.3554: the GNN
+    marginals absorb ~2/3 of within-group co-movement, matching the PR
+    #140 comment's ~40%-survives estimate (linear-fit lower bound).
+    Diagnostic splits (never selection criteria): decision round 3 rho
+    0.3507 vs 0.021-0.115 at rounds 7-19 — the founding-exodus round
+    carries the strongest residual herding, exactly where the SC deficit
+    lives (candidate follow-up: round-dependent rho; constant rho kept
+    per §5); cell size 2-3 rho 0.455 vs 4+ 0.075.
+13. Step 8: rho_lag1 = 0.08196398283355816 over 5406 consecutive
+    decision-epoch pairs (same-group blocks; 810 same-player pairs
+    included — eps redraws each round so every cross-round pair carries
+    rho*phi); **phi_hat = 0.70366020589033**, bootstrap 95% CI
+    [0.11702191363043744, 2.0829306438837505] excludes 0 -> **ARM B
+    KEPT**. phi SE unusable (ratio statistic, heavy tails) — the CI is
+    the drop-rule quantity. Signed-grid refit confirms the lag-1 optimum
+    is interior (0.081964), not boundary-truncated. copula_params.json
+    written with provenance (base artifact sha256 184f7f5c..., git head
+    at estimator commit). Ordering note: the JSON was written before the
+    step-9 preflight (it contains only rho/phi parameters, which the
+    preflight never feeds — the preflight is go/no-go only).
