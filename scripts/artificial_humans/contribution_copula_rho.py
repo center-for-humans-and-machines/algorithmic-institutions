@@ -170,9 +170,17 @@ def describe(tr, label):
 # --------------------------------------------------------------------------- #
 def compare_saved(before, after):
     """Every saved key except `copula_rho` must survive the round trip
-    unchanged -- module weights compared parameter by parameter."""
+    unchanged -- module weights compared parameter by parameter. Legacy
+    artifacts predate `edge_encoding` in GraphNetwork.save's key list; the
+    re-save may add it only as the reconstructed default (empty)."""
     assert set(before) - set(after) == set(), "a saved key disappeared"
-    assert set(after) - set(before) <= {"copula_rho"}, "an unexpected key appeared"
+    extra = set(after) - set(before)
+    assert extra <= {"copula_rho", "edge_encoding"}, "an unexpected key appeared"
+    if "edge_encoding" in extra:
+        assert after["edge_encoding"] in ([], None), (
+            "edge_encoding appeared with a non-default value: "
+            f"{after['edge_encoding']!r}"
+        )
     for k, va in before.items():
         if k == "copula_rho":
             continue
