@@ -23,9 +23,10 @@ Three numbers, judged in this order, all from one `evaluation/scores.csv`
    Their scores must drop; no movement means the hypothesis failed, whatever
    else moved.
 2. **Rows <= 1** — rows at or below the human-vs-human noise ceiling, whole
-   stack. Must not fall; raising it is the headline. **Baseline: 11 / 21.**
+   stack. Must not fall; raising it is the headline. **Baseline: 10 / 21**
+   (RSA sits at 1.001, just over).
 3. **Mean score** — average over all 21 rows. Must not rise; breaks ties.
-   **Baseline: 1.76.**
+   **Baseline: 1.69.**
 
 An experiment is **kept** iff its target rows improve and neither stack
 metric regresses — you cannot buy your targets by quietly breaking the rest
@@ -42,8 +43,10 @@ valuable notes, not a success.
 
 The metrics are a property of a full stack, so candidates are always scored
 inside one. **Reference stack** (current): `gnn` contribution x `gnn` switch
-x `lin_multinomial` punisher. Only the human maintainer updates this
-definition, when a candidate is accepted.
+x `lin_multinomial` punisher with severity-copula sampling
+(`artifacts/baselines/punishment_multinomial_severity_copula.joblib`,
+PR #146). Only the human maintainer updates this definition, when a
+candidate is accepted.
 
 - **Stage 1 — iterate.** Swap your candidate into its slot of the reference
   stack; one simulation (§7 protocol) + one evaluation.
@@ -95,17 +98,18 @@ Ties go to the simpler model.
 ## 6. Where to aim
 
 The failing rows depend on the base model — the GNN contributor fails CG
-hardest, the categorical linear fails RCA; the multinomial punisher fails
-only PD, gaussian/ridge everything *but* PD. Do not work from a fixed
-target list: fetch your base model's deficit profile, then declare targets.
+hardest, the categorical linear fails RCA; the multinomial punisher failed
+only PD until the severity copula closed it (PR #146), gaussian/ridge fail
+everything *but* PD. Do not work from a fixed target list: fetch your base
+model's deficit profile, then declare targets.
 
-**Where the numbers live:**
+**Where the numbers live** (current sweep: `23_stack_sweep_severity_copula`):
 
 | resource | what it gives you |
 |---|---|
-| `plots/data_analysis/evaluation/23_stack_sweep_updated/score_matrix.csv` | every score: 32 stacks x 21 rows |
-| `.../23_stack_sweep_updated/slot_report.jpg` | each slot option's rows, averaged over the other slots |
-| `.../23_stack_sweep_updated/slot_concordance.jpg` | whether a deficit / ranking is stable across contexts |
+| `plots/data_analysis/evaluation/23_stack_sweep_severity_copula/score_matrix.csv` | every score: 40 stacks x 21 rows |
+| `.../23_stack_sweep_severity_copula/slot_report.jpg` | each slot option's rows, averaged over the other slots |
+| `.../23_stack_sweep_severity_copula/slot_concordance.jpg` | whether a deficit / ranking is stable across contexts |
 | `plots/simulation/23_*/evaluation/scores.csv` + `visuals/` | per-stack scores and one figure per row |
 | `notes/evaluation_metric_defs.md` | what each row measures |
 | PRs #140 and #143 | the narrative: findings, shortcomings, per-slot verdicts |
