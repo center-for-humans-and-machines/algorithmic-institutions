@@ -96,24 +96,24 @@ Slug: `cg_copula`.
       marginals intact; rho absent/0.0 bit-identical to legacy decode
       incl. RNG; save/load round-trips `copula_rho`; committed M0 loads
       at 0.0; init gate raises (protects switch + valid models).
-- [ ] 7. Calibration script
+- [x] 7. Calibration script
       `scripts/artificial_humans/contribution_copula_rho.py`
       (`--model IN.pt --out OUT.pt [--preflight] [--roundtrip]`), importing
       the #146 estimator machinery from
       `scripts/baselines/punishment_copula_rho.py` unmodified; installs the
       `torch_geometric.nn.meta` alias before `GraphNetwork.load` (D7).
-- [ ] 8. Calibration data: `create_torch_data` on the FULL human file (so
+- [x] 8. Calibration data: `create_torch_data` on the FULL human file (so
       defaults match training), then keep the 40 single-copy episodes of
       `experiments/baseline/2group_8agent_50ep_bline_train.csv`, taking the
       copy present in the train file (copy choice is not neutral — D5).
       Teacher-forced `predict_independent(sample=False)` probabilities,
       rows where `contribution_valid`, cells = (episode, round, agent_group).
-- [ ] 9. Estimator + gates: pairwise MLE (grid + Brent), cluster bootstrap
+- [x] 9. Estimator + gates: pairwise MLE (grid + Brent), cluster bootstrap
       SE/CI over 40 episodes, `--roundtrip` acceptance (max |bias| <= 0.03),
       randomized-PIT printed as attenuated diagnostic, test-split rho as
       out-of-sample check only, `--preflight` group-spread ratios
       (independent / copula / human) as go/no-go only (D9).
-- [ ] 10. Stamp rho into a copy of the artifact: `model.copula_rho = rho;
+- [x] 10. Stamp rho into a copy of the artifact: `model.copula_rho = rho;
       model.save(out)`; reload-assert logits bit-identical, rho
       round-trips, no other key changed. Arm A out:
       `artifacts/artificial_humans/group_switching_contribution_50ep_cg_copula/model/..._cg_copula.pt`.
