@@ -91,7 +91,7 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
       rows<=1 >= 8, mean <= 1.560720754938168; band upgrade needs RCA < 5.
       Log unrounded + collateral C/RC rows.
 - [ ] 14. Not kept, or kept within-band: complete log, `[FAIL]` PR, stop.
-- [ ] 15. Band upgrade: two 4-pairing Stage-2 configs (gaussian / gnn /
+- [x] 15. Band upgrade: two 4-pairing Stage-2 configs (gaussian / gnn /
       lin_multinomial_copula / ridge punishers; one gnn-switch, one
       lin-switch; exact names decided at the step) covering all 8 contexts
       with the candidate contribution artifact.
@@ -211,3 +211,11 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
    anti-correlation trade, now from the opposite direction), RCB 1.7931
    -> 2.3193, PD 1.0300 -> 1.3913. CG/RCB concordance is the thing to
    watch in Stage 2.
+10. Stage-2 configs: `23_2g8a_prev_onehot_full_self_cat_onehot_contr_
+    {gnn,lin}_switch.yml` — copies of the original 4-pairing cat configs
+    with the contribution artifact swapped and the multinomial manager
+    renamed/pointed to the copula bundle (label `multinomial_copula`,
+    matching the severity_copula baseline dirs). The gnn-switch copula
+    cell re-runs Stage 1's context inside the 4-pairing config — a free
+    robustness replication under different RNG pre-consumption. Jobs
+    29301963 (gnn) and 29301965 (lin).
