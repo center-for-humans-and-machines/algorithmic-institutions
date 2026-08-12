@@ -90,7 +90,7 @@ Slug: `cg_copula`.
       draws; within-cell corr > 0, cross-cell ~ 0; determinism;
       composition-stable RNG consumption; parity vs
       `LinearAHAdapter._sample_levels_copula` on the same P/groups/seed.
-- [ ] 6. (Raven) GNN wiring tests
+- [x] 6. (Raven) GNN wiring tests
       `src/aimanager/tests/test_contribution_copula_gnn.py` via
       `remote_test.sh`: toy GraphNetwork induces within-group corr with
       marginals intact; rho absent/0.0 bit-identical to legacy decode
