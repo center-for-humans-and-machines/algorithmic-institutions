@@ -55,14 +55,17 @@ Validated by the orchestrator 2026-08-12 (targets per §2, legality per §5,
 frozen surface per §8; planner discrepancies D1–D9 recorded in Notes).
 Slug: `cg_copula`.
 
-- [ ] 1. (Raven) Cluster preflight: `squeue -u certuer` for parallel
+- [x] 1. (Raven) Cluster preflight: `squeue -u certuer` for parallel
       PENDING jobs; confirm M0 `.pt` exists remotely; check whether the M4
       `.pt` from PR #144 still exists on Raven (metrics were fetched, model
       never was — D6); confirm scipy importable in the remote `.venv`.
-- [ ] 2. (Raven) Start the M4 retrain (long pole) unless D6 found it:
+- [x] 2. (Raven) ~~Start the M4 retrain (long pole)~~ D6 confirmed: the M4
+      `.pt` exists on Raven (mtime Jul 1 — the seed-pinned product of the
+      unchanged config); fetched and committed instead of retraining.
+      Original step:
       `scripts/train_cluster.sh ah configs/training/artificial_humans/contribution/group_switching_contribution_50ep_own_group_same_group.yml`
       (unchanged config, seed-pinned). Poll while later steps proceed.
-- [ ] 3. New pure-torch module `src/aimanager/generic/copula.py` (no PyG
+- [x] 3. New pure-torch module `src/aimanager/generic/copula.py` (no PyG
       import, locally testable): `sample_levels_copula(proba, cells, rho)`
       with the #146 sampler conventions — exactly 2N float64 draws per call
       (`zs` then `eps`), latent from each cell's first member,
