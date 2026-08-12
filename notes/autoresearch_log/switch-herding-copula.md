@@ -66,7 +66,7 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       does_switch, switch_valid, p_switch) + `_test.parquet` for the 10
       holdout games. Assert mean predicted p over eligible rows ~ 0.2937 and
       the per-round profile tracks step 2.
-- [ ] 4. `squeue -u certuer` PENDING check (precedent note 11), sync, run the
+- [x] 4. `squeue -u certuer` PENDING check (precedent note 11), sync, run the
       dump on the Raven login node, `scripts/fetch_cluster.sh` both parquets,
       commit.
 - [ ] 5. Binary pairwise-likelihood MLE in `switch_copula_rho.py`:
@@ -284,3 +284,13 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
    the "edge" in the artifact name is `add_edge_model`, not an edge input
    feature (so PR #145's SC-relevant feature is NOT in the production
    artifact).
+10. Step 4 ran (Raven login node, 16.4s; queue empty before sync — one
+    rsync hiccup: the full `remote_test.sh --sync-only` did not deliver
+    the new script, pushed explicitly and md5-verified). Sanity checks
+    PASS: recomputed default_values identical to the artifact's stored
+    ones; train mean p_switch 0.29519684 vs observed 0.29372937; per-round
+    mean p 0.4401/0.2914/0.2466/0.2511/0.2422 tracks the observed
+    0.4290/0.3026/0.2601/0.2292/0.2434; the p[..., 1] class-index
+    assumption was correct. Log loss 0.51241862 train / 0.44504137 test
+    (10 holdout games, eligible 376, rate 0.30851064). Parquets fetched
+    and committed (LFS).
