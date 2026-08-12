@@ -47,7 +47,7 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
 
 - [x] 1. Worktree + Claude commit identity; record the validated plan in
       this file; commit.
-- [ ] 2. Local calibration script `scripts/baselines/switch_copula_rho.py`
+- [x] 2. Local calibration script `scripts/baselines/switch_copula_rho.py`
       (pandas/numpy/scipy, no PyG) with a `--raw-stats` mode reproducing the
       feasibility numbers (note 5) from
       `experiments/baseline/2group_8agent_50ep_bline_train.csv` via
@@ -225,3 +225,13 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
    `state["agent_group"]` at decision round s is the pre-switch membership,
    identical to `parse_agent_rounds`' `group_id` at row s — simulation and
    calibration cells are the same object.
+7. Step 2 ran: every feasibility number reproduces exactly; gate PASS
+   (pairs 3009 >= 1500, tetrachoric rho 0.35537564291376417 > 0.1,
+   likelihood-ratio 2*delta-nll = 128.86 against independence). Convention
+   pinned: within-cell pairs are unordered, so the 2x2 pair table is
+   symmetrised (n10 = n01 = 464.5); expected n11 under independence uses
+   the pooled pair-slot rate 0.2677 (not the row rate 0.2937 — big cells
+   carry most pairs and switch less; both printed side by side). The
+   tetrachoric is a true 2x2 bivariate-normal MLE at marginal-MLE
+   thresholds, built on the precedent's Drezner-Wesolowsky `bvn_cdf`
+   (max abs err vs scipy 2.2e-16), reused verbatim for step 5.
