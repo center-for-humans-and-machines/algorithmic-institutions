@@ -41,10 +41,10 @@
 Validated by the orchestrator 2026-08-12 (targets per §2, legality per §5,
 frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
 
-- [ ] 1. Worktree interpreter check: `uv sync` in the worktree; assert
+- [x] 1. Worktree interpreter check: `uv sync` in the worktree; assert
       `aimanager.__file__` and `handcrafted_grid.__file__` resolve inside
       this worktree; `pytest tests/baselines` green pre-change.
-- [ ] 2. `handcrafted_grid.py`: emit `prev_contribution_onehot_00..20`
+- [x] 2. `handcrafted_grid.py`: emit `prev_contribution_onehot_00..20`
       (N_CONTRIBUTION_LEVELS = 21) from
       `clip(rint(prev_contribution), 0, 20)` in the prev family; NOT in
       CURRENT_VALUED; document in `notes/baseline_feature_defs.md`.
