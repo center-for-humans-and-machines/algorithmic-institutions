@@ -19,6 +19,8 @@ and estimate the CONDITIONAL latent correlation the sampler will use:
                      (plan step 7)
     --lag1           the same MLE over cross-round pairs of one group's
                      latent, phi_hat = rho_lag1 / rho_hat (plan step 8)
+    --preflight      go/no-go: one-step redraws of the human decision cells,
+                     independent vs copula at the calibrated rho (plan step 9)
     --write-params   dump rho / phi and their provenance to JSON (step 10)
 
 Method details, conventions, and the estimator history:
@@ -567,6 +569,143 @@ def roundtrip(rows, rho_trues=RHO_TRUES, n_rep=N_ROUNDTRIP, seed=SEED):
 
 
 # --------------------------------------------------------------------------- #
+# pre-flight go/no-go (plan step 9)
+# --------------------------------------------------------------------------- #
+N_PREFLIGHT = 500  # redraw repeats
+DECISION_ROUNDS = (3, 7, 11, 15, 19)
+PARAMS_JSON = CALIB / "copula_params.json"
+# PR #140 reference numbers (full simulations, all rounds -- levels differ
+# from this one-step-ahead check; the within-setting comparison is the point)
+PR140 = dict(mean=(6.09, 5.28, 5.46), p8=(0.144, 0.018, 0.030))
+
+
+def load_preflight(path):
+    """Decision-round rows of a dump, UNFILTERED: ineligible players count
+    toward group sizes but are never redrawn (they cannot switch)."""
+    df = pd.read_parquet(path)
+    df = df[df["round_number"].isin(DECISION_ROUNDS)].copy()
+    df = df.sort_values(CELL_KEY + ["player_idx"], kind="stable")
+    elig = df[MASK].to_numpy().astype(bool)
+    sub = df[df[MASK]]
+    return dict(
+        p=np.clip(df["p_switch"].to_numpy(np.float64)[elig], P_CLIP, 1.0 - P_CLIP),
+        y=df[TARGET].to_numpy().astype(np.int64)[elig],
+        cell=sub.groupby(CELL_KEY, sort=False).ngroup().to_numpy(np.int64),
+        gr_all=df.groupby(GAME_KEY + ["round_number"], sort=False)
+        .ngroup()
+        .to_numpy(np.int64),
+        group_all=df["agent_group"].to_numpy(np.int64),
+        round_all=df["round_number"].to_numpy(np.int64),
+        elig=elig,
+        path=path,
+    )
+
+
+def preflight_stats(pf, Y):
+    """One-step post-switch group stats for outcome draws `Y` (n_elig, R).
+
+    Post sizes at s+1 apply the drawn switches to the actual pre-switch
+    memberships; ineligible players stay. Returns (mean larger-group size,
+    P(larger == 8), sd of per-cell switch count, round-3 mean |size diff|,
+    round-3 sd |size diff|), averaged over the R draws where applicable.
+    """
+    if Y.ndim == 1:
+        Y = Y[:, None]
+    n_r = Y.shape[1]
+    gr_e = pf["gr_all"][pf["elig"]]
+    group_e = pf["group_all"][pf["elig"]]
+    n_gr = int(pf["gr_all"].max()) + 1
+    # pre-switch sizes of group 0 per (game, round); total is always 8
+    n0 = np.bincount(pf["gr_all"], weights=(pf["group_all"] == 0), minlength=n_gr)
+    out0 = np.zeros((n_gr, n_r))
+    out1 = np.zeros((n_gr, n_r))
+    np.add.at(out0, gr_e[group_e == 0], Y[group_e == 0])
+    np.add.at(out1, gr_e[group_e == 1], Y[group_e == 1])
+    post0 = n0[:, None] - out0 + out1
+    larger = np.maximum(post0, 8.0 - post0)
+    # per-cell switch counts (a cell = one group's eligible members)
+    n_cells = int(pf["cell"].max()) + 1
+    counts = np.zeros((n_cells, n_r))
+    np.add.at(counts, pf["cell"], Y)
+    sd_out = counts.std(axis=0, ddof=1).mean()
+    # the founding exodus: segregation created at the first decision
+    is_r3 = (
+        np.bincount(pf["gr_all"], weights=(pf["round_all"] == 3), minlength=n_gr) > 0
+    )
+    absdiff = np.abs(2.0 * post0[is_r3] - 8.0)
+    return (
+        float(larger.mean()),
+        float((larger == 8.0).mean()),
+        float(sd_out),
+        float(absdiff.mean()),
+        float(absdiff.std(ddof=1)),
+    )
+
+
+def run_preflight(n_rep=N_PREFLIGHT, seed=SEED):
+    """Go/no-go: does the copula move the one-step group aggregates from the
+    independence floor toward the human realizations? rho is READ from the
+    params JSON -- never a tunable input of this check."""
+    import json
+
+    params = json.loads(PARAMS_JSON.read_text())
+    rho = float(params["rho"])
+    pf = load_preflight(PROBS["train"])
+    t = thresholds(pf["p"])
+    n_cells = int(pf["cell"].max()) + 1
+    print(f"\n=== pre-flight (plan step 9): one-step redraws, R={n_rep} ===")
+    print(f"data      {Path(pf['path']).relative_to(ROOT)}")
+    print(f"rho       {f(rho)}  (from {PARAMS_JSON.relative_to(ROOT)})")
+    rng = np.random.default_rng(seed)
+    y_ind = np.empty((len(t), n_rep), dtype=np.int64)
+    y_cop = np.empty((len(t), n_rep), dtype=np.int64)
+    for k in range(n_rep):
+        y_ind[:, k] = sample_copula_binary(t, pf["cell"], n_cells, 0.0, rng)
+        y_cop[:, k] = sample_copula_binary(t, pf["cell"], n_cells, rho, rng)
+    hum = preflight_stats(pf, pf["y"])
+    ind = preflight_stats(pf, y_ind)
+    cop = preflight_stats(pf, y_cop)
+    names = (
+        "larger-group mean (s+1)",
+        "P(larger group = 8)",
+        "sd per-cell switch count",
+        "round-3 mean |size diff|",
+        "round-3 sd |size diff|",
+    )
+    print(f"{'':<28}{'human':>12}{'independent':>14}{'copula':>12}")
+    for i, name in enumerate(names):
+        print(f"{name:<28}{hum[i]:>12.4f}{ind[i]:>14.4f}{cop[i]:>12.4f}")
+    print(
+        "PR #140 reference (full sims, all rounds; levels not comparable "
+        "to one-step):"
+    )
+    print(
+        f"{'  mean / P(=8)':<28}"
+        f"{PR140['mean'][0]:>7.2f}/{PR140['p8'][0]:.3f}"
+        f"{PR140['mean'][1]:>9.2f}/{PR140['p8'][1]:.3f}"
+        f"{PR140['mean'][2]:>7.2f}/{PR140['p8'][2]:.3f}"
+    )
+    print(
+        "\nCAVEAT: arm B's AR(1) persistence (phi = "
+        f"{f(params.get('phi'))}) cannot appear in a ONE-STEP check; this "
+        "pre-flight bounds ARM A only. The cumulative multi-round effect "
+        "is what Stage 1 measures."
+    )
+    closed = []
+    for i in (0, 2):
+        gap_h = hum[i] - ind[i]
+        share = (cop[i] - ind[i]) / gap_h if gap_h != 0 else float("nan")
+        closed.append(share)
+        print(f"copula closes {100 * share:.1f}% of the {names[i]} gap")
+    if closed[1] < 0.10:
+        print(
+            "ESCALATE-CANDIDATE: copula closes <10% of the switch-count-sd "
+            "gap (orchestrator rules; see the caveat above)"
+        )
+    return hum, ind, cop, closed
+
+
+# --------------------------------------------------------------------------- #
 # params JSON (plan step 10)
 # --------------------------------------------------------------------------- #
 def write_params(path, info):
@@ -810,6 +949,12 @@ def main():
         "arm-B drop verdict",
     )
     ap.add_argument(
+        "--preflight",
+        action="store_true",
+        help="plan step 9: one-step redraws of the human decision cells, "
+        "independent vs copula at the rho of the params JSON",
+    )
+    ap.add_argument(
         "--write-params",
         metavar="PATH",
         default=None,
@@ -824,14 +969,17 @@ def main():
         if args.bootstrap is None:
             args.bootstrap = N_BOOT
     conditional = bool(args.mle or args.roundtrip or args.bootstrap or args.lag1)
-    if not (args.raw_stats or conditional):
+    if not (args.raw_stats or conditional or args.preflight):
         ap.error(
             "nothing to do: pass --raw-stats, --mle, --roundtrip, "
-            "--bootstrap [N], --lag1 or --write-params PATH"
+            "--bootstrap [N], --lag1, --preflight or --write-params PATH"
         )
 
     if args.raw_stats:
         run_raw_stats()
+
+    if args.preflight:
+        run_preflight()
 
     if conditional:
         rows = load_probs(PROBS["train"])

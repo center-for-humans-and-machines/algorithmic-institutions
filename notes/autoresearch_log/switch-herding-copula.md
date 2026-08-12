@@ -84,13 +84,13 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       same-(episode, group) pairs at lag 1 (model implies corr = rho * phi);
       phi_hat = rho_lag1 / rho_hat with bootstrap CI. If the CI includes 0
       or phi_hat <= 0: arm B dropped with a Notes entry, never hand-tuned.
-- [ ] 9. Pre-flight go/no-go (`--preflight`): redraw switch indicators from
+- [x] 9. Pre-flight go/no-go (`--preflight`): redraw switch indicators from
       the dumped marginals per human decision cell, independent vs copula at
       rho_hat; compare larger-group-size distribution and P(fully segregated)
       at s+1 against the realized human one, next to the PR #140 reference
       numbers (5.28 null / 5.46 sim / 6.09 human; 0.018 / 0.030 / 0.144).
       Escalate if the copula barely moves; rho is never tuned to this.
-- [ ] 10. Run steps 5-9; write
+- [x] 10. Run steps 5-9; write
       `.../switch_pred_herding_copula/calibration/copula_params.json`
       (rho, se, ci, phi, estimator, base-artifact sha256, data file,
       n_pairs, n_cells); record every number unrounded in §4; commit.
@@ -323,3 +323,17 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
     at estimator commit). Ordering note: the JSON was written before the
     step-9 preflight (it contains only rho/phi parameters, which the
     preflight never feeds — the preflight is go/no-go only).
+14. Step 9 preflight (500 one-step redraws of the human decision cells
+    from the GNN marginals, rho read from the params JSON): **GO**. The
+    copula closes 79.7% of the per-cell switch-count sd gap (human 1.2657,
+    independent 1.1838, copula 1.2490) — the direct within-round herding
+    measure. Larger-group mean at s+1: 6.0200 / 5.6955 / 5.7691 (22.7%
+    closed); P(larger = 8): 0.1200 / 0.0684 / 0.0851. Round-3 slice
+    (founding exodus): mean |size diff| 4.7500 / 3.4192 / 3.5672 — only
+    ~11% closed one-step, consistent with the round-3 local rho of 0.35
+    vs the constant 0.116; arm B's persistence and cumulative multi-round
+    dynamics (invisible to a one-step check) are what Stage 1 adds.
+    Escalate line (<10% of the sd gap) not hit. Process note: this step
+    was implemented by the orchestrator directly — the subagent assigned
+    to it stalled on a transient permission-classifier outage, was
+    stopped, and its task re-done inline.
