@@ -51,7 +51,97 @@
 
 ## 2. Plan
 
-(to be filled by the validated planner step list)
+Validated by the orchestrator 2026-08-12 (targets per §2, legality per §5,
+frozen surface per §8; planner discrepancies D1–D9 recorded in Notes).
+Slug: `cg_copula`.
+
+- [ ] 1. (Raven) Cluster preflight: `squeue -u certuer` for parallel
+      PENDING jobs; confirm M0 `.pt` exists remotely; check whether the M4
+      `.pt` from PR #144 still exists on Raven (metrics were fetched, model
+      never was — D6); confirm scipy importable in the remote `.venv`.
+- [ ] 2. (Raven) Start the M4 retrain (long pole) unless D6 found it:
+      `scripts/train_cluster.sh ah configs/training/artificial_humans/contribution/group_switching_contribution_50ep_own_group_same_group.yml`
+      (unchanged config, seed-pinned). Poll while later steps proceed.
+- [ ] 3. New pure-torch module `src/aimanager/generic/copula.py` (no PyG
+      import, locally testable): `sample_levels_copula(proba, cells, rho)`
+      with the #146 sampler conventions — exactly 2N float64 draws per call
+      (`zs` then `eps`), latent from each cell's first member,
+      `u = ndtr(sqrt(rho) z + sqrt(1-rho) eps)`, discrete-quantile
+      inversion via searchsorted on the cumsum, clamp to [0, K-1].
+- [ ] 4. Wire into `GraphNetwork` (`src/aimanager/generic/graph.py`),
+      contribution draw only: `copula_rho=0.0` in `__init__` (assert
+      0 <= rho < 1; rho > 0 only with `y_name == "contribution"`), append
+      to `to_save`; optional `cells=None` through `predict_encoded`;
+      `predict_independent` builds cells from `data["agent_group"]`.
+      `predict_autoreg`, `encode`, `forward`, `encoder.decode` byte-
+      identical; legacy `.pt` loads default to 0.0 (exact pre-change RNG).
+- [ ] 5. Local unit tests `tests/copula/test_contribution_copula.py` (pure
+      torch): bin-edge inversion; marginal preservation vs independent
+      draws; within-cell corr > 0, cross-cell ~ 0; determinism;
+      composition-stable RNG consumption; parity vs
+      `LinearAHAdapter._sample_levels_copula` on the same P/groups/seed.
+- [ ] 6. (Raven) GNN wiring tests
+      `src/aimanager/tests/test_contribution_copula_gnn.py` via
+      `remote_test.sh`: toy GraphNetwork induces within-group corr with
+      marginals intact; rho absent/0.0 bit-identical to legacy decode
+      incl. RNG; save/load round-trips `copula_rho`; committed M0 loads
+      at 0.0; init gate raises (protects switch + valid models).
+- [ ] 7. Calibration script
+      `scripts/artificial_humans/contribution_copula_rho.py`
+      (`--model IN.pt --out OUT.pt [--preflight] [--roundtrip]`), importing
+      the #146 estimator machinery from
+      `scripts/baselines/punishment_copula_rho.py` unmodified; installs the
+      `torch_geometric.nn.meta` alias before `GraphNetwork.load` (D7).
+- [ ] 8. Calibration data: `create_torch_data` on the FULL human file (so
+      defaults match training), then keep the 40 single-copy episodes of
+      `experiments/baseline/2group_8agent_50ep_bline_train.csv`, taking the
+      copy present in the train file (copy choice is not neutral — D5).
+      Teacher-forced `predict_independent(sample=False)` probabilities,
+      rows where `contribution_valid`, cells = (episode, round, agent_group).
+- [ ] 9. Estimator + gates: pairwise MLE (grid + Brent), cluster bootstrap
+      SE/CI over 40 episodes, `--roundtrip` acceptance (max |bias| <= 0.03),
+      randomized-PIT printed as attenuated diagnostic, test-split rho as
+      out-of-sample check only, `--preflight` group-spread ratios
+      (independent / copula / human) as go/no-go only (D9).
+- [ ] 10. Stamp rho into a copy of the artifact: `model.copula_rho = rho;
+      model.save(out)`; reload-assert logits bit-identical, rho
+      round-trips, no other key changed. Arm A out:
+      `artifacts/artificial_humans/group_switching_contribution_50ep_cg_copula/model/..._cg_copula.pt`.
+- [ ] 11. (Raven) Run arm-A calibration (+preflight +roundtrip). Escalate
+      and stop before any sim if rho CI touches 0, round-trip fails, or
+      preflight barely moves the ratio. Fetch + commit the `.pt`; log rho,
+      SE, CI, round-trip, preflight unrounded.
+- [ ] 12. (Raven) M4 arrived: fetch + commit; run arm-B calibration the
+      same way (own rho, never reuse arm A's); same gates; log.
+- [ ] 13. Stage-1 configs (single `lin_multinomial_self` pairing, protocol
+      byte-identical):
+      `23_2g8a_cg_copula_m0_self_gnn_copula_contr_gnn_switch.yml` and
+      `23_2g8a_cg_copula_m4_self_gnnm4_copula_contr_gnn_switch.yml`.
+- [ ] 14. (Raven) squeue guard, then `simulate_cluster.sh` both arms;
+      verify remote artifact paths before submitting; confirm
+      `per_round.parquet`.
+- [ ] 15. `fetch_cluster.sh` + `python -m aimanager evaluate` both arms;
+      read unrounded scores.
+- [ ] 16. Arm selection by Stage-1 CG subject to guards. Keep iff
+      CG < 9.850 AND rows<=1 >= 11 AND mean <= 1.759557; RC/CA/CD rows
+      materially moving on arm A signals a sampler bug (arm B compares
+      against #144's p=0 control: CG 7.587, 11/21, 1.621).
+- [ ] 17. Band decision: upgrade requires CG < 5 in the reference stack.
+      Kept-but-within-band or gate-fail -> Notes + `[FAIL]` PR (skip
+      Stage 2, it cannot become a success).
+- [ ] 18. (If Stage 2) add the winning contr token to `CONTR_ORDER` and
+      `CONTR_MARKERS` in `scripts/data_analysis/evaluation_sweep.py`
+      (analysis layer; D2 — there is no CONTR_COLORS).
+- [ ] 19. Stage-2 configs: TWO configs (D1), full four-punisher pairing
+      block, gnn-switch and lin-switch variants:
+      `23_2g8a_cg_copula_self_<label>_contr_{gnn,lin}_switch.yml`
+      = 8 contexts.
+- [ ] 20. (Raven) Simulate, fetch, evaluate both; sweep old 8 reference
+      dirs + 2 new into `23_stack_sweep_cg_copula`; confirm slot claim on
+      CG across all 8 contexts, guards hold, band upgrade survives
+      (unrounded scores.csv for boundary calls).
+- [ ] 21. Complete this log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis /
+      Results / Collateral; commits map to steps.
 
 ## 3. Results
 
@@ -71,3 +161,29 @@
    punisher-severity-copula (merged). Slug `cg_copula` chosen so config and
    output-dir names cannot collide; per the #146 incident, check
    `squeue -u certuer` for PENDING jobs before any cluster rsync.
+3. Planner discrepancies, orchestrator rulings: (D1) contribution Stage 2
+   is 2 configs x 4 punisher pairings = 8 contexts, not 8 configs — plan
+   step 19 reflects it. (D2) `evaluation_sweep.py` has CONTR_ORDER +
+   CONTR_MARKERS, no CONTR_COLORS. (D3) encoder/graph import PyG at module
+   level: calibration, rho stamping, and all GNN-level tests run on Raven;
+   only the standalone sampler module tests locally. (D4) the GNN trained
+   on all 100 flip-doubled episodes, so rho on the 40-episode baseline
+   train split is holdout-closing convention, not out-of-sample w.r.t. the
+   marginals — no out-of-fold predictions exist to do better; disclosed
+   here. (D5) flip-doubling lives in the CSV and M0 conditions on
+   agent_group, so the two copies of a game give different marginals —
+   calibration takes exactly the copy present in the train file. (D6) the
+   M4 `.pt` may still exist on Raven from PR #144 — check before
+   retraining. (D7) `copula_rho` rides in the `.pt` via `__init__` +
+   `to_save`; legacy artifacts splat to the 0.0 default; re-saving needs
+   the `torch_geometric.nn.meta` alias to load legacy pickles. (D8) latent
+   keyed per `agent_group` within one predict call (one call covers both
+   groups), same resolution as #146's D1. (D9) the preflight group-spread
+   ratio is CG's own statistic: go/no-go readout only, rho never tuned to
+   it.
+4. Planner risk assessment, accepted: the copula is a within-round,
+   round-independent shock while CG rewards persistent between-group
+   divergence, and marginals mean-revert through prev_contribution and the
+   RNN — closing 0.59 -> 0.85 at group size 4 would imply latent rho ~ 0.6,
+   likely outside the honest MLE's CI. Realistic failure mode is
+   kept-but-within-band; the step-11 preflight is the cheap early read.
