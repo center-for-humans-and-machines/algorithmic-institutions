@@ -41,6 +41,13 @@
   loss, architecture, or evaluation-suite change.
 - **Stack guards (must not regress):** rows <= 1 baseline 11/21; mean
   baseline 1.76 (reference stack `gnn x gnn x lin_multinomial`).
+  **Re-baselined 2026-08-12 (maintainer ruling, Notes 5):** the reference
+  punisher is now the severity-copula multinomial bundle
+  (`artifacts/baselines/punishment_multinomial_severity_copula.joblib`,
+  PR #146, same `lin_multinomial` slot). New reference cell = #146's
+  Stage-1 run (`23_2g8a_severity_copula_self_gnn_contr_gnn_switch`):
+  **CG 9.808514; rows <= 1 = 10/21; mean 1.687998** — these replace
+  9.850 / 11 / 1.759557 everywhere in the plan's gates.
 - **Prior art consulted:** PR #144 [FAIL] (dropout regresses RCA), PR #147
   [FAIL] (kept but no band upgrade; RCA/RCB collateral), PR #146 [SUCCESS]
   (copula mechanism + estimator), PR #140 comment (sampler-vs-model
@@ -71,7 +78,7 @@ Slug: `cg_copula`.
       (`zs` then `eps`), latent from each cell's first member,
       `u = ndtr(sqrt(rho) z + sqrt(1-rho) eps)`, discrete-quantile
       inversion via searchsorted on the cumsum, clamp to [0, K-1].
-- [ ] 4. Wire into `GraphNetwork` (`src/aimanager/generic/graph.py`),
+- [x] 4. Wire into `GraphNetwork` (`src/aimanager/generic/graph.py`),
       contribution draw only: `copula_rho=0.0` in `__init__` (assert
       0 <= rho < 1; rho > 0 only with `y_name == "contribution"`), append
       to `to_save`; optional `cells=None` through `predict_encoded`;
@@ -116,8 +123,9 @@ Slug: `cg_copula`.
       SE, CI, round-trip, preflight unrounded.
 - [ ] 12. (Raven) M4 arrived: fetch + commit; run arm-B calibration the
       same way (own rho, never reuse arm A's); same gates; log.
-- [ ] 13. Stage-1 configs (single `lin_multinomial_self` pairing, protocol
-      byte-identical):
+- [ ] 13. Stage-1 configs (single `lin_multinomial_self` pairing pointing
+      at the severity-copula joblib — the re-baselined reference punisher,
+      Notes 5 — protocol byte-identical):
       `23_2g8a_cg_copula_m0_self_gnn_copula_contr_gnn_switch.yml` and
       `23_2g8a_cg_copula_m4_self_gnnm4_copula_contr_gnn_switch.yml`.
 - [ ] 14. (Raven) squeue guard, then `simulate_cluster.sh` both arms;
@@ -126,7 +134,8 @@ Slug: `cg_copula`.
 - [ ] 15. `fetch_cluster.sh` + `python -m aimanager evaluate` both arms;
       read unrounded scores.
 - [ ] 16. Arm selection by Stage-1 CG subject to guards. Keep iff
-      CG < 9.850 AND rows<=1 >= 11 AND mean <= 1.759557; RC/CA/CD rows
+      CG < 9.808514 AND rows<=1 >= 10 AND mean <= 1.687998 (re-baselined,
+      Notes 5); RC/CA/CD rows
       materially moving on arm A signals a sampler bug (arm B compares
       against #144's p=0 control: CG 7.587, 11/21, 1.621).
 - [ ] 17. Band decision: upgrade requires CG < 5 in the reference stack.
@@ -150,7 +159,8 @@ Slug: `cg_copula`.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
-| 2026-08-12 | (baseline) reference stack, no change | 1 | CG 9.850 | 11/21 | 1.760 | baseline |
+| 2026-08-12 | (baseline) reference stack, old multinomial punisher | 1 | CG 9.850 | 11/21 | 1.760 | superseded baseline |
+| 2026-08-12 | (baseline) reference stack, severity-copula punisher (#146 Stage-1 run) | 1 | CG 9.808514 | 10/21 | 1.687998 | baseline (Notes 5) |
 
 ## 4. Notes
 
