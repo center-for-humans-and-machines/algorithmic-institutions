@@ -57,7 +57,7 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       `parse_agent_rounds(df, switch_every=4)`, `switch_valid` rows only.
       Gate: escalate and stop if within-cell pairs < 1500 or unconditional
       tetrachoric rho <= 0.10.
-- [ ] 3. Raven dump script `scripts/artificial_humans/dump_switch_probs.py`:
+- [x] 3. Raven dump script `scripts/artificial_humans/dump_switch_probs.py`:
       load the base switch artifact, `create_torch_data` on the human data,
       full-episode forward (mask `switch_valid`, GRU over rounds = the
       simulation's warm-RNN semantics), write
@@ -268,3 +268,19 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
    unification is cosmetic and the maintainer's to make. Calibration
    steps 2-10 are unaffected (they involve only the switch GNN and human
    data).
+9. Step 3 written and desk-checked: all rounds dumped (7680 train / 1920
+   test rows; `switch_valid` marks the 1515 / 376 usable), game key is
+   `(global_group_id, episode_id)` (`episode_id` alone is NOT unique
+   across sessions — step 5 must group on both), per-game forwards (block
+   diagonal anyway; removes cross-game-leakage doubt), `default_values`
+   recomputed from the doubled training file (warn-not-assert on mismatch
+   with the artifact's stored values; moot here — every agent-round cell
+   is populated so padding never fires). Verified locally with PyG stubbed
+   and a fake model: zero index round-trip mismatches, every note-5 number
+   reproduced. Residual risk: the one-hot class index (p[..., 1] =
+   does_switch True) is inferred, not executed — the script's own
+   mean-p assert fires at ~0.706 instead of ~0.294 if it is wrong.
+   Artifact pickle inspected: `same_group` absent, `edge_encoding == []` —
+   the "edge" in the artifact name is `add_edge_model`, not an edge input
+   feature (so PR #145's SC-relevant feature is NOT in the production
+   artifact).
