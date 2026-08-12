@@ -33,8 +33,13 @@
   log-loss metric), C searched as a hyperparameter. One change; the
   gaussian/ridge baselines and other slots untouched.
 - **Stack guards (must not regress), Stage-1 cell
-  `23_2g8a_self_cat_contr_gnn_switch` / lin_multinomial run:** rows <= 1
-  baseline **7/21**; mean baseline **1.7806142974986534**.
+  `23_2g8a_severity_copula_self_cat_contr_gnn_switch` /
+  lin_multinomial_copula run (maintainer ruling 2026-08-12: the reference
+  punisher is now `punishment_multinomial_severity_copula.joblib`, same
+  multinomial class):** RCA baseline **5.744514189776296**; rows <= 1
+  baseline **8/21**; mean baseline **1.560720754938168**. (Superseded
+  original baselines from the pre-copula cell: RCA 5.730682422372414,
+  rows <= 1 7/21, mean 1.7806142974986534.)
 
 ## 2. Plan
 
@@ -73,25 +78,29 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
       the repeat spike does not appear.
 - [ ] 9. Stage-1 config `configs/simulation/manager_testing/
       23_2g8a_prev_onehot_self_cat_onehot_contr_gnn_switch.yml`: copy of
-      the cat x gnn config, only the contribution artifact swapped and
-      output slugged; all 4 punisher pairings kept (D2: identical RNG
-      pre-consumption); protocol byte-identical.
+      `23_2g8a_severity_copula_self_cat_contr_gnn_switch.yml` (the new
+      reference-punisher cell, single lin_multinomial_copula pairing),
+      only the contribution artifact swapped and output slugged; protocol
+      and RNG stream shape byte-identical to the baseline cell. (Supersedes
+      D2's 4-pairing design — the new baseline dir is single-pairing.)
 - [ ] 10. `squeue -u certuer` (no PENDING jobs), push the joblib to Raven
       explicitly (artifacts/ excluded from sync), `simulate_cluster.sh`.
 - [ ] 11. Poll; confirm remote per_round.parquet; `fetch_cluster.sh`.
 - [ ] 12. `python -m aimanager evaluate` the Stage-1 config.
-- [ ] 13. Keep gate (lin_multinomial_self row): RCA < 5.730682422372414,
-      rows<=1 >= 7, mean <= 1.7806142974986534; band upgrade needs RCA < 5.
-      Log unrounded + collateral C/RC rows + other punisher cells as
-      concordance preview.
+- [ ] 13. Keep gate (lin_multinomial_copula run): RCA < 5.744514189776296,
+      rows<=1 >= 8, mean <= 1.560720754938168; band upgrade needs RCA < 5.
+      Log unrounded + collateral C/RC rows.
 - [ ] 14. Not kept, or kept within-band: complete log, `[FAIL]` PR, stop.
-- [ ] 15. Band upgrade: Stage-2 config `23_2g8a_prev_onehot_self_
-      cat_onehot_contr_lin_switch.yml` (same swap, lin-switch family).
-- [ ] 16. squeue check, simulate, fetch, evaluate (Stage-1 dir is the
-      gnn-switch half of the family).
+- [ ] 15. Band upgrade: two 4-pairing Stage-2 configs (gaussian / gnn /
+      lin_multinomial_copula / ridge punishers; one gnn-switch, one
+      lin-switch; exact names decided at the step) covering all 8 contexts
+      with the candidate contribution artifact.
+- [ ] 16. squeue check, simulate, fetch, evaluate both Stage-2 configs.
 - [ ] 17. Add `cat_onehot` to CONTR_ORDER/CONTR_MARKERS in
-      `evaluation_sweep.py` (analysis layer); sweep 10 dirs (8 original +
-      2 candidate) into `23_stack_sweep_prev_onehot`.
+      `evaluation_sweep.py` (analysis layer); sweep the candidate dirs
+      against the per-context baselines (original 23_* dirs for
+      gaussian/gnn/ridge cells, severity_copula dirs for the multinomial
+      cells) into `23_stack_sweep_prev_onehot`.
 - [ ] 18. Confirm slot claim: candidate beats cat on RCA in (nearly) all
       8 contexts; concordance panel + Kendall's W; guards netted per
       context; unrounded scores.csv for all boundary judgments.
@@ -153,3 +162,16 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
    21 prev levels populated (min 67 at level 19). (D11) RNG consumption
    per contribution call is one multinomial draw regardless of feature
    count, so switch/punisher streams are unperturbed.
+6. Maintainer ruling (2026-08-12, mid-experiment, before any sim): the
+   reference punisher is now the severity-copula bundle
+   `artifacts/baselines/punishment_multinomial_severity_copula.joblib`
+   (same multinomial class, not a separate slot option; the autoresearch
+   doc will be updated by the maintainer). Re-anchored: Stage-1 baseline
+   cell is `23_2g8a_severity_copula_self_cat_contr_gnn_switch` (RCA
+   5.744514189776296, rows<=1 8/21, mean 1.560720754938168); the Stage-1
+   config copies that cell's config (single pairing — supersedes ruling
+   D2, whose 4-pairing rationale was RNG parity with the old 4-pairing
+   baseline dir); Stage 2 covers the 8 contexts with two 4-pairing
+   configs where the multinomial slot points at the copula bundle.
+   Training steps 5-7 are unaffected (the punisher does not enter
+   contribution training).
