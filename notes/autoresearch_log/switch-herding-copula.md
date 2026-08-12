@@ -94,14 +94,14 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       `.../switch_pred_herding_copula/calibration/copula_params.json`
       (rho, se, ci, phi, estimator, base-artifact sha256, data file,
       n_pairs, n_cells); record every number unrounded in §4; commit.
-- [ ] 11. PyG-free sampler `src/aimanager/generic/copula.py` (torch only):
+- [x] 11. PyG-free sampler `src/aimanager/generic/copula.py` (torch only):
       `sample_correlated_levels(proba, cell_id, rho, z_prev=None, phi=0.0)`
       — exactly 2N draws per call (z then eps, float64,
       composition-stable), per-cell latent from the cell's first member,
       u = ndtr(sqrt(rho) z_cell + sqrt(1-rho) eps),
       level = searchsorted(cumsum(proba, -1), u); returns levels + new
       per-cell latents for the AR(1) arm.
-- [ ] 12. Local tests `tests/switch/test_switch_copula.py` (no PyG imports,
+- [x] 12. Local tests `tests/switch/test_switch_copula.py` (no PyG imports,
       plain pytest): inverse-CDF exact at bin edges; marginals preserved
       within binomial-SE multiples; within-cell correlation > 0, cross-cell
       ~ 0; 2N draws regardless of composition; determinism; AR(1) keeps
@@ -337,3 +337,17 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
     was implemented by the orchestrator directly — the subagent assigned
     to it stalled on a transient permission-classifier outage, was
     stopped, and its task re-done inline.
+15. Steps 11-12: `sample_correlated_levels` (torch-only, general L) with
+    conventions pinned to the calibration sampler and the punisher
+    precedent: searchsorted left side (u == 1-p falls to level 0, exactly
+    the strict `w > t` of the fitted model), unconditionally 2 randn calls
+    (n_cells then N, float64) so RNG consumption is composition-, rho- and
+    phi-invariant; AR(1) z = phi*z_prev + sqrt(1-phi^2)*z_new keeps
+    Var(z) = 1 so marginals are phi-invariant; cumsum promoted UP to the
+    latent's float64 (a float32 GNN softmax cannot truncate the latent);
+    ndtr via torch.erf (no scipy, imports on macOS). 23 local tests pass,
+    including exact array_equal agreement with a numpy re-derivation of
+    the calibration sampler at the calibrated rho/phi, fed the same draws
+    via the documented RNG contract. Bit-identity of the LEGACY path is
+    deliberately not asserted here — it belongs to graph.py's dispatch
+    gate (steps 13-14).
