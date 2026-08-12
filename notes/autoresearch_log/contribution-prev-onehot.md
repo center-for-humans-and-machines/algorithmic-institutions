@@ -59,15 +59,15 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
       rows sum to 1.
 - [x] 4. Run `pytest tests/baselines` + eval-suite tests (frozen surface
       untouched proof).
-- [ ] 5. New config `configs/training/baselines/contribution/
+- [x] 5. New config `configs/training/baselines/contribution/
       cat_prev_onehot.yml`: data block identical to `cat.yml` (single-copy
       train file, exclude_flipped, 21 levels, switch_every 4), cv seed
       38381 / 4 folds, C grid [0.001..3.0], set s0 = 5 retained scalars +
       21 dummies (scalar prev_contribution replaced), set s1 = incumbent's
       6 features as matched-search diagnostic only.
-- [ ] 6. `mkdir -p data/baselines`; run `run_baseline_cv.py`; report s0/s1
+- [x] 6. `mkdir -p data/baselines`; run `run_baseline_cv.py`; report s0/s1
       C-curves; check convergence at the selected C with warnings on.
-- [ ] 7. Save `artifacts/baselines/contribution_categorical_prev_onehot.joblib`
+- [x] 7. Save `artifacts/baselines/contribution_categorical_prev_onehot.joblib`
       via `inspect_best_model.py` — selection by CV log loss within s0 rows
       only; verify bundle (26 features, coef shape (21, 26), defaults);
       incumbent joblib untouched. Exactly one variant goes to Stage 1.
@@ -175,3 +175,16 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
    configs where the multinomial slot points at the copula bundle.
    Training steps 5-7 are unaffected (the punisher does not enter
    contribution training).
+7. CV (steps 5-7): 24 rows (floor / s0 / s1 x 8 C values). Selected
+   s0 (5 scalars + 21 dummies) at C = 0.03: CV log loss
+   2.1099111203770766 +/- 0.034361 vs the incumbent search s1 best
+   2.445486104561887 at C = 1.0 (bit-identical to the incumbent's
+   recorded cv_metric — search reproduced exactly). Every s0 row at
+   C >= 0.003 beats every s1 row; C-curve flat over 0.01-3.0. Saved
+   bundle train_metric 2.0259675054010176, test_metric
+   1.8823689047046444 (incumbent 2.3858 / 2.2726; same test_floor
+   2.717958377177829) — test gain exceeds train gain, no overfit
+   signal. Fit converges in 25 iterations (MAX_ITER 1000 untouched);
+   incumbent joblib checksum unchanged. Adapter smoke: [1, 8, 1]
+   int64 predictions, one-hot rows sum to 1, argmax recovers the
+   previous level.

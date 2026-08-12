@@ -1,0 +1,93 @@
+data:
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: contribution
+  target_type: categorical
+  categorical_levels: 21        # contribution is an integer 0..20
+  mask: contribution_valid
+  exclude_flipped: True
+  switch_every: 4
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/contr_cat_prev_onehot.csv
+
+setting:              # multinomial logistic; only C is valid here
+  C: [0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0]
+
+blocks:
+  # One block, two sets -> 3 combos (floor / s0 / s1) x 8 C values = 24 rows.
+  # s0 is the candidate: the incumbent's 5 non-self features plus a 21-level
+  # one-hot of the previous own contribution (the scalar prev_contribution is
+  # REPLACED, giving every previous level its own per-class intercepts).
+  # s1 is the incumbent's exact 6 features, re-run over the same C grid as a
+  # matched-search diagnostic only -- it is never saved as an artifact.
+  B0_variant:
+    components:
+      [
+        prev_contribution,
+        prev_punishment,
+        prev_contribution_mean_group,
+        prev_group_size,
+        prev_group_size_delta,
+        prev_win_common_good,
+        prev_contribution_onehot_00,
+        prev_contribution_onehot_01,
+        prev_contribution_onehot_02,
+        prev_contribution_onehot_03,
+        prev_contribution_onehot_04,
+        prev_contribution_onehot_05,
+        prev_contribution_onehot_06,
+        prev_contribution_onehot_07,
+        prev_contribution_onehot_08,
+        prev_contribution_onehot_09,
+        prev_contribution_onehot_10,
+        prev_contribution_onehot_11,
+        prev_contribution_onehot_12,
+        prev_contribution_onehot_13,
+        prev_contribution_onehot_14,
+        prev_contribution_onehot_15,
+        prev_contribution_onehot_16,
+        prev_contribution_onehot_17,
+        prev_contribution_onehot_18,
+        prev_contribution_onehot_19,
+        prev_contribution_onehot_20,
+      ]
+    sets:
+      - [
+          prev_punishment,
+          prev_contribution_mean_group,
+          prev_group_size,
+          prev_group_size_delta,
+          prev_win_common_good,
+          prev_contribution_onehot_00,
+          prev_contribution_onehot_01,
+          prev_contribution_onehot_02,
+          prev_contribution_onehot_03,
+          prev_contribution_onehot_04,
+          prev_contribution_onehot_05,
+          prev_contribution_onehot_06,
+          prev_contribution_onehot_07,
+          prev_contribution_onehot_08,
+          prev_contribution_onehot_09,
+          prev_contribution_onehot_10,
+          prev_contribution_onehot_11,
+          prev_contribution_onehot_12,
+          prev_contribution_onehot_13,
+          prev_contribution_onehot_14,
+          prev_contribution_onehot_15,
+          prev_contribution_onehot_16,
+          prev_contribution_onehot_17,
+          prev_contribution_onehot_18,
+          prev_contribution_onehot_19,
+          prev_contribution_onehot_20,
+        ]
+      - [
+          prev_contribution,
+          prev_punishment,
+          prev_contribution_mean_group,
+          prev_group_size,
+          prev_group_size_delta,
+          prev_win_common_good,
+        ]
