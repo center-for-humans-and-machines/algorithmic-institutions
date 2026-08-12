@@ -38,7 +38,65 @@
 
 ## 2. Plan
 
-(to be filled by the validated plan)
+Validated by the orchestrator 2026-08-12 (targets per §2, legality per §5,
+frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
+
+- [ ] 1. Worktree interpreter check: `uv sync` in the worktree; assert
+      `aimanager.__file__` and `handcrafted_grid.__file__` resolve inside
+      this worktree; `pytest tests/baselines` green pre-change.
+- [ ] 2. `handcrafted_grid.py`: emit `prev_contribution_onehot_00..20`
+      (N_CONTRIBUTION_LEVELS = 21) from
+      `clip(rint(prev_contribution), 0, 20)` in the prev family; NOT in
+      CURRENT_VALUED; document in `notes/baseline_feature_defs.md`.
+- [ ] 3. `tests/baselines/test_baseline_features.py`: add the dummies to
+      PREV_FAMILY with an independent pandas reference; explicit test that
+      round 0 puts onehot_09 = 1 in both the pipeline and adapter paths and
+      rows sum to 1.
+- [ ] 4. Run `pytest tests/baselines` + eval-suite tests (frozen surface
+      untouched proof).
+- [ ] 5. New config `configs/training/baselines/contribution/
+      cat_prev_onehot.yml`: data block identical to `cat.yml` (single-copy
+      train file, exclude_flipped, 21 levels, switch_every 4), cv seed
+      38381 / 4 folds, C grid [0.001..3.0], set s0 = 5 retained scalars +
+      21 dummies (scalar prev_contribution replaced), set s1 = incumbent's
+      6 features as matched-search diagnostic only.
+- [ ] 6. `mkdir -p data/baselines`; run `run_baseline_cv.py`; report s0/s1
+      C-curves; check convergence at the selected C with warnings on.
+- [ ] 7. Save `artifacts/baselines/contribution_categorical_prev_onehot.joblib`
+      via `inspect_best_model.py` — selection by CV log loss within s0 rows
+      only; verify bundle (26 features, coef shape (21, 26), defaults);
+      incumbent joblib untouched. Exactly one variant goes to Stage 1.
+- [ ] 8. Offline pre-flight (go/no-go, never tuning): teacher-forced
+      sampling on train-split human features through LinearAHAdapter;
+      report repeat rate / |change|<=1 / mean |change| vs human
+      0.438 / 0.621 / 2.29 and cat sim 0.193 / 0.331 / 3.30. Escalate if
+      the repeat spike does not appear.
+- [ ] 9. Stage-1 config `configs/simulation/manager_testing/
+      23_2g8a_prev_onehot_self_cat_onehot_contr_gnn_switch.yml`: copy of
+      the cat x gnn config, only the contribution artifact swapped and
+      output slugged; all 4 punisher pairings kept (D2: identical RNG
+      pre-consumption); protocol byte-identical.
+- [ ] 10. `squeue -u certuer` (no PENDING jobs), push the joblib to Raven
+      explicitly (artifacts/ excluded from sync), `simulate_cluster.sh`.
+- [ ] 11. Poll; confirm remote per_round.parquet; `fetch_cluster.sh`.
+- [ ] 12. `python -m aimanager evaluate` the Stage-1 config.
+- [ ] 13. Keep gate (lin_multinomial_self row): RCA < 5.730682422372414,
+      rows<=1 >= 7, mean <= 1.7806142974986534; band upgrade needs RCA < 5.
+      Log unrounded + collateral C/RC rows + other punisher cells as
+      concordance preview.
+- [ ] 14. Not kept, or kept within-band: complete log, `[FAIL]` PR, stop.
+- [ ] 15. Band upgrade: Stage-2 config `23_2g8a_prev_onehot_self_
+      cat_onehot_contr_lin_switch.yml` (same swap, lin-switch family).
+- [ ] 16. squeue check, simulate, fetch, evaluate (Stage-1 dir is the
+      gnn-switch half of the family).
+- [ ] 17. Add `cat_onehot` to CONTR_ORDER/CONTR_MARKERS in
+      `evaluation_sweep.py` (analysis layer); sweep 10 dirs (8 original +
+      2 candidate) into `23_stack_sweep_prev_onehot`.
+- [ ] 18. Confirm slot claim: candidate beats cat on RCA in (nearly) all
+      8 contexts; concordance panel + Kendall's W; guards netted per
+      context; unrounded scores.csv for all boundary judgments.
+- [ ] 19. Complete log; PR `[SUCCESS]`/`[FAIL]` per §9.7; commits map to
+      steps.
 
 ## 3. Results
 
@@ -71,3 +129,27 @@
    been promoted into the reference definition by the maintainer), so
    Stage 1 swaps the candidate into the cat x gnn x lin_multinomial cell
    and compares against that cell's existing scores.
+5. Planner discrepancies, orchestrator rulings: (D1) new training config
+   `cat_prev_onehot.yml` instead of editing `cat.yml` — the incumbent
+   bundle records its config path and cv output; editing in place destroys
+   provenance. (D2) Stage 1 keeps all 4 punisher pairings, unlike the
+   copula's single pairing: the sim seed is consumed before MultiManager
+   builds the GNN punisher, so a 1-pairing config would shift the torch RNG
+   stream relative to the baseline dir; 4 pairings keep pre-run consumption
+   identical, and the dir doubles as the gnn-switch half of Stage 2.
+   (D3) Stage 2 therefore needs only 1 extra config (lin-switch); the 8
+   contexts = 2 switch configs x 4 punisher pairings. (D4) sweep needs the
+   `cat_onehot` label registered or it KeyErrors; the slugged dir name
+   parses as contr=cat_onehot, never silently averaged into `cat`.
+   (D6, ruled (a)) round-0 rows impute prev_contribution = 9 (train
+   median), so onehot_09 mixes "repeated 9" with "first round" (320 of 537
+   level-9 train rows) — accepted: the scalar had the same contamination,
+   and one change per experiment; an `is_first` feature is a candidate
+   follow-up. (D5) the locked test split's median default is 10, so the
+   reported test_metric is mildly pessimistic — affects neither selection
+   nor the sim. (D8) StandardScaler inflates rare dummies (level 19 scale
+   ~0.095) — handled by the C grid reaching 1e-3; selection by CV log
+   loss. (D9) feasibility: 7457 valid train rows vs 567 parameters, all
+   21 prev levels populated (min 67 at level 19). (D11) RNG consumption
+   per contribution call is one multinomial draw regardless of feature
+   count, so switch/punisher streams are unperturbed.
