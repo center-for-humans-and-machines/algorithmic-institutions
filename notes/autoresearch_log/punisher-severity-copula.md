@@ -220,3 +220,90 @@ frozen surface per §8). Slug: `severity_copula`.
     0.7889 -> 1.3521) — possible seed for a follow-up. The sweep matrix
     rounds to 2dp; all boundary judgments here use the unrounded
     scores.csv values.
+
+## Appendix: method details (moved out of the code docstrings)
+
+### Why a copula
+
+A group's punishments in a round are ONE human manager's joint decision, but
+the simulation samples every agent's punishment independently, which pins the
+group-spread ratio (metric row PD) to the independence floor while humans sit
+well above it. A Gaussian copula keeps each agent's fitted marginal exactly
+and adds a shared round-level severity latent: one standard normal per
+(episode, round, agent_group) cell, mixed with per-agent noise at weight rho,
+pushed through each agent's own predicted multinomial CDF. rho is estimated
+from the human TRAIN split only (the locked holdout stays closed) and written
+into a copy of the marginal bundle; the marginal model itself is untouched.
+
+### The estimator: pairwise-likelihood MLE
+
+For every within-cell pair (i, j) with observed levels (a, b), the
+exchangeable Gaussian copula assigns the rectangle probability
+
+    P(y_i = a, y_j = b | rho) = C(F_i(a),   F_j(b))   - C(F_i(a-1), F_j(b))
+                              - C(F_i(a),   F_j(b-1)) + C(F_i(a-1), F_j(b-1))
+
+where F_i is observation i's own discrete CDF from its (1e-12-floored,
+renormalised) probability row and C(u, v) = Phi_2(Phi^-1(u), Phi^-1(v); rho)
+is the bivariate normal copula. rho maximises the summed pairwise
+log-likelihood: a coarse grid (0 to 0.9, step 0.05) then a bounded Brent
+refinement. Phi_2 is evaluated with the Drezner-Wesolowsky identity
+
+    Phi_2(h, k; rho) = Phi(h) Phi(k)
+        + 1/(2 pi) * int_0^rho (1 - r^2)^-1/2
+          exp(-(h^2 - 2 r h k + k^2) / (2 (1 - r^2))) dr
+
+by Gauss-Legendre quadrature (32 nodes), fully vectorised over pairs and
+checked against scipy.stats.multivariate_normal.cdf at startup. This is a
+composite (pairwise) likelihood -- it uses only the joint distribution of the
+OBSERVED punishments, so it never looks at the metric the experiment is
+judged on. Uncertainty is a cluster bootstrap over the 40 train episodes with
+a percentile CI. Explicitly rejected alternative: choosing rho so the sampled
+group-spread ratio matches the human one -- that is calibration at PD's own
+metric definition (framework §5) and is illegal, however tempting the fit.
+
+### Attenuated diagnostic: the randomized-PIT moment estimator
+
+The first revision estimated rho as the within-cell correlation of
+randomized-PIT latents,
+
+    u_i = F_i(y_i - 1) + v_i * p_i(y_i),  v_i ~ U(0, 1),  z_i = Phi^-1(u_i),
+
+averaged over R = 20 PIT replicates (mid-point PIT, which maps every tie to
+the same u, printed as a sensitivity). Those latents are exactly uniform
+under the fitted marginal, but their correlation is NOT the latent rho:
+punishment is lumpy (most of the mass sits on 0), so the auxiliary uniform v
+carries most of the variance of z and the correlation is attenuated by a
+factor of ~2.4 at this discretisation (proven by the --roundtrip recovery
+table; see note 6). The PIT numbers are kept in the script output, labelled
+ATTENUATED DIAGNOSTIC, because their splits by round and cell size still
+show where the dependence lives.
+
+### Sampler conventions (adapter `_sample_levels_copula`)
+
+- Marginals are identical to `_sample_levels` -- both build P through the
+  shared `_class_probs` helper (1e-12 floor, `classes_` scatter, temperature,
+  row renormalisation), so the two paths cannot drift.
+- One latent per DISTINCT group id per call, read from the slot of the
+  group's first member: a `get_punishments` call covers all agents of both
+  groups in a self pairing, and one manager decision per (episode, round,
+  group) is what the human data shows (note 3, D1).
+- Always exactly 2A torch draws per call (`zs` then `eps`), whatever the
+  group composition, so the RNG stream is composition-stable.
+- Inversion is the discrete quantile of the agent's own row,
+  level_i = min{a : F_i(a) >= u_i} (so F_i(a-1) < u <= F_i(a)) -- the same
+  convention the calibration script's sampler uses.
+- Latents are drawn in float64 to match the calibration sampler numerically;
+  bundles without `copula_rho` (or with 0.0) take the pre-change path with
+  its exact RNG consumption (pinned by test).
+
+### Test invariants (tests/baselines/test_punishment_copula.py)
+
+The inverse CDF honours F_i(a-1) < u <= F_i(a) exactly at bin edges; per-agent
+marginals match the independent sampler within stated binomial-SE multiples;
+levels correlate within a group at rho > 0 and not across groups; a bundle
+without `copula_rho` (or 0.0) is bit-identical to the pre-change code path,
+RNG consumption included (the legacy sampling is reimplemented inside the
+test from the committed two-liner, so the comparison does not depend on the
+code under test); seeding is deterministic; the __init__ gate refuses a rho
+outside [0, 1) or on a non-multinomial / non-punishment bundle.

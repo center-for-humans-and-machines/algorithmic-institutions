@@ -1,20 +1,8 @@
-"""Unit tests for the severity-copula punishment sampler (autoresearch
-punisher-severity-copula, plan step 11).
-
-The copula path adds ONE shared severity latent per group to the multinomial
-punisher: marginals stay exactly what the fitted model says, but a group's
-punishments co-move, because one human manager decides them together. What has
-to hold:
-
-  * the inverse CDF is the discrete quantile F_i(a-1) < u <= F_i(a);
-  * the per-agent marginals are unchanged versus the independent sampler;
-  * levels correlate WITHIN a group at rho > 0 and not ACROSS groups;
-  * a bundle without `copula_rho` (or with 0.0) is bit-identical to the
-    pre-change code path, RNG consumption included -- the legacy sampling is
-    reimplemented here from the committed two-liner, so the comparison does not
-    depend on the code under test;
-  * seeding is deterministic, and the __init__ gate refuses a rho it cannot
-    honour.
+"""Unit tests for the severity-copula punishment sampler: inverse-CDF
+convention, marginal preservation, within-group (not cross-group)
+correlation, bit-identical legacy path for bundles without `copula_rho`
+(RNG consumption included), determinism, and the __init__ gate.
+Invariants and rationale: notes/autoresearch_log/punisher-severity-copula.md.
 
 Local test (CPU torch, no PyG):
     .venv/bin/python -m pytest tests/baselines/test_punishment_copula.py

@@ -1,67 +1,14 @@
-"""Calibrate the severity-copula correlation `rho` for the multinomial
-punisher baseline (autoresearch: punisher-severity-copula, steps 2-7).
+"""Calibrate `copula_rho` for the multinomial punisher's severity copula.
 
-Why a copula at all
--------------------
-A group's punishments in a round are ONE human manager's joint decision, but
-the simulation samples every agent's punishment independently, which pins the
-group-spread ratio (metric row PD) to the independence floor while humans sit
-well above it. A Gaussian copula keeps each agent's fitted marginal exactly and
-adds a shared round-level severity latent: one standard normal per
-(episode, round, agent_group) cell, mixed with per-agent noise at weight
-`rho`, pushed through each agent's own predicted multinomial CDF.
+Estimates the within-(episode, round, group) latent correlation of human
+punishments by pairwise-likelihood MLE of an exchangeable Gaussian copula
+(each observation keeps its own fitted discrete marginal), on the bundle's
+own train split only, and saves the marginal bundle plus `copula_rho` as
+artifacts/baselines/punishment_multinomial_severity_copula.joblib. The
+randomized-PIT moment estimator is printed as an attenuated diagnostic only.
 
-This script estimates `rho` from the human TRAIN split only (the locked
-holdout stays closed) and writes it into a copy of the marginal bundle. It
-never touches the marginal model.
-
-The estimator: pairwise-likelihood MLE
---------------------------------------
-For every within-cell pair (i, j) with observed levels (a, b), the exchangeable
-Gaussian copula assigns the rectangle probability
-
-    P(y_i = a, y_j = b | rho) = C(F_i(a),   F_j(b))   - C(F_i(a-1), F_j(b))
-                              - C(F_i(a),   F_j(b-1)) + C(F_i(a-1), F_j(b-1))
-
-where F_i is observation i's own discrete CDF from its (1e-12-floored,
-renormalised) probability row and C(u, v) = Phi_2(Phi^-1(u), Phi^-1(v); rho) is
-the bivariate normal copula. `rho` maximises the summed pairwise
-log-likelihood: a coarse grid (0 to 0.9, step 0.05) then a bounded Brent
-refinement. Phi_2 is evaluated with the Drezner-Wesolowsky identity
-
-    Phi_2(h, k; rho) = Phi(h) Phi(k)
-        + 1/(2 pi) * int_0^rho (1 - r^2)^-1/2
-          exp(-(h^2 - 2 r h k + k^2) / (2 (1 - r^2))) dr
-
-by Gauss-Legendre quadrature, fully vectorised over pairs (checked against
-scipy.stats.multivariate_normal.cdf at startup). This is a composite
-(pairwise) likelihood -- it uses only the joint distribution of the OBSERVED
-punishments, so it is a legal estimator: it never looks at the metric the
-experiment is judged on. Uncertainty is a cluster bootstrap over the 40 train
-episodes with a percentile CI.
-
-Explicitly rejected alternative: choosing rho so the sampled group-spread ratio
-matches the human one. That is calibration at PD's own metric definition
-(framework section 5) and is illegal, however tempting the fit. If the
-likelihood-fitted rho closes only part of the spread gap, that is the honest
-result Stage 1 gets.
-
-Attenuated diagnostic: the randomized-PIT moment estimator
-----------------------------------------------------------
-The first revision of this script estimated rho as the within-cell correlation
-of randomized-PIT latents,
-
-    u_i = F_i(y_i - 1) + v_i * p_i(y_i),  v_i ~ U(0, 1),  z_i = Phi^-1(u_i),
-
-averaged over R PIT replicates (mid-point PIT, which maps every tie to the same
-u, printed as a sensitivity). Those latents are exactly uniform under the
-fitted marginal, but their correlation is NOT the latent rho: punishment is
-lumpy (most of the mass sits on 0), so the auxiliary uniform v carries most of
-the variance of z and the correlation is attenuated by a factor of ~2.4 at this
-discretisation. The round-trip table (--roundtrip) shows both estimators on
-data generated at a known rho. The PIT numbers are kept, labelled ATTENUATED
-DIAGNOSTIC, because their splits by round and cell size still show WHERE the
-dependence lives.
+Method details, formulas, and the estimator revision history:
+notes/autoresearch_log/punisher-severity-copula.md (appendix).
 
 Runs locally (CPU torch, no PyG):
     .venv/bin/python scripts/baselines/punishment_copula_rho.py \
@@ -164,9 +111,8 @@ def build_rows(cfg, features):
 
 
 def class_probs(bundle, X):
-    """The class-probability matrix EXACTLY as LinearAHAdapter._sample_levels
-    builds it: 1e-12 floor, predict_proba scattered onto `classes_`, optional
-    temperature (this bundle has none -> 1.0, a no-op), row renormalised."""
+    """Scaled features + class probabilities, built exactly as the adapter's
+    LinearAHAdapter._class_probs so calibration and sampling share one P."""
     est, n_levels = bundle["estimator"], int(bundle["n_levels"])
     Xs = bundle["scaler"].transform(X)
     P = np.full((len(Xs), n_levels), 1e-12)
@@ -339,9 +285,8 @@ def _cell_moments(Zc, starts, sizes):
 
 
 def rho_pairs(Z, starts, sizes):
-    """Exchangeable moment estimator, equal weight per PAIR: mean over pairs of
-    (z_i - zbar)(z_j - zbar) / var(z), zbar and var (ddof=1) over all rows.
-    Returns (rho per replicate, total pairs)."""
+    """Exchangeable moment estimator, equal weight per pair; returns
+    (rho per replicate, total pairs)."""
     Zc = Z - Z.mean(axis=0, keepdims=True)
     var = Zc.var(axis=0, ddof=1)
     pair_prod, pairs = _cell_moments(Zc, starts, sizes)
@@ -458,9 +403,7 @@ def sample_copula(P, inv, n_cells, rho):
 
 
 def roundtrip(P, cell, rho_trues, n_rep, seed):
-    """ACCEPTANCE GATE: generate punishments from the human P matrices at a
-    KNOWN rho, re-estimate with the pairwise MLE (and with the PIT moment
-    estimator for contrast), and report the recovery."""
+    """Acceptance gate: generate data at a known rho, re-estimate, report."""
     _, inv = np.unique(cell, return_inverse=True)
     n_cells = int(inv.max()) + 1
     order, starts, sizes = blocks(cell)
@@ -526,9 +469,7 @@ def save_bundle(bundle, X, rho, se, ci, data_file, n_pairs):
         copula_rho_se=float(se),
         copula_rho_ci=(float(ci[0]), float(ci[1])),
         copula_estimator="pairwise_mle",
-        # provenance of the attenuated diagnostic only; the stored rho is the
-        # pairwise MLE, which uses no PIT at all
-        copula_diag_pit="randomized",
+        copula_diag_pit="randomized",  # provenance of the diagnostic only
         copula_cell_key="episode_round_group",
         copula_data_file=str(data_file),
         copula_n_pairs=int(n_pairs),

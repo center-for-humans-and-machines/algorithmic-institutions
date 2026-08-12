@@ -85,10 +85,8 @@ class LinearAHAdapter:
         # multinomial = predict_proba tempered by `temperature` (T=1 as-is).
         self.sigma = float(bundle.get("sigma") or 0.0)
         self.temperature = float(bundle.get("temperature", 1.0))
-        # Severity copula: a punishment bundle may carry `copula_rho`, the
-        # within-group correlation of the latent the sampler inverts (one human
-        # manager decides a whole group's punishments, so they co-move beyond
-        # what the shared features explain; calibrated by
+        # Severity copula: `copula_rho` on a punishment bundle correlates a
+        # group's punishments via one shared latent per round (calibrated by
         # scripts/baselines/punishment_copula_rho.py). Absent or 0.0 keeps the
         # independent path -- and its exact RNG consumption -- unchanged.
         self.copula_rho = float(bundle.get("copula_rho", 0.0) or 0.0)
@@ -242,10 +240,8 @@ class LinearAHAdapter:
     # level sampling (shared by contribution and punishment)
     # ------------------------------------------------------------------ #
     def _class_probs(self, Xs, n_levels):
-        """The [n, n_levels] class-probability matrix of a multinomial bundle:
-        classes absent from the fit get a tiny floor, `temperature` flattens or
-        sharpens, rows renormalise. Shared by the independent and the copula
-        sampler so the two can never drift in their marginals."""
+        """[n, n_levels] class probabilities of a multinomial bundle; shared
+        by the independent and copula samplers so marginals cannot drift."""
         proba = self.estimator.predict_proba(Xs)
         P = np.full((len(Xs), n_levels), 1e-12)
         P[:, self.estimator.classes_] = proba
@@ -276,22 +272,11 @@ class LinearAHAdapter:
         return np.clip(np.rint(yhat), 0, n_levels - 1).astype(np.int64)
 
     def _sample_levels_copula(self, Xs, n_levels, groups):
-        """Discrete levels [A] whose latents share one severity draw per group.
-
-        Marginals are IDENTICAL to ``_sample_levels`` -- the same ``P`` -- but
-        the uniform each agent inverts is correlated inside a group:
-
-            u_i = Phi(sqrt(rho) * z_g(i) + sqrt(1 - rho) * eps_i)
-
-        with one ``z`` per distinct group id and independent per-agent ``eps``.
-        Inversion is the discrete quantile of the agent's own row,
-        ``level_i = min{a : F_i(a) >= u_i}`` (so ``F_i(a-1) < u <= F_i(a)``),
-        the convention the calibration script's sampler used.
-
-        Exactly 2A torch draws per call (``zs``, then ``eps``) whatever the
-        group composition is: the group latent is read from the slot of the
-        group's FIRST member, so a round with one group consumes the same
-        stream as a round with two."""
+        """Discrete levels [A], one shared severity latent per group id:
+        u_i = Phi(sqrt(rho) z_g(i) + sqrt(1-rho) eps_i), inverted through the
+        agent's own CDF. Same marginals as ``_sample_levels``; always exactly
+        2A torch draws per call. Conventions and rationale:
+        notes/autoresearch_log/punisher-severity-copula.md (appendix)."""
         P = self._class_probs(Xs, n_levels)
         if not self.sample:
             return P.argmax(1).astype(np.int64)
