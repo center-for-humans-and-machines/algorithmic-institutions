@@ -106,7 +106,7 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       within binomial-SE multiples; within-cell correlation > 0, cross-cell
       ~ 0; 2N draws regardless of composition; determinism; AR(1) keeps
       Var(z) = 1 and corr(z_t, z_{t-1}) = phi.
-- [ ] 13. Wire into `src/aimanager/generic/graph.py`: keyword-only
+- [x] 13. Wire into `src/aimanager/generic/graph.py`: keyword-only
       `copula_rho=0.0, copula_phi=0.0, copula_switch_every=None` on
       `__init__` (assert 0 <= rho < 1, 0 <= phi < 1, rho > 0 only for
       `y_name == "does_switch"`); all three in `to_save` (old artifacts
@@ -119,7 +119,7 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       calls `_run_switch_predictor` every round; only decision-round
       outputs are consumed, only decision rounds advance the AR state).
       Absent/zero field leaves the legacy `th.multinomial` path untouched.
-- [ ] 14. Raven test `src/aimanager/tests/test_switch_copula_graph.py`:
+- [x] 14. Raven test `src/aimanager/tests/test_switch_copula_graph.py`:
       no-rho artifact bit-identical to the pre-change path (values and
       torch RNG consumption, legacy decode reimplemented inside the test);
       copula model preserves marginals, correlates within group not across;
@@ -351,3 +351,22 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
     via the documented RNG contract. Bit-identity of the LEGACY path is
     deliberately not asserted here — it belongs to graph.py's dispatch
     gate (steps 13-14).
+16. Steps 13-14: simulation call path confirmed ONE round per call
+    (`reset_state` allocates (B, A, 1); `step()` advances in place) — the
+    copula cell is (episode, group), dense id batch*2 + agent_group, per
+    ruling D7. The multi-round branch is reachable only from
+    `intervention_probe.py`; implemented as per-round slices in round
+    order. `load` tolerates the three new fields being absent (missing
+    kwargs fall back to `__init__` defaults — the `edge_encoding`
+    mechanism). Legacy path is the literal original line, pinned
+    bit-identically (values AND RNG state) by the Raven test against a
+    self-contained multinomial reimplementation. Implementation deviation
+    accepted by the orchestrator: `self._copula_z` is stored at full
+    length 2B and the `[:n_cells]` prefix passed to the sampler — with
+    dense ids, a fully segregated last episode drops n_cells to 2B-1
+    mid-episode, which would shift RNG consumption and trip the sampler's
+    z_prev length assert (a live crash risk at P(seg) ~ 0.03-0.14 per
+    episode). Extra integration test drives the real ArtificialHumanEnv
+    for 11 rounds: latent set at round 3, held 4-6, advanced at 7,
+    cleared by reset. Step-14 run: 102 Raven tests pass (12 new), local
+    suites 248 pass (frozen surface untouched).
