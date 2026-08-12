@@ -200,3 +200,13 @@ Slug: `cg_copula`.
    RNN — closing 0.59 -> 0.85 at group size 4 would imply latent rho ~ 0.6,
    likely outside the honest MLE's CI. Realistic failure mode is
    kept-but-within-band; the step-11 preflight is the cheap early read.
+5. Maintainer ruling 2026-08-12 (mid-experiment, before any Stage-1 config
+   existed): the reference punisher is now the severity-copula multinomial
+   bundle from PR #146 — same `lin_multinomial` slot, not a separate
+   option; the maintainer updates `notes/autoresearch.md` themselves.
+   Experiment re-baselined to #146's Stage-1 cell
+   (`23_2g8a_severity_copula_self_gnn_contr_gnn_switch`): CG 9.808514,
+   rows <= 1 = 10/21 (RSA 1.001009 — the razor-edge row #146's Stage 2
+   adjudicated as noise), mean 1.687998. Target unaffected (CG 9.85 →
+   9.81); Stage-1 configs will point `lin_multinomial` at the copula
+   joblib.
