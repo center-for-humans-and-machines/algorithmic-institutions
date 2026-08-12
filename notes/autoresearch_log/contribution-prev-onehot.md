@@ -83,11 +83,11 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
       only the contribution artifact swapped and output slugged; protocol
       and RNG stream shape byte-identical to the baseline cell. (Supersedes
       D2's 4-pairing design — the new baseline dir is single-pairing.)
-- [ ] 10. `squeue -u certuer` (no PENDING jobs), push the joblib to Raven
+- [x] 10. `squeue -u certuer` (no PENDING jobs), push the joblib to Raven
       explicitly (artifacts/ excluded from sync), `simulate_cluster.sh`.
-- [ ] 11. Poll; confirm remote per_round.parquet; `fetch_cluster.sh`.
-- [ ] 12. `python -m aimanager evaluate` the Stage-1 config.
-- [ ] 13. Keep gate (lin_multinomial_copula run): RCA < 5.744514189776296,
+- [x] 11. Poll; confirm remote per_round.parquet; `fetch_cluster.sh`.
+- [x] 12. `python -m aimanager evaluate` the Stage-1 config.
+- [x] 13. Keep gate (lin_multinomial_copula run): RCA < 5.744514189776296,
       rows<=1 >= 8, mean <= 1.560720754938168; band upgrade needs RCA < 5.
       Log unrounded + collateral C/RC rows.
 - [ ] 14. Not kept, or kept within-band: complete log, `[FAIL]` PR, stop.
@@ -111,6 +111,8 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-12 | (baseline) copula reference cell, cat contr unchanged | 1 | RCA 5.744514189776296 | 8/21 | 1.560720754938168 | baseline |
+| 2026-08-12 | prev-contribution one-hot (C=0.03), same 5 other features | 1 | RCA 2.972152984061371 | 11/21 | 1.4242459459240815 | kept — band upgrade (>5 -> 2-5), run Stage 2 |
 
 ## 4. Notes
 
@@ -199,3 +201,13 @@ frozen surface per §8). Slug: `prev_onehot`; contr label: `cat_onehot`.
    the test log loss 1.882 vs 2.273). Residual over-dispersion remains
    in the tails, so RCA should improve substantially but need not reach
    the ceiling. GO.
+9. Stage 1 (job 29301475): RCA 5.744514189776296 -> 2.972152984061371 —
+   a band upgrade (>5 into 2-5); rows<=1 8 -> 11, mean 1.560720754938168
+   -> 1.4242459459240815; all three gates pass. Collateral +: the whole
+   marginal C block (CA 2.0752 -> 1.7155, CB 1.7107 -> 0.8468, CC 1.5555
+   -> 1.0602, CD 1.5852 -> 0.7341), RCD 1.9968 -> 1.3452, SC 2.5628 ->
+   2.2672, RSA 0.9886 -> 0.7923. Collateral -: CG 1.7604 -> 4.8242 (the
+   sticky self-anchor weakens group-mean convergence — the §6
+   anti-correlation trade, now from the opposite direction), RCB 1.7931
+   -> 2.3193, PD 1.0300 -> 1.3913. CG/RCB concordance is the thing to
+   watch in Stage 2.
