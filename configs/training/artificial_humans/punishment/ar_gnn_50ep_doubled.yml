@@ -1,0 +1,69 @@
+description: >-
+  Autoregressive punishment predictor (auto/punisher-ar-gnn): the
+  rnn_edge_50ep_doubled base model plus one gated ar_punishment edge
+  feature -- same-group AND decided gate, gated normalised same-round
+  groupmate punishment -- trained with the any-order reveal-mask scheme
+  (autoregression: true). Node features, data, seed, and optimizer are
+  byte-identical to the base config; epochs raised to 5000 because ~half
+  the agent-rounds are masked per step, eval_period raised to 250 because
+  the 255-pattern eval dominates runtime.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 8
+  memory: 32
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: punishment_valid
+  switch_every: 4
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn+ar
+    dataset: 50ep_doubled
+    epochs: 5000
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: []
+  basedir: .
+  output_dir: artifacts/artificial_humans/punishment_ar_gnn_50ep_doubled
+  model_args:
+    y_levels: 31
+    y_name: punishment
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - etype: bool
+        name: is_first
+    edge_encoding:
+      - name: ar_punishment
+        n_levels: 31
+  optimizer_args:
+    lr: 1.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 5000
+    batch_size: 10
+    clamp_grad: 1
+    eval_period: 250
+    l1_entropy: 0
+  device: cuda
+  autoregression: true
+  min_predicted: 1
+  max_predicted: 8

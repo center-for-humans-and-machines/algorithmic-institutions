@@ -55,29 +55,29 @@ advances once per round by construction).
 - [x] 1. Worktree + Claude commit identity + declaration (done at branch
       creation).
 - [x] 2. Record the validated step list and rulings; commit.
-- [ ] 3. `src/aimanager/generic/graph.py`: add `ARPunishmentEdgeEncoder`
+- [x] 3. `src/aimanager/generic/graph.py`: add `ARPunishmentEdgeEncoder`
       (config `name: ar_punishment`, `n_levels: 31`, size 2: same-group AND
       decided gate; gated normalised source punishment from
       `punishment_masked`/`autoreg_mask` at `edge_index[0]`), register in
       `EDGE_ENCODERS`; docstring states the legality contract (own group,
       same round, manager's own already-decided punishments only).
-- [ ] 4. `graph.py` `encode()`: forward `f"{y_name}_masked"` and
+- [x] 4. `graph.py` `encode()`: forward `f"{y_name}_masked"` and
       `autoreg_mask` (flattened `(N, T)`) into `edge_state` when present;
       empty-`edge_encoding` path byte-unchanged.
-- [ ] 5. `graph.py` `predict_autoreg()`: drop the no-RNN assert; keep
+- [x] 5. `graph.py` `predict_autoreg()`: drop the no-RNN assert; keep
       `reset_rnn=True` per AR step; comment the contract (order from the
       sim's seeded RNG; only round -1 consumed by `MultiManager`).
-- [ ] 6. Raven test file `src/aimanager/tests/test_ar_punisher.py`:
+- [x] 6. Raven test file `src/aimanager/tests/test_ar_punisher.py`:
       gate/value correctness (incl. mid-episode group switch); cross-group
       invariance; undecided-agent invariance; no self-leak;
       current-round-contribution invariance; train<->sim parity of the AR
       edge construction; `predict_autoreg` with RNN (shapes, determinism,
       later agents depend on earlier draws); save/load round-trip.
-- [ ] 7. Local: eval-suite tests + `scripts/tests` + `tests/baselines`
+- [x] 7. Local: eval-suite tests + `scripts/tests` + `tests/baselines`
       (frozen-surface proof), black + flake8 batched pass.
-- [ ] 8. Raven: `squeue -u certuer` PENDING check, then
+- [x] 8. Raven: `squeue -u certuer` PENDING check, then
       `scripts/remote_test.sh` — full PyG suite green.
-- [ ] 9. Training config
+- [x] 9. Training config
       `configs/training/artificial_humans/punishment/ar_gnn_50ep_doubled.yml`:
       copy of `rnn_edge_50ep_doubled.yml` + `autoregression: true`,
       `min_predicted: 1`, `max_predicted: 8`,
@@ -186,3 +186,16 @@ advances once per round by construction).
    (D13) `run_simulation.sh` `--time` may be raised to 2h only on an
    actual walltime failure (infrastructure, not frozen protocol); logged
    if it happens.
+5. Steps 3-8 done and verified. Full Raven suite green (99 passed, incl.
+   the 9 new AR tests: cross-group / undecided / self / current-round
+   contribution leak invariants, train<->sim parity of the encoder inputs,
+   RNN-enabled `predict_autoreg` determinism and conditioning, save/load).
+   Facts worth keeping: `autoreg_mask` polarity is True = to-be-predicted
+   (decided = ~mask); `predict_autoreg` reveals a decided agent's WHOLE
+   round history (parity with training holds because the gate zeroes
+   everything outside same-group-and-decided); `predict_independent` on an
+   `ar_punishment` model requires `punishment_masked`/`autoreg_mask` in the
+   data (hard assert, no silent fallback) — the sim path always goes
+   through `predict_autoreg`, which builds them. Out of scope, untouched:
+   `rl_manager.py` and `train.py` are not black-clean on main (pre-existing
+   drift).
