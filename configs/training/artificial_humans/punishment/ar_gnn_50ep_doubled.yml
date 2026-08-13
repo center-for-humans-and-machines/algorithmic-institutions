@@ -4,9 +4,10 @@ description: >-
   feature -- same-group AND decided gate, gated normalised same-round
   groupmate punishment -- trained with the any-order reveal-mask scheme
   (autoregression: true). Node features, data, seed, and optimizer are
-  byte-identical to the base config; epochs raised to 5000 because ~half
-  the agent-rounds are masked per step, eval_period raised to 250 because
-  the 255-pattern eval dominates runtime.
+  byte-identical to the base config; epochs 2750 = the CV-test-log-loss
+  optimum of a 5000-epoch probe run (~half the agent-rounds are masked per
+  step, so the base's 1250 was under-trained), eval_period 250 because the
+  255-pattern eval is the main per-eval cost.
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -24,7 +25,7 @@ params:
   labels:
     architecture: node+edge+rnn+ar
     dataset: 50ep_doubled
-    epochs: 5000
+    epochs: 2750
   n_contributions: 21
   n_punishments: 31
   n_cross_val: 5
@@ -58,7 +59,7 @@ params:
     lr: 1.e-4
     weight_decay: 1.e-5
   train_args:
-    epochs: 5000
+    epochs: 2750
     batch_size: 10
     clamp_grad: 1
     eval_period: 250

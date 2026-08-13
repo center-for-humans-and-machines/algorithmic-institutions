@@ -85,18 +85,17 @@ advances once per round by construction).
       `labels.architecture: node+edge+rnn+ar`, epochs 5000,
       `eval_period: 250`,
       `output_dir: artifacts/artificial_humans/punishment_ar_gnn_50ep_doubled`.
-- [ ] 10. Train on Raven: PENDING check, `scripts/train_cluster.sh ah
+- [x] 10. Train on Raven: PENDING check, `scripts/train_cluster.sh ah
       <config>`; poll; confirm 5 CV folds + final full-data fit + artifact.
-- [ ] 11. `scripts/fetch_cluster.sh artifacts/.../punishment_ar_gnn_50ep_doubled`;
+- [x] 11. `scripts/fetch_cluster.sh artifacts/.../punishment_ar_gnn_50ep_doubled`;
       assert checkpoint `autoregressive` flag, `edge_encoding`, and base
       `x_encoding` parity; checksum vs Raven; commit (LFS).
-- [ ] 12. Convergence/selection analysis from the metrics parquet: mean CV
+- [x] 12. Convergence/selection analysis from the metrics parquet: mean CV
       test log_loss per epoch -> epoch E; report the n_pred==8 marginal
       curve vs base best 1.2029941249670393 and n_pred<8 curves (evidence
       the AR channel is used). Log in Notes.
-- [ ] 13. (conditional) If the optimum is clearly earlier than 5000,
-      retrain at epochs E, fetch, commit; else keep the 5000-epoch
-      artifact.
+- [x] 13. (conditional, triggered) Optimum clearly earlier than 5000:
+      retrain at epochs 2750 (job 29318893), fetch, commit.
 - [ ] 14. Stage-1 config
       `23_2g8a_ar_gnn_self_gnn_contr_gnn_switch.yml`: copy of the reference
       config, single manager `ar_gnn` (type `human`) -> new `.pt`, single
@@ -199,3 +198,19 @@ advances once per round by construction).
    through `predict_autoreg`, which builds them. Out of scope, untouched:
    `rl_manager.py` and `train.py` are not black-clean on main (pre-existing
    drift).
+6. Wall-clock correction: the planner's 4-5 h training estimate was ~7x
+   too pessimistic — the 255-pattern AR eval costs ~6 s (not 30-40 s), and
+   a 5000-epoch fit runs ~6 min at ~21 it/s. The 6-fit job (29318459)
+   completed in 40m06s, exit 0:0.
+7. Step-12 analysis (5000-epoch probe, metrics parquet): mean CV test
+   log_loss optimum 1.1930113224996335 at epoch 2750 vs base punisher best
+   1.2029941249670393 (at its budget end, 1240) — the AR model wins on
+   held-out likelihood by ~0.010. Overfit past ~3000 (test 1.207264 at
+   4999, train still falling). Conditioning gradient is monotone in the
+   number of decided groupmates: test log_loss at best epoch 1.1912
+   (n_pred=1, 7 decided) -> 1.1989 (n_pred=8, none decided) across all 8
+   levels — direct evidence the AR channel carries signal. Even the
+   zero-conditioning marginal (1.1989) beats the base (1.2030). Ruling:
+   retrain at E=2750 (step 13 condition met; job 29318893). The 5000-epoch
+   artifact stays committed for provenance; the 2750 one becomes the
+   candidate.
