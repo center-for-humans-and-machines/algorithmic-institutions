@@ -1,7 +1,7 @@
 from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU
 import numpy as np
 import torch as th
-from torch_scatter import scatter_mean
+from torch_scatter import scatter_add, scatter_mean
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
 
@@ -37,14 +37,20 @@ class NodeModel(th.nn.Module):
                 Lin(in_features=in_features, out_features=out_features), activation
             )
 
-    def forward(self, x, edge_index, edge_attr, u, batch):
+    def forward(self, x, edge_index, edge_attr, u, batch, *, edge_weight=None):
         # x: [N, F_x], where N is the number of nodes.
         # edge_index: [2, E] with max entry N - 1.
         # edge_attr: [E, F_e]
         # u: [B, F_u]
         # batch: [N] with max entry B - 1.
+        # edge_weight: [E, ..., 1] attention weights, keyword-only. MetaLayer
+        # calls this positionally, so legacy paths always take the None branch
+        # and keep the exact uniform mean.
         row, col = edge_index
-        out = scatter_mean(edge_attr, col, dim=0, dim_size=x.size(0))
+        if edge_weight is None:
+            out = scatter_mean(edge_attr, col, dim=0, dim_size=x.size(0))
+        else:
+            out = scatter_add(edge_attr * edge_weight, col, dim=0, dim_size=x.size(0))
         out = th.cat([x, out, u[batch]], dim=-1)
         out = self.node_mlp(out)
         return out
