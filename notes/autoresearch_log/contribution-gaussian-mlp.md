@@ -59,11 +59,11 @@ untouched; referenced configs/scores verified to exist).
   `_make_net`/out-layer hooks; warm-started output biases, zero-init output
   weights; `_Head`/`GaussianRegressor` untouched (incumbent joblib must
   unpickle bit-identically).
-- [ ] 4. Register `gaussian_mlp` in `baseline_models.py` (settings: hidden,
+- [x] 4. Register `gaussian_mlp` in `baseline_models.py` (settings: hidden,
   weight_decay, lr, epochs; metric nll; shared gaussian floor/CE paths),
   widen `run_baseline_cv.py` show_ce gate, `inspect_best_model.py`: cast
   `hidden` int + include `gaussian_mlp` in the save_best CE/sigma branch.
-- [ ] 5. Sim adapter: `model_type in ("gaussian", "gaussian_mlp")` for the
+- [x] 5. Sim adapter: `model_type in ("gaussian", "gaussian_mlp")` for the
   heteroscedastic sampling branch in `src/aimanager/simulation/linear_ah.py`;
   nothing else.
 - [ ] 6. Config `configs/training/baselines/contribution/gaussian_mlp.yml`
