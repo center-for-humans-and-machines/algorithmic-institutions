@@ -85,7 +85,7 @@ untouched; referenced configs/scores verified to exist).
   (teacher-forced, PR #148 pattern): NLL/CE, sigma(x) by state, implied
   repeat mass vs empirical 0.44; flat sigma or unmoved repeat mass -> stop,
   `[FAIL]` PR without a sim.
-- [ ] 11. Stage-1 sim config
+- [x] 11. Stage-1 sim config
   `23_2g8a_severity_copula_self_gaussian_mlp_contr_gnn_switch.yml` (copy of
   the `..._gaussian_contr_gnn_switch` config; only artifact path + naming
   lines change).
