@@ -46,12 +46,15 @@
 Validated 2026-08-13 (targets per §2; every step legal per §5; frozen surface
 untouched; referenced configs/scores verified to exist).
 
-- [ ] 1. Worktree env prep (untracked): `uv sync`, copy
+- [x] 1. Worktree env prep (untracked): `uv sync`, copy
   `data/baselines/gaussian_top500_feats.csv` from the main checkout.
-- [ ] 2. Timing/feasibility gate: single-fit timings at fold size, size the
+  (Done: imports ok, CSV 36,865 lines.)
+- [x] 2. Timing/feasibility gate: single-fit timings at fold size, size the
   grid to < 20 min local wall clock. (Pre-measured on the full train split:
-  h=8 0.35 s … h=32 0.91 s per 500–1000-epoch fit.)
-- [ ] 3. `GaussianMLPRegressor` in `scripts/baselines/gaussian_regressor.py`:
+  h=8 0.35 s … h=32 0.91 s per 500–1000-epoch fit; a fold fit is 3/4 of
+  that. 96 sets x 12 settings x 4 folds ≈ 4,608 fits ≈ 6–10 min on 10
+  workers — inside budget.)
+- [x] 3. `GaussianMLPRegressor` in `scripts/baselines/gaussian_regressor.py`:
   2-layer head (`Linear(d,h)` → tanh → `Linear(h,2)`), subclass via small
   `_make_net`/out-layer hooks; warm-started output biases, zero-init output
   weights; `_Head`/`GaussianRegressor` untouched (incumbent joblib must
