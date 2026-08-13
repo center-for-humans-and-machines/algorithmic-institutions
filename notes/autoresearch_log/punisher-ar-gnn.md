@@ -115,13 +115,13 @@ advances once per round by construction).
       `23_2g8a_ar_gnn_self_<contr>_contr_<switch>_switch.yml`, copies of
       the matching severity_copula configs with only
       managers/pairings/output_dir/figure_name swapped.
-- [ ] 20. Simulate (PENDING check per sync) + fetch + evaluate the 7.
-- [ ] 21. Add `ar_gnn` to PUNISHER_ORDER/PUNISHER_COLORS in
+- [ ] ~~20. Simulate + fetch + evaluate the 7.~~ (n/a — Stage 1 failed)
+- [ ] ~~21. Add `ar_gnn` to PUNISHER_ORDER/PUNISHER_COLORS in~~ (n/a)
       `evaluation_sweep.py` (analysis layer); sweep 24 dirs (8 base +
       8 severity_copula + 8 ar_gnn) into `23_stack_sweep_ar_gnn`.
-- [ ] 22. Confirm the slot claim: PD bands + wins across the 8 contexts,
+- [ ] ~~22. Confirm the slot claim: PD bands + wins across the 8 contexts,~~ (n/a)
       concordance panel, stack metrics net over contexts.
-- [ ] 23. Complete the log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis /
+- [x] 23. Complete the log; PR `[FAIL]`, body Hypothesis /
       Results / Collateral; commits map to steps.
 
 ## 3. Results
