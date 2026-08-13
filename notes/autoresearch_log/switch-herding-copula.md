@@ -144,16 +144,16 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       multinomial first — same RNG position as the severity-copula
       baseline run; ridge/gaussian/gnn at positions 2-4 as in the old
       reference config); protocol untouched.
-- [ ] 17. `squeue` check, `scripts/simulate_cluster.sh <config>`, confirm
+- [x] 17. `squeue` check, `scripts/simulate_cluster.sh <config>`, confirm
       `per_round.parquet`, fetch, `python -m aimanager evaluate <config>`.
-- [ ] 18. Keep gate on the `lin_multinomial_copula_self` row vs the updated
+- [x] 18. Keep gate on the `lin_multinomial_copula_self` row vs the updated
       reference baseline
       (`23_2g8a_severity_copula_self_gnn_contr_gnn_switch`): SC < 2.816006
       with band upgrade requiring SC < 2; rows <= 1 >= 10; mean <=
       1.6879978841849728; SA 0.773715 / SB 0.848892 / RSA 1.001009
       essentially unmoved (a marginal move signals a sampler bug). Log
       unrounded.
-- [ ] 19. Arm B only if phi survived step 8: second artifact + config, slug
+- [x] 19. Arm B only if phi survived step 8: second artifact + config, slug
       `herding_copula_ar1` (switch token `herdcopar1`), identical protocol;
       Stage-1 evaluate; select the better SC under the same guards (§5
       variant selection). Log both rows.
@@ -183,6 +183,8 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-13 | arm A: copula rho=0.116482333585783 | 1 | SC 2.905083072873831 (ref 2.816005922026658) | 11/21 (ref 10/21) | 1.6286919320 (ref 1.6879978842) | fail: target regressed |
+| 2026-08-13 | arm B: rho + AR(1) phi=0.70366020589033 | 1 | SC 1.9138838624773855 (ref 2.816005922026658) | 11/21 (ref 10/21) | 1.5863134655 (ref 1.6879978842) | pass (winner) — band upgrade 2-5 -> 1-2 |
 
 ## 4. Notes
 
@@ -381,3 +383,25 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
     arm A's (both arms were declared and calibrated; running them in one
     cluster session avoids a second sync cycle) — selection stays
     Stage-1-score-based per §5.
+18. Infrastructure, for the record: the first Stage-1 submission attempts
+    (2026-08-12 evening) never reached SLURM — the SSH ControlMaster had
+    gone stale and `simulate_cluster.sh`'s rsync died with "unexpected
+    end of file"; a concurrent permission-classifier outage masked the
+    diagnosis. Resubmitted 2026-08-13 after the maintainer refreshed the
+    connection: configs pushed explicitly, both arms submitted with
+    `--no-sync` (jobs 29316132 / 29316140, ~7 min on a shared node).
+19. Stage 1 verdict: **arm B selected, band upgrade achieved.** Arm A
+    (rho only) REGRESSED SC to 2.905083072873831 — one-step herding
+    without persistence lets segregation mean-revert between decision
+    rounds. Arm B (rho + AR(1)) lands **SC 1.9138838624773855** (2-5 ->
+    1-2, 4.3% under the boundary), rows <= 1 = 11/21 (RSA 1.001009 ->
+    0.855280, back under the ceiling — the PR #146 crossing resolved),
+    mean 1.5863134655. Guards: SA 0.744234, SB 0.900725 — marginals hold.
+    Collateral (arm B vs ref): CG -1.196713 (9.808514 -> 8.611802),
+    PD -0.481340 (1.532497 -> 1.051157), RCC -0.177448; negative: RPB
+    +0.204968 (0.975488, still <= 1), PA +0.176103 (0.768540, still
+    <= 1), RPA +0.152347 (1.336940), RCA +0.113514 (2.196422). The
+    arm-A regression despite the GO preflight confirms note 14's caveat:
+    the one-step check cannot see cumulative dynamics; it bounded arm A
+    and arm A alone. Stage 2 proceeds with arm B; SC's 4.3% margin makes
+    the 16-context sweep the real adjudicator.
