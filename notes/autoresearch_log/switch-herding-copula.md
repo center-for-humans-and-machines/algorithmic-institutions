@@ -185,6 +185,7 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
 |---|---|---|---|---|---|---|
 | 2026-08-13 | arm A: copula rho=0.116482333585783 | 1 | SC 2.905083072873831 (ref 2.816005922026658) | 11/21 (ref 10/21) | 1.6286919320 (ref 1.6879978842) | fail: target regressed |
 | 2026-08-13 | arm B: rho + AR(1) phi=0.70366020589033 | 1 | SC 1.9138838624773855 (ref 2.816005922026658) | 11/21 (ref 10/21) | 1.5863134655 (ref 1.6879978842) | pass (winner) — band upgrade 2-5 -> 1-2 |
+| 2026-08-13 | arm B, 16-context sweep vs gnn switch | 2 | SC wins 14/16 (2 losses +0.03/+0.08 = noise); slot mean 2.6273 -> 2.0816 | 73 -> 72 stack-wide; sane 8: 56 -> 55 | improves 12/16; sane 8: 1.7522 -> 1.6695 | SC confirmed; RSA boundary escalated to maintainer |
 
 ## 4. Notes
 
@@ -405,3 +406,25 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
     the one-step check cannot see cumulative dynamics; it bounded arm A
     and arm A alone. Stage 2 proceeds with arm B; SC's 4.3% margin makes
     the 16-context sweep the real adjudicator.
+20. Stage 2 (steps 21-22 run; 20 dirs swept into
+    `23_stack_sweep_herding_copula`): **SC confirmed** — wins 14/16
+    contexts, slot mean 2.6273 -> 2.0816; the two losses (gaussian x
+    gaussian +0.0833, ridge x ridge +0.0283) are within noise. SA slot
+    mean improves 1.5718 -> 1.4170 (1 crossing), SB 1.1379 -> 1.0860 (0
+    crossings). **RSA is the boundary question**: slot mean 1.1664 ->
+    1.2917, 5 ceiling crossings against 2 re-entries, and the pattern is
+    STRUCTURED, not scrambled — RSA improves in the gnn-contribution
+    contexts (reference stack 1.0010 -> 0.8553; gnn x ridge -0.3218,
+    gnn x gaussian -0.1603) and in cat x gnn (-0.2909), but rises in
+    every gaussian-contribution context (max +0.4599) and most ridge/cat
+    x linear-punisher ones (max +0.7386 at cat x ridge). Crossing
+    magnitudes: 1.0068 / 1.0560 / 1.1149 / 1.2264 / 1.4484. Stack
+    metrics: rows <= 1 net 73 -> 72; mean improves in 12/16; on the 8
+    sane-punisher contexts (multinomial_copula + gnn, the PR #140
+    discipline): rows <= 1 56 -> 55, mean 1.7522 -> 1.6695. Unlike the
+    punisher precedent's RSA question (which scrambled and was ruled
+    noise), this one has a consistent sign within contribution families —
+    plausibly real: the shared switch latent adds punishment-independent
+    co-switching, diluting the punishment -> switch response where the
+    contribution model is linear. Escalated to the maintainer per §2/§9
+    rather than self-ruling [SUCCESS].
