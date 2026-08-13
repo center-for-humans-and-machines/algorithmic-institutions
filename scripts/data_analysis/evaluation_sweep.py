@@ -60,7 +60,7 @@ SWITCH_ROWS = ["SA", "SB", "SC", "RSA"]
 PUNISHER_ROWS = ["PA", "PB", "PC", "PD", "RPA", "RPB"]
 
 CONTR_ORDER = ["gnn", "cat", "gaussian", "ridge"]
-SWITCH_ORDER = ["lin", "gnn"]
+SWITCH_ORDER = ["lin", "gnn", "herdcopar1"]
 PUNISHER_ORDER = ["multinomial", "multinomial_copula", "gnn", "gaussian", "ridge"]
 
 SLOT_CONTEXT = {
