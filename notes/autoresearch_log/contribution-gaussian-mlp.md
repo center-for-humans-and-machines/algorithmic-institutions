@@ -89,27 +89,29 @@ untouched; referenced configs/scores verified to exist).
   `23_2g8a_severity_copula_self_gaussian_mlp_contr_gnn_switch.yml` (copy of
   the `..._gaussian_contr_gnn_switch` config; only artifact path + naming
   lines change).
-- [ ] 12. rsync the bundle to Raven (`simulate_cluster.sh` excludes
+- [x] 12. rsync the bundle to Raven (`simulate_cluster.sh` excludes
   `artifacts/`).
-- [ ] 13. Simulate on Raven.
-- [ ] 14. Fetch + `python -m aimanager evaluate` locally.
-- [ ] 15. Stage-1 gate and log vs incumbent cell (RCA 5.20832162095758,
+- [x] 13. Simulate on Raven. (job 29317620, ~2.5 min)
+- [x] 14. Fetch + `python -m aimanager evaluate` locally.
+- [x] 15. Stage-1 gate and log vs incumbent cell (RCA 5.20832162095758,
   CA 2.1698859787106297, RCB 2.3471849734654717, rows <= 1 = 8/21,
   mean 1.6308337314805847; guard CG 3.9780560538984258).
-- [ ] 16. Decision: band upgrade + no stack regression -> Stage 2; else
+- [x] 16. Decision: band upgrade + no stack regression -> Stage 2; else
   `[FAIL]` PR, no sweep.
-- [ ] 17. (Stage 2) three further sim configs (gnn/lin switch x punisher
+- [ ] 17. (Stage 2) SKIPPED per step 16 -- not kept. three further sim configs (gnn/lin switch x punisher
   family), simulate/fetch/evaluate -> 10 contexts total.
-- [ ] 18. (Stage 2) add `gaussian_mlp` to `CONTR_ORDER`, run
+- [ ] 18. (Stage 2) SKIPPED per step 16 -- not kept. add `gaussian_mlp` to `CONTR_ORDER`, run
   `evaluation_sweep.py 24_stack_sweep_gaussian_mlp` over 40 existing + 4 new
   dirs; slot verdict needs the band upgrade concordant across contexts.
-- [ ] 19. Close out: complete log, PR titled `[SUCCESS]`/`[FAIL]`, body
+- [x] 19. Close out: complete log, PR titled `[SUCCESS]`/`[FAIL]`, body
   Hypothesis / Results / Collateral.
 
 ## 3. Results
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-13 | (baseline) severity-copula reference cell, gaussian contr unchanged | 1 | RCA 5.20832162095758, CA 2.1698859787106297, RCB 2.3471849734654717 | 8/21 | 1.6308337314805847 | baseline |
+| 2026-08-13 | gaussian_mlp (hidden 16, 5 features, lr 0.01, wd 1e-4, 500 ep) in the contribution slot | 1 | RCA 4.530240 (band upgrade >5 -> 2-5), CA 2.340982 (regressed), RCB 2.135299 | 9/21 | 1.733961 | **not kept — mean rose (CG 3.978 -> 6.581); [FAIL], no Stage 2** |
 
 ## 4. Notes
 
@@ -168,3 +170,28 @@ untouched; referenced configs/scores verified to exist).
    family. RCA needs < 5 from 5.21 for the band upgrade, i.e. a 4%
    score drop; autoregressive compounding over 24 rounds may amplify
    the per-round differences either way.
+7. Stage 1 (sim job 29317620, seed 42, 100 eps, repeats_used 500/500):
+   the hypothesis half-worked. RCA 5.208 -> 4.530 — the declared band
+   upgrade (> 5 into 2-5) — and RCB 2.347 -> 2.135, with strong
+   collateral gains on RCC 1.601 -> 1.196, CB 1.048 -> 0.888 (the 9th
+   row <= 1), CF 1.767 -> 1.594, CD 1.525 -> 1.386. But CA regressed
+   2.170 -> 2.341 and CG exploded 3.978 -> 6.581 (+2.60), dragging SC
+   up too (2.564 -> 3.028); the stack mean rose 1.6308 -> 1.7340. Per
+   §2 the experiment is NOT kept — the mean must not rise — so Stage 2
+   is skipped and the experiment closes as [FAIL].
+8. Post-mortem: this is PR #148's collateral, amplified. Sharper
+   individual stickiness (state-dependent sigma) buys the response rows
+   (RCA, RCB, RCC) exactly as hypothesized, but with independent
+   per-agent sampling the group means stop converging — CG, already the
+   independence-floor row, pays for it. In the categorical family the
+   marginal-fit gains were large enough to absorb the CG hit (mean fell
+   there); in the gaussian family they are not. Two forward paths for
+   the next experiment: (a) a within-group shared latent (copula) in
+   the CONTRIBUTION slot — §6 names it the obvious follow-up, PR #149
+   stopped at the preflight gate with rho ~ 0.07 estimated on humans,
+   suggesting the latent must live at the group-trajectory level, not
+   the round level; (b) keep the MLP's response gains but restore group
+   convergence via features (own-vs-group-mean gap already in the
+   feature pool did not save it here). The gaussian_mlp machinery
+   (estimator, registry, adapter, tests, preflight script) is sound and
+   reusable regardless.
