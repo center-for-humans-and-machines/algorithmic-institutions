@@ -92,7 +92,57 @@ class SameGroupEdgeEncoder(th.nn.Module):
         return same.float().unsqueeze(-1)  # (E, n_rounds, 1)
 
 
-EDGE_ENCODERS = {"same_group": SameGroupEdgeEncoder}
+class ARPunishmentEdgeEncoder(th.nn.Module):
+    """Autoregressive within-round conditioning on groupmate punishments.
+
+    Two channels per edge and round: a gate that is on only where source and
+    destination share the sub-group at that round *and* the source agent's
+    punishment is already decided (``autoreg_mask`` false), and the gated,
+    normalised punishment of the source agent. The channel therefore carries
+    only the manager's own already-decided punishments of the same round and
+    the same agent group -- never the other group's punishments (the graph is
+    fully connected across sub-groups) and never any current-round
+    contribution.
+
+    Relational like ``SameGroupEdgeEncoder``, so it reads its state at both
+    endpoints via ``edge_index`` instead of using the per-node encoders.
+    """
+
+    masked_key = "punishment_masked"
+    mask_key = "autoreg_mask"
+
+    def __init__(self, name="ar_punishment", n_levels=31, **_):
+        super().__init__()
+        assert n_levels > 1, f"ar_punishment needs n_levels > 1, got {n_levels}"
+        self.name = name
+        self.n_levels = n_levels
+        self.size = 2
+
+    def forward(self, *, edge_index, **state):
+        # agent_group, punishment_masked, autoreg_mask: (N, n_rounds), each
+        # flattened with per-batch node offsets so edge_index gathers endpoints
+        # directly (no batch handling).
+        for key in ("agent_group", self.masked_key, self.mask_key):
+            assert key in state, (
+                f"ar_punishment requires '{key}' in the edge state; the data "
+                "passed to encode() must carry agent_group, "
+                f"{self.masked_key} and {self.mask_key} "
+                "(see apply_mask_pattern / predict_autoreg)"
+            )
+        ag = state["agent_group"]
+        y_masked = state[self.masked_key]
+        undecided = state[self.mask_key].bool()
+        row, col = edge_index
+        gate = (ag[row] == ag[col]) & ~undecided[row]  # (E, n_rounds) bool
+        gate = gate.float().unsqueeze(-1)  # (E, n_rounds, 1)
+        value = y_masked[row].float().unsqueeze(-1) / (self.n_levels - 1)
+        return th.cat([gate, gate * value], dim=-1)  # (E, n_rounds, 2)
+
+
+EDGE_ENCODERS = {
+    "same_group": SameGroupEdgeEncoder,
+    "ar_punishment": ARPunishmentEdgeEncoder,
+}
 
 
 class EdgeEncoder(th.nn.Module):
