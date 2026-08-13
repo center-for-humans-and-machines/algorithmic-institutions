@@ -1,7 +1,7 @@
 from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU
 import numpy as np
 import torch as th
-from torch_scatter import scatter_add, scatter_mean
+from torch_scatter import scatter_add, scatter_mean, scatter_softmax
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
 
@@ -72,6 +72,29 @@ class GlobalModel(th.nn.Module):
         # batch: [N] with max entry B - 1.
         out = th.cat([u, scatter_mean(x, batch, dim=0)], dim=-1)
         return self.global_mlp(out)
+
+
+class EdgeAttention(th.nn.Module):
+    """Single-head attention over each node's incoming edges.
+
+    Scores an edge from the same inputs the edge MLP sees and normalises the
+    scores over the incoming edges of each destination node. Tensors carry a
+    round axis, ``[E, n_rounds, F]``; ``scatter_softmax`` along dim 0 groups
+    over edges per destination and broadcasts along that round axis, so the
+    normalisation is per round.
+    """
+
+    def __init__(self, x_features, edge_features, u_features):
+        super().__init__()
+        in_features = 2 * x_features + edge_features + u_features
+        self.score = Lin(in_features=in_features, out_features=1)
+
+    def forward(self, src, dest, edge_attr, u, batch, col, n_nodes):
+        # src, dest: [E, F_x]; edge_attr: [E, F_e]; u: [B, F_u]
+        # batch: [E] with max entry B - 1; col: [E] destination node indices.
+        out = th.cat([src, dest, edge_attr, u[batch]], dim=-1)
+        out = self.score(out)
+        return scatter_softmax(out, col, dim=0, dim_size=n_nodes)
 
 
 class SameGroupEdgeEncoder(th.nn.Module):
