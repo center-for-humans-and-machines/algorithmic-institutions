@@ -81,7 +81,7 @@ untouched; referenced configs/scores verified to exist).
   per Notes 5: TEST binned CE < 2.351383364066987 passed (2.3477); TEST
   NLL 3.0913 > incumbent 2.6957 documented as a 1%-tail-row effect, not
   gating for a heteroscedastic sampler.
-- [ ] 10. Pre-flight `scripts/baselines/gaussian_mlp_preflight.py`
+- [x] 10. Pre-flight `scripts/baselines/gaussian_mlp_preflight.py`
   (teacher-forced, PR #148 pattern): NLL/CE, sigma(x) by state, implied
   repeat mass vs empirical 0.44; flat sigma or unmoved repeat mass -> stop,
   `[FAIL]` PR without a sim.
@@ -152,3 +152,19 @@ untouched; referenced configs/scores verified to exist).
    comparable to the categorical/GNN log-loss), which passed on CV and
    TEST; continuous TEST NLL is reported, not gating. The behavioral
    pre-flight (step 10) is the decisive go/no-go before any simulation.
+6. Pre-flight (step 10) — weak pass, proceed. sigma(x) is materially
+   state-dependent (test sd 1.75 vs incumbent 1.06, min 0.41 vs 1.80):
+   sharp at prev=20 (2.52 vs 3.53) as hypothesized, but WIDE at prev=0
+   (5.78 vs 4.17) — the Gaussian's unimodal answer to the zero state's
+   stay-or-jump mixture, and where the whole TEST CE margin is won
+   (prev=0 delta -0.786; prev=20 +0.217, mid ~0). Implied exact-repeat
+   mass moves toward the human rate but closes only ~4% of the gap
+   (test 0.2051 vs 0.1924, empirical 0.5030; concordant in 5/6 state
+   cells). Reading: the gate's letter passes (sigma not flat, repeat mass
+   moved), so Stage 1 runs; expectation set honestly to modest target
+   movement — the unimodal Gaussian cannot host a 0.85 repeat spike plus
+   a defection tail at prev=20 simultaneously, which is the structural
+   ceiling PR #148's one-hot transition escaped in the categorical
+   family. RCA needs < 5 from 5.21 for the band upgrade, i.e. a 4%
+   score drop; autoregressive compounding over 24 rounds may amplify
+   the per-round differences either way.
