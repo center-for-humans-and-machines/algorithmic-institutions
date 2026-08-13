@@ -88,6 +88,9 @@ step 16 is analysis-layer, not frozen).
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-13 | (baseline) severity-copula reference stack | 1 | CG 9.808514112722413, RCD 2.941928428442498, RCA 2.0829074791966917 | 10/21 | 1.687998 | baseline |
+| 2026-08-13 | peer attention + same_group edge input (sg) | 1 | CG 8.406637, RCD 2.757585, RCA 2.190154 | 10/21 | 1.619010 | CG/RCD improve, RCA regresses; no band upgrade |
+| 2026-08-13 | peer attention, no edge features (nosg) | 1 | CG 8.890287, RCD 3.345678, RCA 1.960076 | 10/21 | 1.624547 | CG/RCA improve, RCA crosses 2-5 -> 1-2; RCD regresses |
 
 ## Notes
 
@@ -103,3 +106,14 @@ step 16 is analysis-layer, not frozen).
 3. Training jobs submitted 2026-08-13: 29319275 (sg), 29319286 (nosg),
    identical recipes to the reference (seed 38381, 575 epochs); only
    `use_attention` and (sg) the `same_group` edge feature differ.
+4. Fit gate: clean 5-fold test log_loss (shuffle-ablation rows excluded)
+   sg 1.9822, nosg 2.0038 vs reference 2.0389 computed identically — both
+   variants beat the reference likelihood. Training took ~9 min per job.
+5. Stage 1: both variants improve the stack (mean 1.688 -> 1.62, SC 2.82 ->
+   2.4/2.2 as collateral) but each improves two declared targets and
+   regresses the third — sg is the Pareto-cleaner stack (CG 8.41, RCD 2.76,
+   best mean) yet strictly within-band; nosg crosses the RCA band boundary
+   (2.083 -> 1.960) by a 0.04 margin while breaking RCD by 0.40. The §2
+   "kept" clause reads "collectively or a selection", so whether nosg's
+   crossing legitimises a Stage 2 sweep is a judgment call — escalated to
+   the maintainer rather than decided unilaterally.
