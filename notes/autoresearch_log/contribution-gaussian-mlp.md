@@ -66,7 +66,7 @@ untouched; referenced configs/scores verified to exist).
 - [x] 5. Sim adapter: `model_type in ("gaussian", "gaussian_mlp")` for the
   heteroscedastic sampling branch in `src/aimanager/simulation/linear_ah.py`;
   nothing else.
-- [ ] 6. Config `configs/training/baselines/contribution/gaussian_mlp.yml`
+- [x] 6. Config `configs/training/baselines/contribution/gaussian_mlp.yml`
   via `make_shortlist_config.py` (add `--model`/`--hidden`), trimmed to
   ~96 sets x 12 settings (hidden [16,32,64] x lr [0.01,0.05] x epochs [500]
   x wd [0.0,1e-4]), seed 38381, 4 folds, show_ce.
