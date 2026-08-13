@@ -43,7 +43,87 @@
 
 ## 2. Plan
 
-(to be filled by the validated step list)
+Validated by the orchestrator 2026-08-13 (targets per §2, legality per §5,
+frozen surface per §8). Slug: `ar_gnn`. Design: one new gated edge feature
+(`ar_punishment`, 2 channels per edge-round: same-group AND decided gate,
+gated normalised source punishment) on top of the base punisher's exact
+node features; training reuses the in-repo any-order reveal-mask scheme
+(`apply_mask_pattern`); sampling reuses `predict_autoreg` with the RNN
+assert relaxed (the sim re-feeds full history per round, so the GRU
+advances once per round by construction).
+
+- [x] 1. Worktree + Claude commit identity + declaration (done at branch
+      creation).
+- [x] 2. Record the validated step list and rulings; commit.
+- [ ] 3. `src/aimanager/generic/graph.py`: add `ARPunishmentEdgeEncoder`
+      (config `name: ar_punishment`, `n_levels: 31`, size 2: same-group AND
+      decided gate; gated normalised source punishment from
+      `punishment_masked`/`autoreg_mask` at `edge_index[0]`), register in
+      `EDGE_ENCODERS`; docstring states the legality contract (own group,
+      same round, manager's own already-decided punishments only).
+- [ ] 4. `graph.py` `encode()`: forward `f"{y_name}_masked"` and
+      `autoreg_mask` (flattened `(N, T)`) into `edge_state` when present;
+      empty-`edge_encoding` path byte-unchanged.
+- [ ] 5. `graph.py` `predict_autoreg()`: drop the no-RNN assert; keep
+      `reset_rnn=True` per AR step; comment the contract (order from the
+      sim's seeded RNG; only round -1 consumed by `MultiManager`).
+- [ ] 6. Raven test file `src/aimanager/tests/test_ar_punisher.py`:
+      gate/value correctness (incl. mid-episode group switch); cross-group
+      invariance; undecided-agent invariance; no self-leak;
+      current-round-contribution invariance; train<->sim parity of the AR
+      edge construction; `predict_autoreg` with RNN (shapes, determinism,
+      later agents depend on earlier draws); save/load round-trip.
+- [ ] 7. Local: eval-suite tests + `scripts/tests` + `tests/baselines`
+      (frozen-surface proof), black + flake8 batched pass.
+- [ ] 8. Raven: `squeue -u certuer` PENDING check, then
+      `scripts/remote_test.sh` — full PyG suite green.
+- [ ] 9. Training config
+      `configs/training/artificial_humans/punishment/ar_gnn_50ep_doubled.yml`:
+      copy of `rnn_edge_50ep_doubled.yml` + `autoregression: true`,
+      `min_predicted: 1`, `max_predicted: 8`,
+      `edge_encoding: [{name: ar_punishment, n_levels: 31}]`,
+      `labels.architecture: node+edge+rnn+ar`, epochs 5000,
+      `eval_period: 250`,
+      `output_dir: artifacts/artificial_humans/punishment_ar_gnn_50ep_doubled`.
+- [ ] 10. Train on Raven: PENDING check, `scripts/train_cluster.sh ah
+      <config>`; poll; confirm 5 CV folds + final full-data fit + artifact.
+- [ ] 11. `scripts/fetch_cluster.sh artifacts/.../punishment_ar_gnn_50ep_doubled`;
+      assert checkpoint `autoregressive` flag, `edge_encoding`, and base
+      `x_encoding` parity; checksum vs Raven; commit (LFS).
+- [ ] 12. Convergence/selection analysis from the metrics parquet: mean CV
+      test log_loss per epoch -> epoch E; report the n_pred==8 marginal
+      curve vs base best 1.2029941249670393 and n_pred<8 curves (evidence
+      the AR channel is used). Log in Notes.
+- [ ] 13. (conditional) If the optimum is clearly earlier than 5000,
+      retrain at epochs E, fetch, commit; else keep the 5000-epoch
+      artifact.
+- [ ] 14. Stage-1 config
+      `23_2g8a_ar_gnn_self_gnn_contr_gnn_switch.yml`: copy of the reference
+      config, single manager `ar_gnn` (type `human`) -> new `.pt`, single
+      `ar_gnn_self` pairing, slugged output dir; protocol byte-identical.
+- [ ] 15. Simulate on Raven: PENDING check, `scripts/simulate_cluster.sh
+      <config>`; poll; confirm `per_round.parquet`. (D13: raise the shared
+      script's `--time` to 2h only if it actually walls out; log it.)
+- [ ] 16. `scripts/fetch_cluster.sh` + `python -m aimanager evaluate
+      <config>`.
+- [ ] 17. Keep gate (unrounded): PD < 1.5324969616723312, band upgrade =
+      PD <= 1 (or RPA <= 1, ref 1.1845929635267691); rows<=1 >= 10/21;
+      mean <= 1.687998. P-family reported as diagnostics vs both the
+      copula reference row and the GNN punisher's own `gnn_self` row
+      (ruling D11). Log all 21 rows unrounded.
+- [ ] 18. Gate fails or no band upgrade -> Notes + `[FAIL]` PR, stop.
+- [ ] 19. Stage-2 configs: the 7 remaining
+      `23_2g8a_ar_gnn_self_<contr>_contr_<switch>_switch.yml`, copies of
+      the matching severity_copula configs with only
+      managers/pairings/output_dir/figure_name swapped.
+- [ ] 20. Simulate (PENDING check per sync) + fetch + evaluate the 7.
+- [ ] 21. Add `ar_gnn` to PUNISHER_ORDER/PUNISHER_COLORS in
+      `evaluation_sweep.py` (analysis layer); sweep 24 dirs (8 base +
+      8 severity_copula + 8 ar_gnn) into `23_stack_sweep_ar_gnn`.
+- [ ] 22. Confirm the slot claim: PD bands + wins across the 8 contexts,
+      concordance panel, stack metrics net over contexts.
+- [ ] 23. Complete the log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis /
+      Results / Collateral; commits map to steps.
 
 ## 3. Results
 
@@ -65,3 +145,44 @@
    latent was essential there), PR #151 (contribution gaussian_mlp — better
    marginals bought with independent sampling explode CG; a warning that
    joint structure and marginal fit must be judged together).
+3. Planner finding: the repo already carries the AR machinery from an
+   abandoned legacy experiment — `train.py`'s `apply_mask_pattern` (any-order
+   reveal masks, 255 patterns for 8 agents), `GraphNetwork.predict_autoreg`,
+   and the checkpoint `autoregressive` flag. The legacy node-feature form
+   (`punishment_masked` as `x_encoding`, recoverable via
+   `git show b0695b7^:configs/.../autoregressive_50ep.yml`) would leak the
+   OTHER group's same-round punishments — the graph is fully connected
+   across sub-groups and one `get_punishments` call serves both groups —
+   so the AR conditioning must be a same-group-gated EDGE feature (the AR
+   analogue of copula ruling D1). The gate also fixes a train/inference
+   skew in `predict_autoreg`: undecided agents carry stale past punishments
+   in `y_masked` at sim time but are blanked in training; gated by the
+   decided mask, both are identically zero.
+4. Planner discrepancies, orchestrator rulings: (D1/D2) same-group-gated
+   edge feature adopted; gate does NOT require `punishment_valid`
+   (`manager_no_input` is constant within all 4512 cells — moot, simpler).
+   (D3) in-repo any-order subset-reveal scheme adopted unchanged — unbiased
+   over orders, zero training-code change, matches what sampling sees; no
+   per-round masks, no reweighting (ties to the simpler model). (D4) RNN
+   kept (`add_rnn: True`, base parity); `predict_autoreg`'s no-RNN assert
+   relaxed — safe because the sim re-feeds the full history with
+   `reset_rnn=True`, so the GRU advances once per round by construction.
+   (D5) epochs 5000, `eval_period: 250` (255-pattern eval dominates
+   runtime); conditional retrain at the CV-test-log-loss-optimal epoch E —
+   legal §5 hyperparameter search, nothing keyed to a metric. (D6) epochs
+   label kept in the artifact name; Stage-1 config written after training.
+   (D7) the `graph.py` edits count as this punisher experiment, not a
+   separate bug fix: additive, opt-in, inert for every existing artifact
+   (`SameGroupEdgeEncoder` precedent); the Raven suite must stay green as
+   proof. (D8) PENDING-job check before every rsync; fetched artifact
+   checksummed against Raven before commit. (D9) metrics parquet committed
+   as convention (LFS). (D10) no `autoregressive` key in the sim config;
+   the step-11 checkpoint assertion suffices. (D11) hard gates are only
+   the §2 stack metrics; P-family rows are diagnostics (the marginal model
+   itself changes — the copula guards assumed preserved marginals), read
+   against both the copula reference row and the GNN punisher's own
+   `gnn_self` row (`plots/simulation/23_2g8a_self_gnn_contr_gnn_switch`).
+   (D12) unrounded reporting; boundary calls escalated, copula precedent.
+   (D13) `run_simulation.sh` `--time` may be raised to 2h only on an
+   actual walltime failure (infrastructure, not frozen protocol); logged
+   if it happens.
