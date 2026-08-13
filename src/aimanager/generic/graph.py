@@ -97,6 +97,43 @@ class EdgeAttention(th.nn.Module):
         return scatter_softmax(out, col, dim=0, dim_size=n_nodes)
 
 
+class AttentionMetaLayer(th.nn.Module):
+    """``MetaLayer`` with attention-weighted instead of uniform aggregation.
+
+    A separate class rather than a flag on ``MetaLayer`` so pickled legacy
+    ``op1`` objects keep restoring the unmodified ``MetaLayer``.
+    """
+
+    def __init__(self, edge_model, node_model, global_model, edge_attention):
+        super().__init__()
+        self.edge_model = edge_model
+        self.node_model = node_model
+        self.global_model = global_model
+        self.edge_attention = edge_attention
+
+    def forward(self, x, edge_index, edge_attr, u, batch):
+        row = edge_index[0]
+        col = edge_index[1]
+        edge_batch = batch if batch is None else batch[row]
+
+        # Scored from the pre-update node and edge features; the weights are
+        # then applied to the edge model's output messages.
+        alpha = self.edge_attention(
+            x[row], x[col], edge_attr, u, edge_batch, col, x.size(0)
+        )
+
+        if self.edge_model is not None:
+            edge_attr = self.edge_model(x[row], x[col], edge_attr, u, edge_batch)
+
+        if self.node_model is not None:
+            x = self.node_model(x, edge_index, edge_attr, u, batch, edge_weight=alpha)
+
+        if self.global_model is not None:
+            u = self.global_model(x, edge_index, edge_attr, u, batch)
+
+        return x, edge_attr, u
+
+
 class SameGroupEdgeEncoder(th.nn.Module):
     """Derived per-edge feature: 1.0 if the two endpoints share a sub-group.
 
