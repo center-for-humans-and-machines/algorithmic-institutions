@@ -372,13 +372,19 @@ class GraphNetwork(th.nn.Module):
             edge_index = self.create_fully_connected(n_player, n_batch=n_batch)
         encoded["edge_index"] = edge_index
         encoded = {k: v.to(device) for k, v in encoded.items() if v is not None}
-        # Per-edge features (e.g. same_group). agent_group is flattened to
-        # (N, n_rounds) so edge_index gathers endpoints directly; only passed
-        # when present, so empty edge_encoding (punishment / legacy models)
-        # never requires it. Empty edge_encoding -> (E, n_rounds, 0).
+        # Per-edge features (e.g. same_group, ar_punishment). Every per-node
+        # tensor is flattened to (N, n_rounds) so edge_index gathers endpoints
+        # directly; each is only passed when present, so empty edge_encoding
+        # (punishment / legacy models) never requires any of them. Empty
+        # edge_encoding -> (E, n_rounds, 0).
         edge_state = {}
         if "agent_group" in data:
             edge_state["agent_group"] = data["agent_group"].flatten(0, 1).to(device)
+        y_masked_name = f"{self.y_name}_masked"
+        if y_masked_name in data:
+            edge_state[y_masked_name] = data[y_masked_name].flatten(0, 1).to(device)
+        if "autoreg_mask" in data:
+            edge_state["autoreg_mask"] = data["autoreg_mask"].flatten(0, 1).to(device)
         encoded["edge_attr"] = self.edge_encoder(
             edge_index=encoded["edge_index"], n_rounds=n_rounds, **edge_state
         )
