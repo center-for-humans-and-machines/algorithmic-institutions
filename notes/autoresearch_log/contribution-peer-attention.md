@@ -77,7 +77,7 @@ step 16 is analysis-layer, not frozen).
       **Maintainer ruling: [FAIL], no Stage 2** — neither variant improved
       all three declared targets; nosg's RCA crossing (1.960, margin 0.04)
       is noise-thin and RCD-taxed, the #147 pattern.
-- [ ] 15. Interpretability analysis (not a gate):
+- [x] 15. Interpretability analysis (not a gate):
       `scripts/data_analysis/peer_attention_weights.py` — alpha on same-group
       vs other-group edges, alpha vs peer extremeness, entropy vs uniform 1/7.
 - [~] 16. Stage 2 — SKIPPED per the step-14 ruling (no qualifying candidate).
@@ -121,3 +121,21 @@ step 16 is analysis-layer, not frozen).
    plus the nosg crossing being 0.04 wide and bought with a 0.40 RCD
    regression. The interpretability analysis (step 15) still runs for the
    PR notes.
+7. Attention-weight analysis (full-data fit, teacher-forced inputs): sg
+   learned the predicted structure — mean alpha 0.1940 same-group vs 0.0659
+   other-group (~2.9x; uniform 0.1429), entropy 0.92 x ln(7), mild
+   avoid-the-outlier tilt on other-group peers (Spearman -0.19) and
+   favour-the-outlier on own group (+0.10); both variants tilt toward
+   high-contributing peers. nosg collapsed to uniform (0.1430 / 0.1426,
+   entropy 0.995 x ln(7)) — the head only finds group structure when
+   same_group is an explicit edge input, and nosg's Stage-1 deltas
+   (including the RCA 1.960) therefore rode on a noise-scale perturbation
+   of the reference architecture, retroactively supporting the FAIL ruling.
+8. Post-mortem: correct conditioning structure, wrong binding constraint.
+   sg's genuine group-selective attention moved CG only 9.81 -> 8.41 —
+   consistent with PR #149's decomposition (the CG deficit is free-running
+   state-tracking loss, not missing peer conditioning). The durable products
+   (EdgeAttention, AttentionMetaLayer, use_attention flag, tests, weights
+   script) are reusable; the natural composition is attention conditioning
+   plus a mechanism that attacks free-running drift (scheduled sampling —
+   claimed by the parallel branch — or an episode-persistent latent).
