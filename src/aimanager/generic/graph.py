@@ -208,6 +208,7 @@ class GraphNetwork(th.nn.Module):
         add_rnn=True,
         add_edge_model=True,
         add_global_model=True,
+        use_attention=False,
         hidden_size=None,
         default_values={},
         **_,
@@ -233,8 +234,22 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+        self.use_attention = use_attention
 
         if op1 is None:
+            if use_attention:
+                assert add_edge_model, (
+                    "use_attention requires add_edge_model: attention weights "
+                    "the messages produced by the edge model"
+                )
+                # Built from the pre-widening feature sizes: it scores the raw
+                # inputs, not the edge model's output.
+                edge_attention = EdgeAttention(
+                    x_features=x_features,
+                    edge_features=edge_features,
+                    u_features=u_features,
+                )
+
             if add_edge_model:
                 edge_model = EdgeModel(
                     x_features=x_features,
@@ -266,7 +281,12 @@ class GraphNetwork(th.nn.Module):
             else:
                 gobal_model = None
 
-            self.op1 = MetaLayer(edge_model, node_model, gobal_model)
+            if use_attention:
+                self.op1 = AttentionMetaLayer(
+                    edge_model, node_model, gobal_model, edge_attention
+                )
+            else:
+                self.op1 = MetaLayer(edge_model, node_model, gobal_model)
 
             if add_rnn:
                 self.rnn_n = GRU(
@@ -502,6 +522,7 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            "use_attention",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
