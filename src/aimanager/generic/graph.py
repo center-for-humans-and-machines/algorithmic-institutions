@@ -409,13 +409,16 @@ class GraphNetwork(th.nn.Module):
         return predict
 
     def predict_autoreg(self, data, sample=True, reset_rnn=True, edge_index=None):
-        # `reset_rnn` accepted for signature parity with predict_independent
-        # (the autoreg model has no RNN). `edge_index` honoured if provided so
-        # batched callers don't pay to rebuild it per call.
+        # `reset_rnn` accepted for signature parity with predict_independent.
+        # `edge_index` honoured if provided so batched callers don't pay to
+        # rebuild it per call.
+        #
+        # RNN contract: the full round history is re-fed on every AR step and
+        # `self(encoded)` runs with `reset_rnn=True`, so the GRU advances once
+        # per round and never per AR step. The reveal order comes from the
+        # caller's seeded numpy RNG, and downstream `MultiManager` consumes
+        # only round -1.
         self.eval()
-        assert (
-            self.rnn_n is None and self.rnn_g is None
-        ), "Autoregressive predictions do not support RNN"
 
         n_batch, n_nodes, n_rounds = data["contribution"].shape
         if edge_index is None:
