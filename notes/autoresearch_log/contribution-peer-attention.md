@@ -63,24 +63,24 @@ step 16 is analysis-layer, not frozen).
       encoding); slugged output dirs `contribution_peer_attention_{sg,nosg}`.
 - [x] 9. Train both on Raven (`scripts/train_cluster.sh ah ...`), pending-job
       check first. Wall clock ~1-4 h each, parallel jobs.
-- [ ] 10. Fetch artifacts; log per-fold test log_loss vs the reference's
+- [x] 10. Fetch artifacts; log per-fold test log_loss vs the reference's
       1.9897 (sanity, not a gate); commit artifacts.
-- [ ] 11. Two Stage-1 sim configs copying the reference sim config with only
+- [x] 11. Two Stage-1 sim configs copying the reference sim config with only
       the contribution artifact path + slugged output dirs swapped; naming
       keeps the `..._self_<contr>_contr_<switch>_switch` pattern.
-- [ ] 12. Simulate both on Raven (~3 min each).
-- [ ] 13. Fetch, `python -m aimanager evaluate` locally, append Results rows
+- [x] 12. Simulate both on Raven (~3 min each).
+- [x] 13. Fetch, `python -m aimanager evaluate` locally, append Results rows
       (unrounded) vs the known baseline (no baseline re-run).
-- [ ] 14. Decision gate: better variant by Stage-1 targets (tie -> simpler,
+- [x] 14. Decision gate: better variant by Stage-1 targets (tie -> simpler,
       no same_group); kept iff targets improve, rows<=1 >= 10, mean <=
       1.687998; Stage 2 only on a band upgrade (CG < 5, RCD < 2, or RCA < 2).
+      **Maintainer ruling: [FAIL], no Stage 2** — neither variant improved
+      all three declared targets; nosg's RCA crossing (1.960, margin 0.04)
+      is noise-thin and RCD-taxed, the #147 pattern.
 - [ ] 15. Interpretability analysis (not a gate):
       `scripts/data_analysis/peer_attention_weights.py` — alpha on same-group
       vs other-group edges, alpha vs peer extremeness, entropy vs uniform 1/7.
-- [ ] 16. Stage 2 if band upgrade: candidate in the contribution slot across
-      the sweep family, extend `CONTR_ORDER`/`CONTR_MARKERS` in
-      `scripts/data_analysis/evaluation_sweep.py`, run the sweep, check the
-      slot claim across contexts.
+- [~] 16. Stage 2 — SKIPPED per the step-14 ruling (no qualifying candidate).
 - [ ] 17. Close out: complete the log, open the `[SUCCESS]`/`[FAIL]` PR
       (Hypothesis / Results / Collateral).
 
@@ -117,3 +117,7 @@ step 16 is analysis-layer, not frozen).
    "kept" clause reads "collectively or a selection", so whether nosg's
    crossing legitimises a Stage 2 sweep is a judgment call — escalated to
    the maintainer rather than decided unilaterally.
+6. Maintainer ruled [FAIL] without Stage 2: the strict all-targets reading,
+   plus the nosg crossing being 0.04 wide and bought with a 0.40 RCD
+   regression. The interpretability analysis (step 15) still runs for the
+   PR notes.
