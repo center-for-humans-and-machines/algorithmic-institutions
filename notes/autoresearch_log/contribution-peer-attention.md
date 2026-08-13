@@ -31,7 +31,58 @@
 
 ## Plan
 
-(to be filled by the validated step list)
+Validated by the orchestrator (targets per §2, all steps legal per §5,
+nothing on the frozen surface §8 — the `evaluation_sweep.py` marker edit in
+step 16 is analysis-layer, not frozen).
+
+- [x] 1. Worktree commit identity set (Claude / noreply@anthropic.com).
+- [ ] 2. Optional keyword-only `edge_weight=None` in `NodeModel.forward`
+      (`src/aimanager/generic/graph.py`): `None` keeps the exact
+      `scatter_mean` path; a weight switches to
+      `scatter_add(edge_attr * edge_weight, col, ...)`. Legacy pickled
+      `NodeModel`s hit the default and stay bit-identical.
+- [ ] 3. `EdgeAttention` module: `Lin(2*x + edge + u features -> 1)` scoring
+      `[src, dest, edge_attr, u[batch]]`, `scatter_softmax` over each
+      destination's incoming edges, returns `(E, n_rounds, 1)` weights.
+- [ ] 4. `AttentionMetaLayer`: mirrors `MetaLayer.forward`; scores from the
+      pre-update `x`/`edge_attr`, passes `edge_weight=alpha` to the node
+      model. Separate class so legacy artifacts keep restoring `MetaLayer`.
+- [ ] 5. Flag-gate `use_attention=False` in `GraphNetwork.__init__`; add to
+      `save()`'s `to_save` list; `load()` unchanged (legacy files omit the
+      key and default off).
+- [ ] 6. Raven unit tests `src/aimanager/tests/test_graph_attention.py`:
+      off-flag equals scatter_mean exactly; alpha sums to 1 per destination;
+      zeroed score head reproduces the mean; alpha responds to same_group;
+      save/load round-trip + legacy-checkpoint load.
+- [ ] 7. Run tests on Raven (`scripts/remote_test.sh`), with the
+      pending-job `squeue` check before the sync.
+- [ ] 8. Two training configs, exact copies of
+      `configs/training/artificial_humans/contribution/group_switching_contribution_50ep.yml`
+      plus `use_attention: true`: `peer_attention_sg.yml` (adds
+      `edge_encoding: same_group`) and `peer_attention_nosg.yml` (no edge
+      encoding); slugged output dirs `contribution_peer_attention_{sg,nosg}`.
+- [ ] 9. Train both on Raven (`scripts/train_cluster.sh ah ...`), pending-job
+      check first. Wall clock ~1-4 h each, parallel jobs.
+- [ ] 10. Fetch artifacts; log per-fold test log_loss vs the reference's
+      1.9897 (sanity, not a gate); commit artifacts.
+- [ ] 11. Two Stage-1 sim configs copying the reference sim config with only
+      the contribution artifact path + slugged output dirs swapped; naming
+      keeps the `..._self_<contr>_contr_<switch>_switch` pattern.
+- [ ] 12. Simulate both on Raven (~3 min each).
+- [ ] 13. Fetch, `python -m aimanager evaluate` locally, append Results rows
+      (unrounded) vs the known baseline (no baseline re-run).
+- [ ] 14. Decision gate: better variant by Stage-1 targets (tie -> simpler,
+      no same_group); kept iff targets improve, rows<=1 >= 10, mean <=
+      1.687998; Stage 2 only on a band upgrade (CG < 5, RCD < 2, or RCA < 2).
+- [ ] 15. Interpretability analysis (not a gate):
+      `scripts/data_analysis/peer_attention_weights.py` — alpha on same-group
+      vs other-group edges, alpha vs peer extremeness, entropy vs uniform 1/7.
+- [ ] 16. Stage 2 if band upgrade: candidate in the contribution slot across
+      the sweep family, extend `CONTR_ORDER`/`CONTR_MARKERS` in
+      `scripts/data_analysis/evaluation_sweep.py`, run the sweep, check the
+      slot claim across contexts.
+- [ ] 17. Close out: complete the log, open the `[SUCCESS]`/`[FAIL]` PR
+      (Hypothesis / Results / Collateral).
 
 ## Results
 
