@@ -96,22 +96,22 @@ advances once per round by construction).
       the AR channel is used). Log in Notes.
 - [x] 13. (conditional, triggered) Optimum clearly earlier than 5000:
       retrain at epochs 2750 (job 29318893), fetch, commit.
-- [ ] 14. Stage-1 config
+- [x] 14. Stage-1 config
       `23_2g8a_ar_gnn_self_gnn_contr_gnn_switch.yml`: copy of the reference
       config, single manager `ar_gnn` (type `human`) -> new `.pt`, single
       `ar_gnn_self` pairing, slugged output dir; protocol byte-identical.
-- [ ] 15. Simulate on Raven: PENDING check, `scripts/simulate_cluster.sh
-      <config>`; poll; confirm `per_round.parquet`. (D13: raise the shared
-      script's `--time` to 2h only if it actually walls out; log it.)
-- [ ] 16. `scripts/fetch_cluster.sh` + `python -m aimanager evaluate
+- [x] 15. Simulate on Raven: PENDING check, `scripts/simulate_cluster.sh
+      <config>`; poll; confirm `per_round.parquet`. (Job 29319185, 2m14s —
+      no walltime issue; D13 not needed.)
+- [x] 16. `scripts/fetch_cluster.sh` + `python -m aimanager evaluate
       <config>`.
-- [ ] 17. Keep gate (unrounded): PD < 1.5324969616723312, band upgrade =
+- [x] 17. Keep gate (unrounded): PD < 1.5324969616723312, band upgrade =
       PD <= 1 (or RPA <= 1, ref 1.1845929635267691); rows<=1 >= 10/21;
       mean <= 1.687998. P-family reported as diagnostics vs both the
       copula reference row and the GNN punisher's own `gnn_self` row
-      (ruling D11). Log all 21 rows unrounded.
-- [ ] 18. Gate fails or no band upgrade -> Notes + `[FAIL]` PR, stop.
-- [ ] 19. Stage-2 configs: the 7 remaining
+      (ruling D11). Log all 21 rows unrounded. **GATE FAILED** (note 8).
+- [x] 18. Gate fails or no band upgrade -> Notes + `[FAIL]` PR, stop.
+- [ ] ~~19. Stage-2 configs: the 7 remaining~~ (n/a — Stage 1 failed)
       `23_2g8a_ar_gnn_self_<contr>_contr_<switch>_switch.yml`, copies of
       the matching severity_copula configs with only
       managers/pairings/output_dir/figure_name swapped.
@@ -128,6 +128,7 @@ advances once per round by construction).
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-13 | AR GNN punisher (gated ar_punishment edge feature, epochs 2750 by CV) | 1 | PD 2.5750800730012529 (ref 1.5324969616723312 — regressed); RPA 1.1831865954389955 (ref 1.1845929635267691 — within-band) | 10/21 (ref 10/21) | 1.7058335780300315 (ref 1.6879978841849728 — regressed) | FAIL — no band upgrade possible, no Stage 2 |
 
 ## 4. Notes
 
@@ -214,3 +215,37 @@ advances once per round by construction).
    retrain at E=2750 (step 13 condition met; job 29318893). The 5000-epoch
    artifact stays committed for provenance; the 2750 one becomes the
    candidate.
+8. Stage 1 (sim job 29319185, 2m14s): **gate failed.** PD
+   2.5750800730012529 vs reference 1.5324969616723312 — the primary
+   target regressed badly against the copula punisher; RPA
+   1.1831865954389955 vs 1.1845929635267691 — a 0.0014 within-band move;
+   mean 1.7058335780300315 vs 1.6879978841849728 (regressed); rows<=1
+   10/21 (held). No band upgrade is reachable, so per §9.6 no Stage 2.
+   AR dispatch verified: the checkpoint flag drives `predict` (the sim
+   config carries no `autoregressive` override), and the independent path
+   would have hit the encoder's hard assert.
+9. The instructive contrast (D11 diagnostics, vs the GNN punisher's own
+   `gnn_self` row): the AR candidate improves EVERY P-family row of its
+   base family — PA 1.2666 -> 0.5948178628121934, PB 1.1138 ->
+   0.7529474373521686, PC 1.1602 -> 0.7470295004161448, PD 2.8228 ->
+   2.5750800730012529, RPA 1.5552 -> 1.1831865954389955, RPB 1.3435 ->
+   0.7335300047644394 — the GNN punisher family is now
+   marginal-competitive with the multinomial (likely mostly the 2750
+   epoch budget: the base's 1250 was under-trained). But the AR channel
+   recovers only a sliver of the within-round dependence: PD moves 2.82
+   -> 2.58 where the copula's explicit latent (rho = 0.3508) reaches
+   1.53. Teacher-forced conditioning on observed groupmate punishments
+   learns the small observable signal (the 0.008-nat CV gradient of note
+   7) but cannot represent the manager's round-level severity latent —
+   at sampling time the first-drawn agents carry no information about
+   the round's severity, so the joint spread stays near the independence
+   floor. The mechanism that closed PD is a *shared latent*, not
+   *observed conditioning*; the two are not substitutes.
+10. Follow-up seeds for the next agent: (a) severity-copula sampling ON
+    TOP of the AR-GNN marginals (the copula is marginal-preserving, so
+    the improved P-family of note 9 would be kept while the latent
+    supplies the spread); (b) a plain 2750-epoch retrain of the non-AR
+    base punisher to isolate how much of note 9 is budget rather than
+    mechanism; (c) a round-level latent severity input to the GNN
+    (learned, sampled at sim time) — the direct generative analogue of
+    the copula.
