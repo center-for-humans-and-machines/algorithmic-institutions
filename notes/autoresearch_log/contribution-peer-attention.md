@@ -36,32 +36,32 @@ nothing on the frozen surface §8 — the `evaluation_sweep.py` marker edit in
 step 16 is analysis-layer, not frozen).
 
 - [x] 1. Worktree commit identity set (Claude / noreply@anthropic.com).
-- [ ] 2. Optional keyword-only `edge_weight=None` in `NodeModel.forward`
+- [x] 2. Optional keyword-only `edge_weight=None` in `NodeModel.forward`
       (`src/aimanager/generic/graph.py`): `None` keeps the exact
       `scatter_mean` path; a weight switches to
       `scatter_add(edge_attr * edge_weight, col, ...)`. Legacy pickled
       `NodeModel`s hit the default and stay bit-identical.
-- [ ] 3. `EdgeAttention` module: `Lin(2*x + edge + u features -> 1)` scoring
+- [x] 3. `EdgeAttention` module: `Lin(2*x + edge + u features -> 1)` scoring
       `[src, dest, edge_attr, u[batch]]`, `scatter_softmax` over each
       destination's incoming edges, returns `(E, n_rounds, 1)` weights.
-- [ ] 4. `AttentionMetaLayer`: mirrors `MetaLayer.forward`; scores from the
+- [x] 4. `AttentionMetaLayer`: mirrors `MetaLayer.forward`; scores from the
       pre-update `x`/`edge_attr`, passes `edge_weight=alpha` to the node
       model. Separate class so legacy artifacts keep restoring `MetaLayer`.
-- [ ] 5. Flag-gate `use_attention=False` in `GraphNetwork.__init__`; add to
+- [x] 5. Flag-gate `use_attention=False` in `GraphNetwork.__init__`; add to
       `save()`'s `to_save` list; `load()` unchanged (legacy files omit the
       key and default off).
-- [ ] 6. Raven unit tests `src/aimanager/tests/test_graph_attention.py`:
+- [x] 6. Raven unit tests `src/aimanager/tests/test_graph_attention.py`:
       off-flag equals scatter_mean exactly; alpha sums to 1 per destination;
       zeroed score head reproduces the mean; alpha responds to same_group;
       save/load round-trip + legacy-checkpoint load.
-- [ ] 7. Run tests on Raven (`scripts/remote_test.sh`), with the
+- [x] 7. Run tests on Raven (`scripts/remote_test.sh`), with the
       pending-job `squeue` check before the sync.
-- [ ] 8. Two training configs, exact copies of
+- [x] 8. Two training configs, exact copies of
       `configs/training/artificial_humans/contribution/group_switching_contribution_50ep.yml`
       plus `use_attention: true`: `peer_attention_sg.yml` (adds
       `edge_encoding: same_group`) and `peer_attention_nosg.yml` (no edge
       encoding); slugged output dirs `contribution_peer_attention_{sg,nosg}`.
-- [ ] 9. Train both on Raven (`scripts/train_cluster.sh ah ...`), pending-job
+- [x] 9. Train both on Raven (`scripts/train_cluster.sh ah ...`), pending-job
       check first. Wall clock ~1-4 h each, parallel jobs.
 - [ ] 10. Fetch artifacts; log per-fold test log_loss vs the reference's
       1.9897 (sanity, not a gate); commit artifacts.
@@ -95,3 +95,11 @@ step 16 is analysis-layer, not frozen).
    mixture, behavioral-mode head, peer attention, scheduled sampling);
    scheduled sampling is already claimed by the parallel
    `auto/contribution-cg-schedsamp` branch.
+2. Back-compat verified two ways before training: the full Raven suite (97
+   tests incl. 7 new) passes, and the zeroed-score-head test pins the
+   attention path to reproduce the uniform mean exactly. `save()` pickles
+   module objects, so the `AttentionMetaLayer` is a separate class and
+   legacy checkpoints restore the unmodified `MetaLayer` untouched.
+3. Training jobs submitted 2026-08-13: 29319275 (sg), 29319286 (nosg),
+   identical recipes to the reference (seed 38381, 575 epochs); only
+   `use_attention` and (sg) the `same_group` edge feature differ.
