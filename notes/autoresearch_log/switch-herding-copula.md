@@ -157,9 +157,9 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       `herding_copula_ar1` (switch token `herdcopar1`), identical protocol;
       Stage-1 evaluate; select the better SC under the same guards (§5
       variant selection). Log both rows.
-- [ ] 20. Selected arm fails the gate or improves within band only: Notes +
-      `[FAIL]` PR, stop (no sweep).
-- [ ] 21. Stage 2 (only after a Stage-1 band upgrade): 3 more configs
+- [x] 20. (n/a — arm B band-upgraded) Selected arm fails the gate or
+      improves within band only: Notes + `[FAIL]` PR, stop (no sweep).
+- [x] 21. Stage 2 (only after a Stage-1 band upgrade): 3 more configs
       `23_2g8a_herding_copula_self_{cat,gaussian,ridge}_contr_herdcopula_switch.yml`
       (same edits as step 16: copula switch artifact, copula multinomial
       punisher, slugged output dir), simulate, fetch, evaluate — with the
@@ -167,16 +167,16 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
       values: the 4 severity-copula gnn-switch dirs for the
       multinomial_copula contexts, the 4 original gnn-switch dirs for
       ridge/gaussian/gnn.
-- [ ] 22. Add `herdcopula` to `SWITCH_ORDER` in
+- [x] 22. Add `herdcopula` to `SWITCH_ORDER` in
       `scripts/data_analysis/evaluation_sweep.py` (analysis layer;
       precedent D5 — no SWITCH_COLORS exists, `fig_switch_unrolled`
       tolerates a third column), sweep the 8 original dirs + the 8
       severity-copula dirs + the 4 new dirs into
       `23_stack_sweep_herding_copula`.
-- [ ] 23. Confirm the slot claim: SC beats the gnn switch in (nearly) all
+- [x] 23. Confirm the slot claim: SC beats the gnn switch in (nearly) all
       16 contexts; check the SC concordance panel and switch slot report;
       verify SA/SB/RSA guards stack-wide; log with unrounded scores.
-- [ ] 24. Complete the log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis /
+- [x] 24. Complete the log; PR `[SUCCESS]`/`[FAIL]`, body Hypothesis /
       Results / Collateral; commits map to steps.
 
 ## 3. Results
@@ -185,7 +185,7 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
 |---|---|---|---|---|---|---|
 | 2026-08-13 | arm A: copula rho=0.116482333585783 | 1 | SC 2.905083072873831 (ref 2.816005922026658) | 11/21 (ref 10/21) | 1.6286919320 (ref 1.6879978842) | fail: target regressed |
 | 2026-08-13 | arm B: rho + AR(1) phi=0.70366020589033 | 1 | SC 1.9138838624773855 (ref 2.816005922026658) | 11/21 (ref 10/21) | 1.5863134655 (ref 1.6879978842) | pass (winner) — band upgrade 2-5 -> 1-2 |
-| 2026-08-13 | arm B, 16-context sweep vs gnn switch | 2 | SC wins 14/16 (2 losses +0.03/+0.08 = noise); slot mean 2.6273 -> 2.0816 | 73 -> 72 stack-wide; sane 8: 56 -> 55 | improves 12/16; sane 8: 1.7522 -> 1.6695 | SC confirmed; RSA boundary escalated to maintainer |
+| 2026-08-13 | arm B, 16-context sweep vs gnn switch | 2 | SC wins 14/16 (2 losses +0.03/+0.08 = noise); slot mean 2.6273 -> 2.0816 | 73 -> 72 stack-wide; sane 8: 56 -> 55 | improves 12/16; sane 8: 1.7522 -> 1.6695 | SC confirmed; RSA boundary escalated -> maintainer ruled SUCCESS (merge decision at PR review) |
 
 ## 4. Notes
 
@@ -428,3 +428,8 @@ frozen surface per §8). Slug: `herding_copula`; switch label: `herdcopula`.
     co-switching, diluting the punishment -> switch response where the
     contribution model is linear. Escalated to the maintainer per §2/§9
     rather than self-ruling [SUCCESS].
+21. Maintainer ruled (2026-08-13): open as [SUCCESS]; the merge decision
+    stays with PR review. RSA dilution in linear-contribution contexts
+    goes on record as collateral and as a seed for a follow-up (note 12's
+    round-dependent rho — herding concentrated at round 3 would add less
+    late-round co-switching, where RSA lives).
