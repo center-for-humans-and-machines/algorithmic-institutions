@@ -81,8 +81,8 @@ step 16 is analysis-layer, not frozen).
       `scripts/data_analysis/peer_attention_weights.py` — alpha on same-group
       vs other-group edges, alpha vs peer extremeness, entropy vs uniform 1/7.
 - [~] 16. Stage 2 — SKIPPED per the step-14 ruling (no qualifying candidate).
-- [ ] 17. Close out: complete the log, open the `[SUCCESS]`/`[FAIL]` PR
-      (Hypothesis / Results / Collateral).
+- [x] 17. Close out: complete the log, open the `[SUCCESS]`/`[FAIL]` PR
+      (Hypothesis / Results / Collateral) — PR #153.
 
 ## Results
 
