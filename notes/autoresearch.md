@@ -23,10 +23,9 @@ Three numbers, judged in this order, all from one `evaluation/scores.csv`
    Their scores must drop; no movement means the hypothesis failed, whatever
    else moved.
 2. **Rows <= 1** — rows at or below the human-vs-human noise ceiling, whole
-   stack. Must not fall; raising it is the headline. **Baseline: 10 / 21**
-   (RSA sits at 1.001, just over).
+   stack. Must not fall; raising it is the headline. **Baseline: 11 / 21.**
 3. **Mean score** — average over all 21 rows. Must not rise; breaks ties.
-   **Baseline: 1.69.**
+   **Baseline: 1.76.**
 
 An experiment is **kept** iff its target rows improve and neither stack
 metric regresses — you cannot buy your targets by quietly breaking the rest
@@ -42,18 +41,18 @@ valuable notes, not a success.
 ## 3. Evaluation protocol (two-stage)
 
 The metrics are a property of a full stack, so candidates are always scored
-inside one. **Reference stack** (current, since PR #146) — only the human
-maintainer updates this definition, when a candidate is accepted:
+inside one. **Reference stack** (current) — only the human maintainer
+updates this definition, when a candidate is accepted:
 
 | slot | model | artifact |
 |---|---|---|
 | contribution | `gnn` | `artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt` |
 | switch | `gnn` | `artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt` |
-| punisher | `lin_multinomial` + severity-copula sampling | `artifacts/baselines/punishment_multinomial_severity_copula.joblib` |
+| punisher | `lin_multinomial` | `artifacts/baselines/punishment_multinomial_best_with_contr.joblib` |
 
 Reference sim config (also carries the shared `valid_model`, which is
 plumbing, not a slot):
-`configs/simulation/manager_testing/23_2g8a_severity_copula_self_gnn_contr_gnn_switch.yml`.
+`configs/simulation/manager_testing/23_2g8a_self_gnn_contr_gnn_switch.yml`.
 
 - **Stage 1 — iterate.** Swap your candidate into its slot of the reference
   stack; one simulation (§7 protocol) + one evaluation.
@@ -105,21 +104,20 @@ Ties go to the simpler model.
 ## 6. Where to aim
 
 The failing rows depend on the base model — the GNN contributor fails CG
-hardest, the categorical linear fails RCA; the multinomial punisher failed
-only PD until the severity copula closed it (PR #146), gaussian/ridge fail
-everything *but* PD. Do not work from a fixed target list: fetch your base
-model's deficit profile, then declare targets.
+hardest, the categorical linear fails RCA; the multinomial punisher fails
+only PD, gaussian/ridge everything *but* PD. Do not work from a fixed
+target list: fetch your base model's deficit profile, then declare targets.
 
-**Where the numbers live** (current sweep: `23_stack_sweep_severity_copula`):
+**Where the numbers live:**
 
 | resource | what it gives you |
 |---|---|
-| `plots/data_analysis/evaluation/23_stack_sweep_severity_copula/score_matrix.csv` | every score: 40 stacks x 21 rows |
-| `.../23_stack_sweep_severity_copula/slot_report.jpg` | each slot option's rows, averaged over the other slots |
-| `.../23_stack_sweep_severity_copula/slot_concordance.jpg` | whether a deficit / ranking is stable across contexts |
+| `plots/data_analysis/evaluation/23_stack_sweep_updated/score_matrix.csv` | every score: 32 stacks x 21 rows |
+| `.../23_stack_sweep_updated/slot_report.jpg` | each slot option's rows, averaged over the other slots |
+| `.../23_stack_sweep_updated/slot_concordance.jpg` | whether a deficit / ranking is stable across contexts |
 | `plots/simulation/23_*/evaluation/scores.csv` + `visuals/` | per-stack scores and one figure per row |
 | `notes/evaluation_metric_defs.md` | what each row measures |
-| PRs #140, #143, and #146 | the narrative: findings, shortcomings, per-slot verdicts |
+| PRs #140 and #143 | the narrative: findings, shortcomings, per-slot verdicts |
 
 **How to read it:** filter `score_matrix.csv` to your base model's contexts,
 average over the other two slots, rank your slot's rows with score >= 2 —
@@ -128,13 +126,8 @@ one context is noise, not a direction.
 
 **Known constraints, whatever the base model:** CG, PD, and SC share one
 root cause — independent per-agent sampling ignores between-participant
-correlation (the motivating comment on PR #140). The severity copula
-(PR #146) broke that floor in the punisher slot — PD 2.93 -> 1.53 in the
-reference stack, slot average 2.68 -> 1.07, best in 8/8 contexts, with SC
-improving in 7/8 as collateral — but the contribution and switch slots
-still sample independently, so CG and SC remain on the floor there; the
-same shared-latent mechanism in those slots is the obvious follow-up.
-CG is *anti-correlated* with the
+correlation (the motivating comment on PR #140); every current model sits on
+the independence floor there. CG is *anti-correlated* with the
 individual-fit rows (r ~ -0.7 to -0.9): buying group spread with worse
 individual behavior is the known failure mode. The switching deficit is
 confined to the first decision round (founding exodus, human mean net flow
