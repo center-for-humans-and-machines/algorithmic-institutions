@@ -61,7 +61,7 @@ PUNISHER_ROWS = ["PA", "PB", "PC", "PD", "RPA", "RPB"]
 
 CONTR_ORDER = ["gnn", "cat", "gaussian", "ridge"]
 SWITCH_ORDER = ["lin", "gnn"]
-PUNISHER_ORDER = ["multinomial", "multinomial_copula", "gnn", "gaussian", "ridge"]
+PUNISHER_ORDER = ["multinomial", "gnn", "gaussian", "ridge"]
 
 SLOT_CONTEXT = {
     "contr": ["switch", "punisher"],
@@ -81,7 +81,6 @@ BAND_NORM = BoundaryNorm([0, 1, 2, 5, 100], BAND_CMAP.N)
 
 PUNISHER_COLORS = {
     "multinomial": "#E69F00",
-    "multinomial_copula": "#D55E00",
     "gnn": "#0072B2",
     "gaussian": "#CC79A7",
     "ridge": "#009E73",
