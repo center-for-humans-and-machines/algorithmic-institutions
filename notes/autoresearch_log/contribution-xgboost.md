@@ -85,6 +85,7 @@
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
 | 2026-08-18 | (baseline) reference cell, gnn contr unchanged | 1 | CG 9.850260681510413, RCD 2.7723214938046725, RCA 2.0348663297861047 | 11/21 | 1.7595567320354153 | baseline |
+| 2026-08-18 | xgb 10-feature (600 trees, d3, lr .02, mcw 30, lam 30) in the contribution slot | 1 | CG 4.404848115505977 (band upgrade >5 → 2–5), RCD 1.145432470718043 (band upgrade 2–5 → 1–2), RCA 2.3289630761228737 (regressed) | 7/21 | 1.5113915203948058 | not kept — rows <= 1 fell 11 → 7 (marginal C block: CA 2.07, CB 1.23, CD 1.21, CF 1.01, RSA 1.19) |
 
 ## 4. Notes
 
@@ -119,3 +120,11 @@
    0.454 vs human 0.456; prev=20: 0.821 vs 0.851); documented weak spot at
    the focal midpoint (prev=10: model 0.382 vs human 0.704, n=388).
    **Go for Stage 1.**
+5. Stage-1 run 1 (10-feature): both CG and RCD band-upgrade and the mean
+   drops 1.76 → 1.51, but rows <= 1 falls 11 → 7 — the GNN's marginal
+   C-block advantage (CA/CB/CD/CF, plus RSA) does not survive the swap.
+   Not kept per §2. Plan revision (validated): one more Stage-1 iterate
+   with the refinement sweep's 5-feature CV-tie cell (rank 4, within one
+   SE) — §5's tie rule favored it anyway, and dropping round_number /
+   sizes / common_good tests whether the extra context features drive the
+   marginal drift under sim feedback. No other change.
