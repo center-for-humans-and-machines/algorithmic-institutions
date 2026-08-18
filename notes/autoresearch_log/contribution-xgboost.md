@@ -49,36 +49,40 @@
 
 ## 2. Plan
 
-1. [ ] Branch `auto/contribution-xgboost` + worktree; declaration committed.
-2. [ ] Add `xgboost` to `pyproject.toml`; `uv sync` in the worktree.
-3. [ ] Register `xgb` in `baseline_models.py` (categorical target,
+1. [x] Branch `auto/contribution-xgboost` + worktree; declaration committed.
+2. [x] Add `xgboost` to `pyproject.toml`; `uv sync` in the worktree.
+3. [x] Register `xgb` in `baseline_models.py` (categorical target,
    `model: xgb`; griddable keys `n_estimators`, `max_depth`,
    `learning_rate`, `min_child_weight`, `subsample`, `reg_lambda`;
    metric `log_loss`, scoring shared with multinomial). Guard
    `inspect_best_model.py` coefficient views (trees have no `coef_`;
    `--save-best` path must work).
-4. [ ] `configs/training/baselines/contribution/xgb.yml`: same data section
+4. [x] `configs/training/baselines/contribution/xgb.yml`: same data section
    as `cat.yml` (single-copy train split, `contribution_valid` mask,
    4 folds, seed 38381), prev-family feature blocks, modest hyperparameter
    grid (trees do their own feature selection — fewer feature-set combos,
    more `setting` cells than the linear configs).
-5. [ ] CV sweep locally (`run_baseline_cv.py`); pick rank-1;
+5. [x] CV sweep locally (`run_baseline_cv.py`); pick rank-1;
    `inspect_best_model.py --save-best` → locked-test evaluation →
    `artifacts/baselines/contribution_xgb_best.joblib`. Gate: TEST log loss
    must beat the incumbent categorical (cat_prev_onehot 1.882) — the GNN
-   reference is 1.9897.
-6. [ ] Teacher-forced pre-flight: sampled repeat rate + transition diagonal
+   reference is 1.9897. (Grid-edge finding → one refinement sweep,
+   `xgb_refine.yml`; gate re-anchored to the merged incumbent 2.2726, see
+   Notes 2 — the 1.882 stretch reference was beaten anyway.)
+6. [x] Teacher-forced pre-flight: sampled repeat rate + transition diagonal
    vs human (0.414 exact repeats); documented go/no-go.
-7. [ ] Extend `linear_ah.py` (`model_type == "xgb"` → multinomial sampling
+7. [x] Extend `linear_ah.py` (`model_type == "xgb"` → multinomial sampling
    path); local adapter smoke test (no PyG needed).
-8. [ ] Stage 1: `configs/simulation/manager_testing/
+8. [x] Stage 1: `configs/simulation/manager_testing/
    23_2g8a_self_xgb_contr_gnn_switch.yml` (reference config, contribution
    artifact swapped, own output dir); xgboost into the Raven venv; sim on
    Raven; fetch; `python -m aimanager evaluate`; score vs the reference
-   cell.
-9. [ ] Verdict per §2 (targets drop, 11/21 must not fall, mean 1.76 must
+   cell. (Revised after run 1: second iterate with the 5-feature tie-rule
+   cell, `contribution_xgb_lean.joblib`, see Notes 5.)
+9. [x] Verdict per §2 (targets drop, 11/21 must not fall, mean 1.76 must
    not rise, band upgrade required). If band upgrade: Stage 2 sweep
-   (8-config family + `evaluation_sweep.py`). PR either way.
+   (8-config family + `evaluation_sweep.py`). PR either way. (Not kept —
+   rows <= 1 regressed in both runs; no Stage 2; [FAIL] PR.)
 
 ## 3. Results
 
@@ -86,6 +90,7 @@
 |---|---|---|---|---|---|---|
 | 2026-08-18 | (baseline) reference cell, gnn contr unchanged | 1 | CG 9.850260681510413, RCD 2.7723214938046725, RCA 2.0348663297861047 | 11/21 | 1.7595567320354153 | baseline |
 | 2026-08-18 | xgb 10-feature (600 trees, d3, lr .02, mcw 30, lam 30) in the contribution slot | 1 | CG 4.404848115505977 (band upgrade >5 → 2–5), RCD 1.145432470718043 (band upgrade 2–5 → 1–2), RCA 2.3289630761228737 (regressed) | 7/21 | 1.5113915203948058 | not kept — rows <= 1 fell 11 → 7 (marginal C block: CA 2.07, CB 1.23, CD 1.21, CF 1.01, RSA 1.19) |
+| 2026-08-18 | xgb 5-feature lean (same setting, tie-rule cell) in the contribution slot | 1 | CG 4.004652090744679 (band upgrade >5 → 2–5), RCD 1.8096720704193887 (band upgrade 2–5 → 1–2), RCA 2.1954094554624577 (regressed) | 9/21 | 1.4481830207797590 | not kept — rows <= 1 fell 11 → 9 (CA 1.8318, CF 1.0292, RSA 1.0454); **experiment closed as [FAIL]** |
 
 ## 4. Notes
 
@@ -128,3 +133,23 @@
    SE) — §5's tie rule favored it anyway, and dropping round_number /
    sizes / common_good tests whether the extra context features drive the
    marginal drift under sim feedback. No other change.
+6. Stage-1 run 2 (lean): the leaner feature set recovers most of the
+   marginal damage (CB 0.89, CD 0.90, CE 0.90 new <= 1; CC 1.11) and gives
+   the best cell mean recorded in this line (1.4482 vs reference 1.7596),
+   but rows <= 1 lands at 9/21: CA 1.83, CF 1.029, RSA 1.045. CF and RSA
+   are within noise of the line; CA is not — every discrete per-round
+   sampler in the sweep history sits at CA ~1.7–2.3 (slot avg 1.94), so a
+   third variant would be chasing the draw, not the model. Closed as
+   [FAIL].
+7. What the next agent should know: (a) xgb is now the best per-agent
+   conditional model of contribution by likelihood (TEST 1.834 vs GNN
+   1.9897 / one-hot 1.882) and it halves CG (9.85 → 4.00) and SC (3.27 →
+   2.07) while band-upgrading RCD — the response structure is real and
+   cheap to get; (b) what it cannot buy is the GNN's marginal C block:
+   CA needs the RNN's own-trajectory memory (or a group/trajectory latent),
+   not a better per-round conditional; (c) RCB regressed in both runs
+   (1.93 → 2.39/2.47), the same punished-change collateral PR #148 saw —
+   a punishment-interaction feature stays a candidate; (d) the natural
+   follow-up is a hybrid: xgb (or one-hot) emission + a trajectory-level
+   latent state, per the PR #151 post-mortem; the xgb machinery
+   (XGBLevelClassifier, adapter path, configs) is sound and reusable.
