@@ -70,7 +70,7 @@ untouched).
 - [x] 7. Adapter verification test: load the bundle through `load_ah_model`,
   assert the leak guard passes, sampling takes the homoscedastic branch,
   integer levels in [0, 20], reproducible under a fixed torch seed.
-- [ ] 8. Add
+- [x] 8. Add
   `configs/simulation/manager_testing/23_2g8a_self_mlp_regressor_contr_gnn_switch.yml`
   — reference config with only the contribution artifact swapped, output
   dir slug `mlp_regressor` (underscored for the sweep parser convention).
