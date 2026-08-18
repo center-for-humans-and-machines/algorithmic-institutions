@@ -44,7 +44,7 @@ frozen-surface file touched; sim protocol copied unchanged).
 - [x] 3. MSE training branch in `src/aimanager/artificial_humans/train.py`
       keyed on the model's `y_encoding`; no entropy term for numeric; onehot
       path byte-identical.
-- [ ] 4. Unit test `src/aimanager/tests/test_numeric_head.py` (Raven);
+- [x] 4. Unit test `src/aimanager/tests/test_numeric_head.py` (Raven);
       run `scripts/remote_test.sh` + local eval-suite pytest.
 - [ ] 5. Training config
       `configs/training/artificial_humans/contribution/group_switching_contribution_50ep_cont_target.yml`
