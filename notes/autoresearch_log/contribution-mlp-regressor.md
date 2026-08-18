@@ -57,7 +57,7 @@ untouched).
 - [x] 3. Add `tests/baselines/test_mlp_regressor.py` (determinism, shape,
   beats intercept-only floor on a nonlinear synthetic target, registry
   contract) and run local pytest.
-- [ ] 4. Add `configs/training/baselines/contribution/mlp.yml` (shortlist:
+- [x] 4. Add `configs/training/baselines/contribution/mlp.yml` (shortlist:
   ridge rank-1 9-feature set, gaussian rank-1 12-feature set, 1–2 lean
   subsets; seed 38381; output `data/baselines/contribution_mlp_cv.csv`) and
   smoke-train one cell to confirm local trainability + per-fit wall-clock.
