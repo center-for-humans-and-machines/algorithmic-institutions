@@ -57,7 +57,7 @@ frozen-surface file touched; sim protocol copied unchanged).
       readout width 1.
 - [x] 8. Stage-1 simulate + fetch + `python -m aimanager evaluate`.
 - [x] 9. Log Stage-1 row; gate on kept-per-§2 + band upgrade.
-- [ ] 10. Stage 2 only on band upgrade: `..._gnn_contr_lin_switch` variant,
+- [x] 10. Stage 2 skipped (no band upgrade possible — unscorable); PR #155 opened: `..._gnn_contr_lin_switch` variant,
       sweep `23_stack_sweep_cont_target` over 2 new + 6 unchanged dirs;
       PR either way (`[SUCCESS]` / `[FAIL]`).
 
@@ -97,3 +97,5 @@ frozen-surface file touched; sim protocol copied unchanged).
    head is not noise to be removed, it IS the behavior. Any successor needs a
    distributional continuous head (e.g. mass at the {0, 20} corners plus a
    continuous middle), not a point estimate.
+5. PR #155 opened as [FAIL]; Stage 2 skipped per §9 step 6 (no band
+   upgrade). Branch left unmerged by design.
