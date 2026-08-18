@@ -41,7 +41,7 @@ frozen-surface file touched; sim protocol copied unchanged).
       scalar to [0,1], decode + squeeze to int64 (N, R) in 0-20, `sample`
       no-op, degenerate one-hot `y_pred_proba`; assert onehot in
       `predict_autoreg`.
-- [ ] 3. MSE training branch in `src/aimanager/artificial_humans/train.py`
+- [x] 3. MSE training branch in `src/aimanager/artificial_humans/train.py`
       keyed on the model's `y_encoding`; no entropy term for numeric; onehot
       path byte-identical.
 - [ ] 4. Unit test `src/aimanager/tests/test_numeric_head.py` (Raven);
