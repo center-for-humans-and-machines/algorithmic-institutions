@@ -54,7 +54,7 @@ untouched).
   `_SPEC["mlp"] = {hidden(int), weight_decay, lr, epochs(int)}`,
   `_METRIC["mlp"] = "mse"`, `resolve_model` continuous set, `build_model`
   branch, `predict_scores`/`floor_score` down the plain-MSE path.
-- [ ] 3. Add `tests/baselines/test_mlp_regressor.py` (determinism, shape,
+- [x] 3. Add `tests/baselines/test_mlp_regressor.py` (determinism, shape,
   beats intercept-only floor on a nonlinear synthetic target, registry
   contract) and run local pytest.
 - [ ] 4. Add `configs/training/baselines/contribution/mlp.yml` (shortlist:
