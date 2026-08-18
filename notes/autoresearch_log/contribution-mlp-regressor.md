@@ -46,7 +46,7 @@
 Validated 2026-08-18 (targets per §2, all steps legal per §5, frozen surface
 untouched).
 
-- [ ] 1. Add `scripts/baselines/mlp_regressor.py` — `MLPRegressor`
+- [x] 1. Add `scripts/baselines/mlp_regressor.py` — `MLPRegressor`
   (`Linear(in,hidden) -> tanh -> Linear(hidden,1)`, full-batch Adam on MSE,
   seed, output-bias warm start to `mean(y)`), sklearn-ish `fit`/`predict`
   only (no `predict_std`, no `nll`).
