@@ -53,7 +53,7 @@ frozen-surface file touched; sim protocol copied unchanged).
       `configs/simulation/manager_testing/23_cont_target_2g8a_self_gnn_contr_gnn_switch.yml`
       (contr token stays `gnn`; slug in prefix — sweep parser hard-codes
       contr tokens).
-- [ ] 7. Train on Raven (`train_cluster.sh ah`), fetch artifact, sanity-check
+- [x] 7. Train on Raven (`train_cluster.sh ah`), fetch artifact, sanity-check
       readout width 1.
 - [ ] 8. Stage-1 simulate + fetch + `python -m aimanager evaluate`.
 - [ ] 9. Log Stage-1 row; gate on kept-per-§2 + band upgrade.
@@ -73,3 +73,8 @@ frozen-surface file touched; sim protocol copied unchanged).
    (run `lin_multinomial_self`) and the 8-stack GNN-contributor average in
    `plots/data_analysis/evaluation/23_stack_sweep_updated/score_matrix.csv`
    (CG 9.65, RCA 2.85, RCD 2.62 averaged over other slots).
+2. Training (Raven job 29374671, COMPLETED): final-epoch 5-fold CV test MAE
+   4.30 for the numeric head vs the categorical reference's 4.72 greedy /
+   5.16 sampling; accuracy 0.14 vs 0.24 (expected for a conditional-mean
+   head). log_loss not comparable (degenerate one-hot proba by design).
+   Artifact verified on Raven: `y_encoding: numeric`, op2 readout width 1.
