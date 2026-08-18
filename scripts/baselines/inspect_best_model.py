@@ -61,7 +61,7 @@ def _row_setting(row, model, cfg):
 
 
 def _y(prep, model):
-    return prep["y_cat"] if model == "multinomial" else prep["y_cont"]
+    return prep["y_cat"] if model in ("multinomial", "xgb") else prep["y_cont"]
 
 
 def _fit(prep, model, feats, setting, seed):
