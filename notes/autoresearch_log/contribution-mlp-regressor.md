@@ -74,10 +74,10 @@ untouched).
   `configs/simulation/manager_testing/23_2g8a_self_mlp_regressor_contr_gnn_switch.yml`
   — reference config with only the contribution artifact swapped, output
   dir slug `mlp_regressor` (underscored for the sweep parser convention).
-- [ ] 9. Submit the Stage-1 simulation on Raven (squeue PENDING check before
+- [x] 9. Submit the Stage-1 simulation on Raven (squeue PENDING check before
   any rsync --delete), fetch
   `plots/simulation/23_2g8a_self_mlp_regressor_contr_gnn_switch`.
-- [ ] 10. `python -m aimanager evaluate` locally, log CG/RCD/RCA, rows <= 1,
+- [x] 10. `python -m aimanager evaluate` locally, log CG/RCD/RCA, rows <= 1,
   mean, band changes in this file; Stage 2 only on a band upgrade.
 
 ## 3. Results
@@ -85,6 +85,7 @@ untouched).
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
 | 2026-08-18 | (baseline) reference cell, gnn contr unchanged | 1 | CG 9.850260681510413, RCD 2.7723214938046725, RCA 2.0348663297861047 | 11/21 | 1.7595567320354153 | baseline |
+| 2026-08-18 | mlp 9-feat (hidden 32, lr 0.01, 200 ep, wd 0.001), ridge sampling | 1 | CG 5.136003 (> 5, no band change), RCD 0.658710 (2-5 -> <= 1), RCA 5.368534 (2-5 -> > 5, regressed) | 8/21 | 1.7416117324769202 | not kept — rows <= 1 fell 11 -> 8; **[FAIL]** |
 
 ## 4. Notes
 
@@ -113,3 +114,19 @@ untouched).
    distribution under homoscedastic sampling; first-layer importances
    are flat (no dominant feature). Pre-flight expectation tempered:
    RCA movement may be small; the sim decides.
+6. Stage-1 verdict: RCD two-band upgrade (best RCD in the line; xgb got
+   1.145) and CG nearly halved (9.85 -> 5.14, still > 5), but RCA
+   collapsed 2.03 -> 5.37 and the marginal C block paid the usual toll
+   (CA 0.77 -> 2.10, CD and CF also left <= 1): rows <= 1 fell 11 -> 8,
+   so the experiment is not kept despite the better mean (1.742 vs
+   1.760). Stage 2 skipped.
+7. The instructive finding: a *nonlinear* mean under ridge's
+   homoscedastic sampling still fails RCA exactly like the linear
+   models (ridge slot-avg RCA ~5.8) while xgb/GNN (categorical
+   emissions) sit at ~2. Combined with note 5 (binned LL worse than
+   ridge), RCA tracks the *emission/noise model*, not the mean's
+   nonlinearity — contribution-change distributions need the discrete,
+   state-dependent emission, not a symmetric Gaussian residual.
+   Collateral seeds: RCD 0.66 and CG -48% show the nonlinear
+   conditional-mean structure is real; SC 3.27 -> 2.88 and PD 2.94 ->
+   2.41 moved from the contribution slot alone.
