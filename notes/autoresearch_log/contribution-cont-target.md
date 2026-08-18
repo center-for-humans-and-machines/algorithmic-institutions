@@ -37,7 +37,7 @@ frozen-surface file touched; sim protocol copied unchanged).
 - [x] 1. Add `y_encoding` model_arg to `GraphNetwork`
       (`src/aimanager/generic/graph.py`): kwarg default `"onehot"`, assert in
       `{"onehot", "numeric"}`, pass to the y `IntEncoder`, add to `save()`.
-- [ ] 2. Numeric prediction path in `predict_encoded`: skip softmax, clamp
+- [x] 2. Numeric prediction path in `predict_encoded`: skip softmax, clamp
       scalar to [0,1], decode + squeeze to int64 (N, R) in 0-20, `sample`
       no-op, degenerate one-hot `y_pred_proba`; assert onehot in
       `predict_autoreg`.

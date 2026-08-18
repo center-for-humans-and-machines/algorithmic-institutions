@@ -343,8 +343,20 @@ class GraphNetwork(th.nn.Module):
     def predict_encoded(self, data, sample=True, reset_rnn=True):
         self.eval()
         y_logit = self(data, reset_rnn)
-        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
-        y_pred = self.y_encoder.decode(y_pred_proba, sample)
+        if self.y_encoding == "numeric":
+            # The numeric head is deterministic: it emits a single scalar in
+            # [0, 1] per node/round, so `sample` is a no-op. `y_pred_proba` is
+            # a degenerate one-hot kept only so downstream consumers
+            # (eval_model, create_confusion_matrix) keep working mechanically --
+            # log_loss is not meaningful for this model.
+            y_pred = self.y_encoder.decode(y_logit.clamp(0.0, 1.0), sample)
+            y_pred = y_pred.squeeze(-1)
+            y_pred_proba = th.nn.functional.one_hot(
+                y_pred, num_classes=self.y_levels
+            ).float()
+        else:
+            y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+            y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
     def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
@@ -366,6 +378,9 @@ class GraphNetwork(th.nn.Module):
         assert (
             self.rnn_n is None and self.rnn_g is None
         ), "Autoregressive predictions do not support RNN"
+        assert (
+            self.y_encoding == "onehot"
+        ), "Autoregressive predictions require y_encoding='onehot'"
 
         n_batch, n_nodes, n_rounds = data["contribution"].shape
         if edge_index is None:
