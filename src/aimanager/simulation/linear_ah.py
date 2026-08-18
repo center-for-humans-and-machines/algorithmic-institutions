@@ -73,7 +73,9 @@ class LinearAHAdapter:
         switch_sample=True,
         sample=True,
     ):
-        self.model_type = bundle["model"]  # 'ridge' | 'gaussian' | 'multinomial'
+        # 'ridge' | 'gaussian' | 'multinomial' | 'xgb' (xgb samples exactly
+        # like the multinomial: predict_proba over the 21 levels)
+        self.model_type = bundle["model"]
         self.estimator = bundle["estimator"]
         self.scaler = bundle["scaler"]
         self.features = list(bundle["features"])
@@ -229,7 +231,7 @@ class LinearAHAdapter:
         """Discrete levels [n]; sample=False -> deterministic. Randomness is
         drawn from the torch RNG so th.manual_seed governs linear and GNN
         sampling alike."""
-        if self.model_type == "multinomial":
+        if self.model_type in ("multinomial", "xgb"):
             proba = self.estimator.predict_proba(Xs)
             P = np.full((len(Xs), n_levels), 1e-12)
             P[:, self.estimator.classes_] = proba
