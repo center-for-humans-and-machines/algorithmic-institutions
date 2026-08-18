@@ -43,7 +43,42 @@
 
 ## 2. Plan
 
-(to be filled after validation)
+Validated 2026-08-18 (targets per §2, all steps legal per §5, frozen surface
+untouched).
+
+- [ ] 1. Add `scripts/baselines/mlp_regressor.py` — `MLPRegressor`
+  (`Linear(in,hidden) -> tanh -> Linear(hidden,1)`, full-batch Adam on MSE,
+  seed, output-bias warm start to `mean(y)`), sklearn-ish `fit`/`predict`
+  only (no `predict_std`, no `nll`).
+- [ ] 2. Wire `mlp` into `scripts/baselines/baseline_models.py` —
+  `_SPEC["mlp"] = {hidden(int), weight_decay, lr, epochs(int)}`,
+  `_METRIC["mlp"] = "mse"`, `resolve_model` continuous set, `build_model`
+  branch, `predict_scores`/`floor_score` down the plain-MSE path.
+- [ ] 3. Add `tests/baselines/test_mlp_regressor.py` (determinism, shape,
+  beats intercept-only floor on a nonlinear synthetic target, registry
+  contract) and run local pytest.
+- [ ] 4. Add `configs/training/baselines/contribution/mlp.yml` (shortlist:
+  ridge rank-1 9-feature set, gaussian rank-1 12-feature set, 1–2 lean
+  subsets; seed 38381; output `data/baselines/contribution_mlp_cv.csv`) and
+  smoke-train one cell to confirm local trainability + per-fit wall-clock.
+- [ ] 5. Run the full shortlist CV over the hidden/lr/weight_decay/epochs
+  grid; report top rows vs ridge's best CV MSE (test file stays closed).
+- [ ] 6. Extend `scripts/baselines/inspect_best_model.py` for `mlp`
+  (ridge-style homoscedastic path: `sigma = sqrt(train MSE)`, binned 21-way
+  test log-loss, int-cast `hidden`) and save
+  `artifacts/baselines/contribution_mlp_best.joblib`.
+- [ ] 7. Adapter verification test: load the bundle through `load_ah_model`,
+  assert the leak guard passes, sampling takes the homoscedastic branch,
+  integer levels in [0, 20], reproducible under a fixed torch seed.
+- [ ] 8. Add
+  `configs/simulation/manager_testing/23_2g8a_self_mlp_regressor_contr_gnn_switch.yml`
+  — reference config with only the contribution artifact swapped, output
+  dir slug `mlp_regressor` (underscored for the sweep parser convention).
+- [ ] 9. Submit the Stage-1 simulation on Raven (squeue PENDING check before
+  any rsync --delete), fetch
+  `plots/simulation/23_2g8a_self_mlp_regressor_contr_gnn_switch`.
+- [ ] 10. `python -m aimanager evaluate` locally, log CG/RCD/RCA, rows <= 1,
+  mean, band changes in this file; Stage 2 only on a band upgrade.
 
 ## 3. Results
 
