@@ -1,6 +1,7 @@
-"""Unit tests for the MLP point-regressor baseline and its registry wiring.
+"""Unit tests for the MLP point-regressor baseline, its registry wiring, and
+the simulation adapter running the saved mlp bundle unchanged.
 
-Two sides are covered:
+Three sides are covered:
   * scripts/baselines/mlp_regressor.py -- the estimator itself: seed
     determinism, predict contract, that the nonlinear mean actually buys
     something (beats both the intercept-only floor and a linear least-squares
@@ -11,6 +12,15 @@ Two sides are covered:
     expansion, and that scoring routes 'mlp' through the MSE path (same floor
     as ridge). Plus a joblib round-trip, since the CV driver persists fitted
     estimators into bundles.
+  * src/aimanager/simulation/linear_ah.py -- the claim that LinearAHAdapter
+    needs NO mlp-specific code: load_ah_model dispatches on the .joblib
+    extension, the current-valued leak guard runs for 'mlp' like any other
+    prev-anchored target, and level sampling falls through to the homoscedastic
+    `sample and sigma > 0` branch (the gaussian branch cannot be reached --
+    MLPRegressor has no predict_std). Driven with the REAL artifact
+    artifacts/baselines/contribution_mlp_best.joblib over the frozen fixture
+    episode, teacher-forced through the same env-state replay the feature-parity
+    test uses (episode_states from test_baseline_features).
 
 Everything here is CPU torch + numpy only (no PyG), so it runs locally.
 
@@ -33,6 +43,9 @@ from mlp_regressor import MLPRegressor  # noqa: E402
 SEED = 20250818
 # small + short: the point is the mechanism, not convergence quality
 N, EPOCHS, HIDDEN = 300, 600, 32
+
+BUNDLE_PATH = ROOT / "artifacts/baselines/contribution_mlp_best.joblib"
+N_CONTRIBUTIONS = 21
 
 
 def nonlinear_data(n=N, seed=SEED):
@@ -162,3 +175,130 @@ def test_joblib_roundtrip(data, fitted, tmp_path):
     loaded = joblib.load(path)
 
     assert np.array_equal(loaded.predict(X), fitted.predict(X))
+
+
+# --------------------------------------------------------------------------- #
+# simulation adapter, driven with the real saved bundle
+# --------------------------------------------------------------------------- #
+@pytest.fixture(scope="module")
+def bundle_path():
+    if not BUNDLE_PATH.exists():
+        pytest.skip(f"artifact not available: {BUNDLE_PATH}")
+    return str(BUNDLE_PATH)
+
+
+@pytest.fixture(scope="module")
+def bundle(bundle_path):
+    import joblib
+
+    return joblib.load(bundle_path)
+
+
+@pytest.fixture(scope="module")
+def episode():
+    """Teacher-forced env states for the frozen fixture episode -- the same
+    replay the feature-parity test drives the adapter with."""
+    from test_baseline_features import episode_states
+
+    states, n_agents, _ = episode_states("contribution")
+    return states, n_agents
+
+
+@pytest.fixture(scope="module")
+def adapter(bundle_path, episode):
+    import torch as th
+
+    from aimanager.simulation.linear_ah import load_ah_model
+
+    _, n_agents = episode
+    return load_ah_model(
+        bundle_path,
+        device=th.device("cpu"),
+        n_agents=n_agents,
+        n_contributions=N_CONTRIBUTIONS,
+    )
+
+
+def replay(adapter, states, seed):
+    """Whole-episode replay under a fixed torch seed -> [T, A] int64 levels."""
+    import torch as th
+
+    th.manual_seed(seed)
+    return np.stack(
+        [
+            adapter.predict(s, reset_rnn=(t == 0))[0].reshape(-1).numpy()
+            for t, s in enumerate(states)
+        ]
+    )
+
+
+def test_load_ah_model_returns_an_mlp_adapter(bundle_path, episode):
+    from handcrafted_grid import CURRENT_VALUED
+
+    from aimanager.simulation.linear_ah import LinearAHAdapter, load_ah_model
+    from test_baseline_features import CONTRIB_SAFE
+
+    _, n_agents = episode
+    # constructing at all means the prev-anchoring leak guard passed
+    ad = load_ah_model(bundle_path, n_agents=n_agents, n_contributions=N_CONTRIBUTIONS)
+
+    assert isinstance(ad, LinearAHAdapter)
+    assert ad.model_type == "mlp"
+    assert ad.target == "contribution" and not ad.is_switch
+    assert ad.autoregressive is False
+    assert ad.sample and ad.sigma > 0  # homoscedastic scalar sigma stored
+    assert not set(ad.features) & CURRENT_VALUED
+    # every feature the bundle uses is one the parity harness already checks
+    assert set(ad.features) <= set(CONTRIB_SAFE)
+
+
+def test_leak_guard_applies_to_the_mlp_bundle(bundle, episode):
+    """The guard is not model-type gated: a tampered mlp bundle still trips."""
+    from aimanager.simulation.linear_ah import LinearAHAdapter
+
+    _, n_agents = episode
+    tampered = {**bundle, "features": list(bundle["features"]) + ["contribution"]}
+    with pytest.raises(AssertionError, match="current-valued"):
+        LinearAHAdapter(tampered, n_agents=n_agents, n_contributions=N_CONTRIBUTIONS)
+
+
+def test_sampled_levels_are_seeded_and_in_range(adapter, episode):
+    states, n_agents = episode
+    a = replay(adapter, states, 7)
+    b = replay(adapter, states, 7)
+    c = replay(adapter, states, 8)
+
+    assert a.shape == (len(states), n_agents)
+    assert a.dtype == np.int64
+    assert a.min() >= 0 and a.max() <= N_CONTRIBUTIONS - 1
+    assert np.array_equal(a, b), "same seed must reproduce identical levels"
+    assert not np.array_equal(a, c), "noise must be applied -> seed must matter"
+
+
+def test_noise_comes_from_the_homoscedastic_branch(adapter, episode, monkeypatch):
+    """Pin the branch: the heteroscedastic path is unreachable (no sigma(x)
+    head), sigma == 0 collapses to the deterministic mean, and scaling sigma
+    scales the deviation from that mean under a fixed seed."""
+    states, _ = episode
+    assert not hasattr(adapter.estimator, "predict_std")
+
+    stored = adapter.sigma
+    monkeypatch.setattr(adapter, "sigma", 0.0)
+    det = replay(adapter, states, 7)
+    assert np.array_equal(det, replay(adapter, states, 99))
+
+    monkeypatch.setattr(adapter, "sigma", stored)
+    narrow = replay(adapter, states, 7)
+    monkeypatch.setattr(adapter, "sigma", 4.0 * stored)
+    wide = replay(adapter, states, 7)
+
+    assert not np.array_equal(narrow, det)
+    assert np.std(wide - det) > np.std(narrow - det)
+
+
+def test_sampled_levels_are_dispersed(adapter, episode):
+    lvl = replay(adapter, episode[0], 11)
+
+    assert len(np.unique(lvl)) > 5, "levels collapsed to a near-constant"
+    assert (lvl.std(axis=0) > 0).all(), "some agent is constant over the episode"
+    assert (lvl.std(axis=1) > 0).mean() > 0.9, "rounds without cross-agent spread"

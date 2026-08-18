@@ -67,7 +67,7 @@ untouched).
   (ridge-style homoscedastic path: `sigma = sqrt(train MSE)`, binned 21-way
   test log-loss, int-cast `hidden`) and save
   `artifacts/baselines/contribution_mlp_best.joblib`.
-- [ ] 7. Adapter verification test: load the bundle through `load_ah_model`,
+- [x] 7. Adapter verification test: load the bundle through `load_ah_model`,
   assert the leak guard passes, sampling takes the homoscedastic branch,
   integer levels in [0, 20], reproducible under a fixed torch seed.
 - [ ] 8. Add
