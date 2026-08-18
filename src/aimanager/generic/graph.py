@@ -135,6 +135,7 @@ class GraphNetwork(th.nn.Module):
         *,
         y_levels=21,
         y_name="contribution",
+        y_encoding="onehot",
         autoregressive=False,
         x_encoding=[],
         u_encoding=[],
@@ -147,9 +148,13 @@ class GraphNetwork(th.nn.Module):
         **_,
     ):
         super().__init__()
+        assert y_encoding in {
+            "onehot",
+            "numeric",
+        }, f"y_encoding must be 'onehot' or 'numeric', got {y_encoding!r}"
         self.x_encoder = Encoder(x_encoding, refrence=y_name)
         self.u_encoder = Encoder(u_encoding, aggregation="mean", refrence=y_name)
-        self.y_encoder = IntEncoder(encoding="onehot", name=y_name, n_levels=y_levels)
+        self.y_encoder = IntEncoder(encoding=y_encoding, name=y_name, n_levels=y_levels)
         self.bias_encoder = (
             Encoder(b_encoding, refrence=y_name) if b_encoding is not None else None
         )
@@ -166,6 +171,7 @@ class GraphNetwork(th.nn.Module):
         self.default_values = default_values
         self.y_levels = y_levels
         self.y_name = y_name
+        self.y_encoding = y_encoding
         self.autoregressive = autoregressive
 
         if op1 is None:
@@ -430,6 +436,7 @@ class GraphNetwork(th.nn.Module):
             "bias",
             "y_levels",
             "y_name",
+            "y_encoding",
             "autoregressive",
             "x_encoding",
             "u_encoding",

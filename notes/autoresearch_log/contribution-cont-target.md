@@ -34,7 +34,7 @@ Validated by the orchestrator against §2 (targets CG/RCD/RCA), §5 (single
 `y_encoding` parameter, behavioral rationale in the declaration), §8 (no
 frozen-surface file touched; sim protocol copied unchanged).
 
-- [ ] 1. Add `y_encoding` model_arg to `GraphNetwork`
+- [x] 1. Add `y_encoding` model_arg to `GraphNetwork`
       (`src/aimanager/generic/graph.py`): kwarg default `"onehot"`, assert in
       `{"onehot", "numeric"}`, pass to the y `IntEncoder`, add to `save()`.
 - [ ] 2. Numeric prediction path in `predict_encoded`: skip softmax, clamp
