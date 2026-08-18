@@ -61,7 +61,7 @@ untouched).
   ridge rank-1 9-feature set, gaussian rank-1 12-feature set, 1–2 lean
   subsets; seed 38381; output `data/baselines/contribution_mlp_cv.csv`) and
   smoke-train one cell to confirm local trainability + per-fit wall-clock.
-- [ ] 5. Run the full shortlist CV over the hidden/lr/weight_decay/epochs
+- [x] 5. Run the full shortlist CV over the hidden/lr/weight_decay/epochs
   grid; report top rows vs ridge's best CV MSE (test file stays closed).
 - [ ] 6. Extend `scripts/baselines/inspect_best_model.py` for `mlp`
   (ridge-style homoscedastic path: `sigma = sqrt(train MSE)`, binned 21-way
@@ -96,3 +96,13 @@ untouched).
    ridge is *not* deterministic in simulation. Its `elif self.sample and
    self.sigma > 0` branch is not gated on model type, so an `mlp` bundle
    carrying a scalar `sigma` needs no adapter sampling changes.
+3. Local trainability confirmed on the real train split (step 4 smoke:
+   mse 14.96 vs floor 41.68, ~4 s end to end; full 81-setting x 4-set
+   grid, 2.5 min wall-clock).
+4. Shortlist CV winner (seed 38381, 4 folds, train split only): ridge's
+   rank-1 9-feature set with hidden=32, wd=0.001, lr=0.01, epochs=200 —
+   CV MSE 14.276944 vs ridge's best 14.62869. Per-set bests: 9-feat
+   14.2769, 12-feat 14.4145, lean-7 14.7764, lean-5 14.8484, floor
+   41.6804. All four sets prefer lr 0.01 / 200-500 epochs; the nonlinear
+   gain over ridge is consistent (~0.35 MSE) but within one fold-SE
+   (~0.97) — the behavioral (sim) test is the decider, as expected.
