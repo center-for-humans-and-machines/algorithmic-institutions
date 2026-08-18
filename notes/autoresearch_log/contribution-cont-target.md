@@ -55,8 +55,8 @@ frozen-surface file touched; sim protocol copied unchanged).
       contr tokens).
 - [x] 7. Train on Raven (`train_cluster.sh ah`), fetch artifact, sanity-check
       readout width 1.
-- [ ] 8. Stage-1 simulate + fetch + `python -m aimanager evaluate`.
-- [ ] 9. Log Stage-1 row; gate on kept-per-§2 + band upgrade.
+- [x] 8. Stage-1 simulate + fetch + `python -m aimanager evaluate`.
+- [x] 9. Log Stage-1 row; gate on kept-per-§2 + band upgrade.
 - [ ] 10. Stage 2 only on band upgrade: `..._gnn_contr_lin_switch` variant,
       sweep `23_stack_sweep_cont_target` over 2 new + 6 unchanged dirs;
       PR either way (`[SUCCESS]` / `[FAIL]`).
@@ -65,6 +65,7 @@ frozen-surface file touched; sim protocol copied unchanged).
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-18 | numeric y_encoding head (deterministic MSE regression) | 1 | unscorable -- evaluate hard-fails at RCC (empty full-contributor stratum) | -- | -- | [FAIL] |
 
 ## 4. Notes
 
@@ -78,3 +79,21 @@ frozen-surface file touched; sim protocol copied unchanged).
    5.16 sampling; accuracy 0.14 vs 0.24 (expected for a conditional-mean
    head). log_loss not comparable (degenerate one-hot proba by design).
    Artifact verified on Raven: `y_encoding: numeric`, op2 readout width 1.
+3. Stage 1 (sim job 29374771, COMPLETED; 100 episodes, seed 42):
+   `python -m aimanager evaluate` raises `ValueError: RCC: empty strata
+   ['contrast']` -- in the entire simulation not a single contribution equals
+   20 (or 0). Simulated distribution: mean 11.03, std 2.09, range 3-19.
+   Reference-stack sim: mean 9.70, std 6.22, 13.4% at 20. Human data: mean
+   9.18, std 6.43, 13.1% at 20, 12.0% at 0. The deterministic conditional-mean
+   head erases the bimodal extremes entirely; the evaluation suite (frozen,
+   correctly) refuses to score a run with an empty RCC stratum.
+4. Verdict [FAIL], decided without shopping for a policy change: the failure
+   is not an evaluation technicality but the model -- a regression head that
+   never emits 0 or 20 cannot reproduce CA/CC/CE marginals either, so the
+   targets (CG, RCA, RCD) cannot be bought without breaking the stack. The
+   lower CV test MAE (4.30 vs 4.72, note 2) alongside the collapsed simulated
+   marginal is the cleanest demonstration yet that pointwise fit and
+   distributional fidelity diverge: the sampling entropy of the categorical
+   head is not noise to be removed, it IS the behavior. Any successor needs a
+   distributional continuous head (e.g. mass at the {0, 20} corners plus a
+   continuous middle), not a point estimate.
