@@ -63,7 +63,7 @@ untouched).
   smoke-train one cell to confirm local trainability + per-fit wall-clock.
 - [x] 5. Run the full shortlist CV over the hidden/lr/weight_decay/epochs
   grid; report top rows vs ridge's best CV MSE (test file stays closed).
-- [ ] 6. Extend `scripts/baselines/inspect_best_model.py` for `mlp`
+- [x] 6. Extend `scripts/baselines/inspect_best_model.py` for `mlp`
   (ridge-style homoscedastic path: `sigma = sqrt(train MSE)`, binned 21-way
   test log-loss, int-cast `hidden`) and save
   `artifacts/baselines/contribution_mlp_best.joblib`.
@@ -106,3 +106,10 @@ untouched).
    41.6804. All four sets prefer lr 0.01 / 200-500 epochs; the nonlinear
    gain over ridge is consistent (~0.35 MSE) but within one fold-SE
    (~0.97) — the behavioral (sim) test is the decider, as expected.
+5. Bundle saved (one sanctioned test-file opening): TEST MSE 14.4643 vs
+   ridge 14.5162 (floor 38.8808), sigma 3.6899, TEST binned 21-way
+   log-loss 2.4231 — worse than ridge 2.4053 and gaussian 2.3514. The
+   nonlinear mean buys ~0.36% MSE but not a better predictive
+   distribution under homoscedastic sampling; first-layer importances
+   are flat (no dominant feature). Pre-flight expectation tempered:
+   RCA movement may be small; the sim decides.
