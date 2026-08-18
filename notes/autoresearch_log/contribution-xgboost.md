@@ -93,3 +93,29 @@
    linear-baseline pipeline; the cat family's known CG-vs-stickiness
    trade-off (PR #148 collateral) is the main risk to the "mean must not
    rise" gate, offset by starting from the GNN's CG 9.85.
+2. First sweep (`data/baselines/contr_xgb.csv`, 192 cells): rank-1 CV
+   log_loss 2.1153 (prev_contribution, prev_punishment, is_first,
+   prev_contribution_mean_group, prev_contribution_mean_other) — already
+   beats the merged incumbent categorical (CV 2.4455, TEST 2.2726). Every
+   top-10 cell sits at the grid edge (max_depth 3, lr 0.05,
+   min_child_weight 30, reg_lambda 10) → one refinement sweep past the
+   edge (`xgb_refine.yml`: depth 2–3, lr 0.02–0.05, mcw 30–120, lambda
+   10–30, 600 trees) on the two winning context sets. Gate note: the plan's
+   TEST gate cited cat_prev_onehot's 1.882, but that artifact was never
+   merged; the binding gate is the merged incumbent (2.2726), with 1.882
+   kept as the stretch reference and the teacher-forced repeat rate as the
+   behavioral go/no-go.
+3. Refinement sweep (`contr_xgb_refine.csv`, 144 cells): rank-1 CV 2.1036 —
+   600 trees, max_depth 3, lr 0.02, min_child_weight 30 (now interior),
+   subsample 0.8, reg_lambda 30, 10 features (self + group context +
+   round_number). Top ~9 cells within one SE; rank-1 kept (also the
+   behaviorally richer set: round_number carries the endgame decline).
+   Saved via `--save-best`: **TEST log loss 1.8342** (floor 2.7180) — beats
+   the merged incumbent cat (2.2726), the GNN (1.9897), and the unmerged
+   one-hot stretch reference (1.882). Likelihood gate passed.
+4. Teacher-forced pre-flight (locked test split): sampled repeat rate
+   0.4006 (human convention 0.414; linear cat 0.193; PR #148 one-hot
+   0.401). Transition diagonal matched at the dominant anchors (prev=0:
+   0.454 vs human 0.456; prev=20: 0.821 vs 0.851); documented weak spot at
+   the focal midpoint (prev=10: model 0.382 vs human 0.704, n=388).
+   **Go for Stage 1.**
