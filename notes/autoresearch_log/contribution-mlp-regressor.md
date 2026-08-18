@@ -50,7 +50,7 @@ untouched).
   (`Linear(in,hidden) -> tanh -> Linear(hidden,1)`, full-batch Adam on MSE,
   seed, output-bias warm start to `mean(y)`), sklearn-ish `fit`/`predict`
   only (no `predict_std`, no `nll`).
-- [ ] 2. Wire `mlp` into `scripts/baselines/baseline_models.py` —
+- [x] 2. Wire `mlp` into `scripts/baselines/baseline_models.py` —
   `_SPEC["mlp"] = {hidden(int), weight_decay, lr, epochs(int)}`,
   `_METRIC["mlp"] = "mse"`, `resolve_model` continuous set, `build_model`
   branch, `predict_scores`/`floor_score` down the plain-MSE path.
