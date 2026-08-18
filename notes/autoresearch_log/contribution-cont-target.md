@@ -46,10 +46,10 @@ frozen-surface file touched; sim protocol copied unchanged).
       path byte-identical.
 - [x] 4. Unit test `src/aimanager/tests/test_numeric_head.py` (Raven);
       run `scripts/remote_test.sh` + local eval-suite pytest.
-- [ ] 5. Training config
+- [x] 5. Training config
       `configs/training/artificial_humans/contribution/group_switching_contribution_50ep_cont_target.yml`
       (copy + `y_encoding: numeric`, new output_dir, new architecture label).
-- [ ] 6. Stage-1 sim config
+- [x] 6. Stage-1 sim config
       `configs/simulation/manager_testing/23_cont_target_2g8a_self_gnn_contr_gnn_switch.yml`
       (contr token stays `gnn`; slug in prefix — sweep parser hard-codes
       contr tokens).
