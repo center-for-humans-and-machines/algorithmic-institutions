@@ -151,6 +151,7 @@ class GraphNetwork(th.nn.Module):
         default_values={},
         conform_mixture=False,
         conform_feature="own_grp_prev_mean_contr",
+        conform_gate_inputs=None,
         **_,
     ):
         super().__init__()
@@ -176,6 +177,12 @@ class GraphNetwork(th.nn.Module):
         self.autoregressive = autoregressive
         self.conform_mixture = conform_mixture
         self.conform_feature = conform_feature
+        if conform_gate_inputs not in (None, "gap"):
+            raise ValueError(
+                "conform_gate_inputs must be None (gate sees the hidden state "
+                f"only) or 'gap', got {conform_gate_inputs!r}"
+            )
+        self.conform_gate_inputs = conform_gate_inputs
 
         if op1 is None:
             if add_edge_model:
@@ -258,7 +265,10 @@ class GraphNetwork(th.nn.Module):
             # after every base module so the base parameters' RNG draws are
             # identical to a build with the flag off.
             if conform_mixture:
-                self.conform_gate = Lin(in_features=hidden_size, out_features=1)
+                # 'gap' additionally feeds the gate the conformity anchor and
+                # the agent's own previous contribution (both scaled to [0, 1]).
+                gate_features = hidden_size + (2 if conform_gate_inputs == "gap" else 0)
+                self.conform_gate = Lin(in_features=gate_features, out_features=1)
                 th.nn.init.constant_(self.conform_gate.bias, -2.0)
                 self.conform_log_sigma = th.nn.Parameter(
                     th.tensor(math.log(2.0), dtype=th.float)
@@ -322,6 +332,10 @@ class GraphNetwork(th.nn.Module):
         learned gate on the post-rnn node state mixes the two; the return value
         is *normalized* log-probabilities (softmax / CrossEntropyLoss consumers
         are unaffected because ``log_softmax(log p) == log p``).
+
+        With ``conform_gate_inputs == "gap"`` the gate additionally sees the
+        anchor and the agent's own previous contribution, so it can condition on
+        the conformity gap instead of hedging a state-independent level.
         """
         if "m" not in data:
             raise KeyError(
@@ -334,7 +348,23 @@ class GraphNetwork(th.nn.Module):
         b_logit = -((k - m.unsqueeze(-1)) ** 2) / (
             2 * th.exp(2 * self.conform_log_sigma)
         )
-        g = self.conform_gate(h)  # (N, R, 1); w = sigmoid(g)
+        gate_in = h
+        if self.conform_gate_inputs == "gap":
+            if "prev_own" not in data:
+                raise KeyError(
+                    "conform_gate_inputs='gap' is on but the encoded data has "
+                    "no 'prev_own' (the prev_contribution feature). Use "
+                    "GraphNetwork.encode to build the model input."
+                )
+            prev_own = data["prev_own"].to(a_logit.dtype)
+            # both anchors on the same [0, 1] scale as the encoded features
+            # (y_levels - 1 == 20 on the contribution grid)
+            scale = float(self.y_levels - 1)
+            gate_in = th.cat(
+                [h, (m / scale).unsqueeze(-1), (prev_own / scale).unsqueeze(-1)],
+                dim=-1,
+            )
+        g = self.conform_gate(gate_in)  # (N, R, 1); w = sigmoid(g)
         return th.logsumexp(
             th.stack(
                 [
@@ -383,6 +413,15 @@ class GraphNetwork(th.nn.Module):
             # raw 0-20 scale, NOT normalized: component B lives on the y grid.
             # (n_batch, n_player, n_rounds) -> flattened to (N, n_rounds) below.
             encoded["m"] = data[self.conform_feature].to(th.float)
+            if self.conform_gate_inputs == "gap":
+                if "prev_contribution" not in data:
+                    raise KeyError(
+                        "conform_gate_inputs='gap' requires 'prev_contribution' "
+                        "in the data passed to encode (training: "
+                        "create_torch_data; simulation: environment state)."
+                    )
+                # raw 0-20 scale like 'm'; scaled inside mix_conform.
+                encoded["prev_own"] = data["prev_contribution"].to(th.float)
         n_batch, n_player, n_rounds, _ = encoded["x"].shape
         encoded = {k: v.flatten(0, 1) for k, v in encoded.items() if v is not None}
         encoded["batch"] = th.tensor(
@@ -508,6 +547,7 @@ class GraphNetwork(th.nn.Module):
             "default_values",
             "conform_mixture",
             "conform_feature",
+            "conform_gate_inputs",
             "conform_gate",
             "conform_log_sigma",
         ]

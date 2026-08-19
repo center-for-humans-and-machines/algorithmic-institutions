@@ -30,7 +30,7 @@ def _make_model(seed=0, **kwargs):
         add_rnn=True,
         add_edge_model=True,
         add_global_model=False,
-        x_encoding=X_ENCODING,
+        x_encoding=kwargs.pop("x_encoding", X_ENCODING),
         edge_encoding=[],
         default_values={},
         **kwargs,
@@ -162,6 +162,106 @@ def test_save_load_round_trip_and_legacy_checkpoint():
     model.conform_mixture = False  # same base modules, categorical path only
     expected = model(model.encode(data, device="cpu"))
     assert th.equal(legacy(legacy.encode(data, device="cpu")), expected)
+
+
+def test_gap_gate_build_and_forward():
+    """Arm B: the gate takes the hidden state plus the two scaled anchors."""
+    model = _make_model(conform_mixture=True, conform_gate_inputs="gap")
+    assert model.conform_gate.weight.shape == (1, HIDDEN_SIZE + 2)
+    assert model.conform_gate.bias.item() == pytest.approx(-2.0)
+
+    data = _make_data()
+    encoded = model.encode(data, device="cpu")
+    assert encoded["prev_own"].shape == (N_NODES, N_ROUNDS)
+    assert encoded["prev_own"].dtype == th.float
+    out = model(encoded)
+    assert out.shape == (N_NODES, N_ROUNDS, 21)
+    assert th.isfinite(out).all()
+    assert th.allclose(th.log_softmax(out, -1), out, atol=1e-6)
+
+
+def test_gap_kwarg_default_is_arm_a_identical():
+    """The new kwarg must neither consume RNG nor change the arm-A build."""
+    arm_a = _make_model(conform_mixture=True)
+    explicit_none = _make_model(conform_mixture=True, conform_gate_inputs=None)
+
+    assert arm_a.conform_gate_inputs is None
+    assert explicit_none.conform_gate.weight.shape == (1, HIDDEN_SIZE)
+    for k, v in arm_a.state_dict().items():
+        assert th.equal(v, explicit_none.state_dict()[k]), k
+
+    data = _make_data()
+    out_a = arm_a(arm_a.encode(data, device="cpu"))
+    out_none = explicit_none(explicit_none.encode(data, device="cpu"))
+    assert th.equal(out_a, out_none)
+
+    # arm B draws the gate's extra columns from the RNG, but only after the
+    # base modules -- those must still match arm A exactly.
+    arm_b = _make_model(conform_mixture=True, conform_gate_inputs="gap")
+    for k, v in arm_a.state_dict().items():
+        if k.startswith("conform_gate."):
+            continue
+        assert th.equal(v, arm_b.state_dict()[k]), k
+
+
+def test_gap_gradients_reach_the_new_input_dims():
+    model = _make_model(conform_mixture=True, conform_gate_inputs="gap")
+    data = _make_data()
+    out = model(model.encode(data, device="cpu"))
+    y = data["contribution"].flatten(0, 1).unsqueeze(-1)
+    loss = -out.gather(-1, y).mean()
+    loss.backward()
+    grad = model.conform_gate.weight.grad
+    assert grad is not None and th.isfinite(grad).all()
+    # last two columns are the m / prev_own channels
+    assert grad[:, -2].abs().sum() > 0
+    assert grad[:, -1].abs().sum() > 0
+
+
+def test_gap_save_load_round_trip():
+    model = _make_model(conform_mixture=True, conform_gate_inputs="gap")
+    data = _make_data()
+    out = model(model.encode(data, device="cpu"))
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "model.pt")
+        model.save(path)
+        loaded = GraphNetwork.load(path, device="cpu")
+        assert loaded.conform_gate_inputs == "gap"
+        assert loaded.conform_gate.weight.shape == (1, HIDDEN_SIZE + 2)
+        assert th.equal(loaded(loaded.encode(data, device="cpu")), out)
+
+        # arm-A / reference artifacts predate the key -> default None
+        saved = th.load(path, map_location="cpu")
+        del saved["conform_gate_inputs"]
+        legacy_path = os.path.join(d, "legacy.pt")
+        th.save(saved, legacy_path)
+        legacy = GraphNetwork.load(legacy_path, device="cpu")
+    assert legacy.conform_gate_inputs is None
+
+
+def test_gap_rejects_unknown_gate_inputs():
+    with pytest.raises(ValueError):
+        _make_model(conform_mixture=True, conform_gate_inputs="anchor")
+
+
+def test_prev_contribution_present_in_encode_input():
+    """`prev_contribution` is structurally present in both model inputs: the
+    training tensors derive every `prev_*` key from `default_values` (which
+    always contains `contribution`), and the sim state does the same in
+    `Environment.reset_state`. The explicit guard only fires for a model whose
+    x_encoding does not already require the key."""
+    assert "prev_contribution" in _make_data()
+
+    model = _make_model(
+        conform_mixture=True,
+        conform_gate_inputs="gap",
+        x_encoding=[{"name": "agent_group", "n_levels": 2, "encoding": "onehot"}],
+    )
+    data = _make_data()
+    del data["prev_contribution"]
+    with pytest.raises(KeyError, match="prev_contribution"):
+        model.encode(data, device="cpu")
 
 
 def test_shift_sensitivity_towards_group_mean():
