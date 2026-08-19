@@ -118,21 +118,23 @@ within-band improvement, so one variant arm is run under §5's Stage-1
 selection before closing.
 
 - [x] 13. Record arm-A results and the revision (this edit).
-- [ ] 14. Arm B: gate input becomes concat [h, m/20, prev_own/20]
+- [x] 14. Arm B: gate input becomes concat [h, m/20, prev_own/20]
   (`conform_gate_inputs: gap` model_arg; arm-A behavior unchanged when
   absent); extend tests; remote suite green.
-- [ ] 15. Arm-B training config (copy of arm A + the flag, output_dir
+- [x] 15. Arm-B training config (copy of arm A + the flag, output_dir
   suffix `_gap`), submit, fetch.
-- [ ] 16. Arm-B sim config (suffix `_gap`), submit, fetch, evaluate,
+- [x] 16. Arm-B sim config (suffix `_gap`), submit, fetch, evaluate,
   diagnostic.
-- [ ] 17. Select the better arm by Stage-1 score; close per §2: band
-  upgrade -> Stage 2 sweep, else [FAIL] PR.
+- [x] 17. Select the better arm by Stage-1 score; close per §2: band
+  upgrade -> Stage 2 sweep, else [FAIL] PR. **Outcome: arm A selected;
+  no band upgrade in either arm; closed [FAIL], Stage 2 skipped.**
 
 ## 3. Results
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
 | 2026-08-19 | arm A: gated conformity mixture head (gate on hidden state only) | 1 | CG 8.429386 (9.850261), RCD 2.520467 (2.772321), RCA 2.257603 (2.034866) | 11/21 (=) | 1.6615 (1.7596) | within-band: CG still > 5, RCD still 2-5, RCA regressed in-band — no band upgrade; trying the gap-informed-gate variant (§5 Stage-1 selection) |
+| 2026-08-19 | arm B: gate additionally sees [m/20, prev_own/20] | 1 | CG 8.199154, RCD 2.952115, RCA 2.307859 | 11/21 (=) | 1.7001 | no band upgrade; RCD regressed past baseline — arm A selected; experiment closes [FAIL] |
 
 ## 4. Notes
 
@@ -173,3 +175,32 @@ selection before closing.
    of hedging a low global level. If arm B produces no band upgrade on a
    target row, the experiment closes as [FAIL] with the dose-response
    finding as the main contribution.
+7. Arm B training (SLURM 29398193): clean CV test log_loss 2.0147 (arm A
+   2.0009, reference 2.0389); sigma 2.28; learned gate weights w_m -1.26,
+   w_prev_own -0.49 — conformity opens where the group level and own
+   previous contribution are LOW, i.e. the model finds conformity mostly
+   in downward cascades.
+8. Arm B Stage 1: CG 8.20 (best CG of the experiment) but RCD 2.95
+   regressed past baseline — the low-norm-selective gate weakens the
+   upward pull on switchers entering high groups — and mean 1.7001 >
+   arm A's 1.6615. Realized peer slope 0.073 vs arm A's 0.076: the
+   reparametrized gate REDISTRIBUTED the conformity mass (20->20
+   stickiness reached human level, 0.779 vs 0.789) but did not raise the
+   total dose. Conclusion: the average gate level (~w 0.08) is pinned by
+   one-step teacher-forced NLL, not by the gate's inputs — no
+   parametrization of this head will open it further under the current
+   training objective.
+9. Closing verdict: [FAIL] per §2 — no target row changed band in either
+   arm (CG > 5 in both; RCD/RCA stayed 2-5, RCA regressed in-band). Arm A
+   is the selected representative (better mean, RCD, likelihood). Main
+   contributions for the next agent: (a) the CG mechanism is confirmed
+   and quantified — realized peer slope has a clean dose-response with CG
+   (+0.038 slope <-> -1.42 CG; human 0.227 needs ~5x arm A's dose);
+   (b) the structural mixture is the first peer-channel change that
+   improves held-out likelihood; (c) the binding constraint is the
+   training objective, not the architecture — the natural successor is
+   this conformity head trained under the [ABANDONED] schedsamp
+   curriculum (implementation complete and tested on that branch), where
+   self-generated histories should make the conform channel worth more
+   than w ~ 0.08 because own-history is no longer a perfect predictor of
+   the peer-correlated variance.
