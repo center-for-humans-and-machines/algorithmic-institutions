@@ -1,6 +1,9 @@
+import math
+
 from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU
 import numpy as np
 import torch as th
+import torch.nn.functional as F
 from torch_scatter import scatter_mean
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
@@ -132,6 +135,8 @@ class GraphNetwork(th.nn.Module):
         rnn_g=None,
         bias=None,
         b_encoding=None,
+        conform_gate=None,
+        conform_log_sigma=None,
         *,
         y_levels=21,
         y_name="contribution",
@@ -144,6 +149,8 @@ class GraphNetwork(th.nn.Module):
         add_global_model=True,
         hidden_size=None,
         default_values={},
+        conform_mixture=False,
+        conform_feature="own_grp_prev_mean_contr",
         **_,
     ):
         super().__init__()
@@ -167,6 +174,8 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+        self.conform_mixture = conform_mixture
+        self.conform_feature = conform_feature
 
         if op1 is None:
             if add_edge_model:
@@ -245,12 +254,27 @@ class GraphNetwork(th.nn.Module):
             else:
                 self.bias = None
 
+            # Conformity mixture (second component of the head). Built strictly
+            # after every base module so the base parameters' RNG draws are
+            # identical to a build with the flag off.
+            if conform_mixture:
+                self.conform_gate = Lin(in_features=hidden_size, out_features=1)
+                th.nn.init.constant_(self.conform_gate.bias, -2.0)
+                self.conform_log_sigma = th.nn.Parameter(
+                    th.tensor(math.log(2.0), dtype=th.float)
+                )
+            else:
+                self.conform_gate = None
+                self.conform_log_sigma = None
+
         else:
             self.op1 = op1
             self.op2 = op2
             self.rnn_n = rnn_n
             self.rnn_g = rnn_g
             self.bias = bias
+            self.conform_gate = conform_gate
+            self.conform_log_sigma = conform_log_sigma
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
 
@@ -272,6 +296,8 @@ class GraphNetwork(th.nn.Module):
             x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
         if self.rnn_g is not None:
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
+        # post-rnn node state (N, R, hidden); input of the conformity gate
+        h = x
         # op2 is a readout with no edge model (edge_features=0), but NodeModel
         # always aggregates edge_attr -- feed it an empty one so a non-empty
         # edge feature consumed by op1 does not leak into the readout's widths.
@@ -283,7 +309,41 @@ class GraphNetwork(th.nn.Module):
         x, _, _ = self.op2(x, edge_index, op2_edge_attr, u, batch)
         if self.bias:
             x = x + self.bias(data["b"])
-        return x
+        if not self.conform_mixture:
+            return x
+        return self.mix_conform(x, h, data)
+
+    def mix_conform(self, a_logit, h, data):
+        """Mix the categorical readout with a conformity component.
+
+        Component B is a discretized bell over the ``y_levels`` grid centered on
+        the agent's own-group leave-one-out previous-round mean contribution
+        (``data["m"]``, raw 0-20 scale) with learned width ``exp(log_sigma)``. A
+        learned gate on the post-rnn node state mixes the two; the return value
+        is *normalized* log-probabilities (softmax / CrossEntropyLoss consumers
+        are unaffected because ``log_softmax(log p) == log p``).
+        """
+        if "m" not in data:
+            raise KeyError(
+                "conform_mixture is on but the encoded data has no 'm' "
+                f"(the {self.conform_feature} feature). Use "
+                "GraphNetwork.encode to build the model input."
+            )
+        m = data["m"].to(a_logit.dtype)
+        k = th.arange(self.y_levels, dtype=a_logit.dtype, device=a_logit.device)
+        b_logit = -((k - m.unsqueeze(-1)) ** 2) / (
+            2 * th.exp(2 * self.conform_log_sigma)
+        )
+        g = self.conform_gate(h)  # (N, R, 1); w = sigmoid(g)
+        return th.logsumexp(
+            th.stack(
+                [
+                    F.logsigmoid(-g) + F.log_softmax(a_logit, -1),
+                    F.logsigmoid(g) + F.log_softmax(b_logit, -1),
+                ]
+            ),
+            dim=0,
+        )
 
     def encode(
         self,
@@ -313,6 +373,16 @@ class GraphNetwork(th.nn.Module):
                 else {}
             ),
         }
+        if self.conform_mixture:
+            if self.conform_feature not in data:
+                raise KeyError(
+                    f"conform_mixture requires '{self.conform_feature}' in the "
+                    "data passed to encode (training: create_torch_data; "
+                    "simulation: environment.update_own_grp_prev_mean_contr)."
+                )
+            # raw 0-20 scale, NOT normalized: component B lives on the y grid.
+            # (n_batch, n_player, n_rounds) -> flattened to (N, n_rounds) below.
+            encoded["m"] = data[self.conform_feature].to(th.float)
         n_batch, n_player, n_rounds, _ = encoded["x"].shape
         encoded = {k: v.flatten(0, 1) for k, v in encoded.items() if v is not None}
         encoded["batch"] = th.tensor(
@@ -436,6 +506,10 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            "conform_mixture",
+            "conform_feature",
+            "conform_gate",
+            "conform_log_sigma",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
