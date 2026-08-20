@@ -38,18 +38,18 @@
 Validated by the orchestrator (targets per §2, all steps legal per §5,
 frozen surface untouched).
 
-- [ ] 1. `graph.py`: add `AgentLatentEncoder` (GRU over the agent's episode
+- [x] 1. `graph.py`: add `AgentLatentEncoder` (GRU over the agent's episode
   trajectory -> mu/logvar), `agent_latent` kwarg on `GraphNetwork`
   (`z_dim = 0` when absent), `z` concatenated onto node features before op1,
   `sample_posterior()` and `sample_prior_z()`.
 - [ ] 2. `graph.py`: config gating + artifact load-compat — `agent_latent`
   and `z_encoder` in `to_save`; old checkpoints without the keys load with
   `z_dim == 0` and produce identical logits.
-- [ ] 3. `train.py`: ELBO — CE + beta * clamp(KL, free_bits), beta linear
+- [x] 3. `train.py`: ELBO — CE + beta * clamp(KL, free_bits), beta linear
   warmup over `anneal_epochs`, KL logged; disabled path byte-identical.
 - [ ] 4. `graph.py` `predict_independent`: sample `z ~ N(0,I)` per node when
   `reset_rnn` (or cache invalid), reuse across rounds; plain attribute cache.
-- [ ] 5. New training config `group_switching_contribution_50ep_type_latent.yml`
+- [x] 5. New training config `group_switching_contribution_50ep_type_latent.yml`
   (dim 4, hidden 20, beta 1.0, free_bits 0.02, anneal 100; else identical to
   reference incl. seed 38381, 575 epochs, flip-doubled 50ep data).
 - [ ] 6. Raven-only unit test `test_agent_latent.py`: disabled parity,
@@ -82,3 +82,12 @@ frozen surface untouched).
    (closed-loop training, recurrent relational core, agent-type latent);
    an `auto/contribution-cg-schedsamp` branch already exists in another
    worktree, so closed-loop training is in flight elsewhere.
+2. `encode()` flattens `y_enc` to (B, P, T, L), not (N, T, L) — the
+   posterior encoder re-flattens; row-major (batch, player) order makes
+   the node axes align.
+3. Eval/test log-loss injects the posterior mean, and q conditions on the
+   full episode including targets — an informative z lowers test loss by
+   construction. The step-9 leakage gate must therefore read test loss
+   jointly with the per-dim KL (nats bound the leak), not on its own.
+   The shipped artifact is the all-data fold (no test set), so checkpoint
+   selection is not affected.
