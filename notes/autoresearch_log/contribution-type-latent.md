@@ -63,11 +63,11 @@ frozen surface untouched).
   0.05; leakage -> move z concat to the rnn_n input (own-z only).
 - [x] 11. Stage-1 sim config `23_2g8a_type_latent_self_gnn_contr_gnn_switch.yml`
   — exact copy of the reference except contribution artifact + output paths.
-- [ ] 12. Simulate on Raven, fetch `per_round.parquet`.
-- [ ] 13. Sanity check: between-agent spread in the sim exceeds the reference
+- [x] 12. Simulate on Raven, fetch `per_round.parquet`.
+- [x] 13. Sanity check: between-agent spread in the sim exceeds the reference
   run (z reaches behavior) before evaluating.
-- [ ] 14. `python -m aimanager evaluate` locally; append results row to §3.
-- [ ] 15. Decision gate per §2: kept iff CG drops, rows <= 1 >= 11, mean
+- [x] 14. `python -m aimanager evaluate` locally; append results row to §3.
+- [x] 15. Decision gate per §2: kept iff CG drops, rows <= 1 >= 11, mean
   <= 1.76; band upgrade iff CG < 5. Stage 2 only on band upgrade; PR either
   way.
 
@@ -75,6 +75,7 @@ frozen surface untouched).
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-20 | per-agent episode latent (dim 4, ELBO, prior-sampled in sim) | 1 | CG 9.850 -> 9.661 | 10/21 (was 11) | 1.7698 (was 1.7596) | FAIL |
 
 ## 4. Notes
 
@@ -103,3 +104,16 @@ frozen surface untouched).
    log-loss 2.51-2.72 vs reference 2.79-2.91; the KL bounds leakage at
    ~0.06 nats/prediction, far below the ~0.25 observed gain, so the
    improvement is predominantly genuine. Step 10 contingency not needed.
+7. Stage-1 sim (job 29413359): z reaches behavior (between-agent SD of
+   episode means 4.18 -> 4.36; group-spread ratio 0.451 -> 0.470) but CG
+   stays 9.66. Verdict FAIL: no band upgrade, and both guards regressed
+   (CA 0.77 -> 1.01 pushed rows <= 1 to 10/21; mean 1.760 -> 1.770).
+8. Mechanism: independent per-agent types add persistent offsets that
+   inflate the group-mean spread AND the individual spread in the same
+   proportion -- the ratio stays at the independence floor. The C
+   marginals pay for the extra offsets (CA/CB/CD +0.22-0.24). CG needs
+   *shared* variance (a per-group latent) or amplifying closed-loop
+   dynamics (schedsamp), not individual heterogeneity. Notable
+   collateral: PD 2.94 -> 2.42 and RCB 1.93 -> 1.59 improved.
+9. No Stage 2 (within-band moves cannot become a success). Ending in a
+   [FAIL] PR per section 9.7.
