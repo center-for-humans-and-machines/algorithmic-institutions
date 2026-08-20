@@ -111,19 +111,19 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
   first cluster run was cancelled: BLAS thread oversubscription (51 min
   user vs 2h52m system time), lesson — pin OMP/torch threads to 1 in
   cluster stats jobs.
-- [ ] 2. `graph.py`: optional `group_latent` on `GraphNetwork` — z as a
+- [x] 2. `graph.py`: optional `group_latent` on `GraphNetwork` — z as a
   per-(group, episode) scalar input, loading vector v added to the
   emission logits; legacy artifacts load with v = 0 and produce identical
   logits.
-- [ ] 3. `train.py`: quadrature marginal-likelihood loss (log-sum-exp
+- [x] 3. `train.py`: quadrature marginal-likelihood loss (log-sum-exp
   over 20 Gauss-Hermite nodes per (group, episode) trajectory);
   `freeze_base` support; disabled path byte-identical to current training.
-- [ ] 4. Simulation free-running path: draw z_g at episode reset, hold
+- [x] 4. Simulation free-running path: draw z_g at episode reset, hold
   fixed across rounds (the type-latent step-4 caching pattern).
-- [ ] 5. Raven unit tests: disabled parity; quadrature loss equals a
+- [x] 5. Raven unit tests: disabled parity; quadrature loss equals a
   brute-force integral on a toy model; z persistence across sim rounds;
   save/load round-trip plus legacy-artifact load.
-- [ ] 6. black + flake8 over touched files (one batched pass).
+- [x] 6. black + flake8 over touched files (one batched pass).
 - [ ] 7. Training config per the sketch; train phase A then B on Raven;
   fetch artifacts and metrics. **Gate (was step 1):** phase-A ||v||
   materially non-zero and held-out marginal log-likelihood beats the
