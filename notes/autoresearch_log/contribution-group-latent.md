@@ -95,14 +95,22 @@ Validated by the orchestrator (§9): targets per §2, every step legal per
 §5, frozen surface untouched — the simulation change is gated on the
 artifact declaring `group_latent`, so legacy artifacts behave identically.
 
-- [ ] 1. **Persistence diagnostic (gate).** Reuse #149's residual
-  machinery (`src/aimanager/generic/copula.py` and
-  `scripts/artificial_humans/contribution_copula_rho.py` on
-  `auto/contribution-cg-copula`) to estimate the episode-persistent
-  share: cross-round group-mate residual correlation phi (t != t' pairs,
-  teacher-forced reference artifact, train split), bootstrap CI, run on
-  Raven via sbatch. **Gate:** CI clearly above 0 and point estimate
-  >= 0.03; else stop -> [FAIL] PR with the measurement.
+- [x] 1. **Gate moved into training (plan revision, 2026-08-20).** The
+  standalone persistence diagnostic was dropped by the maintainer: with
+  the base frozen and z entering as `logits += z * v`, phase-A training
+  computes base logits once and the 20 quadrature variants are logit
+  shifts — phase A *is* the persistence measurement (same MLE as the
+  #149-style calibration, on the full joint likelihood), at ~1x forward
+  cost. **Gate (now at step 7):** phase-A loading ||v|| materially
+  non-zero AND held-out marginal log-likelihood beats the frozen base;
+  else stop -> [FAIL] PR. The residual-export machinery written for the
+  original step 1 (`scripts/artificial_humans/contribution_latent_phi.py`
+  + copula imports, locally validated: same-round estimator reproduces
+  #149's estimand to 4e-16; false-positive gate phi_hat 0.0013 on
+  rho=0.07/phi=0 synthetics) is kept as optional analysis tooling. Its
+  first cluster run was cancelled: BLAS thread oversubscription (51 min
+  user vs 2h52m system time), lesson — pin OMP/torch threads to 1 in
+  cluster stats jobs.
 - [ ] 2. `graph.py`: optional `group_latent` on `GraphNetwork` — z as a
   per-(group, episode) scalar input, loading vector v added to the
   emission logits; legacy artifacts load with v = 0 and produce identical
@@ -117,9 +125,11 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
   save/load round-trip plus legacy-artifact load.
 - [ ] 6. black + flake8 over touched files (one batched pass).
 - [ ] 7. Training config per the sketch; train phase A then B on Raven;
-  fetch artifacts and metrics. **Mid gate:** learned ||v|| materially
-  non-zero and held-out log-loss not worse than the frozen baseline;
-  else stop with notes.
+  fetch artifacts and metrics. **Gate (was step 1):** phase-A ||v||
+  materially non-zero and held-out marginal log-likelihood beats the
+  frozen base; else stop -> [FAIL] PR. Phase A is cheap (frozen base:
+  one forward per batch + 20 logit shifts); only phase B pays the ~20x
+  quadrature forward cost and stays short.
 - [ ] 8. Stage-1 sim config
   `23_2g8a_group_latent_self_gnn_contr_gnn_switch.yml` — exact copy of
   the reference except the contribution artifact and output paths;
@@ -149,6 +159,14 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
    free-running state-tracking loss (teacher-forced spread ratio 0.784 vs
    free-running ~0.59, human 0.847). The bet is that an episode-persistent
    push compounds under free-running dynamics in a way #149's within-round
-   copula could not; the step-1 phi measurement and the step-9 spread
-   sanity check are the cheap points to falsify this before burning a
-   full evaluation cycle.
+   copula could not; the phase-A gate and the step-9 spread sanity check
+   are the cheap points to falsify this before burning a full evaluation
+   cycle.
+4. Plan revision (2026-08-20, maintainer): the standalone step-1
+   diagnostic was dropped after its first run had to be cancelled (BLAS
+   thread oversubscription on the CPU partition; also a coordination
+   scare with the parallel type-latent session's training job on the
+   shared Raven checkout). Rationale: frozen-base phase-A training
+   measures the same persistence signal at ~1x forward cost and inside
+   the pipeline that decides the experiment anyway. Diagnostic code kept
+   as analysis tooling; estimator validations recorded in step 1.
