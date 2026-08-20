@@ -91,7 +91,9 @@ surface.
 
 ## 2. Plan
 
-Draft — pending maintainer validation (§9) before implementation.
+Validated by the orchestrator (§9): targets per §2, every step legal per
+§5, frozen surface untouched — the simulation change is gated on the
+artifact declaring `group_latent`, so legacy artifacts behave identically.
 
 - [ ] 1. **Persistence diagnostic (gate).** Reuse #149's residual
   machinery (`src/aimanager/generic/copula.py` and
