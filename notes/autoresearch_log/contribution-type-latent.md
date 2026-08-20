@@ -42,26 +42,26 @@ frozen surface untouched).
   trajectory -> mu/logvar), `agent_latent` kwarg on `GraphNetwork`
   (`z_dim = 0` when absent), `z` concatenated onto node features before op1,
   `sample_posterior()` and `sample_prior_z()`.
-- [ ] 2. `graph.py`: config gating + artifact load-compat — `agent_latent`
+- [x] 2. `graph.py`: config gating + artifact load-compat — `agent_latent`
   and `z_encoder` in `to_save`; old checkpoints without the keys load with
   `z_dim == 0` and produce identical logits.
 - [x] 3. `train.py`: ELBO — CE + beta * clamp(KL, free_bits), beta linear
   warmup over `anneal_epochs`, KL logged; disabled path byte-identical.
-- [ ] 4. `graph.py` `predict_independent`: sample `z ~ N(0,I)` per node when
+- [x] 4. `graph.py` `predict_independent`: sample `z ~ N(0,I)` per node when
   `reset_rnn` (or cache invalid), reuse across rounds; plain attribute cache.
 - [x] 5. New training config `group_switching_contribution_50ep_type_latent.yml`
   (dim 4, hidden 20, beta 1.0, free_bits 0.02, anneal 100; else identical to
   reference incl. seed 38381, 575 epochs, flip-doubled 50ep data).
-- [ ] 6. Raven-only unit test `test_agent_latent.py`: disabled parity,
+- [x] 6. Raven-only unit test `test_agent_latent.py`: disabled parity,
   posterior shapes/KL, z reaches logits, sim-time z persistence, save/load
   round-trip + legacy load.
-- [ ] 7. black + flake8 over touched files.
+- [x] 7. black + flake8 over touched files.
 - [ ] 8. Train on Raven (`train_cluster.sh ah ...`), fetch artifact + metrics.
 - [ ] 9. Collapse/leakage gate: per-dim KL above free_bits on >= 2 dims; test
   log-loss not implausibly below baseline. GO / step 10.
 - [ ] 10. Contingency (only if 9 fails): collapse -> beta 0.5 / free_bits
   0.05; leakage -> move z concat to the rnn_n input (own-z only).
-- [ ] 11. Stage-1 sim config `23_2g8a_type_latent_self_gnn_contr_gnn_switch.yml`
+- [x] 11. Stage-1 sim config `23_2g8a_type_latent_self_gnn_contr_gnn_switch.yml`
   — exact copy of the reference except contribution artifact + output paths.
 - [ ] 12. Simulate on Raven, fetch `per_round.parquet`.
 - [ ] 13. Sanity check: between-agent spread in the sim exceeds the reference
@@ -91,3 +91,9 @@ frozen surface untouched).
    jointly with the per-dim KL (nats bound the leak), not on its own.
    The shipped artifact is the all-data fold (no test set), so checkpoint
    selection is not affected.
+4. All 96 Raven tests pass incl. the 6 new agent-latent tests. Legacy
+   caveat found while testing: a latent checkpoint stripped of its keys
+   cannot run forward (op1 keeps the widened input width) — real
+   pre-latent artifacts are unaffected and covered by a dedicated test.
+5. Training submitted 2026-08-20 as SLURM job 29413062 (10 h limit,
+   `train_cluster.sh ah .../group_switching_contribution_50ep_type_latent.yml`).
