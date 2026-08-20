@@ -294,6 +294,10 @@ class GraphNetwork(th.nn.Module):
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
 
+        # Simulation-time prior sample, held for the duration of one episode.
+        # A plain attribute (never a buffer/parameter) so save() cannot see it.
+        self._z_cache = None
+
     def forward(self, data, reset_rnn=True):
         x = data["x"]
         edge_index = data["edge_index"]
@@ -428,6 +432,19 @@ class GraphNetwork(th.nn.Module):
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
+        if self.z_dim > 0:
+            # encode() does not carry z, so pass a caller-supplied one through
+            # untouched. Otherwise (the simulation case: no observed rounds to
+            # condition on) z comes from the prior. z is an episode-level trait,
+            # so it is drawn once at the episode boundary -- reset_rnn, which the
+            # environment sets at round 0 -- and reused for the later rounds.
+            z = data.get("z")
+            if z is None:
+                n = n_batch * n_nodes
+                if reset_rnn or self._z_cache is None or self._z_cache.shape[0] != n:
+                    self._z_cache = self.sample_prior_z(n)
+                z = self._z_cache
+            encoded["z"] = z
         predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
