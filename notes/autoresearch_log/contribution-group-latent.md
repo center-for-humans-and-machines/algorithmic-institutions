@@ -124,19 +124,19 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
   brute-force integral on a toy model; z persistence across sim rounds;
   save/load round-trip plus legacy-artifact load.
 - [x] 6. black + flake8 over touched files (one batched pass).
-- [ ] 7. Training config per the sketch; train phase A then B on Raven;
+- [x] 7. Training config per the sketch; train phase A then B on Raven;
   fetch artifacts and metrics. **Gate (was step 1):** phase-A ||v||
   materially non-zero and held-out marginal log-likelihood beats the
   frozen base; else stop -> [FAIL] PR. Phase A is cheap (frozen base:
   one forward per batch + 20 logit shifts); only phase B pays the ~20x
   quadrature forward cost and stays short.
-- [ ] 8. Stage-1 sim config
+- [x] 8. Stage-1 sim config
   `23_2g8a_group_latent_self_gnn_contr_gnn_switch.yml` — exact copy of
   the reference except the contribution artifact and output paths;
   simulate both phase arms on Raven; fetch `per_round.parquet`.
-- [ ] 9. Sanity: between-group contribution spread in the sim exceeds the
+- [x] 9. Sanity: between-group contribution spread in the sim exceeds the
   reference run (z reaches behavior) before evaluating.
-- [ ] 10. Evaluate locally; append results rows; decision per §2 —
+- [x] 10. Evaluate locally; append results rows; decision per §2 —
   Stage 2 sweep only on a CG band upgrade; PR either way.
 
 ## 3. Results
@@ -146,6 +146,7 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
 | 2026-08-20 | (baseline) reference stack, lin_multinomial punisher | 1 | CG 9.850261 | 11/21 | 1.759557 | baseline |
 | 2026-08-20 | phase A: frozen base + learned loading (job 29414705, 3m43s) | gate | no sim — held-out marginal 1.820757 vs plain 1.825020 (delta +0.004264, 3/5 folds, paired t p=0.385); \|\|v\|\| 1.475239 converged | — | — | gate criterion 2 failed as computed — later found leakage-compromised (note 6) |
 | 2026-08-20 | phase A arm, Stage-1 sim (job 29414977, 12m03s) | 1 | CG 8.006817 (from 9.850261) | 11/21 | 1.575373 | kept; no band upgrade (CG > 5) — best CG and best mean on record |
+| 2026-08-20 | phase B: joint finetune from phase A (job 29415913, 2m26s) | gate | no sim — fold-test marginal LL minimum at epoch 0 in 5/5 folds; \|\|v\|\| static 1.474 -> 1.455-1.504 | — | — | arm dropped: pure overfit, no dose growth (note 10) |
 
 ## 4. Notes
 
@@ -214,3 +215,20 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
    Phase B (joint finetune, base adapts around the latent) submitted as
    the declared second arm; if it also lands > 5, the experiment closes
    as [FAIL] with phase A as the better-documented arm.
+10. Phase B dropped without a sim (maintainer observation on wandb run
+   2ng46xio, confirmed in the metrics): fold-test marginal LL rises
+   monotonically from epoch 0 in all 5 folds — the init is the reference
+   base early-stopped at its own test optimum, so joint finetuning on
+   the same 100 episodes can only overfit (the leakage of note 6 makes
+   the fold curves doubly pessimistic) — and ||v|| did not grow, so the
+   dose phase B existed to deliver never materialised. The honest
+   epoch selection is 0 in 5/5 folds, i.e. phase B == phase A. Declining
+   to run its sim is the reverse of score-shopping: an arm whose only
+   winning path is seed luck is not an arm. Experiment closes as [FAIL]
+   per the band rule, phase A as the arm. Directions this points to,
+   in order: (i) this latent + free-running-aware training (schedsamp)
+   — the two mechanisms attack disjoint parts of the CG deficit (29%
+   spread-share closed here; the state-tracking share is untouched);
+   (ii) richer latent pathways (z into the RNN state, not just logits)
+   to raise the dose ceiling; (iii) a per-fold-base likelihood gate if
+   a future experiment needs an honest pre-sim gate (note 6).
