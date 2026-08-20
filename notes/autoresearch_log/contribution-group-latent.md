@@ -145,6 +145,7 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
 |---|---|---|---|---|---|---|
 | 2026-08-20 | (baseline) reference stack, lin_multinomial punisher | 1 | CG 9.850261 | 11/21 | 1.759557 | baseline |
 | 2026-08-20 | phase A: frozen base + learned loading (job 29414705, 3m43s) | gate | no sim — held-out marginal 1.820757 vs plain 1.825020 (delta +0.004264, 3/5 folds, paired t p=0.385); \|\|v\|\| 1.475239 converged | — | — | gate criterion 2 failed as computed — later found leakage-compromised (note 6) |
+| 2026-08-20 | phase A arm, Stage-1 sim (job 29414977, 12m03s) | 1 | CG 8.006817 (from 9.850261) | 11/21 | 1.575373 | kept; no band upgrade (CG > 5) — best CG and best mean on record |
 
 ## 4. Notes
 
@@ -194,3 +195,22 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
    gate's save-a-cycle economics no longer bind. Phase B stays withheld
    unless Stage 1 shows life on CG. Success bar unchanged: CG band
    upgrade or [FAIL].
+8. Phase-A Stage 1: the mechanism works and is uniquely clean. Spread
+   ratio lifted off the independence floor in 4/4 pairings (mean 0.5860
+   -> 0.6619, floor 0.5834, human 0.8480; 29.0% of the gap closed) — z
+   demonstrably reaches free-running behavior. CG improved in all four
+   pairings (best 6.42, baseline pairing 8.007). The §6 anti-correlation
+   tax did NOT materialise: CA/CB/CD all improved — the first CG
+   mechanism in the log that does not charge the individual marginals.
+   Collateral: PD -0.654, SC -0.493, CE, CC, RCD, RCC, RCA, SA all
+   improved; only PA (+0.062) worsened. RCA's 2.03->1.94 band crossing
+   is discounted as noise (0.06 margin, the #153 standard). gnn_self
+   pairing's rows<=1 dropped 6->4 (guard is on the reference stack,
+   which held at 11/21) — logged for Stage 2 attention if reached.
+9. Quantified shortfall: CG < 5 needs spread ratio > 0.7158; the
+   baseline pairing delivered 38.4% of the required move (best pairing
+   59-74%). The remainder is #149's free-running state-tracking loss,
+   which a logit-level persistent push structurally cannot reach.
+   Phase B (joint finetune, base adapts around the latent) submitted as
+   the declared second arm; if it also lands > 5, the experiment closes
+   as [FAIL] with phase A as the better-documented arm.
