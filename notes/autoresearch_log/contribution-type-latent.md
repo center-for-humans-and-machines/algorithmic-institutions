@@ -56,8 +56,8 @@ frozen surface untouched).
   posterior shapes/KL, z reaches logits, sim-time z persistence, save/load
   round-trip + legacy load.
 - [x] 7. black + flake8 over touched files.
-- [ ] 8. Train on Raven (`train_cluster.sh ah ...`), fetch artifact + metrics.
-- [ ] 9. Collapse/leakage gate: per-dim KL above free_bits on >= 2 dims; test
+- [x] 8. Train on Raven (`train_cluster.sh ah ...`), fetch artifact + metrics.
+- [x] 9. Collapse/leakage gate: per-dim KL above free_bits on >= 2 dims; test
   log-loss not implausibly below baseline. GO / step 10.
 - [ ] 10. Contingency (only if 9 fails): collapse -> beta 0.5 / free_bits
   0.05; leakage -> move z concat to the rnn_n input (own-z only).
@@ -97,3 +97,9 @@ frozen surface untouched).
    pre-latent artifacts are unaffected and covered by a dedicated test.
 5. Training submitted 2026-08-20 as SLURM job 29413062 (10 h limit,
    `train_cluster.sh ah .../group_switching_contribution_50ep_type_latent.yml`).
+6. Step-9 gate: GO. Training (job 29413062, 11m44s) converged; per-fold
+   total KL 1.02-1.83 nats/agent-episode with 1-2 active dims (others at
+   the free-bits floor; dim identity rotates across folds). Test
+   log-loss 2.51-2.72 vs reference 2.79-2.91; the KL bounds leakage at
+   ~0.06 nats/prediction, far below the ~0.25 observed gain, so the
+   improvement is predominantly genuine. Step 10 contingency not needed.
