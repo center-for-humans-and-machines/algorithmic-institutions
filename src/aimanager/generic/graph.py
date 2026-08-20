@@ -533,6 +533,11 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            # z_dim is recomputed from agent_latent in __init__; both keys are
+            # absent from pre-latent checkpoints, where the __init__ defaults
+            # (agent_latent=None -> z_dim 0, z_encoder=None) restore them.
+            "agent_latent",
+            "z_encoder",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
