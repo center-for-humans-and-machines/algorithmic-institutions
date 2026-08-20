@@ -144,6 +144,7 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
 | 2026-08-20 | (baseline) reference stack, lin_multinomial punisher | 1 | CG 9.850261 | 11/21 | 1.759557 | baseline |
+| 2026-08-20 | phase A: frozen base + learned loading (job 29414705, 3m43s) | gate | no sim — held-out marginal 1.820757 vs plain 1.825020 (delta +0.004264, 3/5 folds, paired t p=0.385); \|\|v\|\| 1.475239 converged | — | — | gate criterion 2 failed as computed — later found leakage-compromised (note 6) |
 
 ## 4. Notes
 
@@ -170,3 +171,26 @@ artifact declaring `group_latent`, so legacy artifacts behave identically.
    measures the same persistence signal at ~1x forward cost and inside
    the pipeline that decides the experiment anyway. Diagnostic code kept
    as analysis tooling; estimator validations recorded in step 1.
+5. Phase-A result as computed: criterion 1 passed decisively (||v||
+   1.475, 5.3x the ramp init, plateaued by epoch ~100-130; freeze
+   verified — plain LL constant to <=6e-7). Criterion 2 failed: held-out
+   delta +0.004264 nats, 3/5 folds, paired t p=0.385, while in-sample
+   improved in every fold. Learned v suppresses levels 0-3 and 17-19,
+   boosts 4-12; ~+-0.6 contribution units of persistent push, saturating.
+6. Maintainer caught a flaw in the gate: the frozen base is the
+   full-data reference artifact — trained on every episode, so the
+   fold-test episodes are in-sample for it (fold-test log loss 1.80-1.90
+   vs the reference training's honest fold-test ~2.85; ln 21 = 3.045).
+   Only v was genuinely held out. In-sample residuals under-represent
+   the persistent group structure, so the criterion-2 delta is
+   attenuated and the FAIL is unreliable in either direction. A rigorous
+   likelihood gate needs per-fold frozen bases (5 base retrains). Also:
+   the shipped v is plausibly under-dosed for free-running use, having
+   been fit against residuals the base had partly absorbed.
+7. Orchestrator decision (pre-dated the leakage finding, reinforced by
+   it): skip further likelihood arbitration and run Stage 1 with the
+   phase-A full-data artifact — the simulation is leakage-free and is
+   the arbiter anyway (§2); training turned out to cost 3m43s, so the
+   gate's save-a-cycle economics no longer bind. Phase B stays withheld
+   unless Stage 1 shows life on CG. Success bar unchanged: CG band
+   upgrade or [FAIL].
