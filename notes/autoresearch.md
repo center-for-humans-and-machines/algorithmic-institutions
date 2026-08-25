@@ -42,7 +42,9 @@ ties broken by the lower mean score; filter to those with your base model
 in your slot, take the best. Swap your candidate into its slot there; one
 simulation (§7 protocol) + one evaluation. That stack's own scores are the
 baseline for both gates (§2). There is no confirmation sweep — winning in
-your base model's best context is the claim. E.g. a lin-switch candidate
+your base model's best context is the claim. (When the maintainer targets
+a parent `[SUCCESS]` PR, the stack and baseline come from the parent
+instead — §9.) E.g. a lin-switch candidate
 evaluates inside `gnn x lin x multinomial` (rows <= 1: 9/21, mean 1.845);
 GNN contribution, GNN switch, and multinomial punisher candidates all
 evaluate inside the top stack itself.
@@ -179,6 +181,18 @@ never decide scope.
 experiments never share a checkout. Name new configs, artifacts, and sim
 output dirs with the same slug so runs cannot collide on paths either.
 Commits via the `/commit` skill; one experiment = one branch = one PR.
+Branches start from `main` — unless the maintainer targets a parent PR:
+
+**Building on a `[SUCCESS]` PR.** Successful PRs are not always merged;
+their branches stay alive as the frontier. When the maintainer points your
+experiment at one, base yourself on it instead of `main`: fetch the PR's
+head branch and create your branch and worktree from it
+(`git worktree add <dir> -b auto/<slot>-<slug> origin/<parent-branch>`),
+and open your PR with `--base <parent-branch>` so the diff shows only your
+own change. Read the parent's log file before planning. Your evaluation
+runs in the same stack the parent's did, with the parent's candidate as
+your base model — the parent's confirmed scores are the baseline the §2
+gates are judged against. Name the parent PR in your declaration (§10).
 
 **Commit identity.** Autoresearch commits are authored by Claude, not the
 human — the human only reviews and merges. In the experiment worktree, set
