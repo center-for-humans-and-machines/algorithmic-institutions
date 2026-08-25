@@ -41,10 +41,13 @@ rank the sweep's stacks (`score_matrix.csv`, §6) by rows <= 1, descending,
 ties broken by the lower mean score; filter to those with your base model
 in your slot, take the best. Swap your candidate into its slot there; one
 simulation (§7 protocol) + one evaluation. That stack's own scores are the
-baseline for both gates (§2). There is no confirmation sweep — winning in
-your base model's best context is the claim. (When the maintainer targets
-a parent `[SUCCESS]` PR, the stack and baseline come from the parent
-instead — §9.) E.g. a lin-switch candidate
+baseline for both gates (§2): its row in `score_matrix.csv`, or at full
+precision
+`plots/simulation/23_2g8a_self_<contr>_contr_<switch>_switch/evaluation/scores.csv`
+with the `run` column filtered to your punisher pairing. There is no
+confirmation sweep — winning in your base model's best context is the
+claim. (When the maintainer targets a parent `[SUCCESS]` PR, the stack and
+baseline come from the parent instead — §9.) E.g. a lin-switch candidate
 evaluates inside `gnn x lin x multinomial` (rows <= 1: 9/21, mean 1.845);
 GNN contribution, GNN switch, and multinomial punisher candidates all
 evaluate inside the top stack itself.
@@ -192,7 +195,11 @@ and open your PR with `--base <parent-branch>` so the diff shows only your
 own change. Read the parent's log file before planning. Your evaluation
 runs in the same stack the parent's did, with the parent's candidate as
 your base model — the parent's confirmed scores are the baseline the §2
-gates are judged against. Name the parent PR in your declaration (§10).
+gates are judged against: the results table in the parent's PR body and
+log file, backed by the parent branch's own sim output
+(`plots/simulation/<parent-slug...>/evaluation/scores.csv`, in your
+worktree since you branched off it). Name the parent PR in your
+declaration (§10).
 
 **Commit identity.** Autoresearch commits are authored by Claude, not the
 human — the human only reviews and merges. In the experiment worktree, set
