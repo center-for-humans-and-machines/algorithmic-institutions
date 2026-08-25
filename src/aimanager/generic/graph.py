@@ -3,6 +3,7 @@ import numpy as np
 import torch as th
 from torch_scatter import scatter_mean
 from torch_geometric.nn import MetaLayer
+from aimanager.generic.copula import sample_correlated_levels
 from aimanager.generic.encoder import Encoder, IntEncoder
 
 
@@ -144,6 +145,9 @@ class GraphNetwork(th.nn.Module):
         add_global_model=True,
         hidden_size=None,
         default_values={},
+        copula_rho=0.0,
+        copula_phi=0.0,
+        copula_switch_every=None,
         **_,
     ):
         super().__init__()
@@ -167,6 +171,21 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+
+        # Herding copula (switch slot only), notes/autoresearch_log/
+        # switch-herding-copula.md: rho 0 keeps the legacy independent draw.
+        assert 0.0 <= copula_rho < 1.0, f"copula_rho must be in [0, 1), {copula_rho}"
+        assert 0.0 <= copula_phi < 1.0, f"copula_phi must be in [0, 1), {copula_phi}"
+        assert (
+            copula_rho == 0.0 or y_name == "does_switch"
+        ), f"copula_rho > 0 is only defined for does_switch, got {y_name}"
+        assert copula_phi == 0.0 or (
+            isinstance(copula_switch_every, int) and copula_switch_every > 0
+        ), "copula_phi > 0 requires a positive int copula_switch_every"
+        self.copula_rho = copula_rho
+        self.copula_phi = copula_phi
+        self.copula_switch_every = copula_switch_every
+        self._copula_z = None
 
         if op1 is None:
             if add_edge_model:
@@ -341,6 +360,55 @@ class GraphNetwork(th.nn.Module):
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
+    def _predict_encoded_copula(self, data, encoded, shape, reset_rnn=True):
+        """Same forward as `predict_encoded`, but the level is drawn with a
+        shared latent per (batch, agent_group) cell -- the herding sampler of
+        notes/autoresearch_log/switch-herding-copula.md."""
+        n_batch, n_nodes, n_rounds = shape
+        self.eval()
+        y_logit = self(encoded, reset_rnn)
+        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+        if reset_rnn:
+            self._copula_z = None
+        # The sampler draws on the cpu RNG; agent_group is 0/1, so the dense
+        # cell id of the round being sampled is batch_index * 2 + agent_group.
+        agent_group = data["agent_group"].reshape(n_batch, n_nodes, n_rounds).cpu()
+        cells = th.arange(n_batch).reshape(-1, 1, 1) * 2 + agent_group
+        proba = y_pred_proba.detach().cpu()
+        y_pred = th.empty(proba.shape[:-1], dtype=th.int64)
+        keep_z = self.copula_phi > 0
+        rounds = (
+            data["round_number"].reshape(n_batch, n_nodes, n_rounds)[0, 0]
+            if keep_z
+            else None
+        )
+        for r in range(n_rounds):
+            cell_id = cells[:, :, r].reshape(-1)
+            n_cells = int(cell_id.max()) + 1
+            z_prev = None if self._copula_z is None else self._copula_z[:n_cells]
+            levels, z_cell = sample_correlated_levels(
+                proba[:, r],
+                cell_id,
+                self.copula_rho,
+                z_prev=z_prev,
+                phi=self.copula_phi,
+            )
+            y_pred[:, r] = levels
+            # Only a decision round advances the AR(1) latent (ruling D6): the
+            # predictor runs every round, so advancing per call would decay the
+            # realized persistence to phi ** copula_switch_every. The store is
+            # kept at full length because a group can empty out (then n_cells
+            # falls below 2 * n_batch), and the cell index must stay stable.
+            if keep_z and (int(rounds[r]) + 1) % self.copula_switch_every == 0:
+                z_store = (
+                    th.zeros(2 * n_batch, dtype=z_cell.dtype)
+                    if self._copula_z is None
+                    else self._copula_z.clone()
+                )
+                z_store[:n_cells] = z_cell
+                self._copula_z = z_store
+        return y_pred.to(y_pred_proba.device), y_pred_proba
+
     def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
         n_batch, n_nodes, n_rounds = data[self.y_name].shape
         if edge_index is None:
@@ -348,7 +416,12 @@ class GraphNetwork(th.nn.Module):
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
-        predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
+        if sample and self.copula_rho > 0:
+            predict = self._predict_encoded_copula(
+                data, encoded, (n_batch, n_nodes, n_rounds), reset_rnn=reset_rnn
+            )
+        else:
+            predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
 
@@ -436,6 +509,9 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            "copula_rho",
+            "copula_phi",
+            "copula_switch_every",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 

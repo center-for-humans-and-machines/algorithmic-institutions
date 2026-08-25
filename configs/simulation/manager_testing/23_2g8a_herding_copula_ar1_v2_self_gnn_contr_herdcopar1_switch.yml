@@ -1,0 +1,43 @@
+# auto/switch-herding-copula-v2: the parent stack
+# (23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch, PR #160) with the
+# switch slot swapped to the herding-copula arm-B artifact (copula_rho +
+# copula_phi, switch_every 4; estimated by pairwise MLE on the human train
+# split; marginals identical to the base gnn switch). Single
+# lin_multinomial_copula pairing at position 1 -- RNG-stream-identical to
+# the four-pairing arm-B run of PR #150 (the parent established
+# single-pairing reproduction is bit-identical). Protocol byte-identical to
+# the 23 family. Slug sits before `_self_` so evaluation_sweep.py's
+# DIR_PATTERN still parses contr/switch.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_herding_copula_ar1/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_herding_copula_ar1_v2_self_gnn_contr_herdcopar1_switch
+figure_name: 2g8a_herding_copula_ar1_v2_self_gnn_contr_herdcopar1_switch
+save_per_round: true
+basedir: .
