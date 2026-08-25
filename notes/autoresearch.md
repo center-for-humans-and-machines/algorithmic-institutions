@@ -37,24 +37,25 @@ in the same column as always — context for the reader, not a criterion.
 
 The metrics are a property of a full stack, so candidates are always scored
 inside one — the **highest-ranked stack that contains your base model**:
-rank the sweep's stacks by mean score (`score_matrix.csv`, §6), filter to
-those with your base model in your slot, take the best. Swap your candidate
-into its slot there; one simulation (§7 protocol) + one evaluation. That
-stack's own scores are the baseline for both gates (§2). There is no
-confirmation sweep — winning in your base model's best context is the
-claim. E.g. a GNN-contributor candidate evaluates inside
-`gnn x gnn x multinomial` (mean 1.759, rows <= 1: 11/21); a multinomial
-punisher candidate inside `gaussian x gnn x multinomial`.
+rank the sweep's stacks (`score_matrix.csv`, §6) by rows <= 1, descending,
+ties broken by the lower mean score; filter to those with your base model
+in your slot, take the best. Swap your candidate into its slot there; one
+simulation (§7 protocol) + one evaluation. That stack's own scores are the
+baseline for both gates (§2). There is no confirmation sweep — winning in
+your base model's best context is the claim. E.g. a lin-switch candidate
+evaluates inside `gnn x lin x multinomial` (rows <= 1: 9/21, mean 1.845);
+GNN contribution, GNN switch, and multinomial punisher candidates all
+evaluate inside the top stack itself.
 
 Artifact paths for any stack are read off its sim config,
 `configs/simulation/manager_testing/23_2g8a_self_<contr>_contr_<switch>_switch.yml`
 (which also carries the shared `valid_model` — plumbing, not a slot). The
-current top of the ranking, `gaussian x gnn x multinomial` (mean 1.640,
-rows <= 1: 8/21):
+current top of the ranking, `gnn x gnn x multinomial` (rows <= 1: 11/21,
+mean 1.759):
 
 | slot | model | artifact |
 |---|---|---|
-| contribution | `lin_gaussian` | `artifacts/baselines/contribution_gaussian_best.joblib` |
+| contribution | `gnn` | `artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt` |
 | switch | `gnn` | `artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt` |
 | punisher | `lin_multinomial` | `artifacts/baselines/punishment_multinomial_best_with_contr.joblib` |
 
