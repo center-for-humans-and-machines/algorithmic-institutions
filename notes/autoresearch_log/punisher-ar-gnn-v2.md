@@ -65,58 +65,108 @@ checkpoint flag drives `predict_autoreg` dispatch
 (`simulate.py:151-154`) and is asserted on Raven before anything runs.
 (R5) `squeue -u certuer` PENDING check before every rsync.
 
-- [ ] 1. Worktree preconditions (branch, identity, clean tree).
-- [ ] 2. Re-verify the declared baseline from
+- [x] 1. Worktree preconditions (branch, identity, clean tree).
+- [x] 2. Re-verify the declared baseline from
       `plots/simulation/23_2g8a_self_gaussian_contr_gnn_switch/evaluation/scores.csv`
       (gnn_self run: 21 rows, PD 2.6128746154448903, rows<=1 7,
       mean 1.7407445494371563).
-- [ ] 3. Record this step list; commit.
-- [ ] 4. Import `src/aimanager/generic/graph.py` and
+- [x] 3. Record this step list; commit.
+- [x] 4. Import `src/aimanager/generic/graph.py` and
       `src/aimanager/tests/test_ar_punisher.py` from
       `origin/auto/punisher-ar-gnn`; verify byte-identity to the source
       branch and `graph.py | 81 +-` vs main.
-- [ ] 5. Import
+- [x] 5. Import
       `configs/training/artificial_humans/punishment/ar_gnn_50ep_doubled.yml`
       (branch tip = 2750-epoch version); verify byte-identity.
-- [ ] 6. Import
+- [x] 6. Import
       `artifacts/artificial_humans/punishment_ar_gnn_50ep_doubled/{model,metrics}`
       (4 files; both epochs for provenance, 2750 is the candidate).
-- [ ] 7. Verify real LFS content, not pointers: `.pt` md5
+- [x] 7. Verify real LFS content, not pointers: `.pt` md5
       4774e934f08a96da01da875851ad7a2c (2750) /
       f789ab0a17ec870d3e53507db9de34f6 (5000).
-- [ ] 8. Local batched gate, once, before staging: eval-suite tests +
+- [x] 8. Local batched gate, once, before staging: eval-suite tests +
       `scripts/tests` + `tests/baselines`; black + flake8 on the two
       imported source files. (`test_ar_punisher.py` is PyG — Raven only.)
-- [ ] 9. PENDING check, then `scripts/remote_test.sh` — full PyG suite
+- [x] 9. PENDING check, then `scripts/remote_test.sh` — full PyG suite
       green incl. the 9 AR tests.
-- [ ] 10. On Raven: assert the 2750 checkpoint's `autoregressive` flag,
+- [x] 10. On Raven: assert the 2750 checkpoint's `autoregressive` flag,
       `edge_encoding == [{name: ar_punishment, n_levels: 31}]`, and
       `x_encoding` parity with the base punisher checkpoint.
-- [ ] 11. Commit the code + tests; re-verify hooks did not mutate bytes.
-- [ ] 12. Commit the training config + 4 artifact files (LFS).
-- [ ] 13. Write
+- [x] 11. Commit the code + tests; re-verify hooks did not mutate bytes.
+- [x] 12. Commit the training config + 4 artifact files (LFS).
+- [x] 13. Write
       `configs/simulation/manager_testing/23_2g8a_ar_gnn_v2_self_gaussian_contr_gnn_switch.yml`:
       copy of the baseline config, single manager `ar_gnn` -> the 2750
       `.pt`, single pairing `ar_gnn_self`, slugged
       output dir/figure name; protocol byte-identical.
-- [ ] 14. Mechanical config check (yaml parse, DIR_PATTERN yields
+- [x] 14. Mechanical config check (yaml parse, DIR_PATTERN yields
       contr=gaussian/switch=gnn, artifact paths exist, output dir fresh);
       commit.
-- [ ] 15. PENDING check, then `scripts/simulate_cluster.sh <config>`.
-- [ ] 16. Poll to completion; confirm `per_round.parquet` on Raven, exit 0.
-- [ ] 17. `scripts/fetch_cluster.sh plots/simulation/23_2g8a_ar_gnn_v2_self_gaussian_contr_gnn_switch`.
-- [ ] 18. `python -m aimanager evaluate <config>`; 21 rows for the single
+- [x] 15. PENDING check, then `scripts/simulate_cluster.sh <config>`.
+- [x] 16. Poll to completion; confirm `per_round.parquet` on Raven, exit 0.
+- [x] 17. `scripts/fetch_cluster.sh plots/simulation/23_2g8a_ar_gnn_v2_self_gaussian_contr_gnn_switch`.
+- [x] 18. `python -m aimanager evaluate <config>`; 21 rows for the single
       `ar_gnn_self` run.
-- [ ] 19. §2 verdict, unrounded: gate 1 PD <= 2 (baseline
+- [x] 19. §2 verdict, unrounded: gate 1 PD <= 2 (baseline
       2.6128746154448903, band 2-5); gate 2 mean < 1.7407445494371563;
       rows<=1 (baseline 7/21) reported as context.
-- [ ] 20. Fill §3 Results + §4 Notes; commit log + sim outputs (LFS).
-- [ ] 21. Push; open the PR (`[SUCCESS]`/`[FAIL]`), body Hypothesis /
+- [x] 20. Fill §3 Results + §4 Notes; commit log + sim outputs (LFS).
+- [x] 21. Push; open the PR (`[SUCCESS]`/`[FAIL]`), body Hypothesis /
       Results / Collateral.
 
 ## 3. Results
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-25 | AR-GNN punisher (gated ar_punishment edge feature, epochs 2750) in gaussian x gnn x gnn | single | PD 2.0572788911625852 (baseline 2.6128746154448903 — improved 0.556 but within band 2-5, boundary missed by 0.0573) | 9/21 (baseline 7/21) | 1.6312543616564725 (baseline 1.7407445494371563 — gate 2 passes) | FAIL — gate 1 not met (no band upgrade; §2 rules a within-band improvement a FAIL) |
 
 ## 4. Notes
+
+1. Import provenance: all code, config, and artifact files are byte-identical
+   to `origin/auto/punisher-ar-gnn` (blob-hash verified; `.pt` md5s
+   4774e934f08a96da01da875851ad7a2c / f789ab0a17ec870d3e53507db9de34f6,
+   confirmed again on Raven before simulating). Pre-commit hooks mutated
+   nothing. Full Raven suite green (99 passed, incl. the 9 AR tests); local
+   eval-suite gate 283 passed, 3 skipped; black/flake8 clean.
+2. Cluster contention: a concurrent autoresearch session
+   (`auto_cg_schedsamp_v2` pilots) was syncing and running jobs in the
+   shared Raven directory throughout. Ruling: the documented gate is
+   PENDING jobs only — a RUNNING job has already imported its code and
+   writes only to rsync-excluded paths (`artifacts/`, `.log/`); a mid-run
+   overwrite of our tree fails loudly (their tree lacks the
+   `ar_punishment` encoder — KeyError, never silent). Verified after the
+   test run that remote `graph.py`/`test_ar_punisher.py` md5s still
+   matched ours; sim job 29612881 COMPLETED 2m17s exit 0:0.
+3. Checkpoint dispatch verified before simulating (plan R4): the 2750
+   checkpoint carries `autoregressive: True` and
+   `edge_encoding: [{name: ar_punishment, n_levels: 31}]`, with
+   `x_encoding` identical to the base punisher's — the sim config has no
+   `autoregressive` key, so the flag alone routes `predict` ->
+   `predict_autoreg`, and the independent path would hard-assert.
+4. Verdict detail: PD landed at 2.0572788911625852 — 0.0573 above the
+   band-2 boundary. §2 and §10 are explicit (a within-band improvement,
+   however large, is a FAIL; no rounding), so this is logged as FAIL
+   despite gate 2 passing with room (mean 1.63 vs 1.74) and rows <= 1
+   rising 7 -> 9 (PA 0.5967 and RPB 0.7201 crossed under the ceiling).
+5. Context matters for the mechanism: in the `gnn x gnn` context the same
+   artifact managed PD 2.8228 -> 2.5751 (-0.25 vs its base family); in
+   this `gaussian x gnn` context it manages 2.6129 -> 2.0573 (-0.556).
+   The AR channel plus the 2750-epoch budget nearly closes the band gap
+   here — but "nearly" is the recurring shape of this mechanism: observed
+   conditioning recovers only part of the within-round dependence that
+   the copula's explicit severity latent supplies outright (PR #152 note
+   9's diagnosis stands).
+6. Collateral, positive: the entire P family improves substantially
+   (PA 1.0798 -> 0.5967, PB 0.9600 -> 0.7855, PC 0.9786 -> 0.8094,
+   RPA 1.4315 -> 1.2689, RPB 1.1671 -> 0.7201) and the C family mostly
+   rides along (CA 2.2647 -> 2.0562, CB 0.9777 -> 0.8347,
+   CC 1.5886 -> 1.4747, CD 1.4803 -> 1.3390, RSA 0.9886 -> 0.8237).
+   Negative: the two shared-variance rows tick up — CG 3.7264 -> 3.9413,
+   SC 2.7144 -> 3.0669 — consistent with the known root cause living in
+   the other slots, not the punisher.
+7. Follow-up seed, sharpened by this run: severity-copula sampling on top
+   of the AR-GNN marginals (seed (a) of PR #152). The AR punisher's
+   marginals are now the best in its family and PD sits 0.06 from the
+   band edge; a marginal-preserving shared latent is exactly the missing
+   piece, and the copula machinery exists on
+   `auto/punisher-severity-copula-v2` (PR #160).
