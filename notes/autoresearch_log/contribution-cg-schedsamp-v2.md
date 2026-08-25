@@ -77,16 +77,16 @@ pilot exists to produce) and sets `train_args.eval_period: 10` in both
 pilot arms (reference 50 gives only 2 hold-phase eval points; shared value
 keeps ctrl-vs-p50 fair).
 
-- [ ] 1. Cherry-pick the implementation unchanged from the local branch
+- [x] 1. Cherry-pick the implementation unchanged from the local branch
       `auto/contribution-cg-schedsamp` (aec2fd3 train.py curriculum,
       7a34868 test_scheduled_sampling.py); verify
       `git diff auto/contribution-cg-schedsamp HEAD -- <the two files>`
       is empty.
-- [ ] 2. Tests: `squeue --me` PENDING/RUNNING check before any rsync;
+- [x] 2. Tests: `squeue --me` PENDING/RUNNING check before any rsync;
       `scripts/remote_test.sh` (expect the 8 scheduled-sampling tests
       green — the old log's "7" was a miscount); local eval-suite +
       scripts + baselines suites green.
-- [ ] 3. Pilot training configs, copies of
+- [x] 3. Pilot training configs, copies of
       `configs/training/artificial_humans/contribution/group_switching_contribution_50ep.yml`
       changing only description/labels/output_dir/epochs(150)/
       eval_period(10)/scheduled_sampling:
@@ -157,3 +157,10 @@ keeps ctrl-vs-p50 fair).
    optional teacher-forced preflight (step 10 there) with a stronger
    free-running one: same-protocol sims of short-trained arms measure the
    CG effect directly and price the full runs before they are bought.
+3. Steps 1-3 done 2026-08-25. Cherry-pick of aec2fd3+7a34868 applied
+   clean; diff vs the abandoned branch empty. Tests: 98 passed on Raven
+   (all 8 scheduled-sampling tests), 314 passed / 3 skipped locally.
+   Pilot configs committed (8bc675e); only intended keys differ from the
+   reference. Caveat noted: the scaled pilot holds full p_max for only 60
+   epochs (vs 230 in the 575-epoch design) — enough for separation
+   detection, not convergence.
