@@ -1,0 +1,70 @@
+description: >-
+  Scheduled-sampling full arm (p_max=0.25) of contribution-cg-schedsamp-v2.
+  Identical to group_switching_contribution_50ep (node+edge+rnn, hidden=20,
+  lr=3e-4, 575 epochs, flip-doubled 50ep data, seed 38381, eval_period 50)
+  except that training unrolls each batch round by round and, with per-agent
+  probability p ramped linearly from 0 (epoch 86) to 0.25 (epoch 345),
+  substitutes prev_contribution with the model's own detached sample from the
+  previous round — exposure-bias fix targeting CG (the free-running group-norm
+  collapse measured in PR #149). The 86→345 ramp is the design schedule of the
+  575-epoch budget; the pilot ran its rescaled 150-epoch version.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 575
+    schedsamp: '0.25'
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/auto_cg_schedsamp_v2_p25
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+    scheduled_sampling:
+      p_max: 0.25
+      ramp_start_epoch: 86
+      ramp_end_epoch: 345
+  device: cuda
+  autoregression: False
