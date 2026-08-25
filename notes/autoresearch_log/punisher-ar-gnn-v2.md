@@ -52,7 +52,67 @@ one evaluation, verdict from the §2 gates.
 
 ## 2. Plan
 
-(to be filled by the validated step list)
+Validated by the orchestrator 2026-08-25 (targets per §2, legality per §5,
+frozen surface per §8). Rulings: (R1) import via
+`git restore --source=origin/auto/punisher-ar-gnn -- <paths>`, never
+cherry-pick — the original commits touch that branch's own log file
+(frozen, §8) and sit on the pre-revert copula base. (R2) import
+`model/` + `metrics/` only (4 files); the ~2 GB `confusion_matrix/`
+parquets stay retrievable on the original branch. (R3) no retraining —
+same code, config, and seed would reproduce the artifact at GPU-hour cost
+(PR #160 precedent). (R4) no `autoregressive` key in the sim config; the
+checkpoint flag drives `predict_autoreg` dispatch
+(`simulate.py:151-154`) and is asserted on Raven before anything runs.
+(R5) `squeue -u certuer` PENDING check before every rsync.
+
+- [ ] 1. Worktree preconditions (branch, identity, clean tree).
+- [ ] 2. Re-verify the declared baseline from
+      `plots/simulation/23_2g8a_self_gaussian_contr_gnn_switch/evaluation/scores.csv`
+      (gnn_self run: 21 rows, PD 2.6128746154448903, rows<=1 7,
+      mean 1.7407445494371563).
+- [ ] 3. Record this step list; commit.
+- [ ] 4. Import `src/aimanager/generic/graph.py` and
+      `src/aimanager/tests/test_ar_punisher.py` from
+      `origin/auto/punisher-ar-gnn`; verify byte-identity to the source
+      branch and `graph.py | 81 +-` vs main.
+- [ ] 5. Import
+      `configs/training/artificial_humans/punishment/ar_gnn_50ep_doubled.yml`
+      (branch tip = 2750-epoch version); verify byte-identity.
+- [ ] 6. Import
+      `artifacts/artificial_humans/punishment_ar_gnn_50ep_doubled/{model,metrics}`
+      (4 files; both epochs for provenance, 2750 is the candidate).
+- [ ] 7. Verify real LFS content, not pointers: `.pt` md5
+      4774e934f08a96da01da875851ad7a2c (2750) /
+      f789ab0a17ec870d3e53507db9de34f6 (5000).
+- [ ] 8. Local batched gate, once, before staging: eval-suite tests +
+      `scripts/tests` + `tests/baselines`; black + flake8 on the two
+      imported source files. (`test_ar_punisher.py` is PyG — Raven only.)
+- [ ] 9. PENDING check, then `scripts/remote_test.sh` — full PyG suite
+      green incl. the 9 AR tests.
+- [ ] 10. On Raven: assert the 2750 checkpoint's `autoregressive` flag,
+      `edge_encoding == [{name: ar_punishment, n_levels: 31}]`, and
+      `x_encoding` parity with the base punisher checkpoint.
+- [ ] 11. Commit the code + tests; re-verify hooks did not mutate bytes.
+- [ ] 12. Commit the training config + 4 artifact files (LFS).
+- [ ] 13. Write
+      `configs/simulation/manager_testing/23_2g8a_ar_gnn_v2_self_gaussian_contr_gnn_switch.yml`:
+      copy of the baseline config, single manager `ar_gnn` -> the 2750
+      `.pt`, single pairing `ar_gnn_self`, slugged
+      output dir/figure name; protocol byte-identical.
+- [ ] 14. Mechanical config check (yaml parse, DIR_PATTERN yields
+      contr=gaussian/switch=gnn, artifact paths exist, output dir fresh);
+      commit.
+- [ ] 15. PENDING check, then `scripts/simulate_cluster.sh <config>`.
+- [ ] 16. Poll to completion; confirm `per_round.parquet` on Raven, exit 0.
+- [ ] 17. `scripts/fetch_cluster.sh plots/simulation/23_2g8a_ar_gnn_v2_self_gaussian_contr_gnn_switch`.
+- [ ] 18. `python -m aimanager evaluate <config>`; 21 rows for the single
+      `ar_gnn_self` run.
+- [ ] 19. §2 verdict, unrounded: gate 1 PD <= 2 (baseline
+      2.6128746154448903, band 2-5); gate 2 mean < 1.7407445494371563;
+      rows<=1 (baseline 7/21) reported as context.
+- [ ] 20. Fill §3 Results + §4 Notes; commit log + sim outputs (LFS).
+- [ ] 21. Push; open the PR (`[SUCCESS]`/`[FAIL]`), body Hypothesis /
+      Results / Collateral.
 
 ## 3. Results
 
