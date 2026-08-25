@@ -69,7 +69,75 @@ the maintainer.
 
 ## 2. Plan
 
-(to be filled by the validated step list)
+Validated by the orchestrator 2026-08-25 (targets per §2, legality per §5,
+frozen surface per §8). Slug: `schedsamp_v2`. Orchestrator-approved planner
+recommendations: pilot keeps `n_cross_val: 5` (nulling it skips the
+held-out folds entirely and destroys the hold-phase loss trajectory the
+pilot exists to produce) and sets `train_args.eval_period: 10` in both
+pilot arms (reference 50 gives only 2 hold-phase eval points; shared value
+keeps ctrl-vs-p50 fair).
+
+- [ ] 1. Cherry-pick the implementation unchanged from the local branch
+      `auto/contribution-cg-schedsamp` (aec2fd3 train.py curriculum,
+      7a34868 test_scheduled_sampling.py); verify
+      `git diff auto/contribution-cg-schedsamp HEAD -- <the two files>`
+      is empty.
+- [ ] 2. Tests: `squeue --me` PENDING/RUNNING check before any rsync;
+      `scripts/remote_test.sh` (expect the 8 scheduled-sampling tests
+      green — the old log's "7" was a miscount); local eval-suite +
+      scripts + baselines suites green.
+- [ ] 3. Pilot training configs, copies of
+      `configs/training/artificial_humans/contribution/group_switching_contribution_50ep.yml`
+      changing only description/labels/output_dir/epochs(150)/
+      eval_period(10)/scheduled_sampling:
+      `auto_cg_schedsamp_v2_pilot_ctrl.yml` (no scheduled_sampling key) and
+      `auto_cg_schedsamp_v2_pilot_p50.yml` (p_max 0.5, ramp 22->90;
+      `labels.schedsamp: '0.50'` quoted — the filename depends on it).
+      Same seed 38381, n_cross_val 5, flip-doubled 50ep data.
+- [ ] 4. Train both pilots on Raven (`train_cluster.sh ah`, second with
+      `--no-sync`); poll; fetch artifacts + metrics; record per arm:
+      sacct Elapsed and per-epoch time (Elapsed / (6 folds x 150)),
+      realized substitution rate and p(e), held-out log_loss trajectory
+      per cv_split.
+- [ ] 5. Pilot sim configs: byte-identical protocol copies of
+      `23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch.yml`, only
+      contribution_model/output_dir/figure_name changed:
+      `23_2g8a_schedsamp_v2_pilot_ctrl_self_gnn_contr_gnn_switch.yml`
+      (artifact `.../auto_cg_schedsamp_v2_pilot_ctrl/model/architecture_node+edge+rnn__dataset_50ep__epochs_150.pt`)
+      and `23_2g8a_schedsamp_v2_pilot_p50_self_gnn_contr_gnn_switch.yml`
+      (artifact `...__epochs_150__schedsamp_0.50.pt`); verify paths against
+      the fetched filenames and the sweep DIR_PATTERN.
+- [ ] 6. Pilot sims on Raven (squeue check; confirm punisher joblib +
+      switch + valid artifacts exist remotely); fetch; `python -m
+      aimanager evaluate` both; report unrounded CG/RCD/RCA, rows <= 1,
+      mean, plus the read-only `_spread_ratio` diagnostic (human, ctrl,
+      p50, parent baseline).
+- [ ] 7. DECISION GATE (orchestrator; STOP POINT): (a) p50 CG separated
+      below ctrl CG with spread ratio moving toward human — if not,
+      STOP and escalate to the maintainer; (b) 575-epoch wall-clock
+      estimate vs the 10 h template wall; (c) hold-phase fold-loss still
+      descending? -> choose epochs E (default 575) for the full arms.
+- [ ] 8. Full arm configs `auto_cg_schedsamp_v2_p25.yml` /
+      `auto_cg_schedsamp_v2_p50.yml`: epochs E, ramp 86->345, seed 38381,
+      n_cross_val 5, quoted schedsamp labels, output_dirs
+      `artifacts/artificial_humans/auto_cg_schedsamp_v2_p{25,50}`.
+- [ ] 9. Train both full arms on Raven; verify sacct State COMPLETED (not
+      TIMEOUT); fetch; log fold-mean best held-out log_loss (diagnostic
+      only), realized substitution rate, Elapsed.
+- [ ] 10. Full-arm sim configs
+      `23_2g8a_schedsamp_v2_p{25,50}_self_gnn_contr_gnn_switch.yml`,
+      same copy discipline, artifact paths verified against the fetched
+      filenames.
+- [ ] 11. Simulate both on Raven; fetch; evaluate both; report all 21
+      rows unrounded per arm + spread-ratio diagnostic + CA/CB/CD/CF
+      guardrail block.
+- [ ] 12. Arm selection (orchestrator): better arm by evaluation score;
+      ties to the lower p_max.
+- [ ] 13. Verdict per §2 vs the declared baseline: CG > 5 -> 2-5 or
+      better, OR RCD/RCA 2-5 -> 1-2 or better, AND mean <
+      1.6879978841849728. Complete the Results table unrounded.
+- [ ] 14. Push; PR with `--base auto/punisher-severity-copula-v2`, title
+      `[SUCCESS]`/`[FAIL]`, body Hypothesis / Results / Collateral.
 
 ## 3. Results
 
