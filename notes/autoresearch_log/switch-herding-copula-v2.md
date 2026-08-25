@@ -62,10 +62,10 @@ against the parent baseline. Targets per §2, legality per §5, frozen
 surface untouched per §8. Slug: `herding_copula_ar1_v2`; switch token
 `herdcopar1` (unchanged — the output dir carries the v2).
 
-- [ ] 1. Worktree + Claude commit identity from
+- [x] 1. Worktree + Claude commit identity from
       `origin/auto/punisher-severity-copula-v2` (done at branch creation);
       declaration + plan committed.
-- [ ] 2. Restore from `origin/auto/switch-herding-copula`, unchanged:
+- [x] 2. Restore from `origin/auto/switch-herding-copula`, unchanged:
       `src/aimanager/generic/copula.py` (torch-only sampler),
       `src/aimanager/generic/graph.py` (gated copula dispatch; rho
       absent/0.0 keeps the legacy path bit-identical, RNG stream included —
@@ -82,22 +82,22 @@ surface untouched per §8. Slug: `herding_copula_ar1_v2`; switch token
       provenance in the original log notes 9-10).
       (`src/aimanager/simulation/linear_ah.py` needs nothing: the parent's
       copy is already byte-identical to the old branch's.)
-- [ ] 3. Re-run the calibration locally (`switch_copula_rho.py`: acceptance
+- [x] 3. Re-run the calibration locally (`switch_copula_rho.py`: acceptance
       gates, pairwise MLE, AR(1) lag-1 step, bootstrap); require
       rho = 0.116482333585783 and phi = 0.70366020589033 to reproduce
       exactly (deterministic, fixed seeds); write
       `artifacts/artificial_humans/switch_pred_herding_copula/calibration/copula_params.json`
       (parameters bit-identical; provenance fields re-stamped).
-- [ ] 4. Run local suites: `pytest tests/` + the eval-suite tests (frozen
+- [x] 4. Run local suites: `pytest tests/` + the eval-suite tests (frozen
       surface untouched).
-- [ ] 5. Arm-B artifact
+- [x] 5. Arm-B artifact
       `artifacts/artificial_humans/switch_pred_herding_copula_ar1/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt`:
       restore the old branch's committed copy (LFS) into the worktree and
       verify the copy already on Raven is bit-identical (sha256); rebuild
       on Raven via `make_switch_copula_artifact.py` only on mismatch.
       (Same-path re-creation, per the parent's precedent with the
       severity-copula joblib — content is bit-identical, so no collision.)
-- [ ] 6. Sim config
+- [x] 6. Sim config
       `configs/simulation/manager_testing/23_2g8a_herding_copula_ar1_v2_self_gnn_contr_herdcopar1_switch.yml`:
       copy of the old branch's arm-B config trimmed to the single
       `lin_multinomial_copula_self` pairing (pairing position 1 — RNG
