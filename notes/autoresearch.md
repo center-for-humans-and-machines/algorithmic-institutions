@@ -15,51 +15,51 @@ definitions in `notes/evaluation_metric_defs.md`).
 
 ## 2. The metrics
 
-Three numbers, judged in this order, all from one `evaluation/scores.csv`
-(21 rows):
+Everything comes from one `evaluation/scores.csv` (21 rows), judged against
+the evaluation stack's own baseline scores (§3). Two gates, both required
+for success:
 
-1. **Target rows** — the rows your hypothesis declares (candidates from §6;
-   e.g. CG, RCA, RCD for the GNN contributor), collectively or a selection.
-   Their scores must drop; no movement means the hypothesis failed, whatever
-   else moved.
-2. **Rows <= 1** — rows at or below the human-vs-human noise ceiling, whole
-   stack. Must not fall; raising it is the headline. **Baseline: 11 / 21.**
-3. **Mean score** — average over all 21 rows. Must not rise; breaks ties.
-   **Baseline: 1.76.**
+1. **A band upgrade on a target row.** The scoring bands
+   (<= 1 / 1-2 / 2-5 / > 5) are the classes: at least one row your
+   hypothesis declares (candidates from §6) must finish in a better band
+   than its baseline — from > 5 into 2-5, from 2-5 into 1-2 or <= 1, from
+   1-2 into <= 1. A within-band improvement, however large, is a `[FAIL]`
+   with valuable notes, not a success.
+2. **The mean score improves.** The average over all 21 rows must drop
+   below the evaluation stack's baseline mean — you cannot buy your targets
+   by breaking the rest of the stack.
 
-An experiment is **kept** iff its target rows improve and neither stack
-metric regresses — you cannot buy your targets by quietly breaking the rest
-of the stack.
+Nothing else gates. **Rows <= 1** (rows at or below the human-vs-human
+noise ceiling) is still computed and reported in every results table (§10),
+in the same column as always — context for the reader, not a criterion.
 
-**Success additionally requires a band upgrade.** The scoring bands
-(<= 1 / 1-2 / 2-5 / > 5) are the classes: at least one declared target row
-must finish in a better band than it started — from > 5 into 2-5, from 2-5
-into 1-2 or <= 1, from 1-2 into <= 1 — in the reference stack, confirmed by
-Stage 2. A within-band improvement, however large, is a `[FAIL]` with
-valuable notes, not a success.
-
-## 3. Evaluation protocol (two-stage)
+## 3. Evaluation protocol
 
 The metrics are a property of a full stack, so candidates are always scored
-inside one. **Reference stack** (current) — only the human maintainer
-updates this definition, when a candidate is accepted:
+inside one — the **highest-ranked stack that contains your base model**:
+rank the sweep's stacks by mean score (`score_matrix.csv`, §6), filter to
+those with your base model in your slot, take the best. Swap your candidate
+into its slot there; one simulation (§7 protocol) + one evaluation. That
+stack's own scores are the baseline for both gates (§2). There is no
+confirmation sweep — winning in your base model's best context is the
+claim. E.g. a GNN-contributor candidate evaluates inside
+`gnn x gnn x multinomial` (mean 1.759, rows <= 1: 11/21); a multinomial
+punisher candidate inside `gaussian x gnn x multinomial`.
+
+Artifact paths for any stack are read off its sim config,
+`configs/simulation/manager_testing/23_2g8a_self_<contr>_contr_<switch>_switch.yml`
+(which also carries the shared `valid_model` — plumbing, not a slot). The
+current top of the ranking, `gaussian x gnn x multinomial` (mean 1.640,
+rows <= 1: 8/21):
 
 | slot | model | artifact |
 |---|---|---|
-| contribution | `gnn` | `artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt` |
+| contribution | `lin_gaussian` | `artifacts/baselines/contribution_gaussian_best.joblib` |
 | switch | `gnn` | `artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt` |
 | punisher | `lin_multinomial` | `artifacts/baselines/punishment_multinomial_best_with_contr.joblib` |
 
-Reference sim config (also carries the shared `valid_model`, which is
-plumbing, not a slot):
-`configs/simulation/manager_testing/23_2g8a_self_gnn_contr_gnn_switch.yml`.
-
-- **Stage 1 — iterate.** Swap your candidate into its slot of the reference
-  stack; one simulation (§7 protocol) + one evaluation.
-- **Stage 2 — confirm.** The full sweep: the 8-config family with your
-  candidate replacing its slot everywhere, then `evaluation_sweep.py`. The
-  claim stands only if the candidate also wins its slot across contexts
-  (the Kendall's-W discipline of PR #143), not just in the reference stack.
+Only the human maintainer refreshes the score matrix (and with it this
+ranking), when a candidate is accepted.
 
 ## 4. Agents and slots
 
@@ -68,7 +68,8 @@ only your slot's model, features, and training configs — one change per
 experiment, declared in your log file before you start (§10).
 
 A bug fix in shared code (encoder, simulation, preprocessing) is legal but is
-its own experiment: fix only, before/after scores for the reference stack.
+its own experiment: fix only, before/after scores for the top-ranked stack
+(§3).
 
 ## 5. Legal and illegal changes
 
@@ -79,8 +80,8 @@ direction the evaluations point to (§6) or a finding you make and document:
 - new input features — only information the real player or manager observably
   had at decision time (punishment models condition on round t-1, never on
   the current round's contributions),
-- hyperparameter search, including selecting between variants by Stage-1
-  score,
+- hyperparameter search, including selecting between variants by their
+  evaluation score,
 - training-data handling within the conventions (GNNs train on the
   flip-doubled data, linears on the single copy),
 - bug fixes, with an explanation of what was wrong.
@@ -97,7 +98,8 @@ that sentence, the change is a frankenstein — do not make it.
   (e.g. keyed to a bin edge or stratum boundary),
 - training on the evaluation's resampling structure, or on the flipped
   duplicates where the convention says single-copy,
-- reporting Stage-1 numbers as confirmed results.
+- stack-shopping: evaluating in any stack other than the one §3 selects
+  for your base model, or reporting scores from a friendlier context.
 
 Ties go to the simpler model.
 
@@ -146,7 +148,7 @@ template (2 groups x 8 agents, 24 rounds, 100 episodes, seed 42,
 | simulate | `scripts/simulate_cluster.sh <config>` | Raven |
 | fetch results | `scripts/fetch_cluster.sh <remote_path>` | local |
 | evaluate | `python -m aimanager evaluate <sim config>` | local |
-| sweep (Stage 2) | `python scripts/data_analysis/evaluation_sweep.py <name> <sim dirs>` | local |
+| sweep (maintainer matrix refresh) | `python scripts/data_analysis/evaluation_sweep.py <name> <sim dirs>` | local |
 | tests | `scripts/remote_test.sh` (PyG) / `pytest` (eval suite) | Raven / local |
 
 ## 8. Frozen surface
@@ -158,7 +160,8 @@ Never modified by agents, under any experiment:
 - `experiments/` (the human data),
 - scoring parameters (500 repeats, master seed 42) and the simulation
   protocol (episode count, seeds, game parameters),
-- the reference stack definition and other branches' (or merged) log files.
+- the evaluation-stack selection (§3) — the sweep's score matrix and the
+  ranking rule — and other branches' (or merged) log files.
 
 If an experiment seems to require touching any of these, stop and escalate
 to the human maintainer.
@@ -208,17 +211,17 @@ machine account may replace this later.
    plan is wrong, revise the step list first (through validation again),
    then continue.
 5. Train, simulate, evaluate per §3 and §7; log every run (§10).
-6. Kept per §2 **with a band upgrade** on a target row? Run Stage 2. Kept
-   but within-band? Skip the sweep — it cannot become a success.
-7. **Every experiment ends in a PR** — titled `[SUCCESS] ...` (band upgrade,
-   Stage-2 confirmed) or `[FAIL] ...` (targets did not move, no band
-   upgrade, or Stage 2 did not confirm; never merged — it exists so the
-   next agent does not retry it).
+6. The verdict comes straight from that single evaluation, per §2: a band
+   upgrade on a target row *and* a better mean is a success; anything less
+   is a fail. There is no second stage.
+7. **Every experiment ends in a PR** — titled `[SUCCESS] ...` (band upgrade
+   on a target row and the mean improved) or `[FAIL] ...` (no band upgrade,
+   or the mean did not improve; never merged — it exists so the next agent
+   does not retry it).
    No silent abandonment. The body, in order:
    1. **Hypothesis** — brief: the behavioral claim, the planned change, and
       the targeted rows with their starting scores.
-   2. **Results** — the log file's results table (§10), both stages where
-      run.
+   2. **Results** — the log file's results table (§10).
    3. **Collateral** — non-target rows that moved, grouped `+` / `-`. Only
       the important ones: movements that could seed further experiments,
       not every wiggle.
