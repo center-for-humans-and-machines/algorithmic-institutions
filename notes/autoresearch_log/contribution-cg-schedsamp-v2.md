@@ -94,7 +94,7 @@ keeps ctrl-vs-p50 fair).
       `auto_cg_schedsamp_v2_pilot_p50.yml` (p_max 0.5, ramp 22->90;
       `labels.schedsamp: '0.50'` quoted — the filename depends on it).
       Same seed 38381, n_cross_val 5, flip-doubled 50ep data.
-- [ ] 4. Train both pilots on Raven (`train_cluster.sh ah`, second with
+- [x] 4. Train both pilots on Raven (`train_cluster.sh ah`, second with
       `--no-sync`); poll; fetch artifacts + metrics; record per arm:
       sacct Elapsed and per-epoch time (Elapsed / (6 folds x 150)),
       realized substitution rate and p(e), held-out log_loss trajectory
@@ -164,3 +164,24 @@ keeps ctrl-vs-p50 fair).
    reference. Caveat noted: the scaled pilot holds full p_max for only 60
    epochs (vs 230 in the 575-epoch design) — enough for separation
    detection, not convergence.
+4. Step 4 done 2026-08-25 (commit 766419c). ctrl job 29612646 (2:46),
+   p50 job 29612707 (22:35): the unroll costs ~8.2x per epoch (1.506 s vs
+   0.184 s), so a full 575-epoch arm prices at ~1.5 h — well inside the
+   10 h wall. Ramp verified exact (parquet scheduled_sampling_rate matches
+   the analytic schedule). Held-out log_loss: p50 worse than ctrl at every
+   eval epoch (+0.128 at e149), gap opening with the ramp — the declared
+   teacher-forcing tax; both arms still descending at e149 in 5/5 folds
+   (150 epochs is a truncation, not convergence).
+5. Incident: a parallel session's rsync --delete sync into the shared
+   Raven checkout deleted the pilot configs and reverted train.py twice
+   during step 4. Training survived because run.sh materializes job.yml
+   under .log/ (sync-excluded) and Python had already imported the right
+   module; the p50 arm's scheduled sampling was verified live from its
+   log (ss_p lines) and the parquet substitution-rate rows, and ctrl's
+   main-train.py run was verified byte-equivalent (scheduled_sampling
+   absent -> identical path). Silent failure mode to guard against in
+   every later cluster step: old train.py ignores the unknown key, so a
+   revert landing before job start would train a control under the
+   schedsamp name with exit code 0. Guard: verify from job logs +
+   recorded metrics, never from exit codes; re-verify remote src md5 at
+   job start for sims.
