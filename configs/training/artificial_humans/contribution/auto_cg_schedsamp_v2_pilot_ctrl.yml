@@ -1,0 +1,69 @@
+description: >-
+  Control arm of the contribution-cg-schedsamp-v2 pilot: no scheduled
+  sampling, 150 epochs. Trains the contribution predictor on the
+  50-episode group-switching data, pair-augmented in preprocessing (each
+  competition appears with both governorA→0 and governorA→1 label
+  mappings; pair-aware CV keeps copies in the same fold). Architecture:
+  node+edge+rnn, hidden=20, lr=3e-4. agent_group node feature encoded
+  onehot instead of numeric — removes the spurious ordering/magnitude a
+  single numeric scalar imposes (group 1 entering at full weight, group 0
+  contributing nothing) and gives each group an independent additive
+  offset. Epochs cut from the 575 early-stop budget to 150 so the pilot
+  arms finish in a short iteration cycle; eval_period 10 keeps the same
+  number of evaluation points on the shortened schedule. This arm is the
+  baseline the p_max=0.50 arm is compared against.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 150
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/auto_cg_schedsamp_v2_pilot_ctrl
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 150
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 10
+    l1_entropy: 0
+  device: cuda
+  autoregression: False
