@@ -65,12 +65,12 @@ surface untouched per §8. Slug: `severity_copula_v2`.
       the copula bundle, single `lin_multinomial_copula` self pairing,
       output dir slugged `severity_copula_v2` (slug before `_self_` so the
       sweep DIR_PATTERN parses); protocol byte-identical to the 23 family.
-- [ ] 6. Push the joblib to Raven explicitly (`simulate_cluster.sh` excludes
+- [x] 6. Push the joblib to Raven explicitly (`simulate_cluster.sh` excludes
       `artifacts/`); check `squeue` for PENDING jobs before any rsync.
-- [ ] 7. `scripts/simulate_cluster.sh <config>`; poll; confirm
+- [x] 7. `scripts/simulate_cluster.sh <config>`; poll; confirm
       `per_round.parquet`; `scripts/fetch_cluster.sh`; `python -m aimanager
       evaluate <config>`.
-- [ ] 8. Verdict per §2 against the declared baseline: PD out of 2-5 into
+- [x] 8. Verdict per §2 against the declared baseline: PD out of 2-5 into
       1-2 or <= 1, AND mean < 1.7595567320354153. Log unrounded; PR
       `[SUCCESS]`/`[FAIL]` with Hypothesis / Results / Collateral.
 
@@ -78,6 +78,7 @@ surface untouched per §8. Slug: `severity_copula_v2`.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-25 | copula sampling, rho=0.3507588625344979 (pairwise MLE) | single | PD 1.5324969616723312 (baseline 2.9348924694638336) | 10/21 (baseline 11/21) | 1.6879978841849728 (baseline 1.7595567320354153) | SUCCESS — gate 1 (PD 2-5 -> 1-2) and gate 2 (mean down) both pass |
 
 ## 4. Notes
 
@@ -86,3 +87,19 @@ surface untouched per §8. Slug: `severity_copula_v2`.
    gates that is a success (PD 2-5 -> 1-2, mean down); the 11 -> 10 rows
    <= 1 dip that forced the old escalation no longer gates. This run
    re-executes the protocol rather than importing those numbers.
+2. The calibration reproduced the original estimate bit-for-bit
+   (rho_hat 0.3507588625344979, bootstrap SE 0.0377, 95% CI
+   [0.278, 0.423]); the pre-flight replay closes 62% of the human
+   group-spread gap (independent 0.627 -> copula 0.704, human 0.750).
+   314 local tests pass, eval suite untouched.
+3. The simulation and evaluation reproduced the original Stage-1 scores
+   bit-for-bit on all 21 rows (same seed, same code, same artifact) —
+   the verdict is a re-execution, not an import.
+4. The single rows <= 1 loss is RSA crossing 0.908837 -> 1.0010089590803533
+   (0.1% over the ceiling). The original PR's 8-context sweep already
+   adjudicated this as noise (RSA falls in the 4 gnn-switch contexts,
+   rises in the 4 lin-switch contexts, slot avg +0.0050); under the
+   current protocol rows <= 1 does not gate, so it is context only.
+5. SC improves 3.270439 -> 2.816006 within the 2-5 band — the shared
+   independent-sampling root cause (PR #140) acting on a sibling row,
+   consistent with the original finding of SC improving in 7/8 contexts.
