@@ -99,7 +99,7 @@ keeps ctrl-vs-p50 fair).
       sacct Elapsed and per-epoch time (Elapsed / (6 folds x 150)),
       realized substitution rate and p(e), held-out log_loss trajectory
       per cv_split.
-- [ ] 5. Pilot sim configs: byte-identical protocol copies of
+- [x] 5. Pilot sim configs: byte-identical protocol copies of
       `23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch.yml`, only
       contribution_model/output_dir/figure_name changed:
       `23_2g8a_schedsamp_v2_pilot_ctrl_self_gnn_contr_gnn_switch.yml`
@@ -107,12 +107,12 @@ keeps ctrl-vs-p50 fair).
       and `23_2g8a_schedsamp_v2_pilot_p50_self_gnn_contr_gnn_switch.yml`
       (artifact `...__epochs_150__schedsamp_0.50.pt`); verify paths against
       the fetched filenames and the sweep DIR_PATTERN.
-- [ ] 6. Pilot sims on Raven (squeue check; confirm punisher joblib +
+- [x] 6. Pilot sims on Raven (squeue check; confirm punisher joblib +
       switch + valid artifacts exist remotely); fetch; `python -m
       aimanager evaluate` both; report unrounded CG/RCD/RCA, rows <= 1,
       mean, plus the read-only `_spread_ratio` diagnostic (human, ctrl,
       p50, parent baseline).
-- [ ] 7. DECISION GATE (orchestrator; STOP POINT): (a) p50 CG separated
+- [x] 7. DECISION GATE (orchestrator; STOP POINT): (a) p50 CG separated
       below ctrl CG with spread ratio moving toward human — if not,
       STOP and escalate to the maintainer; (b) 575-epoch wall-clock
       estimate vs the 10 h template wall; (c) hold-phase fold-loss still
@@ -144,6 +144,8 @@ keeps ctrl-vs-p50 fair).
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
 | 2026-08-25 | (baseline) parent stack, severity-copula punisher (PR #160) | — | CG 9.808514112722413, RCD 2.941928428442498, RCA 2.0829074791966917 | 10/21 | 1.6879978841849728 | baseline |
+| 2026-08-25 | pilot ctrl: 150 epochs, no schedsamp (jobs 29612646 train / 29613554 sim) | pilot | CG 9.592575, RCD 3.484160, RCA 3.134277 | 8/21 | 1.8250754491656211 | pilot reference |
+| 2026-08-25 | pilot p50: 150 epochs, p_max 0.5, ramp 22->90 (jobs 29612707 / 29613556) | pilot | CG 8.315325, RCD 0.878690, RCA 6.639278 | 10/21 | 1.85971801958414 | separation confirmed; gate passed |
 
 ## 4. Notes
 
@@ -185,3 +187,15 @@ keeps ctrl-vs-p50 fair).
    schedsamp name with exit code 0. Guard: verify from job logs +
    recorded metrics, never from exit codes; re-verify remote src md5 at
    job start for sims.
+6. Step 7 gate decision 2026-08-25: PROCEED. (a) Separation confirmed —
+   pilot CG 9.5926 (ctrl) vs 8.3153 (p50), spread ratio 0.5955 vs 0.6299
+   (human 0.8480, reference 0.5882): ~16% of the reference-to-human gap
+   at a truncated dose. (b) Cost: 575-epoch arm ~1.5 h, inside the wall.
+   (c) Epochs: both pilot arms still descending at e149; keep E=575
+   (matches the reference artifact), re-check on the full run.
+   Texture for step 12: schedsamp buys RCD massively (3.4842 -> 0.8787,
+   two bands in-pilot) and CG partially, but taxes RCA (3.1343 -> 6.6393)
+   and RCB (2.0280 -> 3.3984) at p50, leaving the pilot mean slightly
+   worse (1.8251 -> 1.8597) — the §6 anti-correlation pattern. The p25
+   arm is the dose hedge; gate 1 can also be satisfied by RCD reaching
+   1-2 in the full stack if the mean improves.
