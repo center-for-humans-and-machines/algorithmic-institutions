@@ -117,7 +117,7 @@ keeps ctrl-vs-p50 fair).
       STOP and escalate to the maintainer; (b) 575-epoch wall-clock
       estimate vs the 10 h template wall; (c) hold-phase fold-loss still
       descending? -> choose epochs E (default 575) for the full arms.
-- [ ] 8. Full arm configs `auto_cg_schedsamp_v2_p25.yml` /
+- [x] 8. Full arm configs `auto_cg_schedsamp_v2_p25.yml` /
       `auto_cg_schedsamp_v2_p50.yml`: epochs E, ramp 86->345, seed 38381,
       n_cross_val 5, quoted schedsamp labels, output_dirs
       `artifacts/artificial_humans/auto_cg_schedsamp_v2_p{25,50}`.
