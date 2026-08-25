@@ -45,21 +45,21 @@ implementation steps are carried over as settled, the two-stage evaluation is
 replaced by the single §3 evaluation. Targets per §2, legality per §5, frozen
 surface untouched per §8. Slug: `severity_copula_v2`.
 
-- [ ] 1. Worktree + Claude commit identity (done at branch creation).
-- [ ] 2. Restore from `origin/auto/punisher-severity-copula`, unchanged:
+- [x] 1. Worktree + Claude commit identity (done at branch creation).
+- [x] 2. Restore from `origin/auto/punisher-severity-copula`, unchanged:
       `scripts/baselines/punishment_copula_rho.py` (calibration),
       `tests/baselines/test_punishment_copula.py` (31 local tests),
       `src/aimanager/simulation/linear_ah.py` (gated copula sampling;
       rho absent/0.0 keeps the legacy path bit-identical, RNG stream
       included — main's copy is byte-identical to the old branch's parent,
       so the restore is exactly the original diff).
-- [ ] 3. Re-run the calibration locally; require rho to reproduce
+- [x] 3. Re-run the calibration locally; require rho to reproduce
       0.3507588625344979 exactly (deterministic, fixed seeds); save
       `artifacts/baselines/punishment_multinomial_severity_copula.joblib`
       (= base bundle + `copula_rho` + provenance; no pre-existing key
       modified, predict_proba bit-identical on reload).
-- [ ] 4. Run local suites: `pytest tests/baselines` + the eval-suite tests.
-- [ ] 5. Sim config
+- [x] 4. Run local suites: `pytest tests/baselines` + the eval-suite tests.
+- [x] 5. Sim config
       `configs/simulation/manager_testing/23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch.yml`:
       copy of the reference-stack config with the punisher slot swapped to
       the copula bundle, single `lin_multinomial_copula` self pairing,
