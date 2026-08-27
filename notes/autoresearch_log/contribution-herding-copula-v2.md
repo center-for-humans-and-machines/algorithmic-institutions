@@ -196,7 +196,7 @@ slot pointers stay as historical PR references.
       `plots/simulation/23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch/`;
       `python -m aimanager evaluate <config>`; commit sim outputs +
       evaluation, scores unrounded.
-- [ ] 14. Verdict per §2 against the declaration's baseline (gate 1:
+- [x] 14. Verdict per §2 against the declaration's baseline (gate 1:
       CG < 5 from 9.808514112722413, or RCD < 2 from 2.941928428442498;
       gate 2: mean < 1.6879978841849728; rows <= 1 vs 10/21 as context).
       Fill results table + Notes; PR with
@@ -262,6 +262,7 @@ no frozen surface):
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-27 | episode-persistent group copula at the contribution sampler, rho=0.06958238086256316 (pairwise MLE), phi=1.0 (boundary ruling) | single | CG 4.163465133854436 (baseline 9.808514112722413), RCD 1.9647336396755046 (baseline 2.941928428442498) | 11/21 (baseline 10/21) | 1.2893632310269196 (baseline 1.6879978841849728) | SUCCESS — gate 1 twice (CG > 5 -> 2-5, RCD 2-5 -> 1-2), gate 2 mean down |
 
 ## 4. Notes
 
@@ -595,3 +596,19 @@ no frozen surface):
    `src/aimanager/evaluation_suite/`, `notes/evaluation_metric_defs.md`,
    `notes/eval_scoring_schema.md`, `experiments/` is empty). Verdict is step
    14's, not recorded here.
+
+8. Verdict (step 14): both declared targets band-upgraded in the single
+   §3 evaluation — CG 9.808514112722413 -> 4.163465133854436 (> 5 into
+   2-5; raw ratio gap 0.2594222471221652 -> 0.1101181553522297) and RCD
+   2.941928428442498 -> 1.9647336396755046 (2-5 into 1-2) — and the mean
+   dropped 1.6879978841849728 -> 1.2893632310269196, the lowest 21-row
+   mean on record for any stack. Collateral band movements: RCA
+   2.0829074791966917 -> 1.4753607514349265 (a third band upgrade, on a
+   declared watch item), CC 1.6268858908646675 -> 0.9650336011427679
+   (into the ceiling), RSA back under 1, PD
+   1.5324969616723312 -> 1.002888436797886; the marginal C block ticks
+   up but stays at or near the ceiling (CF 1.0080725240834727 is the
+   one ceiling exit, 0.8% over), the expected direction of the
+   marginal/joint trade. The three group-dispersion mechanisms now in
+   the stack (severity copula, this latent, and SC's remaining 2.19)
+   all moved the way the PR #140 shared-root-cause analysis predicted.
