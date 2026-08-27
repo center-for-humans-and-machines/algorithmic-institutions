@@ -239,7 +239,7 @@ def marginals():
         out["P"] = proba[:, first, -1]
     # identical features across the batch -> one conditional row for all of it
     assert th.allclose(out["P"], out["P"][:1].expand_as(out["P"]))
-    out["P"] = out["P"][0].numpy().astype(np.float64)
+    out["P"] = out["P"][0].detach().numpy().astype(np.float64)
     return out
 
 
