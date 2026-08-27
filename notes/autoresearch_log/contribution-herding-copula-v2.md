@@ -153,7 +153,7 @@ slot pointers stay as historical PR references.
       Local (torch-only, main checkout's interpreter with `PYTHONPATH`
       at this worktree's `src`): `pytest tests/copula tests/switch` +
       the eval-suite tests. Log entry only if green.
-- [ ] 8. `sbatch scripts/artificial_humans/calibrate_copula.slurm` in
+- [x] 8. `sbatch scripts/artificial_humans/calibrate_copula.slurm` in
       the isolated dir (CPU job; no compute on login nodes).
       Acceptance: rho must reproduce #149's 0.06958238086256316 exactly
       (SE 0.010418260898762315, CI [0.04592661278794028,
@@ -202,6 +202,61 @@ slot pointers stay as historical PR references.
       Fill results table + Notes; PR with
       `--base auto/punisher-severity-copula-v2`, titled
       `[SUCCESS]`/`[FAIL]`, body Hypothesis / Results / Collateral.
+
+### Plan revision (2026-08-27, after step 8, before step 9 — §9.4)
+
+Step 8 ran: rho reproduced PR #149 bit-exactly
+(0.06958238086256316, SE 0.010418260898762315, CI
+[0.04592661278794028, 0.0854596547235886], round-trip max |bias|
+0.009462259703284237, preflight 0.7837119164031583 ->
+0.7928150641319318 vs human 0.8472681041593946 — all four acceptance
+numbers match). The phi stop-gate fired: PRIMARY cross-player lag-1
+phi_hat = 1.1588380212468576, CI [0.8256631146532615,
+1.6415133722844082]; all-pairs diagnostic 1.1114407681084841;
+rho_lag1_cross = 0.0806347085524179 > rho. The job exits 1 by design
+("STOP-ESCALATE", `contribution_copula_rho.py:603-609`).
+
+**Orchestrator ruling — adopt phi = 1.0, the unit-root boundary
+(static episode latent), and continue.** Rationale, recorded before any
+artifact was stamped or simulation run:
+
+1. The CI spans 1: the estimator saturated at its boundary; it did not
+   measure a real super-unit persistence.
+2. `phi = rho_lag1 / rho` assumes a stationary latent-only dependence
+   structure. PR #149 documented round-growing rho
+   (0.035 / 0.074 / 0.119 by thirds) and the `prev_contribution`
+   feedback adds cross-round dependence outside the latent — both bias
+   phi_hat upward.
+3. phi = 1.0 is exact in the sampler (`z_next = z_prev`, variance 1,
+   marginals untouched) and conservative: it predicts cross-round
+   cross-player dependence rho = 0.0696, still below the observed
+   0.0806.
+4. It is the declared hypothesis in its purest form — one shared
+   standard-normal per (episode, group), the copula analog of
+   PR #159's episode-persistent latent. The dose is untouched: rho
+   stays the MLE value. Persistence-class boundary decision, not a
+   tuned parameter; no evaluation score was involved.
+5. The ported stamper already implements exactly this path
+   (`phi_final` = "1.0 exactly for a static episode latent",
+   `make_contribution_copula_artifact.py` docstring + the (0, 1]
+   assert) — the prior branch designed the escape hatch; only the two
+   sampler asserts were never relaxed to match.
+
+Amended steps, validated (targets unchanged, §5 legal — simpler model,
+no frozen surface):
+
+- [ ] 8b. Relax the two strict asserts to admit the boundary
+      (`copula.py` `0.0 <= phi <= 1.0`; `graph.py:180` likewise);
+      extend the test suites with phi = 1.0 cases (latent constant
+      across rounds, cell-switch pickup, marginals preserved, RNG
+      contract unchanged); rerun the affected local + Raven suites.
+- [ ] 9'. Step 9 additionally: append `phi_final: 1.0` +
+      `phi_final_reason` (this ruling) to the committed
+      `copula_params.json` — the field the stamper is designed to
+      read; the estimated phi stays in the JSON unaltered.
+- [ ] 10'. Step 10 stamps `copula_phi = 1.0` via `phi_final`; the
+      `.copula.json` sidecar carries both the estimate and the adopted
+      value.
 
 ## 3. Results
 
