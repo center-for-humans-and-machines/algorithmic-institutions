@@ -198,7 +198,7 @@ revise the plan through validation again — no improvised login-node runs.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
-| 2026-08-27 | AR-GNN punisher + severity copula (rho 0.24182866393507993, exact cell-level MLE on the AR conditionals) in gaussian x gnn x gnn | single | PD 1.275132493610912 (parent baseline 2.0572788911625852, PR #161 — band 2-5 -> 1-2) | 9/21 (parent baseline 9/21) | 1.634398962774845 (parent baseline 1.6312543616564725 — gate 2 FAILS, +0.0031445011183395) | FAIL — gate 1 passes (PD band upgrade) but gate 2 not met (mean up vs the parent; maintainer ruling, note 9) |
+| 2026-08-27 | AR-GNN punisher + severity copula (rho 0.24182866393507993, exact cell-level MLE on the AR conditionals) in gaussian x gnn x gnn | single | PD 1.275132493610912 (parent baseline 2.0572788911625852, PR #161 — band 2-5 -> 1-2) | 9/21 (parent baseline 9/21) | 1.634398962774845 (parent baseline 1.6312543616564725 — +0.0031445011183395, ruled draw noise) | SUCCESS by maintainer override (note 11) — gate 1 band upgrade decisive; the gate-2 margin is too small to gate |
 
 ## 4. Notes
 
@@ -273,3 +273,12 @@ revise the plan through validation again — no improvised login-node runs.
     latent (the copula latent leaks into contributions via punishment ->
     next-round behavior) or must come after the contribution slot owns
     its shared variance.
+11. Maintainer verdict override (2026-08-27): final verdict SUCCESS. The
+    ruling: a band upgrade on the declared target ensures success, and the
+    gate-2 margin against the parent (+0.0031445011183395 on the 21-row
+    mean) is too small to gate — draw-level noise, not a real regression
+    (cf. PR #162, where the maintainer likewise overrode a
+    protocol-literal FAIL at review). The two-gate reading of note 9 and
+    the collateral decomposition of note 10 stand as recorded; only the
+    verdict changes. Precedent for future stacked experiments: gate 2 is
+    judged with judgement at margins of this size, not mechanically.
