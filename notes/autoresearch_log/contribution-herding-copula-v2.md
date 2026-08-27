@@ -167,7 +167,7 @@ slot pointers stay as historical PR references.
       `artifacts/artificial_humans/group_switching_contribution_50ep_herding_copula_v2/calibration/copula_params.json`;
       log rho, phi, both CIs, the all-pairs phi diagnostic, job id,
       unrounded.
-- [ ] 10. Port `scripts/artificial_humans/make_contribution_copula_artifact.py`
+- [x] 10. Port `scripts/artificial_humans/make_contribution_copula_artifact.py`
       with the `PARAMS`/`OUT` dirs renamed to `..._herding_copula_v2`;
       run in the isolated dir (stamps `copula_rho`, `copula_phi`,
       `copula_switch_every=1`; bit-identical check on every pre-existing
@@ -254,7 +254,7 @@ no frozen surface):
       `phi_final_reason` (this ruling) to the committed
       `copula_params.json` — the field the stamper is designed to
       read; the estimated phi stays in the JSON unaltered.
-- [ ] 10'. Step 10 stamps `copula_phi = 1.0` via `phi_final`; the
+- [x] 10'. Step 10 stamps `copula_phi = 1.0` via `phi_final`; the
       `.copula.json` sidecar carries both the estimate and the adopted
       value.
 
@@ -470,3 +470,51 @@ no frozen surface):
    job log needed `git add -f`: `.gitignore:4` is `*.log`, and plan
    step 9 asks for the log itself, so this one 10 KB text file is a
    deliberate narrow exception (flagged for the reviewer).
+
+6. Step 10 (artifact stamped). **Port:** the stamper checked out from
+   `auto/contribution-herding-copula`; the only edits are the `PARAMS`
+   and `OUT` dirs renamed to `..._herding_copula_v2` (two occurrences,
+   post-edit grep for the old name returns nothing), the log pointer in
+   the module docstring repointed to this file, and two stale
+   prior-branch pointers renumbered to this plan ("note-7 decision rule"
+   -> the plan-revision ruling in this log, assert message "plan step
+   8b/8c" -> "plan step 8b"). Read in full first: it stamps
+   `params["phi_final"]` when present and refuses a `phi_final` without
+   a `phi_final_reason`; asserts `0 < rho < 1` and `0 < phi <= 1`;
+   re-checks `phi_kept`, `copula_switch_every`, `source_model` and
+   `source_model_sha256` against the base; walks every pre-existing key
+   with a bit-level `same()` after reload and asserts the only new keys
+   are the three copula fields; round-trips the three fields through
+   `GraphNetwork.load`; and runs the honesty check (teacher-forced
+   `sample=False` train-split probability matrix bit-identical to the
+   base). **Run (job 29667403, `cg_copula_stamp`, COMPLETED 00:00:14,
+   ExitCode 0:0):** via `sbatch` from the isolated dir, not the login
+   node -- the script unpickles PyG modules and does a full teacher-
+   forced pass, i.e. real compute. The wrapper
+   `scripts/artificial_humans/stamp_copula.slurm` copies
+   `calibrate_copula.slurm`'s pattern (shared checkout's interpreter,
+   `PYTHONPATH="$PWD/src"`, `--chdir=.`, provenance echo); it queued
+   ~9 min on `QOSGrpCpuLimit` behind an unrelated 8-CPU job of another
+   session in `~/iso_contr_herdcopar1` (no `_v2`, a different dir --
+   nothing wrote into ours). Remote `aimanager.__file__` was inside the
+   isolated dir; md5 of the stamper, the wrapper and the params JSON
+   verified local vs remote before submission.
+   **Verification lines:** base sha256
+   `3748e9e12461eaa70c7d5ff5c445e7ac1a54396b928624bf32f5d6b9974925c1`
+   (== the params' `source_model_sha256`), params sha256
+   `9ee42b1f433ee3eb353adcbdbb72382e347e4d73e9d202d06234243c34bdbbc5`,
+   stamped sha256
+   `4a32785d88707662ac70f393b8fd6bec1c59bf9be27446426731b12b1f01614b`
+   (re-hashed after the fetch: identical). "10 tensors compared
+   bit-identically vs the base artifact" over modules
+   `['op1', 'op2', 'rnn_n']`; `loads {'copula_rho':
+   0.06958238086256316, 'copula_phi': 1.0, 'copula_switch_every': 1}`;
+   "7457 teacher-forced train-split rows bit-identical to the base
+   model's"; "artifact verified bit-identical to the base outside the
+   copula fields". The `.copula.json` sidecar carries both numbers --
+   `phi_lag1_diagnostic 1.1588380212468576` (the estimate) and
+   `phi_stamped`/`copula_phi 1.0` (adopted) -- plus the ruling text and
+   both CIs. `git check-attr filter` on the `.pt` says `lfs`, so it was
+   committed normally through the LFS filter; the sidecar is plain JSON.
+   The stamper's own job log is not committed (`.gitignore` `*.log`);
+   its key lines are the ones quoted above.
