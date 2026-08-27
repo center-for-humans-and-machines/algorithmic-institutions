@@ -121,10 +121,10 @@ keeps ctrl-vs-p50 fair).
       `auto_cg_schedsamp_v2_p50.yml`: epochs E, ramp 86->345, seed 38381,
       n_cross_val 5, quoted schedsamp labels, output_dirs
       `artifacts/artificial_humans/auto_cg_schedsamp_v2_p{25,50}`.
-- [ ] 9. Train both full arms on Raven; verify sacct State COMPLETED (not
+- [x] 9. Train both full arms on Raven; verify sacct State COMPLETED (not
       TIMEOUT); fetch; log fold-mean best held-out log_loss (diagnostic
       only), realized substitution rate, Elapsed.
-- [ ] 10. Full-arm sim configs
+- [x] 10. Full-arm sim configs
       `23_2g8a_schedsamp_v2_p{25,50}_self_gnn_contr_gnn_switch.yml`,
       same copy discipline, artifact paths verified against the fetched
       filenames.
@@ -199,3 +199,11 @@ keeps ctrl-vs-p50 fair).
    worse (1.8251 -> 1.8597) — the §6 anti-correlation pattern. The p25
    arm is the dose hedge; gate 1 can also be satisfied by RCD reaching
    1-2 in the full stack if the mean improves.
+7. Step 9 done (jobs 29613983/29613993, 1:14:30 / 1:16:15): ramps exact,
+   realized substitution 0.2515 / 0.4995 at e574. Held-out log_loss still
+   descending at e574 in both arms (p25 best 1.98229, p50 2.02649, both
+   at the final eval) — the pilot's likelihood tax shrank with training
+   length; 575 remains a truncation, noted for the write-up. The step-9
+   subagent stalled after fetching p25 (session gap); the orchestrator
+   fetched p50 and committed. Step 10 sim configs verified
+   protocol-identical to the parent except the three intended fields.
