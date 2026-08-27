@@ -178,14 +178,14 @@ revise the plan through validation again — no improvised login-node runs.
       contr=gaussian / switch=gnn, artifact paths exist, output dir fresh,
       `save_per_round: true`, seed 42 / 100 episodes / 24 rounds
       unchanged); commit.
-- [ ] 16. PENDING check; confirm the copula `.pt` on Raven with matching
+- [x] 16. PENDING check; confirm the copula `.pt` on Raven with matching
       md5 (push explicitly if absent); `scripts/simulate_cluster.sh
       <config>`; poll; confirm `per_round.parquet`, exit 0; re-verify
       remote `graph.py` / `.pt` md5s after the run.
-- [ ] 17. `scripts/fetch_cluster.sh plots/simulation/23_2g8a_ar_copula_self_gaussian_contr_gnn_switch`;
+- [x] 17. `scripts/fetch_cluster.sh plots/simulation/23_2g8a_ar_copula_self_gaussian_contr_gnn_switch`;
       `python -m aimanager evaluate <config>`; 21 rows for the single
       `ar_copula_self` run.
-- [ ] 18. §2 verdict, unrounded: gate 1 PD <= 2 (baseline
+- [x] 18. §2 verdict, unrounded: gate 1 PD <= 2 (baseline
       2.6128746154448903, band 2-5); gate 2 mean < 1.7407445494371563;
       rows<=1 (baseline 7/21) as context. Guard: P-family marginals should
       sit near PR #161's (PA 0.5967, PB 0.7855, PC 0.8094, RPA 1.2689,
@@ -198,6 +198,7 @@ revise the plan through validation again — no improvised login-node runs.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-08-27 | AR-GNN punisher + severity copula (rho 0.24182866393507993, exact cell-level MLE on the AR conditionals) in gaussian x gnn x gnn | single | PD 1.275132493610912 (baseline 2.6128746154448903 — band 2-5 -> 1-2) | 9/21 (baseline 7/21) | 1.634398962774845 (baseline 1.7407445494371563 — gate 2 passes) | SUCCESS — gate 1 (PD band upgrade) and gate 2 (mean down) both pass |
 
 ## 4. Notes
 
@@ -219,3 +220,25 @@ revise the plan through validation again — no improvised login-node runs.
    AR independent 0.6497, AR copula 0.6688 (predict_autoreg) / 0.6969
    (free sweep) — a go, not a guaranteed band crossing; the verdict comes
    from the single §3 evaluation.
+4. Verdict detail (sim job 29666760, COMPLETED 0:0, 2m59s; evaluation 21
+   rows, 500 repeats, seed 42): PD 1.275132493610912 — through the band-2
+   edge the AR model alone missed by 0.0573 (PR #161: 2.0573) and past the
+   copula-on-multinomial's 1.5325 (PR #160). The mechanism decomposition
+   now reads: AR conditioning -0.56, shared severity latent a further
+   -0.78; the two dependence channels are complementary, as PR #152 note 9
+   predicted.
+5. Marginal guard (step 18): the P family stays at PR #161's level under
+   the copula — PA 0.7082 (#161 0.5967), PB 0.8489 (0.7855), PC 0.8175
+   (0.8094), RPA 1.2324 (1.2689), RPB 0.8321 (0.7201). Differences are
+   draw noise (the copula consumes a different RNG stream), not a marginal
+   shift — marginal preservation held in the full stack.
+6. Collateral, positive: the whole C family improves on baseline
+   (CA 2.2647 -> 2.0212, CB 0.9777 -> 0.7856, CC 1.5886 -> 1.5035,
+   CD 1.4803 -> 1.3433, RSA 0.9886 -> 0.8542) alongside the P family.
+   Negative: CG 3.7264 -> 4.0755 and SC 2.7144 -> 3.0271 tick up
+   within-band — the same shape as PR #161's run; the shared-variance
+   root cause lives in the contribution and switch slots, not the
+   punisher.
+7. The calibration tee log (`metrics/copula_rho_calibration.log`) is
+   untracked (`*.log` is gitignored repo-wide); `copula_rho.json` carries
+   the full provenance and is committed.
