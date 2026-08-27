@@ -101,19 +101,19 @@ references); (iii) only doc pointers to the superseded
 `contribution-herding-copula.md` log are repointed to this file; switch-
 slot pointers stay as historical PR references.
 
-- [ ] 1. Provenance survey, no code. Verified at planning: `b7dabfc` is
+- [x] 1. Provenance survey, no code. Verified at planning: `b7dabfc` is
       an ancestor of both donor branches, so both ports are clean path
       checkouts; `scripts/baselines/punishment_copula_rho.py` is
       byte-identical between base and donor (the estimator
       `contribution_copula_rho.py` imports is unchanged, #149's rho
       reproducible); port set A is self-contained (`copula.py` imports
       only `math` + `torch`). Record in Notes; no commit of its own.
-- [ ] 2. Port the machinery (commit): `git checkout
+- [x] 2. Port the machinery (commit): `git checkout
       auto/switch-herding-copula-v2 -- src/aimanager/generic/copula.py
       src/aimanager/generic/graph.py
       src/aimanager/tests/test_switch_copula_graph.py
       tests/switch/test_switch_copula.py`. Nothing else; no edits.
-- [ ] 3. Port the contribution work (commit): `git checkout
+- [x] 3. Port the contribution work (commit): `git checkout
       auto/contribution-herding-copula -- src/aimanager/generic/graph.py
       src/aimanager/tests/test_switch_copula_graph.py
       src/aimanager/tests/test_contribution_copula_graph.py
@@ -123,7 +123,7 @@ slot pointers stay as historical PR references.
       references to the superseded log file to this one. NOT ported: the
       superseded branch's sim config and log, every #162
       artifact/config/log.
-- [ ] 4. Re-verify the mechanism points once in the new tree, by
+- [x] 4. Re-verify the mechanism points once in the new tree, by
       reading, into Notes (commit with step 3 or alone): head-agnostic
       sampler; 21-level ordering == encoder; per-round sim calls with
       `n_rounds=1`; `reset_rnn` clears `_copula_z` at round 0;
@@ -222,3 +222,79 @@ slot pointers stay as historical PR references.
    hard-codes `n_groups = 2` — correct for the whole 23 family, silently
    wrong if a future config changes group count (planning-stage flag (d),
    recorded for the next reader).
+
+3. Steps 1-4 done in the worktree branch
+   `auto/contribution-herding-copula-v2`. **Provenance (step 1), re-run
+   here:** `git merge-base b7dabfc auto/switch-herding-copula-v2` ==
+   `b7dabfc259965d8300ee01ef7cc5749cfeb80b3a`, and the same for
+   `auto/contribution-herding-copula` — `b7dabfc` is an ancestor of both
+   donors, so both ports are clean path checkouts with no merge.
+   `git diff b7dabfc <donor> -- scripts/baselines/punishment_copula_rho.py`
+   is empty for both donors, so the estimator #149's rho came from is
+   byte-identical and step 8's acceptance number is reproducible. Port set
+   A is self-contained: `copula.py` on the donor imports only `math`
+   (`copula.py:15`) and `torch` (`copula.py:17`). **Ports:** step 2 is the
+   four donor files verbatim (`copula.py` new, `graph.py` +78/-1,
+   `test_switch_copula_graph.py` +361, `tests/switch/test_switch_copula.py`
+   +316); step 3 adds only the head-gate relaxation in `graph.py`, the
+   rejection-case move in `test_switch_copula_graph.py`, and the two new
+   contribution suites — no unexpected hunks in `graph.py` in either
+   direction. Four dangling pointers to the superseded log were repointed
+   to this file (`graph.py:177`, `test_switch_copula_graph.py:332`,
+   `test_contribution_copula_graph.py:2,16`,
+   `tests/copula/test_contribution_copula.py:2,12`), their stale plan-step
+   numbers renumbered to this plan's step 3; switch-slot log and PR
+   references were left as historical pointers per plan amendment (iii).
+   **Mechanism re-verification (step 4), by reading this tree:**
+   (a) head-agnostic sampler — `copula.py:48` `sample_correlated_levels`
+   takes `proba` as `(N, L)` with the only shape constraints
+   `proba.dim() == 2` (`copula.py:74`) and `n_levels >= 2`
+   (`copula.py:76`), and the level comes from a generic row-cumsum
+   `searchsorted` (`copula.py:43-45`, called at `copula.py:101`); nothing
+   assumes L == 2. (b) 21-level ordering == encoder — the head's decoder is
+   `IntEncoder(encoding="onehot", n_levels=y_levels)`
+   (`graph.py:156`, `y_levels=21` default at `graph.py:137`), whose onehot
+   map has row `i` hot at position `i` (`encoder.py:21-25`, indexed at
+   `encoder.py:47`) and whose sampling decode returns the column index
+   itself (`encoder.py:55-58`); so softmax column `i` is contribution value
+   `i` and the copula's returned level is the contribution directly (the
+   artifact's stored `y_levels` is re-checked at load in step 10).
+   (c) one predictor call per round with `n_rounds=1` — `env.reset()`
+   (`simulate.py:258`) and `env.step()` (`simulate.py:300`) each call
+   `update_contribution` once (`environment.py:346`, `environment.py:407`),
+   which calls `artifical_humans.predict(self.state, ...)`
+   (`environment.py:318-322`); `predict` dispatches to
+   `predict_independent` for the non-autoregressive head
+   (`graph.py:497-501`), which reads `n_rounds` off the state tensor shape
+   (`graph.py:419`), and the env's state tensors are
+   `(batch_size, n_agents, 1)` (`environment.py:136`) — so the copula loop
+   `for r in range(n_rounds)` (`graph.py:391`) runs exactly once per round.
+   (d) `reset_rnn` clears the copula state at round 0 —
+   `_predict_encoded_copula` sets `self._copula_z = None` when `reset_rnn`
+   (`graph.py:377-378`), and the env passes
+   `reset_rnn=self.round_number[0, 0, 0] == 0` (`environment.py:320`), i.e.
+   True only on the round-0 call; the field is initialised to `None` at
+   construction (`graph.py:194`). (e) `copula_switch_every=1` advances the
+   AR(1) every round — the existing gate is
+   `(int(rounds[r]) + 1) % self.copula_switch_every == 0`
+   (`graph.py:408`), which is unconditionally true at `k=1`, with `rounds`
+   taken from the state's `round_number` (`graph.py:386-390`); no code
+   change was needed for the every-round case. (f) arrival-group cells —
+   `step` calls `apply_switch(pending_switch)` (`environment.py:405-406`)
+   before `update_contribution()` (`environment.py:407`), and
+   `apply_switch` rewrites `state["agent_group"]`
+   (`environment.py:368-373`), so a switcher's cell id
+   (`graph.py:381-382`) is their receiving group from the switch round on —
+   the RCD claim in §1 holds as written. (g) invalid-agent overwrite after
+   the draw — the copula draw happens at `environment.py:318-322` and the
+   `contribution[~contribution_valid] = default` overwrite only at
+   `environment.py:331-334`, so the validity model never perturbs the
+   copula's RNG consumption or its latent. (h) required state keys present
+   — `round_number` (`environment.py:140`) and `agent_group`
+   (`environment.py:150-154`) are both in the dict `reset_state` builds,
+   and `round_number` is advanced at `environment.py:396`; the copula
+   sampler reads them off the raw state, which `predict_independent`
+   forwards untouched (`graph.py:426-428`). All eight points OK; nothing in
+   the diffs was unexpected. Not run at these steps: any Python, hence no
+   `pre-commit`/flake8 pass — the only hand edits are comments and
+   docstrings, all within 88 characters (checked with `awk`).
