@@ -167,14 +167,14 @@ revise the plan through validation again — no improvised login-node runs.
       confirm round-trip gate PASS + reload self-checks; verify local LFS
       content + md5 parity with remote; record rho_hat / SE / CI / spread /
       pre-flight in §4 Notes; commit the artifact files (LFS).
-- [ ] 14. Write
+- [x] 14. Write
       `configs/simulation/manager_testing/23_2g8a_ar_copula_self_gaussian_contr_gnn_switch.yml`:
       copy of the baseline stack config, single manager `ar_copula` -> the
       copula `.pt`, single pairing `ar_copula_self`, slugged output
       dir/figure name, rho in a header comment, no `copula_rho`/
       `autoregressive` config keys (checkpoint drives both); protocol
       byte-identical to the 23 family.
-- [ ] 15. Mechanical config check (yaml parse, DIR_PATTERN yields
+- [x] 15. Mechanical config check (yaml parse, DIR_PATTERN yields
       contr=gaussian / switch=gnn, artifact paths exist, output dir fresh,
       `save_per_round: true`, seed 42 / 100 episodes / 24 rounds
       unchanged); commit.

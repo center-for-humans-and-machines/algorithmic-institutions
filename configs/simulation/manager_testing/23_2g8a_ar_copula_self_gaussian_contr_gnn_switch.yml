@@ -1,0 +1,42 @@
+# auto/punisher-ar-copula: the §3-selected evaluation stack
+# (23_2g8a_self_gaussian_contr_gnn_switch, the top-ranked stack containing
+# the GNN punisher) with the punisher slot swapped to the AR-GNN punisher
+# sampled through a severity copula (copula_rho 0.24182866393507993, exact
+# cell-level MLE on the AR conditionals; PR #161's 2750-epoch weights,
+# bit-identical). The checkpoint's autoregressive flag and copula_rho field
+# drive dispatch and sampling — no config keys needed. Single pairing;
+# protocol byte-identical to the 23 family. Slug sits before `_self_` so
+# evaluation_sweep.py's DIR_PATTERN still parses contr/switch.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/baselines/contribution_gaussian_best.joblib
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  ar_copula:
+    type: human
+    path: artifacts/artificial_humans/punishment_ar_gnn_copula_50ep_doubled/model/architecture_node+edge+rnn+ar+copula__dataset_50ep_doubled__epochs_2750.pt
+
+pairings:
+  - name: ar_copula_self
+    group_0: ar_copula
+    group_1: ar_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_ar_copula_self_gaussian_contr_gnn_switch
+figure_name: 2g8a_ar_copula_self_gaussian_contr_gnn_switch
+save_per_round: true
+basedir: .
