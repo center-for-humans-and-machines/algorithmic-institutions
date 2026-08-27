@@ -1,0 +1,138 @@
+{
+  "cell_key": "episode_round_agent_group",
+  "data_file": "experiments/2group_8agent_50ep.csv",
+  "diagnostics": {
+    "per_replicate_rho": [
+      0.24198573654423694,
+      0.24122247510099754,
+      0.24400104127341274,
+      0.2412203498541434,
+      0.23974031747579913,
+      0.24205689657139898,
+      0.24191765949259614,
+      0.24249454002891038
+    ],
+    "pit_moment_rho_attenuated": 0.07500558675376123,
+    "single_copy_rho": 0.24214053527554316
+  },
+  "estimator": "exact cell-level shared-latent Gaussian-copula MLE on the AR model's own conditional CDFs; conditionals harvested by replaying the training reveal scheme (apply_mask_pattern) over 8 seeded per-episode reveal permutations; cells are (episode, round, agent_group) with >= 2 valid agents; 64-node Gauss-Hermite; coarse grid 0-0.9 step 0.05 then bounded Brent, clipped to [0, 0.95]",
+  "git_commit": null,
+  "log_likelihood": -20163.92047172069,
+  "log_likelihood_at_zero": -20435.182812440104,
+  "n_bootstrap": 200,
+  "n_cells": 3860,
+  "n_cells_total": 4304,
+  "n_episodes": 100,
+  "n_pairs_effective": 50,
+  "n_valid_rows": 18386,
+  "preflight": {
+    "AR copula rho_hat (free sweep)": {
+      "sd_cell_mean": 3.033595185608556,
+      "spread_ratio": 0.6969053893218211
+    },
+    "AR copula rho_hat (predict_autoreg)": {
+      "sd_cell_mean": 2.942473965378983,
+      "spread_ratio": 0.6688171527999597
+    },
+    "AR independent (free sweep)": {
+      "sd_cell_mean": 2.836725945351285,
+      "spread_ratio": 0.647035979535937
+    },
+    "AR independent (predict_autoreg)": {
+      "sd_cell_mean": 2.90024473990438,
+      "spread_ratio": 0.6496961045297224
+    },
+    "human": {
+      "sd_cell_mean": 3.253589249521073,
+      "spread_ratio": 0.7388387221896273
+    }
+  },
+  "quadrature_nodes": 64,
+  "quadrature_rel_error": {
+    "0.1": 2.4424906541753444e-15,
+    "0.3": 1.7541523789077473e-14,
+    "0.5": 3.3306690738754696e-15,
+    "0.7": 5.7422067101242646e-11,
+    "0.9": 0.0013495269599105297,
+    "0.95": 0.05826579451212033
+  },
+  "reveal_replicates": 8,
+  "rho": 0.24182866393507993,
+  "rho_ci_95": [
+    0.18567594377208105,
+    0.2976370227961655
+  ],
+  "rho_max": 0.95,
+  "rho_se": 0.029018191641679864,
+  "roundtrip": {
+    "passed": true,
+    "rows": [
+      {
+        "bias": 0.00014672801805033775,
+        "dataset": 0,
+        "rho_hat": 0.10014672801805034,
+        "rho_hat_oracle_order": 0.0992075990988504,
+        "rho_true": 0.1
+      },
+      {
+        "bias": -0.004857269310724832,
+        "dataset": 1,
+        "rho_hat": 0.09514273068927517,
+        "rho_hat_oracle_order": 0.09440654982530243,
+        "rho_true": 0.1
+      },
+      {
+        "bias": -0.01510728305084913,
+        "dataset": 0,
+        "rho_hat": 0.28489271694915086,
+        "rho_hat_oracle_order": 0.2897490066506534,
+        "rho_true": 0.3
+      },
+      {
+        "bias": 0.0031674039258912656,
+        "dataset": 1,
+        "rho_hat": 0.30316740392589125,
+        "rho_hat_oracle_order": 0.3093364864767631,
+        "rho_true": 0.3
+      },
+      {
+        "bias": -0.008099697768945147,
+        "dataset": 0,
+        "rho_hat": 0.49190030223105485,
+        "rho_hat_oracle_order": 0.4935213623463441,
+        "rho_true": 0.5
+      },
+      {
+        "bias": -0.014787546548456487,
+        "dataset": 1,
+        "rho_hat": 0.4852124534515435,
+        "rho_hat_oracle_order": 0.4903746329549977,
+        "rho_true": 0.5
+      }
+    ],
+    "tolerance": 0.03
+  },
+  "runtime_seconds": 1227.2101874351501,
+  "seeds": {
+    "base": 38381,
+    "bootstrap": 38381,
+    "pit": 131381,
+    "preflight": 130381,
+    "reveal": [
+      38381,
+      38382,
+      38383,
+      38384,
+      38385,
+      38386,
+      38387,
+      38388
+    ],
+    "roundtrip_draw": 129381,
+    "roundtrip_order": 128381
+  },
+  "source_md5": "4774e934f08a96da01da875851ad7a2c",
+  "source_model": "artifacts/artificial_humans/punishment_ar_gnn_50ep_doubled/model/architecture_node+edge+rnn+ar__dataset_50ep_doubled__epochs_2750.pt",
+  "target_md5": "1f55ebbbd66749a5156efaaaf7d0c7b8",
+  "target_model": "artifacts/artificial_humans/punishment_ar_gnn_copula_50ep_doubled/model/architecture_node+edge+rnn+ar+copula__dataset_50ep_doubled__epochs_2750.pt"
+}

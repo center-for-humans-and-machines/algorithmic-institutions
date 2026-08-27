@@ -161,9 +161,9 @@ revise the plan through validation again — no improvised login-node runs.
       carrying the calibration script through the documented
       `train_cluster.sh ah` path (device cpu for determinism); local
       black/flake8 + yaml parse; commit steps 9-11.
-- [ ] 12. PENDING check; assert remote source `.pt` md5; submit via
+- [x] 12. PENDING check; assert remote source `.pt` md5; submit via
       `scripts/train_cluster.sh ah <config>`; poll to COMPLETED, exit 0:0.
-- [ ] 13. `scripts/fetch_cluster.sh artifacts/artificial_humans/punishment_ar_gnn_copula_50ep_doubled`;
+- [x] 13. `scripts/fetch_cluster.sh artifacts/artificial_humans/punishment_ar_gnn_copula_50ep_doubled`;
       confirm round-trip gate PASS + reload self-checks; verify local LFS
       content + md5 parity with remote; record rho_hat / SE / CI / spread /
       pre-flight in §4 Notes; commit the artifact files (LFS).
@@ -204,3 +204,18 @@ revise the plan through validation again — no improvised login-node runs.
 1. Baseline re-verified bit-exact before planning: PD 2.6128746154448903,
    rows <= 1 7/21, mean 1.7407445494371563 (gnn_self run in the
    `23_2g8a_self_gaussian_contr_gnn_switch` evaluation on main).
+2. Calibration (job 29666118, COMPLETED 0:0, 20m46s):
+   rho_hat 0.24182866393507993, SE 0.029018191641679864, 95% CI
+   [0.18567594377208105, 0.2976370227961655] — well below the multinomial
+   punisher's 0.3508, as hypothesized (the AR channel already explains part
+   of the within-round correlation). Round-trip gate PASS (max |bias|
+   0.0151 <= 0.03); per-replicate rho spread 0.2397-0.2440; single-copy
+   0.2421 agrees; LL gain over rho=0: 271.3 nats over 3860 cells; PIT
+   moment estimator 0.075 (ATTENUATED, diagnostic only). Reload
+   self-checks passed (10 tensors bit-identical, new keys ==
+   {'copula_rho'}); local/remote md5 parity
+   1f55ebbbd66749a5156efaaaf7d0c7b8.
+3. Preflight (go/no-go context only): group-spread ratio human 0.7388,
+   AR independent 0.6497, AR copula 0.6688 (predict_autoreg) / 0.6969
+   (free sweep) — a go, not a guaranteed band crossing; the verdict comes
+   from the single §3 evaluation.
