@@ -136,7 +136,7 @@ keeps ctrl-vs-p50 fair).
 - [x] 13. Verdict per §2 vs the declared baseline: CG > 5 -> 2-5 or
       better, OR RCD/RCA 2-5 -> 1-2 or better, AND mean <
       1.6879978841849728. Complete the Results table unrounded.
-- [ ] 14. Push; PR with `--base auto/punisher-severity-copula-v2`, title
+- [x] 14. Push; PR with `--base auto/punisher-severity-copula-v2`, title
       `[SUCCESS]`/`[FAIL]`, body Hypothesis / Results / Collateral.
 
 ## 3. Results
