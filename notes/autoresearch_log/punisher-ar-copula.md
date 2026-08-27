@@ -130,9 +130,9 @@ revise the plan through validation again — no improvised login-node runs.
 - [x] 7. Local batched gate, once, before staging: eval-suite tests +
       `scripts/tests` + `tests/baselines`; single black + flake8 pass on
       `src/`. Commit steps 5-6; re-verify hooks mutated nothing.
-- [ ] 8. PENDING check, then `scripts/remote_test.sh` — full PyG suite
+- [x] 8. PENDING check, then `scripts/remote_test.sh` — full PyG suite
       green including the 9 AR tests and the new copula tests.
-- [ ] 9. Write `scripts/artificial_humans/punishment_ar_copula_rho.py`:
+- [x] 9. Write `scripts/artificial_humans/punishment_ar_copula_rho.py`:
       unpickle shim; load the 2750 checkpoint (assert md5,
       `autoregressive`, `edge_encoding == [{ar_punishment, 31}]`); rebuild
       training data (`create_torch_data`, `switch_every=4`) on the full
@@ -143,7 +143,7 @@ revise the plan through validation again — no improvised login-node runs.
       1e-12); maximise the exact shared-latent cell log-likelihood
       (64-node Gauss–Hermite, grid 0-0.9 step 0.05 then bounded Brent,
       clip 0.95); cells with <2 valid agents excluded; SEED 38381.
-- [ ] 10. Same script — cluster bootstrap (200 resamples over the 50
+- [x] 10. Same script — cluster bootstrap (200 resamples over the 50
       `pair_id`s); `--roundtrip` acceptance gate (rho_true in
       {0.1, 0.3, 0.5}, 2 synthetic datasets each, generated through the
       shipped sampler, max |bias| <= 0.03); diagnostics printed, never
@@ -156,7 +156,7 @@ revise the plan through validation again — no improvised login-node runs.
       `metrics/copula_rho.json` + `metrics/copula_rho_calibration.log`;
       reload self-checks: every parameter tensor bit-identical to the
       source, `autoregressive is True`, new keys == `{"copula_rho"}`.
-- [ ] 11. Job config
+- [x] 11. Job config
       `configs/training/artificial_humans/punishment/ar_copula_rho.yml`
       carrying the calibration script through the documented
       `train_cluster.sh ah` path (device cpu for determinism); local
