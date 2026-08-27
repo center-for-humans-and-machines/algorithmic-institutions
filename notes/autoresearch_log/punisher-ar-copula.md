@@ -198,7 +198,7 @@ revise the plan through validation again — no improvised login-node runs.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
-| 2026-08-27 | AR-GNN punisher + severity copula (rho 0.24182866393507993, exact cell-level MLE on the AR conditionals) in gaussian x gnn x gnn | single | PD 1.275132493610912 (baseline 2.6128746154448903 — band 2-5 -> 1-2) | 9/21 (baseline 7/21) | 1.634398962774845 (baseline 1.7407445494371563 — gate 2 passes) | SUCCESS — gate 1 (PD band upgrade) and gate 2 (mean down) both pass |
+| 2026-08-27 | AR-GNN punisher + severity copula (rho 0.24182866393507993, exact cell-level MLE on the AR conditionals) in gaussian x gnn x gnn | single | PD 1.275132493610912 (parent baseline 2.0572788911625852, PR #161 — band 2-5 -> 1-2) | 9/21 (parent baseline 9/21) | 1.634398962774845 (parent baseline 1.6312543616564725 — gate 2 FAILS, +0.0031445011183395) | FAIL — gate 1 passes (PD band upgrade) but gate 2 not met (mean up vs the parent; maintainer ruling, note 9) |
 
 ## 4. Notes
 
@@ -251,3 +251,25 @@ revise the plan through validation again — no improvised login-node runs.
    branch, every experiment file bit-identical, scores.csv blob unchanged.
    No re-run of anything; the verdict and all numbers stand as logged.
    PR #164 base changed to `auto/punisher-ar-gnn-v2` (stacked on #161).
+9. Maintainer baseline ruling (2026-08-27, after the rebase of note 8):
+   since the experiment builds on PR #161's branch, the §2 gates are
+   judged against the parent branch's own run — PD 2.0572788911625852,
+   rows <= 1 9/21, mean 1.6312543616564725 — not the main-branch stack
+   baseline the declaration named (PD 2.6128746154448903, mean
+   1.7407445494371563; under that reading both gates had passed and the
+   PR was briefly titled [SUCCESS]). Re-adjudicated: gate 1 passes (PD
+   2.0573 -> 1.2751, band 2-5 -> 1-2, the best punisher PD in any stack
+   to date), gate 2 fails — mean 1.634398962774845 vs 1.6312543616564725,
+   +0.0031. Verdict: FAIL. No number changed; only the baseline did.
+10. Where the +0.0031 lives, vs the parent run: the copula's big win is
+    all in PD (-0.7822); against it, CG +0.1342 (3.9413 -> 4.0755) and
+    small draw-level wiggles in the P/C marginals (PA +0.1115,
+    RPB +0.1120, CB -0.0491, CA -0.0350, SC -0.0398, ...) sum to a net
+    +0.066 over 21 rows, i.e. +0.0031 on the mean. Nothing systematic
+    breaks — marginals are preserved by construction and the guard held —
+    but under a parent whose mean already banked the AR family gains, the
+    copula's residual collateral is no longer paid for by the P family.
+    The next punisher experiment on this line needs either a CG-neutral
+    latent (the copula latent leaks into contributions via punishment ->
+    next-round behavior) or must come after the contribution slot owns
+    its shared variance.
