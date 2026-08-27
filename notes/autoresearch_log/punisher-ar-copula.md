@@ -97,17 +97,17 @@ revise the plan through validation again — no improvised login-node runs.
       run `ah group_switching managed by gnn_self` (21 rows,
       PD 2.6128746154448903, rows<=1 7, mean 1.7407445494371563).
 - [x] 2. Record this step list in §2; commit declaration + plan.
-- [ ] 3. Import `src/aimanager/generic/graph.py` and
+- [x] 3. Import `src/aimanager/generic/graph.py` and
       `src/aimanager/tests/test_ar_punisher.py` from
       `origin/auto/punisher-ar-gnn-v2` (R1); verify blob-hash byte-identity
       to the source branch and `graph.py | 81 +-` vs `main`; commit.
-- [ ] 4. Import
+- [x] 4. Import
       `configs/training/artificial_humans/punishment/ar_gnn_50ep_doubled.yml`
       and `artifacts/artificial_humans/punishment_ar_gnn_50ep_doubled/{model,metrics}`
       (4 files only); verify real LFS content not pointers, `.pt` md5
       `4774e934f08a96da01da875851ad7a2c` (2750) /
       `f789ab0a17ec870d3e53507db9de34f6` (5000); commit.
-- [ ] 5. `graph.py`: add `copula_rho=None` to `GraphNetwork.__init__`
+- [x] 5. `graph.py`: add `copula_rho=None` to `GraphNetwork.__init__`
       (store on `self`, gate `None` or `0.0 <= rho < 1.0`) and to
       `to_save`; gated copula branch in `predict_autoreg` — `z` of shape
       `(n_batch, n_nodes, n_rounds)` drawn once per call before the AR
@@ -117,7 +117,7 @@ revise the plan through validation again — no improvised login-node runs.
       (`min{a : F(a) >= u}`), clamped. The `else` branch keeps the original
       statements verbatim and no torch draw precedes the branch — rho
       absent/0.0 or `sample=False` consumes the PR #161 RNG stream exactly.
-- [ ] 6. New Raven-only test file `src/aimanager/tests/test_ar_copula.py`:
+- [x] 6. New Raven-only test file `src/aimanager/tests/test_ar_copula.py`:
       rho absent / 0.0 / rho>0-with-`sample=False` bit-identical to the
       legacy path including post-call RNG state; inverse-CDF bin-edge
       convention; first-revealed agent's empirical marginal matches its
@@ -127,7 +127,7 @@ revise the plan through validation again — no improvised login-node runs.
       consumption independent of group composition; `save`/`load`
       round-trips `copula_rho`, legacy checkpoints load as `None`;
       constructor gate rejects rho outside [0, 1).
-- [ ] 7. Local batched gate, once, before staging: eval-suite tests +
+- [x] 7. Local batched gate, once, before staging: eval-suite tests +
       `scripts/tests` + `tests/baselines`; single black + flake8 pass on
       `src/`. Commit steps 5-6; re-verify hooks mutated nothing.
 - [ ] 8. PENDING check, then `scripts/remote_test.sh` — full PyG suite
