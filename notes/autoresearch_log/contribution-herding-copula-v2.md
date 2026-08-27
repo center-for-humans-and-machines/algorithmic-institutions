@@ -176,7 +176,7 @@ slot pointers stay as historical PR references.
       the base). Fetch and commit script + stamped artifact
       (`.../group_switching_contribution_50ep_herding_copula_v2/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt`,
       LFS) + `.copula.json` sidecar.
-- [ ] 11. Sim config `configs/simulation/manager_testing/23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch.yml`:
+- [x] 11. Sim config `configs/simulation/manager_testing/23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch.yml`:
       byte-copy of the parent's
       `23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch.yml` with
       exactly three edits — contribution artifact path, `output_dir`,
@@ -184,7 +184,7 @@ slot pointers stay as historical PR references.
       pairing), seed 42, episode count, `save_per_round: true` all
       untouched; dir name parses under the sweep DIR_PATTERN with switch
       token `gnn`.
-- [ ] 12. Isolated simulation: rsync config + artifact into
+- [x] 12. Isolated simulation: rsync config + artifact into
       `~/iso_contr_herdcopar1_v2`, re-md5 the code, submit one job that
       prints provenance first (`aimanager.__file__`, md5 of
       `copula.py`/`graph.py`/`environment.py`, sha256 of all four
@@ -192,7 +192,7 @@ slot pointers stay as historical PR references.
       `copula_rho`/`copula_phi`/`copula_switch_every`). squeue PENDING
       check before the rsync; one job, seed 42; confirm
       `per_round.parquet`.
-- [ ] 13. Fetch into
+- [x] 13. Fetch into
       `plots/simulation/23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch/`;
       `python -m aimanager evaluate <config>`; commit sim outputs +
       evaluation, scores unrounded.
@@ -518,3 +518,80 @@ no frozen surface):
    committed normally through the LFS filter; the sidecar is plain JSON.
    The stamper's own job log is not committed (`.gitignore` `*.log`);
    its key lines are the ones quoted above.
+
+7. Steps 11-13 (sim config, isolated simulation, evaluation).
+   **Config (step 11):** `cp` of the parent's
+   `23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch.yml` followed by
+   exactly three edits; `diff` against the parent reports 6 changed lines
+   (3 `-` / 3 `+`) and nothing else -- contribution artifact path ->
+   `..._herding_copula_v2/...`, `output_dir` and `figure_name` slugged
+   `23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch`. Verified
+   untouched by grep: `seed: 42`, `n_episodes: 100`, `n_rounds: 24`,
+   `switch_every: 4`, `save_per_round: true`, and the single
+   `lin_multinomial_copula_self` pairing. The header comment still names the
+   parent branch -- deliberately left, since the plan and the orchestrator
+   brief both specify exactly three edits (flagged for the reviewer). The dir
+   name parses under the sweep's `DIR_PATTERN` as
+   `{'contr': 'gnncopar1', 'switch': 'gnn'}` (checked by running the compiled
+   regex from `evaluation_sweep.py:90`).
+   **Isolated simulation (step 12), job 29667869** (`cg_copula_sim`, node
+   ravg1010, 1x A100-SXM4-40GB, **00:02:20** elapsed, ExitCode 0:0; PENDING in
+   `gpu1` for ~4 min before start). squeue before the rsync: one unrelated
+   RUNNING `small` job of another session (29666338 `contrcop`, 47 min in),
+   **no PENDING**, so no sync race. Shipped into `~/iso_contr_herdcopar1_v2`
+   by direct `rsync --relative` from the worktree: the new config, the stamped
+   artifact dir, and -- newly needed for this stack, absent since step 6 --
+   the `raven_script_22` (valid) and
+   `switch_pred_opt_50ep_doubled_reanchored` (switch) artifact dirs plus the
+   parent's punisher joblib. The shared checkout was never synced, read, or
+   run from beyond borrowing its interpreter. All four code/config md5s match
+   local vs remote (`copula.py a163eee6253d29af6480d08266744a58`,
+   `graph.py 4375327572ea22cdb4d5cbcaaf3e827a`,
+   `environment.py e0f14eeefc088c53250709e6a8a9bf13`, config
+   `534b7b43abf13a1a39cdc22a88b73164`); the first two differ from note 4's
+   values because step 8b relaxed the two phi asserts. No shipped file is an
+   LFS pointer (remote `grep -rl` over `artifacts/ configs/ src/` returns
+   nothing; the `.pt` byte-sniffs as `PK` zip magic locally). New wrapper
+   `scripts/simulate_iso.slurm` copies `run_simulation.sh`'s resource block
+   (a100 GPU, `cuda/11.4`, 2 CPUs, 16 GB, 1 h) onto the
+   `calibrate_copula.slurm`/`stamp_copula.slurm` interpreter pattern
+   (`PY="$HOME/algorithmic-institutions/.venv/bin/python"`,
+   `PYTHONPATH="$PWD/src"`, `--chdir=.`) and prints the provenance block
+   demanded by the plan step before simulating -- rather than
+   `simulate_cluster.sh`, whose `rsync --delete` into the shared checkout is
+   the race this experiment is isolated against.
+   **Provenance block as printed:** `cwd
+   /raven/u/certuer/iso_contr_herdcopar1_v2`; `aimanager
+   /raven/u/certuer/iso_contr_herdcopar1_v2/src/aimanager/__init__.py` (inside
+   the isolated dir, no fall-through to the editable install); torch
+   `1.11.0+cu113`, cuda available True, cuda `11.3`; artifact sha256s
+   `4a32785d88707662ac70f393b8fd6bec1c59bf9be27446426731b12b1f01614b`
+   (contribution -- the step-10 stamped artifact),
+   `f9a19012fab31c5354ed0dd4bec600cc764e930d505de71703f74522454e6ae6` (valid),
+   `184f7f5c8ed326d49983fe455ef6478715fcac79c8161f08fa685b9cfb25d037` (switch),
+   `9e3cf677ce71cee46594059ebb12f7aa31fc7659b6d863691b08ece3ac78cc2f`
+   (manager `lin_multinomial_copula`); loaded contribution fields
+   `y_name contribution`, `y_levels 21`, `copula_rho 0.06958238086256316`,
+   **`copula_phi 1.0`**, `copula_switch_every 1`; config `seed 42`,
+   `n_episodes 100`, `save_per_round True`. The sim ran on `cuda` and wrote
+   `per_round.parquet` plus the four standard figures and `aggregates.csv`.
+   **Fetch + evaluation (step 13):** the output dir was `rsync`ed back and
+   `per_round.parquet` verified bit-identical across the hop (sha256
+   `4f64fc42fe23cad1cf14423f79b8496adff9874e2e546c05a0d7683055960be2` on both
+   sides). Evaluated locally with the main checkout's interpreter and THIS
+   worktree's code (`aimanager.__file__` confirmed at
+   `<worktree>/src/aimanager/__init__.py` first); the human CSV was already
+   real content, not an LFS pointer, so no `git lfs pull` was needed. Wrote 21
+   metric rows, 21 scores and 24 figures. **Result: rows <= 1 11/21 (baseline
+   10/21), 21-row mean 1.2893632310269196 (baseline 1.6879978841849728);
+   targets CG 4.163465133854436 (baseline 9.808514112722413, raw ratio gap
+   0.1101181553522297 vs 0.2594222471221652 over ceiling
+   0.026448679600274437) and RCD 1.9647336396755046 (baseline
+   2.941928428442498, raw gap 0.15738827739093497).** Watch items:
+   RCA 1.4753607514349265 (baseline 2.0829074791966917), RCB
+   1.7383880025982466 (baseline 1.9881). No eval-suite file, metric
+   definition, scoring parameter, seed, episode count or game parameter was
+   touched (`git diff --stat main...HEAD` over
+   `src/aimanager/evaluation_suite/`, `notes/evaluation_metric_defs.md`,
+   `notes/eval_scoring_schema.md`, `experiments/` is empty). Verdict is step
+   14's, not recorded here.
