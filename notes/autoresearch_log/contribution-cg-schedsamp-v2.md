@@ -128,12 +128,12 @@ keeps ctrl-vs-p50 fair).
       `23_2g8a_schedsamp_v2_p{25,50}_self_gnn_contr_gnn_switch.yml`,
       same copy discipline, artifact paths verified against the fetched
       filenames.
-- [ ] 11. Simulate both on Raven; fetch; evaluate both; report all 21
+- [x] 11. Simulate both on Raven; fetch; evaluate both; report all 21
       rows unrounded per arm + spread-ratio diagnostic + CA/CB/CD/CF
       guardrail block.
-- [ ] 12. Arm selection (orchestrator): better arm by evaluation score;
+- [x] 12. Arm selection (orchestrator): better arm by evaluation score;
       ties to the lower p_max.
-- [ ] 13. Verdict per §2 vs the declared baseline: CG > 5 -> 2-5 or
+- [x] 13. Verdict per §2 vs the declared baseline: CG > 5 -> 2-5 or
       better, OR RCD/RCA 2-5 -> 1-2 or better, AND mean <
       1.6879978841849728. Complete the Results table unrounded.
 - [ ] 14. Push; PR with `--base auto/punisher-severity-copula-v2`, title
@@ -146,6 +146,8 @@ keeps ctrl-vs-p50 fair).
 | 2026-08-25 | (baseline) parent stack, severity-copula punisher (PR #160) | — | CG 9.808514112722413, RCD 2.941928428442498, RCA 2.0829074791966917 | 10/21 | 1.6879978841849728 | baseline |
 | 2026-08-25 | pilot ctrl: 150 epochs, no schedsamp (jobs 29612646 train / 29613554 sim) | pilot | CG 9.592575, RCD 3.484160, RCA 3.134277 | 8/21 | 1.8250754491656211 | pilot reference |
 | 2026-08-25 | pilot p50: 150 epochs, p_max 0.5, ramp 22->90 (jobs 29612707 / 29613556) | pilot | CG 8.315325, RCD 0.878690, RCA 6.639278 | 10/21 | 1.85971801958414 | separation confirmed; gate passed |
+| 2026-08-27 | full p25: 575 epochs, ramp 86->345 (train 29613983, sim 29664927) | single | CG 10.310505631407525, RCD 2.104296359202163, RCA 3.3164522148090363 | 10/21 | 1.7207052441497264 | no band upgrade; mean regressed |
+| 2026-08-27 | full p50: 575 epochs, ramp 86->345 (train 29613993, sim 29664928) | single | CG 9.190735098536564, RCD 1.1149379652960172, RCA 5.911296139033602 | 10/21 | 1.8112095513767383 | gate 1 pass (RCD 2-5 -> 1-2), gate 2 FAIL (mean > 1.6879978841849728) — [FAIL] |
 
 ## 4. Notes
 
@@ -207,3 +209,29 @@ keeps ctrl-vs-p50 fair).
    subagent stalled after fetching p25 (session gap); the orchestrator
    fetched p50 and committed. Step 10 sim configs verified
    protocol-identical to the parent except the three intended fields.
+8. Step 11 done (sims 29664927/29664928, integrity guard clean, commit
+   147029c). Spread ratios: human 0.8480, reference 0.5882, p25 0.5757,
+   p50 0.6055 — the pilot's CG separation largely did not survive
+   full-length training: against the fully-trained reference the p50 edge
+   shrinks to ~7% of the gap, and p25 lands below the reference.
+9. Step 12: p50 is the representative arm — it alone satisfies gate 1
+   (RCD 2.9419 -> 1.1149) and exhibits the full dose-response. Verdict
+   per §2: [FAIL] — gate 2 fails in both arms (p25 1.7207, p50 1.8112 vs
+   baseline 1.6880).
+10. Mechanism reading: scheduled sampling fixes free-running
+    contribution autocorrelation (RCD, strongly dose-responsive
+    2.94 -> 2.10 -> 1.11) but collapses the punishment response (RCA
+    2.08 -> 3.32 -> 5.91, RCB 1.99 -> 2.21 -> 2.98). Plausible cause:
+    substitution decouples the (ground-truth) punishment inputs from the
+    substituted own-contribution they actually responded to — round t's
+    punishment was dealt to the REAL t-1 contribution, but the model sees
+    its own sample, making the punishment-contribution contingency
+    inconsistent in training. Any successor must keep the pair coherent:
+    substitute punishment-conditioning jointly, restrict substitution to
+    weakly-punished cells, or gate the substitution on received
+    punishment.
+11. CG remains structural: even at p_max 0.5 the free-running ratio
+    reaches only 0.605 of the human 0.848 (floor 0.588). Combined with
+    #159 (latent alone: 0.662), the two mechanisms attack different
+    parts of the deficit and neither suffices alone; latent + a
+    punishment-coherent curriculum remains the open combination.
