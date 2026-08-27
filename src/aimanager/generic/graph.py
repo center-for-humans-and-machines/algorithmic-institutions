@@ -175,9 +175,10 @@ class GraphNetwork(th.nn.Module):
         # Herding copula, defined for the switch and contribution heads;
         # see notes/autoresearch_log/switch-herding-copula.md and
         # notes/autoresearch_log/contribution-herding-copula-v2.md.
-        # rho 0 keeps the legacy independent draw.
+        # rho 0 keeps the legacy independent draw; phi 1 is the unit-root
+        # boundary, a latent held static for the whole episode.
         assert 0.0 <= copula_rho < 1.0, f"copula_rho must be in [0, 1), {copula_rho}"
-        assert 0.0 <= copula_phi < 1.0, f"copula_phi must be in [0, 1), {copula_phi}"
+        assert 0.0 <= copula_phi <= 1.0, f"copula_phi must be in [0, 1], {copula_phi}"
         assert copula_rho == 0.0 or y_name in (
             "does_switch",
             "contribution",

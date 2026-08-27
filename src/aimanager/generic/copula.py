@@ -55,7 +55,10 @@ def sample_correlated_levels(proba, cell_id, rho, z_prev=None, phi=0.0):
         rho: latent weight in ``[0, 1)``. ``0.0`` reduces to independent
             inverse-CDF sampling (marginals unchanged either way).
         z_prev: previous cell latents ``(n_cells,)`` or ``None``.
-        phi: AR(1) persistence in ``[0, 1)``; ignored when ``z_prev is None``.
+        phi: AR(1) persistence in ``[0, 1]``; ignored when ``z_prev is None``.
+            ``1.0`` is the unit-root boundary: ``z_cell = z_prev`` exactly, a
+            static latent for the whole span (see the phi ruling in
+            ``notes/autoresearch_log/contribution-herding-copula-v2.md``).
 
     Returns:
         ``(levels, z_cell)`` -- ``levels`` int64 ``(N,)``, ``z_cell`` float64
@@ -77,7 +80,7 @@ def sample_correlated_levels(proba, cell_id, rho, z_prev=None, phi=0.0):
     cell_id = cell_id.reshape(-1).to(th.int64)
     assert len(cell_id) == n, f"cell_id has {len(cell_id)} entries for {n} rows"
     assert 0.0 <= rho < 1.0, f"rho must lie in [0, 1), got {rho}"
-    assert 0.0 <= phi < 1.0, f"phi must lie in [0, 1), got {phi}"
+    assert 0.0 <= phi <= 1.0, f"phi must lie in [0, 1], got {phi}"
 
     # Dense ids: a negative id would wrap the latent gather silently, and a
     # gap would misalign `z_prev` on the next round.
@@ -94,7 +97,9 @@ def sample_correlated_levels(proba, cell_id, rho, z_prev=None, phi=0.0):
             f"z_prev has {len(z_prev)} entries for {n_cells} cells -- the cell "
             f"index must be stable across the rounds an AR(1) latent spans"
         )
-        # Var(z_cell) stays 1, so the marginals do not depend on phi.
+        # Var(z_cell) stays 1, so the marginals do not depend on phi. At the
+        # boundary phi == 1.0 the innovation weight is sqrt(0) == 0 exactly,
+        # so z_cell is z_prev bit-for-bit (the static-latent case).
         z_cell = phi * z_prev + math.sqrt(1.0 - phi * phi) * z_new
 
     w = math.sqrt(rho) * z_cell[cell_id] + math.sqrt(1.0 - rho) * eps

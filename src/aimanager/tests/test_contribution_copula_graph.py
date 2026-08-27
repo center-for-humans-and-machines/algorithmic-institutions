@@ -147,6 +147,38 @@ class _FixedSwitch:
         return does_switch, None
 
 
+def make_env(contribution, batch_size, switch_every=4):
+    """The simulation call site: `update_contribution` every round, one round
+    per call, with agent 0 switching group on every decision round."""
+    return ArtificialHumanEnv(
+        artifical_humans=contribution,
+        artifical_humans_valid=None,
+        artifical_humans_switch=_FixedSwitch([0]),
+        switch_every=switch_every,
+        batch_size=batch_size,
+        n_agents=N_AGENTS,
+        n_contributions=N_LEVELS,
+        n_punishments=31,
+        n_rounds=12,
+        n_groups=2,
+        device="cpu",
+        reward_mode="avg",
+        agent_groups=GROUPS,
+        default_values={
+            "punishment": 0,
+            "contribution": 0,
+            "round_number": 0,
+            "is_first": False,
+            "contribution_valid": False,
+            "punishment_valid": False,
+            "common_good": 0,
+            "contributor_payoff": 0,
+            "manager_payoff": 0,
+            "reward": 0,
+        },
+    )
+
+
 def run_seeded(fn):
     """Return (result, next 5 draws) with the RNG seeded before `fn`."""
     th.manual_seed(SEED)
@@ -359,6 +391,45 @@ def test_reset_rnn_clears_the_latent(monkeypatch):
     assert model._copula_z is not None  # redrawn within the reset round
 
 
+# --------------------------------------------------------------------------- #
+# 5. the unit-root boundary phi = 1.0 -- the adopted persistence (step 8b)
+# --------------------------------------------------------------------------- #
+def test_unit_phi_is_accepted_and_round_trips():
+    """phi = 1.0 (a latent held static for the episode) is a legal dose at
+    construction and survives the artifact round trip unchanged."""
+    model = make_model(copula_rho=RHO, copula_phi=1.0, copula_switch_every=1)
+    assert model.copula_phi == 1.0
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "model.pt")
+        model.save(path)
+        loaded = GraphNetwork.load(path, device="cpu")
+    assert loaded.copula_rho == RHO
+    assert loaded.copula_phi == 1.0
+    assert loaded.copula_switch_every == 1
+
+
+def test_env_holds_the_latent_static_at_unit_phi():
+    """The simulation call site at the adopted phi: the copula state is drawn
+    once at round 0 and then unchanged for the rest of the episode, while
+    `reset()` still drops it and redraws a fresh one."""
+    batch_size = 3
+    contribution = make_model(copula_rho=RHO, copula_phi=1.0, copula_switch_every=1)
+    env = make_env(contribution, batch_size)
+
+    th.manual_seed(SEED)
+    env.reset()
+    z_first = contribution._copula_z.clone()
+    assert z_first.shape == (2 * batch_size,)
+    for r in range(11):
+        env.punish(th.zeros_like(env.state["punishment"]))
+        env.step()
+        assert th.equal(contribution._copula_z, z_first), r
+
+    env.reset()
+    z_second = contribution._copula_z.clone()
+    assert not th.equal(z_second, z_first), "reset must redraw the latent"
+
+
 def test_env_drives_the_contribution_copula_predictor(monkeypatch):
     """The simulation call site: `update_contribution` every round, one round
     per call, cells from the env's POST-switch `agent_group` (`apply_switch`
@@ -366,35 +437,8 @@ def test_env_drives_the_contribution_copula_predictor(monkeypatch):
     spy = _SamplerSpy()
     monkeypatch.setattr(graph_module, "sample_correlated_levels", spy)
     batch_size = 3
-    switch_every = 4
     contribution = make_model(copula_rho=RHO, copula_phi=PHI, copula_switch_every=1)
-    env = ArtificialHumanEnv(
-        artifical_humans=contribution,
-        artifical_humans_valid=None,
-        artifical_humans_switch=_FixedSwitch([0]),
-        switch_every=switch_every,
-        batch_size=batch_size,
-        n_agents=N_AGENTS,
-        n_contributions=N_LEVELS,
-        n_punishments=31,
-        n_rounds=12,
-        n_groups=2,
-        device="cpu",
-        reward_mode="avg",
-        agent_groups=GROUPS,
-        default_values={
-            "punishment": 0,
-            "contribution": 0,
-            "round_number": 0,
-            "is_first": False,
-            "contribution_valid": False,
-            "punishment_valid": False,
-            "common_good": 0,
-            "contributor_payoff": 0,
-            "manager_payoff": 0,
-            "reward": 0,
-        },
-    )
+    env = make_env(contribution, batch_size)
 
     th.manual_seed(SEED)
     spy.clear()  # drop the draw `__init__`'s own reset() made
