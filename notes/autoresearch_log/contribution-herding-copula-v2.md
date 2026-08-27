@@ -131,7 +131,7 @@ slot pointers stay as historical PR references.
       `apply_switch` before `update_contribution` (arrival-group cells);
       invalid-agent overwrite after the draw; `agent_group` and
       `round_number` present in `env.state`.
-- [ ] 5. Port the calibration tooling (commit): `git checkout
+- [x] 5. Port the calibration tooling (commit): `git checkout
       auto/contribution-herding-copula --
       scripts/artificial_humans/contribution_copula_rho.py
       scripts/artificial_humans/calibrate_copula.slurm`, then rename the
@@ -141,13 +141,13 @@ slot pointers stay as historical PR references.
       `(episode, round, agent_group)`, pairwise MLE, round-trip gate,
       200-episode-cluster bootstrap, PRIMARY cross-player-only lag-1 phi
       all carried over unchanged.
-- [ ] 6. Create the isolated remote dir `~/iso_contr_herdcopar1_v2`
+- [x] 6. Create the isolated remote dir `~/iso_contr_herdcopar1_v2`
       (squeue PENDING check first) by direct rsync of the branch
       including `artifacts/`; md5-verify `copula.py`, `graph.py`,
       `environment.py`, `contribution_copula_rho.py` against the local
       branch. Everything remote for this experiment runs here, never in
       the shared checkout.
-- [ ] 7. Tests. Raven (PyG): login-node pytest inside the isolated dir
+- [x] 7. Tests. Raven (PyG): login-node pytest inside the isolated dir
       for `test_switch_copula_graph.py` +
       `test_contribution_copula_graph.py` (+ the other src suites).
       Local (torch-only, main checkout's interpreter with `PYTHONPATH`
@@ -298,3 +298,74 @@ slot pointers stay as historical PR references.
    the diffs was unexpected. Not run at these steps: any Python, hence no
    `pre-commit`/flake8 pass — the only hand edits are comments and
    docstrings, all within 88 characters (checked with `awk`).
+
+4. Steps 5-7 (calibration tooling ported, isolated remote setup, tests).
+   **Port (step 5):** `contribution_copula_rho.py` (613 lines) and
+   `calibrate_copula.slurm` checked out from
+   `auto/contribution-herding-copula`. The artifact dir
+   `group_switching_contribution_50ep_herding_copula` occurred exactly ONCE
+   across both files (`calibrate_copula.slurm:25`, the `PARAMS` path) and is
+   now `..._herding_copula_v2`; a post-edit grep for the old name returns
+   nothing. Estimator specifics re-confirmed by reading the whole file:
+   train split `experiments/baseline/2group_8agent_50ep_bline_train.csv`
+   with `N_TRAIN_EP = 40` asserted in `select_split`; teacher-forced
+   `predict_independent(..., sample=False, reset_rnn=True)`; cell
+   `(episode * n_rounds + round) * N_GROUPS + agent_group` (meta
+   `cell_key="episode_round_agent_group"`); pairwise-likelihood MLE via
+   `pc.rho_mle`; round-trip gate at tolerance 0.03 behind `--roundtrip`;
+   episode-cluster bootstrap at `pc.N_BOOT = 200`; PRIMARY phi from
+   `cross_pairs` filtered to `agent[i] != agent[j]` with the all-pairs refit
+   kept as `phi_allpairs` ("never used"); `--write-params` dumps estimates
+   plus `source_model_sha256` and `git_head`. `pc` is
+   `scripts/baselines/punishment_copula_rho.py`, still byte-identical to
+   base (`git diff b7dabfc` empty), so step 8's acceptance number is
+   reproducible; `SEED = 38381`, `RHO_GRID = 0.0..0.90` non-negative.
+   **Slurm adaptation (flagged):** the donor script's only environment
+   assumption was the relative `source .venv/bin/activate`, and the
+   isolated dir carries no venv. Replaced with
+   `PY="$HOME/algorithmic-institutions/.venv/bin/python"` plus
+   `export PYTHONPATH="$PWD/src:..."`, so the shared checkout supplies only
+   the interpreter while THIS tree supplies the code (the script's own
+   `sys.path.insert(0, ROOT / "src")` off `__file__` is the second guard);
+   the job now echoes `cwd` and `aimanager.__file__` before running. No
+   absolute `~/algorithmic-institutions` path was ever hard-coded in either
+   file, and `#SBATCH --chdir=.` already resolves to the submission dir.
+   **Isolated setup (step 6):** `~/iso_contr_herdcopar1_v2`, populated by
+   direct `rsync` from the worktree (`src/`, `scripts/`, `configs/`,
+   `pyproject.toml`, the three human CSVs, the base contribution artifact
+   dir, and `artifacts/baselines/`); the shared checkout was never synced,
+   read, or run from beyond borrowing its interpreter. squeue at the start:
+   one unrelated RUNNING gpu job (29666118 `architec`), no PENDING, so no
+   sync race. All nine md5s match local vs remote:
+   `copula.py 96393213cfd3244aa4ef26ef22c2e11e`,
+   `graph.py c277589c2e9471d8eeafb48294d1face`,
+   `environment.py e0f14eeefc088c53250709e6a8a9bf13`,
+   `contribution_copula_rho.py 140723dd30a95bcdb3a93dde5fd60ffd`, plus the
+   slurm, the three CSVs and the base `.pt`
+   (`c70309eac20b48ad18d96aa5c5bf7725`). No shipped file is an LFS pointer:
+   scanned locally before the rsync and again remotely
+   (`grep -rl 'version https://git-lfs.github.com/spec/v1'` returns
+   nothing), and the CSVs/`.pt` were byte-sniffed remotely (CSV header, `PK`
+   zip magic).
+   **Tests (step 7), both import paths verified before trusting a result:**
+   local `aimanager.__file__` ==
+   `<worktree>/src/aimanager/__init__.py`, remote ==
+   `/u/certuer/iso_contr_herdcopar1_v2/src/aimanager/__init__.py` — neither
+   fell through to an editable install. Local (main checkout's interpreter,
+   `PYTHONPATH` at this worktree's `src`): `tests/copula`, `tests/switch`
+   and the five eval-suite suites, **101 passed**. Raven login-node pytest
+   inside the isolated dir: `test_switch_copula_graph.py`,
+   `test_contribution_copula_graph.py`, `test_encoder.py`,
+   `test_edge_encoder.py`, `test_environment.py`,
+   `test_linear_manager.py`, **41 passed**. The remote run first showed
+   `1 failed` — `test_linear_manager.py::test_multimanager_linear_side`
+   raised a bare `FileNotFoundError` for
+   `artifacts/baselines/punishment_multinomial_best_with_contr.joblib`,
+   i.e. a gap in what I had shipped, not a code failure; shipping
+   `artifacts/baselines/` (needed for the parent stack's
+   `lin_multinomial_copula_self` punisher at step 12 regardless) made it
+   pass with no source edit. Lint, one batched pass over
+   `git diff --name-only b7dabfc -- 'src/**/*.py' 'scripts/**/*.py'`
+   (5 files): flake8 (88, `E203,W503`) clean and `black --check` reports all
+   5 unchanged; the two branch-added `tests/` suites are clean too. No fix
+   was needed, so nothing was edited for lint.
