@@ -1,0 +1,72 @@
+description: >-
+  Scheduled-sampling arm (p_max=0.50) of the contribution-cg-schedsamp-v2
+  pilot. Identical to auto_cg_schedsamp_v2_pilot_ctrl (node+edge+rnn,
+  hidden=20, lr=3e-4, 150 epochs, flip-doubled 50ep data, seed 38381,
+  eval_period 10) except that training unrolls each batch round by round
+  and, with per-agent probability p ramped linearly from 0 (epoch 22) to
+  0.50 (epoch 90), substitutes prev_contribution with the model's own
+  detached sample from the previous round — exposure-bias fix targeting CG
+  (the free-running group-norm collapse measured in PR #149). The ramp is
+  the 86→345 schedule of the 575-epoch design rescaled to the 150-epoch
+  pilot budget, so the fraction of training spent ramping and at full
+  p_max is unchanged.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 150
+    schedsamp: '0.50'
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/auto_cg_schedsamp_v2_pilot_p50
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 150
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 10
+    l1_entropy: 0
+    scheduled_sampling:
+      p_max: 0.5
+      ramp_start_epoch: 22
+      ramp_end_epoch: 90
+  device: cuda
+  autoregression: False

@@ -85,6 +85,171 @@ def create_fully_connected(
     ).T
 
 
+# Inputs derived from contributions other than `prev_contribution`. Scheduled
+# sampling substitutes a sampled contribution into `prev_contribution` only; any
+# of these would additionally have to be recomputed from the substituted values,
+# which is unsupported -- so their presence is a hard error.
+CONTRIBUTION_DERIVED_FEATURES = (
+    "common_good",
+    "contribution_masked",
+    "own_grp_prev_mean_contr",
+    "prev_common_good",
+)
+
+SCHEDULED_SAMPLING_DEFAULTS = {"ramp_start_epoch": 86, "ramp_end_epoch": 345}
+
+
+def scheduled_sampling_p(epoch, p_max, ramp_start_epoch, ramp_end_epoch):
+    """Substitution probability at `epoch`.
+
+    Zero before `ramp_start_epoch`, linear in the epoch on
+    [`ramp_start_epoch`, `ramp_end_epoch`), `p_max` from `ramp_end_epoch` on.
+    """
+    if epoch < ramp_start_epoch:
+        return 0.0
+    if epoch >= ramp_end_epoch:
+        return p_max
+    span = ramp_end_epoch - ramp_start_epoch
+    return p_max * (epoch - ramp_start_epoch) / span
+
+
+def parse_scheduled_sampling(train_args, model_args):
+    """Validate `train_args['scheduled_sampling']`, None if the key is absent.
+
+    Returns the keyword arguments of `scheduled_sampling_p`. Everything that
+    makes the curriculum inapplicable raises here, at startup, rather than
+    part-way into a multi-hour run.
+    """
+    cfg = train_args.get("scheduled_sampling")
+    if cfg is None:
+        return None
+    unknown = set(cfg) - {"p_max", "ramp_start_epoch", "ramp_end_epoch"}
+    if unknown:
+        raise ValueError(f"Unknown scheduled_sampling keys: {sorted(unknown)}.")
+    if "p_max" not in cfg:
+        raise ValueError("scheduled_sampling requires 'p_max'.")
+    p_max = float(cfg["p_max"])
+    if not 0.0 <= p_max <= 1.0:
+        raise ValueError(f"scheduled_sampling p_max must be in [0, 1], got {p_max}.")
+    ramp_start = int(
+        cfg.get("ramp_start_epoch", SCHEDULED_SAMPLING_DEFAULTS["ramp_start_epoch"])
+    )
+    ramp_end = int(
+        cfg.get("ramp_end_epoch", SCHEDULED_SAMPLING_DEFAULTS["ramp_end_epoch"])
+    )
+    if ramp_end <= ramp_start:
+        raise ValueError(
+            "scheduled_sampling needs ramp_end_epoch > ramp_start_epoch, got "
+            f"{ramp_end} <= {ramp_start}."
+        )
+
+    y_name = model_args.get("y_name", "contribution")
+    if y_name != "contribution":
+        raise ValueError(
+            "scheduled sampling feeds back sampled contributions and is only "
+            f"defined for y_name 'contribution', got '{y_name}'."
+        )
+    names = [
+        e.get("name")
+        for key in ("x_encoding", "u_encoding", "edge_encoding", "b_encoding")
+        for e in (model_args.get(key) or [])
+    ]
+    offending = sorted({n for n in names if n in CONTRIBUTION_DERIVED_FEATURES})
+    if offending:
+        raise ValueError(
+            "scheduled sampling supports prev_contribution as the only "
+            "contribution-derived input; these would need recomputation from "
+            f"the substituted values: {offending}."
+        )
+    if "prev_contribution" not in names:
+        raise ValueError(
+            "scheduled sampling requires prev_contribution among the encoded "
+            "features; without it substitution would be a no-op."
+        )
+    return {
+        "p_max": p_max,
+        "ramp_start_epoch": ramp_start,
+        "ramp_end_epoch": ramp_end,
+    }
+
+
+def unroll_scheduled_sampling(model, b_data, *, mask_name, edge_index, device, p):
+    """Run one batch round by round, feeding back the model's own samples.
+
+    The GRU hidden state carries across the loop (`reset_rnn` only at t == 0),
+    so with no substitution the per-round forwards are the single fused pass.
+    At round t >= 1 the input `prev_contribution` -- which `data.shift` filled
+    with the ground truth contribution of round t - 1 -- is replaced by the
+    model's own detached sample from round t - 1, drawn per agent with
+    probability `p`, and only where `prev_contribution_valid` marks the cell as
+    a real contribution (`parse_agent_rounds` puts the median default into
+    no-input cells; those must keep their filler).
+
+    Returns a dict: `batch_data` is the full-episode encoding (targets, mask,
+    batch structure) exactly as the single-pass path builds it, `y_logit` the
+    per-round logits concatenated along the round axis -- shaped like the fused
+    pass -- plus the substituted inputs, the samples and the substitution
+    counts for logging.
+    """
+    batch_data = model.encode(
+        b_data, mask=mask_name, edge_index=edge_index, device=device
+    )
+    n_batch, n_player, n_rounds = b_data[model.y_name].shape
+    # clone: the substitution must never reach the epoch's source tensors
+    prev_contribution = b_data["prev_contribution"].clone()
+    prev_valid = b_data["prev_contribution_valid"]
+    samples = th.zeros_like(prev_contribution)
+    logits = []
+    x_seen = []
+    n_substituted = 0
+    n_eligible = 0
+    for t in range(n_rounds):
+        if t > 0:
+            eligible = prev_valid[:, :, t]
+            n_eligible += int(eligible.sum())
+            if p > 0:
+                coin = th.rand(eligible.shape, device=eligible.device) < p
+                substitute = eligible & coin
+                n_substituted += int(substitute.sum())
+                prev_contribution[:, :, t] = th.where(
+                    substitute, samples[:, :, t - 1], prev_contribution[:, :, t]
+                )
+        round_data = {k: v[:, :, t : t + 1] for k, v in b_data.items()}
+        round_data["prev_contribution"] = prev_contribution[:, :, t : t + 1]
+        round_enc = model.encode(
+            round_data,
+            mask=mask_name,
+            y_encode=False,
+            edge_index=edge_index,
+            device=device,
+        )
+        round_logit = model(round_enc, reset_rnn=(t == 0))
+        logits.append(round_logit)
+        x_seen.append(round_enc["x"])
+        # detached: the curriculum feeds back a value, not a gradient path --
+        # the loss keeps its single backward per batch
+        proba = round_logit.detach().softmax(-1).reshape(-1, round_logit.shape[-1])
+        samples[:, :, t] = (
+            th.multinomial(proba, 1)
+            .reshape(n_batch, n_player)
+            .to(dtype=samples.dtype, device=samples.device)
+        )
+    # drop the carried hidden states; the next batch resets at t == 0 anyway
+    if model.rnn_n is not None:
+        model.rnn_n_h0 = None
+    if model.rnn_g is not None:
+        model.rnn_g_h0 = None
+    return {
+        "batch_data": batch_data,
+        "y_logit": th.cat(logits, dim=1),
+        "x": th.cat(x_seen, dim=1),
+        "prev_contribution": prev_contribution,
+        "samples": samples,
+        "n_substituted": n_substituted,
+        "n_eligible": n_eligible,
+    }
+
+
 def load_config(config_path):
     with open(config_path, "r") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
@@ -115,6 +280,7 @@ def main(config):
     output_dir = config["output_dir"]
     experiment_names = config["experiment_names"]
     labels = config.get("labels", {})
+    sched_samp = parse_scheduled_sampling(train_args, model_args)
 
     if autoregression:
         if min_predicted is None:
@@ -140,6 +306,12 @@ def main(config):
 
     switch_every = config.get("switch_every", None)
     data, default_values, pair_id = create_torch_data(df, switch_every=switch_every)
+
+    if sched_samp is not None and "prev_contribution_valid" not in data:
+        raise ValueError(
+            "scheduled sampling needs prev_contribution_valid to gate the "
+            "substitution, but the dataset does not provide it."
+        )
 
     rec = Recorder()
 
@@ -180,8 +352,11 @@ def main(config):
     conf_m_all = []
 
     for i, train_data, test_data in get_cross_validations(
-        data, n_cross_val, fraction_training,
-        holdout_fold=holdout_fold, group_key=pair_id,
+        data,
+        n_cross_val,
+        fraction_training,
+        holdout_fold=holdout_fold,
+        group_key=pair_id,
     ):
         model = AH_MODELS[model_name](
             default_values=default_values, autoregressive=autoregression, **model_args
@@ -217,6 +392,10 @@ def main(config):
         for e in pbar:
             rec.set_labels(cv_split=i, epoch=e)
             model.train()
+            if sched_samp is not None:
+                p_epoch = scheduled_sampling_p(e, **sched_samp)
+                ss_substituted = 0
+                ss_eligible = 0
             for j, b_data in enumerate(batch_loader(train_data, batch_size)):
                 optimizer.zero_grad()
                 p_idx = th.randint(0, len(training_mask_pattern), (batch_size,))
@@ -227,14 +406,29 @@ def main(config):
                     mask_name,
                     default_values,
                 )
-                batch_data = model.encode(
-                    b_data,
-                    mask=mask_name,
-                    edge_index=batch_edge_index,
-                    device=th_device,
-                )
+                if sched_samp is None:
+                    batch_data = model.encode(
+                        b_data,
+                        mask=mask_name,
+                        edge_index=batch_edge_index,
+                        device=th_device,
+                    )
 
-                y_logit = model(batch_data).flatten(end_dim=-2)
+                    y_logit = model(batch_data).flatten(end_dim=-2)
+                else:
+                    ss_out = unroll_scheduled_sampling(
+                        model,
+                        b_data,
+                        mask_name=mask_name,
+                        edge_index=batch_edge_index,
+                        device=th_device,
+                        p=p_epoch,
+                    )
+                    batch_data = ss_out["batch_data"]
+                    y_logit = ss_out["y_logit"].flatten(end_dim=-2)
+                    ss_substituted += ss_out["n_substituted"]
+                    ss_eligible += ss_out["n_eligible"]
+
                 y_pred = y_logit.softmax(-1)
                 y_true = batch_data["y_enc"].flatten(end_dim=-2)
                 mask = batch_data["mask"].flatten()
@@ -262,6 +456,12 @@ def main(config):
             if (e % train_args["eval_period"] == 0) or last_epoch:
                 avg_loss = sum_loss / n_steps
                 rec.rec(value=avg_loss, set="train")
+
+                ss_rate = None
+                if sched_samp is not None:
+                    ss_rate = ss_substituted / ss_eligible if ss_eligible > 0 else 0.0
+                    rec.rec(value=p_epoch, name="scheduled_sampling_p", set="train")
+                    rec.rec(value=ss_rate, name="scheduled_sampling_rate", set="train")
 
                 # evalute on training data for all possible mask patterns
                 for j, mask in enumerate(test_mask_pattern):
@@ -377,9 +577,15 @@ def main(config):
                         wandb_log[f"fold_{i}/test/log_loss"] = test_log_loss
                         for key, val in perturb_log_loss.items():
                             wandb_log[f"fold_{i}/test/log_loss__{key}"] = val
+                    if sched_samp is not None:
+                        wandb_log[f"fold_{i}/train/scheduled_sampling_p"] = p_epoch
+                        wandb_log[f"fold_{i}/train/scheduled_sampling_rate"] = ss_rate
                     wandb.log(wandb_log)
 
                 postfix = {"loss": f"{avg_loss:.4f}"}
+                if sched_samp is not None:
+                    postfix["ss_p"] = f"{p_epoch:.3f}"
+                    postfix["ss_rate"] = f"{ss_rate:.3f}"
                 if test_log_loss is not None:
                     postfix["test_loss"] = f"{test_log_loss:.4f}"
                     if early_stopping_patience is not None:
