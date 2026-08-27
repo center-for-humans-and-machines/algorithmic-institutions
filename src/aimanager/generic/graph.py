@@ -186,6 +186,7 @@ class GraphNetwork(th.nn.Module):
         y_levels=21,
         y_name="contribution",
         autoregressive=False,
+        copula_rho=None,
         x_encoding=[],
         u_encoding=[],
         edge_encoding=[],
@@ -217,6 +218,13 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+        # Severity-copula weight for autoregressive sampling. None (absent from
+        # a legacy checkpoint) and 0.0 both mean "off" and must leave the
+        # sampling path -- values and RNG stream -- untouched.
+        assert copula_rho is None or (
+            isinstance(copula_rho, float) and 0.0 <= copula_rho < 1.0
+        ), f"copula_rho must be None or a float in [0, 1), got {copula_rho!r}"
+        self.copula_rho = copula_rho
 
         if op1 is None:
             if add_edge_model:
@@ -408,6 +416,39 @@ class GraphNetwork(th.nn.Module):
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
 
+    def _copula_levels(self, proba_i, z, group_i):
+        """Levels for one AR step from a shared severity latent.
+
+        ``u = Phi(sqrt(rho) z_g + sqrt(1-rho) eps)`` inverted through the
+        agent's own conditional CDF, so the AR marginals are preserved exactly
+        and only the within-group, within-round dependence changes. Exactly one
+        ``randn`` call per AR step regardless of group composition, so the RNG
+        stream is composition-stable; ``eps`` is per (batch, round), ``z`` is
+        drawn once per call and shared by every agent of a group-round.
+
+        ``z`` carries a full node axis so a group id can index it directly --
+        group ids are always < n_nodes, and reusing the node axis avoids
+        renumbering groups (which would make the draw count composition
+        dependent). ``proba_i``: (n_batch, n_rounds, y_levels); ``z``:
+        (n_batch, n_nodes, n_rounds); ``group_i``: (n_batch, n_rounds) int64.
+        Inverse-CDF convention: ``min{a : F(a) >= u}`` (``searchsorted`` with
+        the default ``right=False``), matching the linear severity copula.
+        """
+        n_batch, n_rounds, _ = proba_i.shape
+        assert int(group_i.max()) < z.shape[1], (
+            f"agent_group id {int(group_i.max())} exceeds the latent node axis "
+            f"({z.shape[1]}); group ids must index z directly"
+        )
+        eps = th.randn((n_batch, n_rounds), device=z.device, dtype=th.float64)
+        a = float(np.sqrt(self.copula_rho))
+        b = float(np.sqrt(1.0 - self.copula_rho))
+        idx = group_i.long().unsqueeze(1)  # (n_batch, 1, n_rounds)
+        z_g = z.gather(1, idx).squeeze(1)  # (n_batch, n_rounds)
+        u = th.special.ndtr(a * z_g + b * eps)
+        cum = proba_i.double().cumsum(-1)
+        lvl = th.searchsorted(cum.contiguous(), u.unsqueeze(-1).contiguous())
+        return lvl.squeeze(-1).clamp(0, self.y_levels - 1).to(th.int64)
+
     def predict_autoreg(self, data, sample=True, reset_rnn=True, edge_index=None):
         # `reset_rnn` accepted for signature parity with predict_independent.
         # `edge_index` honoured if provided so batched callers don't pay to
@@ -445,6 +486,23 @@ class GraphNetwork(th.nn.Module):
         )
         y_masked_name = self.y_name + "_masked"
 
+        # Copula sampling is off unless a rho is set and we are sampling; both
+        # None and 0.0 are falsy, and sample=False always keeps the argmax.
+        # Nothing above this point draws, so the legacy path below consumes the
+        # unmodified RNG stream.
+        use_copula = bool(sample and self.copula_rho)
+        if use_copula:
+            assert "agent_group" in data, (
+                "copula sampling needs 'agent_group' in the data to share one "
+                "severity latent per group and round"
+            )
+            # one latent per (batch, group, round), drawn once per call and
+            # held fixed across the AR steps of the round
+            z = th.randn(
+                (n_batch, n_nodes, n_rounds), device=self.device, dtype=th.float64
+            )
+            agent_group = data["agent_group"].to(self.device)
+
         for i in agent_order:
             data[y_masked_name] = y_masked
             data["autoreg_mask"] = autoreg_mask
@@ -462,11 +520,25 @@ class GraphNetwork(th.nn.Module):
             )
             y_logit = self(encoded)
             y_pred_proba_ = th.nn.functional.softmax(y_logit, dim=-1)
-            y_pred_ = self.y_encoder.decode(y_pred_proba_, sample)
-            y_pred_ = y_pred_.reshape(n_batch, n_nodes, n_rounds)
-            y_pred_proba_ = y_pred_proba_.reshape(
-                n_batch, n_nodes, n_rounds, self.y_levels
-            )
+            if use_copula:
+                # decode() is never called here: its categorical draw would
+                # both override the copula level and consume RNG. Only agent
+                # i's slice is read below, so the other slots stay at zero.
+                y_pred_proba_ = y_pred_proba_.reshape(
+                    n_batch, n_nodes, n_rounds, self.y_levels
+                )
+                y_pred_ = th.zeros(
+                    (n_batch, n_nodes, n_rounds), device=self.device, dtype=th.int64
+                )
+                y_pred_[:, i] = self._copula_levels(
+                    y_pred_proba_[:, i], z, agent_group[:, i]
+                )
+            else:
+                y_pred_ = self.y_encoder.decode(y_pred_proba_, sample)
+                y_pred_ = y_pred_.reshape(n_batch, n_nodes, n_rounds)
+                y_pred_proba_ = y_pred_proba_.reshape(
+                    n_batch, n_nodes, n_rounds, self.y_levels
+                )
             y_pred[:, i] = y_pred_[:, i]
             y_pred_proba[:, i] = y_pred_proba_[:, i]
             y_masked[:, i, -1] = y_pred_[:, i, -1]
@@ -490,6 +562,7 @@ class GraphNetwork(th.nn.Module):
             "y_levels",
             "y_name",
             "autoregressive",
+            "copula_rho",
             "x_encoding",
             "u_encoding",
             "edge_encoding",
