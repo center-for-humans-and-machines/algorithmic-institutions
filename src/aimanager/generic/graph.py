@@ -172,13 +172,19 @@ class GraphNetwork(th.nn.Module):
         self.y_name = y_name
         self.autoregressive = autoregressive
 
-        # Herding copula (switch slot only), notes/autoresearch_log/
-        # switch-herding-copula.md: rho 0 keeps the legacy independent draw.
+        # Herding copula, defined for the switch and contribution heads;
+        # see notes/autoresearch_log/switch-herding-copula.md and
+        # notes/autoresearch_log/contribution-herding-copula-v2.md.
+        # rho 0 keeps the legacy independent draw.
         assert 0.0 <= copula_rho < 1.0, f"copula_rho must be in [0, 1), {copula_rho}"
         assert 0.0 <= copula_phi < 1.0, f"copula_phi must be in [0, 1), {copula_phi}"
-        assert (
-            copula_rho == 0.0 or y_name == "does_switch"
-        ), f"copula_rho > 0 is only defined for does_switch, got {y_name}"
+        assert copula_rho == 0.0 or y_name in (
+            "does_switch",
+            "contribution",
+        ), (
+            "copula_rho > 0 is only defined for does_switch and contribution, "
+            f"got {y_name}"
+        )
         assert copula_phi == 0.0 or (
             isinstance(copula_switch_every, int) and copula_switch_every > 0
         ), "copula_phi > 0 requires a positive int copula_switch_every"

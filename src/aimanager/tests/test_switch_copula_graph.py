@@ -327,12 +327,33 @@ def test_phi_requires_switch_every():
         make_model(copula_rho=RHO, copula_phi=PHI)
 
 
-def test_rho_only_allowed_for_switch_predictor():
+def test_rho_only_allowed_for_switch_and_contribution_heads():
+    """The head gate opened to the contribution head
+    (notes/autoresearch_log/contribution-herding-copula-v2.md, step 3);
+    every other head must still reject rho > 0, so the validity model and
+    any future head keep the legacy draw."""
+    th.manual_seed(0)
+    contribution = GraphNetwork(
+        y_levels=21,
+        y_name="contribution",
+        hidden_size=4,
+        add_rnn=True,
+        add_edge_model=True,
+        add_global_model=False,
+        x_encoding=[
+            {"name": "prev_contribution", "n_levels": 21, "encoding": "numeric"}
+        ],
+        edge_encoding=[],
+        default_values={"contribution": 0},
+        copula_rho=RHO,
+    )
+    assert contribution.copula_rho == RHO
+
     with pytest.raises(AssertionError, match="does_switch"):
         th.manual_seed(0)
         GraphNetwork(
-            y_levels=21,
-            y_name="contribution",
+            y_levels=2,
+            y_name="contribution_valid",
             hidden_size=4,
             x_encoding=[],
             default_values={},
