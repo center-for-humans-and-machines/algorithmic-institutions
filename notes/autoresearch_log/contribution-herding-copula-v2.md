@@ -163,7 +163,7 @@ slot pointers stay as historical PR references.
       includes 0, or phi_hat >= 1 -> no artifact, no simulation,
       calibration-only `[FAIL]` PR. Otherwise continue regardless of
       preflight magnitude.
-- [ ] 9. Commit the calibration output: job log +
+- [x] 9. Commit the calibration output: job log +
       `artifacts/artificial_humans/group_switching_contribution_50ep_herding_copula_v2/calibration/copula_params.json`;
       log rho, phi, both CIs, the all-pairs phi diagnostic, job id,
       unrounded.
@@ -245,12 +245,12 @@ artifact was stamped or simulation run:
 Amended steps, validated (targets unchanged, §5 legal — simpler model,
 no frozen surface):
 
-- [ ] 8b. Relax the two strict asserts to admit the boundary
+- [x] 8b. Relax the two strict asserts to admit the boundary
       (`copula.py` `0.0 <= phi <= 1.0`; `graph.py:180` likewise);
       extend the test suites with phi = 1.0 cases (latent constant
       across rounds, cell-switch pickup, marginals preserved, RNG
       contract unchanged); rerun the affected local + Raven suites.
-- [ ] 9'. Step 9 additionally: append `phi_final: 1.0` +
+- [x] 9'. Step 9 additionally: append `phi_final: 1.0` +
       `phi_final_reason` (this ruling) to the committed
       `copula_params.json` — the field the stamper is designed to
       read; the estimated phi stays in the JSON unaltered.
@@ -424,3 +424,49 @@ no frozen surface):
    (5 files): flake8 (88, `E203,W503`) clean and `black --check` reports all
    5 unchanged; the two branch-added `tests/` suites are clean too. No fix
    was needed, so nothing was edited for lint.
+
+5. Steps 8b and 9 (boundary phi admitted, calibration output committed).
+   **Calibration numbers, job 29666293** (`cg_copula_rho`, node ravc4115,
+   8 CPUs, 00:12:29 elapsed, ExitCode 1:0 -- the exit-1 is BY DESIGN, the
+   script's `STOP-ESCALATE` on `phi >= 1.0`, not a crash; the whole run
+   completed and wrote its params first, total runtime 715.1s):
+   rows=7457, cells>=2=1608, pairs=15090 over the 40 single-copy train
+   episodes (24 rounds, 8 agents), Phi_2 quadrature max abs err vs scipy
+   2.220446049250313e-16.
+   rho = **0.06958238086256316** (SE 0.010418260898762315, 95% cluster-
+   bootstrap CI [0.04592661278794028, 0.0854596547235886], bootstrap
+   min/max 0.03714875071909212 / 0.09852826610976997, pairwise LR
+   45.923711626266595 on 15090 pairs) -- PR #149's number bit-exactly, so
+   the data path did not move. Round-trip acceptance gate: max |bias|
+   0.009462259703284237 -> PASS at tolerance 0.03.
+   phi: rho_lag1_cross = 0.0806347085524179 (PRIMARY, 28714 cross-player
+   pairs; 6603 self-pairs excluded), so phi_hat =
+   **1.1588380212468576**, paired-bootstrap 95% CI
+   [0.8256631146532615, 1.6415133722844082] (median 1.179254232832173,
+   0 degenerate draws, 0 draws with rho < 0.01). All-pairs diagnostic
+   (never used): rho_lag1_all = 0.07733669483270429, phi_allpairs =
+   1.1114407681084841. Pre-flight group-spread ratio (one-step redraw,
+   50 repeats): independent 0.7837119164031583 -> copula
+   0.7928150641319318 vs human 0.8472681041593946. Diagnostics, not
+   selection criteria: PIT rho 0.045726003288415626, holdout rho
+   0.13423231991344123, round-thirds rho 0.03450698559687487 /
+   0.07363186867146107 / 0.11868440333255369 (the lock-in growth that
+   biases a stationary-latent phi upward, ruling point 2).
+   **Ruling implemented (step 8b):** the two strict asserts now admit
+   phi = 1.0 (`copula.py:82`, `graph.py:180`); rho keeps [0, 1). New
+   phi = 1.0 cases pass in both suites -- local
+   `pytest tests/copula tests/switch` 34 passed, Raven login-node pytest
+   in `~/iso_contr_herdcopar1_v2` for the two graph suites 23 passed
+   (md5 of all four shipped files verified local vs remote, remote
+   `aimanager.__file__` inside the isolated dir). flake8 (88,
+   `E203,W503`) and `black --check` clean on the four touched files.
+   **Committed (step 9'):** the params JSON with `phi_final: 1.0` and
+   `phi_final_reason` appended (all 38 estimator fields byte-unchanged,
+   including the untouched `phi: 1.1588380212468576`; sorted-key order
+   preserved) plus the job log next to it as
+   `calibration/calibrate_copula_29666293.log`. Neither file is
+   LFS-tracked (`.gitattributes` covers only `*.csv`, `*.parquet`,
+   `*.pt`; `git check-attr filter` says `unspecified` for both), but the
+   job log needed `git add -f`: `.gitignore:4` is `*.log`, and plan
+   step 9 asks for the log itself, so this one 10 KB text file is a
+   deliberate narrow exception (flagged for the reviewer).
