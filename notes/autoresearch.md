@@ -109,6 +109,16 @@ that sentence, the change is a frankenstein — do not make it.
 
 Ties go to the simpler model.
 
+**Iteration budget.** The loop lives on fast retrains, so wall-clock is a
+constraint, not a footnote. Before adopting a method, check your base
+model's current training time from recent plain runs (the SLURM logs of
+the latest `train-ah` jobs on Raven); any method that needs **more than
+3x that** is ruled out, whatever it promises. Example: scheduled
+sampling — it replaces teacher-forced parallel batches with sequential
+own-rollout unrolling, pushing one training to ~1.5 h; at several
+variants per hypothesis that turns a same-day experiment into a
+multi-day one, which is why the schedsamp family is vetoed (PR #163).
+
 ## 6. Where to aim
 
 The failing rows depend on the base model — the GNN contributor fails CG
