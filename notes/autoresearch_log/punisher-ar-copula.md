@@ -191,7 +191,7 @@ revise the plan through validation again — no improvised login-node runs.
       sit near PR #161's (PA 0.5967, PB 0.7855, PC 0.8094, RPA 1.2689,
       RPB 0.7201) — a large P-family move signals a sampler bug, not a
       finding. Fill §3 Results + §4 Notes; commit log + sim outputs (LFS).
-- [ ] 19. Push; open the PR against `main` titled `[SUCCESS]`/`[FAIL]`,
+- [x] 19. Push; open the PR against `main` titled `[SUCCESS]`/`[FAIL]`,
       body Hypothesis / Results / Collateral.
 
 ## 3. Results
