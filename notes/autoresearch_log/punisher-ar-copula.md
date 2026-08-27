@@ -242,3 +242,12 @@ revise the plan through validation again — no improvised login-node runs.
 7. The calibration tee log (`metrics/copula_rho_calibration.log`) is
    untracked (`*.log` is gitignored repo-wide); `copula_rho.json` carries
    the full provenance and is committed.
+8. Maintainer-requested rebase (2026-08-27, post-verdict): the branch was
+   rebased onto `origin/auto/punisher-ar-gnn-v2` (PR #161) so the PR diff
+   shows only the copula work — the step 3-4 import commits dropped as
+   already-upstream (the imports were blob-hash-identical by
+   construction). Tree-identity verified against the pre-rebase tip
+   (`backup/pre-rebase-ar-copula`): only pure additions from the parent
+   branch, every experiment file bit-identical, scores.csv blob unchanged.
+   No re-run of anything; the verdict and all numbers stand as logged.
+   PR #164 base changed to `auto/punisher-ar-gnn-v2` (stacked on #161).
