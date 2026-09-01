@@ -22,7 +22,8 @@ set -euo pipefail
 
 # ── Configuration ────────────────────────────────────────────────────
 REMOTE_HOST="raven"
-REMOTE_PROJECT_DIR="~/algorithmic-institutions"
+# Set AI_REMOTE_DIR to fetch from an isolated experiment dir instead.
+REMOTE_PROJECT_DIR="${AI_REMOTE_DIR:-~/algorithmic-institutions}"
 LOCAL_PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # ── Validate arguments ───────────────────────────────────────────────
