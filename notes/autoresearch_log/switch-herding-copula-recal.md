@@ -89,7 +89,7 @@ in the steps below and argued in Notes 2:
   stamping script reads only that file, so the freeze is auditable rather
   than narrative.
 
-1. [ ] **[Sonnet] Port the isolation tooling and calibration machinery** — in
+1. [x] **[Sonnet] Port the isolation tooling and calibration machinery** — in
    the worktree, `git checkout auto/switch-herding-copula-v3 --` the six
    AI_REMOTE_DIR-aware scripts (`scripts/fetch_cluster.sh`,
    `scripts/remote_test.sh`, `scripts/simulate_cluster.sh`,
@@ -267,3 +267,19 @@ in the steps below and argued in Notes 2:
    persistence re-exporting from the group just filled, or the
    size-boundedness of a group that has already emptied. Step 3 has to
    separate these with numbers, not pick one.
+
+4. (Opus, step 1) The port is exact and the AI_REMOTE_DIR gap is closed:
+   the six scripts were byte-identical on HEAD to 8680db9's parent before
+   the checkout and byte-identical to 8680db9 after it, so this applies
+   that commit's script half with zero drift. `fetch_cluster.sh`,
+   `simulate_cluster.sh` and `remote_test.sh` now read
+   `REMOTE_PROJECT_DIR="${AI_REMOTE_DIR:-...}"`; the three SLURM templates
+   contribute only `source "${AIMANAGER_VENV:-.venv}/bin/activate"` — the
+   exact line that killed #166's first job, which is why step 6 symlinks
+   `.venv` into the isolated dir rather than trusting the variable to
+   survive `sbatch`. Calibration provenance verified: rho
+   0.116482333585783, phi 0.70366020589033, rho_ci
+   [0.035037571771319845, 0.21502476987895425], phi_ci
+   [0.11702191363043744, 2.0829306438837505]; both calibration parquets'
+   working-copy sha256 equal the source-branch LFS oids (train
+   b0fe6892..., test d61deeee...).
