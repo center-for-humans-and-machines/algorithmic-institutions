@@ -182,13 +182,15 @@ Implementer tags per §9 Roles.
   (own-vs-group-mean deviation) must be negative (mean pulls toward the
   group mean); a no-pull fit predicts PR #151's CG explosion and is a
   documented stop.
-- [ ] 9. **Candidate sim config** — [Sonnet]
+- [x] 9. **Candidate sim config** — [Sonnet]
   `configs/simulation/manager_testing/23_2g8a_gmlp2_self_gaussian_mlp_v2_contr_gnn_switch.yml`:
   copy of the step-3 baseline config, only `contribution_model` (the new
   bundle) and `output_dir`/`figure_name` change.
-- [ ] 10. **Candidate sim + eval** — [Opus] same Raven isolation + local evaluate
+- [x] 10. **Candidate sim + eval** — [Opus] same Raven isolation + local evaluate
   as step 4; log the Results row against the step-4 baseline.
-- [ ] 11. **Bounded variant selection (§5)** — [Opus] only if gate 1 passes but
+- [x] 11. **Bounded variant selection (§5)** — NOT TRIGGERED (gate 2 passed on
+  the first candidate, so no further variants were run; one candidate
+  evaluation total of the three permitted). [Opus] only if gate 1 passes but
   gate 2 fails on the known CG mode (or RCA misses narrowly): up to two
   further variants — (a) alternative declared feature set from the step-6
   config, (b) tighter capacity on the sigma path (smaller hidden / larger
@@ -205,6 +207,7 @@ Implementer tags per §9 Roles.
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
 | 2026-09-01 | (baseline) gaussian contr x gnn switch x PR #160 severity-copula punisher, contribution slot unchanged | RCA 5.20832162095758, CA 2.1698859787106297, RCB 2.3471849734654717 (guard CG 3.9780560538984258) | 8/21 | 1.6308337314805847 | baseline — reproduces PR #151's cell bit-for-bit on all 21 rows |
+| 2026-09-01 | gaussian_mlp_v2 in the contribution slot (2-layer MLP, hidden 8, forced group-conditioned core, 7 features, lr 0.01, wd 3e-4, 1000 ep) | RCA 3.9995310319882194 (**band upgrade > 5 -> 2-5**), RCB 2.05613753519669, CA 2.1657982689458293 (guard CG 5.91060457046713, 2-5 -> > 5) | 8/21 | 1.6145149045441503 | **SUCCESS — gate 1 (RCA band upgrade) and gate 2 (mean 1.63083 -> 1.61451) both pass** |
 
 ## 4. Notes
 
@@ -357,3 +360,32 @@ Implementer tags per §9 Roles.
     CG question is a quantified prediction that deserves the real
     measurement. A [FAIL] carrying a measured CG plus the a+b mechanism is
     worth far more to the next agent than a [FAIL] on an untested guess.
+14. **Step 10 result: both gates pass — SUCCESS.** Gate 1: RCA
+    5.20832162095758 -> 3.9995310319882194, out of > 5 into 2-5, the declared
+    primary target. Gate 2: mean 1.6308337314805847 -> 1.6145149045441503
+    (-0.0163188269364345), strictly below. rows <= 1 unchanged at 8/21 (CB
+    gained, PD lost; context only, does not gate). Step 11 was therefore not
+    triggered — one candidate evaluation of the three permitted.
+15. **The pre-registered prediction (Note 13) was right, and it did not
+    change the verdict.** CG rose 3.9780560538984258 -> 5.91060457046713,
+    crossing 2-5 into > 5, exactly the direction and roughly the magnitude
+    a+b = 0.9331 implied; SC, its known sibling, followed 2.564 -> 2.867.
+    What separates this from PR #151 is that the fit gains are now large
+    enough to pay for it. Against #151 in the same stack: RCA 4.000 here vs
+    4.530 there (a bigger upgrade), CG 5.911 here vs 6.581 there (less
+    damage), and the mean falls 1.6145 where #151's rose to 1.7340. So the
+    group-conditioned core did do its job — it bought more RCA *and* less CG
+    harm than the CV-shopped 5-feature set — it simply did not do enough to
+    keep CG inside its band. The honest reading is that a+b is the right
+    knob and this model sits at 0.93; a successor that holds a+b at the
+    incumbent's 0.77 while keeping this feature core is the obvious next
+    experiment, and the a+b read is now a cheap pre-sim diagnostic for it.
+16. Test status: PyG suite on Raven 81 passed with test_linear_manager (the
+    only PyG test touching the changed `linear_ah.py`) green and zero
+    non-eval failures; the 5 failures + 4 errors there are all
+    `test_eval_*` hitting `FileNotFoundError` on
+    `plots/simulation/22_2g8a_linear_self_ridge_contr/per_round.parquet`,
+    because `remote_test.sh` excludes `plots/` from the sync to an isolated
+    dir — those same 70 eval-suite tests pass locally. Not a regression, but
+    it means the eval suite is effectively unrunnable on an isolated remote
+    dir; worth a fixture fix in its own change.
