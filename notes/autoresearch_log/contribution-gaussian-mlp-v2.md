@@ -196,7 +196,7 @@ Implementer tags per §9 Roles.
   config, (b) tighter capacity on the sigma path (smaller hidden / larger
   wd) trading response sharpness against CG. Each is retrain + one sim +
   one eval, logged. Hard stop after three candidate evaluations total.
-- [ ] 12. **Close out** — [Opus] verdict per §2 (band upgrade on a declared target
+- [x] 12. **Close out** — [Opus] verdict per §2 (band upgrade on a declared target
   AND mean below the step-4 baseline); PR to `main` titled
   `[SUCCESS]`/`[FAIL]` with Hypothesis / Results / Collateral, noting up
   front that the diff carries the PR #160 copula integration by maintainer
