@@ -99,9 +99,11 @@ run_simulation() {
     if [[ "${REMOTE_PROJECT_DIR}" == "${CANONICAL_REMOTE_DIR}" ]]; then
         sim_cmd+=" && uv run python"
     else
-        # Shared venv + this dir's code; both propagate into sbatch jobs.
+        # Raven sets SBATCH_EXPORT=NONE; ALL is required so these
+        # variables actually reach the sbatch job.
         sim_cmd+=" && export AIMANAGER_VENV=${CANONICAL_REMOTE_DIR}/.venv"
         sim_cmd+=" PYTHONPATH=${REMOTE_PROJECT_DIR}/src"
+        sim_cmd+=" SBATCH_EXPORT=ALL"
         sim_cmd+=" && python"
     fi
     sim_cmd+=" src/aimanager/simulation/run.py"
