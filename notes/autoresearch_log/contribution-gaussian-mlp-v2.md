@@ -166,7 +166,7 @@ Implementer tags per §9 Roles.
   [500, 1000] = 54 settings — covers PR #151's unexplored edges (its note 4).
   24 x 54 x 4 folds = 5,184 fits, ~10-20 min local at #151's measured
   0.35-0.91 s/fit on ~9 workers.
-- [ ] 7. **CV gate** — [Sonnet] `run_baseline_cv.py` locally ->
+- [x] 7. **CV gate** — [Sonnet] `run_baseline_cv.py` locally ->
   `data/baselines/gaussian_mlp_v2_cv.csv`. Selection is the best `ce` row
   among rows whose `features` contain both `prev_contribution` and
   `prev_contribution_mean_group` (the declared core; a deterministic filter
@@ -295,3 +295,19 @@ Implementer tags per §9 Roles.
    step-4a fix exists to protect. The §2 gates are now pinned to these
    numbers: gate 1 needs RCA out of > 5 (or RCB/CA out of 2-5), gate 2 needs
    the mean strictly below 1.6308337314805847.
+10. Step 7 CV gate PASSES, and the declared core won on its own merits.
+    Selected row (lowest `ce` among the 1080 core-containing rows of 1296):
+    `B_core:s3 + B7_structural:s2`, hidden 8, wd 3e-4, lr 0.01, 1000 epochs,
+    7 features — binned CE **2.3991710817157537** < the incumbent gaussian's
+    2.445040254938614, and also below PR #151's CV CE 2.421791; context NLL
+    2.692550840548696 < incumbent 2.713452599085718 (and < #151's 2.693316).
+    Two things worth recording. First, the pre-fixed core filter turned out
+    to be non-binding: the best `ce` row over the *whole* grid is the same
+    row, so nothing was excluded by insisting on the core — the declared
+    feature set is the CV winner outright. Second, `B_core:s3` is exactly the
+    declared B1+B2+B5 core (own state + group contribution + group
+    punishment + group contribution trajectory), and the structural block
+    that survives is `switched_last_choice + rounds_since_switch` (tenure,
+    not `round_number`). Grid edges: hidden 8 and epochs 1000 both sit at an
+    edge, so capacity and training length are the axes a follow-up would
+    extend; lr and wd are interior, which closes PR #151's Note 4 gap.
