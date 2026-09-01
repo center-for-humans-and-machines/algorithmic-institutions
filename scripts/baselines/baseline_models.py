@@ -5,17 +5,19 @@ inspector (inspect_best_model), for:
   * choosing the estimator from `data.target_type` + `data.model`
     - categorical -> multinomial logistic  (data.model is implicitly 'multinomial')
     - continuous  -> 'ridge' (fast MSE point model, good for shrinking a huge
-      feature grid) or 'gaussian' (heteroscedastic N(mu, sigma) by MLE -- samples
-      in the sim, gives a proper cross-entropy)
+      feature grid), 'gaussian' (heteroscedastic N(mu, sigma) by MLE -- samples
+      in the sim, gives a proper cross-entropy) or 'gaussian_mlp' (the same
+      heads behind a 2-layer net, so mu and sigma become state-dependent)
   * validating + expanding the `setting:` sweep. EVERY key is griddable (scalar or
     list -> Cartesian product). A key that does not belong to the chosen model is
     an error (fail fast on a misconfigured run).
   * the primary CV metric name per model, and scoring a fitted model / the floor.
 
 Each model's allowed `setting` keys, with (default, caster):
-  * multinomial : C
-  * ridge       : alpha
-  * gaussian    : weight_decay, lr, epochs
+  * multinomial  : C
+  * ridge        : alpha
+  * gaussian     : weight_decay, lr, epochs
+  * gaussian_mlp : hidden, weight_decay, lr, epochs
 """
 
 import itertools
@@ -31,8 +33,21 @@ _SPEC = {
         "lr": (0.05, float),
         "epochs": (3000, int),
     },
+    "gaussian_mlp": {
+        "hidden": (32, int),
+        "weight_decay": (0.0, float),
+        "lr": (0.05, float),
+        "epochs": (500, int),
+    },
 }
-_METRIC = {"multinomial": "log_loss", "ridge": "mse", "gaussian": "nll"}
+_METRIC = {
+    "multinomial": "log_loss",
+    "ridge": "mse",
+    "gaussian": "nll",
+    "gaussian_mlp": "nll",
+}
+# Models sharing the heteroscedastic-Gaussian scoring path (NLL + binned CE).
+GAUSSIAN_MODELS = ("gaussian", "gaussian_mlp")
 MAX_ITER = 1000  # multinomial logistic solver cap
 
 
@@ -53,9 +68,10 @@ def resolve_model(cfg):
         return "multinomial"
     if tt == "continuous":
         model = model or "gaussian"
-        if model not in ("ridge", "gaussian"):
+        if model not in ("ridge",) + GAUSSIAN_MODELS:
             raise ValueError(
-                f"continuous target model must be 'ridge' or 'gaussian'; got {model!r}"
+                "continuous target model must be 'ridge', 'gaussian' or "
+                f"'gaussian_mlp'; got {model!r}"
             )
         return model
     raise ValueError(f"unknown target_type {tt!r}")
@@ -89,7 +105,7 @@ def metric_name(model):
 
 
 def build_model(model, setting, seed):
-    """Construct (unfitted) estimator for one setting. `seed` used by gaussian."""
+    """Construct (unfitted) estimator for one setting. `seed` used by gaussian*."""
     if model == "multinomial":
         from sklearn.linear_model import LogisticRegression
 
@@ -98,6 +114,16 @@ def build_model(model, setting, seed):
         from sklearn.linear_model import Ridge
 
         return Ridge(alpha=setting["alpha"])
+    if model == "gaussian_mlp":
+        from gaussian_regressor import GaussianMLPRegressor
+
+        return GaussianMLPRegressor(
+            hidden=setting["hidden"],
+            weight_decay=setting["weight_decay"],
+            lr=setting["lr"],
+            epochs=setting["epochs"],
+            seed=seed,
+        )
     from gaussian_regressor import GaussianRegressor
 
     return GaussianRegressor(
@@ -110,7 +136,8 @@ def build_model(model, setting, seed):
 
 def predict_scores(model, m, Xte, yte, n_levels, show_ce=False, ce_levels=21):
     """(primary_loss, ce) for a fitted model on (Xte, yte). ce is the binned
-    21-way cross-entropy for the gaussian model when show_ce, else None."""
+    21-way cross-entropy for the gaussian models when show_ce, else None. The
+    fall-through is the shared GAUSSIAN_MODELS path (same surface either way)."""
     if model == "multinomial":
         from sklearn.metrics import log_loss
 
@@ -131,7 +158,9 @@ def predict_scores(model, m, Xte, yte, n_levels, show_ce=False, ce_levels=21):
 
 
 def floor_score(model, ytr, yte, n_levels, show_ce=False, ce_levels=21):
-    """(primary_loss, ce) of the intercept-only floor (no features)."""
+    """(primary_loss, ce) of the intercept-only floor (no features). The
+    fall-through floor is shared by GAUSSIAN_MODELS: with no features both
+    reduce to the same marginal N(mean(ytr), std(ytr))."""
     if model == "multinomial":
         from sklearn.metrics import log_loss
 
