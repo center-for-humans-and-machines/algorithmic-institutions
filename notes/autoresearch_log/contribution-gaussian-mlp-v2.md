@@ -80,13 +80,13 @@ forced feature core needs an explicit mechanism because
 `enumerate_feature_sets` gives every block an implicit OFF (step 6).
 Implementer tags per §9 Roles.
 
-- [ ] 1. **Worktree env prep** — [Sonnet] in
+- [x] 1. **Worktree env prep** — [Sonnet] in
   `.claude/worktrees/contribution-gaussian-mlp-v2`: `uv sync`; `mkdir -p
   data/baselines` (gitignored CV output dir); verify
   `experiments/baseline/2group_8agent_50ep_bline_{train,test}.csv` and
   `artifacts/baselines/contribution_gaussian_best.joblib` are real files, not
   LFS pointers. No tracked-file changes.
-- [ ] 2. **Integrate the PR #160 severity-copula punisher** — [Sonnet] verify
+- [x] 2. **Integrate the PR #160 severity-copula punisher** — [Sonnet] verify
   `origin/main` has not touched `src/aimanager/simulation/linear_ah.py`
   since `git merge-base origin/main origin/auto/punisher-severity-copula-v2`,
   then `git checkout origin/auto/punisher-severity-copula-v2 --`
@@ -242,3 +242,14 @@ Implementer tags per §9 Roles.
    `features` string contains both — a rule fixed before the run, so the
    4 core-less combinations (structural-only, floor) simply cannot be
    selected. Grid sized to 24 sets x 54 settings x 4 folds = 5,184 fits.
+7. Steps 1-2 confirmed (commit `97f6a3c`): the restore touched exactly the
+   four intended paths and is byte-identical to
+   `origin/auto/punisher-severity-copula-v2`; `copula_rho` reloads as
+   0.3507588625344979 and the 31 copula tests pass locally. Phase A can
+   therefore be checked hard: PR #151's own baseline config
+   (`23_2g8a_severity_copula_self_gaussian_contr_gnn_switch.yml`) is this
+   exact stack with the same seed and the same artifacts, so the refreshed
+   baseline must reproduce its 21 rows bit-for-bit (RCA 5.20832162095758,
+   CA 2.1698859787106297, RCB 2.3471849734654717, CG 3.9780560538984258,
+   8/21, mean 1.6308337314805847). Anything else means the restored code or
+   an artifact is not what it claims, and is a stop-and-escalate.
