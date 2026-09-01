@@ -16,6 +16,28 @@ answers, per the log's Declaration:
                     empirical exact-repeat rate (~0.44)
   * where the CE margin comes from, and what the continuous-NLL tail rows cost
     once discretized
+  * conformity   -- the two partial derivatives that govern how an
+                    own-vs-group deviation evolves. Writing mu ~ a*own_prev +
+                    b*group_prev, a = d mu / d prev_contribution at a fixed
+                    group level and b = d mu / d prev_contribution_mean_group
+                    at a fixed own level.
+
+                    Read them as follows. The deviation (own - group)
+                    CONTRACTS iff a < 1: that, not a negative a, is
+                    conditional cooperation -- a < 0 would mean a player who
+                    contributed more last round contributes less next round
+                    regardless of the group, which is contrarian, not
+                    conformist, and no sane fit produces it. The per-round
+                    contraction is 1 - a.
+
+                    a + b is the quantity that governs CG. Averaging mu over
+                    a group's members sends own_prev -> the group mean, so a
+                    group's mean contribution evolves as an AR(1) with
+                    coefficient a + b: below 1 the group means are mean
+                    reverting and stay together, at 1 they random-walk apart.
+                    A candidate whose a + b is closer to 1 than the incumbent's
+                    lets group means drift further before reverting, which is
+                    mechanically PR #151's CG-explosion mode.
 
 Deterministic (closed form via scipy.stats.norm, no sampling).
 
@@ -51,6 +73,10 @@ TAIL_NLL = 10.0  # per-row continuous NLL above this = tail row
 # a "repeated last round" indicator needs the agent's t-2 contribution; these
 # are the only pool names that could carry it (see the printed NOTE).
 LAG2_FEATS = ("prev2_contribution", "prev_prev_contribution", "contribution_lag2")
+# the conformity read needs both halves of the own-vs-group deviation
+DEV_FEATS = ("prev_contribution", "prev_contribution_mean_group")
+CONFORM_H = 1.0  # forward step, RAW contribution units
+CONFORM_H_C = 0.5  # +-step of the central-difference estimate
 
 
 def bin_probs(mu, sigma, k=K):
@@ -115,6 +141,43 @@ def groups_of(prep):
         ("prev 1-19", (lvl > 0) & (lvl < K - 1)),
         ("prev = 20", lvl == K - 1),
     ]
+
+
+def conformity_slope(bundle, prep, h, central=False, feature="prev_contribution"):
+    """d mu / d `feature`, every other feature held fixed.
+
+    `feature="prev_contribution"` gives a (own persistence, the group level
+    held fixed -- i.e. the derivative along the own-vs-group deviation);
+    `feature="prev_contribution_mean_group"` gives b (the conformity pull, the
+    agent's own level held fixed). The step is applied in RAW feature space and
+    then re-standardized through the bundle's own scaler (equivalent to scaling
+    h by scaler.scale_ for that column). Nothing is refit, nothing is sampled."""
+    cols = [prep["col_of"][f] for f in bundle["features"]]
+    j = bundle["features"].index(feature)
+    raw = np.asarray(prep["X"][:, cols], float)
+    est = bundle["estimator"]
+
+    def mu_at(shift):
+        Z = raw.copy()
+        Z[:, j] += shift
+        return np.asarray(est.predict(bundle["scaler"].transform(Z)), float)
+
+    if central:
+        return (mu_at(h) - mu_at(-h)) / (2.0 * h)
+    return (mu_at(h) - mu_at(0.0)) / h
+
+
+def conformity_schemes(bundle, prep):
+    """{scheme label: per-row slopes} for one bundle, or {} when the bundle's
+    feature list cannot express the own-vs-group deviation."""
+    if not set(DEV_FEATS) <= set(bundle["features"]):
+        return {}
+    return {
+        f"forward h=+{CONFORM_H:g}": conformity_slope(bundle, prep, CONFORM_H),
+        f"central h=+-{CONFORM_H_C:g}": conformity_slope(
+            bundle, prep, CONFORM_H_C, central=True
+        ),
+    }
 
 
 def main():
@@ -270,6 +333,97 @@ def main():
         ],
         rows,
     )
+
+    prep_te = splits["test"][0]
+    print("[8] conformity read -- d mu / d (own-vs-group deviation), TEST rows")
+    print("  route: step applied in RAW feature space (prev_contribution += h,")
+    print("  prev_contribution_mean_group held fixed), then re-standardized")
+    print("  through each bundle's own scaler. No refit, no sampling.")
+    slopes = {n: conformity_schemes(b, prep_te) for n, b in models}
+    for name, b in models:
+        if not slopes[name]:
+            missing = [f for f in DEV_FEATS if f not in b["features"]]
+            print(f"  {name}: SKIPPED -- feature list lacks {', '.join(missing)}")
+    print()
+    rows = [
+        [
+            name,
+            scheme,
+            f"{s.mean():+.4f}",
+            f"{np.median(s):+.4f}",
+            f"{np.mean(s < 1.0):.4f}",
+        ]
+        for name, _ in models
+        for scheme, s in slopes[name].items()
+    ]
+    table(["model", "scheme", "mean a", "median a", "frac a<1"], rows)
+
+    # b = conformity pull, and a + b = the AR(1) coefficient of a group's mean
+    # contribution -- the quantity CG actually responds to.
+    print()
+    print("  a = d mu / d own_prev (group fixed); b = d mu / d group (own fixed)")
+    print("  deviation contracts iff a < 1 (per-round contraction 1 - a);")
+    print("  group means evolve as AR(1) with coefficient a + b -> CG risk.")
+    ab = {}
+    rows = []
+    for name, b in models:
+        if not slopes[name]:
+            continue
+        a_s = slopes[name][f"forward h=+{CONFORM_H:g}"]
+        b_s = conformity_slope(
+            b, prep_te, CONFORM_H, feature="prev_contribution_mean_group"
+        )
+        ab[name] = (a_s.mean(), b_s.mean())
+        rows.append(
+            [
+                name,
+                f"{a_s.mean():+.4f}",
+                f"{b_s.mean():+.4f}",
+                f"{1.0 - a_s.mean():+.4f}",
+                f"{a_s.mean() + b_s.mean():+.4f}",
+            ]
+        )
+    table(["model", "a (own)", "b (group)", "contraction 1-a", "a+b (CG)"], rows)
+
+    fwd = f"forward h=+{CONFORM_H:g}"
+    print(f"[9] conformity read by prev_contribution state (TEST, {fwd})")
+    rows = []
+    for label, m in groups_of(prep_te):
+        row = [label, int(m.sum())]
+        for name, _ in models:
+            s = slopes[name].get(fwd)
+            row += (
+                ["-", "-"]
+                if s is None
+                else [f"{s[m].mean():+.4f}", f"{np.mean(s[m] < 1.0):.4f}"]
+            )
+        rows.append(row)
+    table(
+        ["state", "n", "cand a", "cand frac a<1", "inc a", "inc frac a<1"],
+        rows,
+    )
+
+    cand = slopes["candidate"].get(fwd)
+    if cand is None:
+        print("CONFORMITY: not measurable -- candidate lacks the deviation feats")
+        return
+    a_c, b_c = ab["candidate"]
+    if a_c >= 1.0:
+        print(f"CONFORMITY: FAIL -- deviations do not contract (a = {a_c:+.4f} >= 1)")
+    else:
+        print(
+            f"CONFORMITY: pull toward group (a = {a_c:+.4f} < 1, "
+            f"contraction {1.0 - a_c:+.4f}/round, b = {b_c:+.4f})"
+        )
+    if "incumbent" in ab:
+        a_i, b_i = ab["incumbent"]
+        d = (a_c + b_c) - (a_i + b_i)
+        verdict = "CG RISK" if d > 0 else "CG ok"
+        print(
+            f"{verdict}: group-mean AR(1) a+b = {a_c + b_c:+.4f} vs incumbent "
+            f"{a_i + b_i:+.4f} (delta {d:+.4f}); closer to 1 = group means "
+            "drift further before reverting"
+        )
 
 
 if __name__ == "__main__":

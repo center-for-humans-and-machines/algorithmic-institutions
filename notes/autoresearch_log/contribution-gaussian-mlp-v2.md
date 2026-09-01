@@ -174,7 +174,7 @@ Implementer tags per §9 Roles.
   < 2.445040254938614 (incumbent gaussian CV CE; binned CE gates per
   PR #151's revised protocol — continuous NLL is reported, not gating).
   Fail -> stop, `[FAIL]` PR without a sim.
-- [ ] 8. **Save-best + preflight** — [Opus] `inspect_best_model.py --save-best` ->
+- [x] 8. **Save-best + preflight** — [Opus] `inspect_best_model.py --save-best` ->
   `artifacts/baselines/contribution_gaussian_mlp_v2_best.joblib`; TEST
   binned CE reported against incumbent 2.351383364066987. Teacher-forced
   preflight (PR #151's script + one addition): sigma(x) state-dependence,
@@ -311,3 +311,49 @@ Implementer tags per §9 Roles.
     not `round_number`). Grid edges: hidden 8 and epochs 1000 both sit at an
     edge, so capacity and training length are the axes a follow-up would
     extend; lr and wd are interior, which closes PR #151's Note 4 gap.
+11. Step 8 save-best: the candidate is a better model than the incumbent on
+    held-out data by **both** measures — TEST binned CE 2.3101098745482482 vs
+    2.351383364066987 (the gating quantity), and TEST continuous NLL
+    2.6411174392098506 vs 2.695732746404992. That second number is the
+    interesting one: PR #151's candidate *failed* the continuous NLL (3.0913
+    vs 2.6957) because 1% of rows blew up under a very sharp sigma. This
+    model does not have that pathology — sigma_mean 3.410 vs the incumbent's
+    3.623 is mildly sharper, where #151 went to sigma_min 0.41 vs 1.80. So
+    the v2 feature core buys the fit without #151's tail damage.
+12. **The step-8 conformity gate was mis-specified, and correcting it is a
+    plan revision.** The plan demanded `d mu / d (own-vs-group deviation) <
+    0`. That criterion is wrong: writing mu ~ a*own_prev + b*group_prev, the
+    measured slope is `a`, and a deviation *contracts* iff a < 1, not a < 0.
+    A negative a would mean a player who contributed more last round
+    contributes less next round irrespective of their group — contrarian
+    behaviour, not conditional cooperation. No sane fit satisfies it, and the
+    incumbent, which produces the perfectly ordinary CG 3.978, scores
+    a = +0.6023. Stopping on the literal rule would have been a false stop on
+    a criterion the baseline also fails. Corrected reading (preflight section
+    [8] rewritten accordingly, with b and a+b added):
+
+    | model | a (own) | b (group) | contraction 1-a | a+b |
+    |---|---|---|---|---|
+    | candidate | +0.7316 | +0.2015 | +0.2684 | **+0.9331** |
+    | incumbent | +0.6023 | +0.1659 | +0.3977 | **+0.7681** |
+
+    Both contract, on 100% of test rows, so conformity is present in both.
+    The hypothesis's own mechanism even worked: the group-conditioned core
+    raised the conformity pull b from 0.1659 to 0.2015 (+21%). But own
+    persistence a rose more, so the net per-round contraction *weakened*
+    (0.398 -> 0.268).
+13. **Pre-registered prediction, recorded before the candidate simulation is
+    run.** The statistic that governs CG is not a but a+b: averaging mu over
+    a group's members sends own_prev to the group mean, so a group's mean
+    contribution follows an AR(1) with coefficient a+b. The candidate sits at
+    0.9331 against the incumbent's 0.7681 — near a unit root, i.e. group
+    means will drift much further before reverting. Prediction: **CG rises
+    above the 3.9780560538984258 baseline**, and gate 2 (mean below
+    1.6308337314805847) is therefore at risk, while RCA may still band-
+    upgrade on the strength of the fit. Decision: **proceed to the
+    simulation** rather than stop. The preflight exists to avoid wasting a
+    sim on a hopeless model; this model is better on both held-out metrics,
+    has no #151 tail pathology, and genuinely contracts deviations, so the
+    CG question is a quantified prediction that deserves the real
+    measurement. A [FAIL] carrying a measured CG plus the a+b mechanism is
+    worth far more to the next agent than a [FAIL] on an untested guess.
