@@ -204,7 +204,7 @@ in the steps below and argued in Notes 2:
    artifacts per job and `aimanager.__file__` resolving inside the isolated
    `src/`. One draw per variant, seed 42, no re-draws.
 
-7. [ ] **[Sonnet] Fetch + evaluate all variants** — `AI_REMOTE_DIR=... scripts/fetch_cluster.sh`
+7. [x] **[Sonnet] Fetch + evaluate all variants** — `AI_REMOTE_DIR=... scripts/fetch_cluster.sh`
    each output dir, then `python -m aimanager evaluate <config>` locally per
    variant. Fill one Results row per variant, scores exact, losers included.
    **Selection rule, declared here before any score is seen**: among
@@ -214,7 +214,7 @@ in the steps below and argued in Notes 2:
    the experiment is a `[FAIL]` and the dose-response curve is the finding.
    Commit sim outputs + evaluations.
 
-8. [ ] **[Opus] Verdict, log, PR** — §2 on the selected variant (gate 1:
+8. [x] **[Opus] Verdict, log, PR** — §2 on the selected variant (gate 1:
    SC < 2.0; gate 2: mean < 1.2893632310269196), exact values both ways.
    Push, PR `--base auto/contribution-herding-copula-v2`, title
    `[SUCCESS]`/`[FAIL]`, body per §9.7 (hypothesis, results table with ALL
@@ -361,8 +361,20 @@ Other isolated runs should be re-checked before their results are trusted.
 
 ## 3. Results
 
+All runs are the parent's stack with only the switch slot's sampling
+parameters changed, in the parent's exact single-pairing config (seed 42,
+100 episodes). Gates: SC < 2.0 (band upgrade out of 2-5) and mean <
+1.2893632310269196.
+
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
+| 2026-09-01 | baseline: parent PR #165 stack (gnn-copula contr x gnn switch x severity-copula punisher) | SC 2.1867905905576634 | 11/21 | 1.2893632310269196 | reference |
+| 2026-09-01 | CTL: parent's config re-simulated under the fixed launcher, output bit-identical | SC 2.1867905905576634 | 11/21 | 1.2893632310269196 | control, exact |
+| 2026-09-01 | arm 1: switch herding copula, rho 0.035037571771319845, phi 1.0 | SC 1.4531172890278043 | 7/21 | 1.3207710955319005 | **[FAIL]** — gate 1 passed (2-5 -> 1-2), gate 2 failed |
+| 2026-09-01 | arm 2: switch herding copula, rho 0.116482333585783, phi 1.0 | SC 1.4170916269123233 | 6/21 | 1.358350400404427 | **[FAIL]** — gate 1 passed (2-5 -> 1-2), gate 2 failed |
+| 2026-09-01 | arm 3: switch herding copula, rho 0.21502476987895425, phi 1.0 | SC 0.9587925645665427 | 6/21 | 1.3616236192643985 | **[FAIL]** — gate 1 passed (2-5 -> <= 1, two bands), gate 2 failed |
+| 2026-09-01 | arm 4: switch herding copula, rho 0.21502476987895425, phi 0.11702191363043744 | SC 1.6062674782036555 | 11/21 | 1.3377431871380137 | **[FAIL]** — gate 1 passed (2-5 -> 1-2), gate 2 failed |
+| 2026-09-01 | REF (not selectable): PR #166's setting, rho 0.116482333585783, phi 0.70366020589033, correctly executed | SC 1.3193781872018437 | 8/21 | 1.3064125900381773 | repair run — gate 1 passed, gate 2 failed |
 
 ## 4. Notes
 
@@ -607,3 +619,76 @@ Other isolated runs should be re-checked before their results are trusted.
    CTL 4f64fc42…, REF 0bdd714a…. Determinism cross-check for free: arms 1
    and 3 had already been run once by the diagnostic probe under the same
    corrected import path, and both reproduced their digests exactly here.
+
+17. (Opus, step 7-8, the verdict) **[FAIL], but on gate 2 only — the
+   mechanism does work on its target.** Every one of the four arms
+   band-upgrades SC, and arm 3 upgrades it by *two* bands, 2.1867905905576634
+   -> 0.9587925645665427, i.e. from "clear deviation" to at or below the
+   human-vs-human noise ceiling. That is the largest SC move the campaign
+   has produced. Not one arm improves the 21-row mean: 1.3207710955319005 /
+   1.358350400404427 / 1.3616236192643985 / 1.3377431871380137 against the
+   parent's 1.2893632310269196. Per the selection rule declared in step 7
+   before any score was seen — winner is the lowest mean *among arms
+   passing both gates* — there is no winner and the experiment is a
+   `[FAIL]`. Nothing here is a near miss to be talked up: the closest arm
+   is 0.031 of mean above the bar, and the bar is what stops a target row
+   being bought with the rest of the stack.
+
+18. (Opus, the dose-response, which is the finding) At phi = 1.0 the
+   trade-off is clean and monotone in rho: SC 1.4531 -> 1.4171 -> 0.9588
+   as rho goes 0.035 -> 0.116 -> 0.215, while the mean moves the other way,
+   1.3208 -> 1.3584 -> 1.3616. So segregation is buyable, at a
+   quantified and steadily rising price. The phi contrasts show
+   persistence is genuinely the lever the grid bet on: at rho = 0.215,
+   phi = 1.0 buys SC 0.9588 where phi = 0.117 only reaches 1.6063. But the
+   ladder is not monotone in phi — at rho = 0.116, the intermediate
+   phi = 0.704 (REF) beats the static phi = 1.0 (arm 2) on *both* axes,
+   SC 1.3194 vs 1.4171 and mean 1.3064 vs 1.3584. The best mean of all five
+   copula runs is REF's 1.3064, and it still misses gate 2. A successor
+   should read this as: the (rho, phi) plane has an interior optimum near
+   rho ~ 0.12, phi ~ 0.7, and no point in it pays for itself under gate 2.
+
+19. (Opus, the correction to PR #166) With the launcher fixed, #166's exact
+   setting scores **SC 1.3193781872018437** — a band upgrade — not the
+   2.967099851949342 regression that PR reports, and mean 1.3064125900381773
+   rather than 1.7229430164446164. #166's `[FAIL]` title happens to survive,
+   because gate 2 still fails, but every substantive claim in it is wrong:
+   the switch copula did not reverse sign, did not damp segregation, and did
+   not collapse the contribution slot. Its Notes 12 and 13 — "the two latents
+   do not compose", "the net effect on segregation reverses sign" — describe
+   an artifact of running the copula-free stack, and should not be carried
+   forward. The premise this experiment was commissioned on (recalibrate
+   because the ported parameters reverse sign) was therefore false; what was
+   actually needed was to run them at all.
+
+20. (Opus, collateral) The tax is concentrated and interpretable, not
+   diffuse. **RCD, switching pull** — how strongly a switcher's contribution
+   adapts toward the gap with their new group — is the one row that changes
+   band for the worse, 1.9647336396755046 -> 2.78 / 2.68 / 3.03 / 2.63
+   (1-2 into 2-5) in all four arms. That is the same channel the step-3
+   diagnostic guessed at from a void comparison, now measured on valid runs:
+   a shared latent decides *who* moves partly by group draw rather than by
+   individual propensity, so switchers are less well matched to the group
+   they join and the pull coefficient drifts from the human value. Second,
+   the C-family individual-fit rows drift up together (CA/CB/CC/CD all cross
+   from <= 1 into 1-2 in arms 1-3), which is why rows <= 1 falls from 11 to
+   7/6/6 even as SC improves — the known CG-vs-individual-fit anti-correlation
+   of §6, appearing on the switch slot. Arm 4 is the exception that proves
+   the reading: with persistence nearly off it holds rows <= 1 at 11/21 and
+   buys the least SC. Movements toward human worth noting: CG improves in
+   arm 1 (4.1635 -> 3.9756), PD improves in arm 3 (1.0029 -> 0.8363) and in
+   REF (-> 0.7908), and CE improves in every arm.
+
+21. (Opus, for the successor) The switch herding copula is now proven to be
+   a real and strong lever on SC, so the open question is no longer whether
+   group-level co-movement helps segregation but how to stop it taxing RCD
+   and the C rows. The step-3 findings that survived the void comparison
+   point the same way as the RCD damage does: human co-switching is
+   concentrated in the founding exodus (pairwise r 0.424 at round 3 versus
+   0.05-0.11 later, where the parent already matches), so a constant rho
+   across all five decision rounds necessarily overdoses rounds 7-19 —
+   a round-dependent rho, high at round 3 and near zero after, is the
+   obvious next experiment and it targets exactly the rows that broke.
+   Beyond that, half the human full-merge rate needs between-label
+   anti-correlation (0.219 observed vs 0.110 predicted from independent
+   labels), which needs a cross-group latent and hence a code change.
