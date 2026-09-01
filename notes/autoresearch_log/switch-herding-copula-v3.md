@@ -113,7 +113,7 @@ parent's `scores.csv` before tagging (mean 1.2893632310269196, rows <= 1:
    (`src/aimanager/tests/test_eval_*.py`) and `scripts/tests/`. Green before
    anything runs; log entry only.
 
-4. **[Opus] Compatibility check: the #162 artifact under the #165 code** *(was
+4. [x] **[Opus] Compatibility check: the #162 artifact under the #165 code** *(was
    step 3)* — the stamped `.pt` was written by #162's
    `make_switch_copula_artifact.py`; this branch's `GraphNetwork` is the
    parent's generalized version. In the isolated remote dir (step 3), load the
@@ -267,3 +267,16 @@ change; no frozen surface touched.
    absent data. Note for later: re-runs of `remote_test.sh` in an isolated dir
    must use `--test-only`, since a syncing re-run would `rsync --delete` the
    artifacts back out.
+
+8. (Opus, step 4) The contract did not drift — the plan's one identified
+   technical risk is retired. Under this branch's generalized `GraphNetwork`,
+   #162's stamped artifact round-trips `copula_rho = 0.116482333585783`,
+   `copula_phi = 0.70366020589033`, `copula_switch_every = 4` (a genuine
+   `int`) and passes the `does_switch` head gate. Two controls beyond the
+   plan make it airtight: the base artifact loads as `(0.0, 0.0, None)`, so
+   the stamped values provably come from the serialized artifact and not from
+   `__init__` defaults; and all 10 weight tensors across `op1`/`op2`/`rnn_n`
+   are `torch.equal`-identical to the base, confirming the port changes no
+   learned parameter and is sampling-time only. `aimanager` resolved to
+   `/u/certuer/autoresearch/switch-herding-copula-v3/src/aimanager/__init__.py`,
+   so the job imports this branch's code, not the shared checkout's.
