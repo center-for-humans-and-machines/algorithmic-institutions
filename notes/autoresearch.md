@@ -16,8 +16,8 @@ definitions in `notes/evaluation_metric_defs.md`).
 ## 2. The metrics
 
 Everything comes from one `evaluation/scores.csv` (21 rows), judged against
-the evaluation stack's own baseline scores (§3). Two gates, both required
-for success:
+the evaluation stack's own baseline scores (§3; on a parent `[SUCCESS]` PR,
+the parent's — §9). Two gates, both required for success:
 
 1. **A band upgrade on a target row.** The scoring bands
    (<= 1 / 1-2 / 2-5 / > 5) are the classes: at least one row your
@@ -140,7 +140,9 @@ target list: fetch your base model's deficit profile, then declare targets.
 **How to read it:** filter `score_matrix.csv` to your base model's contexts,
 average over the other two slots, rank your slot's rows with score >= 2 —
 that is your target list. Check concordance first: a deficit that appears in
-one context is noise, not a direction.
+one context is noise, not a direction. (Building on a parent `[SUCCESS]`
+PR: the matrix does not contain the parent's candidate — the deficit
+profile comes from the parent's own `evaluation/scores.csv` instead, §9.)
 
 **Known constraints, whatever the base model:** CG, PD, and SC share one
 root cause — independent per-agent sampling ignores between-participant
@@ -184,10 +186,14 @@ to the human maintainer.
 
 ## 9. Work process
 
-**Roles.** The orchestrator is a **Fable** model; planning, implementation,
-and analysis are delegated to **Opus** subagents, one task at a time. The
-orchestrator decides, validates, and confirms; subagents execute — they
-never decide scope.
+**Roles.** **Fable** opens the experiment and nothing more: research,
+declaration, plan (loop steps 1-3). **Opus**
+orchestrates everything after — on receiving the declaration and the plan
+it validates the plan and attaches an implementer to every step: an
+**Opus** engineer where the step is complicated or risky, a **Sonnet**
+agent otherwise, for cost efficiency. It then dispatches subagents one
+step at a time, each to the model its step carries, and confirms each
+result. Subagents execute; they never decide scope.
 
 **Branch and worktree.** Every experiment lives on its own branch,
 `auto/<slot>-<slug>`, checked out in its **own git worktree** — parallel
@@ -232,16 +238,22 @@ machine account may replace this later.
    profile (§6).
 2. Create the branch and worktree; write the declaration in your log
    file (§10).
-3. **Plan** — a planning subagent turns the hypothesis into a **simple
-   numbered list of steps**, nothing more elaborate. The orchestrator
-   validates it before anything runs — targets per §2, every step legal per
-   §5, nothing on the frozen surface (§8) — then records it in the log file
-   and commits it.
-4. **Implement** — one subagent per step. The orchestrator confirms each
-   step's result before dispatching the next and commits at each confirmed
-   step — commits map to steps, never one monolith. If a step reveals the
-   plan is wrong, revise the step list first (through validation again),
-   then continue.
+3. **Plan** — Fable turns the hypothesis into a numbered list of
+   implementation steps in the style of
+   [signifier-trainer#13](https://github.com/cemrtkn/signifier-trainer/issues/13):
+   clearly separated steps that build on each other, each opening with a
+   bold name and the exact place to change (file, function, config; new or
+   existing), then what exactly changes there — understandable and
+   concise. The orchestrator validates it before anything runs — targets
+   per §2, every step legal per §5, nothing on the frozen surface (§8) —
+   attaches an implementer to every step (Opus or Sonnet, per Roles), then
+   records the tagged plan in the log file and commits it.
+4. **Implement** — one subagent per step, sent to the model its step
+   carries. The orchestrator confirms each step's result
+   before dispatching the next and commits at each confirmed step —
+   commits map to steps, never one monolith. If a step reveals the plan is
+   wrong, revise the step list first (through validation again), then
+   continue.
 5. Train, simulate, evaluate per §3 and §7; log every run (§10).
 6. The verdict comes straight from that single evaluation, per §2: a band
    upgrade on a target row *and* a better mean is a success; anything less
@@ -267,12 +279,12 @@ file. Four sections, in this order:
 
 1. **Declaration** — slot, base model, target rows, hypothesis, planned
    change.
-2. **Plan** — the validated step list from §9, checked off as steps are
-   confirmed.
+2. **Plan** — the validated, implementer-tagged step list from §9, checked
+   off as steps are confirmed.
 3. **Results** — one row per run:
 
-   | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
-   |---|---|---|---|---|---|---|
+   | date | change (one line) | target scores | rows <= 1 | mean | verdict |
+   |---|---|---|---|---|---|
 
 4. **Notes** — a numbered list (`1.`, `2.`, ...), appended as you go: what
    you observed, what you decided and why, dead ends and what killed them.
