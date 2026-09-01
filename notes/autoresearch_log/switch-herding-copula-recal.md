@@ -269,6 +269,96 @@ Orchestrator validation:
   round-dependent rho.
 - **Diagnostic reproduced independently** before accepting it (Notes 9).
 
+## 2b. Plan revision after step 6: the isolation was never real
+
+The four grid simulations ran to COMPLETED 0:0 and produced four
+**byte-identical** `per_round.parquet` files, identical also to PR #166's
+run — five different (rho, phi) settings, one set of bytes. The cause is
+not the model and not the grid; it is the job launcher.
+
+**The bug.** `scripts/run_simulation.sh` (the SLURM template, reproduced
+verbatim into every generated `run.sh`) activates a venv but never sets
+`PYTHONPATH`. An isolated experiment dir has no venv of its own and
+borrows the canonical checkout's, whose *editable install* resolves
+`aimanager` to `~/algorithmic-institutions/src/aimanager`. So a job
+submitted from an isolated dir runs the **shared checkout's** code, not
+the experiment's. `simulate_cluster.sh` does export the right variables at
+submit time, but they are lost between the local shell and the job (the
+same loss #166 hit with `AIMANAGER_VENV`, which the `.venv` symlink
+papered over — there is no symlink trick for `PYTHONPATH`).
+
+At the time of these runs the shared checkout was on an unrelated
+`punisher-ar-copula` tree, which has **no copula code at all**:
+`aimanager.generic.copula` does not exist there, `predict_independent`
+has no copula branch, and `GraphNetwork.__init__` takes `**kwargs`, so
+`copula_phi` and `copula_switch_every` were silently swallowed and
+`copula_rho` was consulted only on a path these artifacts never take.
+Hence four clean exits and total inertness of every stamp.
+
+**Evidence** (probe job 29858573, reported in Notes 13): re-running arm 1
+with no `PYTHONPATH` — byte-equal to the real jobs' environment —
+reproduces the collision hash `a9a446e4…` exactly, with **0** calls to
+`sample_correlated_levels`; re-running arms 1 and 3 with
+`PYTHONPATH=$PWD/src` gives **4801** sampler calls each and two different
+outputs. Saturation (the innocent explanation) is ruled out: the switch
+probabilities have mean 0.296, max 0.949, and *zero* mass above 0.99 or
+below 0.01.
+
+**The fix**, one line in `scripts/run_simulation.sh`:
+`export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"` after the venv
+activation, mirroring the preamble the stamping SLURM templates already
+use. `--chdir=.` puts the job in the submitting dir, so `$PWD/src` is the
+experiment's own source; in the canonical checkout the two coincide, so
+behaviour there is unchanged. This is launcher plumbing, not model or
+scoring code: it changes *which code runs*, which §9's isolation mandate
+already requires, and it is what makes the experiment runnable at all.
+The parent-control run below is the before/after evidence §4 asks of a
+bug fix.
+
+**Revised step 6**, six simulations in parallel instead of four:
+
+- the four frozen grid arms, unchanged;
+- **a baseline control**, `23_2g8a_swrecalctl_self_gnncopar1_contr_gnn_switch.yml`
+  — the parent's config with only `output_dir`/`figure_name` changed. Under
+  the fix it must reproduce the parent's `per_round.parquet` **bit for
+  bit** (sha256 4f64fc42…). If it does not, the baseline the gates are
+  judged against is not reproducible on this tooling and I escalate
+  instead of reporting scores. This is the control that licenses every
+  comparison in the Results table;
+- **a repair run of PR #166's exact setting** (rho 0.116482333585783,
+  phi 0.70366020589033; artifact sha256 9b89f3c7…, ported from the v3
+  branch), because #166's published numbers describe the copula-free
+  stack and not the mechanism it claimed to test. Reported for the record
+  and to complete the phi ladder 0.117 / 0.704 / 1.0; **not eligible for
+  selection** — the grid is frozen at four arms and that setting belongs
+  to #166.
+
+**The grid stays frozen.** No valid score has been observed: the four void
+runs carry no information about any arm's performance, so nothing has been
+seen that could bias a re-specification, and the arms are re-run exactly
+as committed in `grid.json`.
+
+**What this voids in step 3.** The diagnostic's frame C was #166's run,
+i.e. the copula-free stack — so every conclusion drawn from B-vs-C is
+void, including the headline z = -6.8 "contribution-spread collapse"
+(that is simply the parent's contribution copula being absent, which is
+PR #165's effect measured backwards) and the claim that the switch latent
+"never delivered co-movement". The H1/H2/H3 verdicts fall with it.
+What survives untouched is everything derived from human-vs-parent, since
+both are valid runs: the SC deficit being a missing right tail, absorption
+0.300 vs 0.091, reaching size 8 from balance 0.219 vs 0.069, the round-3
+concentration of human co-switching (r 0.424 vs 0.237) with rounds 7-19
+already matched, the between-label anti-correlation accounting for half
+the human full-merge rate, and the rho ~ 0.294 implied by the round-3 gap.
+The grid's rationale rests on those, plus the parent's own phi = 1.0
+precedent — so it stands, but Notes 7 and 8 must be read with Note 14.
+
+**Escalation for the maintainer.** This bug is in `main` (commit 8680db9)
+and silently affects **any** experiment that ran a simulation from an
+isolated `AI_REMOTE_DIR` while keeping its change in `src/`. PR #166 is
+certainly affected: its `[FAIL]` verdict measured the copula-free stack.
+Other isolated runs should be re-checked before their results are trusted.
+
 ## 3. Results
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
@@ -469,3 +559,38 @@ Orchestrator validation:
    stale deliberately rather than spend a fourth edit. Dir names parse
    under the sweep's DIR_PATTERN as contr `gnncopar1`, switch
    `herdcoprc<k>`.
+
+13. (Opus, step 6, the anomaly) All four arms COMPLETED 0:0 in ~83 s and
+   produced one set of bytes (`a9a446e4…`), equal to #166's run and
+   different from the parent's. Provenance had looked perfect: correct
+   artifact sha256s remotely, correct (rho, phi, 4) round-tripping through
+   `GraphNetwork.load` on the cluster minutes before submission, correct
+   config path in every job log, the two copula suites 23/23 green. All of
+   that was true and all of it was beside the point — those checks ran
+   through `PYTHONPATH=$PWD/src` on the login node, while the jobs ran
+   without it. The lesson for the protocol: verifying an artifact loads
+   correctly *next to* a job is not evidence that the job imported the
+   same code. Provenance has to be printed **from inside the job**, which
+   the simulation template still does not do.
+
+14. (Opus, step 6, what it costs us) PR #166's published `[FAIL]` numbers
+   (SC 2.967, mean 1.723, CG collapse) are not measurements of the switch
+   herding copula — they are the copula-free stack, with #165's
+   contribution copula and #160's punisher copula equally inert. That also
+   voids the parts of this experiment's own step-3 diagnostic that leaned
+   on frame C (§2b). It is worth being blunt that the diagnostic's most
+   confident, most quantitative claim — a 6.8 sigma channel — was an
+   artifact, and that it looked *more* convincing than the human-vs-parent
+   findings that actually survived. The tell was there in hindsight: a
+   z = -6.8 effect on the contribution slot from a switch-slot parameter
+   was too large for its cause, and I accepted it because it explained the
+   sign reversal so neatly.
+
+15. (Opus, step 6, the fix and its control) One line in the SLURM template
+   exports `PYTHONPATH="$PWD/src"`. Rather than assert that this restores
+   the intended behaviour, the re-run includes a control that re-simulates
+   the parent's own config under the fixed tooling: it must reproduce the
+   parent's `per_round.parquet` bit for bit. This branch changes no file
+   under `src/` (`git diff` against the parent over `src/` is empty), so a
+   bit-identical control is exactly the right expectation, and it is what
+   licenses judging the arms against the parent's `scores.csv`.
