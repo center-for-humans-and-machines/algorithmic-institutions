@@ -167,7 +167,7 @@ in the steps below and argued in Notes 2:
    commit them locally, so the step-6 sync ships identical content and
    cannot delete them. Commit scripts + artifacts.
 
-5. [ ] **[Sonnet] Grid sim configs** — one per variant,
+5. [x] **[Sonnet] Grid sim configs** — one per variant,
    `configs/simulation/manager_testing/23_2g8a_swrecal<k>_self_gnncopar1_contr_herdcoprc<k>_switch.yml`,
    each a byte-copy of the parent's
    `23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch.yml`
@@ -455,3 +455,17 @@ Orchestrator validation:
    tooling, not just by the log. Artifacts were fetched back and committed
    locally so the step-6 sync ships identical bytes and `rsync --delete`
    cannot remove them.
+
+12. (Opus, step 5) Four configs, each a byte-copy of the parent's with
+   exactly three changed lines (`switch_model`, `output_dir`,
+   `figure_name`) — verified by `diff` showing 3 removed / 3 added lines
+   and nothing else, and by a recursive YAML dict comparison finding
+   exactly those three keys differing. All five configs (parent plus the
+   four arms) agree on `seed: 42`, `n_episodes: 100`, `switch_every: 4`,
+   `save_per_round: true` and the single `lin_multinomial_copula_self`
+   pairing, so every arm's RNG context equals the baseline's — the
+   condition #162 showed the manager list controls. The inherited header
+   comment, which describes the punisher-severity experiment, is left
+   stale deliberately rather than spend a fourth edit. Dir names parse
+   under the sweep's DIR_PATTERN as contr `gnncopar1`, switch
+   `herdcoprc<k>`.
