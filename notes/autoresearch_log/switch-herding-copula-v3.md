@@ -65,7 +65,7 @@ eval-suite suites only. Baseline figures in §1 were re-verified against the
 parent's `scores.csv` before tagging (mean 1.2893632310269196, rows <= 1:
 11/21, SC 2.1867905905576634 — all exact).
 
-1. **[Sonnet] Port the switch-copula calibration provenance** — in the experiment
+1. [x] **[Sonnet] Port the switch-copula calibration provenance** — in the experiment
    worktree, `git checkout origin/auto/switch-herding-copula-v2 --`
    `artifacts/artificial_humans/switch_pred_herding_copula/calibration/copula_params.json`,
    `.../calibration/switch_probs_train.parquet`,
@@ -77,14 +77,14 @@ parent's `scores.csv` before tagging (mean 1.2893632310269196, rows <= 1:
    reproduced #150 bit-for-bit). Verify `copula_params.json` still reads
    rho = 0.116482333585783, phi = 0.70366020589033. Commit.
 
-2. **[Sonnet] Port the stamped switch artifact** — `git checkout
+2. [x] **[Sonnet] Port the stamped switch artifact** — `git checkout
    origin/auto/switch-herding-copula-v2 --
    artifacts/artificial_humans/switch_pred_herding_copula_ar1/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt`
    (Git LFS; `git lfs pull` as needed). Integrity gate: the working-copy
    file's sha256 must equal the LFS pointer oid recorded on
    `origin/auto/switch-herding-copula-v2` for that path. Commit.
 
-2b. **[Opus] Port the AI_REMOTE_DIR isolation tooling** *(plan revision, added
+2b. [x] **[Opus] Port the AI_REMOTE_DIR isolation tooling** *(plan revision, added
    after step 1 — see the "Plan revision" section below)* — this branch
    predates `main`'s commit 8680db9, so `simulate_cluster.sh`,
    `fetch_cluster.sh` and `remote_test.sh` still hardcode the shared remote
@@ -100,7 +100,7 @@ parent's `scores.csv` before tagging (mean 1.2893632310269196, rows <= 1:
    the maintainer's process doc). No behavior change without
    `AI_REMOTE_DIR` set. Commit.
 
-3. **[Sonnet] Isolated remote setup + tests** *(was step 4; moved ahead of the
+3. [x] **[Sonnet] Isolated remote setup + tests** *(was step 4; moved ahead of the
    compatibility check, which needs this environment)* — create the isolated
    dir via `AI_REMOTE_DIR='~/autoresearch/switch-herding-copula-v3'` (all
    `train_cluster.sh`/`simulate_cluster.sh`/`fetch_cluster.sh` calls from
@@ -125,7 +125,7 @@ parent's `scores.csv` before tagging (mean 1.2893632310269196, rows <= 1:
    re-stamp from the base artifact with this branch's script conventions
    instead (a plan revision, not an improvisation). Notes entry either way.
 
-5. **[Sonnet] Sim config** —
+5. [x] **[Sonnet] Sim config** —
    `configs/simulation/manager_testing/23_2g8a_full_copula_v3_self_gnncopar1_contr_herdcopar1_switch.yml`:
    byte-copy of the parent's
    `23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch.yml`
@@ -188,6 +188,16 @@ document, not this experiment's to edit. Nothing in the frozen surface (§8)
 is touched, and nothing about the model, protocol, seeds or RNG stream
 changes — this is tooling only.
 
+**Second revision (during step 3).** Step 3 as written assumed a fresh
+isolated remote dir could run the whole `src/` suite. It cannot:
+`remote_test.sh` excludes `artifacts/` and `plots/`, so artifact-reading tests
+fail on absent files. Resolution, folded into step 3 rather than added as a
+new step: run `AI_REMOTE_DIR=... scripts/simulate_cluster.sh --sync-only`
+first (it ships artifacts to isolated dirs, mirroring what step 6 does
+anyway), then re-run any artifact-dependent suite with `--test-only`. The
+eval-suite suites stay local per the plan and are non-gating remotely. No code
+change; no frozen surface touched.
+
 ## 3. Results
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
@@ -223,3 +233,37 @@ changes — this is tooling only.
    steps would have rsync --deleted into the shared checkout while appearing
    to work. Added step 2b to port that commit's six script files, which are
    byte-identical to its parent here and so apply exactly — see §2a.
+
+5. (Opus, step 3) The pre-sync `squeue` check tripped: a PENDING job
+   (29855233) appeared between the plan check and the sync. `scontrol` put
+   its WorkDir at `/u/certuer/autoresearch/contribution-gaussian-mlp-v2/.` —
+   a different experiment's isolated dir, disjoint from our
+   `~/autoresearch/switch-herding-copula-v3` target, so `rsync --delete`
+   could not reach it. Proceeded rather than waiting; this is the case
+   remote isolation is designed to make safe, and step 2b is what made the
+   guarantee real here.
+
+6. (Opus, step 3) Remote suites: 103 passed, 6 failed, 4 errors — but every
+   failure is a missing input file, not a logic failure (9 `FileNotFoundError`
+   plus one `SystemExit: 1`, no other error class in the log). Cause:
+   `remote_test.sh` excludes `artifacts/` and `plots/` from its rsync
+   unconditionally, and the isolated dir was fresh, so anything reading a
+   `.joblib` or an existing `per_round.parquet` had nothing to read.
+   Decisive evidence the mechanism is intact: `test_switch_copula_graph` and
+   `test_contribution_copula_graph` pass 23/23, including
+   `test_save_load_round_trips_copula_fields` and `test_phi_requires_switch_every`.
+
+7. (Opus, step 3 resolution) Fixed environmentally, not in code, and without a
+   hand-rolled rsync: `simulate_cluster.sh` already ships artifacts to isolated
+   dirs (`--exclude='artifacts/manager/'` in place of all of `artifacts/`), so
+   `--sync-only` through it is exactly what step 6 does. After that sync
+   `test_linear_manager::test_multimanager_linear_side` passes (1 passed), and
+   the ported `.pt`'s sha256 on the cluster still reads
+   9b89f3c7b29f05e75df2601034c27a404906146872ca717d3dffbcc5e69c6f65 —
+   integrity holds source branch -> worktree -> Raven. The remote eval-suite
+   failures are explicitly **non-gating**: those suites are designated local
+   (they need `plots/`, which no isolated sync ships) and they pass locally,
+   89 passed / 3 skipped. Re-running them remotely would only re-fail on
+   absent data. Note for later: re-runs of `remote_test.sh` in an isolated dir
+   must use `--test-only`, since a syncing re-run would `rsync --delete` the
+   artifacts back out.
