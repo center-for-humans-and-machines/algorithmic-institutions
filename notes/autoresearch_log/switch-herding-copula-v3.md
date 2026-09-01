@@ -280,3 +280,28 @@ change; no frozen surface touched.
    learned parameter and is sampling-time only. `aimanager` resolved to
    `/u/certuer/autoresearch/switch-herding-copula-v3/src/aimanager/__init__.py`,
    so the job imports this branch's code, not the shared checkout's.
+
+9. (Opus, step 6) The first submission (job 29855296) died in 0 s at
+   `line 21: .venv/bin/activate: No such file or directory`. The generated
+   `run.sh` correctly contains `source "${AIMANAGER_VENV:-.venv}/bin/activate"`
+   and the submitting shell provably had
+   `AIMANAGER_VENV=/u/certuer/algorithmic-institutions/.venv`, so the variable
+   was lost between `sbatch` and the job environment; the fallback then pointed
+   at a `.venv` that an isolated dir does not have by design. This path was
+   never exercised by the parent PRs (#160/#165 ran in the shared checkout,
+   which does have a `.venv`), and the one other isolated experiment hit the
+   identical failure first (its job ab5fcab0, FAILED 1:0 in 1 s) before
+   succeeding.
+
+10. (Opus, step 6 fix) Rather than chase SLURM's export semantics or edit
+   `run.py`'s `sbatch {script_file}` call, made the fallback itself correct:
+   symlinked `~/autoresearch/switch-herding-copula-v3/.venv` ->
+   `~/algorithmic-institutions/.venv`. That is robust whether or not the
+   variable propagates, touches no repository file and no frozen surface, and
+   matches the shared-venv intent exactly; rsync's `--exclude='.venv/'` both
+   skips it and protects it from `--delete`. Resubmitted as job 29855389 with
+   `--no-sync`, the remote code already sha256-verified. **This is not a
+   re-draw:** the failed job died at venv activation before consuming a single
+   RNG value and wrote no output at all, so job 29855389 is the first actual
+   execution — and with seed 42 and an unchanged config the draw is
+   deterministic regardless.
