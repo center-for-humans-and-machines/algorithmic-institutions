@@ -144,19 +144,19 @@ parent's `scores.csv` before tagging (mean 1.2893632310269196, rows <= 1:
    experiment) is left stale by design rather than spend a fourth edit, since
    this config's provenance is recorded here. Commit.
 
-6. **[Opus] Isolated simulation** — from the worktree,
+6. [x] **[Opus] Isolated simulation** — from the worktree,
    `AI_REMOTE_DIR='~/autoresearch/switch-herding-copula-v3'
    scripts/simulate_cluster.sh <config>` (sbatch, never login-node
    compute). The job prints provenance first: `aimanager.__file__`,
    sha256 of all three slot artifacts (contribution copula `.pt`, switch
    copula `.pt`, punisher `.joblib`). One run, seed 42 — no re-draws.
 
-7. **[Sonnet] Fetch + evaluate** — `AI_REMOTE_DIR=... scripts/fetch_cluster.sh`
+7. [x] **[Sonnet] Fetch + evaluate** — `AI_REMOTE_DIR=... scripts/fetch_cluster.sh`
    the sim output dir; locally `python -m aimanager evaluate
    configs/simulation/manager_testing/23_2g8a_full_copula_v3_self_gnncopar1_contr_herdcopar1_switch.yml`.
    Commit sim outputs + evaluation.
 
-8. **[Opus] Verdict, log, PR** — §2 against the parent baseline: gate 1 = SC
+8. [x] **[Opus] Verdict, log, PR** — §2 against the parent baseline: gate 1 = SC
    finishes < 2.0; gate 2 = mean < 1.2893632310269196. Scores reported
    exactly as computed. Fill the Results row and Notes, commit, push,
    open the PR with `--base auto/contribution-herding-copula-v2`, titled
@@ -202,6 +202,8 @@ change; no frozen surface touched.
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
+| 2026-09-01 | baseline: parent PR #165 stack (gnn-copula contr x gnn switch x severity-copula punisher) | SC 2.1867905905576634 | 11/21 | 1.2893632310269196 | reference |
+| 2026-09-01 | swap PR #162's calibrated AR(1) herding-copula switch artifact (rho 0.116482333585783, phi 0.70366020589033) into the parent stack's switch slot; sampling-time only | SC 2.967099851949342 | 11/21 | 1.7229430164446164 | **[FAIL]** — no band upgrade (SC worsened within 2-5), mean worsened |
 
 ## 4. Notes
 
@@ -305,3 +307,36 @@ change; no frozen surface touched.
    RNG value and wrote no output at all, so job 29855389 is the first actual
    execution — and with seed 42 and an unchanged config the draw is
    deterministic regardless.
+
+11. (Opus, steps 7-8) **FAIL on both gates, and the target row moved the wrong
+   way.** Gate 1: SC 2.1867905905576634 -> 2.967099851949342, no band upgrade
+   (it stayed in 2-5 and got worse). Gate 2: mean 1.2893632310269196 ->
+   1.7229430164446164, worse. Rows <= 1 unchanged at 11/21. The copula was
+   genuinely active — the run differs substantially from the parent
+   (contribution mean 10.117 -> 9.526) — and behaved as designed on marginals,
+   SA 0.7154 -> 0.7110 and SB 0.8592 -> 0.7737, both slightly better, which is
+   the signature of a marginal-preserving copula.
+
+12. (Opus, mechanism) SC got worse because the switch copula made the stack
+   **less** segregated, not more. SC is the size of the larger group, and the
+   known human deficit is that the sim under-segregates; mean larger-group size
+   went 5.397 -> 5.262, i.e. further from the human target. So in this stack the
+   AR(1) latent damps net exodus rather than amplifying it — the opposite of its
+   effect in #162, where the same artifact improved SC 2.816 -> 2.188 on a
+   non-copula contribution stack. CG's collapse (4.163 -> 9.725, into > 5) has
+   the same root: the group-mean contribution spread fell (2.716 -> 2.582) while
+   individual spread rose (5.239 -> 5.719), driving the CG ratio 0.5183 ->
+   0.4515 and further below the human value.
+
+13. (Opus, conclusion) The finding worth carrying forward is that **the two
+   latents do not compose.** #162's switch copula was calibrated against a
+   stack whose contributions were sampled independently; once the contribution
+   slot carries its own episode-persistent group latent (#165), the switch
+   latent is no longer adding independent group-level co-movement — it is
+   coupling to an already-correlated contribution process, and the net effect
+   on segregation reverses sign. The triptych cannot be assembled by porting
+   separately calibrated parts: a switch copula for this stack would have to be
+   **re-calibrated on top of the contribution copula**, which is a retraining
+   experiment, explicitly out of scope here (sampling-time only). PD's
+   degradation (1.003 -> 2.505) says the punisher slot is sensitive to the same
+   interaction, so a joint calibration would likely have to cover all three.
