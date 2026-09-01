@@ -24,12 +24,16 @@
   exploit the hidden layer's nonlinearity. The copula integration is stack
   plumbing shared by baseline and candidate runs — both gates measure only
   the contribution-slot delta.
-- **Target rows** (exact baselines pinned after the baseline run):
-  - **RCA** (~5.21, band > 5) — primary; declared upgrade > 5 -> 2-5.
-  - **RCB** (~2.35, band 2-5) and **CA** (~2.17, band 2-5) — secondary
-    candidates for 2-5 -> 1-2.
-  - **CG** (~3.98) is *excluded* as a target but is the named guard: it is
-    what killed PR #151 through gate 2 (mean rose on CG 3.98 -> 6.58).
+- **Target rows** — pinned to the step-4 baseline run (exact, unrounded):
+  - **RCA 5.20832162095758** (band > 5) — primary; declared upgrade
+    > 5 -> 2-5.
+  - **RCB 2.3471849734654717** and **CA 2.1698859787106297** (both band
+    2-5) — secondary candidates for 2-5 -> 1-2.
+  - **CG 3.9780560538984258** is *excluded* as a target but is the named
+    guard: it is what killed PR #151 through gate 2 (mean rose on
+    CG 3.98 -> 6.58).
+  - Gate 2 threshold: the 21-row mean must fall strictly below
+    **1.6308337314805847** (rows <= 1: 8/21, context only).
 - **Hypothesis:** Human contribution behavior is nonlinear *and
   group-conditioned*: the punishment response saturates and depends on the
   player's own level, persistence differs at the 0/20 boundaries, and —
@@ -96,7 +100,7 @@ Implementer tags per §9 Roles.
   `artifacts/baselines/punishment_multinomial_severity_copula.joblib`.
   Run `pytest tests/baselines/test_punishment_copula.py` locally (green
   required). One commit, message crediting PR #160.
-- [ ] 3. **Updated-baseline sim config** — [Sonnet] new file
+- [x] 3. **Updated-baseline sim config** — [Sonnet] new file
   `configs/simulation/manager_testing/23_2g8a_gmlp2_base_self_gaussian_contr_gnn_switch.yml`:
   copy of `23_2g8a_self_gaussian_contr_gnn_switch.yml` with managers reduced
   to a single `lin_multinomial_copula` entry
@@ -112,7 +116,7 @@ Implementer tags per §9 Roles.
   `PYTHONPATH` never reached the sbatch job. Verified by an sbatch probe, not
   by inspection: both variables arrive, the interpreter is the shared venv
   and `aimanager.__file__` resolves to the isolated dir's `src/`.
-- [ ] 4. **Baseline sim + eval (the metrics update)** — [Opus] submit with
+- [x] 4. **Baseline sim + eval (the metrics update)** — [Opus] submit with
   `AI_REMOTE_DIR='~/autoresearch/contribution-gaussian-mlp-v2'
   scripts/simulate_cluster.sh <config>` (check `squeue` for PENDING jobs
   before any sync; login node is orchestration only), fetch with the same
@@ -200,6 +204,7 @@ Implementer tags per §9 Roles.
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
+| 2026-09-01 | (baseline) gaussian contr x gnn switch x PR #160 severity-copula punisher, contribution slot unchanged | RCA 5.20832162095758, CA 2.1698859787106297, RCB 2.3471849734654717 (guard CG 3.9780560538984258) | 8/21 | 1.6308337314805847 | baseline — reproduces PR #151's cell bit-for-bit on all 21 rows |
 
 ## 4. Notes
 
@@ -280,3 +285,13 @@ Implementer tags per §9 Roles.
    the identical unfixed idiom at lines 108-109 — out of scope here (this
    experiment submits no training jobs, so a fix could not be verified), but
    the next agent to train a GNN from a worktree will hit it.
+9. Step 4 (job 29855233, seed 42, 100 episodes, repeats_used 500/500): the
+   refreshed baseline reproduces PR #151's severity-copula cell **bit-for-bit
+   on all 21 rows** (max |delta| exactly 0.0), mean 1.6308337314805847,
+   rows <= 1 8/21. That is the intended outcome and it does double duty: the
+   maintainer's requested metrics refresh is done, and it independently
+   confirms the restored copula code, the copula bundle and the incumbent
+   gaussian artifact are exactly what PR #151 ran — the provenance the
+   step-4a fix exists to protect. The §2 gates are now pinned to these
+   numbers: gate 1 needs RCA out of > 5 (or RCB/CA out of 2-5), gate 2 needs
+   the mean strictly below 1.6308337314805847.
