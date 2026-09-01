@@ -18,7 +18,7 @@
 
 set -e
 
-source .venv/bin/activate
+source "${{AIMANAGER_VENV:-.venv}}/bin/activate"
 
 module load cuda/11.4
 

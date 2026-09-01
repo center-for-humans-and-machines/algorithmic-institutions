@@ -84,6 +84,22 @@ parent's `scores.csv` before tagging (mean 1.2893632310269196, rows <= 1:
    file's sha256 must equal the LFS pointer oid recorded on
    `origin/auto/switch-herding-copula-v2` for that path. Commit.
 
+2b. **[Opus] Port the AI_REMOTE_DIR isolation tooling** *(plan revision, added
+   after step 1 — see the "Plan revision" section below)* — this branch
+   predates `main`'s commit 8680db9, so `simulate_cluster.sh`,
+   `fetch_cluster.sh` and `remote_test.sh` still hardcode the shared remote
+   checkout and ignore `AI_REMOTE_DIR`; steps 3/6/7 would silently sync into
+   `~/algorithmic-institutions`. Port the script half of 8680db9 only:
+   `git checkout 8680db9 -- scripts/fetch_cluster.sh scripts/remote_test.sh
+   scripts/simulate_cluster.sh scripts/run_simulation.sh
+   scripts/artificial_humans/run_training.sh
+   scripts/manager/run_training.sh`. All six files on this branch are
+   byte-identical to 8680db9's parent, so this applies the commit's script
+   changes with no drift and no conflict. Its `notes/autoresearch.md` change
+   is deliberately NOT ported (that file has diverged on this branch and is
+   the maintainer's process doc). No behavior change without
+   `AI_REMOTE_DIR` set. Commit.
+
 3. **[Sonnet] Isolated remote setup + tests** *(was step 4; moved ahead of the
    compatibility check, which needs this environment)* — create the isolated
    dir via `AI_REMOTE_DIR='~/autoresearch/switch-herding-copula-v3'` (all
@@ -148,6 +164,30 @@ parent's `scores.csv` before tagging (mean 1.2893632310269196, rows <= 1:
    table, collateral +/-). Delete the remote isolated dir after the PR
    is open.
 
+## 2a. Plan revision (after step 1)
+
+The plan assumed `AI_REMOTE_DIR` isolation was available, as the maintainer's
+brief states. It is not on this branch: `main`'s commit 8680db9 ("Isolate
+parallel experiments on Raven via AI_REMOTE_DIR") is not an ancestor of
+`auto/switch-herding-copula-v3`, nor of the parent
+`auto/contribution-herding-copula-v2` — PR #165's branch was cut before that
+commit landed. On this branch `scripts/simulate_cluster.sh` still reads
+`REMOTE_PROJECT_DIR="~/algorithmic-institutions"` unconditionally, so
+exporting `AI_REMOTE_DIR` would have been silently ignored and steps 3, 6 and
+7 would have synced (with `rsync --delete`) into the shared remote checkout —
+precisely the race the brief forbids, and it would have gone unnoticed
+because the runs would still have succeeded.
+
+Rationale for the fix chosen (new step 2b): port only the six script files
+from 8680db9. All six are byte-identical on this branch to that commit's
+parent (`git diff HEAD 8680db9^ --` over them is empty), so the port is
+exact — no conflict, no unrelated drift, and no behavior change unless
+`AI_REMOTE_DIR` is set. The commit's `notes/autoresearch.md` hunk is not
+ported: that file has diverged on this branch and is the maintainer's process
+document, not this experiment's to edit. Nothing in the frozen surface (§8)
+is touched, and nothing about the model, protocol, seeds or RNG stream
+changes — this is tooling only.
+
 ## 3. Results
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
@@ -170,3 +210,16 @@ parent's `scores.csv` before tagging (mean 1.2893632310269196, rows <= 1:
    exactly those three keys to the base dict — so step 4 should be a
    confirmation, not a fork. Kept it as a hard gate anyway since the
    unpickle only happens on Raven.
+
+3. (Opus, step 1) The port is exact: `copula_params.json` reads
+   rho = 0.116482333585783 / phi = 0.70366020589033, and both calibration
+   parquets' working-copy sha256 equal the LFS pointer oids on
+   `origin/auto/switch-herding-copula-v2` (train b0fe6892…, test d61deeee…).
+   Six paths, no edits.
+
+4. (Opus, after step 1) Caught the plan's one wrong assumption before it
+   could do damage: `AI_REMOTE_DIR` isolation does not exist on this branch
+   (commit 8680db9 postdates the parent PR's branch point), so the remote
+   steps would have rsync --deleted into the shared checkout while appearing
+   to work. Added step 2b to port that commit's six script files, which are
+   byte-identical to its parent here and so apply exactly — see §2a.
