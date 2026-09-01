@@ -112,7 +112,7 @@ in the steps below and argued in Notes 2:
    cluster script may be run** — without it `AI_REMOTE_DIR` is silently
    ignored and the syncs would `rsync --delete` into the shared checkout.
 
-2. [ ] **[Sonnet] Check the diagnostic's three inputs, in place** (replaces the
+2. [x] **[Sonnet] Check the diagnostic's three inputs, in place** (replaces the
    draft's plots port) — confirm all three frames load locally and report
    their shapes / key columns: the human reference
    `experiments/2group_8agent_50ep.csv` (single copy after de-duplicating
@@ -283,3 +283,35 @@ in the steps below and argued in Notes 2:
    [0.11702191363043744, 2.0829306438837505]; both calibration parquets'
    working-copy sha256 equal the source-branch LFS oids (train
    b0fe6892..., test d61deeee...).
+
+5. (Opus, step 2) All three diagnostic inputs load through the evaluation
+   suite's own loaders, so the diagnostic sees exactly the frame SC is
+   computed on. Provenance, for reproducibility without the sibling
+   worktree: human `experiments/2group_8agent_50ep.csv` sha256
+   27c6bdbe417d487461ce1fe2db6e81c5df8bff50a5c8d8f260c3e9b2daf0517a
+   (9600 rows / 50 episodes after `load_human` collapses the flip
+   augmentation by `pair_id`); parent run `per_round.parquet` sha256
+   4f64fc42fe23cad1cf14423f79b8496adff9874e2e546c05a0d7683055960be2;
+   #166's run `per_round.parquet` sha256
+   a9a446e49a5afca89f5543b200501e0edc234d77affed59ca2bda047de2bcd82.
+   Membership is `group_id` (the loader never reads `agent_group`).
+   A worktree-local `.venv` was created with `uv sync --frozen`; `uv.lock`
+   unchanged.
+
+6. (Opus, step 2) The SC deficit is now localised, before the diagnostic
+   proper. Larger-group-size counts (rounds >= 4; human n = 1000, sims
+   n = 2000), as shares:
+
+   | size | 4 | 5 | 6 | 7 | 8 | mean |
+   |---|---|---|---|---|---|---|
+   | human | 9.6% | 24.4% | 28.0% | 23.6% | 14.4% | 6.088 |
+   | parent (SC 2.187) | 16.2% | 32.0% | 25.4% | 20.8% | 5.6% | 5.676 |
+   | #166 (SC 2.967) | 19.0% | 34.0% | 27.4% | 15.8% | 3.8% | 5.514 |
+
+   The stack's whole SC deficit is a missing right tail: humans sit at
+   size 8 (one group emptied) in 14.4% of observations, the parent in
+   5.6%. #166's latent moved mass the wrong way at exactly those two
+   extremes (8: 5.6% -> 3.8%, 7: 20.8% -> 15.8%) and piled it onto 4-6.
+   So the grid is not chasing a mean — it has to produce more *complete*
+   exoduses, and the diagnostic must explain why intra-group herding
+   produced fewer of them.
