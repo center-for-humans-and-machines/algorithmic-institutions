@@ -121,7 +121,7 @@ Implementer tags per §9 Roles.
   scores to these exact numbers. Sanity-check against the expected
   pre-revert values (RCA ~5.208, mean ~1.6308, PD in 1-2); a large
   unexplained discrepancy is a stop-and-escalate.
-- [ ] 5. **Port the gaussian_mlp machinery from PR #151's branch**
+- [x] 5. **Port the gaussian_mlp machinery from PR #151's branch**
   (`origin/auto/contribution-gaussian-mlp`) — [Opus] `GaussianMLPRegressor` in
   `scripts/baselines/gaussian_regressor.py`, registry entry in
   `scripts/baselines/baseline_models.py`, `run_baseline_cv.py` show_ce gate,
@@ -138,7 +138,7 @@ Implementer tags per §9 Roles.
   and step 6 writes the config by hand from the behavioral declaration
   (Note 4). Local `pytest tests/baselines/` + eval-suite tests green;
   `scripts/remote_test.sh` for the PyG suite.
-- [ ] 6. **Training config** — [Opus]
+- [x] 6. **Training config** — [Opus]
   `configs/training/baselines/contribution/gaussian_mlp_v2.yml`
   (data conventions identical to `gaussian.yml`: single-copy train file,
   `exclude_flipped: True`, seed 38381, 4 folds, `show_ce: true`,
