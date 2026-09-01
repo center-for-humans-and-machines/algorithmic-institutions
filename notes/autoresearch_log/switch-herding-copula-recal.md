@@ -181,7 +181,7 @@ in the steps below and argued in Notes 2:
    and no underscores, so the dir names parse under the sweep's
    `_self_(\w+?)_contr_(\w+?)_switch$`. Commit.
 
-6. [ ] **[Opus] Isolated parallel simulations** — `AI_REMOTE_DIR='~/autoresearch/switch-herding-copula-recal'`
+6. [x] **[Opus] Isolated parallel simulations** — `AI_REMOTE_DIR='~/autoresearch/switch-herding-copula-recal'`
    on every remote call. Order: `squeue` PENDING check (other experiments'
    isolated dirs are disjoint, but verify) -> create the dir -> `ln -s
    ~/algorithmic-institutions/.venv` inside it (v3 Notes 9-10: isolated
@@ -594,3 +594,16 @@ Other isolated runs should be re-checked before their results are trusted.
    under `src/` (`git diff` against the parent over `src/` is empty), so a
    bit-identical control is exactly the right expectation, and it is what
    licenses judging the arms against the parent's `scores.csv`.
+
+16. (Opus, step 6 re-run) Six jobs (29858758/59/60/66/67/68), all
+   COMPLETED 0:0, every generated `run.sh` carrying the PYTHONPATH export,
+   no traceback in any log. **The control passes: CTL's
+   `per_round.parquet` is
+   4f64fc42fe23cad1cf14423f79b8496adff9874e2e546c05a0d7683055960be2,
+   bit-identical to the parent's** — so the fixed tooling reproduces the
+   baseline exactly and the gate comparisons are licensed. All six digests
+   are mutually distinct and the old collision hash appears nowhere:
+   arm1 aaee236c…, arm2 1e504971…, arm3 ad0756e9…, arm4 983c6392…,
+   CTL 4f64fc42…, REF 0bdd714a…. Determinism cross-check for free: arms 1
+   and 3 had already been run once by the diagnostic probe under the same
+   corrected import path, and both reproduced their digests exactly here.
