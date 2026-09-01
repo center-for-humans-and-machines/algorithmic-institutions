@@ -124,7 +124,7 @@ in the steps below and argued in Notes 2:
    paths' sha256 in the log so the diagnostic is reproducible without the
    sibling worktree. No files added; log entry only.
 
-3. [ ] **[Opus] Diagnostic: how did the latent damp net flow?** — local analysis
+3. [x] **[Opus] Diagnostic: how did the latent damp net flow?** — local analysis
    (pandas, no cluster) over the three frames of step 2, on the switch
    decision rounds (3, 7, 11, 15, 19) and the SC support (rounds >= 4).
    Quantify per (episode, decision round): gross out-flow per group,
@@ -221,6 +221,54 @@ in the steps below and argued in Notes 2:
    grid rows, collateral +/-). Delete the remote isolated dir after the PR
    opens.
 
+## 2a. Plan revision after step 3: the frozen grid
+
+Validated by the orchestrator and committed before any stamping or
+simulation. The grid is fixed at four arms; `copula_switch_every = 4`
+throughout; nothing but `copula_rho` and `copula_phi` varies.
+
+| k | rho | phi | one-line rationale |
+|---|---|---|---|
+| 1 | 0.035037571771319845 | 1.0 | minimum dose, static latent: one founding group becomes the episode's persistent exporter and the other a stable core, the human pattern on exporter concentration (0.204 vs the parent's 0.153) and co-membership (0.635 vs 0.575) |
+| 2 | 0.116482333585783 | 1.0 | #166's exact rho with only phi moved to the boundary — the strict one-parameter test that exporter-role *rotation*, not dose, caused #166's failure |
+| 3 | 0.21502476987895425 | 1.0 | top of #162's CI, static: the largest defensible dose toward the human round-3 bimodality (P(k = 4 of 4) 0.19 vs the parent's 0.125) |
+| 4 | 0.21502476987895425 | 0.11702191363043744 | max dose, memoryless: tests whether the right tail is buyable round-locally, with no group-level memory |
+
+Design: phi = 1.0 is the primary lever, with a three-point rho
+dose-response at phi = 1.0 (arms 1-2-3) and two clean one-parameter phi
+contrasts — arm 2 against #166's already-measured (0.116, 0.704), and arm 4
+against arm 3 — which together give the phi ladder 0.117 / 0.704 / 1.0.
+
+Orchestrator validation:
+
+- **Bounds.** rho takes #162's CI lower bound, its point estimate and its
+  CI upper bound exactly; phi takes the CI lower bound and the static
+  boundary 1.0. Every value is inside the Declaration's envelope, and
+  phi = 1.0 is the boundary the Declaration pre-authorised (the parent's
+  own contribution copula runs there). Nothing needed an out-of-CI
+  justification, and the diagnostic explicitly declined to chase the
+  rho ~ 0.294 that its round-3 algebra points at, on the grounds that the
+  contribution-spread tax scales with the latent weight — the required
+  dose is logged as a finding instead of dosed into a near-certain
+  gate-2 failure. I agree with that call.
+- **Legality (§5).** Sampling parameters only; no retraining, no code
+  change, no new mechanism; seeds, episode count and the protocol
+  untouched; the grid is frozen here, before any of its simulations run,
+  and all four arms will be reported whatever they score.
+- **Semantics of phi = 1.0 verified in code, not assumed.**
+  `environment.py` calls the switch predictor with
+  `reset_rnn = (round_number == 0)`, so `GraphNetwork._copula_z` is
+  cleared once per episode and carried across rounds; the AR(1) advances
+  only on decision rounds. phi = 1.0 therefore means one latent per
+  (episode, group label), frozen for the whole episode — which is the
+  mechanism the grid's headline relies on.
+- **Each arm is falsifiable.** Every arm carries a prediction in
+  `grid.json` that makes a null result informative: if arm 2 leaves CG
+  near 0.59 the tax is rho-driven and no positive dose can pass gate 2;
+  if arm 4 matches arm 3, phi is irrelevant and the successor needs a
+  round-dependent rho.
+- **Diagnostic reproduced independently** before accepting it (Notes 9).
+
 ## 3. Results
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
@@ -315,3 +363,70 @@ in the steps below and argued in Notes 2:
    So the grid is not chasing a mean — it has to produce more *complete*
    exoduses, and the diagnostic must explain why intra-group herding
    produced fewer of them.
+
+7. (Opus, step 3, the diagnostic's answer) **None of the three
+   hypotheses was the cause: at rho = 0.116 the switch copula barely
+   touched switching at all, and #166's damage was done to the
+   contribution slot.** Gross flow is statistically identical across
+   human / parent / #166 (2.288 / 2.390 / 2.316) and out-flow variance
+   *fell* rather than rose (Var(out_0) 1.706 / 1.364 / 1.238), so the
+   latent never delivered the co-movement it exists to add; every
+   switch-side difference between the parent and #166 sits at |z| <= 2.0
+   under a 400-episode bootstrap. Meanwhile the between-group
+   contribution spread ratio collapsed 0.742 -> 0.592 at **z = -6.8**.
+   The channel is *who* moves, not how many: the shared latent partly
+   overrides individual propensity in selecting the movers, so
+   assortativity (own contribution vs destination group mean) fell
+   0.278 -> 0.110, the exporter role rotated between labels each
+   decision round (concentration 0.153 -> 0.136), group composition
+   mixed (pair co-membership 0.575 -> 0.552), and the sorting that
+   produces between-group contribution spread was destroyed. That is
+   what drove #166's mean from 1.289 to 1.723, and it also removes the
+   pressure SC's right tail feeds on. H1 (size-coupled restoring force)
+   is real but second-order (restoring slope -0.365 -> -0.445, |z| <= 2);
+   H2 (direction flipping) is refuted outright — humans oscillate *more*
+   than either sim (lag-1 corr -0.349 vs -0.283 / -0.297) and cancel
+   more, so human segregation is not built by directional persistence;
+   H3 holds for the human-vs-parent gap (co-switching r at round 3:
+   0.424 human vs 0.237 parent, matched from round 7 on) but not for
+   #166's own regression, which accumulates evenly across the episode.
+
+8. (Opus, step 3, why the grid targets phi) Two human signatures the
+   parent misses are both about *persistence of roles*, not dose:
+   humans hold a merged group once formed (P(stay at size 8) 0.300 vs
+   the parent's 0.091) and reach it far more often from balance
+   (0.219 vs 0.069) — and under label independence the human marginals
+   predict only 0.110 of that 0.219, so half the human full-merge rate
+   needs between-label anti-correlation. Within the mechanism as built,
+   the only lever on role persistence is phi, and #166 itself is
+   evidence it works: at phi = 0.704 absorption already rose
+   0.091 -> 0.125 even as the overall merge rate fell. phi = 1.0 freezes
+   each label's latent for the episode, which is both the absorption
+   mechanism and the thing whose rotation measurably destroyed the
+   contribution spread. Hence a static-latent grid rather than a pure
+   dose ladder.
+
+9. (Opus, validation of step 3) Re-derived the diagnostic's load-bearing
+   numbers independently before fixing the grid, from the same three
+   frames but my own code: larger-group size 8 shares 0.1440 / 0.0560 /
+   0.0380 and size >= 7 shares 0.3800 / 0.2640 / 0.1960, and absorption
+   at size 8 exactly 9/30 = 0.300 (human), 2/22 = 0.091 (parent),
+   2/16 = 0.125 (#166) — all reproduced. On the contribution channel my
+   simpler spread ratio (sd of group means over sd of individual
+   contributions) gives 0.536 / 0.374 / 0.331 with sd(group means)
+   falling 1.831 -> 1.768 and sd(individual) rising 4.901 -> 5.350: a
+   different normalisation from the suite's CG row, same direction and
+   same decomposition. The diagnostic is sound.
+
+10. (Opus, findings for a successor, all needing code changes and
+   therefore out of scope here) (i) Half the human full-merge rate
+   requires **between-label anti-correlation** — one latent shared across
+   both labels with opposite signs, so a migration wave has a direction,
+   rather than two independent per-label latents. (ii) Human co-switching
+   is confined to the founding exodus (r 0.424 at round 3 vs 0.05-0.11
+   later, where the parent already matches), so a **constant rho over all
+   decision rounds necessarily overdoses rounds 7-19**. (iii) Human
+   switching concentrates in persistent individuals (top-2 movers 49.7%
+   vs 43.8%), pointing at an **agent-level** rather than group-level
+   latent. (iv) Closing the round-3 consensus gap within the current
+   mechanism would need rho ~ 0.294, above #162's CI.
