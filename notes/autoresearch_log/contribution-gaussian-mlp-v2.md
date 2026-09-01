@@ -105,6 +105,13 @@ Implementer tags per §9 Roles.
   (slug before `_self_` so `evaluation_sweep.py`'s DIR_PATTERN still parses,
   same convention as PR #160's config). Protocol fields byte-identical to
   the 23 family (seed 42, 100 episodes, 24 rounds, `save_per_round: true`).
+- [x] 4a. **Unblock the isolated remote dir** (inserted 2026-09-01 after
+  step 4 failed at launch; Note 8) — [Opus] `scripts/simulate_cluster.sh`:
+  add `SBATCH_EXPORT=ALL` to the exports of the isolated-dir branch. Raven's
+  login shells set `SBATCH_EXPORT=NONE`, so `AIMANAGER_VENV` and
+  `PYTHONPATH` never reached the sbatch job. Verified by an sbatch probe, not
+  by inspection: both variables arrive, the interpreter is the shared venv
+  and `aimanager.__file__` resolves to the isolated dir's `src/`.
 - [ ] 4. **Baseline sim + eval (the metrics update)** — [Opus] submit with
   `AI_REMOTE_DIR='~/autoresearch/contribution-gaussian-mlp-v2'
   scripts/simulate_cluster.sh <config>` (check `squeue` for PENDING jobs
@@ -253,3 +260,23 @@ Implementer tags per §9 Roles.
    CA 2.1698859787106297, RCB 2.3471849734654717, CG 3.9780560538984258,
    8/21, mean 1.6308337314805847). Anything else means the restored code or
    an artifact is not what it claims, and is a stop-and-escalate.
+8. Step 4 failed at launch, and the cause is a real bug in `main`, not in
+   this experiment: job 29855185 died in 1 s on
+   `.venv/bin/activate: No such file or directory`. Raven's login shells set
+   `SBATCH_EXPORT=NONE`, so the `AIMANAGER_VENV` / `PYTHONPATH` exports that
+   `scripts/simulate_cluster.sh` sets for an isolated remote dir (commit
+   `8680db9`, whose comment claims "both propagate into sbatch jobs") never
+   reach the job; `run_simulation.sh` then falls back to the isolated dir's
+   `.venv`, which by design does not exist. The isolation mechanism had
+   evidently never been exercised — `~/autoresearch/` was empty. The second,
+   quieter half matters more: with `PYTHONPATH` dropped, the shared venv's
+   editable install would have made the job import the SHARED checkout's
+   `src/`, so a job that *appeared* to run would have silently simulated
+   `main`'s code instead of the branch's. Fix: `SBATCH_EXPORT=ALL` alongside
+   the two exports, verified by an sbatch probe printing both variables plus
+   `sys.executable` and `aimanager.__file__` (interpreter = shared venv,
+   `aimanager` = isolated dir). Kept as its own commit, and it cannot move a
+   score: without it no job runs at all. `scripts/train_cluster.sh` carries
+   the identical unfixed idiom at lines 108-109 — out of scope here (this
+   experiment submits no training jobs, so a fix could not be verified), but
+   the next agent to train a GNN from a worktree will hit it.

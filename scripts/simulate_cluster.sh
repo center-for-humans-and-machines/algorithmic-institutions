@@ -99,9 +99,15 @@ run_simulation() {
     if [[ "${REMOTE_PROJECT_DIR}" == "${CANONICAL_REMOTE_DIR}" ]]; then
         sim_cmd+=" && uv run python"
     else
-        # Shared venv + this dir's code; both propagate into sbatch jobs.
+        # Shared venv + this dir's code. Raven's login shells set
+        # SBATCH_EXPORT=NONE, so an exported variable does NOT reach the job
+        # by itself -- SBATCH_EXPORT=ALL restores propagation, without which
+        # run_simulation.sh falls back to the isolated dir's non-existent
+        # .venv and python imports the SHARED checkout's editable install
+        # instead of this dir's src/ (silently voiding the isolation).
         sim_cmd+=" && export AIMANAGER_VENV=${CANONICAL_REMOTE_DIR}/.venv"
         sim_cmd+=" PYTHONPATH=${REMOTE_PROJECT_DIR}/src"
+        sim_cmd+=" SBATCH_EXPORT=ALL"
         sim_cmd+=" && python"
     fi
     sim_cmd+=" src/aimanager/simulation/run.py"
