@@ -150,7 +150,7 @@ in the steps below and argued in Notes 2:
    as a plan revision for orchestrator validation; the revision and
    `grid.json` are committed BEFORE any stamping or simulation.
 
-4. [ ] **[Sonnet] Stamp the grid artifacts on Raven** — a new script
+4. [x] **[Sonnet] Stamp the grid artifacts on Raven** — a new script
    `scripts/artificial_humans/make_switch_copula_recal_artifacts.py`,
    modelled on the ported `make_switch_copula_artifact.py` but reading its
    arms **only** from the committed `grid.json` (no inline parameters), and
@@ -430,3 +430,28 @@ Orchestrator validation:
    vs 43.8%), pointing at an **agent-level** rather than group-level
    latent. (iv) Closing the round-3 consensus gap within the current
    mechanism would need rho ~ 0.294, above #162's CI.
+
+11. (Opus, step 4) All four arms stamped on Raven (job 29858081, COMPLETED
+   0:0, 31 s) inside the isolated dir — `aimanager.__file__` resolved to
+   `/raven/u/certuer/autoresearch/switch-herding-copula-recal/src/aimanager/__init__.py`,
+   so the job used this branch's code. The base artifact arrived with
+   sha256 184f7f5c8ed326d49983fe455ef6478715fcac79c8161f08fa685b9cfb25d037,
+   equal to the `base_artifact_sha256` in #162's calibration provenance.
+   Control: the unmodified base loads as (0.0, 0.0, None) through
+   `GraphNetwork.load`, so each arm's round-tripped values provably come
+   from the artifact and not from `__init__` defaults. Round-trips, all
+   with `copula_switch_every = 4` as a genuine int, and all module
+   state_dicts `th.equal`-identical to the base:
+
+   | k | copula_rho | copula_phi | sha256 (remote == local) |
+   |---|---|---|---|
+   | 1 | 0.035037571771319845 | 1.0 | f172cfc84e99db5a... |
+   | 2 | 0.116482333585783 | 1.0 | a69316ae8e32712a... |
+   | 3 | 0.21502476987895425 | 1.0 | 4d335b3b59a25105... |
+   | 4 | 0.21502476987895425 | 0.11702191363043744 | 4ece9b0add0d298e... |
+
+   The stamping script takes no inline parameters — rho and phi are read
+   only from the committed `grid.json` — so the freeze is enforced by the
+   tooling, not just by the log. Artifacts were fetched back and committed
+   locally so the step-6 sync ships identical bytes and `rsync --delete`
+   cannot remove them.
