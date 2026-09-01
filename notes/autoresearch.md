@@ -196,8 +196,8 @@ step at a time, each to the model its step carries, and confirms each
 result. Subagents execute; they never decide scope.
 
 **Branch and worktree.** Every experiment lives on its own branch,
-`auto/<slot>-<slug>`, checked out in its **own git worktree** — parallel
-experiments never share a checkout. Name new configs, artifacts, and sim
+`auto/<slot>-<slug>`, checked out in its **own git worktree** under
+`.claude/worktrees/<slug>` — parallel experiments never share a checkout. Name new configs, artifacts, and sim
 output dirs with the same slug so runs cannot collide on paths either.
 Commits via the `/commit` skill; one experiment = one branch = one PR.
 Branches start from `main` — unless the maintainer targets a parent PR:
@@ -216,6 +216,17 @@ log file, backed by the parent branch's own sim output
 (`plots/simulation/<parent-slug...>/evaluation/scores.csv`, in your
 worktree since you branched off it). Name the parent PR in your
 declaration (§10).
+
+**Remote isolation.** The same rule holds on Raven: parallel experiments
+never share the remote checkout. Every `train_cluster.sh` /
+`simulate_cluster.sh` / `fetch_cluster.sh` call from an experiment worktree
+sets `AI_REMOTE_DIR='~/autoresearch/<slug>'`, which syncs and runs in that
+dir instead of the shared `~/algorithmic-institutions` — the shared
+checkout is synced from `main` only and owns the single venv. Isolated
+dirs carry no venv: the scripts wire the shared venv plus the dir's own
+`src/` via PYTHONPATH into the jobs automatically, so each job imports
+exactly its branch's code. Outputs land inside the dir; fetch from there.
+When the experiment's PR closes, delete the remote dir.
 
 **Commit identity.** Autoresearch commits are authored by Claude, not the
 human — the human only reviews and merges. In the experiment worktree, set

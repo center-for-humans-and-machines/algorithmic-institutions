@@ -12,11 +12,17 @@
 #   scripts/train_cluster.sh --sync-only           # sync files only
 #   scripts/train_cluster.sh --no-sync ah <config> # train without syncing
 #
+# Set AI_REMOTE_DIR to sync and run in an isolated remote dir (e.g.
+# ~/autoresearch/<slug>) instead of the shared checkout. Isolated dirs
+# carry no venv: jobs use the shared checkout's venv and import their
+# own code via PYTHONPATH.
+#
 set -euo pipefail
 
 # ── Configuration ────────────────────────────────────────────────────
 REMOTE_HOST="raven"
-REMOTE_PROJECT_DIR="~/algorithmic-institutions"
+CANONICAL_REMOTE_DIR="~/algorithmic-institutions"
+REMOTE_PROJECT_DIR="${AI_REMOTE_DIR:-${CANONICAL_REMOTE_DIR}}"
 LOCAL_PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # ── Parse arguments ──────────────────────────────────────────────────
@@ -66,13 +72,22 @@ check_ssh() {
 # ── Step 2: Sync files ──────────────────────────────────────────────
 sync_files() {
     info "Syncing files to ${REMOTE_HOST}:${REMOTE_PROJECT_DIR}..."
+    local artifacts_opts=(--exclude='artifacts/')
+    if [[ "${REMOTE_PROJECT_DIR}" != "${CANONICAL_REMOTE_DIR}" ]]; then
+        # Isolated experiment dir: create it and ship the small AH
+        # artifacts its configs reference (manager artifacts not needed).
+        ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_PROJECT_DIR} \
+            && cp -n ${CANONICAL_REMOTE_DIR}/.env ${REMOTE_PROJECT_DIR}/ \
+            2>/dev/null || true"
+        artifacts_opts=(--exclude='artifacts/manager/')
+    fi
     rsync -azP --delete \
         --filter='P /.env' \
         --filter=':- .gitignore' \
         --exclude='.git/' \
         --exclude='.venv/' \
         --exclude='.log/' \
-        --exclude='artifacts/' \
+        "${artifacts_opts[@]}" \
         --exclude='plots/' \
         --exclude='temp/' \
         "${LOCAL_PROJECT_DIR}/" \
@@ -86,16 +101,23 @@ run_training() {
     info "Config: ${CONFIG_FILE}"
 
     local train_cmd="cd ${REMOTE_PROJECT_DIR}"
-    train_cmd+=" && source .venv/bin/activate"
+    train_cmd+=" && source ${CANONICAL_REMOTE_DIR}/.venv/bin/activate"
+    local py="uv run python"
+    if [[ "${REMOTE_PROJECT_DIR}" != "${CANONICAL_REMOTE_DIR}" ]]; then
+        # Shared venv + this dir's code; both propagate into sbatch jobs.
+        train_cmd+=" && export AIMANAGER_VENV=${CANONICAL_REMOTE_DIR}/.venv"
+        train_cmd+=" PYTHONPATH=${REMOTE_PROJECT_DIR}/src"
+        py="python"
+    fi
 
     case "${TRAIN_TYPE}" in
         ah)
-            train_cmd+=" && uv run python"
+            train_cmd+=" && ${py}"
             train_cmd+=" src/aimanager/artificial_humans/run.py"
             train_cmd+=" ${CONFIG_FILE}"
             ;;
         manager)
-            train_cmd+=" && uv run python"
+            train_cmd+=" && ${py}"
             train_cmd+=" src/aimanager/manager/run.py"
             train_cmd+=" ${CONFIG_FILE}"
             ;;
