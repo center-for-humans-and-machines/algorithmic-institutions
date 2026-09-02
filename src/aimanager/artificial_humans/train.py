@@ -7,6 +7,7 @@ import random
 import torch as th
 import wandb
 from aimanager.generic.data import create_torch_data, get_cross_validations
+from aimanager.generic.joint_exodus import pool_by_group
 from aimanager.artificial_humans import AH_MODELS
 from aimanager.artificial_humans.evaluation import (
     eval_model,
@@ -83,6 +84,156 @@ def create_fully_connected(
         ],
         device=device,
     ).T
+
+
+# --------------------------------------------------------------------------- #
+# The joint exodus objective (plan step 2)
+# --------------------------------------------------------------------------- #
+#
+# `generic/joint_exodus.py` emits, at every (episode, round), a joint
+# distribution over the PAIR of leaver counts (m_0, m_1). Fitting it means
+# turning the per-agent `does_switch` labels into that pair and adding its
+# cross-entropy to the per-agent loss. See
+# notes/autoresearch_log/switch-joint-exodus.md.
+#
+# INCOMPLETE PAIRS ARE DROPPED (`DROP_INCOMPLETE_PAIRS`). 109 of the 2,000
+# human decision rows fail `switch_valid` (selection timeouts), which leaves
+# 84 of 465 group-decision cells short of their group's nominal size, so
+# k_0 + k_1 < 8 in 83 of 250 pairs; the doubled dataset this trains on carries
+# exactly twice each of those. Dropping keeps 334 of 500 pairs (66.8%); the
+# per-agent loss is untouched and still sees all 3,782 valid rows.
+#
+# The reason it is not a close call is the full-exodus event, the very
+# structure this head exists to reproduce. On a short group m_g == k_g does
+# NOT mean the group emptied -- the timed-out member may well have stayed.
+# 18 of the 112 apparent full-exodus cells (16%) are exactly that artefact,
+# and carrying them inflates P(full exodus | k_g > 0) from 0.1079 to 0.1204.
+# Carrying also buys nothing on the target statistic: the raw between-group
+# correlation of the pair is -0.3660 on complete pairs and -0.3658 on all
+# pairs. And it would introduce 19 (k_0, k_1) configurations -- (0,6), (1,3),
+# (2,4), ... -- that the simulation, which has no timeouts, can never
+# produce. Dropping is also what the predecessor's measurement did
+# (complete pairs only, 167 of 250), so the head is fitted on the same
+# object whose resample set this experiment's oracle ceiling.
+DROP_INCOMPLETE_PAIRS = True
+
+
+def joint_exodus_counts(y, mask, agent_group, batch, *, n_batch):
+    """Leaver-count pair (m_0, m_1) and valid-decider pair (k_0, k_1).
+
+    Both come out of `joint_exodus.pool_by_group` -- the same function, the
+    same `agent_group` and the same `batch` the head pools with inside
+    `GraphNetwork.forward` -- so the quantity the loss scores is the quantity
+    the head emits by construction rather than by coincidence. `k` counts the
+    valid deciders; `m` counts them AND'ed with the label, so a leaver is
+    counted only where its own decision is valid and m_g <= k_g holds
+    identically.
+
+    Args:
+        y: bool/int (N, R) `does_switch` per node and round.
+        mask: bool (N, R) valid deciders. In the loop below this is
+            `batch_data["mask"]`, which is exactly what `forward` hands the
+            head as its `decider_mask`.
+        agent_group: int (N, R) group label.
+        batch: int (N,) graph id per node.
+        n_batch: number of graphs.
+
+    Returns:
+        (m, k), both int64 (n_batch, R, 2), indexed by group LABEL -- the
+        head's own pooling order.
+    """
+    assert mask.dim() == 2, f"mask must be (N, R), got {tuple(mask.shape)}"
+    n, n_rounds = mask.shape
+    # pool_by_group's count channel is a masked sum of ones and does not look
+    # at the embedding, so a zero embedding of the right shape is enough.
+    zeros = th.zeros((n, n_rounds, 1), dtype=th.float32, device=mask.device)
+    decides = mask.reshape(n, n_rounds).to(th.bool)
+    leaves = decides & y.reshape(n, n_rounds).to(th.bool)
+    _, k = pool_by_group(zeros, agent_group, batch, n_batch=n_batch, mask=decides)
+    _, m = pool_by_group(zeros, agent_group, batch, n_batch=n_batch, mask=leaves)
+    return m.round().to(th.int64), k.round().to(th.int64)
+
+
+def joint_exodus_loss(joint, batch_data, *, drop_incomplete_pairs=None):
+    """Cross-entropy of the observed count pair under the head's joint.
+
+    Decision rounds are not hardcoded. A (graph, round) cell enters the loss
+    only if it holds at least one valid decider, and `switch_valid` is False
+    everywhere outside a decision round (`generic/data.py`), so the config's
+    `switch_every: 4` is what makes the surviving rounds 3, 7, 11, 15, 19 --
+    change `switch_every` and the selection follows it.
+
+    Returns:
+        (loss, n_cells) -- the mean negative log-likelihood over the selected
+        cells and how many there were.
+    """
+    if drop_incomplete_pairs is None:
+        drop_incomplete_pairs = DROP_INCOMPLETE_PAIRS
+    log_prob, k_head = joint
+    n_batch = log_prob.shape[0]
+    n_player = batch_data["batch"].shape[0] // n_batch
+    m, k = joint_exodus_counts(
+        batch_data["y"],
+        batch_data["mask"],
+        batch_data["agent_group"],
+        batch_data["batch"],
+        n_batch=n_batch,
+    )
+    # The head pooled with the same mask and the same membership, so this is
+    # an identity -- asserted, not assumed. If it ever fails, the loss is
+    # scoring a different quantity than the head emits.
+    assert th.equal(k, k_head), (
+        "the count pair derived for the loss and the head's own "
+        "valid-decider count disagree"
+    )
+    assert bool((m <= k).all()), "leavers exceed valid deciders"
+
+    n_valid = k.sum(-1)
+    cells = n_valid > 0
+    if drop_incomplete_pairs:
+        cells = cells & (n_valid == n_player)
+    grid = log_prob.shape[-1]
+    flat = (m[..., 0] * grid + m[..., 1]).unsqueeze(-1)
+    nll = -log_prob.flatten(-2, -1).gather(-1, flat).squeeze(-1)
+    # Select rather than multiply by a 0/1 mask: dropped cells can sit on a
+    # -inf grid entry, and inf * 0 is NaN.
+    nll = nll[cells]
+    if nll.numel() == 0:
+        # Summing the empty selection gives a differentiable zero. Scaling
+        # `log_prob` instead would not: its masked cells are -inf, and
+        # -inf * 0 is NaN.
+        return nll.sum(), 0
+    return nll.mean(), int(nll.numel())
+
+
+def compute_batch_loss(model, batch_data, loss_fn, l1_entropy, **joint_kwargs):
+    """The training loss, and its components for reporting.
+
+    With the joint exodus head OFF this returns the per-agent loss object
+    itself, built by exactly the expression this file used before the head
+    existed -- same forward call, same graph, same value, same optimisation.
+    """
+    use_joint = getattr(model, "joint_exodus_head", None) is not None
+    if use_joint:
+        y_logit, joint = model(batch_data, return_joint=True)
+    else:
+        y_logit = model(batch_data)
+    y_logit = y_logit.flatten(end_dim=-2)
+    y_pred = y_logit.softmax(-1)
+    y_true = batch_data["y_enc"].flatten(end_dim=-2)
+    node_mask = batch_data["mask"].flatten()
+
+    loss = loss_fn(y_logit, y_true) + (y_pred * y_pred.log()).sum(-1) * l1_entropy
+    agent_loss = (loss * node_mask).sum() / node_mask.sum()
+    if not use_joint:
+        return agent_loss, {"agent": agent_loss.item(), "joint": None, "n_joint": 0}
+
+    joint_loss, n_cells = joint_exodus_loss(joint, batch_data, **joint_kwargs)
+    return agent_loss + joint_loss, {
+        "agent": agent_loss.item(),
+        "joint": joint_loss.item(),
+        "n_joint": n_cells,
+    }
 
 
 def load_config(config_path):
@@ -207,6 +358,15 @@ def main(config):
         loss_fn = th.nn.CrossEntropyLoss(reduction="none")
         sum_loss = 0
         n_steps = 0
+        # The joint exodus component is accumulated separately, so `sum_loss`
+        # keeps meaning the per-agent loss and the recorded `loss` curve stays
+        # comparable with runs that have no head.
+        sum_joint_loss = 0.0
+        n_joint_steps = 0
+        joint_cells = 0
+        first_joint_loss = None
+        last_joint_loss = None
+        last_agent_loss = None
 
         early_stopping_patience = train_args.get("early_stopping_patience")
         best_test_loss = float("inf")
@@ -234,17 +394,9 @@ def main(config):
                     device=th_device,
                 )
 
-                y_logit = model(batch_data).flatten(end_dim=-2)
-                y_pred = y_logit.softmax(-1)
-                y_true = batch_data["y_enc"].flatten(end_dim=-2)
-                mask = batch_data["mask"].flatten()
-
-                loss = (
-                    loss_fn(y_logit, y_true)
-                    + (y_pred * y_pred.log()).sum(-1) * train_args["l1_entropy"]
+                loss, components = compute_batch_loss(
+                    model, batch_data, loss_fn, train_args["l1_entropy"]
                 )
-
-                loss = (loss * mask).sum() / mask.sum()
 
                 loss.backward(retain_graph=True)
 
@@ -255,13 +407,29 @@ def main(config):
                         )
 
                 optimizer.step()
-                sum_loss += loss.item()
+                sum_loss += components["agent"]
                 n_steps += 1
+                if components["joint"] is not None:
+                    sum_joint_loss += components["joint"]
+                    joint_cells = components["n_joint"]
+                    n_joint_steps += 1
 
             last_epoch = e == (train_args["epochs"] - 1)
             if (e % train_args["eval_period"] == 0) or last_epoch:
                 avg_loss = sum_loss / n_steps
                 rec.rec(value=avg_loss, set="train")
+                last_agent_loss = avg_loss
+                avg_joint_loss = None
+                if n_joint_steps > 0:
+                    avg_joint_loss = sum_joint_loss / n_joint_steps
+                    rec.rec(
+                        value=avg_joint_loss,
+                        name="joint_exodus_loss",
+                        set="train",
+                    )
+                    if first_joint_loss is None:
+                        first_joint_loss = avg_joint_loss
+                    last_joint_loss = avg_joint_loss
 
                 # evalute on training data for all possible mask patterns
                 for j, mask in enumerate(test_mask_pattern):
@@ -373,6 +541,8 @@ def main(config):
                         "fold": i,
                         f"fold_{i}/train/loss": avg_loss,
                     }
+                    if avg_joint_loss is not None:
+                        wandb_log[f"fold_{i}/train/joint_exodus_loss"] = avg_joint_loss
                     if test_log_loss is not None:
                         wandb_log[f"fold_{i}/test/log_loss"] = test_log_loss
                         for key, val in perturb_log_loss.items():
@@ -380,6 +550,8 @@ def main(config):
                     wandb.log(wandb_log)
 
                 postfix = {"loss": f"{avg_loss:.4f}"}
+                if avg_joint_loss is not None:
+                    postfix["joint"] = f"{avg_joint_loss:.4f}"
                 if test_log_loss is not None:
                     postfix["test_loss"] = f"{test_log_loss:.4f}"
                     if early_stopping_patience is not None:
@@ -399,6 +571,8 @@ def main(config):
                 pbar.set_postfix(postfix)
                 sum_loss = 0
                 n_steps = 0
+                sum_joint_loss = 0.0
+                n_joint_steps = 0
 
             if (
                 early_stopping_patience is not None
@@ -412,6 +586,18 @@ def main(config):
                 if best_model_state is not None:
                     model.load_state_dict(best_model_state)
                 break
+
+        if last_joint_loss is not None:
+            # Both components, per fold: `agent` is the per-agent switch loss
+            # this file has always optimised, `joint` the exodus head's own
+            # cross-entropy. first -> last is the head's learning curve; if it
+            # is flat, the head is not learning.
+            print(
+                f"  fold {i}: agent loss {last_agent_loss:.4f} | "
+                f"joint exodus loss {first_joint_loss:.4f} -> "
+                f"{last_joint_loss:.4f} "
+                f"({joint_cells} count pairs per batch)"
+            )
 
         if test_data is not None:
             # compute confusion matrix
