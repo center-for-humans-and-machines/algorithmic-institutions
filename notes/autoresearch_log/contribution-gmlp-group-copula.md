@@ -256,7 +256,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
    out-of-sample check only. Expected values in Note 6. Labelled throughout
    as *attenuated moment diagnostics*; the estimate that matters is step 6.
 
-- [ ] 3. **Open the adapter's gate to Gaussian contribution copulas (its own
+- [x] 3. **Open the adapter's gate to Gaussian contribution copulas (its own
    step, so the revision is visible in the diff)** — [Sonnet]
    `src/aimanager/simulation/linear_ah.py`, `LinearAHAdapter.__init__`
    (currently lines 88-101): keep `copula_rho` as the multinomial-punisher
@@ -695,3 +695,16 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     whole cannot be collected locally — `test_encoder` and `test_edge_encoder`
     import PyG, which per CLAUDE.md is Raven-only — so the eval-suite modules
     are named explicitly rather than selected with `-k eval`.
+17. **Step 3 confirmed (orchestrator, 2026-09-02).** The gate is open and
+    behaviour is provably unchanged: `copula_rho_p` / `copula_rho_t` are read
+    tolerantly, restricted to `target == "contribution"` with a
+    `gaussian`/`gaussian_mlp` model, and bounded by `rho_p + rho_t < 1` so the
+    idiosyncratic weight `sqrt(1 - rho_p - rho_t)` stays real and non-zero.
+    PR #160's `copula_rho` field and both of its asserts are byte-for-byte
+    untouched, so the punisher path is unaffected. 244 -> 255 tests, black and
+    flake8 clean. The load-bearing one is
+    `test_copula_rho_p_t_no_behaviour_change_yet`: with a non-zero pair set,
+    output and RNG consumption are still bit-identical to the fields being
+    absent. That is a step-3 invariant by design and step 4 must update it
+    when the sampler starts honouring the fields — a test that keeps passing
+    after step 4 would mean the sampler is never reached.

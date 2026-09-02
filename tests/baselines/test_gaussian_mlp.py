@@ -321,11 +321,93 @@ def test_sampling_actually_varies(contribution_bundle):
 
 
 def test_copula_rho_rejected_on_gaussian_mlp():
-    """The severity copula is a multinomial-punishment feature; a gaussian_mlp
-    bundle carrying rho is a misconfiguration, exactly as for `gaussian`."""
+    """`copula_rho` (PR #160's punisher field) is a multinomial-punishment
+    feature; a gaussian_mlp bundle carrying it is a misconfiguration, exactly
+    as for `gaussian`. This is about `copula_rho` specifically -- the group
+    copula's own fields, `copula_rho_p` / `copula_rho_t`, are covered below."""
     for model in ("gaussian", "gaussian_mlp"):
         with pytest.raises(AssertionError, match="multinomial punishment"):
             _adapter(toy_bundle(model=model, copula_rho=0.35))
+
+
+# --------------------------------------------------------------------------- #
+# (3b) simulation adapter: the group-copula gate (`copula_rho_p` /
+# `copula_rho_t`) -- step 3 only opens the gate, it draws nothing; the
+# sampler that honours these fields is step 4.
+# --------------------------------------------------------------------------- #
+def test_copula_rho_p_t_accepted_on_gaussian_mlp_contribution():
+    ad = _adapter(toy_bundle(copula_rho_p=0.05, copula_rho_t=0.02))
+    assert ad.copula_rho_p == 0.05
+    assert ad.copula_rho_t == 0.02
+
+
+def test_copula_rho_p_t_accepted_on_gaussian_contribution():
+    ad = _adapter(toy_bundle(model="gaussian", copula_rho_p=0.03, copula_rho_t=0.01))
+    assert ad.copula_rho_p == 0.03
+    assert ad.copula_rho_t == 0.01
+
+
+def test_copula_rho_p_t_rejected_on_multinomial_punishment():
+    bundle = toy_bundle(model="multinomial", target="punishment", copula_rho_p=0.05)
+    with pytest.raises(AssertionError, match="Gaussian contribution sampler"):
+        _adapter(bundle)
+
+
+def test_copula_rho_p_t_rejected_on_ridge():
+    with pytest.raises(AssertionError, match="Gaussian contribution sampler"):
+        _adapter(toy_bundle(model="ridge", copula_rho_p=0.05))
+
+
+def test_copula_rho_p_t_rejected_when_sum_at_least_one():
+    with pytest.raises(AssertionError, match="must be < 1"):
+        _adapter(toy_bundle(copula_rho_p=0.6, copula_rho_t=0.4))
+
+
+@pytest.mark.parametrize(
+    "over",
+    [{"copula_rho_p": -0.1}, {"copula_rho_t": -0.1}],
+)
+def test_copula_rho_p_t_rejected_when_negative(over):
+    with pytest.raises(AssertionError, match="must be >= 0"):
+        _adapter(toy_bundle(**over))
+
+
+@pytest.mark.parametrize(
+    "over",
+    [
+        {},
+        {"copula_rho_p": None, "copula_rho_t": None},
+        {"copula_rho_p": 0.0, "copula_rho_t": 0.0},
+    ],
+)
+def test_copula_rho_p_t_accepted_as_zero_when_absent_or_none(over):
+    ad = _adapter(toy_bundle(**over))
+    assert ad.copula_rho_p == 0.0
+    assert ad.copula_rho_t == 0.0
+
+
+def test_copula_rho_p_t_no_behaviour_change_yet(contribution_bundle):
+    """Step 3 invariant, EXPECTED TO BE UPDATED IN STEP 4: setting the new
+    fields to a non-zero pair must leave sampling completely unchanged --
+    step 3 only opens the configuration gate, it adds no sampler branch. Once
+    step 4 lands the sampler and wires it in at `predict()`, a non-zero pair
+    will draw from the group-copula path and this test's premise (bit-identity
+    with the fields absent) will no longer hold and must be replaced."""
+    ad_legacy = _adapter(contribution_bundle)
+    ad_copula = _adapter(toy_bundle(copula_rho_p=0.2, copula_rho_t=0.1))
+    Xs = ad_legacy.scaler.transform(toy_features(8, 40))
+
+    th.manual_seed(11)
+    want = [ad_legacy._sample_levels(Xs, N_CONTRIBUTIONS) for _ in range(3)]
+    want_next = th.randn(1).item()
+
+    th.manual_seed(11)
+    got = [ad_copula._sample_levels(Xs, N_CONTRIBUTIONS) for _ in range(3)]
+    got_next = th.randn(1).item()
+
+    for i, (w, g) in enumerate(zip(want, got)):
+        assert np.array_equal(w, g), f"call {i}: {w.tolist()} != {g.tolist()}"
+    assert got_next == want_next, "RNG consumption differs with the fields set"
 
 
 # --------------------------------------------------------------------------- #

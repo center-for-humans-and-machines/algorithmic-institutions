@@ -99,6 +99,35 @@ class LinearAHAdapter:
             "copula_rho is implemented for the multinomial punishment sampler "
             f"only, got target={self.target!r} model={self.model_type!r}"
         )
+        # Group copula, Gaussian contribution sampler: `copula_rho_p` /
+        # `copula_rho_t` weight a shared latent that correlates a group's
+        # contribution draws -- persistent per (episode, group) and transient
+        # per (round, group) respectively, entering the standard normal as
+        # z = sqrt(rho_p) * u_g + sqrt(rho_t) * v_g + sqrt(1 - rho_p - rho_t) * e_i
+        # (calibrated by scripts/baselines/contribution_gmlp_copula_rho.py).
+        # Absent or both 0.0 keeps the independent path -- and its exact RNG
+        # consumption -- unchanged; this step only opens the gate, it draws
+        # nothing.
+        self.copula_rho_p = float(bundle.get("copula_rho_p", 0.0) or 0.0)
+        self.copula_rho_t = float(bundle.get("copula_rho_t", 0.0) or 0.0)
+        assert (
+            0.0 <= self.copula_rho_p
+        ), f"copula_rho_p must be >= 0, got {self.copula_rho_p}"
+        assert (
+            0.0 <= self.copula_rho_t
+        ), f"copula_rho_t must be >= 0, got {self.copula_rho_t}"
+        assert self.copula_rho_p + self.copula_rho_t < 1.0, (
+            "copula_rho_p + copula_rho_t must be < 1 (residual idiosyncratic "
+            f"variance would vanish), got {self.copula_rho_p} + {self.copula_rho_t}"
+        )
+        assert self.copula_rho_p + self.copula_rho_t == 0.0 or (
+            self.target == "contribution"
+            and self.model_type in ("gaussian", "gaussian_mlp")
+        ), (
+            "copula_rho_p / copula_rho_t are implemented for the Gaussian "
+            f"contribution sampler only, got target={self.target!r} "
+            f"model={self.model_type!r}"
+        )
         self.default_values = dict(bundle["default_values"])
         self.switch_every = bundle.get("switch_every")
         # env-driven use (predict) needs both; the rounds-driven manager path
