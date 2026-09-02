@@ -5,8 +5,12 @@ description: >-
   Every hyperparameter is copied verbatim from opt_50ep_doubled_reanchored.yml
   (375 epochs, batch 10, lr 5.e-4, hidden 10, 5-fold, seed 38381, flip-doubled
   data) -- this tests a mechanism, not a tuning. The only differences are
-  model_args.joint_exodus (the gate) and output_dir (this experiment's slug,
-  so runs cannot collide on paths).
+  model_args.joint_exodus (the gate), model_args.joint_exodus_switch_every
+  (which rounds the simulation's joint draw fires on -- the same 4 as the
+  params-level switch_every this run's decision rounds already come from; it
+  does not enter training, it is persisted into the artifact for step 4's
+  sampler) and output_dir (this experiment's slug, so runs cannot collide on
+  paths).
 exec:
   command: python -m aimanager train-ah {job_file}
   script_name: run_training
@@ -43,6 +47,7 @@ params:
     add_edge_model: True
     add_global_model: False
     joint_exodus: True
+    joint_exodus_switch_every: 4
     x_encoding:
       - etype: float
         name: common_good

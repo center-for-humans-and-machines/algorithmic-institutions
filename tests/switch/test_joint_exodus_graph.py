@@ -186,9 +186,9 @@ def test_head_off_leaves_the_sampling_path_bitwise_unchanged():
 def test_head_on_does_not_disturb_the_per_agent_forward_pass():
     """The head branches off the post-RNN embeddings and feeds nothing back,
     so with the same trunk weights the per-agent logits are bit-identical --
-    and step 1 leaves sampling alone entirely."""
+    and off a decision round sampling is untouched too."""
     off = make_model(seed=3)
-    on = make_model(seed=3, joint_exodus=True)
+    on = make_model(seed=3, joint_exodus=True, joint_exodus_switch_every=4)
     # the head is constructed last, so every shared parameter is initialised
     # from exactly the RNG state it saw before the head existed
     off_state = off.state_dict()
@@ -213,7 +213,10 @@ def test_head_on_does_not_disturb_the_per_agent_forward_pass():
     assert th.equal(logit_on_joint, logit_on)
     assert joint is not None
 
-    # and sampling still takes the legacy draw: step 1 does not wire the head in
+    # and on a NON-decision round (make_data's round_number 0, switch_every 4)
+    # sampling still takes the legacy draw, bit-for-bit and RNG-for-RNG --
+    # step 4 confines the joint draw to decision rounds. The decision-round
+    # behaviour is tested in tests/switch/test_joint_exodus_sampling.py.
     (ref_pred, _), ref_rng = run_seeded(
         lambda: legacy_predict(on, data, edge_index=edge_index)
     )
