@@ -209,6 +209,11 @@ protocol, seeds and episode count are the parent's.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-09-02 | learned per-group count head over m = 0..k with conditional-Bernoulli selection | preflight gate (step 2), no training or simulation run | not evaluated — the oracle count distribution reaches mean larger-group size 5.7622 against the declared bar of 5.99 (human 6.0880) | — | — | FAIL — the step-2 stop condition fired |
+
+Steps 1 and 2 ran. Steps 3-10 were never started: the stop condition declared in
+the plan before any result was seen forbids them. No model was trained, no
+simulation was run, and no evaluation score exists for this branch.
 
 ## Notes
 
@@ -249,3 +254,70 @@ protocol, seeds and episode count are the parent's.
    likelihood rather than through a correlation parameter, and a warning that
    the head must be checked against the observed unanimity rates (17.5% at
    size 4, 19.4% at size 3), not against a summary statistic.
+6. **The gate failed at 5.7622 against 5.99, and it failed as an oracle.** Drawing
+   the leaver count directly from the human empirical p(m | k, round) — the
+   distribution any learned head would be fitted to, handed over for free — gives a
+   mean larger-group size of 5.7622 at best over seven pooling choices (range
+   5.6846-5.7622, 200,000 replicates, MC sd 0.00078 over 8 seeds). This is an upper
+   bound on the design: a trained head cannot beat the distribution it estimates.
+   The shortfall is ~290x the MC noise; a game-clustered bootstrap that rebuilds the
+   count table from resampled games and reruns the Monte Carlo reaches 5.99 in 1.3%
+   of resamples. The ranking of pooling choices runs the honest way — the two most
+   pooled arms do best and the most round-specific arm does worst, as expected when
+   37 of 40 round cells have n < 20 — so there is no pooling choice that rescues it.
+7. **Note 5's warning was answered and it was not the problem.** The count
+   factorisation reproduces the unanimity spike essentially exactly — realised
+   P(m = k) of 0.193 at k = 3 and 0.176 at k = 4 against the human 0.194 and 0.175,
+   where the parent sim manages 0.098 and 0.081. So the failure is emphatically not
+   "the wrong count distribution was fitted". The right count distribution, applied
+   independently per group, simply does not produce the human size dynamics: the
+   defining transition P(reach 8 | larger group is 5) moves only from the sim's
+   0.0376 to 0.051-0.076, against the human 0.1569.
+8. **The mechanism is between-group, not within-group — measured, not assumed.**
+   In the human data the two groups' leaver counts in the same (episode, round) are
+   strongly negatively dependent: residual correlation -0.4676 controlling for both
+   sizes and round (game-clustered 95% CI [-0.5759, -0.3602], permutation
+   p < 0.0001 on 148 complete pairs across 45 games), and still -0.3038 after
+   conditioning on *both* groups' full round-level observable state. Conditioning on
+   each game's own switch rate makes it more negative, not less, so it is not game
+   heterogeneity. Raw: the smaller group empties while the larger holds entirely in
+   14/137 = 0.1022 of pairs against 0.0596 under independence, and
+   P(larger holds | smaller empties) = 0.538 against 0.261 otherwise. Roughly a
+   third of this dependence is reachable through shared observables and two thirds
+   is irreducible residual dependence — which is precisely what a per-group head,
+   drawing the two groups independently given state, cannot express.
+9. **The successor is quantified before it is built.** Resampling the pair
+   (m_smaller, m_larger) jointly from the human cells — adding between-group
+   dependence and nothing else, on the same complete-pair data as the failing P7 arm
+   — gives mean 6.1078 with EMD against the human size distribution collapsing from
+   0.361 to 0.052, and the 5 -> 8 transition landing at 0.172 against the human
+   0.157. Against the independent-null-to-human gap of +0.7203: the count arms carry
+   44-55%, the method-of-moments rho arm 57%, and the joint arm 103%. The round-
+   specific variant independently lands at 6.0663. Caveat, stated because this is
+   the one number that looks too good: it is an in-sample bootstrap of 167 pairs
+   with several strata under 35 observations, so it partly memorises the human data
+   and overshoots reach-8 (0.511 vs 0.420); it is an optimistic ceiling, not a
+   forecast. The direction, however, is not in doubt. This is the anti-correlated
+   between-label structure PR #168 flagged as its named successor, with the sign and
+   magnitude now measured rather than hypothesised.
+10. **Two design elements survive the failure and should be reused, not rebuilt.**
+    (a) A count head is provably moment-consistent with the per-agent marginals: the
+    maximum discrepancy between E[m | k, round] under the empirical counts and
+    k * p(switch | k, round) is 2.220e-16 across every cell, so a likelihood-fitted
+    count head cannot move SA or SB by itself. (b) The conditional-Bernoulli
+    selection of *which* members leave is exactly neutral for SC — confirmed
+    analytically (the state updates as a <- a - m_A + m_B, in which mover identity
+    appears nowhere) and numerically across a 2x range of propensity heterogeneity
+    (5.7410 vs 5.7282, within MC noise). It is worth keeping, but as a defence of
+    the individual-level rows that PR #168's shared latent broke, never as a lever
+    on SC.
+11. One caveat that a successor must carry: a count-driven simulation visits more
+    unbalanced states, where the per-agent switch rate is higher, so the realised
+    overall rate drifts to 0.293-0.322 against the human 0.2967 and the late-round
+    profile flattens (rounds 11/15/19 at ~0.28 against the human 0.245/0.241/0.251).
+    SB's late rounds are the exposed row for any mechanism in this family.
+12. A data-handling detail worth inheriting: 109 of 2,000 human decision rows fail
+    `switch_valid` (selection timeouts), so in 84 of 465 group-decision cells the
+    number of valid deciders is below the true group size and the two groups' sizes
+    do not sum to 8. All between-group statistics above use complete pairs only
+    (167 of 250), where the sum-to-8 invariant provably holds.
