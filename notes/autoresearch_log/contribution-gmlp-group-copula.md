@@ -386,7 +386,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
    again on Raven in step 10). The stamped bundle is LFS-tracked like its
    siblings.
 
-- [ ] 8. **Preflight (diagnostic, not a gate)** — [Opus] new file
+- [x] 8. **Preflight (diagnostic, not a gate)** — [Opus] new file
    `scripts/baselines/gmlp_group_copula_preflight.py`, running four arms
    from the one two-component code path, reporting **deltas** against the
    rho = 0 arm: (i) rho = 0; (ii) **the candidate**, `(rho_p, rho_t) =
@@ -932,3 +932,59 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     identity claim is only meaningful in-process at construction time, where
     the stamper asserts it; across a reload the right check is numerical
     bit-identity, which is what Note 35 reports.
+38. **THE PRE-REGISTERED PREDICTION, recorded before the simulation is
+    submitted.** At the fitted dose (`rho_p = 0.04378520865574197`,
+    `rho_t = 0.0`, read from the stamped bundle, not retyped):
+    **CG ~ 1.91, band `1-2`** — a two-band upgrade on the parent's
+    5.91060457046713 — corresponding to a predicted sim ratio of 0.7975
+    (0.6915274426731914 + 0.1059). That is proxy B's number, the closed-loop
+    rollout of the real contribution and punisher bundles, and it is the one
+    I stand behind. **The two proxies span CG 0.22 (`<= 1`) to 1.91 (`1-2`)**;
+    both are two-band upgrades. Secondary: CA is predicted to improve, its
+    `std_diff` moving from -2.621590294686563 toward about -1.24, because
+    every persistent arm raises SD(participant means) (2.9787 -> 4.3600 in
+    proxy B) while the transient-only arm barely does (+0.0715) — exactly the
+    asymmetry the Declaration pre-registered. Gate 2 has a wide margin on
+    these numbers: CG alone would take the 21-row mean from
+    1.6145149045441503 to roughly 1.42.
+39. **Both proxies calibrate, in opposite directions, which is why only
+    deltas are used.** Proxy A's rho = 0 arm gives 0.6558 against Note 8's
+    0.6551 and reproduces its other arms to ~0.001; proxy B's gives 0.7216,
+    matching Note 9's 0.7216 to four decimals despite being independently
+    rebuilt. The real sim sits at 0.6915, *between* them — A is 0.036 low, B
+    is 0.030 high — so every prediction above applies the proxy's delta to
+    the parent's real baseline ratio rather than the proxy's own level. Both
+    remain open-loop approximations: A has a linear mean and no punisher, B
+    fixes group membership, disables switching and treats every contribution
+    as valid where the real stack has a GNN validity model. Neither carries
+    the switch-slot interaction. One incidental confirmation: Note 8's "n = 8"
+    means two groups of four; a single group of eight gives 0.502 and does not
+    reproduce it.
+40. **Dose-response around the fitted dose (proxy B, `rho_t = 0`):** ratio
+    0.7216 / 0.7876 / 0.8277 / 0.8472 / 0.8644 at `rho_p` = 0 / 0.02 / 0.0438
+    / 0.06 / 0.08, i.e. implied CG 5.92 / 3.42 / 1.91 / 1.17 / 0.52. Local
+    slope ~1.49 of ratio per unit of `rho_p` (about 0.56 of CG score per 0.01
+    of dose), clearly concave. So the verdict is not knife-edge in the dose:
+    anything from 0.02 upward band-upgrades CG, and the fitted dose's CI
+    [0.03228, 0.06507] maps entirely inside `1-2` to `2-5`.
+41. **An honest discrepancy with Note 30, not reconciled away.** Note 30 read
+    proxy A's *absolute* level off its 0.040 row (0.8013 -> CG 1.765). Step 8's
+    delta rule instead applies proxy A's delta (+0.1507, 42% larger than
+    proxy B's) to the real baseline, which pushes A's prediction to CG 0.22 —
+    materially more optimistic. Proxy B lands at 1.91, within 0.15 of Note
+    30's expectation, so the faithful proxy confirms Note 30 and proxy A
+    brackets it from the optimistic side. Overshoot past `<= 1` is possible on
+    A's reading, not on B's. Nothing here changed the dose.
+42. **One implementation point that makes the arms comparable.** The (0,0)
+    reference is forced through `_sample_levels_gaussian_copula` by a
+    script-local adapter subclass, because `predict`'s gate would otherwise
+    route it to the independent sampler at 1n draws instead of 3n and the arms
+    would sit on different RNG streams — the deltas would then carry that
+    difference. This is exactly what the unconditional-3n-draw invariant
+    (Note 22) exists to permit; at (0,0) the copula sampler is algebraically
+    the independent one. `linear_ah.py` was not modified. Also worth noting
+    for the guards: SD(individual) rises too (5.1800 -> 5.9287 in proxy B).
+    That is free-running feedback on the trajectories, not a marginal change —
+    the per-agent conditional law is preserved by construction — but it means
+    the C-family rows will move, and the under-dispersed ones (CA -2.62,
+    CC -1.86, CE -2.21 std_diff) should move toward human.
