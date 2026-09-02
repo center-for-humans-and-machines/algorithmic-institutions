@@ -327,7 +327,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
    Note 16: `test_eval_*` fail on an isolated remote dir because `plots/` is
    not synced; not a regression.
 
-- [ ] 6. **The estimator** — [Opus] new file `scripts/baselines/contribution_gmlp_copula_rho.py`
+- [x] 6. **The estimator** — [Opus] new file `scripts/baselines/contribution_gmlp_copula_rho.py`
    (local, CPU torch, no PyG). Imports `punishment_copula_rho` as a module
    for `rho_mle`, `pair_nll`, `bvn_cdf`, `rect_points`, `cdf_bounds`,
    `pair_index`, `blocks`, `check_bvn` (unmodified) and
@@ -813,3 +813,83 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     power test — the arm that decides whether the declared falsifier is live —
     measures the wrong thing. Sent to the step-6 implementer while it was
     still running.
+27. **Step 6 confirmed: the dose is `rho_total = 0.04378520865574197`**, used
+    as-is, so `rho_p = 0.04378520865574197` and `rho_t = 0.0`. Cluster
+    bootstrap over the 40 episodes, 200 resamples, seed 38381: 95% CI
+    [0.032281937767127324, 0.06507099556615693], SE 0.008769066352832287;
+    pairwise LR against rho = 0 is 46.506379232683685. The two hard
+    provenance checks pass: within-cell **n_pairs = 15090**, identical to
+    PR #165 and step 2, and `check_bvn` max deviation against scipy's mvn is
+    3.3306690738754696e-16. Censored share 0.21577041705779804; residual mean
+    +0.005617, var 0.997453. The dose sits inside the pre-registered
+    0.03-0.05 expectation.
+28. **The declared falsifier inverted, and the power test settled it against
+    my own ground 3.** The censored MLE of the lag-1 cross-member pairs is
+    **0.03634366202384774** (n 28714, CI [0.009304553955279456,
+    0.061219727158390254], excluding 0) — 83% of `rho_total`, i.e. the
+    dependence is almost entirely *persistent*. The moment version of the
+    same pair set is +0.00620, an order of magnitude smaller. The `(0.03, 0)`
+    power test decides which to believe: driven through the real sampler on a
+    purely persistent panel, the lag-1 fit recovers **0.03410270756524159**
+    (6 panels, sd 0.00715; panel-0 CI [0.020882239028975094,
+    0.05450848823201269], excluding 0). **The estimator has power.** So
+    Declaration **ground 3 is retracted** — the lag-1 estimate is *not*
+    attenuated by construction, it simply disagreed with its own moment
+    version, and the censored fit is the one with the better properties.
+    Grounds 1 (PR #150's A/B), 2 (teacher-forced 0.812 vs free-running
+    0.6915) and 4 (§5 tie-break) stand unchanged, and the data now supports
+    the persistent structure independently of them.
+29. **The honest cost of Note 28: this experiment has lost its falsifier.**
+    The Declaration's discriminating test was that the two-component reading
+    predicts CG ~5.3 while the persistent reading predicts ~2.8, so a
+    measured CG near 6.6 would convict the structural choice. But the
+    two-component reading *as the censored MLE actually estimates it* is
+    (0.03634366202384774, 0.007441546631894225) — 83% persistent, which is
+    essentially the candidate. Both readings now predict the same move, so
+    CG can no longer discriminate between them. The remaining ways this run
+    fails are real but different: the closed-loop dynamics not delivering
+    what the open-loop proxies predict, or a collateral cost that keeps the
+    mean above 1.6145149045441503. Recorded here rather than quietly dropped,
+    because the pre-registration is weaker than it was when written.
+30. **The prediction therefore sharpens upward, to a two-band upgrade.** At
+    0.0438 the dose sits by Note 8's 0.040 row — ratio 0.8013, CG 1.765,
+    band `1-2` — not the 0.0278 row that gave the Declaration's headline
+    CG ~2.8. Step 8 must predict against 0.0438, not 0.028. Still on the
+    undershoot side (`<= 1` needs ~0.07 by the same table), so overshoot
+    remains a non-risk.
+31. **The one finding that limits what the dose means: the dependence is not
+    exchangeable-Gaussian in shape.** Same-group pairs co-occupy the
+    censoring bounds far more often than the fitted copula allows —
+    within-cell both-at-0 2.50x and both-at-20 3.49x independence, lag-1
+    2.58x and 3.54x, against 0.99x / 1.06x on synthetic panels at the same
+    fitted rho. Per-pair likelihood ratio on human data vs a synthetic arm at
+    the same rho: within-cell 0.00308 vs 0.00173 (1.8x), lag-1 0.04677 vs
+    0.00116 (**40x**). So the lag-1 "persistence" is substantially *persistent
+    same-group boundary clustering* — groups locking together at 0 or at 20
+    across consecutive rounds — rather than a clean Gaussian latent, and that
+    is why its MLE and its moment estimate point in opposite directions while
+    agreeing on every synthetic panel. The within-cell dose's own excess is
+    mild, so the dose is the sounder of the two numbers, which is fortunate
+    given it is the one being used. A latent that reproduces boundary
+    clustering directly, rather than through a Gaussian copula, is the
+    successor this points at.
+32. **Two methodological points worth carrying forward.** (a) The
+    per-episode-reset warning relayed from step 5 was material, not
+    hypothetical: re-run without it, the `(0.03, 0)` arm collapses to 0.0071
+    total / 0.0121 lag-1 (bias -0.023 / -0.018) and would have **failed** the
+    round-trip gate, which would have read as a sampler bug. (b) Each arm is
+    the mean of 6 independent panels with common random numbers, because a
+    single panel's own sd is 0.006-0.019 — the first single-panel `(0.1, 0)`
+    draw came out at +0.0215 bias, which alone would have failed a correct
+    implementation. Round-trip max |bias| over the four arms is
+    0.008091217083174201, PASS against the 0.02 tolerance. The panels re-draw
+    contributions on fixed human feature rows, so this validates the
+    estimator, not the closed-loop dynamics.
+33. **Constant rho is an approximation, and the round profile says so.**
+    Round-thirds MLE 0.0271281091298599 / 0.03559872... / 0.07688 — a 2.8x
+    rise across the game, the sharper version of step 2's mild moment rise
+    and of PR #149's round-growing rho. Interior-only within-cell MLE 0.0647
+    against all-rows 0.0438. Test split (10 episodes) within-cell MLE 0.0927
+    and lag-1 0.0309, with the Note-20 moment impossibility reproduced
+    exactly; noise indicators only, not estimates. A round-dependent rho is a
+    seeded follow-up, not a change to this experiment.
