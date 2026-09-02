@@ -256,3 +256,62 @@ protocol, seeds and episode count are the parent's.
    ruling, but the fact that it has not converged is a note for a successor,
    not a licence to change the epoch count here — the config is deliberately
    byte-identical to the base run's.
+6. **The isolation tooling was missing entirely and had to be ported.** PR #165
+   forked from `main` at `4b2f3f4`, before `8680db9` and `849e3ca`, so
+   `AI_REMOTE_DIR` was not implemented on this branch at all — the launchers
+   hardcoded the shared checkout, and setting the variable would have silently
+   fired `rsync --delete` into `~/algorithmic-institutions`. Neither tree alone
+   carried a correct SLURM template: `main` rewrote the activation line to honour
+   `AIMANAGER_VENV` but has no in-job `PYTHONPATH` export, while this branch's
+   step 1 added the `PYTHONPATH` block but not the venv indirection. The union of
+   the two is what actually works, and is what commit `fbec309` lands.
+7. **Why the isolation design is sound at all, measured rather than argued.** The
+   shared venv installs the package through a plain path `.pth`
+   (`_editable_impl_algorithmic_institutions.pth`, one line:
+   `/raven/u/certuer/algorithmic-institutions/src`), not an
+   `__editable___*_finder` meta-path hook. A `sys.path` dump under
+   `PYTHONPATH=<iso>/src` puts the isolated `src/` at index 0 and the shared
+   checkout's editable path at index 5, appended by `site.addsitedir` after
+   `PYTHONPATH` is already in place. Had setuptools chosen the import-hook form,
+   it would sit on `sys.meta_path`, which is consulted *before* `sys.path`, and
+   every "isolated" run in this project's history would have been importing
+   shared code with no symptom — including the runs re-executed specifically to
+   repair that bug.
+8. **`main` carries the training-side twin of the PR #166 hazard, in latent
+   form.** `scripts/artificial_humans/run_training.sh` on `main` has no in-job
+   `PYTHONPATH` export; isolation there rests entirely on `849e3ca`'s
+   `SBATCH_EXPORT=ALL` propagating the submitting shell's environment through
+   `#!/bin/bash -l` profile sourcing, `module load cuda/11.4`, and SLURM's own
+   export handling. That is a single point of failure with no in-job fallback,
+   and per the project record it had never been exercised by a live job before
+   this experiment's training run — which did work. `scripts/manager/run_training.sh`
+   has the same gap on both trees and is a live trap for the next manager-slot
+   experiment. For the maintainer: the union template should be ported back.
+9. **Training (step 6), SLURM job 29870374, 00:04:17 on one A100.** 1.21x the
+   base run's 3m32s, comfortably inside §5's 3x rule. Provenance verified from
+   inside the job's own log two independent ways: a warning traceback naming
+   `/u/certuer/autoresearch/switch-joint-exodus/src/aimanager/generic/data.py`
+   (the string `algorithmic-institutions/src` appears zero times in the log), and
+   the branch-only per-fold joint-loss lines, which the shared tree cannot
+   produce because `aimanager.generic.joint_exodus` does not exist on `main`.
+   Artifact sha256 `8a4ae4ade60d5443970255a4265bb7abaf555164ec020a4c77ba28ff364abdc0`,
+   identical in-job and after fetch, carrying `joint_exodus = True`,
+   `joint_exodus_switch_every = 4`, an inert copula (`copula_rho = 0.0`), and a
+   1,131-parameter head. The joint loss descended monotonically in every fold,
+   ~3.00 -> 1.92-2.12, still falling at epoch 374 in all five.
+10. **The detach held on real hardware.** Per-agent held-out log-loss came out at
+   0.5169944527434331 against the base artifact's 0.5163464160282509 — a
+   difference of +0.00065 with *mixed signs*, four of five folds improving. The
+   attached head in step 2b cost +0.0042 systematically; this is 6.5x smaller and
+   non-directional, which is the signature of a different random realisation
+   (constructing the head consumes RNG) rather than a degraded model. The trunk's
+   objective is unchanged by construction, and the gradient-identity test passes.
+11. **The local PyG stand-ins do not diverge from real PyG.** All 87 of this
+   experiment's tests pass on Raven against real `torch_scatter` 2.0.9 and
+   `torch_geometric` 2.5.0, and each test module was made to report whether its
+   stand-ins were installed — every one reported not-installed, confirming the
+   real packages were exercised. No local result in this experiment needs
+   re-examining. The 10 non-passing tests in that run are eval-suite and
+   linear-manager tests missing fixtures under `artifacts/` and `plots/`, which
+   `remote_test.sh` excludes from its sync by design and which CLAUDE.md says run
+   locally.
