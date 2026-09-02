@@ -219,7 +219,7 @@ training split; no feature, seed, episode-count or scoring change), and
 nothing touches the frozen surface (§8). Paths are relative to the worktree
 `.claude/worktrees/contribution-gmlp-group-copula`.
 
-- [ ] 1. **Worktree env prep** — [Sonnet] in the worktree: `uv sync` (the worktree has no
+- [x] 1. **Worktree env prep** — [Sonnet] in the worktree: `uv sync` (the worktree has no
    `.venv`; the parent's worktree does, this one must build its own);
    `mkdir -p data/baselines` (gitignored); set the §9 commit identity
    (`git config extensions.worktreeConfig true`, `--worktree user.name
@@ -687,3 +687,11 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     seed and marginals, so bit-identity is the signature of the failure that
     voided four of PR #168's runs, and it is cheaper to test for than to
     discover afterwards.
+16. **Step 1 confirmed (orchestrator, 2026-09-02).** Venv built; all five
+    inputs are real files, not LFS pointers (bundles 3934 / 3816 bytes, the
+    two baseline CSVs, the parent's `per_round.parquet` 112609 bytes).
+    Starting point pinned: `pytest tests/baselines/` **244 passed**, the five
+    `test_eval_*` modules **70 passed**. `pytest src/aimanager/tests/` as a
+    whole cannot be collected locally — `test_encoder` and `test_edge_encoder`
+    import PyG, which per CLAUDE.md is Raven-only — so the eval-suite modules
+    are named explicitly rather than selected with `-k eval`.
