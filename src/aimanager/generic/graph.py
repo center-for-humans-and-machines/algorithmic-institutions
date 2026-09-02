@@ -135,6 +135,7 @@ class GraphNetwork(th.nn.Module):
         *,
         y_levels=21,
         y_name="contribution",
+        y_encoding="onehot",
         autoregressive=False,
         x_encoding=[],
         u_encoding=[],
@@ -147,9 +148,13 @@ class GraphNetwork(th.nn.Module):
         **_,
     ):
         super().__init__()
+        assert y_encoding in {
+            "onehot",
+            "numeric",
+        }, f"y_encoding must be 'onehot' or 'numeric', got {y_encoding!r}"
         self.x_encoder = Encoder(x_encoding, refrence=y_name)
         self.u_encoder = Encoder(u_encoding, aggregation="mean", refrence=y_name)
-        self.y_encoder = IntEncoder(encoding="onehot", name=y_name, n_levels=y_levels)
+        self.y_encoder = IntEncoder(encoding=y_encoding, name=y_name, n_levels=y_levels)
         self.bias_encoder = (
             Encoder(b_encoding, refrence=y_name) if b_encoding is not None else None
         )
@@ -166,6 +171,7 @@ class GraphNetwork(th.nn.Module):
         self.default_values = default_values
         self.y_levels = y_levels
         self.y_name = y_name
+        self.y_encoding = y_encoding
         self.autoregressive = autoregressive
 
         if op1 is None:
@@ -337,8 +343,20 @@ class GraphNetwork(th.nn.Module):
     def predict_encoded(self, data, sample=True, reset_rnn=True):
         self.eval()
         y_logit = self(data, reset_rnn)
-        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
-        y_pred = self.y_encoder.decode(y_pred_proba, sample)
+        if self.y_encoding == "numeric":
+            # The numeric head is deterministic: it emits a single scalar in
+            # [0, 1] per node/round, so `sample` is a no-op. `y_pred_proba` is
+            # a degenerate one-hot kept only so downstream consumers
+            # (eval_model, create_confusion_matrix) keep working mechanically --
+            # log_loss is not meaningful for this model.
+            y_pred = self.y_encoder.decode(y_logit.clamp(0.0, 1.0), sample)
+            y_pred = y_pred.squeeze(-1)
+            y_pred_proba = th.nn.functional.one_hot(
+                y_pred, num_classes=self.y_levels
+            ).float()
+        else:
+            y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+            y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
     def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
@@ -360,6 +378,9 @@ class GraphNetwork(th.nn.Module):
         assert (
             self.rnn_n is None and self.rnn_g is None
         ), "Autoregressive predictions do not support RNN"
+        assert (
+            self.y_encoding == "onehot"
+        ), "Autoregressive predictions require y_encoding='onehot'"
 
         n_batch, n_nodes, n_rounds = data["contribution"].shape
         if edge_index is None:
@@ -430,6 +451,7 @@ class GraphNetwork(th.nn.Module):
             "bias",
             "y_levels",
             "y_name",
+            "y_encoding",
             "autoregressive",
             "x_encoding",
             "u_encoding",

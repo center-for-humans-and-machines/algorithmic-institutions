@@ -205,6 +205,7 @@ def main(config):
 
         optimizer = th.optim.Adam(model.parameters(), **optimizer_args)
         loss_fn = th.nn.CrossEntropyLoss(reduction="none")
+        y_encoding = getattr(model, "y_encoding", "onehot")
         sum_loss = 0
         n_steps = 0
 
@@ -235,14 +236,17 @@ def main(config):
                 )
 
                 y_logit = model(batch_data).flatten(end_dim=-2)
-                y_pred = y_logit.softmax(-1)
                 y_true = batch_data["y_enc"].flatten(end_dim=-2)
                 mask = batch_data["mask"].flatten()
 
-                loss = (
-                    loss_fn(y_logit, y_true)
-                    + (y_pred * y_pred.log()).sum(-1) * train_args["l1_entropy"]
-                )
+                if y_encoding == "numeric":
+                    loss = ((y_logit - y_true) ** 2).sum(-1)
+                else:
+                    y_pred = y_logit.softmax(-1)
+                    loss = (
+                        loss_fn(y_logit, y_true)
+                        + (y_pred * y_pred.log()).sum(-1) * train_args["l1_entropy"]
+                    )
 
                 loss = (loss * mask).sum() / mask.sum()
 
