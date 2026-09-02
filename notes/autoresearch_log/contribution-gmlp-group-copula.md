@@ -233,7 +233,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
    (test_gaussian_mlp + test_punishment_copula + features) and
    `pytest src/aimanager/tests/test_eval_*.py`. No tracked-file changes.
 
-- [ ] 2. **Reproduce the CG direction + residual ICC diagnostic** — [Sonnet] new file
+- [x] 2. **Reproduce the CG direction + residual ICC diagnostic** — [Sonnet] new file
    `scripts/baselines/gmlp_group_copula_diagnostic.py`. Part A: load the
    human CSV via `aimanager.evaluation_suite.convert.load_human` and the two
    parent sims (`23_2g8a_gmlp2_base_self_gaussian_contr_gnn_switch`,
@@ -708,3 +708,33 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     absent. That is a step-3 invariant by design and step 4 must update it
     when the sampler starts honouring the fields — a test that keeps passing
     after step 4 would mean the sampler is never reached.
+18. **Step 2 confirmed (orchestrator, 2026-09-02).** Part A reproduces the
+    direction exactly: human ratio 0.8480163543652899 (SD group means
+    5.35768983626258 / SD individual 6.317908621317357), base sim
+    0.7427252620205091, candidate sim 0.6915274426731914 with gap
+    0.15648891169209844 — equal to the CG row's `d` in the candidate's
+    `evaluation/metrics.csv` to 1e-12. The deficit is under-dispersion at the
+    group level in both sims, and the candidate is *further* below human than
+    the base, which is the finding this experiment is built on.
+19. **The ratio band edges are indicative to ~0.1%, not exact.** The
+    diagnostic's `d` is a point estimate on the full data, while
+    `scores.csv`'s numerator is the mean over the 500 resampling repeats:
+    0.15648891169209844 vs 0.15632768652820284 for the candidate (0.10%) and
+    0.10529109234478073 vs 0.10521433000149152 for the base (0.07%). So the
+    quoted thresholds (ratio > 0.7157729563639177 for `2-5`, > 0.795118995164741
+    for `1-2`) are accurate to about +-0.0002 in ratio units. Immaterial at
+    the margins this experiment works with, but the verdict comes from
+    `evaluation/scores.csv`, never from a ratio computed against these edges.
+20. **Two things in the moment diagnostics that shape what step 6 can claim.**
+    First, *individual* persistence dominates *group* persistence: same-agent
+    cross-round residual correlation +0.06618 (n 84031) against cross-member
+    lag-1 +0.00620 (n 28714), while the cross-group same-round share is
+    -0.00437 (n 10271) — so there is no episode-level common shock, and the
+    shared structure really is group-scoped. Second, the lag-1 estimate is
+    the *unstable* one: on the test split it comes out at +0.05139, larger
+    than that split's own within-cell +0.03301, on 10 episodes. Combined with
+    the 21.58% censored share on train (27.70% on test), that is direct
+    evidence the falsifier estimator is low-powered, which is exactly what
+    step 6's `(0.03, 0)` round-trip arm is there to quantify rather than
+    assume. Within-cell by round thirds: +0.02271 / +0.01942 / +0.03493 — a
+    mild rise in the last third, the weak echo of PR #149's round-growing rho.
