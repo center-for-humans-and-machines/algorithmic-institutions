@@ -117,7 +117,93 @@ and already present.
 
 ## Plan
 
-To be written and validated before any implementation.
+Validated by the orchestrator against §2 (targets), §5 (legality) and §8 (frozen
+surface) before any step ran. No step adds an input feature, so the model
+consumes exactly the information it consumes today and the
+`Environment.default_values` hazard of note 3(b) cannot bite; the only new
+learned object is a factorisation of the *label* distribution, which is a
+likelihood choice, not a feature. Nothing under
+`src/aimanager/evaluation_suite/`, `notes/evaluation_metric_defs.md`,
+`notes/eval_scoring_schema.md` or `experiments/` is touched, and the simulation
+protocol, seeds and episode count are the parent's.
+
+1. **Port the isolated-run launcher fix** — `scripts/run_simulation.sh`.
+   Apply commit `66733b3` from `auto/switch-herding-copula-recal`: export
+   `PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"` after venv activation, so a
+   job launched from `~/autoresearch/switch-exodus-count` imports this branch's
+   `src/` instead of the shared checkout's. Nothing on this branch may be
+   simulated before this lands. *[Sonnet]*
+
+2. **Preflight gate — does the observed count distribution reach the target?**
+   New scratch analysis (not committed to `src/`), on the single-copy human file
+   and the parent's `per_round.parquet`. Estimate the empirical leaver-count
+   distribution p(m | k, round) on human decisions, then run the group-size Monte
+   Carlo of the diagnostic drawing m from it directly, with membership assigned by
+   propensity. Report the resulting larger-group-size distribution and mean against
+   the human 9.6/24.4/28.0/23.6/14.4 and 6.088, plus the unanimity rates at k = 3
+   and 4. **STOP condition:** if drawing from the human count distribution itself
+   does not lift the mean to within roughly 0.1 of 6.088, the factorisation cannot
+   carry SC and the experiment stops here and is written up as a `[FAIL]` with the
+   ceiling recorded. Also report E[m] against the sum of the base model's per-agent
+   probabilities on the same rows — the SA/SB consistency check. *[Opus]*
+
+3. **The count head** — `src/aimanager/generic/graph.py`, `GraphNetwork`.
+   Add an optional group-level head: pool the post-RNN node embeddings over each
+   group (mask by the `agent_group` column of the state, not by the edge index,
+   which is group-agnostic), concatenate the group size k and the round, and read
+   out 9 logits for m = 0..8, masked to m <= k before the softmax. Gate the whole
+   head behind a constructor argument defaulting to off, and persist it through
+   `save()`/`load()` alongside the existing `copula_*` fields so an artifact
+   without it loads exactly as today. *[Opus]*
+
+4. **The joint training objective** — `src/aimanager/artificial_humans/train.py`
+   plus a new config
+   `configs/training/artificial_humans/switch_predictor/exodus_count.yml`.
+   Derive the per-(episode, decision round, group) leaver count from the existing
+   `does_switch` labels under the `switch_valid` mask, and add its cross-entropy
+   to the existing per-agent loss. The config copies
+   `opt_50ep_doubled_reanchored.yml` unchanged (375 epochs, batch 10, lr 5e-4,
+   hidden 10, 5-fold, seed 38381, flip-doubled data per the GNN convention) and
+   only enables the head. Report both loss components per fold. *[Opus]*
+
+5. **The conditional-Bernoulli sampler** — new
+   `src/aimanager/generic/conditional_bernoulli.py`, with unit tests that run
+   locally (no PyG import). Given a group's per-agent probabilities and a count m,
+   draw the leaving subset exactly by enumerating the C(k,m) <= 70 subsets with
+   weight proportional to the product of odds. Tests must assert: the marginals
+   recovered by averaging over m drawn from a binomial match the input
+   probabilities; the propensity ordering is preserved (a higher-p agent leaves at
+   least as often as a lower-p one); and m = 0 and m = k are handled. *[Sonnet]*
+
+6. **Wire the sampler into the simulation draw** — `graph.py`, alongside the
+   existing copula dispatch in `predict_independent`. When the count head is
+   present and `sample=True`, replace the independent `th.multinomial` draw on
+   decision rounds with: per-agent probabilities from the existing head, m drawn
+   per group cell (`batch_index * 2 + agent_group`) from the count head, then the
+   step-5 subset draw. Non-decision rounds keep running the forward pass to hold
+   the GRU warm and consume no extra RNG, matching the current semantics. *[Opus]*
+
+7. **Train/sim parity test** — `src/aimanager/tests/`. Assert that the grouping
+   and count derived at training time from `data.py` matches the grouping the
+   simulation builds from `environment.py` on the same synthetic membership,
+   closing the untested invariant of note 3(a) for this mechanism. *[Sonnet]*
+
+8. **Train on Raven** — `scripts/train_cluster.sh ah <config>` with
+   `AI_REMOTE_DIR='~/autoresearch/switch-exodus-count'`. Base run is 3m32s, so the
+   §5 budget ceiling of ~10.5 min is not in question; record the actual elapsed
+   time and the in-job artifact sha256. *[Sonnet]*
+
+9. **Baseline control, then the candidate** — two simulations from the isolated
+   dir. First re-run the parent's own config unchanged and require a bit-identical
+   `per_round.parquet` (sha256 `4f64fc42...` per PR #168's control), which is the
+   licence to compare anything; then the candidate config, a three-edit copy of the
+   parent's differing only in `switch_model`, `output_dir` and `figure_name`.
+   *[Sonnet]*
+
+10. **Evaluate and rule** — `python -m aimanager evaluate` on the candidate,
+    locally. One simulation, one evaluation, no second stage (§3). Record the
+    results row, then open the PR titled `[SUCCESS]` only if SC leaves band 2-5
+    *and* the mean falls below 1.2893632310269196; otherwise `[FAIL]`. *[Opus]*
 
 ## Results
 
