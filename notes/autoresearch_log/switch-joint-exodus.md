@@ -147,6 +147,35 @@ protocol, seeds and episode count are the parent's.
    flip-doubled data per the GNN convention) and only enables the head. Report both
    loss components per fold. *[Opus]*
 
+2b. **Detach the head from the trunk** (plan revision, §9 step 4; ruled after
+   step 2 reported, before step 3 was dispatched) —
+   `src/aimanager/artificial_humans/train.py`. Stop the joint loss's gradient at
+   the pooled embeddings, so the shared trunk is optimised by the per-agent loss
+   alone and the head is fitted as a readout on top of it. Verify that the
+   resulting per-agent held-out log-loss matches a head-off run of the same
+   config and seed, and report both. *[Opus]*
+
+   **Why the plan changed.** Step 2 measured what the plan had assumed away: the
+   joint term is ~2-3 nats against ~0.5 for the per-agent term, so it dominates
+   the trunk's gradient by sheer magnitude, and the local single-fold run showed
+   the cost landing exactly where this experiment cannot afford it — held-out
+   per-agent log-loss 0.5200 with the head against 0.5158 without. SB is the
+   declared watch item and gate 2 is what killed PR #168; degrading the per-agent
+   switch model to buy a better joint fit is the same trade in a new costume.
+   Detaching removes it by construction: the trunk is trained by exactly the
+   objective the base artifact was trained by, so the candidate is the parent's
+   switch model plus a joint head, and any score movement is attributable to the
+   mechanism rather than to a re-fitted representation. This also matches the
+   declared hypothesis, which is about the sampling structure between groups, not
+   about better representations. The cost is that the head can no longer shape the
+   embeddings it reads — acceptable, because the head receives both group sizes
+   and the round directly, and the dependence it exists to capture is by
+   definition the part that observables do not explain, so it lives in the shape
+   of the joint rather than in the features. Adding a loss *weight* instead was
+   rejected: a weight is a tuning knob that would have to be searched, and
+   searching it before any evaluation score exists is how one change per
+   experiment becomes several.
+
 3. **The conditional-Bernoulli sampler** — new
    `src/aimanager/generic/conditional_bernoulli.py`, with unit tests that run
    locally (no PyG import). Given a group's per-agent probabilities and a count m,
@@ -205,3 +234,25 @@ protocol, seeds and episode count are the parent's.
    it is an optimistic ceiling, not a forecast. The honest expectation is that a
    learned head lands below it; the gate is a band upgrade on SC, not a match of
    the oracle.
+3. Step 2's ruling on the timeout artefact is worth carrying beyond this
+   experiment: on a group whose members did not all submit a decision,
+   `m_g == k_g` does not mean the group emptied. 18 of 112 apparent full-exodus
+   cells (16%) are timeouts, and carrying incomplete pairs inflates
+   P(apparent full exodus | k_g > 0) from 0.1079 to 0.1204. Any future work on
+   the exodus tail — the 5 -> 8 transition, the unanimity spike — must drop
+   incomplete pairs or it will fit an artefact. Note that the between-group
+   correlation itself is indifferent to the choice (-0.3660 on complete pairs
+   against -0.3658 on all), so this is a bias in the tail statistics only, not
+   in the dependence the head is fitted to.
+4. The joint loss is unweighted, and step 2b's detach is what makes that safe.
+   Before the detach, the joint term's ~2-3 nats against the per-agent term's
+   ~0.5 dominated the trunk gradient and cost 0.0042 nats of held-out per-agent
+   log-loss. If a successor ever re-attaches the head, a loss weight stops being
+   optional.
+5. Local end-to-end training under PyG stand-ins (CPU, single fold, not the
+   experiment) showed the head learning under the shipped hyperparameters:
+   joint loss 3.006 -> 1.887 nats over 375 epochs and still descending at the
+   end. The head is not starved by the 66.8% of pairs that survive the drop
+   ruling, but the fact that it has not converged is a note for a successor,
+   not a licence to change the epoch count here — the config is deliberately
+   byte-identical to the base run's.
