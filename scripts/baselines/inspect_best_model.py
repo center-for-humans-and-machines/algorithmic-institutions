@@ -6,6 +6,8 @@ The estimator + its swept hyper-parameters come from the config (data.model) and
 the CSV row (see baseline_models). Features are standardized as in CV. Per-feature
 value reported:
   * ridge / gaussian (mu-head) -> signed standardized coefficient
+  * mlp (nonlinear, no coef_) -> first-layer per-feature L2 norm, an unsigned
+    importance PROXY (not a coefficient)
   * multinomial (one coef per class) -> magnitude via --cat-metric:
     absmag (mean |coef|, default) / l2 (coef norm) / perm (delta in-sample log-loss).
 
@@ -53,7 +55,7 @@ def _row_setting(row, model, cfg):
     """(label, setting) for a CV-output row: read the model's swept hyper-parameter
     columns off the row. label is a short display string."""
     setting = {
-        k: (int(row[k]) if k == "epochs" else float(row[k]))
+        k: (int(row[k]) if k in ("epochs", "hidden") else float(row[k]))
         for k in setting_keys(model)
     }
     label = " ".join(f"{k}={v}" for k, v in setting.items())
@@ -83,10 +85,10 @@ def save_best(args, df, cfg, model, n_levels, metric_col, prep_tr):
     """Refit the CV-best model on all train with the row's swept setting, evaluate
     on the locked test split, and save the fitted model + metadata under artifacts/.
 
-    Both continuous models are sampleable in the sim (#121): gaussian from its
-    trained heteroscedastic head, contribution ~ N(mu(x), sigma(x)); ridge is a
-    point model, so it stores a homoscedastic `sigma` = sqrt(train MSE) and samples
-    contribution ~ N(mu(x), sigma). Features are standardized (scaler saved)."""
+    All continuous models are sampleable in the sim (#121): gaussian from its
+    trained heteroscedastic head, contribution ~ N(mu(x), sigma(x)); ridge and mlp
+    are point models, so they store a homoscedastic `sigma` = sqrt(train MSE) and
+    sample contribution ~ N(mu(x), sigma). Features standardized (scaler saved)."""
     import joblib
 
     row = df[df["rank"] == args.rank].iloc[0]
@@ -129,14 +131,14 @@ def save_best(args, df, cfg, model, n_levels, metric_col, prep_tr):
         "switch_every": prep_tr["switch_every"],
     }
 
-    # Both continuous models are distributional -> report a binned 21-way test CE
-    # (comparable to the multinomial / GNN). ridge: N(mu(x), sigma) homoscedastic;
-    # gaussian: N(mu(x), sigma(x)) from its trained head.
+    # All continuous models are made distributional -> report a binned 21-way test
+    # CE (comparable to the multinomial / GNN). ridge / mlp: N(mu(x), sigma)
+    # homoscedastic; gaussian: N(mu(x), sigma(x)) from its trained head.
     extra = []
-    if model in ("ridge", "gaussian"):
+    if model in ("ridge", "gaussian", "mlp"):
         Xte, yte = sc.transform(prep_te["X"][:, cols]), prep_te["y_cont"]
         k = int(cfg["data"].get("categorical_levels", 21))
-        if model == "ridge":  # point model -> homoscedastic sigma makes it sampleable
+        if model in ("ridge", "mlp"):  # point model -> homoscedastic sigma
             mu_tr = m.predict(sc.transform(prep_tr["X"][:, cols]))
             sigma = float(np.sqrt(np.mean((mu_tr - prep_tr["y_cont"]) ** 2)))
             bundle["sigma"] = sigma  # sim samples N(mu(x), sigma) on standardized feats
@@ -175,9 +177,10 @@ def save_best(args, df, cfg, model, n_levels, metric_col, prep_tr):
 def _fit_betas(
     prep, model, n_levels, feats, setting, seed, cat_metric="absmag", n_repeats=10
 ):
-    """{feature: value}, intercept, in-sample metric. Continuous -> signed
-    standardized mu-coefficient. Multinomial -> per-feature magnitude (cat_metric:
-    absmag / l2 / perm delta-log-loss)."""
+    """{feature: value}, intercept, in-sample metric. Continuous linear -> signed
+    standardized mu-coefficient. mlp -> first-layer per-feature L2 norm (unsigned
+    importance proxy, no intercept). Multinomial -> per-feature magnitude
+    (cat_metric: absmag / l2 / perm delta-log-loss)."""
     y = _y(prep, model)
     cols = [prep["col_of"][f] for f in feats]
     if not feats:
@@ -215,6 +218,12 @@ def _fit_betas(
         return vals, None, base
 
     insample = float(np.mean((m.predict(Xs) - y) ** 2))
+    if model == "mlp":
+        # Nonlinear mean: m.coef_ raises. Use the first-layer weight column norm
+        # per feature as an unsigned importance PROXY (no sign, no intercept).
+        w1 = m.net.hidden.weight.detach().numpy()  # (hidden, n_features)
+        vals = {f: float(np.linalg.norm(w1[:, j])) for j, f in enumerate(feats)}
+        return vals, None, insample
     betas = {f: float(b) for f, b in zip(feats, m.coef_)}
     return betas, float(m.intercept_), insample
 
@@ -268,7 +277,7 @@ def main():
     value_name = (
         {"perm": "perm_dloss", "l2": "coef_l2", "absmag": "coef_absmag"}[cm]
         if model == "multinomial"
-        else "std_beta"
+        else ("w1_l2" if model == "mlp" else "std_beta")  # w1_l2: importance proxy
     )
     print(
         f"train rows={len(prep['fold_row'])}, "
@@ -324,6 +333,11 @@ def main():
     print(f"\n  {'feature':<32}{value_name:>12}")
     for f, v in sorted(betas.items(), key=lambda kv: -abs(kv[1])):
         print(f"  {f:<32}{v:>12.3f}")
+    if model == "mlp":
+        print(
+            "\n(w1_l2 = L2 norm of the feature's first-layer weight column -- an "
+            "unsigned\n importance PROXY, not a coefficient: the mean is nonlinear.)"
+        )
 
 
 if __name__ == "__main__":
