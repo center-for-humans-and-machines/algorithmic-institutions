@@ -28,6 +28,9 @@ Design points that are load-bearing:
   always the group's nominal size: 109 of 2,000 human decision rows fail
   ``switch_valid``. The support of the head is tied to the deciders it is
   fitted on.
+* **The pooled embedding is DETACHED, so this head is a pure readout.** No
+  gradient of the joint loss reaches the message-passing layers, the RNN or
+  the encoders; see ``JointExodusHead.forward`` for why.
 
 Torch only -- no ``torch_geometric`` / ``torch_scatter`` -- so this module
 imports and is unit-testable on macOS, mirroring ``generic/copula.py``.
@@ -232,6 +235,30 @@ class JointExodusHead(th.nn.Module):
             mask=decider_mask,
             n_groups=self.n_groups,
         )
+        # ---------------------------------------------------------------- #
+        # THE CUT (plan step 2b). The trunk is optimised by the per-agent
+        # loss ALONE; this head is fitted as a readout on top of it.
+        #
+        # Why: step 2 measured the joint term at ~2-3 nats against the
+        # per-agent term's ~0.5, so attached it dominates the shared trunk's
+        # gradient by sheer magnitude, and the cost landed on the per-agent
+        # switch model itself -- held-out log-loss 0.5200 with the head
+        # against 0.5158 without, on a local single-fold run. SB is this
+        # experiment's declared watch item and the 21-row mean is gate 2, so
+        # degrading the per-agent model to buy a better joint fit is the
+        # trade this experiment cannot make. Detaching removes it by
+        # construction rather than by tuning: the candidate is the base
+        # model's trunk plus a joint head, and any score movement is
+        # attributable to the mechanism, not to a re-fitted representation.
+        # (A loss WEIGHT was considered and rejected -- see the plan.)
+        #
+        # ONLY the embedding is cut. `k` below is an integer count and the
+        # round is an integer feature, so neither ever carried gradient, and
+        # everything downstream -- this module's whole MLP -- still receives
+        # full gradient and trains normally.
+        # ---------------------------------------------------------------- #
+        pooled = pooled.detach()
+
         n_batch, n_rounds = pooled.shape[0], pooled.shape[1]
         k = counts.round().to(th.int64)
         sizes = k.to(x.dtype) / SIZE_NORM

@@ -336,9 +336,14 @@ class GraphNetwork(th.nn.Module):
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
         # The joint exodus head branches off the post-RNN node embeddings and
         # feeds nothing back, so the per-agent path below is untouched whether
-        # the head runs or not. `return_joint` defaults to False, so every
-        # existing call site keeps the exact signature and return type it has
-        # today. Sampling is NOT wired to this yet (plan step 4).
+        # the head runs or not. It feeds nothing back on the BACKWARD pass
+        # either: the head detaches the pooled embeddings it reads (plan step
+        # 2b, see `joint_exodus.JointExodusHead.forward`), so the joint loss
+        # leaves every parameter above this line -- op1, the RNNs, the
+        # encoders -- with exactly the gradient it would have had with the
+        # head off. `return_joint` defaults to False, so every existing call
+        # site keeps the exact signature and return type it has today.
+        # Sampling is NOT wired to this yet (plan step 4).
         joint = None
         if return_joint and self.joint_exodus_head is not None:
             joint = self.joint_exodus_head(
