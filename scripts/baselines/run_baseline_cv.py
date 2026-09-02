@@ -10,9 +10,10 @@ locked file and is never opened here); results are written best-to-worst to
 `cv.output`.
 
 The estimator is chosen by data.target_type + data.model (see baseline_models):
-categorical -> multinomial logistic; continuous -> ridge (fast MSE) or gaussian
-(heteroscedastic N(mu, sigma) by MLE). With cv.show_ce, the gaussian run also
-reports a binned 21-way cross-entropy alongside its NLL.
+categorical -> multinomial logistic; continuous -> ridge (fast MSE), gaussian
+(heteroscedastic N(mu, sigma) by MLE) or gaussian_mlp (the same heads behind a
+2-layer net). With cv.show_ce, the gaussian runs also report a binned 21-way
+cross-entropy alongside their NLL.
 
 Usage:
     .venv/bin/python scripts/baselines/run_baseline_cv.py [config.yml]
@@ -47,6 +48,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/baselines"))
 from handcrafted_grid import load_config, prepare_data  # noqa: E402
 from baseline_models import (  # noqa: E402
+    GAUSSIAN_MODELS,
     build_model,
     build_settings,
     floor_score,
@@ -98,7 +100,7 @@ def _score(Xtr, ytr, Xte, yte):
 
 def _worker(cols):
     """Return, per setting, (setting, mean, se, ce_mean, ce_se) across folds.
-    ce_* are None unless cv.show_ce is set (gaussian only)."""
+    ce_* are None unless cv.show_ce is set (gaussian models only)."""
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
     X, y, fr, settings, dev = (_W["X"], _W["y"], _W["fr"], _W["settings"], _W["dev"])
     cols = list(cols)
@@ -171,7 +173,7 @@ def main():
     seed = cfg["cv"]["seed"]  # gaussian init seed reuses cv.seed
     settings = build_settings(cfg, model)  # validated + Cartesian expanded
     metric = metric_name(model)
-    show_ce = bool(cfg["cv"].get("show_ce", False)) and model == "gaussian"
+    show_ce = bool(cfg["cv"].get("show_ce", False)) and model in GAUSSIAN_MODELS
     ce_levels = int(cfg["data"].get("categorical_levels", 21))
 
     prep = prepare_data(cfg, ROOT)
