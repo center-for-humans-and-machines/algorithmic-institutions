@@ -299,7 +299,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
    the code cannot show (draw count, first-member rule, arrival-group
    semantics, persistent-latent lifetime).
 
-- [ ] 5. **Unit tests** — [Opus] new file `tests/baselines/test_contribution_group_copula.py`
+- [x] 5. **Unit tests** — [Opus] new file `tests/baselines/test_contribution_group_copula.py`
    (local, CPU torch, `toy_bundle` pattern from `test_gaussian_mlp.py` with
    `copula_rho_p` / `copula_rho_t` added). The two that matter: **(i)
    marginal preservation** — over many draws on fixed feature rows, each
@@ -779,3 +779,37 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     entries equal the stored `u_g`. Recovering the two weights separately
     needs multi-round episodes: within-round within-group correlation targets
     `rho_p + rho_t`, cross-round cross-member targets `rho_p` alone.
+24. **Step 5 confirmed (orchestrator, 2026-09-02).** 24 tests in
+    `tests/baselines/test_contribution_group_copula.py`; `tests/baselines/`
+    256 -> **280 passed**, the five `test_eval_*` modules still 70. Both
+    Note-22 mutations are now caught, and I re-ran the dangerous one myself
+    rather than taking it on report: mutation B (`setdefault` -> assignment)
+    fails 6 tests — `test_correlation_recovery_from_replayed_z[0.1-0.1]` and
+    `[0.15-0.0]`, `test_persistent_latent_constant_within_episode[0.15-0.0]`
+    and `[0.2-0.1]`, `test_group_that_empties_and_reforms_resumes_its_latent`,
+    `test_switcher_draws_from_the_receiving_group` — with the source restored
+    to the identical md5 (`da1903d0...`) and an empty `git diff`. Mutation A
+    fails 2, including the `rho_t == 0.0` stream check that is the candidate's
+    own configuration.
+25. **The sampler is now independently validated by replay.** Reconstructing
+    the pre-clip `z` from the documented draw order recovers the two weights
+    separately: at `(0.10, 0.10)` within-round within-group 0.2075 against a
+    target 0.20 and cross-round cross-member 0.1106 against 0.10; at
+    `(0.15, 0.00)` 0.1552 and 0.1535 against 0.15 and 0.15; cross-group
+    -0.0074 / +0.0044 against 0. Replay bit-identity with `predict`'s levels
+    is asserted first, so those numbers cannot be an artefact of a wrong
+    replay. Marginal preservation was tested twice over: a binomial test
+    against the *exact analytic* marginal (worst 2.51 / 3.37 / 2.24 SEs over
+    98 bins, where four independent-sampler runs score 2.38-2.67 on the same
+    bins) and the Note-21 noise-floor comparison with the floor recomputed
+    in-test.
+26. **A real trap step 5 caught for step 6, relayed mid-flight.** Marginals
+    are preserved *across* episodes, not within one: `_copula_z` freezes a
+    group's `u_g` until `_reset_history()` clears it, so driving the sampler
+    in a plain repeated-call loop generates **one giant episode** with a
+    single frozen offset per group. Step 6's round-trip panels must reset per
+    synthetic episode and match the episode structure the estimator then keys
+    cells on, or the persistent arms are misconstructed and the `(0.03, 0)`
+    power test — the arm that decides whether the declared falsifier is live —
+    measures the wrong thing. Sent to the step-6 implementer while it was
+    still running.
