@@ -412,7 +412,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
    whatever these print, and whatever a larger or smaller dose would
    imply.**
 
-- [ ] 9. **Candidate sim config** — [Sonnet] new file
+- [x] 9. **Candidate sim config** — [Sonnet] new file
    `configs/simulation/manager_testing/23_2g8a_gmlpcop_self_gaussian_mlp_v2_group_copula_contr_gnn_switch.yml`:
    a copy of the parent's
    `23_2g8a_gmlp2_self_gaussian_mlp_v2_contr_gnn_switch.yml` in which only
@@ -893,3 +893,14 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     and lag-1 0.0309, with the Note-20 moment impossibility reproduced
     exactly; noise indicators only, not estimates. A round-dependent rho is a
     seeded follow-up, not a change to this experiment.
+34. **Step 9 confirmed (orchestrator, 2026-09-02).** Written in front rather
+    than dispatched, because it gates the run and the check is a diff. Against
+    the parent config, exactly three lines differ — `contribution_model`,
+    `output_dir`, `figure_name` — and every protocol field is byte-identical
+    (seed 42, `n_episodes` 100, `n_rounds` 24, `n_episode_steps` 24,
+    `switch_every` 4, `agent_groups` [0,0,0,0,1,1,1,1], `n_contributions` 21,
+    `n_punishments` 31, `save_per_round: true`), including the shared
+    `valid_model` and the single `lin_multinomial_copula_self` pairing.
+    `evaluation_sweep.py`'s `DIR_PATTERN` parses the new directory name to
+    `contr = gaussian_mlp_v2_group_copula`, `switch = gnn`, so the sweep
+    convention still holds.
