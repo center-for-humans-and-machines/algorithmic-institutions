@@ -1,0 +1,60 @@
+# Stage 1 of autoresearch auto/contribution-group-latent: an exact copy of
+# 23_2g8a_self_gnn_contr_gnn_switch.yml (protocol untouched -- seed 42, 100
+# episodes, 24 rounds, save_per_round) with the contribution model swapped
+# for the phase-A group-latent contributor and the output paths renamed.
+#
+# #139: full stack sweep -- as 21/22 (punishers in self-play) but with the
+# GNN punisher added as a fourth pairing and both the contribution and the
+# switch model varied: gnn contribution x gnn switch. Valid stays
+# GNN (no linear valid model exists).
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_group_latent_phaseA/model/architecture_node+edge+rnn+group_latent__dataset_50ep__phase_A__epochs_200.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_best_with_contr.joblib
+  lin_ridge:
+    type: linear
+    path: artifacts/baselines/punishment_ridge_best.joblib
+  lin_gaussian:
+    type: linear
+    path: artifacts/baselines/punishment_gaussian_best_with_contr.joblib
+  gnn:
+    type: human
+    path: artifacts/artificial_humans/punishment_rnn_edge_50ep_doubled/model/architecture_node+edge+rnn__dataset_50ep_doubled.pt
+
+pairings:
+  - name: lin_multinomial_self
+    group_0: lin_multinomial
+    group_1: lin_multinomial
+  - name: lin_ridge_self
+    group_0: lin_ridge
+    group_1: lin_ridge
+  - name: lin_gaussian_self
+    group_0: lin_gaussian
+    group_1: lin_gaussian
+  - name: gnn_self
+    group_0: gnn
+    group_1: gnn
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_group_latent_self_gnn_contr_gnn_switch
+figure_name: 2g8a_group_latent_self_gnn_contr_gnn_switch
+save_per_round: true
+basedir: .
