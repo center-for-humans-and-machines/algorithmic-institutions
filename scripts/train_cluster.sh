@@ -104,9 +104,11 @@ run_training() {
     train_cmd+=" && source ${CANONICAL_REMOTE_DIR}/.venv/bin/activate"
     local py="uv run python"
     if [[ "${REMOTE_PROJECT_DIR}" != "${CANONICAL_REMOTE_DIR}" ]]; then
-        # Shared venv + this dir's code; both propagate into sbatch jobs.
+        # Raven sets SBATCH_EXPORT=NONE; ALL is required so these
+        # variables actually reach the sbatch job.
         train_cmd+=" && export AIMANAGER_VENV=${CANONICAL_REMOTE_DIR}/.venv"
         train_cmd+=" PYTHONPATH=${REMOTE_PROJECT_DIR}/src"
+        train_cmd+=" SBATCH_EXPORT=ALL"
         py="python"
     fi
 
