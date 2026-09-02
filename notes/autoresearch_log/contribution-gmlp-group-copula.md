@@ -423,7 +423,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
    `lin_multinomial_copula_self` pairing, `save_per_round: true`,
    byte-identical protocol fields.
 
-- [ ] 10. **Job-log provenance line, Raven sim, fetch, local evaluate** — [Opus] (a)
+- [x] 10. **Job-log provenance line, Raven sim, fetch, local evaluate** — [Opus] (a)
     `scripts/run_simulation.sh` (the SLURM template): add one line before
     the `python -m aimanager simulate` call, `python -c "import sys,
     aimanager; print('PROVENANCE', sys.executable, aimanager.__file__)"`,
@@ -460,7 +460,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     SC, RCA, rows <= 1, mean, exactly as computed) against the parent's
     baseline numbers in the Declaration.
 
-- [ ] 11. **Close out** — [Opus] verdict per §2 from that single evaluation: a band
+- [x] 11. **Close out** — [Opus] verdict per §2 from that single evaluation: a band
     upgrade on CG, CA or SC **and** mean strictly below 1.6145149045441503
     is `[SUCCESS]`, anything less `[FAIL]`; no second stage, no re-run, no
     dose change. Update this log (Results, Notes: the mechanism reading —
@@ -476,6 +476,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
+| 2026-09-02 | group copula at the gaussian_mlp_v2 sampler, `rho_p = 0.04378520865574197` (censored pairwise MLE), `rho_t = 0.0` | CG 2.8292447... (**band upgrade > 5 -> 2-5**), CA 1.6416427... (**band upgrade 2-5 -> 1-2**), SC 2.6692710... (within band); guards RCA 3.4934320... (2-5, held), RCD 0.6701004... (1-2 -> <= 1) | 10/21 | 1.3138927788530981 | **SUCCESS -- gate 1 twice and gate 2 both pass** |
 
 ## 4. Notes
 
@@ -988,3 +989,77 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     the per-agent conditional law is preserved by construction — but it means
     the C-family rows will move, and the under-dispersed ones (CA -2.62,
     CC -1.86, CE -2.21 std_diff) should move toward human.
+43. **Step 10 confirmed, and the run's provenance is clean.** Job 29869716
+    (dir `8fca66b7`), ExitCode 0:0, 2:56 elapsed on ravg1005. All three
+    validity checks pass. The PROVENANCE line reads
+    `/raven/u/certuer/algorithmic-institutions/.venv/bin/python` and
+    `/u/certuer/autoresearch/contribution-gmlp-group-copula/src/aimanager/__init__.py`
+    — shared venv, **isolated dir's source**, which is exactly the failure
+    mode PR #167 note 8 and PR #168 were bitten by. The bundle's sha256 on
+    Raven is `da42031ab0ca5bc2ea355036f2e07f5dd37b369d49bf0bf6999c9ebe68d0ea7c`,
+    equal to the local stamp. And the activation check passes: the fetched
+    `per_round.parquet` (sha `72599716...`) differs from the parent's
+    (`dbb4343f...`), so the copula branch was genuinely taken — bit-identity
+    there would have meant an inactive sampler and a void run.
+44. **VERDICT: SUCCESS, on both gates, with two target band upgrades.**
+    Gate 1 twice over: **CG 5.91060457046713 -> 2.8292447** (`> 5` -> `2-5`,
+    the declared primary) and **CA 2.1657982689458293 -> 1.6416427**
+    (`2-5` -> `1-2`, a declared secondary). Gate 2: mean
+    **1.6145149045441503 -> 1.3138927788530981**, down 0.3006221256910522.
+    Rows <= 1 go 8/21 -> 10/21 (context only). Five rows change band and
+    **every one improves; none regresses**: the two targets plus PD
+    1.051227 -> 0.836562 (`1-2` -> `<= 1`), RCB 2.056138 -> 1.910008
+    (`2-5` -> `1-2`) and RCD 1.191308 -> 0.670100 (`1-2` -> `<= 1`). SC
+    2.866508 -> 2.669271 improved but stayed in band, so it is not one of the
+    upgrades.
+45. **The pre-registered prediction was one band optimistic, and that is the
+    most useful number in this log.** Note 38 predicted CG ~1.91 (`1-2`) from
+    a delta of +0.1059; the realised delta is **+0.081718** (ratio
+    0.691527 -> **0.773246**), giving CG 2.827. So the closed-loop proxy
+    **over-predicted the delta by 30%**. The likely mechanism is what proxy B
+    left out: it fixes group membership and disables switching, but the real
+    simulation reshuffles groups every 4 rounds, so an agent carries the
+    *arrival* group's latent and a per-(episode, group) latent's coherence is
+    partially scrambled at the agent level; the real stack also runs a GNN
+    validity model the proxy ignores. Both dilute the numerator relative to
+    the denominator. The same 30% shows up in CA, predicted at `std_diff`
+    ~-1.24 and realised at **-1.5958** — consistent over-prediction, not two
+    unrelated misses. **Calibration for future preflights: scale a
+    no-switching closed-loop rollout's ratio delta by ~0.77 before quoting a
+    prediction.**
+46. **The mechanism did what it claimed, on the diagnostics that are not
+    scores.** All three under-dispersion `std_diff` values move toward human
+    together: CA -2.621590 -> -1.595834, CC -1.860802 -> -0.968395, CE
+    -2.205269 -> -1.552298. That is the signature of shared group variance
+    rather than of a wider marginal, and it is why the C block improves as a
+    block (CC 1.666 -> 1.115, CD 1.309 -> 1.140, CE 1.298 -> 1.059, CF 1.722
+    -> 1.300) instead of trading off against CG. The §6 anti-correlation tax
+    did not materialise — as in PR #159, and unlike the mean-function
+    approaches.
+47. **The RCA guard behaved as designed and reported no bug.** RCA
+    3.999531 -> 3.493432, an improvement inside `2-5`. Marginal preservation
+    predicted no large move, and there was none; the improvement comes from
+    the trajectories, not the marginals. RCD is the more informative guard:
+    1.191308 -> 0.670100, a band upgrade, siding with PR #165 (contribution
+    latent improves RCD) against PR #168 (switch latent costs it) — a
+    switcher assimilating toward the receiving group's latent is real
+    switching pull, not diluted selection.
+48. **Everything that got worse, in full.** Only two rows move by more than
+    0.05 in the wrong direction and both stay at ceiling: CB 0.724767 ->
+    0.983765 (round mean contributions — the shared latent adds
+    round-to-round wobble in the group means) and RSA 0.774043 -> 0.956174
+    (switching after punishment), the latter being exactly the "RSA dilution"
+    PR #150 recorded for a shared latent: co-switching that is not
+    punishment-driven. Both remain `<= 1`. The rest is noise: SA +0.0038,
+    PA +0.0084, PB +0.0181. No row changed band for the worse.
+49. **Where this leaves the slot.** CG at 2.829 is still the largest deficit
+    in the stack, and Note 40's dose-response says the remaining gap is dose,
+    not mechanism: the fitted 0.0438 delivered 52% of the ratio gap, and the
+    same rollout puts `<= 1` near `rho_p` 0.08 — roughly twice the MLE. Two
+    honest routes, neither of which is raising the dose by hand: Note 31's
+    finding that the dependence is **not exchangeable-Gaussian** (same-group
+    co-censoring at 2.5-3.5x independence, lag-1 per-pair LR 40x synthetic),
+    which points at a latent that reproduces boundary clustering directly;
+    and Note 33's **round-growing rho** (thirds MLE 0.0271 / 0.0356 / 0.0769,
+    a 2.8x rise), which points at a round-dependent or lock-in latent and
+    echoes PR #149's seed. SC 2.669 remains the switch slot's problem.
