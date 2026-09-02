@@ -22,4 +22,11 @@ source "${{AIMANAGER_VENV:-.venv}}/bin/activate"
 
 module load cuda/11.4
 
+# Provenance, one line in every job log: which interpreter and which src/
+# actually ran. An isolated experiment dir shares the canonical checkout's
+# venv, whose editable install resolves `aimanager` to THAT checkout, so a
+# job can silently simulate the shared tree's code instead of the branch's
+# (PR #167 note 8; four of PR #168's runs). A print cannot move a score.
+python -c "import sys, aimanager; print('PROVENANCE', sys.executable, aimanager.__file__)"
+
 python -m aimanager simulate {config_path}
