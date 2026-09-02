@@ -1,0 +1,141 @@
+# Autoresearch log: contribution-peer-attention
+
+## Declaration
+
+- **Slot:** contribution
+- **Base model:** GNN (`artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt`, the reference contributor)
+- **Target rows** (reference severity-copula cell, concordant >= 2 in 10/10
+  gnn-contribution contexts of `23_stack_sweep_severity_copula`):
+  - **CG 9.808514** (band > 5; upgrade requires < 5)
+  - **RCD 2.941928** (band 2-5; upgrade requires < 2)
+  - **RCA 2.082907** (band 2-5; upgrade requires < 2)
+- **Hypothesis:** Humans condition selectively on specific peers — their own
+  group's level and its extremes — not on a uniform room average. The current
+  `NodeModel` aggregates the 7 incoming peer messages with `scatter_mean`
+  (uniform 1/7, both groups blended), so any single peer's signal is diluted
+  and the model cannot concentrate on the peers a human actually reacts to.
+  Learned attention over incoming messages lets conditioning concentrate where
+  humans' does: on the receiving group after a switch (RCD, switching pull),
+  on the own group's level for norm tracking (CG, free-running group
+  coherence — PR #149 showed peer conditioning absorbs group dependence), and
+  on the round context that drives contribution change (RCA).
+- **Planned change:** single-head edge attention in `GraphNetwork.op1` — a
+  scalar score per edge from the inputs the edge MLP already sees
+  (`[x_src, x_dest, edge_attr, u]`), `scatter_softmax` over each node's
+  incoming edges, weighted sum replacing `scatter_mean`. Flag-gated
+  (`use_attention`, default off) so legacy artifacts stay bit-identical.
+  The `same_group` edge feature (merged in PR #113) is supplied as edge input
+  so attention can learn group-selective weighting. Variant selection
+  (attention with/without same_group edge input) by Stage-1 target scores,
+  per §5.
+
+## Plan
+
+Validated by the orchestrator (targets per §2, all steps legal per §5,
+nothing on the frozen surface §8 — the `evaluation_sweep.py` marker edit in
+step 16 is analysis-layer, not frozen).
+
+- [x] 1. Worktree commit identity set (Claude / noreply@anthropic.com).
+- [x] 2. Optional keyword-only `edge_weight=None` in `NodeModel.forward`
+      (`src/aimanager/generic/graph.py`): `None` keeps the exact
+      `scatter_mean` path; a weight switches to
+      `scatter_add(edge_attr * edge_weight, col, ...)`. Legacy pickled
+      `NodeModel`s hit the default and stay bit-identical.
+- [x] 3. `EdgeAttention` module: `Lin(2*x + edge + u features -> 1)` scoring
+      `[src, dest, edge_attr, u[batch]]`, `scatter_softmax` over each
+      destination's incoming edges, returns `(E, n_rounds, 1)` weights.
+- [x] 4. `AttentionMetaLayer`: mirrors `MetaLayer.forward`; scores from the
+      pre-update `x`/`edge_attr`, passes `edge_weight=alpha` to the node
+      model. Separate class so legacy artifacts keep restoring `MetaLayer`.
+- [x] 5. Flag-gate `use_attention=False` in `GraphNetwork.__init__`; add to
+      `save()`'s `to_save` list; `load()` unchanged (legacy files omit the
+      key and default off).
+- [x] 6. Raven unit tests `src/aimanager/tests/test_graph_attention.py`:
+      off-flag equals scatter_mean exactly; alpha sums to 1 per destination;
+      zeroed score head reproduces the mean; alpha responds to same_group;
+      save/load round-trip + legacy-checkpoint load.
+- [x] 7. Run tests on Raven (`scripts/remote_test.sh`), with the
+      pending-job `squeue` check before the sync.
+- [x] 8. Two training configs, exact copies of
+      `configs/training/artificial_humans/contribution/group_switching_contribution_50ep.yml`
+      plus `use_attention: true`: `peer_attention_sg.yml` (adds
+      `edge_encoding: same_group`) and `peer_attention_nosg.yml` (no edge
+      encoding); slugged output dirs `contribution_peer_attention_{sg,nosg}`.
+- [x] 9. Train both on Raven (`scripts/train_cluster.sh ah ...`), pending-job
+      check first. Wall clock ~1-4 h each, parallel jobs.
+- [x] 10. Fetch artifacts; log per-fold test log_loss vs the reference's
+      1.9897 (sanity, not a gate); commit artifacts.
+- [x] 11. Two Stage-1 sim configs copying the reference sim config with only
+      the contribution artifact path + slugged output dirs swapped; naming
+      keeps the `..._self_<contr>_contr_<switch>_switch` pattern.
+- [x] 12. Simulate both on Raven (~3 min each).
+- [x] 13. Fetch, `python -m aimanager evaluate` locally, append Results rows
+      (unrounded) vs the known baseline (no baseline re-run).
+- [x] 14. Decision gate: better variant by Stage-1 targets (tie -> simpler,
+      no same_group); kept iff targets improve, rows<=1 >= 10, mean <=
+      1.687998; Stage 2 only on a band upgrade (CG < 5, RCD < 2, or RCA < 2).
+      **Maintainer ruling: [FAIL], no Stage 2** — neither variant improved
+      all three declared targets; nosg's RCA crossing (1.960, margin 0.04)
+      is noise-thin and RCD-taxed, the #147 pattern.
+- [x] 15. Interpretability analysis (not a gate):
+      `scripts/data_analysis/peer_attention_weights.py` — alpha on same-group
+      vs other-group edges, alpha vs peer extremeness, entropy vs uniform 1/7.
+- [~] 16. Stage 2 — SKIPPED per the step-14 ruling (no qualifying candidate).
+- [x] 17. Close out: complete the log, open the `[SUCCESS]`/`[FAIL]` PR
+      (Hypothesis / Results / Collateral) — PR #153.
+
+## Results
+
+| date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
+|---|---|---|---|---|---|---|
+| 2026-08-13 | (baseline) severity-copula reference stack | 1 | CG 9.808514112722413, RCD 2.941928428442498, RCA 2.0829074791966917 | 10/21 | 1.687998 | baseline |
+| 2026-08-13 | peer attention + same_group edge input (sg) | 1 | CG 8.406637, RCD 2.757585, RCA 2.190154 | 10/21 | 1.619010 | CG/RCD improve, RCA regresses; no band upgrade |
+| 2026-08-13 | peer attention, no edge features (nosg) | 1 | CG 8.890287, RCD 3.345678, RCA 1.960076 | 10/21 | 1.624547 | CG/RCA improve, RCA crosses 2-5 -> 1-2; RCD regresses |
+
+## Notes
+
+1. Direction chosen by the maintainer from four candidates (persistent-type
+   mixture, behavioral-mode head, peer attention, scheduled sampling);
+   scheduled sampling is already claimed by the parallel
+   `auto/contribution-cg-schedsamp` branch.
+2. Back-compat verified two ways before training: the full Raven suite (97
+   tests incl. 7 new) passes, and the zeroed-score-head test pins the
+   attention path to reproduce the uniform mean exactly. `save()` pickles
+   module objects, so the `AttentionMetaLayer` is a separate class and
+   legacy checkpoints restore the unmodified `MetaLayer` untouched.
+3. Training jobs submitted 2026-08-13: 29319275 (sg), 29319286 (nosg),
+   identical recipes to the reference (seed 38381, 575 epochs); only
+   `use_attention` and (sg) the `same_group` edge feature differ.
+4. Fit gate: clean 5-fold test log_loss (shuffle-ablation rows excluded)
+   sg 1.9822, nosg 2.0038 vs reference 2.0389 computed identically — both
+   variants beat the reference likelihood. Training took ~9 min per job.
+5. Stage 1: both variants improve the stack (mean 1.688 -> 1.62, SC 2.82 ->
+   2.4/2.2 as collateral) but each improves two declared targets and
+   regresses the third — sg is the Pareto-cleaner stack (CG 8.41, RCD 2.76,
+   best mean) yet strictly within-band; nosg crosses the RCA band boundary
+   (2.083 -> 1.960) by a 0.04 margin while breaking RCD by 0.40. The §2
+   "kept" clause reads "collectively or a selection", so whether nosg's
+   crossing legitimises a Stage 2 sweep is a judgment call — escalated to
+   the maintainer rather than decided unilaterally.
+6. Maintainer ruled [FAIL] without Stage 2: the strict all-targets reading,
+   plus the nosg crossing being 0.04 wide and bought with a 0.40 RCD
+   regression. The interpretability analysis (step 15) still runs for the
+   PR notes.
+7. Attention-weight analysis (full-data fit, teacher-forced inputs): sg
+   learned the predicted structure — mean alpha 0.1940 same-group vs 0.0659
+   other-group (~2.9x; uniform 0.1429), entropy 0.92 x ln(7), mild
+   avoid-the-outlier tilt on other-group peers (Spearman -0.19) and
+   favour-the-outlier on own group (+0.10); both variants tilt toward
+   high-contributing peers. nosg collapsed to uniform (0.1430 / 0.1426,
+   entropy 0.995 x ln(7)) — the head only finds group structure when
+   same_group is an explicit edge input, and nosg's Stage-1 deltas
+   (including the RCA 1.960) therefore rode on a noise-scale perturbation
+   of the reference architecture, retroactively supporting the FAIL ruling.
+8. Post-mortem: correct conditioning structure, wrong binding constraint.
+   sg's genuine group-selective attention moved CG only 9.81 -> 8.41 —
+   consistent with PR #149's decomposition (the CG deficit is free-running
+   state-tracking loss, not missing peer conditioning). The durable products
+   (EdgeAttention, AttentionMetaLayer, use_attention flag, tests, weights
+   script) are reusable; the natural composition is attention conditioning
+   plus a mechanism that attacks free-running drift (scheduled sampling —
+   claimed by the parallel branch — or an episode-persistent latent).

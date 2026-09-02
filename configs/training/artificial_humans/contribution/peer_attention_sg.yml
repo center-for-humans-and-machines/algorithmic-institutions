@@ -1,0 +1,70 @@
+description: >-
+  Peer-attention contribution AH, same_group variant
+  (auto/contribution-peer-attention). Exact copy of the reference recipe
+  (group_switching_contribution_50ep.yml: node+edge+rnn, hidden=20,
+  lr=3e-4, 575 epochs, seed 38381) with two additions: `use_attention:
+  true` — a single-head scored softmax over each agent's incoming peer
+  messages replacing the uniform scatter_mean — and the `same_group`
+  edge feature as attention/edge-MLP input so the weighting can be
+  group-selective. Writes to a new output_dir; the reference artifact
+  is untouched.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 575
+    attention: sg
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/contribution_peer_attention_sg
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    use_attention: True
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+    edge_encoding:
+      - name: same_group
+        etype: bool
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: False

@@ -1,7 +1,7 @@
 from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU
 import numpy as np
 import torch as th
-from torch_scatter import scatter_mean
+from torch_scatter import scatter_add, scatter_mean, scatter_softmax
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
 
@@ -37,14 +37,20 @@ class NodeModel(th.nn.Module):
                 Lin(in_features=in_features, out_features=out_features), activation
             )
 
-    def forward(self, x, edge_index, edge_attr, u, batch):
+    def forward(self, x, edge_index, edge_attr, u, batch, *, edge_weight=None):
         # x: [N, F_x], where N is the number of nodes.
         # edge_index: [2, E] with max entry N - 1.
         # edge_attr: [E, F_e]
         # u: [B, F_u]
         # batch: [N] with max entry B - 1.
+        # edge_weight: [E, ..., 1] attention weights, keyword-only. MetaLayer
+        # calls this positionally, so legacy paths always take the None branch
+        # and keep the exact uniform mean.
         row, col = edge_index
-        out = scatter_mean(edge_attr, col, dim=0, dim_size=x.size(0))
+        if edge_weight is None:
+            out = scatter_mean(edge_attr, col, dim=0, dim_size=x.size(0))
+        else:
+            out = scatter_add(edge_attr * edge_weight, col, dim=0, dim_size=x.size(0))
         out = th.cat([x, out, u[batch]], dim=-1)
         out = self.node_mlp(out)
         return out
@@ -66,6 +72,66 @@ class GlobalModel(th.nn.Module):
         # batch: [N] with max entry B - 1.
         out = th.cat([u, scatter_mean(x, batch, dim=0)], dim=-1)
         return self.global_mlp(out)
+
+
+class EdgeAttention(th.nn.Module):
+    """Single-head attention over each node's incoming edges.
+
+    Scores an edge from the same inputs the edge MLP sees and normalises the
+    scores over the incoming edges of each destination node. Tensors carry a
+    round axis, ``[E, n_rounds, F]``; ``scatter_softmax`` along dim 0 groups
+    over edges per destination and broadcasts along that round axis, so the
+    normalisation is per round.
+    """
+
+    def __init__(self, x_features, edge_features, u_features):
+        super().__init__()
+        in_features = 2 * x_features + edge_features + u_features
+        self.score = Lin(in_features=in_features, out_features=1)
+
+    def forward(self, src, dest, edge_attr, u, batch, col, n_nodes):
+        # src, dest: [E, F_x]; edge_attr: [E, F_e]; u: [B, F_u]
+        # batch: [E] with max entry B - 1; col: [E] destination node indices.
+        out = th.cat([src, dest, edge_attr, u[batch]], dim=-1)
+        out = self.score(out)
+        return scatter_softmax(out, col, dim=0, dim_size=n_nodes)
+
+
+class AttentionMetaLayer(th.nn.Module):
+    """``MetaLayer`` with attention-weighted instead of uniform aggregation.
+
+    A separate class rather than a flag on ``MetaLayer`` so pickled legacy
+    ``op1`` objects keep restoring the unmodified ``MetaLayer``.
+    """
+
+    def __init__(self, edge_model, node_model, global_model, edge_attention):
+        super().__init__()
+        self.edge_model = edge_model
+        self.node_model = node_model
+        self.global_model = global_model
+        self.edge_attention = edge_attention
+
+    def forward(self, x, edge_index, edge_attr, u, batch):
+        row = edge_index[0]
+        col = edge_index[1]
+        edge_batch = batch if batch is None else batch[row]
+
+        # Scored from the pre-update node and edge features; the weights are
+        # then applied to the edge model's output messages.
+        alpha = self.edge_attention(
+            x[row], x[col], edge_attr, u, edge_batch, col, x.size(0)
+        )
+
+        if self.edge_model is not None:
+            edge_attr = self.edge_model(x[row], x[col], edge_attr, u, edge_batch)
+
+        if self.node_model is not None:
+            x = self.node_model(x, edge_index, edge_attr, u, batch, edge_weight=alpha)
+
+        if self.global_model is not None:
+            u = self.global_model(x, edge_index, edge_attr, u, batch)
+
+        return x, edge_attr, u
 
 
 class SameGroupEdgeEncoder(th.nn.Module):
@@ -142,6 +208,7 @@ class GraphNetwork(th.nn.Module):
         add_rnn=True,
         add_edge_model=True,
         add_global_model=True,
+        use_attention=False,
         hidden_size=None,
         default_values={},
         **_,
@@ -167,8 +234,22 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+        self.use_attention = use_attention
 
         if op1 is None:
+            if use_attention:
+                assert add_edge_model, (
+                    "use_attention requires add_edge_model: attention weights "
+                    "the messages produced by the edge model"
+                )
+                # Built from the pre-widening feature sizes: it scores the raw
+                # inputs, not the edge model's output.
+                edge_attention = EdgeAttention(
+                    x_features=x_features,
+                    edge_features=edge_features,
+                    u_features=u_features,
+                )
+
             if add_edge_model:
                 edge_model = EdgeModel(
                     x_features=x_features,
@@ -200,7 +281,12 @@ class GraphNetwork(th.nn.Module):
             else:
                 gobal_model = None
 
-            self.op1 = MetaLayer(edge_model, node_model, gobal_model)
+            if use_attention:
+                self.op1 = AttentionMetaLayer(
+                    edge_model, node_model, gobal_model, edge_attention
+                )
+            else:
+                self.op1 = MetaLayer(edge_model, node_model, gobal_model)
 
             if add_rnn:
                 self.rnn_n = GRU(
@@ -436,6 +522,7 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            "use_attention",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
