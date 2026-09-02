@@ -5,6 +5,7 @@ from torch_scatter import scatter_mean
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.copula import sample_correlated_levels
 from aimanager.generic.encoder import Encoder, IntEncoder
+from aimanager.generic.joint_exodus import JointExodusHead
 
 
 class EdgeModel(th.nn.Module):
@@ -148,6 +149,8 @@ class GraphNetwork(th.nn.Module):
         copula_rho=0.0,
         copula_phi=0.0,
         copula_switch_every=None,
+        joint_exodus=False,
+        joint_exodus_head=None,
         **_,
     ):
         super().__init__()
@@ -193,6 +196,19 @@ class GraphNetwork(th.nn.Module):
         self.copula_phi = copula_phi
         self.copula_switch_every = copula_switch_every
         self._copula_z = None
+
+        # Joint exodus head, a round-level joint over the pair of leaver
+        # counts (m_0, m_1); see notes/autoresearch_log/switch-joint-exodus.md
+        # and generic/joint_exodus.py. Off by default: an artifact saved
+        # without these two keys loads with the head absent and behaves
+        # exactly as it does today.
+        assert isinstance(
+            joint_exodus, bool
+        ), f"joint_exodus must be a bool, got {joint_exodus!r}"
+        assert not joint_exodus or y_name == "does_switch", (
+            "joint_exodus is only defined for the does_switch head, " f"got {y_name}"
+        )
+        self.joint_exodus = joint_exodus
 
         if op1 is None:
             if add_edge_model:
@@ -271,6 +287,20 @@ class GraphNetwork(th.nn.Module):
             else:
                 self.bias = None
 
+            # Built LAST, so every pre-existing parameter is initialised from
+            # exactly the RNG state it saw before this head existed: a model
+            # with the head off is bit-identical to today, and a model with it
+            # on shares the same trunk weights under the same seed.
+            # `x_features` is the post-RNN node width the head reads.
+            if joint_exodus_head is not None:
+                self.joint_exodus_head = joint_exodus_head
+            elif joint_exodus:
+                self.joint_exodus_head = JointExodusHead(
+                    embed_size=x_features, hidden_size=hidden_size
+                )
+            else:
+                self.joint_exodus_head = None
+
         else:
             self.op1 = op1
             self.op2 = op2
@@ -279,8 +309,14 @@ class GraphNetwork(th.nn.Module):
             self.bias = bias
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
+            self.joint_exodus_head = joint_exodus_head
 
-    def forward(self, data, reset_rnn=True):
+        assert (self.joint_exodus_head is not None) == self.joint_exodus, (
+            "joint_exodus and joint_exodus_head disagree: "
+            f"{self.joint_exodus} vs {type(self.joint_exodus_head).__name__}"
+        )
+
+    def forward(self, data, reset_rnn=True, return_joint=False, decider_mask=None):
         x = data["x"]
         edge_index = data["edge_index"]
         if "edge_attr" in data:
@@ -298,6 +334,20 @@ class GraphNetwork(th.nn.Module):
             x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
         if self.rnn_g is not None:
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
+        # The joint exodus head branches off the post-RNN node embeddings and
+        # feeds nothing back, so the per-agent path below is untouched whether
+        # the head runs or not. `return_joint` defaults to False, so every
+        # existing call site keeps the exact signature and return type it has
+        # today. Sampling is NOT wired to this yet (plan step 4).
+        joint = None
+        if return_joint and self.joint_exodus_head is not None:
+            joint = self.joint_exodus_head(
+                x,
+                agent_group=data["agent_group"],
+                round_number=data["round_number"],
+                batch=batch,
+                decider_mask=data.get("mask") if decider_mask is None else decider_mask,
+            )
         # op2 is a readout with no edge model (edge_features=0), but NodeModel
         # always aggregates edge_attr -- feed it an empty one so a non-empty
         # edge feature consumed by op1 does not leak into the readout's widths.
@@ -309,6 +359,8 @@ class GraphNetwork(th.nn.Module):
         x, _, _ = self.op2(x, edge_index, op2_edge_attr, u, batch)
         if self.bias:
             x = x + self.bias(data["b"])
+        if return_joint:
+            return x, joint
         return x
 
     def encode(
@@ -358,6 +410,14 @@ class GraphNetwork(th.nn.Module):
         encoded["edge_attr"] = self.edge_encoder(
             edge_index=encoded["edge_index"], n_rounds=n_rounds, **edge_state
         )
+        # The joint exodus head pools by membership and conditions on the
+        # round, neither of which the per-agent path needs, so both are only
+        # carried when the head is present -- a model without it encodes
+        # exactly the keys it encodes today.
+        if self.joint_exodus_head is not None:
+            for key in ("agent_group", "round_number"):
+                assert key in data, f"the joint exodus head requires {key} in the state"
+                encoded[key] = data[key].flatten(0, 1).to(device)
         return encoded
 
     def predict_encoded(self, data, sample=True, reset_rnn=True):
@@ -519,6 +579,8 @@ class GraphNetwork(th.nn.Module):
             "copula_rho",
             "copula_phi",
             "copula_switch_every",
+            "joint_exodus",
+            "joint_exodus_head",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
