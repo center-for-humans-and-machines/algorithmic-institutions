@@ -18,7 +18,7 @@
 
 set -e
 
-source .venv/bin/activate
+source "${{AIMANAGER_VENV:-.venv}}/bin/activate"
 
 # Isolated experiment dirs share the canonical checkout's venv, whose editable
 # install resolves `aimanager` to THAT checkout -- so without this line a job
