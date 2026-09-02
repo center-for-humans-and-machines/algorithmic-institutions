@@ -273,7 +273,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
    bundle, and `rho_p + rho_t >= 1` is rejected. Local
    `pytest tests/baselines/` green.
 
-- [ ] 4. **The Gaussian group-copula sampler** — [Opus] `src/aimanager/simulation/linear_ah.py`:
+- [x] 4. **The Gaussian group-copula sampler** — [Opus] `src/aimanager/simulation/linear_ah.py`:
    (a) `_reset_history()` (line 128) additionally sets `self._copula_z = {}`
    (group id -> persistent latent `u_g`, episode state). (b) New method
    `_sample_levels_gaussian_copula(self, Xs, n_levels, groups)`, following
@@ -738,3 +738,44 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     step 6's `(0.03, 0)` round-trip arm is there to quantify rather than
     assume. Within-cell by round thirds: +0.02271 / +0.01942 / +0.03493 — a
     mild rise in the last third, the weak echo of PR #149's round-growing rho.
+21. **Step 4 confirmed (orchestrator, 2026-09-02).** `_sample_levels_gaussian_copula`
+    is in and the independent path is provably untouched — the only line
+    removed from the file is the old call site, now the `else` branch of the
+    gate. Verified by the implementer against the pre-change file loaded from
+    `git show HEAD`, not by inspection: the fields-absent adapter reproduces
+    the old levels bit-for-bit on four rounds at seed 42 and leaves the RNG at
+    the same position (next draw 0.13314196467399597). Marginal preservation
+    was measured *against its own noise floor*, which is the right calibration:
+    max abs per-agent bin-frequency deviation 0.0063 over 40,000 draws, where
+    two independent runs of the *independent* sampler at different seeds
+    differ by 0.0065 — no detectable marginal change. Dependence structure at
+    `rho_p = 0.3`: within-group pair correlation +0.2770 [0.2560, 0.2991]
+    against +0.0010 independent, cross-group +0.0013 — the 0.277 against a
+    latent 0.3 is `rint`/`clip` attenuation, so **level-based correlation
+    recovery runs ~8% low and a 0.02 tolerance on it would be too tight**.
+22. **Mutation testing found the step-4 tests have no teeth on the two
+    invariants that matter, and both gaps sit on the candidate's own
+    configuration.** I broke the sampler two ways and the full suite stayed
+    green at 256 passed both times: (a) drawing `zv` only when `rho_t > 0`,
+    which destroys stream invariance, and (b) replacing the
+    `_copula_z.setdefault` with an assignment, which redraws the persistent
+    latent every round and destroys persistence altogether. The reason is
+    visible in the test: the only behavioural case uses
+    `copula_rho_p=0.2, copula_rho_t=0.1`, both non-zero, whereas **the
+    declared candidate runs `rho_t = 0.0`** — the one configuration no test
+    exercises. Mutation (b) matters most: it would silently convert the
+    experiment into the transient-only arm, which the Declaration predicts
+    lands at CG ~6.6, and nothing would have caught it. Both mutations are
+    handed to step 5 as acceptance criteria — its test module must fail under
+    each. Worth stating why (a) is a real defect even though `sqrt(0) * v`
+    contributes nothing to the candidate: the arms in step 8 are only
+    comparable if they share an RNG stream, so a stream that depends on the
+    weights confounds the very comparison the preflight exists to make.
+23. **`z` is replayable, which step 5 should use instead of a monkeypatch.**
+    The draw order is fixed and documented, so a test can seed, call
+    `predict`, re-seed, regenerate `zu, zv, eps` in order, apply the `pick`
+    map and reconstruct `z` bit-for-bit; the implementer verified the replay
+    reproduces `predict`'s levels exactly and that the reconstructed `zu`
+    entries equal the stored `u_g`. Recovering the two weights separately
+    needs multi-round episodes: within-round within-group correlation targets
+    `rho_p + rho_t`, cross-round cross-member targets `rho_p` alone.

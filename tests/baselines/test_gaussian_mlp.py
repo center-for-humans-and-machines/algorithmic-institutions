@@ -331,9 +331,9 @@ def test_copula_rho_rejected_on_gaussian_mlp():
 
 
 # --------------------------------------------------------------------------- #
-# (3b) simulation adapter: the group-copula gate (`copula_rho_p` /
-# `copula_rho_t`) -- step 3 only opens the gate, it draws nothing; the
-# sampler that honours these fields is step 4.
+# (3b) simulation adapter: the group copula (`copula_rho_p` / `copula_rho_t`)
+# -- the configuration gate here, the sampler itself in
+# tests/baselines/test_contribution_group_copula.py.
 # --------------------------------------------------------------------------- #
 def test_copula_rho_p_t_accepted_on_gaussian_mlp_contribution():
     ad = _adapter(toy_bundle(copula_rho_p=0.05, copula_rho_t=0.02))
@@ -386,28 +386,81 @@ def test_copula_rho_p_t_accepted_as_zero_when_absent_or_none(over):
     assert ad.copula_rho_t == 0.0
 
 
-def test_copula_rho_p_t_no_behaviour_change_yet(contribution_bundle):
-    """Step 3 invariant, EXPECTED TO BE UPDATED IN STEP 4: setting the new
-    fields to a non-zero pair must leave sampling completely unchanged --
-    step 3 only opens the configuration gate, it adds no sampler branch. Once
-    step 4 lands the sampler and wires it in at `predict()`, a non-zero pair
-    will draw from the group-copula path and this test's premise (bit-identity
-    with the fields absent) will no longer hold and must be replaced."""
-    ad_legacy = _adapter(contribution_bundle)
-    ad_copula = _adapter(toy_bundle(copula_rho_p=0.2, copula_rho_t=0.1))
-    Xs = ad_legacy.scaler.transform(toy_features(8, 40))
+GROUPS = [0, 0, 0, 0, 1, 1, 1, 1]  # two groups of four, the real composition
+
+
+def _state(t):
+    """Minimal env state for `predict()`: the round index, post-arrival
+    membership, and the prev_ siblings `_record` folds into the history."""
+    A = len(GROUPS)
+    ag = th.tensor(GROUPS, dtype=th.int64).reshape(1, A, 1)
+    st = {
+        "round_number": th.full((1, A, 1), t, dtype=th.int64),
+        "agent_group": ag,
+    }
+    if t > 0:
+        st["prev_contribution"] = th.full((1, A, 1), 9.0)
+        st["prev_punishment"] = th.zeros((1, A, 1))
+        st["prev_common_good"] = th.full((1, A, 1), 12.0)
+        st["prev_agent_group"] = ag
+    return st
+
+
+def _predict_episode(ad, rounds=3):
+    """Levels per round of one episode, plus the next RNG draw -- so a
+    comparison pins the output AND the RNG consumption."""
+    out = [
+        ad.predict(_state(t), reset_rnn=(t == 0))[0].reshape(-1).numpy()
+        for t in range(rounds)
+    ]
+    return out, th.randn(1).item()
+
+
+def test_copula_rho_p_t_zero_keeps_the_legacy_path(contribution_bundle):
+    """Fields absent and fields at 0.0 must both run the INDEPENDENT sampler:
+    same levels and the same RNG consumption, one size-n draw per round. This
+    is what makes every bundle predating the group copula byte-identical."""
+    ad_absent = _adapter(contribution_bundle)
+    ad_zero = _adapter(toy_bundle(copula_rho_p=0.0, copula_rho_t=0.0))
 
     th.manual_seed(11)
-    want = [ad_legacy._sample_levels(Xs, N_CONTRIBUTIONS) for _ in range(3)]
-    want_next = th.randn(1).item()
-
+    want, want_next = _predict_episode(ad_absent)
     th.manual_seed(11)
-    got = [ad_copula._sample_levels(Xs, N_CONTRIBUTIONS) for _ in range(3)]
-    got_next = th.randn(1).item()
+    got, got_next = _predict_episode(ad_zero)
 
     for i, (w, g) in enumerate(zip(want, got)):
-        assert np.array_equal(w, g), f"call {i}: {w.tolist()} != {g.tolist()}"
+        assert np.array_equal(w, g), f"round {i}: {w.tolist()} != {g.tolist()}"
     assert got_next == want_next, "RNG consumption differs with the fields set"
+
+    th.manual_seed(11)  # legacy stream: exactly one draw of size n per round
+    for _ in range(len(want)):
+        th.randn(len(GROUPS))
+    assert th.randn(1).item() == want_next, "legacy path is not n draws/round"
+
+
+def test_copula_rho_p_t_nonzero_reaches_the_group_copula(contribution_bundle):
+    """The other half, honest since step 4: a non-zero pair must CHANGE the
+    levels -- if it does not, `predict()` never reaches
+    `_sample_levels_gaussian_copula` -- and must consume the sampler's fixed
+    three size-n float64 draws per round."""
+    ad_legacy = _adapter(contribution_bundle)
+    ad_copula = _adapter(toy_bundle(copula_rho_p=0.2, copula_rho_t=0.1))
+
+    th.manual_seed(11)
+    legacy, _ = _predict_episode(ad_legacy)
+    th.manual_seed(11)
+    copula, copula_next = _predict_episode(ad_copula)
+
+    assert any(
+        not np.array_equal(a, b) for a, b in zip(legacy, copula)
+    ), "a non-zero (rho_p, rho_t) left the levels unchanged"
+    assert set(ad_copula._copula_z) == set(GROUPS), "no persistent latent stored"
+
+    th.manual_seed(11)  # copula stream: zu, zv, eps of size n, every round
+    for _ in range(len(copula)):
+        for _ in range(3):
+            th.randn(len(GROUPS), dtype=th.float64)
+    assert th.randn(1).item() == copula_next, "sampler is not 3n draws/round"
 
 
 # --------------------------------------------------------------------------- #
