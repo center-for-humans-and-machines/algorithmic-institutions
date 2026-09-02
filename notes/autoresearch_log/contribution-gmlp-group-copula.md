@@ -367,7 +367,7 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
    `structure = "persistent_episode_group"`, data file, base bundle sha256,
    git sha, timestamp. Record all numbers in Notes before step 7.
 
-- [ ] 7. **The stamper** — [Sonnet] new file `scripts/baselines/stamp_contribution_group_copula.py`
+- [x] 7. **The stamper** — [Sonnet] new file `scripts/baselines/stamp_contribution_group_copula.py`
    (precedent: PR #160's `save_bundle`, PR #165's
    `make_contribution_copula_artifact.py`; **never** via
    `inspect_best_model.py`). Loads the base bundle and the step-6 JSON,
@@ -904,3 +904,31 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     `evaluation_sweep.py`'s `DIR_PATTERN` parses the new directory name to
     `contr = gaussian_mlp_v2_group_copula`, `switch = gnn`, so the sweep
     convention still holds.
+35. **Step 7 confirmed (orchestrator, 2026-09-02).** `contribution_gaussian_mlp_v2_group_copula.joblib`,
+    sha256 **da42031ab0ca5bc2ea355036f2e07f5dd37b369d49bf0bf6999c9ebe68d0ea7c**
+    (re-checked here, and to be re-checked again on Raven in step 10). Base
+    bundle sha256 matched the value the params sidecar recorded. 21 keys in,
+    33 out: 12 added, none removed, and the 19 directly comparable shared keys
+    are value-equal. The two that are not comparable by `==` are the
+    `estimator` and `scaler` objects, so I checked those the way that
+    actually matters — on all 7457 train rows the stamped bundle's scaler
+    output, `predict` and `predict_std` are **bit-identical** to the base
+    (`np.array_equal`). The model is numerically untouched; only the
+    dependence structure differs. Read back through `LinearAHAdapter`:
+    `copula_rho_p = 0.04378520865574197`, `copula_rho_t = 0.0`, accepted by
+    the step-3 gate; the deterministic (`sample=False`) path returns identical
+    levels to the base adapter over a 6-round sequence including a switch.
+36. **A correction to the plan's own text:** step 7 called the stamped bundle
+    "LFS-tracked like its siblings". It is not — `.gitattributes` tracks only
+    `*.csv`, `*.parquet` and `*.pt`, so none of the joblib bundles are, and
+    this one commits as a plain ~4 KB binary exactly like
+    `contribution_gaussian_mlp_v2_best.joblib`. `.gitattributes` was not
+    touched.
+37. **One check of mine was malformed and is recorded so the log is not
+    misleading.** I first tried to verify "every pre-existing key is the
+    identical object" by loading both bundles separately and testing `is`.
+    That cannot work: two independent `joblib.load` calls unpickle to distinct
+    objects, so the test reports False regardless of correctness. The
+    identity claim is only meaningful in-process at construction time, where
+    the stamper asserts it; across a reload the right check is numerical
+    bit-identity, which is what Note 35 reports.
