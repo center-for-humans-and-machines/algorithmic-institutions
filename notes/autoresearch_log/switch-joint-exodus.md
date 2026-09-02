@@ -219,6 +219,7 @@ protocol, seeds and episode count are the parent's.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-09-02 | round-level joint head over the leaver-count pair (m_0, m_1), detached from the trunk, with conditional-Bernoulli selection of who leaves | single | **SC 1.147392663266986** (baseline 2.1867905905576634) | 11/21 (baseline 11/21) | 1.3040409569053069 (baseline 1.2893632310269196) | **FAIL** — gate 1 passes (SC 2-5 -> 1-2), gate 2 fails (mean +0.0146777258783870) |
 
 ## Notes
 
@@ -315,3 +316,66 @@ protocol, seeds and episode count are the parent's.
    linear-manager tests missing fixtures under `artifacts/` and `plots/`, which
    `remote_test.sh` excludes from its sync by design and which CLAUDE.md says run
    locally.
+12. **Verdict: `[FAIL]`.** Gate 1 passes decisively — SC 2.1867905905576634 ->
+   1.147392663266986, a band upgrade 2-5 -> 1-2, the largest single-row
+   improvement this slot has recorded on this stack. Gate 2 fails: the 21-row
+   mean rose from 1.2893632310269196 to 1.3040409569053069, +0.0146777258783870.
+   Both gates are required (§2), so this is a fail whatever the size of the SC
+   move. For the maintainer's calibration at review, the mean margin sits between
+   the two standing precedents: PR #164 was overridden at 0.003, PR #168 was not
+   at 0.031. This one is 0.0147. I am not arguing the override; I am recording
+   where it falls.
+13. **SC did not get fixed — its error changed sign.** The larger-group-size
+   distribution now *overshoots* the human right tail. Mass on the fully merged
+   state: human 0.1440, parent 0.0560, candidate 0.2140 — the parent's shortfall
+   of -0.0880 became an excess of +0.0700, and every other bin is correspondingly
+   deficient. Mean larger-group size: human 6.088, parent 5.676, candidate 6.286.
+   The EMD fell from 0.4119999999999999 to 0.19799999999999995 against a ceiling
+   of 0.19452799999999945, which is why the score lands just above 1. The residual
+   is now entirely "too much merging", where the parent's was "too little", and
+   the per-round line turns *upward* over rounds 16-20 (6.13 -> 6.33) where the
+   human line declines (5.92 -> 5.84). The trajectory shape is wrong at the end of
+   the game, not merely the level. A successor should aim at calibrating the dose,
+   not at adding more.
+14. **The conditional-Bernoulli protection was falsified, and the reason is
+   structural.** The Declaration asserted that conditioning on the count and
+   selecting movers by propensity would protect RCD, the row PR #168's shared
+   latent broke. RCD degraded anyway, a full band, 1.9647336396755046 ->
+   2.764919035295771 — the largest movement in the table. The protection is
+   vacuous exactly where the mechanism is most active: when the head draws
+   m = k, there is precisely one subset (C(k,k) = 1) and no selection is made at
+   all — everybody leaves regardless of propensity. Measured on the two runs'
+   own parquets, full-exodus cells rose from 0.0869 to 0.1424 of decision cells
+   (human reference 0.1079 from step 2's clean estimate, so the candidate
+   overshoots the human rate too), and the share of all movers sitting inside a
+   full-exodus cell rose from 0.1766 to 0.3043. Nearly a third of the candidate's
+   movers are selected by no propensity whatsoever. **Any successor that buys SC
+   through full-group exodus inherits this: the assortativity defence and the SC
+   lever are in direct tension, because the same event supplies both.**
+15. **The collateral splits cleanly along one seam.** Every contribution row
+   improved (CA -0.123, CB -0.114, CD -0.112, CE -0.205, CC -0.044, CF -0.075
+   crossing into the ceiling) and the punishment family improved (PA, PB, and PD
+   -0.057 crossing into the ceiling), giving three band upgrades in total with SC.
+   Every consequential worsening is in the relational/switching block: RCD +0.800
+   and RCB +0.286 (both 1-2 -> 2-5), RSA +0.421 and SB +0.206 (both leaving the
+   ceiling), with RCA and RCC drifting up within band. The improvements sum to
+   -0.7735 and the worsenings to +0.9818, which is the whole of gate 2's failure.
+   Three upgrades against four degradations, rows <= 1 unchanged at 11/21 with the
+   composition rotated: CF and PD in, SB and RSA out.
+16. **SB behaved exactly as PR #169 note 11 predicted**, which is worth recording
+   as a successful forecast rather than a surprise: a mechanism that drives the
+   simulation into more unbalanced states raises the realised switch rate in the
+   late decision rounds, and SB pays. SB 0.8592497281751998 -> 1.06526788518747,
+   raw mean per-round gap 0.0166 -> 0.0263 against a ceiling of 0.0394. SA stayed
+   inside the ceiling but its raw gap grew 4.8x, 0.00208 -> 0.00992.
+17. A measurement convention worth fixing in memory, because it nearly misled the
+   reading of this run. SC is defined over rounds 4 onward
+   (`metrics.py`, and `evaluation_metric_defs.md`: rounds 0-3 excluded because
+   groups are always 4-4 before the first switch). Computing the same statistic
+   over all 24 rounds drags the parent's mean larger-group size from 5.676 to
+   5.3967, purely by adding 400 rounds that are 4 by construction. Restricting
+   instead to the five post-decision anchor rounds {4, 8, 12, 16, 20} gives a
+   bit-identical mean to the full window, since membership is constant between
+   decision rounds — so the anchor convention can never explain a mean
+   discrepancy, only a change in n. Mixing the two conventions across a human and
+   a simulated number makes an overshoot look half its true size.
