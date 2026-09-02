@@ -20,6 +20,14 @@ set -e
 
 source .venv/bin/activate
 
+# Isolated experiment dirs share the canonical checkout's venv, whose editable
+# install resolves `aimanager` to THAT checkout -- so without this line a job
+# submitted from an isolated dir silently runs the shared tree's code instead
+# of the experiment's. --chdir=. puts us in the submitting dir, so $PWD/src is
+# this experiment's source. Mirrors the preamble the stamping SLURM templates
+# already use. No effect in the canonical checkout, where the two coincide.
+export PYTHONPATH="$PWD/src${{PYTHONPATH:+:$PYTHONPATH}}"
+
 module load cuda/11.4
 
 if [ -f .env ]; then
