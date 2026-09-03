@@ -17,7 +17,10 @@ set -euo pipefail
 
 # ── Configuration ────────────────────────────────────────────────────
 REMOTE_HOST="raven"
-REMOTE_PROJECT_DIR="~/algorithmic-institutions"
+CANONICAL_REMOTE_DIR="~/algorithmic-institutions"
+# Set AI_REMOTE_DIR to sync and test in an isolated experiment dir
+# (shared venv + own code via PYTHONPATH; no venv of its own).
+REMOTE_PROJECT_DIR="${AI_REMOTE_DIR:-${CANONICAL_REMOTE_DIR}}"
 LOCAL_PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOG_DIR="${LOCAL_PROJECT_DIR}/.claude/test-logs"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
@@ -71,6 +74,9 @@ check_ssh() {
 # ── Step 2: Sync files ──────────────────────────────────────────────
 sync_files() {
     info "Syncing files to ${REMOTE_HOST}:${REMOTE_PROJECT_DIR}..."
+    if [[ "${REMOTE_PROJECT_DIR}" != "${CANONICAL_REMOTE_DIR}" ]]; then
+        ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_PROJECT_DIR}"
+    fi
     rsync -azP --delete \
         --filter='P /.env' \
         --filter=':- .gitignore' \
@@ -92,7 +98,13 @@ sync_files() {
 run_tests() {
     info "Running tests on ${REMOTE_HOST}..."
 
-    local pytest_cmd="cd ${REMOTE_PROJECT_DIR} && source .venv/bin/activate && python -m pytest"
+    local pytest_cmd="cd ${REMOTE_PROJECT_DIR}"
+    if [[ "${REMOTE_PROJECT_DIR}" == "${CANONICAL_REMOTE_DIR}" ]]; then
+        pytest_cmd+=" && source .venv/bin/activate && python -m pytest"
+    else
+        pytest_cmd+=" && source ${CANONICAL_REMOTE_DIR}/.venv/bin/activate"
+        pytest_cmd+=" && PYTHONPATH=${REMOTE_PROJECT_DIR}/src python -m pytest"
+    fi
 
     if [[ ${#PYTEST_ARGS[@]} -eq 0 ]]; then
         pytest_cmd+=" src/ -v --tb=short"

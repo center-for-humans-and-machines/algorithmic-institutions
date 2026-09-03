@@ -11,11 +11,17 @@
 #   scripts/simulate_cluster.sh --sync-only        # sync files only
 #   scripts/simulate_cluster.sh --no-sync <config> # simulate without syncing
 #
+# Set AI_REMOTE_DIR to sync and run in an isolated remote dir (e.g.
+# ~/autoresearch/<slug>) instead of the shared checkout. Isolated dirs
+# carry no venv: jobs use the shared checkout's venv and import their
+# own code via PYTHONPATH.
+#
 set -euo pipefail
 
 # ── Configuration ────────────────────────────────────────────────────
 REMOTE_HOST="raven"
-REMOTE_PROJECT_DIR="~/algorithmic-institutions"
+CANONICAL_REMOTE_DIR="~/algorithmic-institutions"
+REMOTE_PROJECT_DIR="${AI_REMOTE_DIR:-${CANONICAL_REMOTE_DIR}}"
 LOCAL_PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 # ── Parse arguments ──────────────────────────────────────────────────
@@ -60,13 +66,22 @@ check_ssh() {
 # ── Step 2: Sync files ──────────────────────────────────────────────
 sync_files() {
     info "Syncing files to ${REMOTE_HOST}:${REMOTE_PROJECT_DIR}..."
+    local artifacts_opts=(--exclude='artifacts/')
+    if [[ "${REMOTE_PROJECT_DIR}" != "${CANONICAL_REMOTE_DIR}" ]]; then
+        # Isolated experiment dir: create it and ship the small AH
+        # artifacts its configs reference (manager artifacts not needed).
+        ssh "${REMOTE_HOST}" "mkdir -p ${REMOTE_PROJECT_DIR} \
+            && cp -n ${CANONICAL_REMOTE_DIR}/.env ${REMOTE_PROJECT_DIR}/ \
+            2>/dev/null || true"
+        artifacts_opts=(--exclude='artifacts/manager/')
+    fi
     rsync -azP --delete \
         --filter='P /.env' \
         --filter=':- .gitignore' \
         --exclude='.git/' \
         --exclude='.venv/' \
         --exclude='.log/' \
-        --exclude='artifacts/' \
+        "${artifacts_opts[@]}" \
         --exclude='plots/' \
         --exclude='temp/' \
         "${LOCAL_PROJECT_DIR}/" \
@@ -80,8 +95,17 @@ run_simulation() {
     info "Config: ${CONFIG_FILE}"
 
     local sim_cmd="cd ${REMOTE_PROJECT_DIR}"
-    sim_cmd+=" && source .venv/bin/activate"
-    sim_cmd+=" && uv run python"
+    sim_cmd+=" && source ${CANONICAL_REMOTE_DIR}/.venv/bin/activate"
+    if [[ "${REMOTE_PROJECT_DIR}" == "${CANONICAL_REMOTE_DIR}" ]]; then
+        sim_cmd+=" && uv run python"
+    else
+        # Raven sets SBATCH_EXPORT=NONE; ALL is required so these
+        # variables actually reach the sbatch job.
+        sim_cmd+=" && export AIMANAGER_VENV=${CANONICAL_REMOTE_DIR}/.venv"
+        sim_cmd+=" PYTHONPATH=${REMOTE_PROJECT_DIR}/src"
+        sim_cmd+=" SBATCH_EXPORT=ALL"
+        sim_cmd+=" && python"
+    fi
     sim_cmd+=" src/aimanager/simulation/run.py"
     sim_cmd+=" ${CONFIG_FILE}"
 

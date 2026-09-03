@@ -16,8 +16,8 @@ definitions in `notes/evaluation_metric_defs.md`).
 ## 2. The metrics
 
 Everything comes from one `evaluation/scores.csv` (21 rows), judged against
-the evaluation stack's own baseline scores (§3). Two gates, both required
-for success:
+the evaluation stack's own baseline scores (§3; on a parent `[SUCCESS]` PR,
+the parent's — §9). Two gates, both required for success:
 
 1. **A band upgrade on a target row.** The scoring bands
    (<= 1 / 1-2 / 2-5 / > 5) are the classes: at least one row your
@@ -25,9 +25,10 @@ for success:
    than its baseline — from > 5 into 2-5, from 2-5 into 1-2 or <= 1, from
    1-2 into <= 1. A within-band improvement, however large, is a `[FAIL]`
    with valuable notes, not a success.
-2. **The mean score improves.** The average over all 21 rows must drop
-   below the evaluation stack's baseline mean — you cannot buy your targets
-   by breaking the rest of the stack.
+2. **The mean score holds.** The average over all 21 rows may not rise
+   more than 10% above the evaluation stack's baseline mean (e.g. baseline
+   1.76 -> ceiling 1.936). A band upgrade is allowed to cost a little
+   elsewhere — but not to be bought by breaking the rest of the stack.
 
 Nothing else gates. **Rows <= 1** (rows at or below the human-vs-human
 noise ceiling) is still computed and reported in every results table (§10),
@@ -109,6 +110,16 @@ that sentence, the change is a frankenstein — do not make it.
 
 Ties go to the simpler model.
 
+**Iteration budget.** The loop lives on fast retrains, so wall-clock is a
+constraint, not a footnote. Before adopting a method, check your base
+model's current training time from recent plain runs (the SLURM logs of
+the latest `train-ah` jobs on Raven); any method that needs **more than
+3x that** is ruled out, whatever it promises. Example: scheduled
+sampling — it replaces teacher-forced parallel batches with sequential
+own-rollout unrolling, pushing one training to ~1.5 h; at several
+variants per hypothesis that turns a same-day experiment into a
+multi-day one, which is why the schedsamp family is vetoed (PR #163).
+
 ## 6. Where to aim
 
 The failing rows depend on the base model — the GNN contributor fails CG
@@ -130,7 +141,9 @@ target list: fetch your base model's deficit profile, then declare targets.
 **How to read it:** filter `score_matrix.csv` to your base model's contexts,
 average over the other two slots, rank your slot's rows with score >= 2 —
 that is your target list. Check concordance first: a deficit that appears in
-one context is noise, not a direction.
+one context is noise, not a direction. (Building on a parent `[SUCCESS]`
+PR: the matrix does not contain the parent's candidate — the deficit
+profile comes from the parent's own `evaluation/scores.csv` instead, §9.)
 
 **Known constraints, whatever the base model:** CG, PD, and SC share one
 root cause — independent per-agent sampling ignores between-participant
@@ -174,14 +187,18 @@ to the human maintainer.
 
 ## 9. Work process
 
-**Roles.** The orchestrator is a **Fable** model; planning, implementation,
-and analysis are delegated to **Opus** subagents, one task at a time. The
-orchestrator decides, validates, and confirms; subagents execute — they
-never decide scope.
+**Roles.** **Fable** opens the experiment and nothing more: research,
+declaration, plan (loop steps 1-3). **Opus**
+orchestrates everything after — on receiving the declaration and the plan
+it validates the plan and attaches an implementer to every step: an
+**Opus** engineer where the step is complicated or risky, a **Sonnet**
+agent otherwise, for cost efficiency. It then dispatches subagents one
+step at a time, each to the model its step carries, and confirms each
+result. Subagents execute; they never decide scope.
 
 **Branch and worktree.** Every experiment lives on its own branch,
-`auto/<slot>-<slug>`, checked out in its **own git worktree** — parallel
-experiments never share a checkout. Name new configs, artifacts, and sim
+`auto/<slot>-<slug>`, checked out in its **own git worktree** under
+`.claude/worktrees/<slug>` — parallel experiments never share a checkout. Name new configs, artifacts, and sim
 output dirs with the same slug so runs cannot collide on paths either.
 Commits via the `/commit` skill; one experiment = one branch = one PR.
 Branches start from `main` — unless the maintainer targets a parent PR:
@@ -200,6 +217,17 @@ log file, backed by the parent branch's own sim output
 (`plots/simulation/<parent-slug...>/evaluation/scores.csv`, in your
 worktree since you branched off it). Name the parent PR in your
 declaration (§10).
+
+**Remote isolation.** The same rule holds on Raven: parallel experiments
+never share the remote checkout. Every `train_cluster.sh` /
+`simulate_cluster.sh` / `fetch_cluster.sh` call from an experiment worktree
+sets `AI_REMOTE_DIR='~/autoresearch/<slug>'`, which syncs and runs in that
+dir instead of the shared `~/algorithmic-institutions` — the shared
+checkout is synced from `main` only and owns the single venv. Isolated
+dirs carry no venv: the scripts wire the shared venv plus the dir's own
+`src/` via PYTHONPATH into the jobs automatically, so each job imports
+exactly its branch's code. Outputs land inside the dir; fetch from there.
+When the experiment's PR closes, delete the remote dir.
 
 **Commit identity.** Autoresearch commits are authored by Claude, not the
 human — the human only reviews and merges. In the experiment worktree, set
@@ -222,24 +250,30 @@ machine account may replace this later.
    profile (§6).
 2. Create the branch and worktree; write the declaration in your log
    file (§10).
-3. **Plan** — a planning subagent turns the hypothesis into a **simple
-   numbered list of steps**, nothing more elaborate. The orchestrator
-   validates it before anything runs — targets per §2, every step legal per
-   §5, nothing on the frozen surface (§8) — then records it in the log file
-   and commits it.
-4. **Implement** — one subagent per step. The orchestrator confirms each
-   step's result before dispatching the next and commits at each confirmed
-   step — commits map to steps, never one monolith. If a step reveals the
-   plan is wrong, revise the step list first (through validation again),
-   then continue.
+3. **Plan** — Fable turns the hypothesis into a numbered list of
+   implementation steps in the style of
+   [signifier-trainer#13](https://github.com/cemrtkn/signifier-trainer/issues/13):
+   clearly separated steps that build on each other, each opening with a
+   bold name and the exact place to change (file, function, config; new or
+   existing), then what exactly changes there — understandable and
+   concise. The orchestrator validates it before anything runs — targets
+   per §2, every step legal per §5, nothing on the frozen surface (§8) —
+   attaches an implementer to every step (Opus or Sonnet, per Roles), then
+   records the tagged plan in the log file and commits it.
+4. **Implement** — one subagent per step, sent to the model its step
+   carries. The orchestrator confirms each step's result
+   before dispatching the next and commits at each confirmed step —
+   commits map to steps, never one monolith. If a step reveals the plan is
+   wrong, revise the step list first (through validation again), then
+   continue.
 5. Train, simulate, evaluate per §3 and §7; log every run (§10).
 6. The verdict comes straight from that single evaluation, per §2: a band
-   upgrade on a target row *and* a better mean is a success; anything less
-   is a fail. There is no second stage.
+   upgrade on a target row with the mean inside the 10% margin is a
+   success; anything less is a fail. There is no second stage.
 7. **Every experiment ends in a PR** — titled `[SUCCESS] ...` (band upgrade
-   on a target row and the mean improved) or `[FAIL] ...` (no band upgrade,
-   or the mean did not improve; never merged — it exists so the next agent
-   does not retry it).
+   on a target row, mean within the margin) or `[FAIL] ...` (no band
+   upgrade, or the mean rose past it; never merged — it exists so the next
+   agent does not retry it).
    No silent abandonment. The body, in order:
    1. **Hypothesis** — brief: the behavioral claim, the planned change, and
       the targeted rows with their starting scores.
@@ -257,12 +291,12 @@ file. Four sections, in this order:
 
 1. **Declaration** — slot, base model, target rows, hypothesis, planned
    change.
-2. **Plan** — the validated step list from §9, checked off as steps are
-   confirmed.
+2. **Plan** — the validated, implementer-tagged step list from §9, checked
+   off as steps are confirmed.
 3. **Results** — one row per run:
 
-   | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
-   |---|---|---|---|---|---|---|
+   | date | change (one line) | target scores | rows <= 1 | mean | verdict |
+   |---|---|---|---|---|---|
 
 4. **Notes** — a numbered list (`1.`, `2.`, ...), appended as you go: what
    you observed, what you decided and why, dead ends and what killed them.
