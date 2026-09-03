@@ -817,3 +817,43 @@ episodes, 500/500 repeats. Baseline is PR #172's own candidate run, whose
     8 long (0.186 against 0.144), and the human decay of P(L=8) to 0.06 by
     rounds 12-15 is still absent (candidate 0.15) — a dissolution-path
     deficit, not a formation one.
+20. (Orchestrator, post-verdict finding) **The late SC divergence is a
+    contribution-slot failure, not a switch-slot one.** Decomposing each
+    decision round into state occupancy x transition hazard and
+    cross-swapping the two: the human hazard on this candidate's own
+    occupancy takes round 19 from 6.32 to **6.02** (human 5.84), the human
+    occupancy on this candidate's hazard only to 6.22 — so **62% of the gap
+    is hazard, 21% occupancy**, concentrated at pre-sizes 6 and 7. The
+    switch rule itself is faithful: P(leave | own per-capita common good)
+    over bins <5 / 5-10 / 10-12.5 / 12.5-15 / 15-17.5 / >17.5 is human
+    0.39 / 0.30 / 0.31 / 0.28 / 0.18 / 0.16 against 0.48 / 0.34 / 0.24 /
+    0.26 / 0.17 / 0.17 here. The **input** is inverted. `common_good` is the
+    switch model's only group-quality signal and is per-capita
+    (`generic/data.py:114` divides the pool by the group's valid
+    contributors); mean per-capita CG at n = 1/2/4/6/7/8 is human
+    16.5 / 14.3 / 15.5 / 14.5 / 14.4 / 11.8 (OLS slope **−0.166**) against
+    9.8 / 13.9 / 14.0 / 15.4 / 16.4 / 16.2 here (**+0.739**), driven by the
+    contributor's contribution-by-size slope **+0.402** where the human is
+    **−0.151** (10.54 alone, 8.19 merged). Humans have the payoff right —
+    a contributed point returns `1.6 / n` to the contributor, 1.6 alone and
+    0.2 in a group of eight — and the contributor has it backwards.
+21. (Orchestrator, post-verdict finding) **Why that makes the divergence
+    late, and why it also owns U1's residual.** The per-capita CG gap
+    (small − big) scales with imbalance and with **opposite sign**: human
+    −2.1 / −0.8 / **+0.6** at |dn| = 2/4/6 against **−0.3 / −1.4 / −6.5**
+    here. So while groups sit near 4-4 the two stacks agree (SC anchors
+    6.37 / 6.25 / 5.97 against human 6.44 / 6.20 / 6.04) and once imbalance
+    appears the small group's CG collapses in simulation only, the switch
+    rule correctly drains it, the imbalance deepens and the loop runs —
+    human late drift mean-reverts to ~5.6-5.8, this stack's fixed point is
+    ~6.2-6.3. The same root cause owns the U1 residual of Note 15: a
+    singleton's per-capita CG is entirely self-determined
+    (`1.6 x own contribution − own punishment`), the sim's lone player
+    contributes 7.29 against the human 10.54, so reads 9.8 against 16.5 and
+    leaves at the p ~ 0.48 its own rule assigns — a self-fulfilling exodus
+    that no count-level head can reverse, which is why the one-hot closed
+    only 31% of that gap. **Successor: the contribution slot**, own-group
+    size as a one-hot over n in {1..8} or the single scalar `1/n`. PR #173
+    tried group size *numeric* there and failed ("CE moved half the
+    distance"); this says why — the effect is ~`1/n` and no linear term in
+    `n` can bend that curve.
