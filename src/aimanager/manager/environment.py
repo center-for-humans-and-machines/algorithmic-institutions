@@ -160,6 +160,11 @@ class ArtificialHumanEnv:
             ),
             "does_switch": th.zeros(size, dtype=th.bool, device=self.device),
             "switch_mask": th.zeros(size, dtype=th.bool, device=self.device),
+            # groups are 4-4 at reset, so this is 4 everywhere; derived
+            # rather than hard-coded so any initial split is honoured.
+            "own_group_size": self.agent_group_mask.sum(dim=1).gather(
+                1, self.agent_groups
+            ),
         }
 
         prev_state = {
@@ -313,8 +318,20 @@ class ArtificialHumanEnv:
             th.full_like(own_sum, default),
         )
 
+    def update_own_group_size(self):
+        """Provide the own_group_size node feature for the contribution AH:
+        the number of MEMBERS of the agent's CURRENT group, broadcast back to
+        each agent. agent_group_mask is pure membership, so a member who
+        timed out still counts -- matching data.py's training-time column.
+        Must run each round after groups are set (i.e. after apply_switch)
+        and before update_contribution's forward pass."""
+        # (B, n_agents, n_groups, 1) membership -> per-group member count
+        grp_size = self.agent_group_mask.sum(dim=1)
+        self.state["own_group_size"] = grp_size.gather(1, self.agent_groups)
+
     def update_contribution(self):
         self.update_own_grp_prev_mean_contr()
+        self.update_own_group_size()
         contribution = self.artifical_humans.predict(
             self.state,
             reset_rnn=self.round_number[0, 0, 0] == 0,
