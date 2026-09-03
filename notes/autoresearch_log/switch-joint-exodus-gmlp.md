@@ -930,3 +930,49 @@ runs once per step before staging, not after every edit.
     `~/autoresearch/contribution-group-size` intact, nothing outside our
     own isolated dir touched, no `sbatch` submitted.
 
+29. (Orchestrator, step 10 confirmed) Job **29892851**, `COMPLETED`,
+    ExitCode `0:0`, elapsed **00:04:36** against the §5 ceiling of
+    ~10.6 min. All three proofs verified independently of the
+    implementer's report.
+    **Provenance:** the job log's first line is
+    `PROVENANCE /raven/u/certuer/algorithmic-institutions/.venv/bin/python /u/certuer/autoresearch/switch-joint-exodus-gmlp/src/aimanager/__init__.py`
+    — shared venv's interpreter, `aimanager` under the isolated dir —
+    and `algorithmic-institutions/src` does not appear in the log. This
+    is the first live exercise of step 1's in-job `PYTHONPATH` export
+    and PROVENANCE echo, and both worked.
+    **Artifact:** sha256 `ecd231f4…1133f33`, identical remote and local,
+    LFS-filtered; loads with `joint_exodus True`,
+    `joint_exodus_switch_every 4`, head `Linear(23 -> 10) -> Tanh ->
+    Linear(10 -> 81)`, **1,131 parameters**.
+    **Detach (the acceptance gate): PASS.** Recomputed from the fetched
+    `metrics/*.parquet` myself (`name == "log_loss"`, `set == "test"`,
+    unperturbed rows, last epoch 374): base 5-fold mean
+    **0.5163464160282509**, reproducing §1's declared figure to the last
+    digit, candidate **0.5169947301762930**, mean delta
+    **+0.0006483141**, per-fold signs **- - - + -**, i.e. **mixed** —
+    four folds improve, fold 3 degrades by +0.0066. An RNG realisation,
+    not a systematic shift, so the trunk was not re-fitted.
+30. (Orchestrator, the strongest faithfulness evidence so far) #171
+    measured **+0.00065** for its detached run and +0.0042 when the head
+    was attached. This branch measures **+0.0006483**. Same base
+    artifact, same config, same seed 38381, same RNG consumption from
+    constructing the head — so an independent reimplementation landing
+    on the same realisation is stronger evidence of faithfulness than
+    the matching 1,131-parameter count, because it is a whole-training
+    outcome rather than a structural coincidence. The head also learned
+    on every fold: joint loss ~3.01 -> ~1.99 nats, monotone across all
+    five folds and the full-data refit, starting already below the
+    `log 81 = 4.39` uniform (the count mask alone buys that). Those
+    values are recorded in the parquet and match the job log exactly.
+31. (Orchestrator, two operational notes from step 10) The queue held one
+    PENDING job at sync time, `29892804 cg_copula_stamp`, and
+    `scontrol` put its `WorkDir` in `~/autoresearch/contribution-group-size`
+    — the parallel experiment's dir, not ours, so the `rsync --delete`
+    was safe; its `Reason=QOSGrpCpuLimit` is the group CPU cap, not a
+    dependency on us. And `GraphNetwork.load` needs `device="cpu"`
+    explicitly on the login node: the raw call deserialises CUDA
+    storages and fails there. That is a property of the base loader, not
+    of this change. Also, both parquets carry a `job_id` string
+    identical to the base run's, so a metrics file is distinguishable
+    from the base's only by its directory, never by its contents.
+
