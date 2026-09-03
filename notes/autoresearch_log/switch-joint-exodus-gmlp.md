@@ -1099,3 +1099,21 @@ runs once per step before staging, not after every edit.
     out in Note 5 is one such lever, and this run is the evidence for or
     against it that the ruling asked for rather than assumed.
 
+39. (Orchestrator, a §9 deviation of mine, recorded) §9 says the remote
+    isolated dir is deleted **when the experiment's PR closes**. I
+    deleted `~/autoresearch/switch-joint-exodus-gmlp` (46 MB) at PR
+    *open* instead — too early by my own framework's rule. What that
+    cost: the raw SLURM job logs are no longer on the remote and are not
+    recoverable. What it did **not** cost, checked before saying so: the
+    three jobs' `sacct` records remain queryable (29892851 `COMPLETED`
+    `0:0` 00:04:36; 29893190 `COMPLETED` `0:0` 00:02:19; 29893192
+    `COMPLETED` `0:0` 00:01:40); every `PROVENANCE` line is quoted
+    verbatim in this log; the per-fold agent and joint losses are in the
+    committed `metrics/*.parquet` as well as here; and all artifact and
+    parquet sha256s are recorded, with the artifacts, sim outputs and
+    evaluation committed. So nothing load-bearing for the verdict or for
+    a reviewer is lost, but a maintainer who wanted to re-read a job log
+    directly cannot, and the correct time to delete was after close.
+    `~/autoresearch/contribution-group-size` and
+    `~/autoresearch/switch-joint-exodus` were left untouched.
+
