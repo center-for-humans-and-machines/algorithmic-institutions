@@ -595,3 +595,36 @@ against the contribution slot's ~24 min training ceiling.
     the one that matters for the comparison's validity: the candidate differs
     from its own trunk only in how it samples, so the stack comparison isolates
     one change.
+
+14. **Both step-10 gates pass; the comparison is licensed.** Control job 29893252,
+    `COMPLETED` 00:01:09, exit `0:0`, re-running the parent's own unmodified
+    config: `per_round.parquet` sha256
+    `0a34f8280bccb98a75fe002eb3669827358117ce56c44f7c10268f312904b7ab`, the
+    expected value **bit-for-bit**. The stronger form of the same statement: the
+    fetched control parquet shows **no git diff** against the copy already
+    committed on the parent branch. Steps 1-2 are therefore empirically the no-op
+    step 2 argued they were statically — adding a state key and a call into
+    `update_contribution` is invisible to a model whose `x_encoding` does not name
+    it.
+
+    Candidate job 29893304, `COMPLETED` 00:02:32, exit `0:0`, parquet sha256
+    `5aac0cecc764e1ee79e485f2ee32cef30d080d3391ebed09148e2c4ff00ba6b4` — which
+    **differs** from the control's, so the stamped artifact is driving the run
+    rather than being silently ignored. Both parquets verified local against
+    remote and both are real Parquet content, not LFS pointer stubs.
+
+    **An honest limit on the isolation evidence for this step.** `simulate.py`
+    prints neither the model path nor `PYTHONPATH`, so unlike Note 6 there is no
+    runtime log line naming the artifact. What exists is documentary: the log's
+    `Work dir: /u/certuer/autoresearch/contribution-group-size/.` combined with
+    the archived `run.sh`'s `export PYTHONPATH="$PWD/src..."` under `--chdir=.`,
+    plus the archived `config.yml` the job actually read, naming the candidate
+    artifact whose remote sha256 was verified as `777e84b1...` before submission.
+    The differing parquet hash is the behavioural confirmation. Recorded as
+    documentary rather than runtime provenance so a later reader does not credit
+    this step with evidence it does not have.
+
+    Jobs 29893190 and 29893192, adjacent in the id sequence, belong to a
+    different isolated dir (`~/autoresearch/switch-joint-exodus-gmlp`) and are not
+    this experiment's. A concurrent experiment running safely alongside this one
+    is §9's isolation design working as intended.
