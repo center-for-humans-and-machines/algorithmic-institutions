@@ -418,9 +418,9 @@ runs once per step before staging, not after every edit.
    tests/baselines src/aimanager/tests/test_eval_*.py -q` all green; each
    stand-in module reports whether stand-ins were installed. Then on Raven
    from the isolated dir (`squeue` check, then `AI_REMOTE_DIR=...
-   scripts/remote_test.sh -- tests/switch
-   src/aimanager/tests/test_joint_exodus_train_sim_parity.py src/ -v
-   --tb=short`) against real `torch_scatter` / `torch_geometric`, with the
+   scripts/remote_test.sh -- tests/switch src/ -v --tb=short` — **the
+   redundant explicit parity-file path is omitted deliberately; see note
+   26**) against real `torch_scatter` / `torch_geometric`, with the
    stand-in reports confirming *not installed*. Known and not a regression:
    `test_eval_*` and `test_linear_manager` fail on an isolated dir for lack
    of `plots/` / `artifacts/` (#170 note 11g). Record test counts.
@@ -881,4 +881,52 @@ runs once per step before staging, not after every edit.
     `tests/switch/test_joint_exodus_loss.py`. Nothing in this file needs
     real PyG, so on Raven it runs the same assertions with no stand-in
     path taken; it is not a local-only claim.
+
+26. (Orchestrator, plan defect found by step 9 and confirmed) The plan's
+    literal Raven command passed **both** `src/` and an explicit file
+    inside it
+    (`src/aimanager/tests/test_joint_exodus_train_sim_parity.py`). Under
+    pytest 8.4.2 that silently collects **only the explicit file** from
+    that subtree and drops every other file under `src/` — no warning,
+    no error. Verified locally: explicit-file + `src/` collects **8**
+    tests, `src/` + explicit-file also **8** (so it is not an
+    argument-order effect, as first reported), `src/` alone **86**, and
+    the corrected `tests/switch src/` **239**, reaching all ten files
+    under `src/aimanager/tests/`. So the first Raven run genuinely
+    exercised only `tests/switch` plus the parity file (149 items) and
+    never ran `test_encoder`, `test_edge_encoder`, `test_environment` or
+    `test_linear_manager` there. The step's implementer caught this
+    unprompted and restored coverage by running `src/` standalone, so
+    the step's goal was met — but the command in the plan was wrong and
+    is now fixed above. **Anyone reusing this plan's step 9 verbatim on
+    another branch would have silently under-tested.**
+27. (Orchestrator, step 9 confirmed) Local: **499 passed**, all green.
+    Raven, isolated dir, real PyG: every mechanism test passes —
+    `tests/switch` 141, the parity file 8, and `test_encoder` /
+    `test_edge_encoder` / `test_environment` in the standalone `src/`
+    run. **No test that passes locally fails on Raven**, so the
+    stand-ins were not masking a real PyG behaviour difference, which is
+    the question this step existed to answer. Real-library provenance,
+    verbatim: `torch 1.11.0+cu113`, `torch_scatter 2.0.9`,
+    `torch_geometric 2.5.0`, all resolving under the **shared** venv's
+    site-packages, while `aimanager.__file__` resolves to
+    `/u/certuer/autoresearch/switch-joint-exodus-gmlp/src/aimanager/__init__.py`
+    — not `algorithmic-institutions/src`. That is the silent-wrong-code
+    check (the PR #166 failure) passing on the training-side tree for
+    the first time on this branch. Corroborated by importing the four
+    mechanism modules in a fresh process outside pytest, where
+    `STAND_INS` is honest: all report `False` / `[]`, i.e. no stand-in
+    was installed anywhere.
+28. (Orchestrator, known failures, not regressions) On an isolated dir
+    the eval-suite and linear-manager tests fail for want of `plots/`
+    and `artifacts/`, which the isolated sync does not ship (log Note 9,
+    #170 note 11g): `test_eval_evaluate` (2), `test_eval_metrics` (1),
+    `test_eval_scoring` (1), `test_eval_visuals` (1),
+    `test_linear_manager` (1), and `test_eval_convert` (4 fixture-level
+    errors) — 10 items, every one a `FileNotFoundError` on a missing
+    `per_round.parquet` or `.joblib`. Not fixed, and `plots/` was **not**
+    synced to make them pass. Cluster state on exit: `squeue` empty (the
+    parallel `cg_copula_rho` job finished on its own),
+    `~/autoresearch/contribution-group-size` intact, nothing outside our
+    own isolated dir touched, no `sbatch` submitted.
 
