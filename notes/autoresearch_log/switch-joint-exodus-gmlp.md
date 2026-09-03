@@ -507,7 +507,7 @@ runs once per step before staging, not after every edit.
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
-| 2026-09-03 | baseline: parent PR #170 stack (gaussian_mlp_v2 group-copula contr x gnn switch x severity-copula punisher) | SC 2.669271261720684 | 10/21 | 1.3138927788530981 | reference |
+| 2026-09-03 | PR #171's joint exodus head reimplemented on the PR #170 stack, unmodified: a round-level joint over the leaver-count pair `(m_0, m_1)` as a detached readout, with conditional-Bernoulli selection, firing on every decision round | **SC 1.301036354663599** (baseline 2.669271261720684, **band upgrade `2-5` -> `1-2`**); collateral upgrades CG 1.9676786688812167 (`2-5` -> `1-2`) and CE 0.9801160413212853 (`1-2` -> `<= 1`); guards RCD 0.715454767607416 (`<= 1`, **held**) and RCB 2.103934063379536 (`1-2` -> `2-5`) | 9/21 (baseline 10/21) | **1.2616424454188417** (baseline 1.3138927788530981, ceiling 1.4452820567384081) | **SUCCESS on both §2 gates — with the §1 unsoundness criterion engaged (note 34)** |
 
 ## 4. Notes
 
@@ -1009,4 +1009,93 @@ runs once per step before staging, not after every edit.
     which differs — the joint branch was taken, so the run is not void.
     Together these two are the strongest statement available that the
     only thing separating candidate from parent is the mechanism.
+
+34. (Orchestrator, step 13 — the verdict, and the criterion firing) **§2:
+    SUCCESS, both gates, unappealed.** Gate 1: SC
+    2.669271261720684 -> **1.301036354663599**, out of `2-5` into
+    `1-2`, the declared target row; CG and CE band-upgrade alongside
+    it. Gate 2: the 21-row mean falls 1.3138927788530981 ->
+    **1.2616424454188417** — not merely inside the 10% margin but
+    **below the parent's own mean**, so `b174f90`'s margin is not
+    invoked at all. Verified by my own recomputation over all 21 rows,
+    and the control's `per_round.parquet` hashes identically to the
+    parent's locally, so the baseline comparison is licensed rather
+    than assumed.
+    **And §1's unsoundness criterion fires.** It was pre-registered
+    thus: SC band-upgraded while the full-exodus cell share **exceeds**
+    the human 0.1079 means SC was bought through excess full-group
+    exodus. Measured: candidate **0.1463** (134/916) against human
+    0.1079 (34/315) and parent 0.0831 — **+36% above the human
+    reference** — with movers inside full-exodus cells **0.3089**
+    against human 0.2600. Both overshoot on the same side as #171's
+    candidate (0.1424 / 0.3043). So by its own pre-committed terms this
+    result is **mechanistically unsound**: the title is honest under §2
+    and stays `[SUCCESS]`, but SC moved because the simulation empties
+    whole groups more often than humans do, and **a successor must not
+    stack on this without fixing the dose.**
+35. (Orchestrator, the distribution moved past human, not onto it) This
+    is the substance behind note 34, verified by me directly from
+    `per_round.parquet` rather than from the diagnostic — and my
+    computation reproduces the parent's declared references exactly
+    (mean larger group 5.5700, fully-merged 0.0580), which validates
+    the convention. Mean larger-group size, rounds >= 4: human 6.088,
+    parent 5.570, candidate **6.3020** — past human, above the Markov
+    oracle's 6.090, and essentially #171's 6.286 **from a parent 0.11
+    lower than #171's**. Fully-merged share: human 0.1440, parent
+    0.0580, candidate **0.2140** — #171's 0.2140 to four digits. SC
+    upgraded because the EMD fell 0.5192 -> 0.2531, but the shape shows
+    what happened: the parent was short at sizes 7-8, and the candidate
+    is now **long** at 8 (21.4% against 14.4%) and short at 5 (19.2%
+    against 24.4%). The §1 prediction that the outcome would sit
+    *between* the oracle and #171's realisation is wrong in the
+    informative direction — it landed at #171's realisation, so the
+    overshoot is a property of the mechanism at this dose and not of
+    the starting deficit.
+36. (Orchestrator, falsifier (d) came true) §1 predicted, under
+    all-rounds firing, that the late-game anchors would rise where the
+    human line declines. They do: candidate anchors 4/8/12/16/20 =
+    6.270 / 6.260 / 6.120 / **6.360 / 6.500** against human 6.440 /
+    6.200 / 6.040 / **5.920 / 5.840**, an OLS slope of **+0.0280** per
+    round over 16-20 against the human **-0.0160**. The rise is
+    entirely the round-19 draw, since membership only moves at decision
+    rounds. Read with Note 3's finding that the parent already matched
+    the human full-exodus rate at rounds 11-19, this is direct evidence
+    that **the head adds exodus where the independent draw was already
+    right** — which is the strongest thing this run hands a successor,
+    and it is exactly what the calibration ruled out in Note 5 was
+    aimed at. The between-group correlation says the same: pooled
+    -0.1987 -> **-0.3142** against human -0.3667 closes most of the gap,
+    but the human per-round profile decays monotonically (-0.69 ->
+    -0.19) while the candidate's is nearly flat (-0.52 / -0.32 / -0.31 /
+    -0.24 / -0.37), i.e. opposition is supplied uniformly and
+    over-supplied late.
+37. (Orchestrator, the guards, and what did *not* happen) **RCD held at
+    `<= 1`** (0.6700998716392149 -> 0.715454767607416, +0.045):
+    #171's full-band RCD collapse did **not** recur. Note that §1's
+    falsifier (c) is therefore *not* engaged — it required RCD leaving
+    `<= 1` with the share at or below 0.1079, and here the share is
+    above it, so the conditional-Bernoulli defence is neither vindicated
+    nor killed by this run; it was simply not the binding constraint.
+    **SB held at `<= 1`** (+0.102), so PR #169 note 11's forecast did not
+    fire, and the reason is visible: gross switch rates are *lower* than
+    the parent at rounds 3, 7 and 19 (0.4088 against 0.4387 at round 3,
+    human 0.4419) — the head **rearranges** movers into whole-group
+    departures rather than adding movers. Three rows left `<= 1`:
+    **RSA** +0.433 (matching #171's +0.42 almost exactly — co-switching
+    that is not punishment-driven, which is precisely what a joint count
+    head produces), **SA** +0.319, and **RCB** into `2-5` (+0.194,
+    #171's direction and near its +0.286). Net 3 band upgrades against 3
+    downgrades, no row entering or leaving `> 5`. RCA is flat (+0.0007)
+    and CA flat (-0.008).
+38. (Orchestrator, for the maintainer) The honest summary is that the
+    mechanism transfers to this stack and clears both gates more
+    cleanly than it did on #165 — where it failed gate 2 on the
+    unamended rule — while reproducing #171's overshoot almost
+    numerically. The two facts are not in tension: this stack's SC
+    deficit was *larger* (2.669 against 2.187), so the same excess
+    exodus travels further before it costs anything. A successor should
+    address the dose, and Note 3's per-round profile plus Note 36's
+    slope are the measurements to aim at; the schedule restriction ruled
+    out in Note 5 is one such lever, and this run is the evidence for or
+    against it that the ruling asked for rather than assumed.
 
