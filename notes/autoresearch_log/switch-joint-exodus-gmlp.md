@@ -294,7 +294,10 @@ runs once per step before staging, not after every edit.
    −0.3658; dropping keeps 334 of 500 doubled pairs and matches the object
    the predecessor's oracle resampled); `joint_exodus_counts(y, mask,
    agent_group, batch, *, n_batch)` → `(m, k)` int64 `(n_batch, R, 2)` via
-   `pool_by_group`'s count channel on `decides = mask` and `leaves = mask &
+   `pool_by_group`'s count channel — which returns **floats** (it
+   accumulates mask weights in `x.dtype`), so this function must do its
+   own `.round().to(th.int64)` exactly as `JointExodusHead.forward`
+   does; the raw return cannot be used as an index (found in step 2) on `decides = mask` and `leaves = mask &
    y`, so the loss scores the quantity the head emits by construction;
    `joint_exodus_loss(joint, batch_data)` → gathers `-log_prob` at
    `m_0 * 9 + m_1`, asserts `k == k_head` and `m <= k`, selects cells with
@@ -654,3 +657,23 @@ runs once per step before staging, not after every edit.
    macOS setup CLAUDE.md describes and the condition the plan's stand-in
    discipline expects, so the stand-ins install locally and must report
    *not installed* on Raven.
+
+10. (Orchestrator, step 2 confirmed) Verified independently: 31 tests pass;
+    `-inf` is applied before a single `log_softmax` over the flattened grid
+    and `(0, 0)` is always valid, so a fully masked grid — which would be
+    NaN — is unreachable; `pool_by_group` takes membership from
+    `agent_group` alone, keeps group as the fastest axis so the reshape is
+    in label order, and divides by `counts.clamp(min=1.0)` so an emptied
+    group pools to zero rather than NaN; the detach is on the pooled
+    embedding only, with `k` and the round being integer features that
+    never carried gradient. **The head has 1,131 parameters at
+    `embed_size = hidden_size = 10`, matching the count #171 recorded** —
+    an architecture-level confirmation that the reimplementation is
+    faithful, not merely plausible. The implementer added four invariances
+    beyond the plan's list, of which the useful one is that logits off the
+    support cannot move the surviving cells: that is the only assertion
+    that distinguishes `-inf`-before-softmax from a large finite penalty.
+    It also dropped three borrowed figures from #171's comments (a
+    single-fold log-loss and a nats estimate measured on that branch)
+    rather than restate another run's numbers as if measured here, which
+    is the right call.
