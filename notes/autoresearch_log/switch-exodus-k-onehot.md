@@ -645,3 +645,39 @@ running the suites). Step 9 stays with the orchestrator.
    discipline, not features). No test asserts the 1,131 parameter count;
    it lives in the parent's log, and 1,291 is this experiment's expected
    figure.
+10. (Orchestrator, steps 1-5 confirmed) **The numeric path is bit-identical,
+    proved twice and on the real bytes.** Locally I loaded
+    `HEAD:src/aimanager/generic/joint_exodus.py` as a second module in one
+    process: every parameter `th.equal` under the same seed with and without
+    the explicit keyword, and `forward`'s `log_prob` and `k` `th.equal`
+    including a batch carrying an invalid decider. The step-2 agent did the
+    same for `graph.py` against the parent head `bc77932` — identical
+    `state_dict`, `predict_independent` output, probabilities and post-call
+    RNG state, head-off and head-on, at rounds 0 and 7, with the round-7
+    head-on draw differing from the independent path so the identity is not
+    vacuous. On Raven the parent's artifact `ecd231f4…1f33` (sha re-verified
+    after transfer) loads through `GraphNetwork.load` against **real PyG**
+    with `joint_exodus_size_encoding is None`, head `size_encoding
+    == "numeric"`, `in_features == 23`, 1,131 head parameters; a fresh
+    onehot model in the same process gives 39 and 1,291. `aimanager`
+    resolved at `~/autoresearch/switch-exodus-k-onehot/src/aimanager/`, the
+    shared venv's interpreter, `algorithmic-institutions/src` absent.
+11. (Orchestrator, steps 1-5 confirmed) **Test counts, and what the new
+    coverage actually binds.** `tests/switch` 141 → 150 → 168 → 184 over
+    steps 1-3; full local set 542 passed (parent's comparable figure 499,
+    the difference being this experiment's additions). On Raven with real
+    PyG, `tests/switch` collected 184 and gave **182 passed, 2 skipped** —
+    the two skips are `needs_baseline`-marked git-recovery tests that cannot
+    build their baseline module because `remote_test.sh` excludes `.git/`
+    from the rsync, which is the fallback their own docstring describes, and
+    the git-free sibling `test_head_off_matches_the_pre_change_expression`
+    passed. `src/` collected 98 items: the PyG unit suites (edge encoder 8,
+    encoder 4, environment 7) and the train/sim parity suite 8/8 all passed;
+    the 10 failures/errors are all the parent's note-28 category, missing
+    `plots/` and `artifacts/` in an isolated dir. Two negative controls
+    establish the coverage is not decorative: undeclaring the plumbing
+    keyword so it falls into `graph.py`'s `**_` sink fails 13 tests while
+    every head-off and `None` case still passes, and swapping the two
+    groups' one-hot codes fails 3 tests including the detach feature-tail
+    check — so the label-order convention the flip-doubling depends on is
+    now enforced rather than merely documented.
