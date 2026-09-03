@@ -1,0 +1,683 @@
+# Group size for the contributor: the marginal per-capita return as a node feature
+
+## Declaration
+
+**Slot:** contribution.
+
+**Parent:** PR #171 (`auto/switch-joint-exodus`, `[SUCCESS]`), the maintainer-designated
+frontier, at `6ba366c`. Branch and worktree created from
+`origin/auto/switch-joint-exodus`; the PR opens with `--base auto/switch-joint-exodus`.
+Read the parent's log (`notes/autoresearch_log/switch-joint-exodus.md`) and PR #169's
+(`switch-exodus-count`, on its own branch) before touching anything here — the notes
+below correct one of the parent's structural findings and locate the switch slot's
+real residual, and the next switch-slot agent needs both.
+
+**Base model:** the parent stack's contributor — the M0 GNN trunk
+`artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt`
+(`x_encoding = prev_contribution (numeric, 21), prev_punishment (numeric, 31),
+agent_group (onehot, 2)`; no `edge_encoding`; hidden 20, 575 epochs, batch 4,
+lr 3e-4, seed 38381) **plus** PR #165's stamped copula (`copula_rho =
+0.06958238086256316`, `copula_phi = 1.0`), shipped as
+`artifacts/artificial_humans/group_switching_contribution_50ep_herding_copula_v2/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt`.
+The base model is "trunk + stamped copula", and so is the candidate.
+
+**Evaluation stack (§3 under the parent rule of §9):** the parent's own stack and
+config, `configs/simulation/manager_testing/23_2g8a_switch_joint_exodus_self_gnncopar1_contr_gnn_switch.yml`
+— this contributor x the joint-exodus GNN switch predictor x the severity-copula
+`lin_multinomial` punisher, single pairing `lin_multinomial_copula_self`, seed 42,
+100 episodes, 24 rounds, `save_per_round: true`.
+
+**Baseline (the parent's confirmed scores; both §2 gates judged against these).**
+Source: `plots/simulation/23_2g8a_switch_joint_exodus_self_gnncopar1_contr_gnn_switch/evaluation/scores.csv`
+on this branch.
+
+| quantity | value |
+|---|---|
+| CE | 1.105386005744275 (band 1-2); numerator 1.6091089668822895, ceiling 1.455698695768135 |
+| mean over 21 rows | 1.3040409569053069 |
+| gate-2 ceiling (mean x 1.10) | 1.4344450525958376 |
+| rows <= 1 | 11/21 |
+
+The parent's log note 20 quotes a ceiling of 1.4182995541296117. That was the ceiling
+for *its* run against *its* baseline (1.2893632310269196, PR #165's mean); it is not
+ours. Under §9 the parent's confirmed mean becomes the baseline, and the ceiling is
+1.4344450525958376.
+
+**Target row: CE alone**, 1.105386005744275, band 1-2 -> requires <= 1: the
+resampled numerator 1.6091089668822895 must fall below the ceiling
+1.455698695768135, a -9.5% move.
+
+**Not targets, not secondaries.** RCD (2.764919035295771): its degradation from the
+independent draw is within-cell, not through the switch mechanism (mix-reweighting
+moves the slope 0.2062 -> 0.2002), and its band position is noise — 1.9 sigma on an
+episode-bootstrap sd of 0.018/0.029, with the band edge 0.001 from the independent
+run's own slope (Notes 2). RCB (2.0242478714062093): 0.024 (1.2%) from the edge,
+its deficit is the flat punishment response of the contribution model in both sims
+alike (dc by rate bin 0.73/0.51/0.54/0.10 vs human 0.89/1.34/1.68/2.01), and
+excluding merged-group or switcher rows recovers none of it — no mechanism claim
+from either slot, so declaring it would be shopping.
+
+**Watch items:** CG (expected 4.27 -> ~3, within band — Notes 4), CC (expected
+down), SC and SB (expected to improve through the switch trunk's common-good
+feature once singletons carry human-like common good, but *not claimed*: the switch
+trunk's own conditional at high common good is also off, on n ~ 30), and the
+C-block marginals CA/CB/CD/CF (a retrained trunk re-randomises everything the
+contributor does; bimodal singletons are human-like, but the retrain wobble on the
+R rows is +-0.2-0.36 in score units from slope noise alone).
+
+**Why CE and not a row >= 2 (§6).** §6's ">= 2" heuristic is not satisfied by CE,
+and the list of rows >= 2 on this stack is exhausted by measurement, not avoided by
+preference:
+
+- **CG 4.267640451429015.** Human spread ratio 0.848, sim 0.738, gap 0.110 against a
+  band edge at 0.053. A counterfactual that hands the sim *perfectly* human-like
+  contributions in every size-1 and size-8 cell (resampled human cells) reaches
+  CG 0.787, gap 0.061, score ~2.3 — no band upgrade; and excluding sizes 1 and 8
+  entirely from both sources the gap is still 0.08. The CG deficit lives in sizes
+  2-7, where #165's copula is already the mechanism and the rest of the record
+  (#151, #157, #158, #159, #163) is exhausted or vetoed.
+- **RCD 2.764919035295771.** At the band edge by noise and not switch-owned (above,
+  and Notes 2). What RCD measures — sim movers barely adjust on arrival (mean dc
+  0.02 partial / 0.92 full-exodus vs human 1.6 / 2.6; PR #116: new-peers beta
+  0.014 vs human 0.247) — is a contribution-model deficit this feature makes no
+  claim on.
+- **RCB 2.0242478714062093.** 0.024 from the edge, no mechanism claim (above).
+
+The target therefore rests on §2's explicit clause — "from 1-2 into <= 1" is a band
+upgrade — plus a counterfactual that spans the edge with margin: the row needs
+-9.5%; human-like singleton cells deliver -40% (EMD 1.388 -> 0.841 on the parent's
+own parquet); singleton polarisation at 100% of the human excess of 0/20 extremes
+delivers -19%; at 50% it delivers -10%. This is not an edge wobble — the mechanism's
+expected effect is several times the distance to the edge.
+
+### Hypothesis
+
+**The behaviour.** A player's marginal per-capita return from the pool is 1.6 / k
+for a group of k: alone you keep your whole multiplied contribution, in a merged
+eight you keep a fifth. Humans respond at both extremes. Lone players *polarise*:
+while alone they contribute 10.5 on average with 31% at 20 and 23% at 0 (sd 8.0),
+against 8.8-10.4 and 17-19% at 20 in groups of 4-5; and it is a within-player
+*response*, not selection — on becoming alone a player goes c(t-1) = 7.5 ->
+c(t) = 9.7 -> c(t+1) = 10.8 (dc +1.74, n = 53) where a stayer at the same arrival
+round moves -0.06. Merged eights *sag*: 8.45 with 7.8% at 20. The simulated
+contributor does neither: its singletons sit at 8.0 (12.5% at 20; on becoming alone
+9.1 -> 9.0, dc -0.07), its merged eights at 10.2 (18.7% at 20).
+
+**The mechanism absence — structural, not a learning shortfall.** The frontier
+contributor is M0: `prev_contribution` numeric, `prev_punishment` numeric,
+`agent_group` onehot, and no `edge_encoding`. `GraphNetwork.create_fully_connected`
+(`graph.py:751`) and `train.create_fully_connected` (`train.py:74`) both emit every
+`i != j` pair **regardless of membership**, so the edge index carries no group
+information at all — the `joint_exodus.py` docstring states this for the switch
+trunk, and it is verified here to hold identically for the contribution trunk (same
+two functions, and M0's edge features are empty). Group identity enters the model
+only as a onehot label on each node; there is no feature that encodes anything
+about the agent's *own group* — not its size, not its level (M0 has no
+`own_grp_prev_mean_contr`). To respond to size the trunk would have to learn the
+bilinear equality of two onehots inside the edge MLP and then count it across
+seven neighbours, from ~240 alone agent-rounds in 9,600. The contributor has **no
+own-group state whatsoever**, and the 10.5-vs-8.0 alone and 8.45-vs-10.2 merged
+numbers are the measured consequence.
+
+**Why CE.** CE is the EMD of signed per-(game, round) group-mean differences, and
+its human fat tail is singleton cells: 23% of human CE cells contain a singleton
+(sim: 23%), with mean |CE| 7.19 there against 4.98 elsewhere (sim: 5.37 against
+4.03). The difference is polarisation, not level: a pure level shift of the sim's
+singleton contributions (+1.25 … +3.5) makes CE *worse* (+3-4%), while restoring
+the human share of 0/20 extremes among singletons at 50% / 100% / human-like cells
+gives -10% / -19% / -40%. The claim this experiment makes is therefore
+**distributional** — lone players polarise — and the 21-level categorical head is
+the right object to represent it.
+
+**Legality — settled by citation.** `notes/baseline_feature_defs.md:6`: "Membership
+itself resolves before contributing, so current membership-derived features
+(sizes, tenure counters) are legal for both targets." `group_size` ("current group
+size") is a documented feature of the linear baseline's current family
+(`notes/baseline_feature_defs.md:28`). The contributor already conditions on
+current membership (`agent_group`); current size is the same information class.
+The feature is not keyed to any metric's bin edge: RPB's size bins (1-3 / 4-5 /
+6-8) are the punisher's row, and SC's bins are larger-group sizes of the switch
+outcome. Secondary point: PR #169 closed "add group size" for the *switch* slot,
+and that closure rested on the sim already reproducing the human *linear* size
+slope of the switch decision; for the contribution decision the size response is
+measurably absent at both extremes, so the closure does not transfer.
+
+**Planned change.** One node feature, `own_group_size` — the current-round member
+count of the agent's group — with numeric encoding `n_levels: 9` (`IntEncoder`
+maps an integer v to `linspace(0, 1, 9)[v] = v / 8`, the convention
+`round_number` and the joint head's `k / 8` already use). Derived once in pandas for
+training (`generic/data.py`) and once in torch for simulation
+(`manager/environment.py`), with a parity test closing the two-implementation
+hazard, on the precedent of `own_grp_prev_mean_contr`. The training config is a
+verbatim copy of `group_switching_contribution_50ep.yml` plus that one feature and
+its own `output_dir`. The base model is trunk + stamped copula, so the candidate is
+completed by re-running PR #165's calibrate -> stamp recipe on the retrained trunk:
+the same `contribution_copula_rho.py`, the same 40-episode single-copy train
+split, `phi_final = 1.0` by #165's boundary ruling, and #165's stop-gate carried
+over verbatim. Re-calibration is the recipe's derived step, not a second change —
+the rho is model-conditional by construction (teacher-forced marginals from the
+model being stamped, and the script asserts its input carries rho 0), so carrying
+the stale 0.0696 onto a different trunk would be the frankenstein.
+
+**Iteration budget (§5).** The contribution slot's own base run is ~8 min (575
+epochs, 5-fold + full; PRs #144/#147 logs), so the ceiling is ~24 min; one extra
+scalar feature is ~1.0x. Cluster wall-clock for the whole experiment: ~8 min GPU
+training + ~12.5 min CPU calibration (#165's job 29666293) + 14 s stamp +
+~2m20s per simulation, ~25 min in total — inside the maintainer's short-iteration
+preference, and every step is a same-day step.
+
+**Probability, stated before anything runs.** Gate 1 ~0.45-0.5: the trunk must learn
+at least half the human singleton polarisation from ~240 alone agent-rounds (x2 in
+the flip-doubled data) given a first-class size input; the `prev_contribution`
+anchor then persists whatever polarisation starts. Gate 2 given gate 1 ~0.85: the
+expected movements (CE, CC, CG, likely SC/SB) are favourable and the risk is retrain
+wobble on the R rows, ~0.03 on the mean against 0.13 of headroom.
+
+## Plan
+
+Validated by the orchestrator against §2 (target), §5 (legality) and §8 (frozen
+surface) before any step runs. One feature enters the model; the copula steps
+re-run the parent stack's own recipe unchanged. Nothing under
+`src/aimanager/evaluation_suite/`, `notes/evaluation_metric_defs.md`,
+`notes/eval_scoring_schema.md` or `experiments/` is touched; the simulation
+protocol, seeds and episode count are the parent's. Wall-clock per step is stated
+against the contribution slot's ~24 min training ceiling.
+
+1. **Train-side feature** — `src/aimanager/generic/data.py`, `parse_agent_rounds`
+   (existing) and `get_default_values` / `create_torch_data_new` (existing). In
+   `parse_agent_rounds`, after `agent_group` is set and before the
+   `own_grp_prev_mean_contr` block, add
+   `df["own_group_size"] = df.groupby(["episode_id", "round_number", "group_id"])["player_id"].transform("size")`
+   — the count of *members* at the current round, timeouts and no-input rows
+   included (membership is not validity; a member who timed out is still in the
+   group). Add `"own_group_size": 4` to `get_default_values` (groups are 4-4 before
+   the first switch, so round 0 and absent cells are 4 by construction) and
+   `"own_group_size": th.int64` to the `data_names` dtype map. Nothing else in the
+   file changes; the human data's singletons must come out at exactly the 44
+   valid singleton decision rows / ~240 alone agent-rounds measured in the
+   diagnosis. *[correctness-critical — implementer: Opus]*
+
+2. **Sim-side feature, refreshed in the right place** — `src/aimanager/manager/environment.py`.
+   Add `update_own_group_size(self)`: `self.state["own_group_size"] =
+   self.agent_group_mask.sum(dim=1, keepdim=...).gather(1, self.agent_groups)`
+   (the per-group member count, gathered to each agent; shape `(batch, n_agents,
+   1)`, int64, matching the other agent-indexed state tensors). Call it at the top
+   of `update_contribution`, next to `update_own_grp_prev_mean_contr()`, so it runs
+   **after** `apply_switch` (which `step` calls first on arrival rounds and which
+   already refreshes `agent_groups` / `state["agent_group"]`) and **before** the
+   contributor's forward pass — the same ordering that keeps
+   `own_grp_prev_mean_contr` keyed to the *new* group. Initialise the key in
+   `reset_state` from the initial `agent_groups` (4 everywhere). Note the hazard
+   PR #169 recorded (note 3b): `Environment.default_values` is read from the
+   *contribution* artifact, so the new key reaches `reset_state`'s `prev_` loop —
+   here that is exactly the artifact carrying it, so no `KeyError` path exists,
+   but the step must confirm it. *[correctness-critical — implementer: Opus]*
+
+3. **Train/sim parity test** — new `src/aimanager/tests/test_group_size_train_sim_parity.py`,
+   modelled on `test_joint_exodus_train_sim_parity.py` (same PyG stand-in pattern,
+   runs locally with plain pytest). On a synthetic membership trajectory with a
+   mid-episode switch that creates a singleton and a seven, assert that the
+   `own_group_size` column `parse_agent_rounds` derives equals, agent for agent and
+   round for round, the `state["own_group_size"]` a real `ArtificialHumanEnv`
+   holds at contribution time — including the round the switch materialises. Also
+   assert the round-0 default is 4 on both sides and that the encoder maps sizes
+   1..8 to 1/8..1. *[correctness-critical — implementer: Opus]*
+
+4. **Training config** — new
+   `configs/training/artificial_humans/contribution/group_switching_contribution_50ep_group_size.yml`,
+   a verbatim copy of `group_switching_contribution_50ep.yml` (575 epochs, batch 4,
+   lr 3e-4, hidden 20, 5-fold, seed 38381, `shuffle_features` unchanged) with
+   exactly three edits: append `- {name: own_group_size, n_levels: 9, encoding:
+   numeric}` to `model_args.x_encoding`; `output_dir:
+   artifacts/artificial_humans/group_switching_contribution_50ep_group_size`; a
+   `description` naming this experiment. Labels unchanged so the artifact filename
+   pattern `architecture_node+edge+rnn__dataset_50ep__epochs_575.pt` is preserved.
+   *[mechanical — implementer: Sonnet]*
+
+5. **Train on Raven** — `scripts/train_cluster.sh ah <step-4 config>` with
+   `AI_REMOTE_DIR='~/autoresearch/contribution-group-size'` (check `squeue` for
+   PENDING jobs before any sync). Record SLURM job id, elapsed (expected ~8 min,
+   ~1.0x the ~8 min base; ceiling ~24 min), the in-job artifact sha256, and the
+   per-fold held-out log-loss against the M0 base (1.9892 best-mean, PR #113) so a
+   worse marginal fit is visible before any score exists. *[mechanical — implementer: Sonnet]*
+
+6. **Pre-sim diagnostic, report-only** — scratch script (not committed to `src/`),
+   run on Raven from the isolated dir (needs PyG). Teacher-forced on the human
+   single-copy data: P(c = 20 | own_group_size = 1) and P(c = 0 | own_group_size =
+   1) against the human 0.31 / 0.23, and the mean predicted contribution by group
+   size 1..8 against the human 10.5 / 9.9 / 8.9 / 10.4 / 10.4 / 9.5 / 9.4 / 8.5
+   (rounds >= 4). **Whatever it says, the simulation runs and the verdict comes from
+   the single evaluation per §2/§6**; this step can never gate or replace the sim.
+   It exists so the results table can say whether a failure was "not learned" or
+   "learned but did not carry through the closed loop". *[mechanical — implementer: Sonnet]*
+
+7. **Calibrate the copula on the new trunk — with #165's stop-gate** — copy
+   `scripts/artificial_humans/calibrate_copula.slurm` to
+   `calibrate_copula_group_size.slurm` with `BASE` pointing at the step-5 artifact
+   and `PARAMS` at
+   `artifacts/artificial_humans/group_switching_contribution_50ep_group_size_herding_copula/calibration/copula_params.json`;
+   `contribution_copula_rho.py` itself is unchanged (`--model`, `--roundtrip`,
+   `--preflight`, `--write-params`). `sbatch` from the isolated dir; expected
+   ~12.5 min on 8 CPUs (#165 job 29666293). Record rho, its 200-episode-cluster
+   bootstrap CI, phi_hat and its CI, the round-trip gate result. **STOP-GATE,
+   verbatim from #165: if the calibrated rho's CI includes 0, the experiment
+   terminates here as a calibration-only `[FAIL]`** — no artifact is stamped, no
+   simulation runs, the results table records the calibration numbers, and the PR
+   opens in that state. Otherwise `phi_final = 1.0` per #165's boundary ruling
+   (persistence-class decision; the estimated phi stays in the JSON unaltered) and
+   the plan continues. *[correctness-critical — implementer: Opus]*
+
+7b. **Fix the stamper's stale precondition (plan revision, inserted after step 7
+    failed)** — `scripts/artificial_humans/make_contribution_copula_artifact.py`.
+    Job 29892804 died in 22 s on
+    `AssertionError: base artifact already carries copula_rho` at line 244,
+    `assert k not in base`. The precondition is stale, not wrong-in-spirit:
+    `graph.py`'s save list (line ~731) now persists `copula_rho`, `copula_phi`
+    and `copula_switch_every` in *every* artifact, at their neutral defaults
+    `0.0 / 0.0 / None` (line ~150), so any trunk trained on this branch carries
+    the keys. PR #165's M0 trunk predates copula support, which is why
+    key-absence held for it and cannot hold now. The calibrator already asserts
+    the correct form on the same invariant —
+    `contribution_copula_rho.py:317-318` checks the *value*
+    (`model.copula_rho == 0.0`) and passed on this very artifact — so the two
+    scripts disagree about one precondition and the value-based one is right.
+    Change: (a) the precondition becomes "the base carries no *active* copula" —
+    a field may be present iff it holds its neutral value; (b)
+    `assert_only_fields_added` (line ~170) currently requires the three fields
+    to be newly *added* and every pre-existing key to be unchanged, which the
+    same staleness breaks, so it must allow exactly those three keys to change
+    from neutral while every other key stays bit-identical. The guarantee's
+    strength is preserved: after the stamp, the artifact differs from the trunk
+    in exactly the three copula fields and nothing else. `stamped = dict(base);
+    stamped.update(fields)` is NOT touched, so the stamped values are identical
+    to what #165's recipe would have produced. *[correctness-critical — implementer: Opus]*
+
+    **Orchestrator ruling on §4.** §4 makes a bug fix in shared code its own
+    experiment. I rule that this does not apply here: the change is confined to
+    assertion logic in a stamping script, provably cannot alter any stamped
+    value, any model, or any simulation, and therefore cannot alter any score.
+    It is this experiment's own recipe being made runnable against a trunk
+    trained after copula support landed — not a behavioural change to shared
+    code. Recorded explicitly so the maintainer can overrule it.
+
+8. **Stamp** — copy `scripts/artificial_humans/stamp_copula.slurm` to
+   `stamp_copula_group_size.slurm` invoking `make_contribution_copula_artifact.py`
+   with `--params` (step 7), `--base` (step 5) and `--out
+   artifacts/artificial_humans/group_switching_contribution_50ep_group_size_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt`;
+   the stamper's teacher-forced honesty check runs as in #165 (~14 s, job
+   29667403 precedent). Verify the three stamped fields round-trip
+   (`copula_rho` = step-7 rho, `copula_phi` = 1.0, `copula_switch_every`) and that
+   every weight tensor is `torch.equal` to the step-5 artifact — the stamp changes
+   sampling only. Fetch and commit the params JSON, the `.copula.json` sidecar and
+   the stamped artifact (LFS). *[mechanical — implementer: Sonnet]*
+
+9. **Simulation config** — new
+   `configs/simulation/manager_testing/23_2g8a_contr_group_size_self_gnncopar1_contr_gnn_switch.yml`,
+   a byte-copy of the parent's
+   `23_2g8a_switch_joint_exodus_self_gnncopar1_contr_gnn_switch.yml` with exactly
+   three edits: `contribution_model` -> the step-8 artifact, `output_dir` ->
+   `plots/simulation/23_2g8a_contr_group_size_self_gnncopar1_contr_gnn_switch`,
+   `figure_name` likewise. The slug sits before `_self_` so
+   `evaluation_sweep.py`'s `DIR_PATTERN` still parses contr/switch, as the parent
+   did. Switch model, valid model, punisher, pairing list, seed, episodes, rounds
+   unchanged. *[mechanical — implementer: Sonnet]*
+
+10. **Baseline control, then the candidate** — two simulations from the isolated
+    dir via `scripts/simulate_cluster.sh` (~2m20s each). First re-run the parent's
+    own config unchanged and require a bit-identical `per_round.parquet` (sha256
+    `0a34f8280bccb98a75fe002eb3669827358117ce56c44f7c10268f312904b7ab`, the parent's
+    reproduced candidate, log note 25) — the licence to compare anything, and the
+    proof that steps 1-2 did not alter the environment's behaviour for a model
+    that does not read the new key. Then the step-9 candidate. Fetch both with
+    `scripts/fetch_cluster.sh` from the isolated dir. *[mechanical — implementer: Sonnet]*
+
+11. **Evaluate and rule** — `python -m aimanager evaluate <step-9 config>`, locally.
+    One simulation, one evaluation, no second stage (§3). Record the results row
+    (CE, rows <= 1, mean, and the watch items CG / CC / SC / SB / CA / CB / CD / CF
+    explicitly). `[SUCCESS]` only if CE < 1.0 *and* the 21-row mean <=
+    1.4344450525958376; otherwise `[FAIL]`. Open the PR with `--base
+    auto/switch-joint-exodus`, body per §9 step 7 (hypothesis, results table,
+    collateral grouped +/-), then delete the remote dir
+    `~/autoresearch/contribution-group-size` when the PR closes. *[correctness-critical — implementer: Opus]*
+
+## Results
+
+| date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
+|---|---|---|---|---|---|---|
+| 2026-09-03 | `own_group_size` (numeric, k/8) as a contribution node feature, copula re-calibrated and re-stamped on the retrained trunk | single | **CE 1.0503773473383176** (baseline 1.1053860057442750, band 1-2 -> 1-2) | 9/21 (baseline 11/21) | 1.3515237999365521 (baseline 1.3040409569053069, ceiling 1.4344450525958376) | **FAIL** — gate 1 fails (CE improves 0.055 but stays in band), gate 2 passes (+3.64%, inside the 10% margin) |
+
+## Notes
+
+1. **The overshoot the parent recorded is a wrong conditional, not state drift, and
+   it sits in the singleton cell — not in the founding exodus.** Per-group-cell
+   full-exodus rate: human 0.1079 (complete pairs), parent 0.1424, independent
+   draw 0.0869. Shapley decomposition of parent minus human over cells keyed by
+   k: conditional **+0.0387**, state **-0.0043**; keyed by (k, round): +0.0453 /
+   -0.0108 — the sim's state distribution actually *reduces* full exoduses (more
+   time at k = 0/8). P(m = k | k), human / parent / independent: k = 1 **0.161
+   (n = 31) / 0.422 (n = 90) / 0.350**; k = 2 0.147 / 0.245 / 0.162; k = 3 0.200 /
+   0.171 / 0.098; k = 4 **0.177 / 0.181 / 0.081**; k >= 5 ~0 everywhere. At k = 4,
+   where the parent's hypothesis lives, the head is *calibrated*; k = 1 alone
+   carries ~85% of the smaller-group conditional excess (~0.047 of +0.055). The
+   "late-game reversal" is the same phenomenon, not one the mechanism cannot
+   express: the merged state is not sticky (P(m = 0 | k = 8) 0.263 human vs 0.287
+   parent), the late rise is *entry* — pooled P(7 -> 8) **0.222 vs human 0.082**,
+   P(6 -> 8) 0.167 vs 0.018, P(enter 8 | not 8) at rounds 15/19 0.146/0.188 vs
+   0.085/0.067 — i.e. singletons and pairs leaving late, which is also SB's late
+   excess. Root cause: the sim's singletons are fed the *lowest* per-capita common
+   good of any group size (10.5; human singletons the *highest*, 17.3) because the
+   contributor puts them at 8.0 instead of 10.5, so the switch trunk sees a
+   low-common-good lone player facing a higher other group (71% of sim singleton
+   cells vs 33% human) and correctly says "leave". This is the diagnosis this
+   experiment acts on.
+
+2. **PR #171's structural finding is not supported by the data, independently of
+   whether this experiment succeeds.** The parent wrote that "the assortativity
+   defence and the SC lever are in direct tension, because the same event supplies
+   both" — that RCD degraded because full-exodus events (where conditional
+   Bernoulli selects nobody) rose from 0.1766 to 0.3043 of movers. Measured on the
+   two parquets: reweighting the parent's switch events to the independent run's
+   (leaving-size x full-exodus) mix moves the pull slope **0.2062 -> 0.2002** (its
+   own value), and the independent run to the parent's mix **0.2710 -> 0.2803**.
+   The mix explains nothing; the change is within-cell, and given m the
+   conditional-Bernoulli draw *is* the independent Bernoulli conditioned on its
+   sum, so within-cell change can only come from the contribution dynamics in
+   differently composed episodes — or noise: episode-bootstrap sd of the slope is
+   0.018 (parent) / 0.029 (independent), making the 0.065 difference ~1.9 sigma,
+   and the RCD band edge (slope 0.270) sits 0.001 from the independent run's own
+   0.271. Furthermore the human full-exodus mover share is **0.260** — the parent's
+   0.304 is *closer* to human than the independent 0.177 — and the human pull is
+   *higher* on full-exodus events (0.66) than on partial ones (0.36), so more
+   full-exodus events should raise RCD, not lower it. RCD measures the
+   contributor's (non-)adjustment on arrival, not who the switch model selects. The
+   parent's log file is not edited (§8); this note is the correction.
+
+3. **Candidate 2, deferred — not dropped: the small-minority holdout (switch
+   slot).** Humans in groups of 1-2 hold out (leave rate 0.25 / 0.32 vs 0.41 /
+   0.42 at sizes 3-4, i.e. rising with size within the minority) where the parent's
+   sim leaves at 0.42 / 0.43 / 0.39 / 0.40 regardless of size; the effect is
+   non-monotone in size, a different claim from the linear size slope PR #169
+   tested and closed. Its **preflight**: run the parent's joint head teacher-forced
+   on the human (1,7) cells and read P(m_s = 1 | k_s = 1) — if ~0.16-0.25 the head
+   is calibrated and only the state is wrong, so the candidate has no content; if
+   ~0.4 the head is miscalibrated and the candidate stands. **Why it must follow
+   this experiment:** the sim's singletons currently carry the lowest per-capita
+   common good of any group size, so a switch-slot fix would learn on human
+   singletons (high common good, stay at 0.143 when cg >= 12, n = 28) and be
+   applied to fake ones (the sim's leave at 0.375 / 0.448 above / below cg 12,
+   n = 32 / 58); the state has to be right first. **Edge flag:** its natural rows
+   are SB (1.06526788518747, 0.0026 raw from <= 1) and SC (1.147392663266986,
+   0.0035 EMD from <= 1) — either crossing would look like shopping whatever the
+   mechanism, so its declaration would need to name the calibration statistics it
+   expects to move (P(m = 1 | k = 1), P(7 -> 8), late minority leave rate) alongside
+   the row.
+
+4. **What the size feature can and cannot buy, measured on the parent's parquet
+   before anything was built.** CE: human-like singleton cells -40% (1.388 ->
+   0.841), singleton 0/20 polarisation at 100% / 50% of the human excess -19% /
+   -10%; a pure level shift +3-4% *worse* — the claim is distributional. CG: with
+   human-like size-1 cells alone 0.738 -> 0.766 (score ~3.1); size-1 and size-8
+   together 0.787 (score ~2.3); no band upgrade available, hence a watch item. CC
+   EMD 0.409 -> 0.345 under the same counterfactual. Size 8 does not enter CE at
+   all (CE drops rounds with an empty group), so the merged-eight sag is a CG/CC
+   watch effect only.
+
+5. **The feature costs held-out likelihood, systematically, in every fold — recorded
+   before any score exists.** Training job 29891768, `COMPLETED`, elapsed 00:07:57
+   (base ~8 min, §5 ceiling ~24 min), artifact sha256
+   `321473ed802148fbdab228ccf55d20d307179c56f67e542b4205f1bb830abec1`. Test
+   log-loss at epoch 574, unshuffled, against the M0 trunk's own metrics parquet
+   (`artifacts/artificial_humans/group_switching_contribution_50ep/metrics/architecture_node+edge+rnn__dataset_50ep__epochs_575.parquet`)
+   read at the same epoch, same `set == test`, same null `shuffle_feature` — an
+   apples-to-apples comparison, checked because the declaration quoted 1.9892 as a
+   "best-mean" and the candidate's figure is a final-epoch one. M0's final-epoch
+   mean is **1.989742**, and it is also M0's best-epoch mean (the curve is
+   monotone over the last three recorded epochs: 1.992634, 1.991538, 1.989742),
+   so the two quantities coincide and the comparison is sound.
+
+   | fold | M0 | candidate | delta |
+   |---|---|---|---|
+   | 0 | 2.048224 | 2.055092 | +0.006868 |
+   | 1 | 2.035988 | 2.078708 | +0.042720 |
+   | 2 | 1.963259 | 1.972700 | +0.009441 |
+   | 3 | 1.999429 | 2.045801 | +0.046372 |
+   | 4 | 1.901808 | 1.903889 | +0.002081 |
+   | mean | 1.989742 | 2.011238 | **+0.021496 (+1.08%)** |
+
+   All five folds move the same way, so this is a systematic cost, not fold noise.
+   The reading that fits both this and the diagnosis: the size response lives in
+   ~2.5% of agent-rounds (236 alone rows in 9,600), so it can shift the tails CE
+   measures while the mean log-loss, averaged over the 97.5% where size is 4-7,
+   only sees the regularisation cost of one more input. That is consistent with
+   the hypothesis but is also the campaign's known failure mode pointing at the
+   marginal C block (CA/CB/CD/CF) — #154, #156, #158 all died there. It changes
+   nothing procedurally: §2's gates are the evaluation scores, this is not one of
+   them, and the experiment continues to its single evaluation. It is logged
+   because a reader comparing this stack's C rows later needs to know the trunk
+   started 1.08% behind on likelihood.
+
+6. **Isolation verified from the job's own log, not inferred.** The FutureWarning at
+   log line 27 is raised from
+   `/u/certuer/autoresearch/contribution-group-size/src/aimanager/generic/data.py:99`
+   — the isolated tree, not `~/algorithmic-institutions/src` — and line 88 records
+   `Work dir: /u/certuer/autoresearch/contribution-group-size/.`. This is the single
+   point of failure PR #171 identified in the `SBATCH_EXPORT` design, so it is
+   checked per run rather than assumed. The artifact carries `x_encoding` of 4
+   entries ending in `own_group_size` and `default_values['own_group_size'] = 4`,
+   with `copula_rho = 0.0` as the pre-calibration trunk must.
+
+7. **The trunk shows no measurable size response at the teacher-forced marginal: the
+   feature was paid for and, at this measurement, bought nothing.** Job 29892301,
+   41 s, on the human single-copy data (9,320 valid rows), both trunks loaded
+   pre-copula with `copula_rho = 0.0` and fed identical tensors, mask and round
+   filter. The pipeline's sanity check reproduces the observed human shares at
+   size 1 (n = 219) exactly: c = 20 **0.305936**, c = 0 **0.228311** against the
+   declared 0.31 / 0.23.
+
+   | quantity (size = 1, n = 219) | candidate | M0 | delta | human |
+   |---|---|---|---|---|
+   | P(c = 20) | 0.226427 | 0.208336 | +0.018092 | 0.31 |
+   | P(c = 0) | 0.230509 | 0.226580 | +0.003930 | 0.23 |
+
+   The binomial SE at n = 219, p ~ 0.25 is **0.033787**, so both deltas sit below
+   the noise floor — not near it, below it. Mean predicted contribution by size
+   1..8 moves by -0.088 to +0.081 against human gaps of ~1.2 at size 1, and the
+   deltas are *negative* at sizes 2-7. Neither tail nor mean moved by a resolvable
+   amount. This is "not learned", not the level-shift failure mode the declaration
+   warned about (which would move the mean and leave the tails): essentially
+   nothing moved. Predicted mean here is the softmax expectation, the natural
+   teacher-forced summary of a distributional head, which is not what a rollout
+   produces.
+
+8. **Why the simulation still runs, and is not a formality.** §2's gates are the
+   evaluation scores and this diagnostic cannot gate them (my ruling 6 at
+   validation, and the standing rule that a diagnostic never substitutes for the
+   sim). But there is also a substantive reason the closed loop can diverge from
+   this measurement: the diagnostic is weighted by the *human* size distribution,
+   where size 1 is 2.3% of rows, whereas the simulation's state distribution
+   reaches the extremes far more often — the parent's own notes record it spending
+   more time at k = 0/8 than the human games do. A per-cell response too small to
+   resolve on 219 human rows can therefore carry more weight in a rollout that
+   visits those cells repeatedly, and CE is an EMD over exactly the tail cells the
+   sim over-visits. The expectation after Notes 5 and 7 is a `[FAIL]`; the point of
+   running it is that "small at the human marginal" and "small in the loop" are
+   different claims, and only one of them has been measured.
+
+9. **Successor hypothesis, from this experiment's own evidence: the encoding, not
+   the feature.** Two things point the same way. First, the human size profile is
+   **non-monotone** — mean contribution by size 1..8 is 10.5 / 9.9 / 8.9 / 10.4 /
+   10.4 / 9.5 / 9.4 / 8.5, dipping at 3 and peaking at 4-5 — so the marginal-return
+   story (monotone in 1.6/k) is not what the level data shows, and a scalar `k / 8`
+   entering an MLP makes a monotone ramp the cheapest fit. Second, this project has
+   already ruled on exactly this trade-off for exactly this reason: M0's own config
+   uses `encoding: onehot` for `agent_group` because a numeric scalar "removes the
+   spurious ordering/magnitude a single numeric scalar imposes ... and gives each
+   group an independent additive offset". `own_group_size` with
+   `encoding: onehot, n_levels: 9` would give each size its own offset and let the
+   size-1 cell move without dragging a ramp through sizes 2-7 — where Note 7 shows
+   the candidate's deltas are, tellingly, *negative*. This is a hypothesis, not a
+   finding: it is untested here, and it is deliberately left to a successor
+   experiment rather than run as a second arm of this one, so that this branch
+   reports one declared change judged by one evaluation (§3, §4).
+
+10. **Copula re-calibrated on the new trunk; #165's stop-gate did NOT fire.** Job
+    29892494, elapsed 00:10:50 (~12.5 min precedent), exit `1:0` — the by-design
+    `STOP-ESCALATE` on `phi >= 1.0` at `contribution_copula_rho.py:603-609`, the
+    same kind of exit #165's job 29666293 took; the run completed in full and
+    wrote its params first, so this is not a crash. Isolation again verified from
+    the job's own log (`aimanager` resolving to the isolated `src`).
+
+    | quantity | #165 (M0 trunk) | this run (group-size trunk) |
+    |---|---|---|
+    | rho | 0.06958238086256316 | **0.07515788161219097** |
+    | rho SE | 0.010418260898762315 | 0.011493971521581246 |
+    | rho 95% CI (200 episode-cluster resamples) | [0.04592661278794028, 0.0854596547235886] | **[0.04874478605923702, 0.09586446234810954]** |
+    | phi_hat | 1.1588380212468576 | 1.0916329502906272 |
+    | phi 95% CI | [0.8256631146532615, 1.6415133722844082] | [0.8046572960759976, 1.4633519892482612] |
+    | round-trip max abs bias | 0.009462259703284237 | 0.005695265453312129 (PASS, tol 0.03) |
+    | preflight independent -> copula | 0.7837119164031583 -> 0.7928150641319318 | 0.790479088118457 -> 0.7998995744339651 |
+    | rows / pairs / cross-player pairs | 7457 / 15090 / 28714 | 7457 / 15090 / 28714 |
+
+    **The gate:** the CI's lower bound is 0.0487, and the smallest of the 200
+    bootstrap draws (0.0388) is itself positive, so the interval excludes 0 by a
+    clear margin and the experiment continues. `phi_final = 1.0` by #165's boundary
+    ruling — `phi_hat > 1` with a CI spanning 1 is the estimator saturating, not a
+    measured explosion, and the round-thirds rho growth #165 cited is reproduced
+    here (0.0473 / 0.0887 / 0.1044). The estimated `phi` stays in the JSON
+    unaltered.
+
+    **rho is not materially different from #165's**: +8.0% on the point estimate,
+    0.49 SE away, and each estimate sits inside the other's CI. That is the
+    expected shape rather than a surprise — rows, cells, pair counts and the
+    cell-size histogram are bit-for-bit identical, so only the teacher-forced
+    marginals changed, and Note 7 established the feature barely moves those.
+    This is a third measurement pointing the same way as Notes 5 and 7. Human
+    group-spread ratio 0.8472681041593946; the preflight's one-step move closes
+    8.6% of the independent-to-human gap, and the new trunk's *independent*
+    ratio (0.7905) starts marginally closer to human than M0's (0.7837) — small,
+    in the right direction, and bounded to the within-round part since phi cannot
+    appear in a one-step redraw.
+
+11. **A latent `rsync --delete` hazard in this experiment's own tooling, found and
+    avoided rather than triggered.** `scripts/train_cluster.sh`'s sync carries
+    `--delete` and, for isolated dirs, excludes only `artifacts/manager/`. The
+    step-5 artifact and the step-7 calibration output live in the isolated dir and
+    **not** in the local tree, so a routine launcher call from this worktree would
+    have deleted them. Step 7 therefore `scp`'d its single new slurm file and
+    sha256-verified it local vs remote (`21d4fdf7c607b6df61b060358368fbb871274be9566aa56e42b9c27113724ac1`)
+    instead of syncing. §9's rule is written about *parallel experiments* colliding;
+    this is a different failure — an experiment deleting its **own** remote outputs
+    — and any step after a training run in an isolated dir is exposed to it. Worth
+    the maintainer's attention as tooling, not as this experiment's finding.
+
+12. **Provenance gap worth knowing:** the params JSON records
+    `git_head: "unavailable"`, because the isolated dir's rsynced `.git` is this
+    worktree's gitdir *pointer*, which does not resolve on Raven. The script
+    captures it best-effort inside an `except`, and #165 recorded a real hash only
+    because it ran from a full checkout. Flagged rather than patched — patching it
+    would be unrequested tooling work on the frozen-adjacent surface, and the
+    artifact's provenance is anchored anyway by `source_model_sha256`
+    (`321473ed8021...`), which the stamper asserts against.
+
+13. **Candidate artifact stamped and verified (step 8, after 7b).** Job 29893136,
+    `COMPLETED` in 35 s, exit `0:0`. Stamped artifact sha256
+    `777e84b1dadfbe5d22ed1f5b3d5dcc39b10befc853f9b89697e4d88af19396da`, from trunk
+    `321473ed8021...` and params `b5bcfd137fa6...`, carrying `copula_rho =
+    0.07515788161219097`, `copula_phi = 1.0`, `copula_switch_every = 1`,
+    `x_encoding` of 4 entries ending in `own_group_size`, and
+    `default_values['own_group_size'] = 4`.
+
+    Three independent confirmations that the stamp changed sampling and nothing
+    else: the stamper's own post-check (10 tensors bit-identical, only the three
+    copula fields differing); a separately written walk over both raw `.pt` dicts
+    comparing every tensor by hand (10/10 identical, all 16 non-copula top-level
+    keys identical); and `verify_probs`, which found **7,457 teacher-forced
+    train-split rows bit-identical** between trunk and stamped model. The third is
+    the one that matters for the comparison's validity: the candidate differs
+    from its own trunk only in how it samples, so the stack comparison isolates
+    one change.
+
+14. **Both step-10 gates pass; the comparison is licensed.** Control job 29893252,
+    `COMPLETED` 00:01:09, exit `0:0`, re-running the parent's own unmodified
+    config: `per_round.parquet` sha256
+    `0a34f8280bccb98a75fe002eb3669827358117ce56c44f7c10268f312904b7ab`, the
+    expected value **bit-for-bit**. The stronger form of the same statement: the
+    fetched control parquet shows **no git diff** against the copy already
+    committed on the parent branch. Steps 1-2 are therefore empirically the no-op
+    step 2 argued they were statically — adding a state key and a call into
+    `update_contribution` is invisible to a model whose `x_encoding` does not name
+    it.
+
+    Candidate job 29893304, `COMPLETED` 00:02:32, exit `0:0`, parquet sha256
+    `5aac0cecc764e1ee79e485f2ee32cef30d080d3391ebed09148e2c4ff00ba6b4` — which
+    **differs** from the control's, so the stamped artifact is driving the run
+    rather than being silently ignored. Both parquets verified local against
+    remote and both are real Parquet content, not LFS pointer stubs.
+
+    **An honest limit on the isolation evidence for this step.** `simulate.py`
+    prints neither the model path nor `PYTHONPATH`, so unlike Note 6 there is no
+    runtime log line naming the artifact. What exists is documentary: the log's
+    `Work dir: /u/certuer/autoresearch/contribution-group-size/.` combined with
+    the archived `run.sh`'s `export PYTHONPATH="$PWD/src..."` under `--chdir=.`,
+    plus the archived `config.yml` the job actually read, naming the candidate
+    artifact whose remote sha256 was verified as `777e84b1...` before submission.
+    The differing parquet hash is the behavioural confirmation. Recorded as
+    documentary rather than runtime provenance so a later reader does not credit
+    this step with evidence it does not have.
+
+    Jobs 29893190 and 29893192, adjacent in the id sequence, belong to a
+    different isolated dir (`~/autoresearch/switch-joint-exodus-gmlp`) and are not
+    this experiment's. A concurrent experiment running safely alongside this one
+    is §9's isolation design working as intended.
+
+15. **Verdict: `[FAIL]`. Gate 1 fails on the declared row; gate 2 passes.** CE
+    **1.1053860057442750 -> 1.0503773473383176**, numerator 1.6091089669 ->
+    1.5290329346 against the unchanged ceiling 1.4556986958. The movement is in
+    the predicted direction and is the largest single improvement in the table,
+    but it is **-4.98% of the numerator against the -9.5% the band edge
+    required** — roughly half the distance, and §2 is explicit that a
+    within-band improvement, however large, is a `[FAIL]` with valuable notes.
+    Mean 1.3040409569053069 -> 1.3515237999365521, a +3.64% rise, inside the
+    10% margin, so gate 2 passes; both are required. Rows <= 1 fell 11/21 ->
+    9/21 (context, not a criterion).
+
+    Measured against Note 4's counterfactual ladder, the mechanism delivered
+    about what half-learned polarisation predicts: the ladder put -10% at 50% of
+    the human singleton excess and -19% at 100%, and the realised -4.98% sits
+    below its bottom rung. Note 7 forecast exactly this — no resolvable change
+    in the size-1 tails at the teacher-forced marginal — so the sim's richer
+    visiting of the extremes (Note 8) bought a real but sub-threshold effect
+    rather than the amplification that was the one argument for running it.
+
+16. **RCB band-upgraded, and this experiment does not claim it.** RCB
+    2.0242478714062093 -> 1.8740639083 (numerator 0.7041451593 -> 0.6519028859),
+    a 2-5 -> 1-2 crossing. With the mean inside its margin, declaring RCB would
+    have made this a `[SUCCESS]` under §2 as written. It is not claimed, for the
+    reason the Declaration gave *before* any of this ran: RCB sat 0.024 (1.2%)
+    from the band edge, this experiment's change makes no mechanism claim on the
+    punishment response, and the Declaration recorded that declaring it "would be
+    shopping". A pre-declaration that binds only when the dice fall favourably is
+    not a pre-declaration. The upgrade is reported as collateral, and a successor
+    that wants RCB must declare it with a mechanism up front and earn it — noting
+    that a row 1.2% from an edge, moving on a change with no claim on it, is at
+    least as likely to be noise as signal.
+
+17. **The predicted marginal-C-block cost arrived, on schedule and in full.**
+    Note 5 recorded the trunk starting 1.08% behind M0 on held-out log-loss and
+    flagged the C block as the campaign's known failure mode (#154, #156, #158).
+    Every marginal C row degraded: CA +0.0674, CC +0.0854 (band <= 1 -> 1-2), CB
+    +0.0591, CD +0.0451, CF +0.0147. CG worsened too, 4.2676 -> 4.5610, against
+    the "expected ~3, within band" the Declaration set as a watch item — so the
+    group-spread watch item moved the wrong way, and the preflight's +8.6%
+    one-step gap closure did not survive the closed loop.
+
+18. **The largest single degradation is SA, and it is a propagation effect worth
+    the next agent's attention.** SA 0.8396005959 -> 1.1882381066 (+0.3486, band
+    <= 1 -> 1-2), raw switch rate 0.0177541466 -> 0.0251264156 against a ceiling
+    of 0.0211459433. A contribution-slot feature has no direct path to the switch
+    rate; the indirect one is that the switch trunk's main feature is per-capita
+    common good, which is a function of contributions. So perturbing the
+    contributor moves the switch model's inputs, and SC followed (1.1474 ->
+    1.3149) with SB flat. Any future contribution-slot change on this stack
+    should expect to pay in S rows through this channel, and the parent's SC
+    result (PR #171, 2.19 -> 1.15) is the thing most exposed to it.

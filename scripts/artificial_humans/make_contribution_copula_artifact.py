@@ -53,6 +53,14 @@ OUT = ROOT / (
 SWITCH_EVERY = 1  # contributions are decided every round (plan step 2)
 MODULE_KEYS = ("op1", "op2", "rnn_n", "rnn_g", "bias")
 FIELDS = ("copula_rho", "copula_phi", "copula_switch_every")
+# `GraphNetwork.__init__` (graph.py ~line 150) now defaults every model --
+# copula or not -- to these three values, and `.save()` (~line 731) persists
+# them unconditionally. A base trained before copula support landed (e.g.
+# PR #165's M0 trunk) lacks the keys entirely; a base trained after carries
+# them at these neutral values. Either is a legal, un-stamped base; a
+# present-but-non-neutral value means the base already carries an active
+# copula and must still be refused (plan step 7b).
+NEUTRAL_FIELDS = dict(copula_rho=0.0, copula_phi=0.0, copula_switch_every=None)
 
 
 def rel(path):
@@ -167,13 +175,20 @@ def n_tensors(obj):
     return 0
 
 
-def assert_only_fields_added(base, again, fields):
-    """Every pre-existing key survives untouched; the only new keys are the
-    three copula fields."""
+def assert_only_copula_fields_changed(base, again, fields):
+    """Every pre-existing key other than the three copula fields survives
+    untouched; those three end up holding the stamped values. They may have
+    been freshly added (a base trained before copula support existed) or
+    already present at their neutral default (any base trained after --
+    checked by the caller before stamping) -- either way the guarantee is
+    the same: the stamped artifact differs from the base in exactly the
+    three copula fields and nothing else."""
     assert set(base) <= set(again), f"keys dropped: {sorted(set(base) - set(again))}"
     added = set(again) - set(base)
-    assert added == set(fields), f"unexpected new keys: {sorted(added - set(fields))}"
+    assert added <= set(fields), f"unexpected new keys: {sorted(added - set(fields))}"
     for k in sorted(base):
+        if k in fields:
+            continue
         assert same(base[k], again[k]), f"pre-existing key {k!r} changed"
     for k, v in fields.items():
         assert again[k] == v, f"{k} did not round-trip: {again[k]!r} != {v!r}"
@@ -241,7 +256,12 @@ def main():
     fields = fields_from(params, args.base)
     base = th.load(args.base, map_location="cpu")
     for k in fields:
-        assert k not in base, f"base artifact already carries {k}"
+        if k not in base:
+            continue  # base predates copula support -- nothing to check
+        assert base[k] == NEUTRAL_FIELDS[k], (
+            f"base artifact already carries an active {k}={base[k]!r} "
+            f"(neutral is {NEUTRAL_FIELDS[k]!r}) -- refusing to double-stamp"
+        )
     print(f"base      {rel(args.base)}")
     print(f"  sha256  {sha256(args.base)}")
     print(f"  keys    {sorted(base)}")
@@ -259,7 +279,7 @@ def main():
     th.save(stamped, args.out)
 
     again = th.load(args.out, map_location="cpu")
-    assert_only_fields_added(base, again, fields)
+    assert_only_copula_fields_changed(base, again, fields)
     n_t = n_tensors({k: base[k] for k in base})
     print(f"wrote     {rel(args.out)}")
     print(f"  sha256  {sha256(args.out)}")
