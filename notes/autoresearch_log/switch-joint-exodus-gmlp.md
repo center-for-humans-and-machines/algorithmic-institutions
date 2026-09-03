@@ -408,7 +408,9 @@ runs once per step before staging, not after every edit.
    `output_dir` may differ).
 
 9. **[Sonnet] Tests, local then Raven** — locally, with `PYTHONPATH=$PWD/src` and the
-   worktree venv (`uv sync` first; the worktree has none): `pytest
+   **main checkout's** interpreter,
+   `/Users/ertuerkan/Desktop/algorithmic-institutions/.venv/bin/python`
+   (`uv sync` in the worktree is not available — see note 8): `pytest
    tests/switch src/aimanager/tests/test_joint_exodus_train_sim_parity.py
    tests/baselines src/aimanager/tests/test_eval_*.py -q` all green; each
    stand-in module reports whether stand-ins were installed. Then on Raven
@@ -627,3 +629,28 @@ runs once per step before staging, not after every edit.
    step that touches code shared with another slot: `GraphNetwork` also
    loads this stack's `valid_model`, so its head-off bitwise-identity
    tests are not ceremony and a failure there halts the run.
+
+8. (Orchestrator, step 1 confirmed) Step 1 verified independently of the
+   implementer's report: both added lines render correctly through
+   `create_script`'s two-step `.format()`, and a brace audit of the whole
+   template leaves only the six real placeholders (`log_file`, `job_id`,
+   `cores`, `memory`, `experiment_name`, `command`) single-braced. The
+   comment's appeal to `--chdir=.` is accurate — it is on line 3 of the
+   template — and under the file's `set -e` a failed provenance import
+   stops the job rather than letting it train on shared-tree code, which
+   is the behaviour we want.
+9. (Orchestrator, environment correction to step 9) `uv sync` cannot run
+   in this worktree: it resolves `--find-links https://data.pyg.org/whl/
+   torch-1.11.0+cu113.html` and the sandbox has no DNS for that host, so
+   it creates an empty `.venv` and fails. The empty venv was removed —
+   left in place it would be picked up by anything defaulting to
+   `.venv`. Local tests instead run on the **main checkout's** venv with
+   the worktree's source on the path:
+   `PYTHONPATH=$PWD/src /Users/ertuerkan/Desktop/algorithmic-institutions/.venv/bin/python -m pytest ...`.
+   Verified: `aimanager` resolves to the worktree's
+   `src/aimanager/__init__.py`, and `test_eval_metrics.py` passes 44/44.
+   That venv is torch 1.11.0 / pytest 8.4.2 / numpy 1.26.4 / pandas
+   2.3.3 with **no** `torch_scatter` or `torch_geometric` — exactly the
+   macOS setup CLAUDE.md describes and the condition the plan's stand-in
+   discipline expects, so the stand-ins install locally and must report
+   *not installed* on Raven.
