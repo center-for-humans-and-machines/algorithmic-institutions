@@ -219,7 +219,7 @@ protocol, seeds and episode count are the parent's.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
-| 2026-09-02 | round-level joint head over the leaver-count pair (m_0, m_1), detached from the trunk, with conditional-Bernoulli selection of who leaves | single | **SC 1.147392663266986** (baseline 2.1867905905576634) | 11/21 (baseline 11/21) | 1.3040409569053069 (baseline 1.2893632310269196) | **FAIL** — gate 1 passes (SC 2-5 -> 1-2), gate 2 fails (mean +0.0146777258783870) |
+| 2026-09-02 | round-level joint head over the leaver-count pair (m_0, m_1), detached from the trunk, with conditional-Bernoulli selection of who leaves | single | **SC 1.147392663266986** (baseline 2.1867905905576634) | 11/21 (baseline 11/21) | 1.3040409569053069 (baseline 1.2893632310269196) | **SUCCESS by maintainer ruling** (2026-09-03) — gate 1 passes (SC 2-5 -> 1-2); gate 2 as written fails (mean +0.0146777258783870) |
 
 ## Notes
 
@@ -379,3 +379,27 @@ protocol, seeds and episode count are the parent's.
    decision rounds — so the anchor convention can never explain a mean
    discrepancy, only a change in n. Mixing the two conventions across a human and
    a simulated number makes an overshoot look half its true size.
+18. **Maintainer ruling, 2026-09-03: this is a SUCCESS.** The maintainer deemed
+   the result a success and stated the intention to amend the §2 definition
+   accordingly. The measured numbers are unchanged and are not restated here in
+   any softer form: SC 2.1867905905576634 -> 1.147392663266986 (band upgrade),
+   21-row mean 1.2893632310269196 -> 1.3040409569053069 (+0.0146777258783870,
+   i.e. gate 2 as written at the time of the run was not met). What changed is
+   the adjudication, not the measurement. Recorded here in the form PR #150 used
+   for its own maintainer ruling, so that a later reader can see exactly which
+   part is data and which part is judgement.
+19. **Flagged to the maintainer before any §2 edit: the definition change is
+   retroactive.** Gate 2 is what separates a band upgrade from a band upgrade
+   that was paid for elsewhere, so relaxing or removing it reclassifies past
+   experiments as well as this one. On the record as it stands, at least these
+   would become successes: PR #168 (all four arms band-upgraded SC, none passed
+   the mean), PR #163 (RCD band upgrade with an RCA collapse — whose entire
+   scheduled-sampling family the maintainer vetoed on 2026-08-27), PR #154
+   (CG and RCD upgrades, killed by the marginal C block), PR #156 (a two-band
+   RCD upgrade, killed by RCA), and PR #151 (RCA upgrade, killed by the CG
+   explosion). PR #169 and PR #162 would remain failures, having produced no band
+   upgrade at all. The narrower instrument with existing precedent is a per-PR
+   maintainer override recorded in the title, as PR #164 did on a 0.003 margin;
+   it reaches this result without reopening the other five. Note also that a
+   "net band movement" rule would not rescue this experiment either — it posts 3
+   upgrades against 4 degradations.
