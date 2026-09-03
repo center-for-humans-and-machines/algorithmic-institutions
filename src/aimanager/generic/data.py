@@ -80,6 +80,12 @@ def parse_agent_rounds(df, switch_every=None):
     else:
         df["switch_valid"] = df["switch_mask"]
 
+    # current group size (node feature): count of MEMBERS at this round,
+    # timeouts and no-input rows included -- membership is not validity.
+    df["own_group_size"] = df.groupby(["episode_id", "round_number", "group_id"])[
+        "player_id"
+    ].transform("size")
+
     # own-group average contribution (node feature, #114 / M3): leave-one-out
     # mean of the agent's CURRENT-group members' PREVIOUS-round contribution.
     # Computed directly (current-group membership x t-1 contribution) so a
@@ -147,6 +153,9 @@ def get_default_values(df):
         # round-0 / absent cells inherit the contribution default (see #114):
         # the own-group prev mean of all-c_def previous contributions is c_def.
         "own_grp_prev_mean_contr": c_def,
+        # groups are 4-4 before the first switch, so round 0 and absent
+        # cells are 4 by construction.
+        "own_group_size": 4,
     }
     return default_values
 
@@ -169,6 +178,7 @@ def create_torch_data_new(df, default_values=None):
         "switch_mask": th.bool,
         "switch_valid": th.bool,
         "own_grp_prev_mean_contr": th.float,
+        "own_group_size": th.int64,
     }
 
     n_groups = df["group_idx"].max() + 1
