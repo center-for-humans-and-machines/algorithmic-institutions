@@ -705,3 +705,41 @@ runs once per step before staging, not after every edit.
     `"non-negative"`, `"max_group_size"` and `"rows of p"` are now part
     of the tested surface, so they must not be reworded casually.
 
+13. (Orchestrator, step 4 confirmed) 25 tests in the new suite, 77 across
+    `tests/switch`, 357 across `tests/`; `graph.py` shows 91 insertions
+    and one deletion (the `forward` signature) over nine hunks, with no
+    incidental reformatting, no `copula` and no `last_round` anywhere in
+    `src/`, `tests/` or `configs/`. The two invariances that protect the
+    other slots both hold: head-off `predict_independent` is `th.equal`
+    in predictions, probabilities **and** the full post-call global RNG
+    state against the pre-change class built out of git (`ad3bc9c`), and
+    head-on shares the head-off trunk `state_dict` tensor for tensor
+    with bit-identical per-agent logits, which is what building the head
+    **last** buys. Confirmed by mutation rather than by a green run:
+    injecting a single `th.rand(1)` into `forward` fails the identity
+    test on the predictions themselves, and the file restores clean. The
+    implementer also verified `embed_size` against the **measured** RNN
+    output width by hooking `rnn_n`'s forward, not by reading the
+    assignment chain — and noted that post-node-model and post-RNN
+    widths coincide here (both `hidden_size`), so "post-RNN" is not what
+    distinguishes it.
+14. (Orchestrator, ruling on step 4's git-dependent tests) The
+    pre-change-class tests `skipif` out where `.git` is absent, which is
+    every Raven run, since `remote_test.sh` rsyncs with `--exclude
+    '.git/'`. Accepted as-is rather than committing a copy of the old
+    module as a fixture. Reason: with the head off, none of the new code
+    executes except the changed `forward` signature, so head-off
+    identity is a PyG-independent property and a local check settles it;
+    what actually needs real `torch_scatter` is the head-**on** path,
+    whose assertions do run on Raven at step 9. A duplicated 500-line
+    fixture would rot and buy nothing.
+15. (Orchestrator, plan correction from step 4) `sample_conditional_bernoulli`
+    is imported in step 6, not step 4: nothing at step 4 calls it and
+    flake8's F401 is active, so an early import would fail lint and a
+    `noqa` would be papering over it. Step 4's inherited test item about
+    head-on non-decision-round sampling is not yet meaningful either —
+    `predict_independent` is untouched here, so with the head on
+    sampling is the legacy path on *every* round; the honest version of
+    that test asserts step 4 changes no sampling behaviour at all, and
+    the round-dependent claim belongs to step 6.
+

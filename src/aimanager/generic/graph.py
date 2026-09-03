@@ -4,6 +4,7 @@ import torch as th
 from torch_scatter import scatter_mean
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
+from aimanager.generic.joint_exodus import JointExodusHead
 
 
 class EdgeModel(th.nn.Module):
@@ -144,6 +145,9 @@ class GraphNetwork(th.nn.Module):
         add_global_model=True,
         hidden_size=None,
         default_values={},
+        joint_exodus=False,
+        joint_exodus_head=None,
+        joint_exodus_switch_every=None,
         **_,
     ):
         super().__init__()
@@ -167,6 +171,39 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+
+        # Joint exodus head: a round-level joint over the pair of leaver counts
+        # (m_0, m_1); see notes/autoresearch_log/switch-joint-exodus-gmlp.md and
+        # generic/joint_exodus.py. Off by default, and an artifact saved without
+        # these three keys loads with the head absent and behaves exactly as it
+        # does today -- which matters, because this class is shared with the
+        # contribution and punishment models and with this stack's valid_model.
+        assert isinstance(
+            joint_exodus, bool
+        ), f"joint_exodus must be a bool, got {joint_exodus!r}"
+        assert not joint_exodus or y_name == "does_switch", (
+            "joint_exodus is only defined for the does_switch head, " f"got {y_name}"
+        )
+        # Which rounds the joint draw fires on. The predictor is run EVERY round
+        # to keep its GRU warm but its output is only consumed on decision
+        # rounds, so the joint machinery -- and the RNG it eats -- is confined
+        # to those rounds: decision rounds are `(r + 1) % every == 0`. `bool` is
+        # excluded explicitly: `True` is an `int` and would silently mean "every
+        # round is a decision round".
+        assert joint_exodus_switch_every is None or (
+            isinstance(joint_exodus_switch_every, int)
+            and not isinstance(joint_exodus_switch_every, bool)
+            and joint_exodus_switch_every > 0
+        ), (
+            "joint_exodus_switch_every must be None or a positive int, got "
+            f"{joint_exodus_switch_every!r}"
+        )
+        assert joint_exodus or joint_exodus_switch_every is None, (
+            "joint_exodus_switch_every is only meaningful with the joint "
+            "exodus head enabled"
+        )
+        self.joint_exodus = joint_exodus
+        self.joint_exodus_switch_every = joint_exodus_switch_every
 
         if op1 is None:
             if add_edge_model:
@@ -245,6 +282,20 @@ class GraphNetwork(th.nn.Module):
             else:
                 self.bias = None
 
+            # Built LAST, so every pre-existing parameter is initialised from
+            # exactly the RNG state it saw before this head existed: a model
+            # with the head off is bit-identical to today, and a model with it
+            # on shares the same trunk weights under the same seed.
+            # `x_features` is the post-RNN node width the head reads.
+            if joint_exodus_head is not None:
+                self.joint_exodus_head = joint_exodus_head
+            elif joint_exodus:
+                self.joint_exodus_head = JointExodusHead(
+                    embed_size=x_features, hidden_size=hidden_size
+                )
+            else:
+                self.joint_exodus_head = None
+
         else:
             self.op1 = op1
             self.op2 = op2
@@ -253,8 +304,14 @@ class GraphNetwork(th.nn.Module):
             self.bias = bias
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
+            self.joint_exodus_head = joint_exodus_head
 
-    def forward(self, data, reset_rnn=True):
+        assert (self.joint_exodus_head is not None) == self.joint_exodus, (
+            "joint_exodus and joint_exodus_head disagree: "
+            f"{self.joint_exodus} vs {type(self.joint_exodus_head).__name__}"
+        )
+
+    def forward(self, data, reset_rnn=True, return_joint=False, decider_mask=None):
         x = data["x"]
         edge_index = data["edge_index"]
         if "edge_attr" in data:
@@ -272,6 +329,26 @@ class GraphNetwork(th.nn.Module):
             x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
         if self.rnn_g is not None:
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
+        # The joint exodus head branches off the post-RNN node embeddings and
+        # feeds nothing back, so the per-agent path below is untouched whether
+        # the head runs or not. It feeds nothing back on the BACKWARD pass
+        # either: the head detaches the pooled embeddings it reads (see
+        # `joint_exodus.JointExodusHead.forward`), so the joint loss leaves
+        # every parameter above this line -- op1, the RNNs, the encoders --
+        # with exactly the gradient it would have had with the head off.
+        # `return_joint` defaults to False, so every existing call site keeps
+        # the exact signature and return type it has today.
+        joint = None
+        if return_joint and self.joint_exodus_head is not None:
+            joint = self.joint_exodus_head(
+                x,
+                agent_group=data["agent_group"],
+                round_number=data["round_number"],
+                batch=batch,
+                decider_mask=(
+                    data.get("mask") if decider_mask is None else decider_mask
+                ),
+            )
         # op2 is a readout with no edge model (edge_features=0), but NodeModel
         # always aggregates edge_attr -- feed it an empty one so a non-empty
         # edge feature consumed by op1 does not leak into the readout's widths.
@@ -283,6 +360,8 @@ class GraphNetwork(th.nn.Module):
         x, _, _ = self.op2(x, edge_index, op2_edge_attr, u, batch)
         if self.bias:
             x = x + self.bias(data["b"])
+        if return_joint:
+            return x, joint
         return x
 
     def encode(
@@ -332,6 +411,14 @@ class GraphNetwork(th.nn.Module):
         encoded["edge_attr"] = self.edge_encoder(
             edge_index=encoded["edge_index"], n_rounds=n_rounds, **edge_state
         )
+        # The joint exodus head pools by membership and conditions on the
+        # round, neither of which the per-agent path needs, so both are only
+        # carried when the head is present -- a model without it encodes
+        # exactly the keys it encodes today.
+        if self.joint_exodus_head is not None:
+            for key in ("agent_group", "round_number"):
+                assert key in data, f"the joint exodus head requires {key} in the state"
+                encoded[key] = data[key].flatten(0, 1).to(device)
         return encoded
 
     def predict_encoded(self, data, sample=True, reset_rnn=True):
@@ -436,6 +523,9 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            "joint_exodus",
+            "joint_exodus_head",
+            "joint_exodus_switch_every",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
