@@ -1,0 +1,64 @@
+# Behaviorally-declared feature core for the gaussian_mlp v2 contribution
+# candidate. Unlike PR #151's CV-shopped 5-feature set (round-level group
+# context only), every variant here forces own-state AND group-state into the
+# input, so the hidden layer can form the own-vs-group deviation and a
+# group-trajectory signal internally -- the conditional-cooperation mechanism
+# that has to hold CG while sigma sharpens RCA/RCB.
+# run_baseline_cv.py's enumerate_feature_sets gives every block an implicit
+# OFF, so a core in its own block would vanish from a quarter of the sets.
+# Mechanism (log Note 6): every set of B_core repeats the minimum core
+# (prev_contribution + prev_contribution_mean_group), and step-7 selection is
+# filtered to rows whose features contain both -- the 4 core-less
+# (B_core-OFF) combinations therefore cannot be selected.
+# Size: 6 x 4 = 24 feature sets x 54 settings x 4 folds = 5,184 fits.
+
+data:
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: contribution
+  target_type: continuous
+  mask: contribution_valid
+  exclude_flipped: True
+  switch_every: 4
+  model: gaussian_mlp
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/gaussian_mlp_v2_cv.csv
+  show_ce: true          # binned 21-way cross-entropy alongside NLL
+
+setting:               # gaussian_mlp heads; every key griddable (scalar|list)
+  hidden: [8, 16, 32]
+  weight_decay: [0.0001, 0.0003, 0.001]
+  lr: [0.003, 0.01, 0.03]
+  epochs: [500, 1000]
+
+blocks:
+  B_core:   # every set contains prev_contribution + prev_contribution_mean_group
+    components: [prev_contribution, prev_punishment, prev_contribution_mean_group,
+                 prev_punishment_mean_group, prev_win_contribution_mean_group,
+                 prev_win_punishment_mean_group]
+    sets:
+      # s0: minimum core -- own state + own-group contribution level
+      - [prev_contribution, prev_punishment, prev_contribution_mean_group]
+      # s1: s0 + group punishment level
+      - [prev_contribution, prev_punishment, prev_contribution_mean_group,
+         prev_punishment_mean_group]
+      # s2: s0 + group contribution trajectory (window since switch)
+      - [prev_contribution, prev_punishment, prev_contribution_mean_group,
+         prev_win_contribution_mean_group]
+      # s3: s0 + both -- the full declared B1+B2+B5 core
+      - [prev_contribution, prev_punishment, prev_contribution_mean_group,
+         prev_punishment_mean_group, prev_win_contribution_mean_group]
+      # s4: s3 + group punishment trajectory
+      - [prev_contribution, prev_punishment, prev_contribution_mean_group,
+         prev_punishment_mean_group, prev_win_contribution_mean_group,
+         prev_win_punishment_mean_group]
+
+  B7_structural:
+    components: [round_number, switched_last_choice, rounds_since_switch, group_size]
+    sets:
+      - [round_number, switched_last_choice, rounds_since_switch]
+      - [round_number]
+      - [switched_last_choice, rounds_since_switch]
