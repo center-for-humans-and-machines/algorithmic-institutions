@@ -20,6 +20,14 @@ set -e
 
 source "${{AIMANAGER_VENV:-.venv}}/bin/activate"
 
+# An isolated experiment dir shares the canonical checkout's venv, whose
+# editable install resolves `aimanager` to THAT checkout, so without this
+# the job would silently run the shared tree's code instead of this
+# branch's. --chdir=. puts the job in the submitting dir, so $PWD/src is
+# this experiment's source; no effect in the canonical checkout, where the
+# two coincide.
+export PYTHONPATH="$PWD/src${{PYTHONPATH:+:$PYTHONPATH}}"
+
 module load cuda/11.4
 
 if [ -f .env ]; then
@@ -31,4 +39,5 @@ export WANDB_RUN_GROUP={experiment_name}
 export WANDB_NAME={job_id}
 
 # python src/aimanager/artificial_humans/train.py $CONFIG_PATH
+python -c "import sys, aimanager; print('PROVENANCE', sys.executable, aimanager.__file__)"
 {command}
