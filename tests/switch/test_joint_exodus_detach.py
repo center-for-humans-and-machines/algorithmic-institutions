@@ -32,6 +32,7 @@ import importlib
 import sys
 import types
 
+import pytest
 import torch as th
 
 
@@ -126,6 +127,8 @@ from aimanager.generic.joint_exodus import SIZE_NORM, pool_by_group  # noqa: E40
 N_AGENTS = 8
 N_ROUNDS = 24
 HEAD_PREFIX = "joint_exodus_head."
+#: The two size encodings the head runs -- see JointExodusHead.SIZE_ENCODINGS.
+SIZE_ENCODINGS = ("numeric", "onehot")
 
 
 # --------------------------------------------------------------------------- #
@@ -206,7 +209,8 @@ def split_parameters(model):
 # --------------------------------------------------------------------------- #
 # 1. the point of the cut: the trunk does not feel the joint term
 # --------------------------------------------------------------------------- #
-def test_trunk_gradients_are_bitwise_identical_with_the_head_on_and_off():
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_trunk_gradients_are_bitwise_identical_with_the_head_on_and_off(size_encoding):
     """Two identically seeded models -- one with the joint head, one without --
     take one training step on the same batch. Every parameter the two share
     must come out of ``backward()`` with the SAME gradient, bit for bit: that
@@ -214,7 +218,9 @@ def test_trunk_gradients_are_bitwise_identical_with_the_head_on_and_off():
     operationally, and it is why the candidate's trunk is the base model's
     trunk rather than a re-fitted one."""
     off = make_model(seed=31)
-    on = make_model(seed=31, joint_exodus=True)
+    on = make_model(
+        seed=31, joint_exodus=True, joint_exodus_size_encoding=size_encoding
+    )
 
     off_trunk, off_head = split_parameters(off)
     on_trunk, on_head = split_parameters(on)
@@ -246,7 +252,8 @@ def test_trunk_gradients_are_bitwise_identical_with_the_head_on_and_off():
         assert float(param.grad.abs().sum()) > 0.0, name
 
 
-def test_the_trunk_gradient_is_the_per_agent_gradient_alone():
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_the_trunk_gradient_is_the_per_agent_gradient_alone(size_encoding):
     """The same claim stated against the model's own per-agent term rather than
     against a second model: with the head on, backward-ing the TOTAL loss and
     backward-ing only the per-agent component leave the trunk in the same
@@ -255,13 +262,17 @@ def test_the_trunk_gradient_is_the_per_agent_gradient_alone():
     state = make_state(GROUPS, SWITCH, VALID)
     loss_fn = th.nn.CrossEntropyLoss(reduction="none")
 
-    total_model = make_model(seed=37, joint_exodus=True)
+    total_model = make_model(
+        seed=37, joint_exodus=True, joint_exodus_size_encoding=size_encoding
+    )
     total, components = compute_batch_loss(
         total_model, encode(total_model, state, len(GROUPS)), loss_fn, 0.0
     )
     total.backward()
 
-    agent_model = make_model(seed=37, joint_exodus=True)
+    agent_model = make_model(
+        seed=37, joint_exodus=True, joint_exodus_size_encoding=size_encoding
+    )
     encoded = encode(agent_model, state, len(GROUPS))
     y_logit = agent_model(encoded).flatten(end_dim=-2)
     y_true = encoded["y_enc"].flatten(end_dim=-2)
@@ -280,12 +291,15 @@ def test_the_trunk_gradient_is_the_per_agent_gradient_alone():
             assert th.equal(param.grad, ref), name
 
 
-def test_the_joint_term_alone_moves_the_head_and_nothing_above_it():
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_the_joint_term_alone_moves_the_head_and_nothing_above_it(size_encoding):
     """The exclusion, isolated: backward ONLY the joint cross-entropy. Every
     trunk parameter must come back with no gradient at all, while the head's
     parameters get a real one. Without the detach this test fails on the first
     trunk tensor -- it is the one that has teeth."""
-    model = make_model(seed=41, joint_exodus=True)
+    model = make_model(
+        seed=41, joint_exodus=True, joint_exodus_size_encoding=size_encoding
+    )
     state = make_state(GROUPS, SWITCH, VALID)
     encoded = encode(model, state, len(GROUPS))
     model.zero_grad()
@@ -303,7 +317,8 @@ def test_the_joint_term_alone_moves_the_head_and_nothing_above_it():
         assert param.grad is not None and float(param.grad.abs().sum()) > 0.0, name
 
 
-def test_the_cut_is_exactly_the_pooled_embedding():
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_the_cut_is_exactly_the_pooled_embedding(size_encoding):
     """Where the cut is, and what it costs the forward pass -- nothing.
 
     Intercept the head's own input (the post-RNN node embeddings) and the
@@ -313,8 +328,12 @@ def test_the_cut_is_exactly_the_pooled_embedding():
     objects they would be with the head attached. And that input must carry
     no gradient at all -- with the sizes and the round being integer
     constants, detaching the embedding leaves the MLP a constant input, so
-    the head's parameters are the only differentiable thing left in it."""
-    model = make_model(seed=43, joint_exodus=True)
+    the head's parameters are the only differentiable thing left in it. This
+    holds under either size encoding: a one-hot of an integer count is just
+    as gradient-free as the numeric scalar it replaces."""
+    model = make_model(
+        seed=43, joint_exodus=True, joint_exodus_size_encoding=size_encoding
+    )
     head = model.joint_exodus_head
     seen = {}
 
@@ -358,10 +377,20 @@ def test_the_cut_is_exactly_the_pooled_embedding():
         mask=encoded["mask"],
     )
     assert th.equal(features[..., :n_pooled], pooled.flatten(-2, -1).detach())
-    assert th.equal(
-        features[..., n_pooled : n_pooled + head.n_groups],
-        counts.round().to(th.int64).to(x.dtype) / SIZE_NORM,
-    )
+    k = counts.round().to(th.int64)
+    if size_encoding == "onehot":
+        expected_tail = (
+            th.nn.functional.one_hot(k, head.grid).flatten(-2, -1).to(x.dtype)
+        )
+        assert th.equal(
+            features[..., n_pooled : n_pooled + head.n_groups * head.grid],
+            expected_tail,
+        )
+    else:
+        assert th.equal(
+            features[..., n_pooled : n_pooled + head.n_groups],
+            k.to(x.dtype) / SIZE_NORM,
+        )
 
     # the whole MLP input is a constant -- there is no path back to the trunk
     assert not features.requires_grad, "the joint head still reaches the trunk"

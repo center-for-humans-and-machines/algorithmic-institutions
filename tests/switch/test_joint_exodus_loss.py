@@ -23,6 +23,7 @@ import math
 import sys
 import types
 
+import pytest
 import torch as th
 
 
@@ -122,6 +123,8 @@ from aimanager.generic.joint_exodus import (  # noqa: E402
 N_AGENTS = 8
 GRID = MAX_GROUP_SIZE + 1
 N_ROUNDS = 24
+#: The two size encodings the head runs -- see JointExodusHead.SIZE_ENCODINGS.
+SIZE_ENCODINGS = ("numeric", "onehot")
 
 
 # --------------------------------------------------------------------------- #
@@ -569,10 +572,12 @@ def test_head_off_reproduces_the_legacy_loss_with_entropy_regularisation():
     assert th.equal(new, ref)
 
 
-def test_head_on_keeps_the_per_agent_component_identical():
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_head_on_keeps_the_per_agent_component_identical(size_encoding):
     """The head branches off the post-RNN embeddings and feeds nothing back, so
     at equal trunk weights the per-agent component is the legacy number; only
-    the total carries the extra term."""
+    the total carries the extra term. Holds under either size encoding: the
+    encoding only changes the head's own input width, not the trunk."""
     groups = [[0, 0, 0, 1, 1, 1, 1, 1], [0, 0, 0, 0, 1, 1, 1, 1]]
     switch = [[1, 0, 0, 0, 1, 1, 0, 0], [0, 1, 0, 0, 0, 0, 1, 0]]
     valid = [[True] * 8, [True] * 8]
@@ -580,7 +585,9 @@ def test_head_on_keeps_the_per_agent_component_identical():
     loss_fn = th.nn.CrossEntropyLoss(reduction="none")
 
     off = make_model(seed=23)
-    on = make_model(seed=23, joint_exodus=True)
+    on = make_model(
+        seed=23, joint_exodus=True, joint_exodus_size_encoding=size_encoding
+    )
     ref = legacy_batch_loss(off, encode_for_loss(off, state, 2), loss_fn, 0.0)
     total, components = compute_batch_loss(
         on, encode_for_loss(on, state, 2), loss_fn, 0.0
@@ -594,16 +601,21 @@ def test_head_on_keeps_the_per_agent_component_identical():
 # --------------------------------------------------------------------------- #
 # 6. end to end: the objective actually optimises
 # --------------------------------------------------------------------------- #
-def test_the_joint_objective_trains_on_a_synthetic_batch():
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_the_joint_objective_trains_on_a_synthetic_batch(size_encoding):
     """A real GraphNetwork with the head on, a real optimiser, real backward
-    passes: the joint component must fall and nothing may go non-finite."""
+    passes: the joint component must fall and nothing may go non-finite. Holds
+    under either size encoding: the wider onehot readout is still a plain MLP
+    fitted by gradient descent."""
     groups = [[0, 0, 0, 1, 1, 1, 1, 1]] * 4
     # the same state always produces the same pair -- a learnable target
     switch = [[1, 0, 0, 0, 1, 1, 0, 0]] * 4
     valid = [[True] * 8] * 4
     state = make_state(groups, switch, valid, n_rounds=2)
     loss_fn = th.nn.CrossEntropyLoss(reduction="none")
-    model = make_model(seed=29, joint_exodus=True)
+    model = make_model(
+        seed=29, joint_exodus=True, joint_exodus_size_encoding=size_encoding
+    )
     optimizer = th.optim.Adam(model.parameters(), lr=5e-3)
 
     history = []
