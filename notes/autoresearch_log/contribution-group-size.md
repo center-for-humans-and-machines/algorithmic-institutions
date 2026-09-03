@@ -431,3 +431,57 @@ against the contribution slot's ~24 min training ceiling.
    checked per run rather than assumed. The artifact carries `x_encoding` of 4
    entries ending in `own_group_size` and `default_values['own_group_size'] = 4`,
    with `copula_rho = 0.0` as the pre-calibration trunk must.
+
+7. **The trunk shows no measurable size response at the teacher-forced marginal: the
+   feature was paid for and, at this measurement, bought nothing.** Job 29892301,
+   41 s, on the human single-copy data (9,320 valid rows), both trunks loaded
+   pre-copula with `copula_rho = 0.0` and fed identical tensors, mask and round
+   filter. The pipeline's sanity check reproduces the observed human shares at
+   size 1 (n = 219) exactly: c = 20 **0.305936**, c = 0 **0.228311** against the
+   declared 0.31 / 0.23.
+
+   | quantity (size = 1, n = 219) | candidate | M0 | delta | human |
+   |---|---|---|---|---|
+   | P(c = 20) | 0.226427 | 0.208336 | +0.018092 | 0.31 |
+   | P(c = 0) | 0.230509 | 0.226580 | +0.003930 | 0.23 |
+
+   The binomial SE at n = 219, p ~ 0.25 is **0.033787**, so both deltas sit below
+   the noise floor — not near it, below it. Mean predicted contribution by size
+   1..8 moves by -0.088 to +0.081 against human gaps of ~1.2 at size 1, and the
+   deltas are *negative* at sizes 2-7. Neither tail nor mean moved by a resolvable
+   amount. This is "not learned", not the level-shift failure mode the declaration
+   warned about (which would move the mean and leave the tails): essentially
+   nothing moved. Predicted mean here is the softmax expectation, the natural
+   teacher-forced summary of a distributional head, which is not what a rollout
+   produces.
+
+8. **Why the simulation still runs, and is not a formality.** §2's gates are the
+   evaluation scores and this diagnostic cannot gate them (my ruling 6 at
+   validation, and the standing rule that a diagnostic never substitutes for the
+   sim). But there is also a substantive reason the closed loop can diverge from
+   this measurement: the diagnostic is weighted by the *human* size distribution,
+   where size 1 is 2.3% of rows, whereas the simulation's state distribution
+   reaches the extremes far more often — the parent's own notes record it spending
+   more time at k = 0/8 than the human games do. A per-cell response too small to
+   resolve on 219 human rows can therefore carry more weight in a rollout that
+   visits those cells repeatedly, and CE is an EMD over exactly the tail cells the
+   sim over-visits. The expectation after Notes 5 and 7 is a `[FAIL]`; the point of
+   running it is that "small at the human marginal" and "small in the loop" are
+   different claims, and only one of them has been measured.
+
+9. **Successor hypothesis, from this experiment's own evidence: the encoding, not
+   the feature.** Two things point the same way. First, the human size profile is
+   **non-monotone** — mean contribution by size 1..8 is 10.5 / 9.9 / 8.9 / 10.4 /
+   10.4 / 9.5 / 9.4 / 8.5, dipping at 3 and peaking at 4-5 — so the marginal-return
+   story (monotone in 1.6/k) is not what the level data shows, and a scalar `k / 8`
+   entering an MLP makes a monotone ramp the cheapest fit. Second, this project has
+   already ruled on exactly this trade-off for exactly this reason: M0's own config
+   uses `encoding: onehot` for `agent_group` because a numeric scalar "removes the
+   spurious ordering/magnitude a single numeric scalar imposes ... and gives each
+   group an independent additive offset". `own_group_size` with
+   `encoding: onehot, n_levels: 9` would give each size its own offset and let the
+   size-1 cell move without dragging a ramp through sizes 2-7 — where Note 7 shows
+   the candidate's deltas are, tellingly, *negative*. This is a hypothesis, not a
+   finding: it is untested here, and it is deliberately left to a successor
+   experiment rather than run as a second arm of this one, so that this branch
+   reports one declared change judged by one evaluation (§3, §4).
