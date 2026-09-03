@@ -485,3 +485,62 @@ against the contribution slot's ~24 min training ceiling.
    finding: it is untested here, and it is deliberately left to a successor
    experiment rather than run as a second arm of this one, so that this branch
    reports one declared change judged by one evaluation (§3, §4).
+
+10. **Copula re-calibrated on the new trunk; #165's stop-gate did NOT fire.** Job
+    29892494, elapsed 00:10:50 (~12.5 min precedent), exit `1:0` — the by-design
+    `STOP-ESCALATE` on `phi >= 1.0` at `contribution_copula_rho.py:603-609`, the
+    same kind of exit #165's job 29666293 took; the run completed in full and
+    wrote its params first, so this is not a crash. Isolation again verified from
+    the job's own log (`aimanager` resolving to the isolated `src`).
+
+    | quantity | #165 (M0 trunk) | this run (group-size trunk) |
+    |---|---|---|
+    | rho | 0.06958238086256316 | **0.07515788161219097** |
+    | rho SE | 0.010418260898762315 | 0.011493971521581246 |
+    | rho 95% CI (200 episode-cluster resamples) | [0.04592661278794028, 0.0854596547235886] | **[0.04874478605923702, 0.09586446234810954]** |
+    | phi_hat | 1.1588380212468576 | 1.0916329502906272 |
+    | phi 95% CI | [0.8256631146532615, 1.6415133722844082] | [0.8046572960759976, 1.4633519892482612] |
+    | round-trip max abs bias | 0.009462259703284237 | 0.005695265453312129 (PASS, tol 0.03) |
+    | preflight independent -> copula | 0.7837119164031583 -> 0.7928150641319318 | 0.790479088118457 -> 0.7998995744339651 |
+    | rows / pairs / cross-player pairs | 7457 / 15090 / 28714 | 7457 / 15090 / 28714 |
+
+    **The gate:** the CI's lower bound is 0.0487, and the smallest of the 200
+    bootstrap draws (0.0388) is itself positive, so the interval excludes 0 by a
+    clear margin and the experiment continues. `phi_final = 1.0` by #165's boundary
+    ruling — `phi_hat > 1` with a CI spanning 1 is the estimator saturating, not a
+    measured explosion, and the round-thirds rho growth #165 cited is reproduced
+    here (0.0473 / 0.0887 / 0.1044). The estimated `phi` stays in the JSON
+    unaltered.
+
+    **rho is not materially different from #165's**: +8.0% on the point estimate,
+    0.49 SE away, and each estimate sits inside the other's CI. That is the
+    expected shape rather than a surprise — rows, cells, pair counts and the
+    cell-size histogram are bit-for-bit identical, so only the teacher-forced
+    marginals changed, and Note 7 established the feature barely moves those.
+    This is a third measurement pointing the same way as Notes 5 and 7. Human
+    group-spread ratio 0.8472681041593946; the preflight's one-step move closes
+    8.6% of the independent-to-human gap, and the new trunk's *independent*
+    ratio (0.7905) starts marginally closer to human than M0's (0.7837) — small,
+    in the right direction, and bounded to the within-round part since phi cannot
+    appear in a one-step redraw.
+
+11. **A latent `rsync --delete` hazard in this experiment's own tooling, found and
+    avoided rather than triggered.** `scripts/train_cluster.sh`'s sync carries
+    `--delete` and, for isolated dirs, excludes only `artifacts/manager/`. The
+    step-5 artifact and the step-7 calibration output live in the isolated dir and
+    **not** in the local tree, so a routine launcher call from this worktree would
+    have deleted them. Step 7 therefore `scp`'d its single new slurm file and
+    sha256-verified it local vs remote (`21d4fdf7c607b6df61b060358368fbb871274be9566aa56e42b9c27113724ac1`)
+    instead of syncing. §9's rule is written about *parallel experiments* colliding;
+    this is a different failure — an experiment deleting its **own** remote outputs
+    — and any step after a training run in an isolated dir is exposed to it. Worth
+    the maintainer's attention as tooling, not as this experiment's finding.
+
+12. **Provenance gap worth knowing:** the params JSON records
+    `git_head: "unavailable"`, because the isolated dir's rsynced `.git` is this
+    worktree's gitdir *pointer*, which does not resolve on Raven. The script
+    captures it best-effort inside an `except`, and #165 recorded a real hash only
+    because it ran from a full checkout. Flagged rather than patched — patching it
+    would be unrequested tooling work on the frozen-adjacent surface, and the
+    artifact's provenance is anchored anyway by `source_model_sha256`
+    (`321473ed8021...`), which the stamper asserts against.
