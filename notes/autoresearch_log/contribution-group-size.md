@@ -344,6 +344,7 @@ against the contribution slot's ~24 min training ceiling.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
+| 2026-09-03 | `own_group_size` (numeric, k/8) as a contribution node feature, copula re-calibrated and re-stamped on the retrained trunk | single | **CE 1.0503773473383176** (baseline 1.1053860057442750, band 1-2 -> 1-2) | 9/21 (baseline 11/21) | 1.3515237999365521 (baseline 1.3040409569053069, ceiling 1.4344450525958376) | **FAIL** — gate 1 fails (CE improves 0.055 but stays in band), gate 2 passes (+3.64%, inside the 10% margin) |
 
 ## Notes
 
@@ -628,3 +629,55 @@ against the contribution slot's ~24 min training ceiling.
     different isolated dir (`~/autoresearch/switch-joint-exodus-gmlp`) and are not
     this experiment's. A concurrent experiment running safely alongside this one
     is §9's isolation design working as intended.
+
+15. **Verdict: `[FAIL]`. Gate 1 fails on the declared row; gate 2 passes.** CE
+    **1.1053860057442750 -> 1.0503773473383176**, numerator 1.6091089669 ->
+    1.5290329346 against the unchanged ceiling 1.4556986958. The movement is in
+    the predicted direction and is the largest single improvement in the table,
+    but it is **-4.98% of the numerator against the -9.5% the band edge
+    required** — roughly half the distance, and §2 is explicit that a
+    within-band improvement, however large, is a `[FAIL]` with valuable notes.
+    Mean 1.3040409569053069 -> 1.3515237999365521, a +3.64% rise, inside the
+    10% margin, so gate 2 passes; both are required. Rows <= 1 fell 11/21 ->
+    9/21 (context, not a criterion).
+
+    Measured against Note 4's counterfactual ladder, the mechanism delivered
+    about what half-learned polarisation predicts: the ladder put -10% at 50% of
+    the human singleton excess and -19% at 100%, and the realised -4.98% sits
+    below its bottom rung. Note 7 forecast exactly this — no resolvable change
+    in the size-1 tails at the teacher-forced marginal — so the sim's richer
+    visiting of the extremes (Note 8) bought a real but sub-threshold effect
+    rather than the amplification that was the one argument for running it.
+
+16. **RCB band-upgraded, and this experiment does not claim it.** RCB
+    2.0242478714062093 -> 1.8740639083 (numerator 0.7041451593 -> 0.6519028859),
+    a 2-5 -> 1-2 crossing. With the mean inside its margin, declaring RCB would
+    have made this a `[SUCCESS]` under §2 as written. It is not claimed, for the
+    reason the Declaration gave *before* any of this ran: RCB sat 0.024 (1.2%)
+    from the band edge, this experiment's change makes no mechanism claim on the
+    punishment response, and the Declaration recorded that declaring it "would be
+    shopping". A pre-declaration that binds only when the dice fall favourably is
+    not a pre-declaration. The upgrade is reported as collateral, and a successor
+    that wants RCB must declare it with a mechanism up front and earn it — noting
+    that a row 1.2% from an edge, moving on a change with no claim on it, is at
+    least as likely to be noise as signal.
+
+17. **The predicted marginal-C-block cost arrived, on schedule and in full.**
+    Note 5 recorded the trunk starting 1.08% behind M0 on held-out log-loss and
+    flagged the C block as the campaign's known failure mode (#154, #156, #158).
+    Every marginal C row degraded: CA +0.0674, CC +0.0854 (band <= 1 -> 1-2), CB
+    +0.0591, CD +0.0451, CF +0.0147. CG worsened too, 4.2676 -> 4.5610, against
+    the "expected ~3, within band" the Declaration set as a watch item — so the
+    group-spread watch item moved the wrong way, and the preflight's +8.6%
+    one-step gap closure did not survive the closed loop.
+
+18. **The largest single degradation is SA, and it is a propagation effect worth
+    the next agent's attention.** SA 0.8396005959 -> 1.1882381066 (+0.3486, band
+    <= 1 -> 1-2), raw switch rate 0.0177541466 -> 0.0251264156 against a ceiling
+    of 0.0211459433. A contribution-slot feature has no direct path to the switch
+    rate; the indirect one is that the switch trunk's main feature is per-capita
+    common good, which is a function of contributions. So perturbing the
+    contributor moves the switch model's inputs, and SC followed (1.1474 ->
+    1.3149) with SB flat. Any future contribution-slot change on this stack
+    should expect to pay in S rows through this channel, and the parent's SC
+    result (PR #171, 2.19 -> 1.15) is the thing most exposed to it.
