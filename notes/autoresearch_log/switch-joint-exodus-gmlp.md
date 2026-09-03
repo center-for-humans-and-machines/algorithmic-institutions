@@ -976,3 +976,37 @@ runs once per step before staging, not after every edit.
     identical to the base run's, so a metrics file is distinguishable
     from the base's only by its directory, never by its contents.
 
+32. (Orchestrator, step 11 confirmed) Configs verified by my own `diff`:
+    control **exactly 2 changed lines** (`output_dir`, `figure_name`)
+    with `switch_model` untouched, candidate **exactly 3** (those two
+    plus `switch_model` -> the step-10 artifact). Every protocol field
+    byte-identical to the parent — seed 42, 100 episodes, 24 rounds,
+    `switch_every: 4`, the single `lin_multinomial_copula_self` pairing,
+    `save_per_round: true`. Both basenames parse under
+    `evaluation_sweep.py`'s `DIR_PATTERN`: contr
+    `gaussian_mlp_v2_group_copula` for both, switch `gnn` for the
+    control and `gnn_joint_exodus` for the candidate.
+    Jobs **29893190** (control, synced first so `artifacts/` shipped)
+    and **29893192** (candidate, `--no-sync`), both `COMPLETED` `0:0`,
+    queue empty beforehand. PROVENANCE identical in both logs, naming
+    the shared venv's interpreter and `aimanager` under the isolated
+    dir, with `algorithmic-institutions/src` absent from each. Remote
+    slot artifacts: contribution `da42031a…`, punisher `9e3cf677…`
+    shared by both runs; switch `184f7f5c…` (parent's stock) for the
+    control and `ecd231f4…1133f33` for the candidate, equal to the
+    step-10 bytes.
+33. (Orchestrator, the two decisive checks — both PASS) **Control
+    bit-identity:** the control's `per_round.parquet` hashes to
+    `72599716d3e93f37a604e7b4a893090100e080e5ee5da6fe6d2e7f9928d0d429`,
+    equal to the parent's. I verified that reference locally rather than
+    taking it from the PR body — the parent's own committed parquet is
+    materialised (114,551 bytes, real `PAR1` data, not an LFS pointer)
+    and hashes to exactly that. So re-running the parent's stack on this
+    branch's code reproduces it bit for bit, which is what licenses
+    judging the candidate against the parent's `scores.csv` instead of
+    re-scoring the parent. **Candidate activation:** the candidate's
+    parquet hashes to `f3c3136cf6b2241c8b3c942a4b746c54c6d0946c80a7dc48a2e6aff4487aa2fa`,
+    which differs — the joint branch was taken, so the run is not void.
+    Together these two are the strongest statement available that the
+    only thing separating candidate from parent is the mechanism.
+
