@@ -828,3 +828,57 @@ runs once per step before staging, not after every edit.
     than per call, which is the only test that catches a
     once-per-forward gate and is among those mutation 2 turns red.
 
+22. (Orchestrator, step 7 confirmed) 8 tests, 149 with `tests/switch`,
+    steps 2-6 untouched. The pre-switch anchor is load-bearing and
+    proven so by mutation from both directions: the implementer shifted
+    one anchor site (3 red), I shifted the training side at all three
+    sites (**8 red**), restoring to 149 green. The file also asserts the
+    distinction directly rather than leaving it to a mutation — every
+    scenario must actually move members, so a degenerate scenario cannot
+    make the file vacuous.
+23. (Orchestrator, step 7's strengthening finding) Scenario D — 4-4 with
+    a 2-2 exchange — is blind to **both** failure modes this step
+    exists to exclude, not just to a label swap: under a global label
+    transposition D still yields `k = [4, 4]`, `m = [2, 2]`, and under a
+    post-switch anchor it yields the same pair again. So on the one
+    scenario built to defeat totals, neither error is visible in
+    `(m, k)` at all and only the agent-for-agent identity catches them.
+    That is a stronger argument for the per-agent check than the plan
+    made. The implementer also closed a triangle rather than a pair:
+    expected `(m, k)` is derived in nine lines of plain Python over the
+    membership lists, touching neither torch nor `pool_by_group`, so the
+    pandas side, the torch-env side and an independent derivation must
+    all agree — #171 hardcoded hand-worked pairs instead, and those
+    numbers now fall out of the derivation rather than standing as
+    literals.
+24. (Orchestrator, three `data.py` facts worth the record) **(a)** The
+    pre-switch anchoring is structural, not a convention: `agent_group`
+    is the row's own `group_id` and `does_switch` is
+    `next_group.ne(group_id)` gated by `is_decision`, so membership and
+    label come off the *same* row, and the two sides agree only because
+    `environment.step()` calls the predictor before `apply_switch`.
+    **Reordering those two statements in `step()` would be caught by
+    this file and nothing else in the suite** — the single most
+    fragile ordering fact the mechanism depends on. **(b)** A real
+    footgun for any future synthetic frame: the batch row is
+    `group_idx`, a dense rank of the *string*
+    `global_group_id + "__" + str(episode_id)`, which coincides with
+    episode order only up to nine episodes — at ten, `"g10__10"` sorts
+    before `"g2__2"` and every per-row assertion would silently key
+    against the wrong scenario. The file asserts the row mapping from
+    `parse_agent_rounds`'s own column rather than assuming it, so a
+    tenth scenario fails loudly. **(c)** `create_torch_data_new` names
+    the batch dimension `n_groups`, colliding with the game's two
+    sub-groups — cosmetic, but exactly the collision that yields an
+    off-by-a-dimension bug in this seam.
+25. (Orchestrator, coverage boundary of step 7) With no
+    `selection_timeout` column, `switch_valid == switch_mask`, so every
+    decider is valid and `k` always sums to 8 in these frames. The
+    incomplete-pair case is therefore **not** exercised here, and
+    correctly so — the environment cannot produce a timeout either, so
+    an incomplete pair has no simulation-side counterpart to be in
+    parity with. It does mean `DROP_INCOMPLETE_PAIRS` rests entirely on
+    `tests/switch/test_joint_exodus_loss.py`. Nothing in this file needs
+    real PyG, so on Raven it runs the same assertions with no stand-in
+    path taken; it is not a local-only claim.
+
