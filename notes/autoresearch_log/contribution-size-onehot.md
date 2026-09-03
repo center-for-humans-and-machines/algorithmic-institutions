@@ -372,7 +372,16 @@ features (sizes, tenure counters) are legal for both targets") and not in
 ## 2. Plan
 
 Steps for the orchestrator to validate (§2 targets, §5 legality, §8 frozen
-surface) and tag. Paths are relative to the worktree
+surface) and tag. **Validated and tagged by the orchestrator
+2026-09-03**: targets adopted as directed by the maintainer's comment on
+PR #174 with the pre-registered `[FAIL]` expectation on gate 1 accepted by
+the maintainer before any compute; every step legal under §5; nothing on
+the frozen surface (§8); step 4 is parametrisation whose defaults equal
+today's constants, bound by its own test, not a behavior change. Each step
+carries its implementer per §9 Roles — **[Opus]** where the step gates a
+falsifier, edits PR #170's artifact machinery, or touches Raven isolation;
+**[Sonnet]** where it is mechanical and guarded by an existing test. Two
+orchestrator amendments are marked **[amended]** in steps 3 and 9. Paths are relative to the worktree
 `.claude/worktrees/contribution-size-onehot`. Local Python is the main
 checkout's venv with the worktree's source first on the path
 (`PYTHONPATH=$PWD/src /Users/ertuerkan/Desktop/algorithmic-institutions/.venv/bin/python …`;
@@ -383,7 +392,7 @@ call, and `squeue -u certuer` over a live SSH tunnel before any syncing
 call. Lint (`black`, `flake8 --max-line-length=88 --extend-ignore=E203,W503`
 on `src/`) once per step before staging.
 
-1. **The `inv_group_size` pool feature** — `scripts/baselines/handcrafted_grid.py`,
+1. **[Sonnet]** **The `inv_group_size` pool feature** — `scripts/baselines/handcrafted_grid.py`,
    `build_feature_pool` (existing), directly after `f["group_size_delta"] =
    own_cur - oth_cur` (line ~279): `f["inv_group_size"] = 1.0 / own_cur`,
    preceded by `assert (own_cur >= 1).all()` (the agent is a recorded member
@@ -409,7 +418,7 @@ on `src/`) once per step before staging.
    `prepare_data`'s `sorted(pool)` shifts column indices by one key —
    nothing persisted depends on them (bundles store feature *names*).
 
-2. **Training config** — new
+2. **[Sonnet]** **Training config** — new
    `configs/training/baselines/contribution/gaussian_mlp_v2_inv_size.yml`:
    `data` block byte-identical to `gaussian_mlp_v2.yml` (train file,
    `exclude_flipped: True`, `mask: contribution_valid`, `switch_every: 4`,
@@ -425,7 +434,7 @@ on `src/`) once per step before staging.
    Header comment: the Declaration's one-sentence rationale and the
    encoding table's numbers, so the file explains itself.
 
-3. **Fit, save, F1** — `run_baseline_cv.py configs/training/baselines/contribution/gaussian_mlp_v2_inv_size.yml`
+3. **[Opus]** **Fit, save, F1** — `run_baseline_cv.py configs/training/baselines/contribution/gaussian_mlp_v2_inv_size.yml`
    (expected rank-1 row: the 8-feature set, CV NLL **2.70171**, CE
    **2.41609**, folds 2.6543 / 2.7522 / 2.6032 / 2.7971; floor rank 2), then
    `inspect_best_model.py data/baselines/gaussian_mlp_v2_inv_size_cv.csv
@@ -442,11 +451,18 @@ on `src/`) once per step before staging.
    2.7125, else stop and debug.** Also run the existing
    `gaussian_mlp_preflight.py --candidate <new> --incumbent <old>` and
    record its conformity `a`, `b`, `a + b` (parent-of-parent's diagnostic;
-   incumbent 0.7316 / 0.2015 / 0.9331) and exact-repeat mass. Commit the
+   incumbent 0.7316 / 0.2015 / 0.9331) and exact-repeat mass. **[amended]** `--save-best` picks
+   the CV rank-1 row, and the config's floor row is the incumbent's own
+   seven features — so if the floor outranked the declared set the saved
+   bundle would silently be the incumbent and every later step would
+   compare the parent against itself. Assert explicitly that the saved
+   bundle's stored feature list **contains `inv_group_size`** and has
+   length 8, and record which row ranked 1; a floor win is a stop, reported
+   as an F1 failure, not worked around. Commit the
    bundle (plain ~4 KB binary, not LFS — `.gitattributes` tracks only
    `*.csv`, `*.parquet`, `*.pt`) and its sha256 in the Notes.
 
-4. **Parametrise #170's estimator and stamper (CLI only, defaults =
+4. **[Opus]** **Parametrise #170's estimator and stamper (CLI only, defaults =
    today's constants)** — `scripts/baselines/contribution_gmlp_copula_rho.py`,
    `main` (existing): add `--bundle` (default the current `BUNDLE_PATH`),
    `--config` (default `TRAIN_CFG`) and `--out` (default `OUT_JSON`), and
@@ -469,7 +485,7 @@ on `src/`) once per step before staging.
    unchanged. **Do not run either script with defaults**: that would
    overwrite the parent's committed sidecar/bundle.
 
-5. **Calibrate rho on the new trunk (F2 stop-gate)** — locally,
+5. **[Opus]** **Calibrate rho on the new trunk (F2 stop-gate)** — locally,
    `contribution_gmlp_copula_rho.py --bundle
    artifacts/baselines/contribution_gaussian_mlp_v2_inv_size_best.joblib
    --config <step-2 config> --out
@@ -481,7 +497,7 @@ on `src/`) once per step before staging.
    arm. **STOP-GATE (F2): CI including 0 -> calibration-only `[FAIL]`, no
    stamp, no sim.** Expected `rho_total` near 0.0438. Commit the sidecar.
 
-6. **Stamp** — `stamp_contribution_group_copula.py --base <step-3 trunk>
+6. **[Sonnet]** **Stamp** — `stamp_contribution_group_copula.py --base <step-3 trunk>
    --params <step-5 sidecar> --out
    artifacts/baselines/contribution_gaussian_mlp_v2_inv_size_group_copula.joblib`.
    Its six checks must all print PASS (identical objects, exact manifest,
@@ -490,7 +506,7 @@ on `src/`) once per step before staging.
    read-back, sha256). Record the bundle sha256 (re-checked on Raven in
    step 8). Commit the bundle.
 
-7. **Sim configs, control and candidate** — two new files under
+7. **[Sonnet]** **Sim configs, control and candidate** — two new files under
    `configs/simulation/manager_testing/`, each a byte-copy of the parent's
    `23_2g8a_kexo_self_gaussian_mlp_v2_group_copula_contr_gnn_joint_exodus_k_onehot_switch.yml`:
    (a) **control**
@@ -510,7 +526,7 @@ on `src/`) once per step before staging.
    42, 100 episodes, 24 rounds, `switch_every 4`, single pairing,
    `save_per_round: true` byte-identical).
 
-8. **Raven: control then candidate, isolated** — `squeue -u certuer`; one
+8. **[Opus]** **Raven: control then candidate, isolated** — `squeue -u certuer`; one
    syncing call `AI_REMOTE_DIR='~/autoresearch/contribution-size-onehot'
    scripts/simulate_cluster.sh <control config>` (the sync ships
    `artifacts/` including the committed step-6 bundle; nothing exists
@@ -528,9 +544,15 @@ on `src/`) once per step before staging.
    parquet must **differ** from `3cb8b3d7…`. One draw each, seed 42, no
    re-runs.
 
-9. **Fetch, evaluate, diagnose** — `AI_REMOTE_DIR=… scripts/fetch_cluster.sh
+9. **[Opus]** **Fetch, evaluate, diagnose** — `AI_REMOTE_DIR=… scripts/fetch_cluster.sh
    plots/simulation/<control dir>` and `<candidate dir>`; confirm the
-   control's sha256 locally; `python -m aimanager evaluate <candidate
+   control's sha256 locally. **[amended]** The control reproducing
+   `3cb8b3d7…fef3f` is what licenses judging against the parent's committed
+   `scores.csv`, so treat it as a gate, not a note: if it does **not**
+   reproduce, stop and escalate to the maintainer — step 1's pool change
+   would then not be inert for the parent's own bundle, the parent's scores
+   would not be a valid baseline for either §2 gate, and no verdict may be
+   issued from this run. Then `python -m aimanager evaluate <candidate
    config>`. Fill the Results row with RCA, CA, the mean, rows <= 1, and
    the guards CG / CC / CE / CD / CF / SA / SB / SC / RCD / RCB / RSA
    exactly as computed. Then the read-only diagnostic — an **uncommitted
@@ -543,7 +565,7 @@ on `src/`) once per step before staging.
    cell share, SC anchors, P(L = 8) by block, per-capita CG gap by |Δn|).
    State F1-F4 outcomes in numbers. Commit sim outputs and evaluation only.
 
-10. **[Orchestrator] Verdict, log, PR, clean-up** — §2 on the single
+10. **[Orchestrator]** **Verdict, log, PR, clean-up** — §2 on the single
     evaluation, no second stage: `[SUCCESS]` iff RCA < 2.0 or CA <= 1.0,
     **and** mean <= 1.344948166641345; otherwise `[FAIL]`. Complete Results
     and Notes (the F1-F4 outcomes, the encoding table, the static-vs-realised
