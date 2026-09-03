@@ -124,6 +124,8 @@ SWITCH_EVERY = 4
 # output is discarded.
 DECISION_ROUND = 3
 NON_DECISION_ROUND = 2
+#: The two size encodings the head runs -- see JointExodusHead.SIZE_ENCODINGS.
+SIZE_ENCODINGS = ("numeric", "onehot")
 
 
 # --------------------------------------------------------------------------- #
@@ -337,9 +339,13 @@ def test_non_decision_round_consumes_no_extra_rng(round_number):
     assert th.equal(new_rng, ref_rng)
 
 
-def test_non_decision_round_costs_exactly_one_categorical_draw():
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_non_decision_round_costs_exactly_one_categorical_draw(size_encoding):
     model = make_model(
-        seed=11, joint_exodus=True, joint_exodus_switch_every=SWITCH_EVERY
+        seed=11,
+        joint_exodus=True,
+        joint_exodus_switch_every=SWITCH_EVERY,
+        joint_exodus_size_encoding=size_encoding,
     )
     data = make_data(round_number=NON_DECISION_ROUND)
     edge_index = model.create_fully_connected(N_AGENTS, n_batch=2)
@@ -349,14 +355,23 @@ def test_non_decision_round_costs_exactly_one_categorical_draw():
     assert counter.calls == [(2 * N_AGENTS, 2)]
 
 
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
 @pytest.mark.parametrize("round_number", [3, 7, 11, 15, 19])
-def test_every_decision_round_costs_three_categorical_draws(round_number):
+def test_every_decision_round_costs_three_categorical_draws(
+    round_number, size_encoding
+):
     """The per-agent draw (kept verbatim so the neutral path IS the old
     expression, then discarded here), the pair draw over the 9 x 9 grid, and
     one batched conditional-Bernoulli draw covering BOTH groups. All five
-    decision rounds fire: there is no schedule parameter on this branch."""
+    decision rounds fire: there is no schedule parameter on this branch. The
+    size encoding only widens the head's own readout MLP, so the draw counts
+    -- which come from the categorical grids the sampler draws from, not from
+    the head's input width -- are the same under either encoding."""
     model = make_model(
-        seed=11, joint_exodus=True, joint_exodus_switch_every=SWITCH_EVERY
+        seed=11,
+        joint_exodus=True,
+        joint_exodus_switch_every=SWITCH_EVERY,
+        joint_exodus_size_encoding=size_encoding,
     )
     data = make_data(round_number=round_number)
     edge_index = model.create_fully_connected(N_AGENTS, n_batch=2)
@@ -400,13 +415,17 @@ def test_a_multi_round_call_fires_only_on_its_decision_rounds():
 # --------------------------------------------------------------------------- #
 # 3. head ON, decision round -- the counts are exactly the drawn pair
 # --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
 @pytest.mark.parametrize("groups", [GROUPS, [0, 1, 0, 1, 0, 1, 0, 1], [1] + [0] * 7])
-def test_switcher_counts_equal_the_drawn_pair(groups):
+def test_switcher_counts_equal_the_drawn_pair(groups, size_encoding):
     """Replay the RNG to recover the pair the sampler actually drew, then check
     the returned decision against it. No distributional assumption: this is an
     exact identity for whatever pair came out."""
     model = make_model(
-        seed=13, joint_exodus=True, joint_exodus_switch_every=SWITCH_EVERY
+        seed=13,
+        joint_exodus=True,
+        joint_exodus_switch_every=SWITCH_EVERY,
+        joint_exodus_size_encoding=size_encoding,
     )
     data = make_data(n_batch=3, round_number=DECISION_ROUND, groups=groups)
     edge_index = model.create_fully_connected(N_AGENTS, n_batch=3)
@@ -552,15 +571,20 @@ def test_determinism_under_a_fixed_seed():
     assert th.equal(first, second)
 
 
-def test_switch_every_round_trips_through_save_load():
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_switch_every_round_trips_through_save_load(size_encoding):
     model = make_model(
-        seed=31, joint_exodus=True, joint_exodus_switch_every=SWITCH_EVERY
+        seed=31,
+        joint_exodus=True,
+        joint_exodus_switch_every=SWITCH_EVERY,
+        joint_exodus_size_encoding=size_encoding,
     )
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "model.pt")
         model.save(path)
         loaded = GraphNetwork.load(path, device="cpu")
     assert loaded.joint_exodus_switch_every == SWITCH_EVERY
+    assert loaded.joint_exodus_size_encoding == size_encoding
 
     data = make_data(round_number=DECISION_ROUND)
     edge_index = loaded.create_fully_connected(N_AGENTS, n_batch=2)

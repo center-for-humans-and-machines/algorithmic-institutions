@@ -16,6 +16,7 @@ Local test (CPU torch, no PyG):
     .venv/bin/python -m pytest tests/switch/test_joint_exodus.py
 """
 
+import io
 import math
 import sys
 from pathlib import Path
@@ -66,9 +67,13 @@ def make_nodes(n_batch, n_rounds, n_features, groups, seed=SEED):
     return x, agent_group.contiguous(), batch
 
 
-def make_head(embed_size=5, hidden_size=7, seed=SEED):
+def make_head(embed_size=5, hidden_size=7, seed=SEED, size_encoding="numeric"):
     th.manual_seed(seed)
-    return JointExodusHead(embed_size=embed_size, hidden_size=hidden_size).double()
+    return JointExodusHead(
+        embed_size=embed_size,
+        hidden_size=hidden_size,
+        size_encoding=size_encoding,
+    ).double()
 
 
 def python_masked_log_prob(logits, k0, k1):
@@ -355,10 +360,29 @@ def head_inputs(groups, n_batch=2, n_rounds=3, round_number=7, embed=5):
     return x, agent_group, batch, round_tensor.contiguous()
 
 
-def test_head_emits_a_valid_masked_joint():
+def capture_features(head, x, agent_group, batch, round_number):
+    """Run the head with its MLP wrapped, and return what the MLP was fed."""
+    captured = {}
+
+    class Capture(th.nn.Module):
+        def __init__(self, inner):
+            super().__init__()
+            self.inner = inner
+
+        def forward(self, features):
+            captured["features"] = features.detach().clone()
+            return self.inner(features)
+
+    head.mlp = Capture(head.mlp)
+    head(x, agent_group=agent_group, round_number=round_number, batch=batch)
+    return captured["features"]
+
+
+@pytest.mark.parametrize("size_encoding", ["numeric", "onehot"])
+def test_head_emits_a_valid_masked_joint(size_encoding):
     groups = [0, 0, 0, 1, 1, 1, 1, 1]
     x, agent_group, batch, round_number = head_inputs(groups)
-    head = make_head()
+    head = make_head(size_encoding=size_encoding)
     log_prob, k = head(
         x, agent_group=agent_group, round_number=round_number, batch=batch
     )
@@ -373,9 +397,10 @@ def test_head_emits_a_valid_masked_joint():
     assert th.all(proba[valid] > 0.0)
 
 
-def test_head_handles_the_fully_merged_state():
+@pytest.mark.parametrize("size_encoding", ["numeric", "onehot"])
+def test_head_handles_the_fully_merged_state(size_encoding):
     x, agent_group, batch, round_number = head_inputs([0] * N_AGENTS)
-    head = make_head()
+    head = make_head(size_encoding=size_encoding)
     log_prob, k = head(
         x, agent_group=agent_group, round_number=round_number, batch=batch
     )
@@ -387,12 +412,13 @@ def test_head_handles_the_fully_merged_state():
     assert th.all(proba[..., 1:] == 0.0)
 
 
-def test_head_support_follows_the_decider_mask():
+@pytest.mark.parametrize("size_encoding", ["numeric", "onehot"])
+def test_head_support_follows_the_decider_mask(size_encoding):
     """An invalid decider shrinks the support: with one group-0 member out,
     m_0 = 4 becomes unreachable even though the group still has 4 members."""
     groups = [0, 0, 0, 0, 1, 1, 1, 1]
     x, agent_group, batch, round_number = head_inputs(groups, n_batch=1, n_rounds=1)
-    head = make_head()
+    head = make_head(size_encoding=size_encoding)
     mask = th.ones(N_AGENTS, 1, dtype=th.bool)
     mask[0] = False
 
@@ -421,21 +447,7 @@ def test_head_feature_normalisation_convention():
     x, agent_group, batch, round_number = head_inputs(groups, n_batch=1, n_rounds=2)
     head = make_head()
 
-    captured = {}
-
-    class Capture(th.nn.Module):
-        def __init__(self, inner):
-            super().__init__()
-            self.inner = inner
-
-        def forward(self, features):
-            captured["features"] = features.detach().clone()
-            return self.inner(features)
-
-    head.mlp = Capture(head.mlp)
-    head(x, agent_group=agent_group, round_number=round_number, batch=batch)
-
-    features = captured["features"]
+    features = capture_features(head, x, agent_group, batch, round_number)
     assert features.shape == (1, 2, 2 * 5 + 2 + 1)
     pooled, _ = pool_by_group(x, agent_group, batch)
     assert th.allclose(features[..., : 2 * 5], pooled.flatten(-2, -1))
@@ -450,10 +462,111 @@ def test_head_feature_normalisation_convention():
     assert SIZE_NORM == float(MAX_GROUP_SIZE) and ROUND_NORM == 23.0
 
 
-def test_head_is_deterministic_and_differentiable():
+def test_head_onehot_feature_layout():
+    """Under `size_encoding="onehot"` the two size scalars are replaced by
+    two nine-wide one-hot codes over k in 0..8, group 0's first, and the
+    round still trails as r / 23:
+    [pooled (2F) | onehot(k_0) (9) | onehot(k_1) (9) | round (1)]."""
+    groups = [0, 0, 0, 1, 1, 1, 1, 1]
+    x, agent_group, batch, round_number = head_inputs(groups, n_batch=1, n_rounds=2)
+    head = make_head(size_encoding="onehot")
+
+    features = capture_features(head, x, agent_group, batch, round_number)
+    assert features.shape == (1, 2, 2 * 5 + 18 + 1)
+    pooled, _ = pool_by_group(x, agent_group, batch)
+    assert th.allclose(features[..., : 2 * 5], pooled.flatten(-2, -1))
+
+    # k_0 = 3 and k_1 = 5, so columns 10-18 are e_3 and columns 19-27 are e_5
+    e_3 = th.zeros(GRID, dtype=th.float64)
+    e_3[3] = 1.0
+    e_5 = th.zeros(GRID, dtype=th.float64)
+    e_5[5] = 1.0
+    for r in range(2):
+        assert th.equal(features[0, r, 10:19], e_3)
+        assert th.equal(features[0, r, 19:28], e_5)
+    expected_round = th.tensor([7.0, 8.0], dtype=th.float64) / ROUND_NORM
+    assert th.allclose(features[0, :, 28], expected_round)
+
+
+def test_head_onehot_codes_the_merged_states_as_transposes():
+    """k = (8, 0) and k = (0, 8) are the two full merges: distinct codes,
+    and each the other with the two group blocks swapped -- the label
+    symmetry the flip-doubled data relies on."""
+    x, agent_group, batch, round_number = head_inputs(
+        [0] * N_AGENTS, n_batch=1, n_rounds=1
+    )
+    _, flipped_group, _, _ = head_inputs([1] * N_AGENTS, n_batch=1, n_rounds=1)
+
+    block_a = capture_features(
+        make_head(size_encoding="onehot"), x, agent_group, batch, round_number
+    )[0, 0, 10:28]
+    block_b = capture_features(
+        make_head(size_encoding="onehot"), x, flipped_group, batch, round_number
+    )[0, 0, 10:28]
+
+    expected = th.zeros(2, GRID, dtype=th.float64)
+    expected[0, MAX_GROUP_SIZE] = 1.0  # k_0 = 8
+    expected[1, 0] = 1.0  # k_1 = 0
+    assert not th.equal(block_a, block_b)
+    assert th.equal(block_a.reshape(2, GRID), expected)
+    assert th.equal(block_a.reshape(2, GRID).flip(0), block_b.reshape(2, GRID))
+
+
+def test_numeric_is_the_default_and_unchanged():
+    """The default must be bit-identical to a head built without the keyword:
+    artifacts trained before the option existed are re-simulated on this
+    code and their draws have to match to the float."""
+    th.manual_seed(SEED)
+    without = JointExodusHead(embed_size=10, hidden_size=10).double()
+    explicit = make_head(embed_size=10, hidden_size=10, size_encoding="numeric")
+
+    assert without.size_encoding == "numeric"
+    assert without.mlp[0].in_features == 2 * 10 + 2 + 1 == 23
+    assert explicit.mlp[0].in_features == 23
+    for a, b in zip(without.parameters(), explicit.parameters()):
+        assert th.equal(a, b)
+
+
+def test_unknown_size_encoding_is_rejected():
+    with pytest.raises(AssertionError, match="size_encoding"):
+        JointExodusHead(embed_size=5, hidden_size=7, size_encoding="one_hot")
+
+
+def test_head_without_the_attribute_unpickles_as_numeric():
+    """`th.load` restores a pickled module's __dict__ without running
+    __init__, so the head inside the parent's committed artifact has no
+    `size_encoding` at all. It must come back numeric on its 23-wide MLP."""
+    head = make_head(embed_size=10, hidden_size=10)
+    del head.__dict__["size_encoding"]
+    assert "size_encoding" not in head.__dict__
+
+    buffer = io.BytesIO()
+    th.save(head, buffer)
+    buffer.seek(0)
+    restored = th.load(buffer)
+
+    assert restored.size_encoding == "numeric"
+    assert restored.mlp[0].in_features == 23
+
+    groups = [0, 0, 0, 1, 1, 1, 1, 1]
+    x, agent_group, batch, round_number = head_inputs(
+        groups, n_batch=1, n_rounds=2, embed=10
+    )
+    features = capture_features(restored, x, agent_group, batch, round_number)
+    assert features.shape == (1, 2, 23)
+    assert th.allclose(
+        features[0, :, 20], th.full((2,), 3.0 / SIZE_NORM, dtype=th.float64)
+    )
+    assert th.allclose(
+        features[0, :, 21], th.full((2,), 5.0 / SIZE_NORM, dtype=th.float64)
+    )
+
+
+@pytest.mark.parametrize("size_encoding", ["numeric", "onehot"])
+def test_head_is_deterministic_and_differentiable(size_encoding):
     groups = [0, 0, 0, 0, 1, 1, 1, 1]
     x, agent_group, batch, round_number = head_inputs(groups, n_batch=1, n_rounds=1)
-    head = make_head()
+    head = make_head(size_encoding=size_encoding)
     log_prob, k = head(
         x, agent_group=agent_group, round_number=round_number, batch=batch
     )

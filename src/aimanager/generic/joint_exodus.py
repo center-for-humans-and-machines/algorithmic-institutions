@@ -33,6 +33,21 @@ Design points that are load-bearing:
   gradient of the joint loss reaches the message-passing layers, the RNN or
   the encoders; see ``JointExodusHead.forward`` for why.
 
+**Why group size can enter as a one-hot.** Humans empty a group at a rate
+that rises with its size only up to four and then hits a hard floor:
+``P(full exodus | k)`` is 0.161 / 0.147 / 0.200 / 0.177 for ``k = 1..4``
+(n 31 / 34 / 35 / 96 complete-pair cells) and **0 of 119** cells for
+``k >= 5`` -- no human group of five or more ever emptied. A single numeric
+``k / 8`` scalar can only bend one smooth curve through that hump and that
+floor, which biases the head's size response toward monotone; the stack it
+was fitted in empties a singleton group in 46.5% of cells against the human
+16.1% (``notes/autoresearch_log/switch-exodus-k-onehot.md`` notes 3-5).
+``size_encoding="onehot"`` replaces the two scalars by two nine-wide one-hot
+codes over ``k in {0..8}``, i.e. nine free intercept vectors per group label,
+so the size dependence is free-form. The default stays ``"numeric"`` so a
+head pickled before the option existed keeps its 23-wide MLP and samples
+bit-identically.
+
 Torch only -- no ``torch_geometric`` / ``torch_scatter`` -- so this module
 imports and is unit-testable on macOS.
 """
@@ -175,12 +190,18 @@ class JointExodusHead(th.nn.Module):
     """Reads post-RNN node embeddings out into a joint over ``(m_0, m_1)``.
 
     Input to the readout MLP: the two group-pooled embeddings concatenated in
-    LABEL order, both valid-decider counts normalised as ``k / 8``, and the
-    round as ``r / 23`` -- the same numeric-encoder convention the model's own
-    ``round_number`` feature already uses (see ``ROUND_NORM``). No new
-    observable enters the model; the head only refactorises the label
-    distribution.
+    LABEL order, both valid-decider counts, and the round as ``r / 23`` -- the
+    same numeric-encoder convention the model's own ``round_number`` feature
+    already uses (see ``ROUND_NORM``). The counts enter either as two scalars
+    ``k / 8`` (``size_encoding="numeric"``, the default) or as two nine-wide
+    one-hot codes over ``k in {0..8}`` (``size_encoding="onehot"``, feature
+    layout ``[pooled (2F) | onehot(k_0) (9) | onehot(k_1) (9) | round (1)]``).
+    No new observable enters the model either way; the head only refactorises
+    the label distribution.
     """
+
+    #: Accepted values of ``size_encoding``.
+    SIZE_ENCODINGS = ("numeric", "onehot")
 
     def __init__(
         self,
@@ -190,23 +211,43 @@ class JointExodusHead(th.nn.Module):
         max_group_size=MAX_GROUP_SIZE,
         n_groups=N_GROUPS,
         round_norm=ROUND_NORM,
+        size_encoding="numeric",
     ):
         super().__init__()
         assert n_groups == N_GROUPS, "the joint exodus grid is defined for 2 groups"
         assert hidden_size is not None, "the joint exodus head needs a hidden_size"
+        assert size_encoding in self.SIZE_ENCODINGS, (
+            f"size_encoding must be one of {self.SIZE_ENCODINGS}, "
+            f"got {size_encoding!r}"
+        )
         self.embed_size = embed_size
         self.hidden_size = hidden_size
         self.max_group_size = max_group_size
         self.n_groups = n_groups
         self.round_norm = float(round_norm)
+        self.size_encoding = size_encoding
         self.grid = max_group_size + 1
-        # two pooled vectors + two normalised sizes + the normalised round
-        in_features = n_groups * embed_size + n_groups + 1
+        # two normalised size scalars, or one nine-wide one-hot code per group
+        size_features = n_groups if size_encoding == "numeric" else n_groups * self.grid
+        # two pooled vectors + the size block + the normalised round
+        in_features = n_groups * embed_size + size_features + 1
         self.mlp = Seq(
             Lin(in_features=in_features, out_features=hidden_size),
             Tanh(),
             Lin(in_features=hidden_size, out_features=self.grid * self.grid),
         )
+
+    def __setstate__(self, state):
+        """Unpickle a head saved before ``size_encoding`` existed as numeric.
+
+        ``th.load`` restores a pickled module's ``__dict__`` without ever
+        running ``__init__``, so the heads inside artifacts trained before
+        this option existed carry no ``size_encoding`` and a size block of
+        two scalars. Defaulting it here keeps those heads on their original
+        MLP width and bit-identical in the simulation.
+        """
+        super().__setstate__(state)
+        self.__dict__.setdefault("size_encoding", "numeric")
 
     def forward(
         self,
@@ -266,7 +307,15 @@ class JointExodusHead(th.nn.Module):
 
         n_batch, n_rounds = pooled.shape[0], pooled.shape[1]
         k = counts.round().to(th.int64)
-        sizes = k.to(x.dtype) / SIZE_NORM
+        # Either encoding of `k` is a function of an integer count and so
+        # carries no gradient at all -- the cut above is the same cut.
+        if self.size_encoding == "onehot":
+            # (..., 2, grid) -> (..., 2 * grid), group 0's codes first, the
+            # same LABEL order the pooled block above is concatenated in.
+            sizes = th.nn.functional.one_hot(k, self.grid)
+            sizes = sizes.flatten(-2, -1).to(x.dtype)
+        else:
+            sizes = k.to(x.dtype) / SIZE_NORM
 
         # The round is constant across the agents of a graph, so mean-pooling
         # it over the single group label 0 recovers it exactly, and reuses the

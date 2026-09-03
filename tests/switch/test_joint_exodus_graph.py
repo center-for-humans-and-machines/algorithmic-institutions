@@ -27,6 +27,7 @@ notes/autoresearch_log/switch-joint-exodus-gmlp.md.
 
 import importlib
 import importlib.util
+import inspect
 import os
 import subprocess
 import sys
@@ -115,6 +116,15 @@ N_AGENTS = 8
 GROUPS = [0, 0, 0, 1, 1, 1, 1, 1]
 GRID = MAX_GROUP_SIZE + 1
 HIDDEN = 4
+# The two size encodings the gate must plumb through, plus the "not specified"
+# value an artifact saved before the key existed loads with.
+SIZE_ENCODINGS = (None, "numeric", "onehot")
+# Head readout widths: two pooled embeddings + the size block + the round.
+IN_FEATURES = {
+    None: 2 * HIDDEN + 2 + 1,
+    "numeric": 2 * HIDDEN + 2 + 1,
+    "onehot": 2 * HIDDEN + 2 * GRID + 1,
+}
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 GRAPH_REL_PATH = "src/aimanager/generic/graph.py"
@@ -339,13 +349,29 @@ def test_head_off_needs_neither_membership_nor_the_round():
 # --------------------------------------------------------------------------- #
 # 2. head on: the trunk is untouched
 # --------------------------------------------------------------------------- #
-def test_head_on_shares_the_trunk_state_dict_and_logits():
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_head_on_shares_the_trunk_state_dict_and_logits(size_encoding):
     """The head is constructed LAST, so every shared parameter is initialised
     from exactly the RNG state it saw before the head existed; and the head
     branches off the post-RNN embeddings and feeds nothing back, so the
-    per-agent logits are bit-identical."""
+    per-agent logits are bit-identical.
+
+    Parametrised over the size encoding because the wider one-hot readout
+    draws MORE numbers from the generator than the numeric one: if it were
+    built anywhere but last, the trunk would diverge here.
+    """
     off = make_model(seed=3)
-    on = make_model(seed=3, joint_exodus=True, joint_exodus_switch_every=4)
+    on = make_model(
+        seed=3,
+        joint_exodus=True,
+        joint_exodus_switch_every=4,
+        joint_exodus_size_encoding=size_encoding,
+    )
+
+    # the kwarg is stored AND reaches the head it selects the block of
+    assert on.joint_exodus_size_encoding == size_encoding
+    assert on.joint_exodus_head.size_encoding == (size_encoding or "numeric")
+    assert on.joint_exodus_head.mlp[0].in_features == IN_FEATURES[size_encoding]
 
     off_state = off.state_dict()
     on_state = on.state_dict()
@@ -414,6 +440,25 @@ def test_the_head_reads_the_post_rnn_width():
 # --------------------------------------------------------------------------- #
 # 3. the head's output through the real encode path
 # --------------------------------------------------------------------------- #
+def test_the_size_encoding_kwarg_is_declared_explicitly():
+    """``train.py`` forwards the config's ``model_args`` as ``**model_args``,
+    and ``GraphNetwork.__init__`` ends in a ``**_`` sink. A key that fell into
+    that sink would train the NUMERIC head under this experiment's name and
+    the run would still produce an artifact -- the single most dangerous
+    failure mode here, so the declaration itself is asserted, not just its
+    effect."""
+    params = inspect.signature(GraphNetwork.__init__).parameters
+    assert "joint_exodus_size_encoding" in params
+    param = params["joint_exodus_size_encoding"]
+    assert param.kind is inspect.Parameter.KEYWORD_ONLY
+    assert param.default is None
+    # and the sink it must not have fallen into is really there
+    assert any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+    ), "the test would be vacuous without the **_ sink"
+
+
+@pytest.mark.parametrize("size_encoding", ["numeric", "onehot"])
 @pytest.mark.parametrize(
     "groups,k0,k1",
     [
@@ -422,8 +467,10 @@ def test_the_head_reads_the_post_rnn_width():
         ([1] * N_AGENTS, 0, 8),
     ],
 )
-def test_joint_output_is_a_valid_masked_distribution(groups, k0, k1):
-    model = make_model(seed=5, joint_exodus=True)
+def test_joint_output_is_a_valid_masked_distribution(groups, k0, k1, size_encoding):
+    model = make_model(
+        seed=5, joint_exodus=True, joint_exodus_size_encoding=size_encoding
+    )
     data = make_data(n_batch=2, round_number=7, groups=groups)
     encoded = model.encode(data, y_encode=False, device="cpu")
     model.eval()
@@ -462,8 +509,14 @@ def test_encode_requires_the_head_s_inputs_when_it_is_on(key):
 # --------------------------------------------------------------------------- #
 # 4. save / load, including the back-compat gate
 # --------------------------------------------------------------------------- #
-def test_save_load_round_trips_the_head():
-    model = make_model(seed=5, joint_exodus=True, joint_exodus_switch_every=4)
+@pytest.mark.parametrize("size_encoding", SIZE_ENCODINGS)
+def test_save_load_round_trips_the_head(size_encoding):
+    model = make_model(
+        seed=5,
+        joint_exodus=True,
+        joint_exodus_switch_every=4,
+        joint_exodus_size_encoding=size_encoding,
+    )
     data = make_data(round_number=7)
     encoded = model.encode(data, y_encode=False, device="cpu")
     model.eval()
@@ -476,7 +529,14 @@ def test_save_load_round_trips_the_head():
 
         assert loaded.joint_exodus is True
         assert loaded.joint_exodus_switch_every == 4
+        assert loaded.joint_exodus_size_encoding == size_encoding
         assert isinstance(loaded.joint_exodus_head, JointExodusHead)
+        head = loaded.joint_exodus_head
+        assert head.size_encoding == (size_encoding or "numeric")
+        assert head.mlp[0].in_features == IN_FEATURES[size_encoding]
+        if size_encoding == "onehot":
+            # spelled out as well as derived: two nine-wide codes + the round
+            assert head.mlp[0].in_features == 2 * HIDDEN + 19
         loaded.eval()
         enc = loaded.encode(data, y_encode=False, device="cpu")
         _, (log_prob, k) = loaded(enc, True, True)
@@ -487,7 +547,7 @@ def test_save_load_round_trips_the_head():
 def test_artifact_without_the_new_keys_loads_and_behaves_as_today():
     """The back-compat gate: every GNN artifact on this stack -- the switch
     base model, the contribution and punishment models, ``valid_model`` --
-    was saved BEFORE this change and carries none of the three new keys. Such
+    was saved BEFORE this change and carries none of the four new keys. Such
     an artifact must load with the head absent and sample bit-identically to
     the pre-change path."""
     model = make_model(seed=5)
@@ -499,6 +559,7 @@ def test_artifact_without_the_new_keys_loads_and_behaves_as_today():
             "joint_exodus",
             "joint_exodus_head",
             "joint_exodus_switch_every",
+            "joint_exodus_size_encoding",
         ):
             assert key in saved
             del saved[key]
@@ -509,6 +570,7 @@ def test_artifact_without_the_new_keys_loads_and_behaves_as_today():
     assert legacy.joint_exodus is False
     assert legacy.joint_exodus_head is None
     assert legacy.joint_exodus_switch_every is None
+    assert legacy.joint_exodus_size_encoding is None
 
     data = make_data()
     edge_index = legacy.create_fully_connected(N_AGENTS, n_batch=2)
@@ -521,6 +583,64 @@ def test_artifact_without_the_new_keys_loads_and_behaves_as_today():
     assert th.equal(new_pred, ref_pred)
     assert th.equal(new_proba, ref_proba)
     assert th.equal(new_rng, ref_rng)
+
+
+def test_head_on_artifact_without_the_size_key_is_bit_identical():
+    """The control run's artifact, exactly.
+
+    The parent's candidate switch model (sha256 ``ecd231f4...``) was saved
+    with the head ON and the three older keys but no
+    ``joint_exodus_size_encoding``. A later step re-simulates it on this
+    branch's code and requires the resulting ``per_round.parquet`` to hash
+    bit-for-bit identically to the parent's, so this exact shape -- head-on,
+    key absent, pickled head numeric -- must sample identically: the joint
+    distribution, the drawn leavers, and the RNG state left behind.
+    """
+    model = make_model(seed=5, joint_exodus=True, joint_exodus_switch_every=4)
+    assert model.joint_exodus_head.size_encoding == "numeric"
+    data = make_data(round_number=7)
+    model.eval()
+    ref_encoded = model.encode(data, y_encode=False, device="cpu")
+    _, (ref_log_prob, ref_k) = model(ref_encoded, True, True)
+    edge_index = model.create_fully_connected(N_AGENTS, n_batch=2)
+    (ref_pred, ref_proba), ref_rng = run_seeded(
+        lambda: model.predict_independent(data, sample=True, edge_index=edge_index)
+    )
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "model.pt")
+        model.save(path)
+        saved = th.load(path, map_location="cpu")
+        # ONLY the new key goes; the head itself stays pickled as it is
+        assert saved["joint_exodus"] is True
+        assert saved["joint_exodus_head"] is not None
+        del saved["joint_exodus_size_encoding"]
+        legacy_path = os.path.join(d, "legacy.pt")
+        th.save(saved, legacy_path)
+        legacy = GraphNetwork.load(legacy_path, device="cpu")
+
+    assert legacy.joint_exodus_size_encoding is None
+    # `__setstate__` gave the pickled head its default, and the width says the
+    # old numeric block is what it actually runs
+    assert legacy.joint_exodus_head.size_encoding == "numeric"
+    assert legacy.joint_exodus_head.mlp[0].in_features == IN_FEATURES["numeric"]
+
+    legacy.eval()
+    encoded = legacy.encode(data, y_encode=False, device="cpu")
+    _, (log_prob, k) = legacy(encoded, True, True)
+    assert th.equal(log_prob, ref_log_prob)
+    assert th.equal(k, ref_k)
+
+    (pred, proba), rng = run_seeded(
+        lambda: legacy.predict_independent(data, sample=True, edge_index=edge_index)
+    )
+    assert th.equal(pred, ref_pred)
+    assert th.equal(proba, ref_proba)
+    assert th.equal(rng, ref_rng)
+    # and this round IS a decision round, so the joint draw really fired on
+    # both sides and the identity above is not vacuous
+    round_number = int(data["round_number"].flatten()[0])
+    assert (round_number + 1) % legacy.joint_exodus_switch_every == 0
 
 
 # --------------------------------------------------------------------------- #
@@ -559,3 +679,59 @@ def test_rejects_a_bad_switch_every(every):
 def test_switch_every_without_the_head_is_rejected():
     with pytest.raises(AssertionError, match="only meaningful"):
         make_model(joint_exodus_switch_every=4)
+
+
+def test_size_encoding_without_the_head_is_rejected():
+    with pytest.raises(
+        AssertionError, match="joint_exodus_size_encoding is only meaningful"
+    ):
+        make_model(joint_exodus_size_encoding="onehot")
+
+
+@pytest.mark.parametrize("bad", ["one_hot", "onehot ", "", "ONEHOT", 0, True])
+def test_rejects_a_bad_size_encoding(bad):
+    with pytest.raises(AssertionError, match="joint_exodus_size_encoding must be"):
+        make_model(joint_exodus=True, joint_exodus_size_encoding=bad)
+
+
+def test_a_saved_dict_may_not_advertise_an_encoding_its_head_does_not_run():
+    """The key and the pickled head are two independent records of the same
+    fact, and a later step's activation check reads BOTH -- so it could not
+    catch its own failure mode. A dict claiming ``"onehot"`` while shipping a
+    numeric head is refused at construction instead."""
+    numeric_head = JointExodusHead(
+        embed_size=HIDDEN, hidden_size=HIDDEN, size_encoding="numeric"
+    )
+    mismatch = "size_encoding and the head's own size_encoding disagree"
+    with pytest.raises(AssertionError, match=mismatch):
+        make_model(
+            joint_exodus=True,
+            joint_exodus_head=numeric_head,
+            joint_exodus_size_encoding="onehot",
+        )
+    # and the mirror image
+    onehot_head = JointExodusHead(
+        embed_size=HIDDEN, hidden_size=HIDDEN, size_encoding="onehot"
+    )
+    with pytest.raises(AssertionError, match=mismatch):
+        make_model(
+            joint_exodus=True,
+            joint_exodus_head=onehot_head,
+            joint_exodus_size_encoding="numeric",
+        )
+    # a matching pair is accepted
+    model = make_model(
+        joint_exodus=True,
+        joint_exodus_head=onehot_head,
+        joint_exodus_size_encoding="onehot",
+    )
+    assert model.joint_exodus_head is onehot_head
+
+
+def test_a_saved_dict_with_no_key_keeps_its_pickled_head():
+    """The legitimate `None` case the assert above must NOT catch: an artifact
+    saved before the key existed, whose head defaults itself to numeric."""
+    head = JointExodusHead(embed_size=HIDDEN, hidden_size=HIDDEN)
+    model = make_model(joint_exodus=True, joint_exodus_head=head)
+    assert model.joint_exodus_size_encoding is None
+    assert model.joint_exodus_head.size_encoding == "numeric"
