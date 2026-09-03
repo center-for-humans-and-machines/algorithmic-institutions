@@ -219,7 +219,7 @@ protocol, seeds and episode count are the parent's.
 
 | date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|---|
-| 2026-09-02 | round-level joint head over the leaver-count pair (m_0, m_1), detached from the trunk, with conditional-Bernoulli selection of who leaves | single | **SC 1.147392663266986** (baseline 2.1867905905576634) | 11/21 (baseline 11/21) | 1.3040409569053069 (baseline 1.2893632310269196) | **SUCCESS by maintainer ruling** (2026-09-03) — gate 1 passes (SC 2-5 -> 1-2); gate 2 as written fails (mean +0.0146777258783870) |
+| 2026-09-02 | round-level joint head over the leaver-count pair (m_0, m_1), detached from the trunk, with conditional-Bernoulli selection of who leaves | single | **SC 1.147392663266986** (baseline 2.1867905905576634) | 11/21 (baseline 11/21) | 1.3040409569053069 (baseline 1.2893632310269196) | **SUCCESS** — gate 1 passes (SC 2-5 -> 1-2); gate 2 passes under the amended §2 (mean 1.3040409569053069 against a 10% ceiling of 1.4182995541296117, a rise of 1.1384%) |
 
 ## Notes
 
@@ -403,3 +403,36 @@ protocol, seeds and episode count are the parent's.
    it reaches this result without reopening the other five. Note also that a
    "net band movement" rule would not rescue this experiment either — it posts 3
    upgrades against 4 degradations.
+20. **Superseding notes 12 and 18: this passes both gates as written, and needs
+   no override.** `main` commit `b174f90` (2026-09-03) amends §2's second gate
+   from "the mean improves" to "the mean may not rise more than 10% above the
+   evaluation stack's baseline mean". Against the baseline 1.2893632310269196
+   that ceiling is 1.4182995541296117. The candidate's 1.3040409569053069 is a
+   rise of **1.1384%**, leaving 0.1142585972243049 of headroom — comfortably
+   inside. Gate 1 was never in question. So the `[SUCCESS]` title now rests on
+   the criteria themselves rather than on a maintainer override, which is a
+   stronger footing; note 18's ruling stands as the record of how the
+   adjudication got here. No measurement changed at any point.
+21. **The retroactive scope of `b174f90`, narrowed by the actual rule chosen.**
+   My earlier flag assumed gate 2 might be removed outright, which would have
+   reclassified five prior experiments. A 10% margin is far more conservative,
+   but it is not inert: PR #168's best arm (mean 1.3208 against the same
+   1.2894 baseline, and a two-band SC upgrade to 0.9588) sits inside the new
+   ceiling too and would now qualify. Whether that PR is revisited is the
+   maintainer's call; recording it so the next reader is not surprised.
+22. **Merged `origin/main` into this branch (`dade303`) rather than rebasing onto
+   it, deliberately.** The evaluation stack for this experiment is PR #165's, and
+   `main` contains neither of the artifacts the simulation config names
+   (`group_switching_contribution_50ep_herding_copula_v2`,
+   `punishment_multinomial_severity_copula.joblib`) nor any copula code at all —
+   `git show origin/main:src/aimanager/generic/graph.py | grep -c copula` returns
+   **0**. Rebasing onto `main` would therefore not carry this result with it; it
+   would silently re-target the candidate at a different stack, and §3's baseline
+   and both gate figures would cease to apply. Merging keeps the parent stack
+   intact while bringing main's tooling and the amended §2 onto the branch.
+23. **The merge conflicted in exactly the predicted place, and confirms `main`
+   still has the gap.** Both SLURM templates conflicted — our in-job
+   `export PYTHONPATH="$PWD/src..."` against `main`'s *absence* of it. Resolved to
+   the union again. So as of `b174f90`, `main`'s isolation still rests entirely on
+   `SBATCH_EXPORT=ALL` propagating `PYTHONPATH` from the submitting shell
+   (`train_cluster.sh:107-111`), with no in-job fallback.
