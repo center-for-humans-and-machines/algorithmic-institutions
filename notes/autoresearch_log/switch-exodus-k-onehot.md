@@ -681,3 +681,43 @@ running the suites). Step 9 stays with the orchestrator.
     groups' one-hot codes fails 3 tests including the detach feature-tail
     check — so the label-order convention the flip-doubling depends on is
     now enforced rather than merely documented.
+12. (Orchestrator, step 6 confirmed) **The retrain activated and the detach
+    held; both re-verified from the bytes, not from the report.** Job
+    **29898162**, `COMPLETED 0:0`, **3m43s** — under the parent's own 4m36s
+    and well inside the §5 ceiling. Artifact sha256
+    `28dd4b40fb5f72ab437784bb7631bca80a78f56cb762d130fe92f7d6fcfc820d`,
+    identical in-job and after the fetch. Unpickling the saved dict locally
+    (PyG stand-ins for the `MetaLayer` trunk only) gives candidate
+    `joint_exodus_size_encoding='onehot'`, head `onehot`, `in_features=39`,
+    **1,291** head parameters, against the parent's `None` / `numeric` /
+    `23` / 1,131 from the same script — so the config key reached the head
+    and the run is not the parent's model under a new name. Joint loss
+    final per fold 1.9093 / 1.8284 / 1.8984 / 1.8514 / 1.9502 against the
+    parent's 1.999 / 1.949 / 1.957 / 1.924 / 2.117: **below on 5 of 5**, so
+    the free intercepts are being used. PROVENANCE names the shared venv's
+    interpreter with `aimanager` under
+    `~/autoresearch/switch-exodus-k-onehot/src/`; `algorithmic-institutions/src`
+    appears nowhere in the log.
+13. (Orchestrator, step 6 confirmed) **The detach numbers, recomputed
+    independently, and one correction to Note 7.** Note 7 gives the filter
+    but not which artifact is "base"; the obvious
+    `switch_pred_opt_50ep_doubled` is the **wrong** one (test folds
+    0.651057 / 0.666856 / 0.627905 / 0.610092 / 0.545478). The reference
+    series belongs to **`switch_pred_opt_50ep_doubled_reanchored`**, which
+    reproduces Note 7 to every digit given — recorded so the next agent does
+    not read a spurious same-sign shift off the wrong baseline. Test
+    log-loss at epoch 374, this run 0.657237 / 0.672105 / 0.615685 /
+    0.614399 / 0.550159 (mean 0.6219171444): against base mean **+0.0029075**
+    with signs `+ + − + +`, against the parent mean **+0.0087911** with
+    signs `+ + + − +`. Mixed both ways, and against base the magnitude is
+    itself under the 0.005 stop threshold, so the stop condition (same sign
+    on all five folds *and* |mean delta| > 0.005) does not fire. The train
+    set is decisive: fold 0 is 0.498511 here against 0.498512 for **both**
+    references — agreeing to 1e-6 — and the train mean delta is −0.00017
+    against base. **The detach held.** Reported as measured, not as
+    "unchanged": the test mean is up 0.0088 against the parent and worse on
+    4 of 5 test folds. The trunk is not expected to be bit-identical to the
+    parent's here — the wider head consumes a different number of draws
+    after the trunk is initialised, so the training's RNG realisation
+    differs — and the parent's own run showed the same mixed pattern at a
+    comparable magnitude against its base.
