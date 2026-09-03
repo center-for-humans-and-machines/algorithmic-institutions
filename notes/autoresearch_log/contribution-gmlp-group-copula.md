@@ -1063,3 +1063,15 @@ nothing touches the frozen surface (§8). Paths are relative to the worktree
     and Note 33's **round-growing rho** (thirds MLE 0.0271 / 0.0356 / 0.0769,
     a 2.8x rise), which points at a round-dependent or lock-in latent and
     echoes PR #149's seed. SC 2.669 remains the switch slot's problem.
+50. **The governing gate-2 rule changed after this experiment closed, and the
+    verdict is unaffected.** `main` commit `b174f90` relaxes §2 gate 2 from
+    "the mean score improves" to "the mean may not rise more than 10% above
+    the evaluation stack's baseline mean", so the ceiling for this experiment
+    becomes 1.7759663949985653 rather than the Declaration's pinned
+    1.6145149045441503. The candidate's mean is 1.3138927788530981, which
+    passes under both readings, and gate 1 is untouched by the change. The
+    Declaration is left as pre-registered — it committed to the stricter of
+    the two rules and met it — rather than rewritten to the looser one.
+    Merged into this branch so the log and the protocol it cites agree; the
+    commit is documentation only and touches no code the experiment depends
+    on.
