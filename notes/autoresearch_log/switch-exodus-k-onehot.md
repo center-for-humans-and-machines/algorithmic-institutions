@@ -472,8 +472,27 @@ running the suites). Step 9 stays with the orchestrator.
 
 ## 3. Results
 
+Evaluation stack (§3, parent-directed): `gaussian_mlp_v2 + group copula`
+contributor x **one-hot-k joint-exodus GNN switch** x PR #160
+severity-copula multinomial punisher, single self pairing, seed 42, 100
+episodes, 500/500 repeats. Baseline is PR #172's own candidate run, whose
+`per_round.parquet` this branch's control reproduces bit-identically.
+
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
+| 2026-09-03 | the joint head's two per-group decider counts enter as one-hot codes over `k in {0..8}` instead of the numeric `k / 8` | **SC 0.9798486593189664** (**band upgrade `1-2` -> `<= 1`**, numerator 0.19060799999999936 against the ceiling 0.19452799999999945); collateral upgrades SA 0.8104274621473664 (`1-2` -> `<= 1`) and RCB 1.9103192887378266 (`2-5` -> `1-2`); guard CG 2.0792636187446272 (`1-2` -> `2-5`, the pre-declared price); guards RCD 0.7316138678546696 and SB 0.8905141825966464 both **held** at `<= 1` | 11/21 (baseline 9/21) | **1.2226801514921317** (baseline 1.2616424454188417) | **SUCCESS on both gates -- with the pre-registered unsoundness criteria U1 and U2 both firing** |
+
+- **Gate 1 PASS**, on the single declared target, by **0.0201513** of score
+  (0.00392 of EMD). Thin: Note 6's oracle puts single-draw SC noise at this
+  level at 0.1-0.2, so the margin is well inside one draw's spread.
+- **Gate 2 PASS, unappealed** -- the mean *falls* 0.0390 to below the
+  parent's own mean, so `b174f90`'s 10% margin is never invoked.
+- Net **3 band upgrades against 1 downgrade**; no row enters or leaves `> 5`;
+  rows `<= 1` 9/21 -> 11/21 (context, not a criterion).
+- **U1 FAILS** (the k=1 leg), **U2 FAILS**, **U3 holds** -- see Note 15. By
+  §1's own pre-committed terms the title is honest under §2 and stays
+  `[SUCCESS]`, but the encoding did **not** fix the singleton hazard to the
+  declared standard, and a successor must not treat it as having done so.
 
 ## 4. Notes
 
@@ -721,3 +740,80 @@ running the suites). Step 9 stays with the orchestrator.
     after the trunk is initialised, so the training's RNG realisation
     differs — and the parent's own run showed the same mixed pattern at a
     comparable magnitude against its base.
+14. (Orchestrator, step 7-8 confirmed) **The control licenses the
+    comparison.** The parent's own stack re-simulated on this branch's code
+    hashes `f3c3136cf6b2241c8b3c942a4b746c54c6d0946c80a7dc48a2e6aff4487aa2fa`
+    — bit-for-bit the parent's committed `per_round.parquet` — verified on
+    Raven and again after the fetch. So the §2 gates may be judged against
+    the parent's committed `scores.csv` rather than against a re-run. The
+    candidate's parquet is `3cb8b3d72784afe09464e0048d27d7cb05f7a3b157780f296e99d168407fef3f`,
+    different, so the one-hot branch was taken. Sim jobs 29898287 (control,
+    1m45s) and 29898289 (candidate, 1m39s), both `COMPLETED 0:0`, both
+    importing `~/autoresearch/switch-exodus-k-onehot/src/`. Independent
+    corroboration from the diagnostic: every control figure equals the
+    parent-candidate figure to the last digit printed.
+15. (Orchestrator, verdict) **U1 and U2 fire; U3 holds. This is the honest
+    headline.** Complete pairs, decision rounds. **U1a FAILS**: P(full |
+    k=1) is **33/89 = 0.3708** against the required <= 0.31 (from 0.4653) —
+    31% of the gap to the human 0.1613 closed, not the 50% pre-registered.
+    **U1b holds**: P(full | k=2) **20/112 = 0.1786** against <= 0.20 (66% of
+    its gap). **U2 FAILS**: the full-exodus cell share is **121/923 =
+    0.1311** against the human 0.1079 — 40% of the gap closed, still 0.0232
+    over. **U3 holds**: k >= 5 full exodus 6/357 = 0.0168 <= 0.03 (human
+    0/119). §1's arithmetic — "if U1 holds, the share lands near 0.10" — did
+    not materialise, because U1 did not hold. So SC crossed the band while
+    the singleton hazard is still 2.3x the human rate: the mechanism moved
+    the hazard in the declared direction and at the declared sizes, but not
+    by the declared amount, and part of SC's move is therefore not the
+    declared cause.
+16. (Orchestrator, verdict) **Where SC's surplus actually came from.**
+    Realised SC 0.9798 sits within 0.0013 of Note 6's oracle prediction for
+    the counterfactual in which the k=1 **and** k=2 hazards are set exactly
+    to the human rate (0.9811 +- 0.1089) — but only 31% / 66% of those two
+    gaps closed, so SC over-delivered against its own hazard move and the
+    coincidence must not be read as the fix having been complete. The
+    diagnostic locates the surplus in rows the oracle held fixed: formation
+    P(post=8 | pre<8) fell 0.1971 -> 0.1631 overall, driven by **pre=6
+    0.1413 -> 0.0804** and **pre=7 0.2673 -> 0.1798** (human 0.0179 /
+    0.0816), and post-founding formation 0.1899 -> 0.1424 (human 0.0824).
+    The larger-group distribution SC scores landed almost on the human at
+    three of five sizes: size 7 0.236 against 0.236, size 6 0.284 against
+    0.280, size 4 0.094 against 0.096; mean L 6.302 -> 6.220 against human
+    6.088; plain full-sample EMD 0.222 -> 0.132, now under the 0.1945
+    ceiling.
+17. (Orchestrator, findings) **The hazard acquired the human hump's shape,
+    and the composition moved with it.** Mean leaver fraction E[m/k | k] for
+    k=1..4 is now 0.371 / 0.397 / 0.409 / 0.405 — *rising* to a peak at k=3-4
+    like the human 0.269 / 0.327 / 0.388 / 0.406 — where the parent's fell
+    monotonically 0.465 / 0.429 / 0.402 / 0.385. That is the free-form size
+    dependence the encoding was for. But the one-hot also changed **which**
+    configurations the simulation visits: the complete-pair k distribution
+    went 101/92/78/290/78/92/101/84 -> 89/112/79/286/79/112/89/77, i.e. 12
+    fewer singleton cells and 20 more pair cells. So the k=2 improvement is
+    partly compositional, and the raw event counts (33 and 20 against the
+    parent's 47 and 22) are the honest reading of the rate changes.
+18. (Orchestrator, findings) **Two guard predictions inverted, and one
+    residual is new.** §1 expected SA to move *against* us (fewer singleton
+    exits, fewer movers) and RCB to sit still; instead **SA band-upgraded**
+    (1.0356 -> 0.8104, the largest move after SC) and **RCB band-upgraded**
+    (2.1039 -> 1.9103). Both are collateral, not claimed — pre-declaration
+    binds. The reason SA moved with us rather than against is visible in the
+    per-round switch rates, which moved *toward* human at rounds 3 and 7
+    (0.4088 -> 0.4387 against human 0.4419; 0.2737 -> 0.2850 against
+    0.2989): the encoding did not merely remove movers, it redistributed
+    when they move. New residuals: **k=6 full exodus 2/112 = 0.0179** where
+    parent and human were both 0 (U3 still holds at 0.0168, but a little of
+    the free intercept budget went to the wrong end), and **pre=5 formation
+    regressed** 0.1667 -> 0.2152 against the human 0.1569 — the only
+    formation row that got worse, and the same size-5 deficit §1's
+    other-direction falsifier had named as the successor's target.
+19. (Orchestrator, findings) **The between-group correlation moved away from
+    human**, pooled −0.3142 -> **−0.2842** against the human −0.3667, and at
+    four of five decision rounds. That is against the direction the joint
+    head exists to serve, so the encoding bought its SC through the
+    *marginal* size hazard rather than through better opposition between the
+    groups. Taken with note 15 it says where a successor should aim: the
+    remaining SC shape error is size 5 short (0.200 against 0.244) and size
+    8 long (0.186 against 0.144), and the human decay of P(L=8) to 0.06 by
+    rounds 12-15 is still absent (candidate 0.15) — a dissolution-path
+    deficit, not a formation one.
