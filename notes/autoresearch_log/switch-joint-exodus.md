@@ -436,3 +436,41 @@ protocol, seeds and episode count are the parent's.
    the union again. So as of `b174f90`, `main`'s isolation still rests entirely on
    `SBATCH_EXPORT=ALL` propagating `PYTHONPATH` from the submitting shell
    (`train_cluster.sh:107-111`), with no in-job fallback.
+24. **Correction to note 23 and to what was reported earlier: `main`'s isolation
+   mechanism WORKS.** A probe job submitted from the isolated dir with exactly
+   what `main`'s launchers export, running a script carrying `main`'s activation
+   line and *no* in-job `PYTHONPATH` export, resolved `aimanager` to
+   `/u/certuer/autoresearch/switch-joint-exodus/src/aimanager/__init__.py` and
+   `aimanager.generic.joint_exodus` — a branch-only module — to the isolated
+   tree. The inherited `PYTHONPATH` arrived intact and the isolated `src` landed
+   at `sys.path[1]`, ahead of site-packages (5) and the shared editable path (6).
+   Job 29889721, COMPLETED 0:0. So `SBATCH_EXPORT=ALL` does propagate, and
+   `8680db9`/`849e3ca` genuinely do solve the isolation problem on `main` today.
+   The union template on this branch is a **hardening, not a bug fix**: it
+   removes a single point of failure (the guarantee currently rests entirely on
+   the submitting shell exporting the variable and on `SBATCH_EXPORT=ALL`
+   surviving `bash -l` and `module load`), but nothing is broken as it stands.
+   Earlier framing in this log that implied otherwise is superseded by this
+   measurement.
+25. **The merge is behaviourally inert, established two ways.** Statically, the
+   diff from the pre-merge tip `128cc92` to `HEAD` restricted to `src/`,
+   `configs/simulation/`, `scripts/` and `artifacts/` is **empty** — the merge
+   changed markdown only, and the conflict resolution restored the pre-merge
+   templates byte for byte. End to end, both simulations re-run from the merged
+   tree reproduced bit-identically: control
+   `4f64fc42fe23cad1cf14423f79b8496adff9874e2e546c05a0d7683055960be2` and
+   candidate `0a34f8280bccb98a75fe002eb3669827358117ce56c44f7c10268f312904b7ab`,
+   on **ravg1131 and ravg1096, different nodes from the originals' ravg1024**, so
+   the reproducibility is node-independent. Every figure in the results table
+   therefore describes the merged tree exactly as it described the pre-merge one.
+   All 87 of this experiment's tests pass again against real PyG, stand-ins
+   confirmed inert.
+26. **Two operational traps worth inheriting.** (a) `SLURM_EXPORT_ENV` reads
+   `<UNSET>` inside a job even when `SBATCH_EXPORT=ALL` was set at submission —
+   the variable governs submission and is not re-exported, so it cannot serve as
+   an in-job self-check; the inherited `PYTHONPATH` value is the only reliable
+   in-job evidence. (b) **When the SSH ControlMaster has expired, `squeue`
+   returns empty output rather than an error.** The §9 sync-race guard is "check
+   `squeue` before any `rsync --delete`", and a dead tunnel makes a busy queue
+   look clear. Any future check must confirm the connection is live before
+   reading an empty queue as safe.
