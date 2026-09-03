@@ -267,6 +267,39 @@ against the contribution slot's ~24 min training ceiling.
    (persistence-class decision; the estimated phi stays in the JSON unaltered) and
    the plan continues. *[correctness-critical — implementer: Opus]*
 
+7b. **Fix the stamper's stale precondition (plan revision, inserted after step 7
+    failed)** — `scripts/artificial_humans/make_contribution_copula_artifact.py`.
+    Job 29892804 died in 22 s on
+    `AssertionError: base artifact already carries copula_rho` at line 244,
+    `assert k not in base`. The precondition is stale, not wrong-in-spirit:
+    `graph.py`'s save list (line ~731) now persists `copula_rho`, `copula_phi`
+    and `copula_switch_every` in *every* artifact, at their neutral defaults
+    `0.0 / 0.0 / None` (line ~150), so any trunk trained on this branch carries
+    the keys. PR #165's M0 trunk predates copula support, which is why
+    key-absence held for it and cannot hold now. The calibrator already asserts
+    the correct form on the same invariant —
+    `contribution_copula_rho.py:317-318` checks the *value*
+    (`model.copula_rho == 0.0`) and passed on this very artifact — so the two
+    scripts disagree about one precondition and the value-based one is right.
+    Change: (a) the precondition becomes "the base carries no *active* copula" —
+    a field may be present iff it holds its neutral value; (b)
+    `assert_only_fields_added` (line ~170) currently requires the three fields
+    to be newly *added* and every pre-existing key to be unchanged, which the
+    same staleness breaks, so it must allow exactly those three keys to change
+    from neutral while every other key stays bit-identical. The guarantee's
+    strength is preserved: after the stamp, the artifact differs from the trunk
+    in exactly the three copula fields and nothing else. `stamped = dict(base);
+    stamped.update(fields)` is NOT touched, so the stamped values are identical
+    to what #165's recipe would have produced. *[correctness-critical — implementer: Opus]*
+
+    **Orchestrator ruling on §4.** §4 makes a bug fix in shared code its own
+    experiment. I rule that this does not apply here: the change is confined to
+    assertion logic in a stamping script, provably cannot alter any stamped
+    value, any model, or any simulation, and therefore cannot alter any score.
+    It is this experiment's own recipe being made runnable against a trunk
+    trained after copula support landed — not a behavioural change to shared
+    code. Recorded explicitly so the maintainer can overrule it.
+
 8. **Stamp** — copy `scripts/artificial_humans/stamp_copula.slurm` to
    `stamp_copula_group_size.slurm` invoking `make_contribution_copula_artifact.py`
    with `--params` (step 7), `--base` (step 5) and `--out
