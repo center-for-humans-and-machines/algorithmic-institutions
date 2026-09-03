@@ -677,3 +677,31 @@ runs once per step before staging, not after every edit.
     single-fold log-loss and a nats estimate measured on that branch)
     rather than restate another run's numbers as if measured here, which
     is the right call.
+
+11. (Orchestrator, step 3 confirmed) 21 tests pass. The `0 * -inf` hazard
+    is closed structurally rather than by tolerance: real slots get a
+    two-sided `clamp(1e-12, 1 - 1e-12)` before `log(p) - log1p(-p)`, and
+    padded slots are overwritten with `p = 0.5`, i.e. a logit of exactly
+    0, so the subset-weight matmul `logit @ bits.T` can never form
+    `0 * ±inf`; subsets touching padding are discarded by `valid`
+    regardless. Probed independently with an adversarial batch — exact
+    `0.0` and `1.0` on *real* slots, a `k == 0` row, `m == k`, `m == 0`,
+    and NaN-poisoned padding — no NaN anywhere, every row's `exp` sums to
+    1.0, exactly `m` selected, no padded slot ever chosen.
+    `sample_conditional_bernoulli` consumes the global RNG exactly once
+    (verified by state replay against a single `th.multinomial` on a
+    table built without consuming RNG, with a two-draw sanity check);
+    that predictable draw count is what step 6's head-off bitwise
+    identity depends on. Marginal recovery over 20,000 draws with `m`
+    from the Poisson-binomial DP: max absolute error 0.0045, worst
+    deviation 1.30 SE, mean drawn `m` 3.586 against `sum(p) = 3.58` —
+    the check that actually validates the mechanism, since it confirms
+    per-agent propensities survive the conditioning.
+12. (Orchestrator, for step 4) Two surface facts from step 3 that the
+    gate's author needs: `conditional_bernoulli_log_prob` upcasts `p` to
+    float64 internally regardless of input dtype (the reference's choice,
+    kept), though the *returned selection* is `bool`, which is what the
+    gate consumes; and the assert message substrings `"exceed"`,
+    `"non-negative"`, `"max_group_size"` and `"rows of p"` are now part
+    of the tested surface, so they must not be reworded casually.
+
