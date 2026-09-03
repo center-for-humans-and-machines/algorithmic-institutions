@@ -87,6 +87,7 @@ C2 = [
     "payoff_mean_group",
     "common_good",
     "group_size",
+    "inv_group_size",
 ]
 C3 = [
     "contribution_mean_other",
@@ -131,6 +132,7 @@ CONTRIB_SAFE = (
         "group_size",
         "group_size_other",
         "group_size_delta",
+        "inv_group_size",
         "win_group_size",
         "win_group_size_other",
     ]
@@ -232,6 +234,7 @@ def _add_cur(ref, bank):
     ref["ref_punishment_mean_group"] = col("p_grp")
     ref["ref_common_good"] = col("cg_grp")
     ref["ref_group_size"] = col("size_grp")
+    ref["ref_inv_group_size"] = 1.0 / ref["ref_group_size"]
     ref["ref_contribution_mean_other"] = col("c_oth")
     ref["ref_punishment_mean_other"] = col("p_oth")
     ref["ref_common_good_other"] = col("cg_oth")

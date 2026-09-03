@@ -26,6 +26,7 @@ Leak rule: any current-family feature that reads round-t contributions/punishmen
 **payoff_mean_group:** this round's average payoff of the current group
 **common_good:** this round's common good = (1.6 · Σ contributions − Σ punishments)/n_valid for the current group
 **group_size:** current group size
+**inv_group_size:** 1 / group_size — the marginal per-capita return factor (a contributed point returns 1.6 / n to the contributor)
 
 ## Current -- Other
 
