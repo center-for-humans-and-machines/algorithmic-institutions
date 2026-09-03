@@ -25,9 +25,10 @@ the parent's — §9). Two gates, both required for success:
    than its baseline — from > 5 into 2-5, from 2-5 into 1-2 or <= 1, from
    1-2 into <= 1. A within-band improvement, however large, is a `[FAIL]`
    with valuable notes, not a success.
-2. **The mean score improves.** The average over all 21 rows must drop
-   below the evaluation stack's baseline mean — you cannot buy your targets
-   by breaking the rest of the stack.
+2. **The mean score holds.** The average over all 21 rows may not rise
+   more than 10% above the evaluation stack's baseline mean (e.g. baseline
+   1.76 -> ceiling 1.936). A band upgrade is allowed to cost a little
+   elsewhere — but not to be bought by breaking the rest of the stack.
 
 Nothing else gates. **Rows <= 1** (rows at or below the human-vs-human
 noise ceiling) is still computed and reported in every results table (§10),
@@ -267,12 +268,12 @@ machine account may replace this later.
    continue.
 5. Train, simulate, evaluate per §3 and §7; log every run (§10).
 6. The verdict comes straight from that single evaluation, per §2: a band
-   upgrade on a target row *and* a better mean is a success; anything less
-   is a fail. There is no second stage.
+   upgrade on a target row with the mean inside the 10% margin is a
+   success; anything less is a fail. There is no second stage.
 7. **Every experiment ends in a PR** — titled `[SUCCESS] ...` (band upgrade
-   on a target row and the mean improved) or `[FAIL] ...` (no band upgrade,
-   or the mean did not improve; never merged — it exists so the next agent
-   does not retry it).
+   on a target row, mean within the margin) or `[FAIL] ...` (no band
+   upgrade, or the mean rose past it; never merged — it exists so the next
+   agent does not retry it).
    No silent abandonment. The body, in order:
    1. **Hypothesis** — brief: the behavioral claim, the planned change, and
       the targeted rows with their starting scores.
