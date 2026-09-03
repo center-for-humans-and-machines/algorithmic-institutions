@@ -99,6 +99,35 @@ class LinearAHAdapter:
             "copula_rho is implemented for the multinomial punishment sampler "
             f"only, got target={self.target!r} model={self.model_type!r}"
         )
+        # Group copula, Gaussian contribution sampler: `copula_rho_p` /
+        # `copula_rho_t` weight a shared latent that correlates a group's
+        # contribution draws -- persistent per (episode, group) and transient
+        # per (round, group) respectively, entering the standard normal as
+        # z = sqrt(rho_p) * u_g + sqrt(rho_t) * v_g + sqrt(1 - rho_p - rho_t) * e_i
+        # (calibrated by scripts/baselines/contribution_gmlp_copula_rho.py).
+        # Absent or both 0.0 keeps the independent path -- and its exact RNG
+        # consumption -- unchanged; this step only opens the gate, it draws
+        # nothing.
+        self.copula_rho_p = float(bundle.get("copula_rho_p", 0.0) or 0.0)
+        self.copula_rho_t = float(bundle.get("copula_rho_t", 0.0) or 0.0)
+        assert (
+            0.0 <= self.copula_rho_p
+        ), f"copula_rho_p must be >= 0, got {self.copula_rho_p}"
+        assert (
+            0.0 <= self.copula_rho_t
+        ), f"copula_rho_t must be >= 0, got {self.copula_rho_t}"
+        assert self.copula_rho_p + self.copula_rho_t < 1.0, (
+            "copula_rho_p + copula_rho_t must be < 1 (residual idiosyncratic "
+            f"variance would vanish), got {self.copula_rho_p} + {self.copula_rho_t}"
+        )
+        assert self.copula_rho_p + self.copula_rho_t == 0.0 or (
+            self.target == "contribution"
+            and self.model_type in ("gaussian", "gaussian_mlp")
+        ), (
+            "copula_rho_p / copula_rho_t are implemented for the Gaussian "
+            f"contribution sampler only, got target={self.target!r} "
+            f"model={self.model_type!r}"
+        )
         self.default_values = dict(bundle["default_values"])
         self.switch_every = bundle.get("switch_every")
         # env-driven use (predict) needs both; the rounds-driven manager path
@@ -128,6 +157,9 @@ class LinearAHAdapter:
     def _reset_history(self):
         self._measure = {m: {} for m in self._MEASURES}  # round -> (A,) float
         self._group = {}  # round -> (A,) int membership
+        # group id -> that group's persistent contribution latent u_g, held for
+        # the whole episode (group copula; empty on the independent path).
+        self._copula_z = {}
 
     def _record(self, state, t):
         """Fold the current env state into the episode history.
@@ -297,6 +329,73 @@ class LinearAHAdapter:
         lvl = th.searchsorted(cum.contiguous(), u.reshape(-1, 1).contiguous())
         return lvl.reshape(-1).clamp(0, n_levels - 1).numpy().astype(np.int64)
 
+    def _sample_levels_gaussian_copula(self, Xs, n_levels, groups):
+        """Discrete levels [A] from the Gaussian contribution sampler with a
+        shared group latent replacing the independent standard normal:
+
+            z_i = sqrt(rho_p) u_g(i) + sqrt(rho_t) v_g(i)
+                  + sqrt(1 - rho_p - rho_t) e_i
+
+        then ``clip(rint(mu_i + sigma_i z_i), 0, n_levels - 1)``. Unlike the
+        multinomial punisher's ``_sample_levels_copula`` there is no CDF
+        inversion: a Gaussian emission takes the correlated normal directly.
+
+        Marginals are preserved EXACTLY, for any (rho_p, rho_t): the weights
+        square to rho_p + rho_t + (1 - rho_p - rho_t) = 1 and u / v / e are
+        independent standard normals, so each z_i is marginally exactly
+        N(0, 1) and each agent's pre-rounding law is exactly N(mu_i, sigma_i)
+        -- the same law the independent path draws from. ``rint`` and ``clip``
+        are monotone, so the discretised marginal is preserved too; only the
+        within-group dependence changes. That is why RCA (and the other
+        marginal / per-agent rows) is a bug-detector here rather than a
+        trade-off: a large move means the marginals are not preserved.
+
+        Conventions the code cannot show:
+          * Exactly 3n float64 draws per call, in the fixed order zu, zv, eps,
+            taken unconditionally -- also when a weight is 0.0 and when the
+            persistent latents are already stored. The RNG stream must depend
+            on n alone, never on the round index, the weights or the group
+            composition, so a switch cannot shift the stream and arms stay
+            comparable (PR #160 treats the analogous property as an
+            invariant).
+          * First-member rule: a group's shared draws are those of its first
+            member in row order, so the row -> draw map is a pure function of
+            the group array.
+          * ``groups`` is post-arrival membership (``self._group[t]``), so a
+            switcher draws from the RECEIVING group's latent.
+          * ``self._copula_z`` holds u_g for the episode (cleared by
+            ``_reset_history``): a group id keeps its latent once drawn, so a
+            group that empties and later re-forms resumes its own u_g instead
+            of getting a fresh one.
+
+        Rationale: notes/autoresearch_log/contribution-gmlp-group-copula.md.
+        """
+        mu = self.estimator.predict(Xs)
+        sd = self.estimator.predict_std(Xs)  # heteroscedastic sigma(x) head
+        if not self.sample:  # deterministic point prediction, no RNG consumed
+            return np.clip(np.rint(mu), 0, n_levels - 1).astype(np.int64)
+
+        n = len(Xs)
+        zu = th.randn(n, dtype=th.float64)  # persistent-latent innovations
+        zv = th.randn(n, dtype=th.float64)  # this round's transient latents
+        eps = th.randn(n, dtype=th.float64)  # idiosyncratic
+        g = np.asarray(groups).reshape(-1)
+        assert len(g) == n, f"groups has {len(g)} entries for {n} agents"
+        first, pick = {}, np.empty(n, dtype=np.int64)
+        for i, gid in enumerate(g):
+            pick[i] = first.setdefault(int(gid), i)
+        for gid, i in first.items():  # keeps an already-stored u_g untouched
+            self._copula_z.setdefault(gid, float(zu[i]))
+
+        u = np.array([self._copula_z[int(gid)] for gid in g], dtype=np.float64)
+        v = zv.numpy()[pick]
+        z = (
+            np.sqrt(self.copula_rho_p) * u
+            + np.sqrt(self.copula_rho_t) * v
+            + np.sqrt(1.0 - self.copula_rho_p - self.copula_rho_t) * eps.numpy()
+        )
+        return np.clip(np.rint(mu + sd * z), 0, n_levels - 1).astype(np.int64)
+
     # ------------------------------------------------------------------ #
     # env-facing predict (contribution / switch)
     # ------------------------------------------------------------------ #
@@ -322,7 +421,15 @@ class LinearAHAdapter:
             pred = th.tensor(sw, dtype=th.bool, device=dev).reshape(1, -1, 1)
             return pred, None
 
-        lvl = self._sample_levels(Xs, self.n_contributions)
+        if self.sample and (self.copula_rho_p + self.copula_rho_t) > 0.0:
+            # post-arrival membership: a switcher draws from the RECEIVING
+            # group's latent. n_levels is the contribution grid (21), never
+            # the bundle's n_levels (0 for a continuous bundle).
+            lvl = self._sample_levels_gaussian_copula(
+                Xs, self.n_contributions, self._group[t]
+            )
+        else:
+            lvl = self._sample_levels(Xs, self.n_contributions)
         return th.tensor(lvl, dtype=th.int64, device=dev).reshape(1, -1, 1), None
 
     # ------------------------------------------------------------------ #

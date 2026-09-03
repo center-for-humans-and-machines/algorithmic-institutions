@@ -321,11 +321,146 @@ def test_sampling_actually_varies(contribution_bundle):
 
 
 def test_copula_rho_rejected_on_gaussian_mlp():
-    """The severity copula is a multinomial-punishment feature; a gaussian_mlp
-    bundle carrying rho is a misconfiguration, exactly as for `gaussian`."""
+    """`copula_rho` (PR #160's punisher field) is a multinomial-punishment
+    feature; a gaussian_mlp bundle carrying it is a misconfiguration, exactly
+    as for `gaussian`. This is about `copula_rho` specifically -- the group
+    copula's own fields, `copula_rho_p` / `copula_rho_t`, are covered below."""
     for model in ("gaussian", "gaussian_mlp"):
         with pytest.raises(AssertionError, match="multinomial punishment"):
             _adapter(toy_bundle(model=model, copula_rho=0.35))
+
+
+# --------------------------------------------------------------------------- #
+# (3b) simulation adapter: the group copula (`copula_rho_p` / `copula_rho_t`)
+# -- the configuration gate here, the sampler itself in
+# tests/baselines/test_contribution_group_copula.py.
+# --------------------------------------------------------------------------- #
+def test_copula_rho_p_t_accepted_on_gaussian_mlp_contribution():
+    ad = _adapter(toy_bundle(copula_rho_p=0.05, copula_rho_t=0.02))
+    assert ad.copula_rho_p == 0.05
+    assert ad.copula_rho_t == 0.02
+
+
+def test_copula_rho_p_t_accepted_on_gaussian_contribution():
+    ad = _adapter(toy_bundle(model="gaussian", copula_rho_p=0.03, copula_rho_t=0.01))
+    assert ad.copula_rho_p == 0.03
+    assert ad.copula_rho_t == 0.01
+
+
+def test_copula_rho_p_t_rejected_on_multinomial_punishment():
+    bundle = toy_bundle(model="multinomial", target="punishment", copula_rho_p=0.05)
+    with pytest.raises(AssertionError, match="Gaussian contribution sampler"):
+        _adapter(bundle)
+
+
+def test_copula_rho_p_t_rejected_on_ridge():
+    with pytest.raises(AssertionError, match="Gaussian contribution sampler"):
+        _adapter(toy_bundle(model="ridge", copula_rho_p=0.05))
+
+
+def test_copula_rho_p_t_rejected_when_sum_at_least_one():
+    with pytest.raises(AssertionError, match="must be < 1"):
+        _adapter(toy_bundle(copula_rho_p=0.6, copula_rho_t=0.4))
+
+
+@pytest.mark.parametrize(
+    "over",
+    [{"copula_rho_p": -0.1}, {"copula_rho_t": -0.1}],
+)
+def test_copula_rho_p_t_rejected_when_negative(over):
+    with pytest.raises(AssertionError, match="must be >= 0"):
+        _adapter(toy_bundle(**over))
+
+
+@pytest.mark.parametrize(
+    "over",
+    [
+        {},
+        {"copula_rho_p": None, "copula_rho_t": None},
+        {"copula_rho_p": 0.0, "copula_rho_t": 0.0},
+    ],
+)
+def test_copula_rho_p_t_accepted_as_zero_when_absent_or_none(over):
+    ad = _adapter(toy_bundle(**over))
+    assert ad.copula_rho_p == 0.0
+    assert ad.copula_rho_t == 0.0
+
+
+GROUPS = [0, 0, 0, 0, 1, 1, 1, 1]  # two groups of four, the real composition
+
+
+def _state(t):
+    """Minimal env state for `predict()`: the round index, post-arrival
+    membership, and the prev_ siblings `_record` folds into the history."""
+    A = len(GROUPS)
+    ag = th.tensor(GROUPS, dtype=th.int64).reshape(1, A, 1)
+    st = {
+        "round_number": th.full((1, A, 1), t, dtype=th.int64),
+        "agent_group": ag,
+    }
+    if t > 0:
+        st["prev_contribution"] = th.full((1, A, 1), 9.0)
+        st["prev_punishment"] = th.zeros((1, A, 1))
+        st["prev_common_good"] = th.full((1, A, 1), 12.0)
+        st["prev_agent_group"] = ag
+    return st
+
+
+def _predict_episode(ad, rounds=3):
+    """Levels per round of one episode, plus the next RNG draw -- so a
+    comparison pins the output AND the RNG consumption."""
+    out = [
+        ad.predict(_state(t), reset_rnn=(t == 0))[0].reshape(-1).numpy()
+        for t in range(rounds)
+    ]
+    return out, th.randn(1).item()
+
+
+def test_copula_rho_p_t_zero_keeps_the_legacy_path(contribution_bundle):
+    """Fields absent and fields at 0.0 must both run the INDEPENDENT sampler:
+    same levels and the same RNG consumption, one size-n draw per round. This
+    is what makes every bundle predating the group copula byte-identical."""
+    ad_absent = _adapter(contribution_bundle)
+    ad_zero = _adapter(toy_bundle(copula_rho_p=0.0, copula_rho_t=0.0))
+
+    th.manual_seed(11)
+    want, want_next = _predict_episode(ad_absent)
+    th.manual_seed(11)
+    got, got_next = _predict_episode(ad_zero)
+
+    for i, (w, g) in enumerate(zip(want, got)):
+        assert np.array_equal(w, g), f"round {i}: {w.tolist()} != {g.tolist()}"
+    assert got_next == want_next, "RNG consumption differs with the fields set"
+
+    th.manual_seed(11)  # legacy stream: exactly one draw of size n per round
+    for _ in range(len(want)):
+        th.randn(len(GROUPS))
+    assert th.randn(1).item() == want_next, "legacy path is not n draws/round"
+
+
+def test_copula_rho_p_t_nonzero_reaches_the_group_copula(contribution_bundle):
+    """The other half, honest since step 4: a non-zero pair must CHANGE the
+    levels -- if it does not, `predict()` never reaches
+    `_sample_levels_gaussian_copula` -- and must consume the sampler's fixed
+    three size-n float64 draws per round."""
+    ad_legacy = _adapter(contribution_bundle)
+    ad_copula = _adapter(toy_bundle(copula_rho_p=0.2, copula_rho_t=0.1))
+
+    th.manual_seed(11)
+    legacy, _ = _predict_episode(ad_legacy)
+    th.manual_seed(11)
+    copula, copula_next = _predict_episode(ad_copula)
+
+    assert any(
+        not np.array_equal(a, b) for a, b in zip(legacy, copula)
+    ), "a non-zero (rho_p, rho_t) left the levels unchanged"
+    assert set(ad_copula._copula_z) == set(GROUPS), "no persistent latent stored"
+
+    th.manual_seed(11)  # copula stream: zu, zv, eps of size n, every round
+    for _ in range(len(copula)):
+        for _ in range(3):
+            th.randn(len(GROUPS), dtype=th.float64)
+    assert th.randn(1).item() == copula_next, "sampler is not 3n draws/round"
 
 
 # --------------------------------------------------------------------------- #
