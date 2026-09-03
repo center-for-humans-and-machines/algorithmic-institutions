@@ -3,6 +3,7 @@ import numpy as np
 import torch as th
 from torch_scatter import scatter_mean
 from torch_geometric.nn import MetaLayer
+from aimanager.generic.conditional_bernoulli import sample_conditional_bernoulli
 from aimanager.generic.encoder import Encoder, IntEncoder
 from aimanager.generic.joint_exodus import JointExodusHead
 
@@ -428,6 +429,121 @@ class GraphNetwork(th.nn.Module):
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
+    def _predict_encoded_joint_exodus(self, encoded, shape, reset_rnn=True):
+        """Same forward as `predict_encoded`, but on a decision round the
+        independent per-agent draw is replaced by the two-stage joint draw of
+        notes/autoresearch_log/switch-joint-exodus-gmlp.md:
+
+        1. per-agent switch probabilities from the existing, UNCHANGED
+           per-agent head -- this method never touches those logits;
+        2. a pair `(m_0, m_1)` of leaver counts drawn per batch element from
+           the joint head's masked joint over the padded 9 x 9 grid;
+        3. WHICH members leave, drawn per group by the exact conditional
+           Bernoulli of `generic/conditional_bernoulli.py`, conditioned on the
+           very probabilities from 1.
+
+        RNG. The switch predictor runs every round to keep its GRU hidden
+        state warm, but its output is only consumed on decision rounds
+        (`manager/environment.py: step`). So a NON-decision round must leave
+        the global RNG exactly where the independent path would have: the
+        legacy `y_encoder.decode(..., sample=True)` below is taken verbatim
+        and, off a decision round, is the only draw this method makes. On a
+        decision round that legacy draw is made and then DISCARDED -- one
+        wasted categorical per decision round buys the guarantee that the
+        neutral path is the pre-existing expression itself rather than a
+        re-derivation of it, and the mechanism is meant to differ on exactly
+        those rounds anyway. Cost: three categorical draws on a decision
+        round (the discarded per-agent one, the pair, and the one batched
+        selection draw), one otherwise.
+
+        Everything stays on the model's device, like the legacy draw.
+        """
+        n_batch, n_nodes, n_rounds = shape
+        head = self.joint_exodus_head
+        assert head is not None, "no joint exodus head to sample from"
+        assert self.joint_exodus_switch_every is not None, (
+            "the joint exodus head is present but joint_exodus_switch_every "
+            "is not set, so the decision rounds it must fire on are unknown. "
+            "Set it on the model (see configs/training/artificial_humans/"
+            "switch_predictor/joint_exodus.yml) rather than sampling the "
+            "per-agent head and silently reporting a joint-exodus run."
+        )
+        assert self.y_levels == 2, (
+            "the joint exodus draw is a leaver COUNT over a binary label, "
+            f"got y_levels={self.y_levels}"
+        )
+        assert n_nodes <= head.max_group_size, (
+            f"{n_nodes} players do not fit the head's count grid "
+            f"(max_group_size={head.max_group_size})"
+        )
+        self.eval()
+        y_logit, joint = self(encoded, reset_rnn, True)
+        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+
+        # (1) The per-agent draw, verbatim. Off a decision round this is the
+        # whole method; see the RNG note above.
+        y_pred = self.y_encoder.decode(y_pred_proba, True)
+
+        log_prob, k = joint
+        agent_group = encoded["agent_group"].reshape(n_batch, n_nodes, n_rounds)
+        round_number = encoded["round_number"].reshape(n_batch, n_nodes, n_rounds)
+        # The gate is read off one node; a round that differed across the
+        # batch would gate some episodes on another's clock.
+        assert bool(
+            (round_number == round_number[0, 0].reshape(1, 1, n_rounds)).all()
+        ), "round_number is not constant within a round across the batch"
+        rounds = round_number[0, 0]
+        grid = log_prob.shape[-1]
+
+        for r in range(n_rounds):
+            if (int(rounds[r]) + 1) % self.joint_exodus_switch_every != 0:
+                continue
+
+            # (2) the pair (m_0, m_1), one draw for the whole batch. The grid
+            # is already masked to m_g <= k_g and renormalised, so the pair is
+            # feasible by construction and (0, 0) is always available -- a
+            # fully merged round (k = 8, k = 0) is an ordinary cell here.
+            pair_proba = log_prob[:, r].exp().flatten(-2, -1)
+            cell = th.multinomial(pair_proba, 1).reshape(-1)  # draw 1/1
+            # Row-major over (m_0, m_1), the same flattening the training loss
+            # gathers with (`train.joint_exodus_loss`: m_0 * grid + m_1).
+            m = th.stack(
+                [th.div(cell, grid, rounding_mode="floor"), cell % grid], dim=-1
+            )  # (n_batch, 2)
+
+            # (3) which members leave. Membership is read at the moment of the
+            # decision, PRE-switch, from the same `agent_group` the head
+            # pooled with -- so the count drawn for group g is spent on group
+            # g's own members. The identity below is the guard against that
+            # ever silently inverting.
+            group_r = agent_group[:, :, r]
+            member = th.stack(
+                [group_r == g for g in range(head.n_groups)], dim=0
+            )  # (n_groups, n_batch, n_nodes)
+            assert th.equal(member.sum(-1).transpose(0, 1), k[:, r]), (
+                "the per-group membership used to place the leavers and the "
+                "head's own valid-decider count disagree"
+            )
+            # One batched conditional-Bernoulli call over both groups, so the
+            # RNG cost is one categorical draw and not one per group. Rows are
+            # group-major: [group 0 of every episode, group 1 of every
+            # episode], and `p` is tiled to match. Every row is n_nodes wide
+            # with the non-members masked out, so a selected slot IS the agent
+            # index and no gather can transpose the two groups.
+            p_switch = y_pred_proba[:, r, -1].reshape(n_batch, n_nodes)
+            selected = sample_conditional_bernoulli(
+                p_switch.repeat(head.n_groups, 1),
+                m.transpose(0, 1).reshape(-1),
+                mask=member.reshape(-1, n_nodes),
+                max_group_size=n_nodes,
+            )
+            # The two masks are disjoint and cover every agent exactly once,
+            # so the union is the round's switch vector.
+            switch = selected.reshape(head.n_groups, n_batch, n_nodes).any(0)
+            y_pred[:, r] = switch.reshape(-1).to(y_pred.dtype)
+
+        return y_pred, y_pred_proba
+
     def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
         n_batch, n_nodes, n_rounds = data[self.y_name].shape
         if edge_index is None:
@@ -435,7 +551,12 @@ class GraphNetwork(th.nn.Module):
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
-        predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
+        if sample and self.joint_exodus_head is not None:
+            predict = self._predict_encoded_joint_exodus(
+                encoded, (n_batch, n_nodes, n_rounds), reset_rnn=reset_rnn
+            )
+        else:
+            predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
 

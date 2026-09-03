@@ -783,3 +783,48 @@ runs once per step before staging, not after every edit.
     this file installed"; a genuine per-session report would need one
     shared `tests/switch/conftest.py`, which is a step 9 decision.
 
+19. (Orchestrator, step 6 confirmed) 42 new tests, 141 across
+    `tests/switch`, 421 across `tests/`; `graph.py` +122/-1, the deletion
+    being the `predict_encoded` dispatch line now inside the `else`, with
+    steps 2/3/5's files untouched. RNG discipline **measured directly**,
+    not inferred: every one of the five decision rounds (3, 7, 11, 15,
+    19) costs exactly three `th.multinomial` draws — `(16, 2)` the
+    verbatim legacy per-agent decode, `(2, 81)` the pair draw over the
+    flattened grid per episode, `(4, 256)` one batched selection over
+    `n_groups x n_batch` rows — and every non-firing round costs exactly
+    one, leaving the full global RNG state byte-identical to the
+    pre-change expression. That all five fire confirms the maintainer's
+    ruling is in force in the code, not merely absent from a config.
+    Both hazards mutation-tested by me independently, reproducing the
+    implementer's counts exactly: transposing the group axis
+    (`m.flip(-1)`) turns 11 tests red, including the mirrored-label row
+    where positions are identical and only labels move, which is the
+    case a totals-only assertion cannot see; replacing the verbatim
+    legacy draw with an `argmax` turns 18 red. Restores to 141 green.
+    `environment.py` and `simulate.py` confirmed unchanged and
+    unnecessary to change, and `state` carries no `"mask"` key, so
+    `decider_mask` stays unset in the simulation path and note 17's
+    coupling is never exercised.
+20. (Orchestrator, correcting my own error) I told the step 4 and step 6
+    implementers that PR #171 carried a `joint_exodus_last_round`
+    firing-schedule parameter that this branch was deliberately
+    dropping. **That is wrong, and step 6's implementer caught it.**
+    `last_round` has zero hits in the #171 reference sources, in #171's
+    log, and on `origin/auto/switch-joint-exodus` itself. #171 always
+    fired on every decision round; `last_round` was *this* experiment's
+    proposed calibration in the original declaration, which the
+    maintainer then ruled out (Note 5). The effect on the code is nil —
+    no such parameter exists anywhere in `src/`, `tests/` or `configs/`,
+    which is what both the ruling and #171's own behaviour require — but
+    the provenance in those two briefs was mine, not #171's, and the
+    record should not carry it.
+21. (Orchestrator, for step 7) `sample=False` provably makes zero
+    `th.multinomial` calls and returns the per-agent argmax, so
+    `eval_model` and the confusion matrix cannot reach the joint path
+    even with the head on — which is what keeps step 10's held-out
+    log-loss comparable with the base artifact's 0.5163464160282509.
+    Step 6's test list was all single-round; the implementer added a
+    four-round window asserting the gate is evaluated per round rather
+    than per call, which is the only test that catches a
+    once-per-forward gate and is among those mutation 2 turns red.
+
