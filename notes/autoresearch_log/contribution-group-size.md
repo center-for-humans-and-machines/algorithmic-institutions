@@ -387,3 +387,47 @@ against the contribution slot's ~24 min training ceiling.
    EMD 0.409 -> 0.345 under the same counterfactual. Size 8 does not enter CE at
    all (CE drops rounds with an empty group), so the merged-eight sag is a CG/CC
    watch effect only.
+
+5. **The feature costs held-out likelihood, systematically, in every fold — recorded
+   before any score exists.** Training job 29891768, `COMPLETED`, elapsed 00:07:57
+   (base ~8 min, §5 ceiling ~24 min), artifact sha256
+   `321473ed802148fbdab228ccf55d20d307179c56f67e542b4205f1bb830abec1`. Test
+   log-loss at epoch 574, unshuffled, against the M0 trunk's own metrics parquet
+   (`artifacts/artificial_humans/group_switching_contribution_50ep/metrics/architecture_node+edge+rnn__dataset_50ep__epochs_575.parquet`)
+   read at the same epoch, same `set == test`, same null `shuffle_feature` — an
+   apples-to-apples comparison, checked because the declaration quoted 1.9892 as a
+   "best-mean" and the candidate's figure is a final-epoch one. M0's final-epoch
+   mean is **1.989742**, and it is also M0's best-epoch mean (the curve is
+   monotone over the last three recorded epochs: 1.992634, 1.991538, 1.989742),
+   so the two quantities coincide and the comparison is sound.
+
+   | fold | M0 | candidate | delta |
+   |---|---|---|---|
+   | 0 | 2.048224 | 2.055092 | +0.006868 |
+   | 1 | 2.035988 | 2.078708 | +0.042720 |
+   | 2 | 1.963259 | 1.972700 | +0.009441 |
+   | 3 | 1.999429 | 2.045801 | +0.046372 |
+   | 4 | 1.901808 | 1.903889 | +0.002081 |
+   | mean | 1.989742 | 2.011238 | **+0.021496 (+1.08%)** |
+
+   All five folds move the same way, so this is a systematic cost, not fold noise.
+   The reading that fits both this and the diagnosis: the size response lives in
+   ~2.5% of agent-rounds (236 alone rows in 9,600), so it can shift the tails CE
+   measures while the mean log-loss, averaged over the 97.5% where size is 4-7,
+   only sees the regularisation cost of one more input. That is consistent with
+   the hypothesis but is also the campaign's known failure mode pointing at the
+   marginal C block (CA/CB/CD/CF) — #154, #156, #158 all died there. It changes
+   nothing procedurally: §2's gates are the evaluation scores, this is not one of
+   them, and the experiment continues to its single evaluation. It is logged
+   because a reader comparing this stack's C rows later needs to know the trunk
+   started 1.08% behind on likelihood.
+
+6. **Isolation verified from the job's own log, not inferred.** The FutureWarning at
+   log line 27 is raised from
+   `/u/certuer/autoresearch/contribution-group-size/src/aimanager/generic/data.py:99`
+   — the isolated tree, not `~/algorithmic-institutions/src` — and line 88 records
+   `Work dir: /u/certuer/autoresearch/contribution-group-size/.`. This is the single
+   point of failure PR #171 identified in the `SBATCH_EXPORT` design, so it is
+   checked per run rather than assumed. The artifact carries `x_encoding` of 4
+   entries ending in `own_group_size` and `default_values['own_group_size'] = 4`,
+   with `copula_rho = 0.0` as the pre-calibration trunk must.
