@@ -743,3 +743,43 @@ runs once per step before staging, not after every edit.
     that test asserts step 4 changes no sampling behaviour at all, and
     the round-dependent claim belongs to step 6.
 
+16. (Orchestrator, step 5 confirmed) 99 tests across `tests/switch`, 379
+    across `tests/`; `train.py` +200/-11, the deletions being exactly the
+    inlined per-agent expression that `compute_batch_loss` now holds, with
+    no incidental reformatting and `src/aimanager/generic/` untouched. The
+    two properties that decide whether this experiment can attribute
+    anything both hold bitwise: head-off `compute_batch_loss` is
+    `th.equal` to a verbatim copy of the pre-change expression in value
+    **and** in every parameter gradient after `backward()`, with and
+    without entropy regularisation; and with the head on, the trunk
+    gradient is `th.equal` to the per-agent-only gradient, the joint term
+    alone leaves every trunk gradient `None` or exactly zero, and the cut
+    is `th.equal` to the detached pooled embedding. Confirmed by my own
+    mutation, not the implementer's: replacing `pooled.detach()` with
+    `pooled * 1.0` turns **all four** detach tests red, and restoring
+    gives 99/99 with `generic/` clean. The loss selects usable cells by
+    boolean indexing and returns `nll.sum()` on an empty selection — a
+    differentiable zero — so a `-inf` grid entry can never reach a
+    multiply.
+17. (Orchestrator, for step 6 — a real coupling, not a nit) `k == k_head`
+    inside `joint_exodus_loss` is an identity **only because the call
+    site hands the head the same mask**: the loss re-derives `k` from
+    `batch_data["mask"]` while the head derived it from `data.get("mask")`
+    inside `forward`. Today they are the same tensor. If step 6 passes a
+    `decider_mask` other than `data["mask"]`, that assert breaks on any
+    training-shaped call. Step 6 must either pass the same mask or leave
+    `decider_mask` unset in the training path. The assert bites — there is
+    a test proving it — so this would fail loudly rather than silently,
+    which is the outcome we want.
+18. (Orchestrator, two step-5 spec notes recorded) `joint_exodus_loss`
+    carries a `drop_incomplete_pairs` keyword the plan's prose does not
+    name; it is the reference's, nothing in the training path passes it,
+    so `DROP_INCOMPLETE_PAIRS` stays the only live setting, and the
+    keyword exists so the `False` arm can show the drop is doing work.
+    And `STAND_INS` cannot honestly report per-file in a shared pytest
+    process — whichever suite imports first installs, and the siblings
+    then report `[]` because `sys.modules` already carries them, which
+    reads exactly like a Raven run. The variable is still sound as "what
+    this file installed"; a genuine per-session report would need one
+    shared `tests/switch/conftest.py`, which is a step 9 decision.
+
