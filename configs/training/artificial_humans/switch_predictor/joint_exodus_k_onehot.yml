@@ -1,0 +1,78 @@
+description: >-
+  Switch predictor with the JOINT EXODUS head, using a ONE-HOT size encoding
+  for the two per-group valid-decider counts (k in {0..8}) instead of the
+  numeric k / 8 scalar: humans never empty a group of five or more (0 of 119
+  complete-pair cells) and empty a singleton in 16.1% of cells, while the
+  numeric-scalar stack empties singletons in 46.5% of cells -- a single
+  k / 8 scalar through one 10-unit Tanh can only bend one smooth curve
+  through that hump and that floor. Everything else is copied verbatim from
+  joint_exodus.yml (375 epochs, batch 10, lr 5.e-4, weight_decay 1.e-3,
+  hidden 10, 5-fold, seed 38381, mask_name switch_valid, switch_every 4,
+  joint_exodus True, joint_exodus_switch_every 4, flip-doubled data, labels
+  architecture: mlp+rnn+edge / dataset: 50ep_doubled) -- this tests a
+  mechanism, not a tuning. The only differences from joint_exodus.yml are
+  this description, output_dir (this experiment's slug, so runs cannot
+  collide on paths), and the added model_args.joint_exodus_size_encoding:
+  onehot (selects the one-hot k-encoding path in GraphNetwork.__init__ in
+  place of the numeric default).
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: switch_valid
+  switch_every: 4
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: mlp+rnn+edge
+    dataset: 50ep_doubled
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features:
+    [common_good, punishment, agent_group, round_number]
+  basedir: .
+  output_dir: artifacts/artificial_humans/switch_exodus_k_onehot
+  model_args:
+    y_levels: 2
+    y_name: does_switch
+    hidden_size: 10
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    joint_exodus: True
+    joint_exodus_switch_every: 4
+    joint_exodus_size_encoding: onehot
+    x_encoding:
+      - etype: float
+        name: common_good
+        norm: 20
+      - name: punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: numeric
+      - name: round_number
+        n_levels: 24
+        encoding: numeric
+  optimizer_args:
+    lr: 5.e-4
+    weight_decay: 1.e-3
+  train_args:
+    epochs: 375
+    batch_size: 10
+    eval_period: 5
+    l1_entropy: 0
+  device: cuda
+  autoregression: False
