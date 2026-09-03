@@ -1,0 +1,29 @@
+{
+  "base_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_group_size/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "base_artifact_sha256": "321473ed802148fbdab228ccf55d20d307179c56f67e542b4205f1bb830abec1",
+  "copula_phi": 1.0,
+  "copula_rho": 0.07515788161219097,
+  "copula_switch_every": 1,
+  "date": "2026-09-03T09:13:17+00:00",
+  "estimator": "pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only",
+  "git_head": "unavailable: Command '['git', '-C', '/raven/u/certuer/autoresearch/contribution-group-size', 'rev-parse', 'HEAD']' returned non-zero exit status 128.",
+  "n_tensors_verified": 10,
+  "note": "dict-level copy of the base artifact plus the three copula fields; every pre-existing key verified bit-identical after reload; teacher-forced (sample=False) probabilities unchanged",
+  "output_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_group_size_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "output_artifact_sha256": "777e84b1dadfbe5d22ed1f5b3d5dcc39b10befc853f9b89697e4d88af19396da",
+  "params_json": "artifacts/artificial_humans/group_switching_contribution_50ep_group_size_herding_copula/calibration/copula_params.json",
+  "params_json_sha256": "b5bcfd137fa68a1d1ac4e26d8fd199366de402a4f541a5a5a8fd51cdeca2ca7b",
+  "phi_ci": [
+    0.8046572960759976,
+    1.4633519892482612
+  ],
+  "phi_final_reason": "orchestrator ruling 2026-09-03 (log: notes/autoresearch_log/contribution-group-size.md, Note 10, plan step 7): phi_hat 1.0916329502906272 saturated the AR(1) boundary with CI [0.8046572960759976, 1.4633519892482612] spanning 1 -- the estimator saturating at its boundary, not a measured super-unit explosion -- so PR #165's boundary ruling carries over unchanged: adopted phi = 1.0 (static episode latent); rho untouched",
+  "phi_lag1_diagnostic": 1.0916329502906272,
+  "phi_stamped": 1.0,
+  "rho_ci": [
+    0.04874478605923702,
+    0.09586446234810954
+  ],
+  "script": "scripts/artificial_humans/make_contribution_copula_artifact.py",
+  "teacher_forced_rows_verified": 7457
+}

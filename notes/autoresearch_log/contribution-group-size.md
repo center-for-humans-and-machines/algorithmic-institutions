@@ -577,3 +577,21 @@ against the contribution slot's ~24 min training ceiling.
     would be unrequested tooling work on the frozen-adjacent surface, and the
     artifact's provenance is anchored anyway by `source_model_sha256`
     (`321473ed8021...`), which the stamper asserts against.
+
+13. **Candidate artifact stamped and verified (step 8, after 7b).** Job 29893136,
+    `COMPLETED` in 35 s, exit `0:0`. Stamped artifact sha256
+    `777e84b1dadfbe5d22ed1f5b3d5dcc39b10befc853f9b89697e4d88af19396da`, from trunk
+    `321473ed8021...` and params `b5bcfd137fa6...`, carrying `copula_rho =
+    0.07515788161219097`, `copula_phi = 1.0`, `copula_switch_every = 1`,
+    `x_encoding` of 4 entries ending in `own_group_size`, and
+    `default_values['own_group_size'] = 4`.
+
+    Three independent confirmations that the stamp changed sampling and nothing
+    else: the stamper's own post-check (10 tensors bit-identical, only the three
+    copula fields differing); a separately written walk over both raw `.pt` dicts
+    comparing every tensor by hand (10/10 identical, all 16 non-copula top-level
+    keys identical); and `verify_probs`, which found **7,457 teacher-forced
+    train-split rows bit-identical** between trunk and stamped model. The third is
+    the one that matters for the comparison's validity: the candidate differs
+    from its own trunk only in how it samples, so the stack comparison isolates
+    one change.
