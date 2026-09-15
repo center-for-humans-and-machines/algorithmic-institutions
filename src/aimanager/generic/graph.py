@@ -6,6 +6,7 @@ from torch_geometric.nn import MetaLayer
 from aimanager.generic.conditional_bernoulli import sample_conditional_bernoulli
 from aimanager.generic.copula import sample_correlated_levels
 from aimanager.generic.encoder import Encoder, IntEncoder
+from aimanager.generic.group_vnode import GroupVirtualNode
 from aimanager.generic.joint_exodus import JointExodusHead
 
 
@@ -153,6 +154,9 @@ class GraphNetwork(th.nn.Module):
         joint_exodus=False,
         joint_exodus_head=None,
         joint_exodus_switch_every=None,
+        group_vnode=False,
+        group_vnode_module=None,
+        group_vnode_hidden=None,
         **_,
     ):
         super().__init__()
@@ -238,6 +242,30 @@ class GraphNetwork(th.nn.Module):
         self.joint_exodus = joint_exodus
         self.joint_exodus_switch_every = joint_exodus_switch_every
 
+        # Per-group virtual node: a learned, persistent group state pooled
+        # from the post-`op1` embeddings and handed back to each of the
+        # group's members at the `op2` readout. See
+        # notes/autoresearch_log/contribution-group-vnode.md and
+        # generic/group_vnode.py. Off by default: an artifact saved without
+        # these three keys loads with the node absent and behaves exactly as
+        # it does today.
+        assert isinstance(
+            group_vnode, bool
+        ), f"group_vnode must be a bool, got {group_vnode!r}"
+        # `bool` is excluded explicitly, the `joint_exodus_switch_every`
+        # precedent: `True` is an `int` and would silently mean a group state
+        # one unit wide.
+        assert group_vnode_hidden is None or (
+            isinstance(group_vnode_hidden, int)
+            and not isinstance(group_vnode_hidden, bool)
+            and group_vnode_hidden > 0
+        ), (
+            "group_vnode_hidden must be None or a positive int, got "
+            f"{group_vnode_hidden!r}"
+        )
+        self.group_vnode = group_vnode
+        self.group_vnode_hidden = group_vnode_hidden
+
         if op1 is None:
             if add_edge_model:
                 edge_model = EdgeModel(
@@ -296,10 +324,17 @@ class GraphNetwork(th.nn.Module):
             else:
                 self.rnn_g = None
 
+            # The group state is concatenated to each member's post-RNN
+            # embedding immediately before this readout, so op2 -- and only
+            # op2 -- is wider by the group state's width. `x_features` itself
+            # is deliberately left at the per-agent width: it is what the
+            # joint head below is built for and what `forward` hands to the
+            # concatenation.
+            vnode_hidden = group_vnode_hidden or hidden_size
             self.op2 = MetaLayer(
                 None,
                 NodeModel(
-                    x_features=x_features,
+                    x_features=x_features + (vnode_hidden if group_vnode else 0),
                     edge_features=0,
                     u_features=u_features,
                     out_features=y_features,
@@ -329,6 +364,24 @@ class GraphNetwork(th.nn.Module):
             else:
                 self.joint_exodus_head = None
 
+            # Built LAST of all, after the joint-head slot, for the same
+            # reason that one is built late: with `group_vnode` off nothing is
+            # constructed and no RNG is drawn, so every parameter above is
+            # initialised from exactly the RNG state it saw before this node
+            # existed and the model is bit-identical to today's. The node
+            # pools the post-`op1` embeddings, so `embed_size` is op1's node
+            # width `hidden_size`, not the post-RNN width the joint head
+            # reads (they coincide here, but for different reasons).
+            if group_vnode_module is not None:
+                self.group_vnode_module = group_vnode_module
+            elif group_vnode:
+                self.group_vnode_module = GroupVirtualNode(
+                    embed_size=hidden_size, hidden_size=vnode_hidden
+                )
+            else:
+                self.group_vnode_module = None
+            self.vnode_h0 = None
+
         else:
             self.op1 = op1
             self.op2 = op2
@@ -338,10 +391,19 @@ class GraphNetwork(th.nn.Module):
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
             self.joint_exodus_head = joint_exodus_head
+            self.group_vnode_module = group_vnode_module
+            # Carried across rounds exactly like `rnn_n_h0` above, and so
+            # initialised in BOTH build branches -- `load` comes through this
+            # one.
+            self.vnode_h0 = None
 
         assert (self.joint_exodus_head is not None) == self.joint_exodus, (
             "joint_exodus and joint_exodus_head disagree: "
             f"{self.joint_exodus} vs {type(self.joint_exodus_head).__name__}"
+        )
+        assert (self.group_vnode_module is not None) == self.group_vnode, (
+            "group_vnode and group_vnode_module disagree: "
+            f"{self.group_vnode} vs {type(self.group_vnode_module).__name__}"
         )
 
     def forward(self, data, reset_rnn=True, return_joint=False, decider_mask=None):
@@ -358,6 +420,26 @@ class GraphNetwork(th.nn.Module):
         u = data["u"]
         batch = data["batch"]
         x, _, u = self.op1(x, edge_index, edge_attr, u, batch)
+        # The group virtual node pools the post-`op1` embeddings -- before the
+        # per-agent RNN, so a group reads what message passing produced this
+        # round rather than each member's private history. Its hidden state is
+        # carried exactly like `rnn_n_h0` below: reset when `reset_rnn` is
+        # set, carried when it is not, so the 24 single-round calls the
+        # simulation makes (`n_rounds = 1`, once per round) reproduce
+        # training's one 24-round call.
+        g_node = None
+        if self.group_vnode_module is not None:
+            assert "agent_group" in data, (
+                "the group virtual node requires agent_group in the encoded "
+                "state; `encode` carries it whenever the node is present, so "
+                "a state assembled by hand must supply it too"
+            )
+            g_node, self.vnode_h0 = self.group_vnode_module(
+                x,
+                agent_group=data["agent_group"],
+                batch=batch,
+                h0=None if reset_rnn else self.vnode_h0,
+            )
         if self.rnn_n is not None:
             x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
         if self.rnn_g is not None:
@@ -389,6 +471,12 @@ class GraphNetwork(th.nn.Module):
             dtype=edge_attr.dtype,
             device=edge_attr.device,
         )
+        # The group state joins the per-agent embedding only here, at the
+        # readout, and only AFTER the joint head above has read `x` at the
+        # per-agent width it was built for. op2's NodeModel is the one module
+        # widened to receive it (see the constructor).
+        if g_node is not None:
+            x = th.cat([x, g_node], dim=-1)
         x, _, _ = self.op2(x, edge_index, op2_edge_attr, u, batch)
         if self.bias:
             x = x + self.bias(data["b"])
@@ -444,12 +532,16 @@ class GraphNetwork(th.nn.Module):
             edge_index=encoded["edge_index"], n_rounds=n_rounds, **edge_state
         )
         # The joint exodus head pools by membership and conditions on the
-        # round, neither of which the per-agent path needs, so both are only
-        # carried when the head is present -- a model without it encodes
+        # round; the group virtual node pools by membership only. Neither is
+        # anything the per-agent path needs, so a key is carried only when the
+        # module that consumes it is present -- a model with neither encodes
         # exactly the keys it encodes today.
-        if self.joint_exodus_head is not None:
-            for key in ("agent_group", "round_number"):
-                assert key in data, f"the joint exodus head requires {key} in the state"
+        if self.joint_exodus_head is not None or self.group_vnode_module is not None:
+            head = self.joint_exodus_head is not None
+            consumer = "the joint exodus head" if head else "the group virtual node"
+            keys = ("agent_group", "round_number") if head else ("agent_group",)
+            for key in keys:
+                assert key in data, f"{consumer} requires {key} in the state"
                 encoded[key] = data[key].flatten(0, 1).to(device)
         return encoded
 
@@ -734,6 +826,9 @@ class GraphNetwork(th.nn.Module):
             "joint_exodus",
             "joint_exodus_head",
             "joint_exodus_switch_every",
+            "group_vnode",
+            "group_vnode_module",
+            "group_vnode_hidden",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
