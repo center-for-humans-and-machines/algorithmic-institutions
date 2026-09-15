@@ -1073,3 +1073,39 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     which is direct marginal-level evidence the emission does what it
     claims, independent of any simulation. Round-thirds MLEs 0.0244 /
     0.0362 / 0.0899 reproduce PR #170's late-round concentration.
+33. (Step 7, confirmed) **Stamped bundle
+    `artifacts/baselines/contribution_gaussian_mlp_inflated_group_copula.joblib`,
+    sha256 `7bfe4d9bff96d012996f8b3edafe36ccb02ce950407ef5314870763760199ed0`**,
+    4728 bytes, not LFS-tracked. Read back by the orchestrator:
+    `copula_rho_p 0.048443521435665396`, `copula_rho_t 0.0`, `atoms
+    prev,0,20`, `test_logloss_binned 1.8817206133537128` — the dose comes
+    from the sidecar's `rho_total`, never from a typed literal. All six
+    checks PASS: 22 pre-existing keys identical by `is`, the 12-key
+    `NEW_KEYS` manifest exact with nothing removed, reload bit-identity on
+    7457 rows for `predict`, `predict_std` **and now `predict_proba`**
+    (shape (7457, 21) — Note 14e's gap closed, since the first two are the
+    mixture's body and verified nothing about the emission that is actually
+    sampled), `sample=False` adapter equivalence over 6 rounds x 8 agents,
+    and the rho read-back. The parent's bundle and sidecar are byte-
+    identical to `git show HEAD:`.
+34. (Step 7, the sha256 assert binds — demonstrated, not asserted) Pointed
+    at the wrong trunk (`contribution_gaussian_mlp_v2_best.joblib`) with
+    the inflated sidecar, the script **refused**: "params sidecar's own
+    base_bundle_sha256 disagrees with the --base bundle on disk … stop, do
+    not stamp", exit 1, **before any file was written**. The literal
+    `EXPECTED_BASE_SHA256` is now a secondary check gated on the default
+    `--base`, so a default run still reproduces PR #170 while a
+    non-default one is bound by the sidecar instead.
+35. (Step 7, a correction to the orchestrator's own brief) I asked that
+    verification 4's `sample=False` equivalence exercise
+    `_sample_levels_gaussian_copula`. **It cannot, and the implementer was
+    right to say so rather than make the wording fit.** That function is
+    gated on `self.sample` (`linear_ah.py:490`), so under `sample=False` it
+    is called 0 times; `_sample_levels` is called 6 times, its CATEGORICAL
+    branch returns `P.argmax(1)`, and the torch RNG state is unchanged —
+    confirmed by monkey-patching both samplers and reading the RNG state.
+    So verification 4 exercises the CATEGORICAL registration that step 5
+    gave `_sample_levels`, which is itself worth having; the inversion
+    function's own correctness rests on step 5's suite at `sample=True`
+    (Notes 23-25) and on step 8's rollout, which runs the stamped bundle
+    through the adapter at `sample=True`.
