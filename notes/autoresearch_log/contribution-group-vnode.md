@@ -581,6 +581,7 @@ here, before anything ran:
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
 | 2026-09-15 | (baseline) parent stack, PR #171 joint-exodus switch x PR #165 copula contributor x PR #160 severity-copula punisher | CG 4.267640451429015, RCD 2.764919035295771 | 11/21 | 1.3040409569053069 | baseline |
+| 2026-09-15 | per-group virtual node on the contribution trunk (one shared GRU per (episode, group), pooled post-op1, broadcast at the op2 readout), copula recalibrated on the retrained trunk (rho 0.0435568043640977, phi 1.0) | **CG 0.8990186987409446**, **RCD 1.3404794689903016**, RCB 2.315200478856858 | 12/21 (baseline 11/21) | **1.0988293946890038** (baseline 1.3040409569053069) | **SUCCESS** -- gate 1 twice (CG 2-5 -> <= 1, two bands; RCD 2-5 -> 1-2), gate 2 passes with the mean *falling* 0.2052115622163031 |
 
 ## 4. Notes
 
@@ -875,3 +876,38 @@ here, before anything ran:
     a 7,457-row forward pass; the pending reason changed to `(Priority)` and it
     scheduled. Resource requests are scheduling, not protocol: no seed, episode
     count, game parameter or model is touched by them, and §8 is not engaged.
+20. **Verdict: SUCCESS, on both declared targets that the mechanism actually
+    claimed.** **CG 4.267640451429015 -> 0.8990186987409446**, a *two-band*
+    upgrade (2-5 -> <= 1) that lands the row at the human-vs-human noise
+    ceiling: the raw ratio gap falls 0.10992965817635214 -> 0.003222562568023113,
+    a 97% reduction against a band-upgrade requirement of 0.0528973592005489.
+    **RCD 2.764919035295771 -> 1.3404794689903016** (2-5 -> 1-2), the row PR
+    #176 missed by 0.053 of score. **RCB 2.0242478714062093 -> 2.315200478856858
+    -- no upgrade, and worse.** Gate 2 passes not by margin but outright: the
+    21-row mean *falls* 1.3040409569053069 -> **1.0988293946890038**, against a
+    permitted ceiling of 1.4344450525958377; rows <= 1 go 11/21 -> 12/21. This
+    is the lowest mean recorded in the campaign (previous best 1.2893632310269196,
+    PR #165).
+21. **The run is not degenerate, and CG moved for the right reason.** sd of
+    group means rose **4.8322 -> 5.5119** while sd of individual contributions
+    *fell* **6.5469 -> 6.4752**, giving a spread ratio **0.7381 -> 0.8512**
+    against the human **0.8480** -- the candidate slightly overshoots rather
+    than undershooting. Group spread was therefore bought **without** making
+    individuals more erratic, which is the specific trade §6 names as the known
+    failure mode ("CG is anti-correlated with the individual-fit rows, r ~ -0.7
+    to -0.9"). The marginals survive: 21 distinct levels used, contribution mean
+    9.7250 -> 9.9002, p(0) 0.0844 -> 0.0821, p(20) 0.1693 -> 0.1769. The
+    teacher-forced preflight (note 15) predicted a copula-off ratio of 0.8363;
+    the closed loop delivered 0.8512 *with* the recalibrated copula, so the
+    mechanism carried through 24 rounds of free-running compounding rather than
+    washing out -- the gap where #159, #153, #157 and #158 all died.
+22. **RCB failed exactly as the step-0 ruling predicted, and the prediction is
+    on the record.** Note 4 stated before any candidate existed that RCB's
+    deficit is dominated by the flattened own-rate gradient while the declared
+    channel was the punishment *climate*, and that the virtual node addresses
+    the latter only. Step 8 then measured the climate channel as the weakest of
+    the four (29.6% of the gap closed, against 66-75% for the others). RCB duly
+    moved the wrong way, +0.2909. The experiment claims nothing on it. Recording
+    the sequence because it is a case where a pre-declared caveat correctly
+    forecast a specific failure -- the row was declared by a rule fixed in
+    advance and it cost nothing to honour, since gate 1 was met twice elsewhere.
