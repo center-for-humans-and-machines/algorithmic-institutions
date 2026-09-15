@@ -796,3 +796,50 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     for 1000 epochs at hidden 8 on 7457 rows; proxy B arm ~30 s; proxy C
     arm ~50 s; `score_all` over 21 rows x 4 arms at 500 repeats 253 s;
     the parent's sims 2m39s each.
+13. (Step 1, confirmed) **The estimator is in and green; one deliberate
+    deviation from the step text, accepted.** The step said to factor the
+    binned body out of `binned_logloss` into a shared *torch* helper, but
+    `torch.special.ndtr` and `scipy.stats.norm.cdf` differ by 2.2e-16, so
+    routing the existing loss through torch would have changed the
+    incumbent's numbers. The convention is instead one documented pair —
+    numpy `binned_probs` (which `binned_logloss` now delegates to) and its
+    torch twin `binned_log_probs` — pinned together by a test. Verified by
+    the orchestrator independently of the implementer: `binned_logloss` is
+    **bit-identical to HEAD** (`==`, not `approx`) over 480 cases at
+    `k_levels` 5 / 21 / 41 including the scalar-sigma path, with identical
+    warning behaviour. `tests/baselines/` is **298 passed**, which includes
+    all 31 pre-existing `test_gaussian_mlp.py` tests and the 18 new ones.
+    Planted-mass recovery: fitted `pi_rep` **0.4003** against a planted
+    0.40. Row sums max `|sum - 1|` **4.44e-16**. `atoms=()` degeneracy:
+    `nll` 2.2781915897 vs `binned_logloss` 2.2781915904. Two hazard tests
+    beyond the specified list — colliding atoms at a corner must **add**
+    rather than overwrite, and the standardiser's affine map must
+    round-trip to the raw integers (a wrong `prev_index` now hard-errors
+    instead of silently misplacing the mass).
+14. (Step 1, findings that bind later steps) Four, all recorded before
+    step 2 was dispatched. (a) **Fit cost is ~14x the declared figure:**
+    9.5 s at 10 threads, 15.5 s single-threaded at n=7000 against the
+    incumbent's 0.68 s. `run_baseline_cv._score` pins `th.set_num_threads(1)`,
+    so step 4's CV is ~3-7 min of core time, not Note 12's ~1.5 min — still
+    far inside the §5 3x rule, but the declaration's figure was optimistic.
+    (b) **`prev_index` is task-dependent** (the position of
+    `prev_contribution` inside the task's `cols`, which changes per feature
+    set) so it cannot live in `_SPEC`, which expands one grid for all
+    tasks: step 2 threads it through `build_model` as a parameter, not a
+    setting key. `predict_proba` needs only `Z` after fit. (c) **Step 6's
+    dose estimator is only half emission-agnostic:** `score_bundle` returns
+    `(Xs, mu, sigma)` and the caller builds `P = bin_probs(mu, sigma, K)`,
+    which for an inflated bundle is the **body only** and silently wrong —
+    it must come from `predict_proba`. The pairwise MLE consumes only `P`
+    and carries over unchanged, but the moment diagnostic
+    `r = (c - mu) / sigma` has no meaning under a mixture and must be
+    replaced by the probit of the discrete CDF interval or dropped for this
+    bundle. (d) **Step 5's adapter would silently take the Gaussian
+    branch:** `linear_ah.py` dispatches on
+    `model_type in ("gaussian", "gaussian_mlp")` and samples `mu + z*sigma`
+    from `predict` / `predict_std`, which on this class are the *body's*
+    parameters — a bundle reaching the sampler without the new branch runs
+    the incumbent emission and raises no error. (e) Step 7's stamper
+    verification asserts `predict` / `predict_std` bit-identity after
+    reload, which still passes but no longer verifies the emission;
+    `predict_proba` must join that check.
