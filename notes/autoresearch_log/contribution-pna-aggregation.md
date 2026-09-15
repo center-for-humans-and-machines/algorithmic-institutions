@@ -251,7 +251,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       + `flake8` (88, `E203,W503`) pass over the touched `src/` files before
       staging.
 
-- [ ] 4. *(Sonnet)* **Training configs, two arms** — new
+- [x] 4. *(Sonnet)* **Training configs, two arms** — new
       `configs/training/artificial_humans/contribution/group_switching_contribution_50ep_pna_aggregation.yml`
       (arm A): verbatim copy of `group_switching_contribution_50ep.yml` (575
       epochs, batch 4, lr 3e-4, hidden 20, 5-fold, seed 38381, same
@@ -267,7 +267,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       `architecture_node+edge+rnn__dataset_50ep__epochs_575.pt` for the copula
       recipe.
 
-- [ ] 5. *(Sonnet)* **Isolated remote dir** — `ssh -O check raven`, then `squeue -u certuer`
+- [x] 5. *(Sonnet)* **Isolated remote dir** — `ssh -O check raven`, then `squeue -u certuer`
       (PENDING check), then `AI_REMOTE_DIR='~/autoresearch/pna-aggregation'
       scripts/train_cluster.sh --sync-only ah <arm-A config>`: creates the dir,
       ships `src/`, `scripts/`, `configs/`, the human CSVs and the AH artifacts
@@ -519,3 +519,43 @@ an unverified number:
    inside the "login node is orchestration only" line, which bars *compute*, not
    a three-second API probe — and the alternative was an assertion nobody had
    checked.
+7. **Step 4 confirmed** (`49497fb`). Both configs differ from M0 in exactly the
+   three declared regions; `labels` is untouched in both, so the artifact
+   filename stays `architecture_node+edge+rnn__dataset_50ep__epochs_575.pt` for
+   the step 10-11 copula recipe. The forwarding path was traced rather than
+   assumed — `train.py::main` builds the model as
+   `AH_MODELS[model_name](default_values=..., autoregressive=..., **model_args)`
+   and `GraphNetwork.__init__` declares `aggregators` explicitly, so the new key
+   lands where the constructor sees it. A silently-ignored `aggregators` would
+   have produced two clean trainings of the *old* model, which is the failure
+   this check exists to exclude.
+8. **Step 5 confirmed.** The sync ran with `AI_REMOTE_DIR` honoured:
+   `~/autoresearch/pna-aggregation` holds the full tree, `graph.py` md5
+   `8fe6e83410ac6ee8a1b98bcb98cb3589` matches local, and a pointer scan over
+   every `.csv` / `.pt` / `.joblib` / `.parquet` in the isolated dir finds
+   nothing — no LFS pointer was shipped. **Isolation proof:** with the shared
+   venv active and `PYTHONPATH=<iso>/src`, `aimanager.__file__` resolves to
+   `/u/certuer/autoresearch/pna-aggregation/src/aimanager/__init__.py` and
+   `graph.AGGREGATORS` reports all four keys — the job imports this branch's
+   code, not the shared checkout's. Raven, real PyG 2.5.0 / torch_scatter 2.0.9
+   / torch 1.11.0+cu113: **25 passed** for the new suite with `STAND_INS =
+   False` (verified explicitly, so the pass is not a stand-in pass) and **51
+   passed** across `test_encoder`, `test_edge_encoder`, `test_environment`,
+   `test_linear_manager`, `test_contribution_copula_graph`,
+   `test_switch_copula_graph`, `test_joint_exodus_train_sim_parity`. 76 green,
+   zero failures. `scripts/remote_test.sh` was not used (its shared-checkout
+   `--delete` sync is the race that voided an earlier branch's run).
+9. **Tooling finding for the maintainer, pre-existing and not caused here.** The
+   shared checkout `~/algorithmic-institutions` is no longer a working git
+   repository: its `.git` is a 92-byte file dated 2026-08-27 reading
+   `gitdir: /Users/ertuerkan/Desktop/algorithmic-institutions/.git/worktrees/punisher-ar-copula`
+   — a *local macOS* worktree pointer, so every `git` command there fails with
+   `fatal: not a git repository`. Some earlier experiment rsynced a worktree
+   (rather than a clone) over it. Harmless for the isolation design, which needs
+   the shared checkout only as a venv host and import fallback, and confirmed
+   harmless here: its `src/` is dated 2026-08-27 while this experiment's sync
+   landed 2026-09-15 19:03 in the isolated dir, so nothing of ours touched it.
+   Worth repairing before anyone relies on `git` state there.
+10. **Step 6 launched.** Arm A SLURM **30255929**, arm B **30255931**, both
+    submitted with `--no-sync` after step 5's sync, both PENDING at submission
+    (arm A queued behind `Nodes required for job are DOWN, DRAINED or reserved`).
