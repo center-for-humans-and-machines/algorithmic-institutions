@@ -29,6 +29,7 @@ torch_scatter's own formula (sum of squared deviations over a clamped count,
 with its ``+ 1e-6``) so the local and Raven numbers agree to float32.
 """
 
+import math
 import importlib
 import importlib.util
 import os
@@ -283,7 +284,6 @@ def test_the_environment_is_what_it_reports():
         assert graph_module.scatter_mean is _scatter_mean
         assert graph_module.scatter_max is _scatter_max
         assert graph_module.scatter_min is _scatter_min
-        assert graph_module.scatter_std is _scatter_std
     else:
         assert graph_module.scatter_mean.__module__.startswith("torch_scatter")
         assert importlib.import_module("torch_scatter") is not None
@@ -533,15 +533,79 @@ def test_an_isolated_node_documents_the_empty_neighbourhood_fill():
 
     The zero fill is not a guess: on Raven's torch_scatter 2.0.9 an
     unreferenced row of `scatter_max` / `scatter_min` comes back as 0.0 with
-    its argmax entry set to ``src.size(0)``, and `scatter_mean` /
-    `scatter_std` divide a zero sum by a count clamped to 1 (both are plain
-    Python in the installed package).
+    its argmax entry set to ``src.size(0)``, and `scatter_mean` divides a zero
+    sum by a count clamped to 1 (both are plain Python in the installed
+    package). `std` is the one exception: it is ours, not torch_scatter's, and
+    its variance floor means an empty neighbourhood reads as
+    ``sqrt(_STD_EPS)``, not 0 -- see `_STD_EPS` in graph.py.
     """
     edge_attr = th.randn(4, N_ROUNDS, 5)
     # Every edge points at node 1 or 2; node 0 receives nothing.
     col = th.tensor([1, 1, 2, 2])
-    for name in ALL_FOUR:
+    for name in ["mean", "max", "min"]:
         out = AGGREGATORS[name](edge_attr, col, dim=0, dim_size=3)
         assert th.equal(
             out[0], th.zeros_like(out[0])
         ), f"{name} fills an empty neighbourhood with {out[0]} in {ENVIRONMENT}"
+    std = AGGREGATORS["std"](edge_attr, col, dim=0, dim_size=3)
+    assert th.allclose(
+        std[0], th.full_like(std[0], math.sqrt(graph_module._STD_EPS))
+    ), f"std fills an empty neighbourhood with {std[0]} in {ENVIRONMENT}"
+
+
+# --------------------------------------------------------------------------- #
+# (f) the zero-variance gradient, the regression test for jobs 30255929/31
+# --------------------------------------------------------------------------- #
+def test_std_has_a_finite_gradient_on_a_zero_variance_neighbourhood(
+    record_property,
+):
+    """`torch_scatter.scatter_std` ends in a bare `.sqrt()` on an unclamped
+    variance. The forward is a harmless 0.0, but the backward of sqrt at 0 is
+    infinite, so one zero-variance neighbourhood NaNs every weight on the
+    first optimizer step -- which is exactly how training jobs 30255929 and
+    30255931 died, at epoch 0, before a single batch finished.
+
+    A neighbourhood has zero variance whenever every peer of an agent carries
+    the same (prev_contribution, prev_punishment, agent_group): a merged group
+    in which nobody contributed and nobody was punished. That is an ordinary
+    state of this game, not a corner case, so the aggregator has to survive it.
+    """
+    record_property("pyg_environment", ENVIRONMENT)
+    # Node 0's three messages are identical -> variance exactly 0.
+    # Node 1's three differ -> the ordinary path, which must be unaffected.
+    src = th.tensor([[1.0], [1.0], [1.0], [2.0], [5.0], [9.0]], requires_grad=True)
+    idx = th.tensor([0, 0, 0, 1, 1, 1])
+
+    out = AGGREGATORS["std"](src, idx, dim=0, dim_size=2)
+    assert not th.isnan(out).any(), f"forward is NaN in {ENVIRONMENT}"
+    out.sum().backward()
+
+    grad = src.grad
+    assert not th.isnan(grad).any(), (
+        f"zero-variance neighbourhood produced a NaN gradient in "
+        f"{ENVIRONMENT}: {grad.view(-1).tolist()}"
+    )
+    assert not th.isinf(grad).any(), f"infinite gradient in {ENVIRONMENT}"
+    # Clamped: the degenerate node contributes no gradient at all ...
+    assert th.equal(grad[:3], th.zeros_like(grad[:3]))
+    # ... while the ordinary neighbourhood keeps a real one.
+    assert grad[3:].abs().sum() > 0
+
+
+def test_std_matches_torch_scatter_away_from_the_degenerate_case(
+    record_property,
+):
+    """The variance floor must not change the aggregator anywhere it matters:
+    on a neighbourhood with real spread, ours agrees with torch's own
+    population std."""
+    record_property("pyg_environment", ENVIRONMENT)
+    th.manual_seed(0)
+    src = th.randn(24, 3)
+    idx = th.arange(8).repeat_interleave(3)
+    ours = AGGREGATORS["std"](src, idx, dim=0, dim_size=8)
+    for node in range(8):
+        expected = src[idx == node].std(dim=0, unbiased=False)
+        assert th.allclose(ours[node], expected, atol=1e-6), (
+            f"node {node}: {ours[node].tolist()} != {expected.tolist()} "
+            f"in {ENVIRONMENT}"
+        )

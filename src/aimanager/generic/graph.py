@@ -1,7 +1,7 @@
 from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU
 import numpy as np
 import torch as th
-from torch_scatter import scatter_mean, scatter_max, scatter_min, scatter_std
+from torch_scatter import scatter_mean, scatter_max, scatter_min
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.conditional_bernoulli import sample_conditional_bernoulli
 from aimanager.generic.copula import sample_correlated_levels
@@ -18,10 +18,30 @@ def _scatter_min(src, index, dim=0, dim_size=None):
     return scatter_min(src, index, dim=dim, dim_size=dim_size)[0]
 
 
+# Variance floor under the square root. `torch_scatter.scatter_std` ends in a
+# bare `.sqrt()` on an unclamped variance: the forward is fine (0.0), but the
+# backward of sqrt at 0 is infinite, so a single zero-variance neighbourhood
+# turns every weight into NaN on the first optimizer step. That case is not
+# exotic here -- it is every agent all of whose peers carry the same
+# (prev_contribution, prev_punishment, agent_group), e.g. a merged group in
+# which nobody contributed or was punished. Clamping the variance before the
+# root is what PyG's own `StdAggregation`, the reference PNA implementation,
+# does: degenerate neighbourhoods get a finite value and zero gradient instead
+# of poisoning the model. 1e-5 is StdAggregation's value.
+_STD_EPS = 1e-5
+
+
 def _scatter_std(src, index, dim=0, dim_size=None):
-    # Population std (unbiased=False), so a node with a single incoming edge
-    # aggregates to 0 rather than to a division by zero.
-    return scatter_std(src, index, dim=dim, dim_size=dim_size, unbiased=False)
+    # Population std (unbiased=False), two-pass so it stays accurate, with the
+    # variance clamped before the root -- see `_STD_EPS`. Deliberately NOT
+    # `torch_scatter.scatter_std`, whose gradient is NaN on a zero-variance
+    # neighbourhood; `src/aimanager/tests/test_pna_aggregation.py` pins both
+    # the agreement with it away from the degenerate case and the finite
+    # gradient at it.
+    mean = scatter_mean(src, index, dim=dim, dim_size=dim_size)
+    centered = src - mean.index_select(dim, index)
+    var = scatter_mean(centered * centered, index, dim=dim, dim_size=dim_size)
+    return var.clamp(min=_STD_EPS).sqrt()
 
 
 # The reductions a NodeModel may apply to its incoming messages, PNA-style
