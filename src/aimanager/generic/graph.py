@@ -199,6 +199,7 @@ class GraphNetwork(th.nn.Module):
         add_rnn=True,
         add_edge_model=True,
         add_global_model=True,
+        aggregators=None,
         hidden_size=None,
         default_values={},
         copula_rho=0.0,
@@ -292,6 +293,30 @@ class GraphNetwork(th.nn.Module):
         self.joint_exodus = joint_exodus
         self.joint_exodus_switch_every = joint_exodus_switch_every
 
+        # PNA-style multi-aggregator at op1's peer-message aggregation; see
+        # notes/autoresearch_log/contribution-pna-aggregation.md. `None` is the
+        # legacy single mean, so an artifact saved without this key loads and
+        # behaves exactly as it does today. Degree scalers -- PNA's other half
+        # -- are deliberately not implemented: the room is a fixed fully
+        # connected 8-node graph, so the in-degree is the constant 7 and a
+        # log-degree scaler would be a constant multiplier.
+        assert aggregators is None or (
+            isinstance(aggregators, list)
+            and len(aggregators) > 0
+            and all(a in AGGREGATORS for a in aggregators)
+            and len(set(aggregators)) == len(aggregators)
+        ), (
+            "aggregators must be None or a non-empty list of distinct keys of "
+            f"{sorted(AGGREGATORS)}, got {aggregators!r}"
+        )
+        # The aggregators reduce the messages the edge model emits; with no
+        # edge model there is nothing to reduce and the widths below would be
+        # multiples of zero.
+        assert (
+            aggregators is None or add_edge_model
+        ), "aggregators require add_edge_model=True, there is nothing to reduce"
+        self.aggregators = aggregators
+
         if op1 is None:
             if add_edge_model:
                 edge_model = EdgeModel(
@@ -310,6 +335,7 @@ class GraphNetwork(th.nn.Module):
                 u_features=u_features,
                 out_features=hidden_size,
                 activation=Tanh(),
+                aggregators=aggregators,
             )
             x_features = hidden_size
 
@@ -392,6 +418,16 @@ class GraphNetwork(th.nn.Module):
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
             self.joint_exodus_head = joint_exodus_head
+            # A loaded artifact must not claim one aggregation and run
+            # another: the node MLP's input width is baked into the saved
+            # weights, and `aggregators` is what the forward dispatches on.
+            # `getattr` again, for the pre-change artifacts (see NodeModel).
+            loaded = getattr(op1.node_model, "aggregators", None)
+            assert loaded == aggregators, (
+                "op1's node model aggregates with "
+                f"{loaded!r} but the model is being built with "
+                f"aggregators={aggregators!r}"
+            )
 
         assert (self.joint_exodus_head is not None) == self.joint_exodus, (
             "joint_exodus and joint_exodus_head disagree: "
@@ -788,6 +824,7 @@ class GraphNetwork(th.nn.Module):
             "joint_exodus",
             "joint_exodus_head",
             "joint_exodus_switch_every",
+            "aggregators",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
