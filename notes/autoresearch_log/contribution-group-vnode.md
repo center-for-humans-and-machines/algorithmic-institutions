@@ -410,7 +410,7 @@ here, before anything ran:
    augmentation) permutes the group states and leaves every node's output unchanged;
    `pool_by_group`'s counts equal the membership counts.
 
-4. *(implementer: Opus)* **Graph gate tests, local with stand-ins and on Raven with real PyG** -- new
+4. *(implementer: Sonnet; retagged from Opus, see note 6)* **Graph gate tests, local with stand-ins and on Raven with real PyG** -- new
    `tests/vnode/test_group_vnode_graph.py`, modelled on
    `tests/switch/test_joint_exodus_graph.py` (its `make_model` / `make_data` /
    `legacy_predict` / `run_seeded` fixtures, contribution-shaped: `y_levels=21`,
@@ -617,3 +617,10 @@ here, before anything ran:
    confirms the bins are weighted by human frequency rather than uniformly (uniform
    would give 1.0131) -- worth knowing for any later reading of a per-bin figure, and
    evidence that this step's population filter matches the frozen suite's.
+6. **Step 4 retagged Opus -> Sonnet, orchestrator ruling.** The first step-4
+   dispatch died mid-run on an org monthly spend limit, having written nothing
+   (tree clean at `0809a81`). The step is re-dispatched to Sonnet: the retag is
+   forced by a resource constraint, not a judgement that the step got easier, so
+   the orchestrator verifies gate (a) -- the off-flag bit-identity that licenses
+   step 13's control comparison -- independently rather than on the subagent's
+   report, and the gates are re-run against real PyG on Raven at step 6 either way.
