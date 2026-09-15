@@ -1,0 +1,29 @@
+{
+  "base_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_arrival_tenure/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "base_artifact_sha256": "dc7227ed484665f1837a81134f623aa5ee9e90fb4d15f4f229f8f199d2171047",
+  "copula_phi": 1.0,
+  "copula_rho": 0.06531229554742463,
+  "copula_switch_every": 1,
+  "date": "2026-09-15T15:26:39+00:00",
+  "estimator": "pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only",
+  "git_head": "unavailable: Command '['git', '-C', '/raven/u/certuer/autoresearch/contribution-arrival-tenure', 'rev-parse', 'HEAD']' returned non-zero exit status 128.",
+  "n_tensors_verified": 10,
+  "note": "dict-level copy of the base artifact plus the three copula fields; every pre-existing key verified bit-identical after reload; teacher-forced (sample=False) probabilities unchanged",
+  "output_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_arrival_tenure_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "output_artifact_sha256": "d0338b16a225e47582cb649a09a677503237e120bf7fb9bfbb674e4451ac17ab",
+  "params_json": "artifacts/artificial_humans/group_switching_contribution_50ep_arrival_tenure_herding_copula/calibration/copula_params.json",
+  "params_json_sha256": "306a9cac212c434e5b7d8be64b8e3e4a418afd569c815b60ad27dce041068a85",
+  "phi_ci": [
+    0.9328437144598106,
+    1.950526511370351
+  ],
+  "phi_final_reason": "Pre-declared boundary ruling (plan step 8, inherited from PR #165): the lag-1 estimate phi=1.2561382822840323 (CI [0.9328437144598106, 1.950526511370351], which covers 1.0) is non-stationary for an AR(1) latent, so phi is clamped to the stationary boundary 1.0 -- a static episode-persistent latent. The raw estimate is retained above as the diagnostic. Decided before the run, not after seeing it.",
+  "phi_lag1_diagnostic": 1.2561382822840323,
+  "phi_stamped": 1.0,
+  "rho_ci": [
+    0.04530695972293109,
+    0.08139961937115604
+  ],
+  "script": "scripts/artificial_humans/make_contribution_copula_artifact.py",
+  "teacher_forced_rows_verified": 7457
+}

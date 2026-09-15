@@ -1,0 +1,76 @@
+description: >-
+  Train contribution predictor on the 50-episode group-switching data,
+  pair-augmented in preprocessing (each competition appears with both
+  governorA→0 and governorA→1 label mappings; pair-aware CV keeps
+  copies in the same fold). Architecture: node+edge+rnn, hidden=20,
+  lr=3e-4. agent_group node feature encoded onehot instead of numeric —
+  removes the spurious ordering/magnitude a single numeric scalar
+  imposes (group 1 entering at full weight, group 0 contributing
+  nothing) and gives each group an independent additive offset. Epochs
+  at the 575 early-stop budget from the doubled-data convergence study:
+  capping at ≤575 costs only ~0.003 vs unrestricted best test log_loss
+  while shaving ~40% of the training time and avoiding late-stage
+  overfit drift visible in 3/5 folds when allowed to run to 999.
+  Arrival-tenure experiment (contribution-arrival-tenure): adds
+  rounds_since_arrival, a onehot tenure-since-last-arrival counter
+  (0 on the arrival round, capped at 4), so the model can express the
+  human anchor-release behaviour at group arrival that the plain
+  agent_group feature does not surface.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 575
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment, rounds_since_arrival]
+  basedir: .
+  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_arrival_tenure
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+      - name: rounds_since_arrival
+        n_levels: 5
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: False

@@ -1,0 +1,52 @@
+{
+  "cell_key": "episode_round_agent_group",
+  "copula_switch_every": 1,
+  "data_file": "experiments/baseline/2group_8agent_50ep_bline_train.csv",
+  "data_file_holdout": "experiments/baseline/2group_8agent_50ep_bline_test.csv",
+  "data_note": "create_torch_data on the full human file (training defaults), restricted to the 40 single-copy train episodes; teacher-forced marginals from the source model; rows where contribution_valid",
+  "date": "2026-09-15T15:18:35+00:00",
+  "diag_pit": "randomized",
+  "diag_pit_rho": 0.04189071135509895,
+  "estimator": "pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only",
+  "git_head": "unavailable: Command '['git', '-C', '/raven/u/certuer/autoresearch/contribution-arrival-tenure', 'rev-parse', 'HEAD']' returned non-zero exit status 128.",
+  "holdout_rho": 0.1347436625714523,
+  "lag_step": 1,
+  "n_bootstrap": 200,
+  "n_bootstrap_phi": 200,
+  "n_cells": 1608,
+  "n_cross_pairs": 35317,
+  "n_cross_pairs_cross_player": 28714,
+  "n_cross_pairs_self": 6603,
+  "n_episodes": 40,
+  "n_pairs": 15090,
+  "n_rows": 7457,
+  "phi": 1.2561382822840323,
+  "phi_allpairs": 1.191022403376743,
+  "phi_ci": [
+    0.9328437144598106,
+    1.950526511370351
+  ],
+  "phi_drop_reason": null,
+  "phi_final": 1.0,
+  "phi_final_reason": "Pre-declared boundary ruling (plan step 8, inherited from PR #165): the lag-1 estimate phi=1.2561382822840323 (CI [0.9328437144598106, 1.950526511370351], which covers 1.0) is non-stationary for an AR(1) latent, so phi is clamped to the stationary boundary 1.0 -- a static episode-persistent latent. The raw estimate is retained above as the diagnostic. Decided before the run, not after seeing it.",
+  "phi_kept": true,
+  "phi_verdict": "PHI KEPT",
+  "preflight": {
+    "copula": 0.7931343295361092,
+    "human": 0.8472681041593946,
+    "independent": 0.7845748518560801
+  },
+  "rho": 0.06531229554742463,
+  "rho_ci": [
+    0.04530695972293109,
+    0.08139961937115604
+  ],
+  "rho_lag1_all": 0.07778840721294582,
+  "rho_lag1_cross": 0.08204127474096902,
+  "rho_se": 0.009729376473371713,
+  "roundtrip_max_bias": 0.0071826042534978984,
+  "script": "scripts/artificial_humans/contribution_copula_rho.py",
+  "seed": 38381,
+  "source_model": "artifacts/artificial_humans/group_switching_contribution_50ep_arrival_tenure/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "source_model_sha256": "dc7227ed484665f1837a81134f623aa5ee9e90fb4d15f4f229f8f199d2171047"
+}

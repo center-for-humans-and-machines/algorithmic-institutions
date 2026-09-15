@@ -160,6 +160,9 @@ class ArtificialHumanEnv:
             ),
             "does_switch": th.zeros(size, dtype=th.bool, device=self.device),
             "switch_mask": th.zeros(size, dtype=th.bool, device=self.device),
+            "rounds_since_arrival": th.full(
+                size, 4, dtype=th.int64, device=self.device
+            ),
         }
 
         prev_state = {
@@ -167,6 +170,12 @@ class ArtificialHumanEnv:
             for k, t in state.items()
             if k in self.default_values
         }
+        # update_rounds_since_arrival reads prev_agent_group unconditionally;
+        # it is env-owned bookkeeping, not an AH input, so it must not depend
+        # on whether the loaded model's default_values declares agent_group.
+        # 0 matches what the comprehension above would put there when the
+        # key is present, so this is a no-op in that case.
+        prev_state.setdefault("prev_agent_group", th.zeros_like(state["agent_group"]))
         self.state = {**prev_state, **state}
 
     def __getattr__(self, name):
@@ -313,7 +322,29 @@ class ArtificialHumanEnv:
             th.full_like(own_sum, default),
         )
 
+    def update_rounds_since_arrival(self):
+        """Provide the rounds_since_arrival node feature for the contribution
+        AH: rounds since the agent last arrived in a new group, 0 on the
+        arrival round, capped at 4, and 4 for an agent that has not arrived
+        anywhere yet. Mirrors data.py's training-time column so sim matches
+        training. `step` rolls every `prev_*` key before `apply_switch`, so
+        `prev_agent_group` holds the pre-switch label and the comparison below
+        is data.py's within-player `group_id` shift. Must run each round after
+        groups are set and before update_contribution."""
+        if self.round_number[0, 0, 0] == 0:
+            self.state["rounds_since_arrival"] = th.full_like(
+                self.state["rounds_since_arrival"], 4
+            )
+            return
+        arrived = self.state["agent_group"] != self.state["prev_agent_group"]
+        self.state["rounds_since_arrival"] = th.where(
+            arrived,
+            th.zeros_like(self.state["rounds_since_arrival"]),
+            (self.state["rounds_since_arrival"] + 1).clamp(max=4),
+        )
+
     def update_contribution(self):
+        self.update_rounds_since_arrival()
         self.update_own_grp_prev_mean_contr()
         contribution = self.artifical_humans.predict(
             self.state,
