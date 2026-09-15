@@ -429,6 +429,16 @@ here, before anything ran:
    `agent_group` absent from the data the on-model raises the assert, the off-model
    does not. Local `pytest tests/vnode` must be green before step 6.
 
+6a. *(implementer: Sonnet; inserted by the orchestrator at step 6, see note 8)*
+   **Make gate (a)'s pre-change fetch degrade to a skip** -- `tests/vnode/test_group_vnode_graph.py`
+   (existing). The fetch of the pre-change `graph.py` via `git show 7b440ee^:...`
+   happens at import time and raises `CalledProcessError` wherever there is no git
+   repo, which takes the whole module down at collection and cost the Raven run all
+   ten of its gates. Wrap the fetch so a failure sets a module-level flag and
+   `pytest.skip`s only the tests that need the pre-change file, with the reason
+   naming the cause; gates (b) to (f) then run unchanged on real PyG. Re-run the
+   file on Raven inside the isolated dir and record the per-test outcome.
+
 5. *(implementer: Sonnet)* **Training config** -- new
    `configs/training/artificial_humans/contribution/group_switching_contribution_50ep_group_vnode.yml`,
    a verbatim copy of `group_switching_contribution_50ep.yml` (575 epochs, batch 4,
@@ -640,3 +650,21 @@ here, before anything ran:
    which is precisely the situation `AI_REMOTE_DIR` was introduced to support.
    Step 6 re-dispatched with the refined gate; the subagent was right to stop
    rather than reason past a rule it had been given literally.
+8. **Orchestrator ruling: gate (a) may skip on Raven, the rest may not.** Step 6
+   reported `tests/vnode/test_group_vnode_graph.py` failing at *collection* on
+   Raven -- `git show 7b440ee^:src/aimanager/generic/graph.py` exits 128 because
+   rsync ships this worktree's `.git` pointer file verbatim (it names a macOS path)
+   and `train_cluster.sh` excludes `.git/` regardless. Confirmed not a stand-in
+   artefact: `STAND_INS = False` and real PyG imported cleanly before the failure.
+   The ruling is that gate (a) does not *need* to run on Raven, while the other
+   nine do. Gate (a) is an invariance between the pre-change and post-change code
+   evaluated with the **same** message-passing implementation on both sides, so as
+   `test_joint_exodus_graph.py`'s docstring puts it, a stand-in cannot manufacture
+   a pass; what it compares -- parameter initialisation, RNG consumption, sampled
+   values old vs new -- is identical in kind under stand-ins and under real PyG,
+   and it was verified bit-exact locally at step 4 and again independently by the
+   orchestrator. What is *not* acceptable is the current state, where one import
+   error silently costs the Raven run all ten gates including the five that do
+   exercise real PyG. Hence step 6a: degrade the fetch to a skip, keep everything
+   else. Vendoring a copy of the pre-change file into the repo was rejected -- a
+   761-line duplicate that drifts is a worse artefact than a named skip.
