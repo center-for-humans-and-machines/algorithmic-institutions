@@ -1,12 +1,39 @@
 from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU
 import numpy as np
 import torch as th
-from torch_scatter import scatter_mean
+from torch_scatter import scatter_mean, scatter_max, scatter_min, scatter_std
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.conditional_bernoulli import sample_conditional_bernoulli
 from aimanager.generic.copula import sample_correlated_levels
 from aimanager.generic.encoder import Encoder, IntEncoder
 from aimanager.generic.joint_exodus import JointExodusHead
+
+
+def _scatter_max(src, index, dim=0, dim_size=None):
+    # scatter_max returns (values, argmax); only the values are the reduction.
+    return scatter_max(src, index, dim=dim, dim_size=dim_size)[0]
+
+
+def _scatter_min(src, index, dim=0, dim_size=None):
+    return scatter_min(src, index, dim=dim, dim_size=dim_size)[0]
+
+
+def _scatter_std(src, index, dim=0, dim_size=None):
+    # Population std (unbiased=False), so a node with a single incoming edge
+    # aggregates to 0 rather than to a division by zero.
+    return scatter_std(src, index, dim=dim, dim_size=dim_size, unbiased=False)
+
+
+# The reductions a NodeModel may apply to its incoming messages, PNA-style
+# (Corso et al. 2020): a mean over a multiset cannot carry its extremes or its
+# spread, whatever the edge model emits. All four share the signature
+# ``(src, index, dim, dim_size)`` so ``forward`` can dispatch on the name.
+AGGREGATORS = {
+    "mean": scatter_mean,
+    "max": _scatter_max,
+    "min": _scatter_min,
+    "std": _scatter_std,
+}
 
 
 class EdgeModel(th.nn.Module):
@@ -29,10 +56,23 @@ class EdgeModel(th.nn.Module):
 
 class NodeModel(th.nn.Module):
     def __init__(
-        self, x_features, edge_features, u_features, out_features, activation=None
+        self,
+        x_features,
+        edge_features,
+        u_features,
+        out_features,
+        activation=None,
+        aggregators=None,
     ):
         super().__init__()
-        in_features = x_features + edge_features + u_features
+        # `aggregators` is a list of `AGGREGATORS` keys, each reducing the
+        # incoming messages once; the results are concatenated, so the node MLP
+        # reads `len(aggregators)` blocks of `edge_features`. `None` is the
+        # legacy single mean and must stay bit-identical to it, widths
+        # included.
+        self.aggregators = aggregators
+        n_aggr = 1 if aggregators is None else len(aggregators)
+        in_features = x_features + n_aggr * edge_features + u_features
         if activation is None:
             self.node_mlp = Lin(in_features=in_features, out_features=out_features)
         else:
@@ -47,7 +87,21 @@ class NodeModel(th.nn.Module):
         # u: [B, F_u]
         # batch: [N] with max entry B - 1.
         row, col = edge_index
-        out = scatter_mean(edge_attr, col, dim=0, dim_size=x.size(0))
+        # `getattr`, not `self.aggregators`: every artifact saved before the
+        # multi-aggregator existed unpickles a NodeModel without the attribute,
+        # and those models must keep running. The legacy branch is the original
+        # expression verbatim -- same values, same RNG consumption.
+        aggregators = getattr(self, "aggregators", None)
+        if aggregators is None:
+            out = scatter_mean(edge_attr, col, dim=0, dim_size=x.size(0))
+        else:
+            out = th.cat(
+                [
+                    AGGREGATORS[a](edge_attr, col, dim=0, dim_size=x.size(0))
+                    for a in aggregators
+                ],
+                dim=-1,
+            )
         out = th.cat([x, out, u[batch]], dim=-1)
         out = self.node_mlp(out)
         return out
