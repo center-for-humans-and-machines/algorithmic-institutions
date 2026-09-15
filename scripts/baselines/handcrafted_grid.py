@@ -277,6 +277,8 @@ def build_feature_pool(d, switch_every):
     f["group_size"] = own_cur
     f["group_size_other"] = oth_cur
     f["group_size_delta"] = own_cur - oth_cur
+    assert (own_cur >= 1).all()
+    f["inv_group_size"] = 1.0 / own_cur
 
     # current windows: tenure mean INCLUDING the current round; the arrival
     # round starts the new window with the joined group's own outcome.

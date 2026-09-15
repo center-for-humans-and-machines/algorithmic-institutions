@@ -621,3 +621,59 @@ def test_determinism_under_manual_seed(base_bundle):
     assert any(not np.array_equal(a, b) for a, b in zip(first, other))
     # genuinely drawing, not collapsed onto the rounded mean
     assert np.stack(first).std(0).max() > 0.0
+
+
+# --------------------------------------------------------------------------- #
+# the two scripts' CLI defaults are PR #170's constants                        #
+# --------------------------------------------------------------------------- #
+def test_script_cli_defaults_are_the_pr170_constants():
+    """`contribution_gmlp_copula_rho.py` and `stamp_contribution_group_copula.py`
+    take their paths from the CLI so the pair can be re-run on a retrained
+    trunk. Run bare, they must still resolve exactly PR #170's inputs and
+    outputs: this pins every argparse default to its module constant AND every
+    module constant to its literal path, so editing either fails here."""
+    import contribution_gmlp_copula_rho as rho
+    import stamp_contribution_group_copula as stamp
+
+    art = ROOT / "artifacts/baselines"
+    expected = {
+        rho.BUNDLE_PATH: art / "contribution_gaussian_mlp_v2_best.joblib",
+        rho.TRAIN_CFG: (
+            ROOT / "configs/training/baselines/contribution/gaussian_mlp_v2.yml"
+        ),
+        rho.OUT_JSON: art / "contribution_gaussian_mlp_v2_group_copula.params.json",
+        stamp.BASE_PATH: art / "contribution_gaussian_mlp_v2_best.joblib",
+        stamp.PARAMS_PATH: (
+            art / "contribution_gaussian_mlp_v2_group_copula.params.json"
+        ),
+        stamp.OUT: art / "contribution_gaussian_mlp_v2_group_copula.joblib",
+    }
+    for got, want in expected.items():
+        assert got == want, (got, want)
+
+    rho_parser = rho.build_parser()
+    assert rho_parser.get_default("bundle") == rho.BUNDLE_PATH
+    assert rho_parser.get_default("config") == rho.TRAIN_CFG
+    assert rho_parser.get_default("out") == rho.OUT_JSON
+    # the pre-existing flag is untouched: the sidecar is never written by
+    # accident
+    assert rho_parser.get_default("write_params") is False
+
+    stamp_parser = stamp.build_parser()
+    assert stamp_parser.get_default("base") == stamp.BASE_PATH
+    assert stamp_parser.get_default("params") == stamp.PARAMS_PATH
+    assert stamp_parser.get_default("out") == stamp.OUT
+
+    # ... and parsing no arguments yields those same paths
+    rho_args = rho_parser.parse_args([])
+    assert (rho_args.bundle, rho_args.config, rho_args.out) == (
+        rho.BUNDLE_PATH,
+        rho.TRAIN_CFG,
+        rho.OUT_JSON,
+    )
+    stamp_args = stamp_parser.parse_args([])
+    assert (stamp_args.base, stamp_args.params, stamp_args.out) == (
+        stamp.BASE_PATH,
+        stamp.PARAMS_PATH,
+        stamp.OUT,
+    )

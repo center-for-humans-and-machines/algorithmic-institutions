@@ -1,0 +1,59 @@
+# gaussian_mlp_v2 trunk + one feature: inv_group_size = 1 / group_size, the
+# marginal per-capita return factor (a contributed point returns 1.6 / n to
+# the contributor). Humans hold that payoff right -- lone players contribute
+# 10.5, merged eights 8.2, within-player dc +1.5 on becoming alone -- while
+# the incumbent contributor, which has no own-group-size input at all, has it
+# backwards (7.3 alone, 11.2 merged, dc -0.4 on becoming alone). No grid: the
+# incumbent's setting (hidden 8, weight_decay 3e-4, lr 0.01, epochs 1000) is
+# pinned as scalars and the feature block holds exactly the incumbent's seven
+# features plus inv_group_size, so this experiment varies one thing only.
+#
+# Encoding chosen by measurement, not preference (both fitted through the
+# incumbent's exact CV procedure: 4-fold, seed 38381, hidden 8, wd 3e-4,
+# lr 0.01, 1000 epochs, StandardScaler per fold):
+#
+#   arm                | features | CV NLL (folds)                          | CV binned CE | TEST NLL | TEST binned CE
+#   incumbent           |    7     | 2.69255 (2.6488/2.7114/2.5485/2.8615)   | 2.39917      | 2.64112  | 2.31011
+#   one-hot n in {1..8}  |   15     | 2.75033 (2.7485/2.7770/2.5327/2.9431)   | 2.45721      | 2.99730  | 2.31364
+#   1/n (this config)   |    8     | 2.70171 (2.6543/2.7522/2.6032/2.7971)   | 2.41609      | 2.65039  | 2.29761
+#
+# The one-hot costs +2.1% held-out CV NLL (worse on 3 of 4 folds) and its
+# TEST NLL rises 13% while binned CE is flat -- a sigma-collapse tail
+# pathology from eight sparse standardised columns feeding a hidden layer of
+# 8 on 7457 rows. The scalar 1/n is essentially free (+0.3% CV NLL, TEST CE
+# *better* than the incumbent) and closes the resolvable defect: the n = 1
+# teacher-forced train residual goes +2.599 -> +0.032 (n = 2: +0.411 ->
+# +0.196; n >= 3 already within 2.4 SE of zero). One-hot is not run as a
+# second arm (Declaration, "Encoding: 1/n, chosen by measurement").
+
+data:
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: contribution
+  target_type: continuous
+  mask: contribution_valid
+  exclude_flipped: True
+  switch_every: 4
+  model: gaussian_mlp
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/gaussian_mlp_v2_inv_size_cv.csv
+  show_ce: true          # binned 21-way cross-entropy alongside NLL
+
+setting:               # incumbent's selected setting, pinned -- no grid
+  hidden: 8
+  weight_decay: 0.0003
+  lr: 0.01
+  epochs: 1000
+
+blocks:
+  B_declared:   # incumbent's 7 features + inv_group_size -- one set, no grid
+    components: [prev_contribution, prev_punishment, prev_contribution_mean_group,
+                 prev_punishment_mean_group, prev_win_contribution_mean_group,
+                 switched_last_choice, rounds_since_switch, inv_group_size]
+    sets:
+      - [prev_contribution, prev_punishment, prev_contribution_mean_group,
+         prev_punishment_mean_group, prev_win_contribution_mean_group,
+         switched_last_choice, rounds_since_switch, inv_group_size]

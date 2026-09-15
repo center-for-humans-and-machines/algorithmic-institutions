@@ -48,7 +48,12 @@ Also computed and printed prominently, but NEVER stamped:
 
 Runs locally (CPU torch, no PyG):
     uv run python scripts/baselines/contribution_gmlp_copula_rho.py \
-        [--write-params]
+        [--write-params] [--bundle B] [--config C] [--out J]
+
+`--bundle` / `--config` / `--out` default to the PR #170 constants below, so a
+bare run reproduces that experiment exactly; they exist because the dose is
+model-conditional (it is fitted against the teacher-forced marginal of the
+bundle being stamped) and so must be re-fitted whenever the trunk is retrained.
 """
 
 import argparse
@@ -474,29 +479,63 @@ def split_mles(P, rows, r, n_rounds):
 
 
 # --------------------------------------------------------------------------- #
-def main():
-    import joblib
-
-    t0 = time.time()
+def build_parser():
+    """The CLI. Every default is the module constant above, so a bare run is
+    the PR #170 recipe unchanged; the three paths exist so the SAME estimator
+    can be re-run on a retrained trunk (the dose is model-conditional)."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
         "--write-params",
         action="store_true",
         help="write the JSON sidecar step 7 stamps onto the bundle",
     )
-    args = ap.parse_args()
+    ap.add_argument(
+        "--bundle",
+        type=Path,
+        default=BUNDLE_PATH,
+        help="model bundle whose emission the dose is fitted to (default: "
+        "%(default)s)",
+    )
+    ap.add_argument(
+        "--config",
+        type=Path,
+        default=TRAIN_CFG,
+        help="training config supplying the data file and mask (default: "
+        "%(default)s)",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=OUT_JSON,
+        help="params sidecar written under --write-params (default: %(default)s)",
+    )
+    return ap
 
-    bundle = joblib.load(BUNDLE_PATH)
-    cfg = load_config(TRAIN_CFG)
+
+def main():
+    import joblib
+
+    t0 = time.time()
+    args = build_parser().parse_args()
+    # resolved up front so an out-of-tree path fails before the estimator runs
+    bundle_path = args.bundle.resolve()
+    cfg_path = args.config.resolve()
+    out_json = args.out.resolve()
+    bundle_rel = bundle_path.relative_to(ROOT)
+    cfg_rel = cfg_path.relative_to(ROOT)
+    out_rel = out_json.relative_to(ROOT)
+
+    bundle = joblib.load(bundle_path)
+    cfg = load_config(cfg_path)
     train_file = cfg["data"]["data_file"]
     print("=" * 78)
     print("STEP 6 -- the dose of the contribution group copula (gaussian_mlp_v2)")
     print("=" * 78)
-    print(f"bundle    {BUNDLE_PATH.relative_to(ROOT)}")
-    print(f"  sha256={sha256(BUNDLE_PATH)}")
+    print(f"bundle    {bundle_rel}")
+    print(f"  sha256={sha256(bundle_path)}")
     print(f"  model={bundle['model']} target={bundle['target']}")
     print(f"  features={bundle['features']}")
-    print(f"config    {TRAIN_CFG.relative_to(ROOT)}")
+    print(f"config    {cfg_rel}")
     print(
         f"data      {train_file} (mask={cfg['data']['mask']}, "
         f"exclude_flipped={cfg['data'].get('exclude_flipped')})"
@@ -837,8 +876,8 @@ def main():
             n_rows=int(len(y)),
             n_episodes=int(n_ep),
             censored_share=censored,
-            base_bundle=str(BUNDLE_PATH.relative_to(ROOT)),
-            base_bundle_sha256=sha256(BUNDLE_PATH),
+            base_bundle=str(bundle_rel),
+            base_bundle_sha256=sha256(bundle_path),
             git_sha=git_sha(),
             timestamp=datetime.now(timezone.utc).isoformat(),
             bvn_max_dev=None if err is None else float(err),
@@ -894,9 +933,9 @@ def main():
                 ),
             ),
         )
-        OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
-        OUT_JSON.write_text(json.dumps(params, indent=2, sort_keys=True) + "\n")
-        print(f"\nwrote {OUT_JSON.relative_to(ROOT)}")
+        out_json.parent.mkdir(parents=True, exist_ok=True)
+        out_json.write_text(json.dumps(params, indent=2, sort_keys=True) + "\n")
+        print(f"\nwrote {out_rel}")
 
     print(f"\ntotal runtime {time.time() - t0:.1f}s")
 
