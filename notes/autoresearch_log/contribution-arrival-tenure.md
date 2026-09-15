@@ -246,6 +246,21 @@ runner-up (candidate A) before any step ran.
    agent and round by round, including the arrival round; round 0 is 4 on both
    sides; `IntEncoder(onehot, 5)` maps 0..4 to the five unit vectors.
 
+2a. **Step 2 revision, forced by step 3b** `[Sonnet]` — `reset_state`'s `prev_state`
+   comprehension only creates `prev_<k>` for keys that appear in the model's
+   `default_values`, so `update_rounds_since_arrival`'s unconditional read of
+   `state["prev_agent_group"]` raises `KeyError` for any env whose `default_values`
+   omits `agent_group`. `generic/data.py`'s `get_default_values` does carry
+   `"agent_group": 0`, so every model trained through the pipeline — including the
+   step-11 control — is unaffected and the simulation path was never wrong; the 9
+   failures are hand-built test fixtures (`test_environment.py`,
+   `test_contribution_copula_graph.py`, `test_switch_copula_graph.py`). Fix in
+   `reset_state`: after `prev_state` is built, seed the key only when it is absent,
+   `prev_state.setdefault("prev_agent_group", th.zeros_like(state["agent_group"]))` —
+   value 0 is exactly what the existing path fills from `default_values["agent_group"]`,
+   so the fix is a no-op wherever the key already exists and inertness for the step-11
+   bit-identical control is preserved. Re-run every suite from step 3b afterwards.
+
 3b. **Tests and lint** `[Sonnet]` — local: the new parity test, `src/aimanager/tests/test_eval_*.py`,
    `tests/` (torch-only suites). Raven: create the isolated dir once with
    `AI_REMOTE_DIR=... scripts/train_cluster.sh --sync-only ah <step-4 config>` and run

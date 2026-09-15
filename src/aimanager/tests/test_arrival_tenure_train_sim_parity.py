@@ -437,9 +437,7 @@ def test_zero_appears_only_on_arrival_rounds_and_only_for_arrivers():
             ]
         )
         sim_zeros = [a for a, t in enumerate(_sim_tenure(seen, round_)) if t == 0]
-        train_zeros = [
-            a for a in range(N_AGENTS) if train[0, a, round_].item() == 0
-        ]
+        train_zeros = [a for a in range(N_AGENTS) if train[0, a, round_].item() == 0]
         assert sim_zeros == expected_arrivers, f"round {round_}"
         assert train_zeros == expected_arrivers, f"round {round_}"
 

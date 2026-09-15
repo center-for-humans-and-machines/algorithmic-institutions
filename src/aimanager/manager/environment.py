@@ -170,6 +170,12 @@ class ArtificialHumanEnv:
             for k, t in state.items()
             if k in self.default_values
         }
+        # update_rounds_since_arrival reads prev_agent_group unconditionally;
+        # it is env-owned bookkeeping, not an AH input, so it must not depend
+        # on whether the loaded model's default_values declares agent_group.
+        # 0 matches what the comprehension above would put there when the
+        # key is present, so this is a no-op in that case.
+        prev_state.setdefault("prev_agent_group", th.zeros_like(state["agent_group"]))
         self.state = {**prev_state, **state}
 
     def __getattr__(self, name):
