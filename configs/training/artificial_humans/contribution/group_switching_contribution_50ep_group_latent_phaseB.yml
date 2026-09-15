@@ -1,0 +1,80 @@
+description: >-
+  Phase B of the group-latent contributor (autoresearch
+  auto/contribution-group-latent, plan step 7). Short joint finetune starting
+  from the phase-A artifact: the base network is unfrozen so the whole model
+  can adapt to a latent it now knows exists, still under the exact marginal
+  likelihood (20-node Gauss-Hermite). Back to the reference optimizer
+  (lr 3e-4, weight_decay 1e-5) because the base weights are learning again
+  and those are the settings they were trained under; the budget is
+  deliberately short (75 epochs) since this is a finetune from a converged
+  base and phase B is the arm that actually pays the quadrature cost on the
+  backward pass.
+  DO NOT SUBMIT until the orchestrator confirms the phase-A gate
+  (||v|| materially non-zero AND held-out marginal log-likelihood beating
+  the frozen base's plain log-likelihood).
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn+group_latent
+    dataset: 50ep
+    phase: B
+    epochs: 75
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: >-
+    artifacts/artificial_humans/group_switching_contribution_50ep_group_latent_phaseB
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+    group_latent:
+      dim: 1
+      n_quadrature: 20
+      pathway: logit_skip
+      loading_init: 0.1
+      n_groups: 2
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 75
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 5
+    l1_entropy: 0
+    freeze_base: False
+    init_artifact: >-
+      artifacts/artificial_humans/group_switching_contribution_50ep_group_latent_phaseA/model/architecture_node+edge+rnn+group_latent__dataset_50ep__phase_A__epochs_200.pt
+  device: cuda
+  autoregression: False

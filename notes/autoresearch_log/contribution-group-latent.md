@@ -1,0 +1,234 @@
+# Autoresearch log: contribution-group-latent
+
+## 1. Declaration
+
+- **Slot:** contribution
+- **Base model:** reference GNN contributor
+  (`artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt`)
+- **Target rows:** **CG** (9.850261, band > 5 — primary; band upgrade
+  requires < 5). Watch: CC (1.606), RCA (2.035), RCD (2.772) as plausible
+  co-movers; the C marginals (CA 0.772, CB 0.691, CD 0.650) as the known
+  anti-correlated collateral (§6: r ~ -0.7 to -0.9).
+- **Hypothesis:** Groups develop persistent shared cultures: group-mates'
+  contributions co-move beyond what observed history explains, and the
+  shared component persists across the episode rather than resetting each
+  round (PR #149: residual rho grows 0.035 -> 0.074 -> 0.119 over round
+  thirds; human early-late segregation correlation 0.38 vs sim 0.03).
+  Independent per-agent sampling erases this factor, so simulated group
+  means regress toward one attractor and the group-mean spread collapses
+  (CG 9.85). An episode-persistent shared group latent — #149's direction
+  (ii), PR #140 Option 1 — injects a small persistent push per group that
+  compounds through the closed-loop peer dynamics, restoring the spread
+  CG measures.
+- **Planned change (one change):** a 1D per-(group, episode) latent
+  `z_g ~ N(0,1)` added to the contribution GNN, entering the emission
+  logits through a learned loading vector (`logits += z_g * v`,
+  `v` in R^21). Trained by **exact marginal likelihood**: the integral
+  over z is a 20-node Gauss-Hermite sum — ~20 forward passes per group
+  trajectory, blended by log-sum-exp — so there is no encoder network, no
+  ELBO, and no posterior-collapse failure mode. Two training phases,
+  selected between by Stage-1 score (legal, §5): (A) base frozen at the
+  reference artifact, only the loading learned; (B) short joint finetune
+  starting from A. Simulation draws `z_g` once per (group, episode) and
+  holds it fixed for all 24 rounds.
+- **Relation to `contribution-type-latent` (in flight):** that experiment
+  gives each *agent* a persistent disposition (per-agent z, dim 4,
+  VAE/ELBO); this one gives each *group* a shared factor (per-group z,
+  dim 1, exact quadrature likelihood). Different behavioral claims —
+  individual identity vs group culture — and different estimation
+  machinery. Siblings, not a retry.
+- **Evidence base:** #149 — within-round rho ~ 0.07 closes only ~14% of
+  the spread gap, the deficit is trajectory-persistent plus free-running
+  drift, and an episode-persistent shared latent is its named direction
+  (ii); #151/#154 — a trajectory-level latent is the repeatedly named
+  missing piece; #157 — the teacher-forced conditional caps *gated*
+  mechanisms, but a marginalized latent is not a conditioning feature, so
+  the MLE assigns it exactly the weight the data likelihood supports;
+  #146/#150 — a shared normal factor is the mechanism that already works
+  post-hoc; this experiment learns it inside the model.
+- **Legality note:** z is an architecture change (latent-variable model),
+  not an information feature — no observed data column feeds it, so the
+  §5 decision-time-information clause does not apply.
+- **Guards (§2):** rows <= 1 must not fall below 11/21; mean score must
+  not rise above 1.759557.
+
+### Method, at a glance
+
+z is not a computed feature: nothing in the data feeds it. At training
+time it is *integrated out* — each (group, episode) trajectory's
+likelihood is the prior-weighted average of the model's likelihood
+evaluated at 20 fixed z values, so gradient descent makes different z
+values specialize to high- and low-culture groups exactly when the data
+demands it (the log-sum-exp gradient is soft-EM). At simulation time it
+is a *random draw*, shared by the four group members and persistent for
+the episode — the in-model analogue of the #146/#150 copula's shared
+normal, with the network free to learn during training what the draw
+means. If the persistent shared factor does not exist in the data, the
+MLE leaves the loading at zero and the experiment fails honestly.
+
+### Config sketch
+
+New training config, identical to the reference
+(`group_switching_contribution_50ep.yml`: seed 38381, flip-doubled data,
+575-epoch budget, hidden 20) plus:
+
+```yaml
+model_args:
+  group_latent:
+    dim: 1                # z_g ~ N(0,1), one draw per (group, episode)
+    n_quadrature: 20      # Gauss-Hermite nodes: exact marginal likelihood
+    pathway: logit_skip   # logits += z_g * v, v a learned 21-vector
+    loading_init: <from step-1 calibration>
+train_phases:
+  - freeze_base: true     # phase A: learn v only, base weights frozen
+  - freeze_base: false    # phase B: short joint finetune from A
+```
+
+Simulation side: when the artifact declares `group_latent`, the simulator
+draws `z_g` per (group, episode) at reset and holds it across rounds. No
+change to the simulation protocol (seeds, episode counts) or the frozen
+surface.
+
+## 2. Plan
+
+Validated by the orchestrator (§9): targets per §2, every step legal per
+§5, frozen surface untouched — the simulation change is gated on the
+artifact declaring `group_latent`, so legacy artifacts behave identically.
+
+- [x] 1. **Gate moved into training (plan revision, 2026-08-20).** The
+  standalone persistence diagnostic was dropped by the maintainer: with
+  the base frozen and z entering as `logits += z * v`, phase-A training
+  computes base logits once and the 20 quadrature variants are logit
+  shifts — phase A *is* the persistence measurement (same MLE as the
+  #149-style calibration, on the full joint likelihood), at ~1x forward
+  cost. **Gate (now at step 7):** phase-A loading ||v|| materially
+  non-zero AND held-out marginal log-likelihood beats the frozen base;
+  else stop -> [FAIL] PR. The residual-export machinery written for the
+  original step 1 (`scripts/artificial_humans/contribution_latent_phi.py`
+  + copula imports, locally validated: same-round estimator reproduces
+  #149's estimand to 4e-16; false-positive gate phi_hat 0.0013 on
+  rho=0.07/phi=0 synthetics) is kept as optional analysis tooling. Its
+  first cluster run was cancelled: BLAS thread oversubscription (51 min
+  user vs 2h52m system time), lesson — pin OMP/torch threads to 1 in
+  cluster stats jobs.
+- [x] 2. `graph.py`: optional `group_latent` on `GraphNetwork` — z as a
+  per-(group, episode) scalar input, loading vector v added to the
+  emission logits; legacy artifacts load with v = 0 and produce identical
+  logits.
+- [x] 3. `train.py`: quadrature marginal-likelihood loss (log-sum-exp
+  over 20 Gauss-Hermite nodes per (group, episode) trajectory);
+  `freeze_base` support; disabled path byte-identical to current training.
+- [x] 4. Simulation free-running path: draw z_g at episode reset, hold
+  fixed across rounds (the type-latent step-4 caching pattern).
+- [x] 5. Raven unit tests: disabled parity; quadrature loss equals a
+  brute-force integral on a toy model; z persistence across sim rounds;
+  save/load round-trip plus legacy-artifact load.
+- [x] 6. black + flake8 over touched files (one batched pass).
+- [x] 7. Training config per the sketch; train phase A then B on Raven;
+  fetch artifacts and metrics. **Gate (was step 1):** phase-A ||v||
+  materially non-zero and held-out marginal log-likelihood beats the
+  frozen base; else stop -> [FAIL] PR. Phase A is cheap (frozen base:
+  one forward per batch + 20 logit shifts); only phase B pays the ~20x
+  quadrature forward cost and stays short.
+- [x] 8. Stage-1 sim config
+  `23_2g8a_group_latent_self_gnn_contr_gnn_switch.yml` — exact copy of
+  the reference except the contribution artifact and output paths;
+  simulate both phase arms on Raven; fetch `per_round.parquet`.
+- [x] 9. Sanity: between-group contribution spread in the sim exceeds the
+  reference run (z reaches behavior) before evaluating.
+- [x] 10. Evaluate locally; append results rows; decision per §2 —
+  Stage 2 sweep only on a CG band upgrade; PR either way.
+
+## 3. Results
+
+| date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
+|---|---|---|---|---|---|---|
+| 2026-08-20 | (baseline) reference stack, lin_multinomial punisher | 1 | CG 9.850261 | 11/21 | 1.759557 | baseline |
+| 2026-08-20 | phase A: frozen base + learned loading (job 29414705, 3m43s) | gate | no sim — held-out marginal 1.820757 vs plain 1.825020 (delta +0.004264, 3/5 folds, paired t p=0.385); \|\|v\|\| 1.475239 converged | — | — | gate criterion 2 failed as computed — later found leakage-compromised (note 6) |
+| 2026-08-20 | phase A arm, Stage-1 sim (job 29414977, 12m03s) | 1 | CG 8.006817 (from 9.850261) | 11/21 | 1.575373 | kept; no band upgrade (CG > 5) — best CG and best mean on record |
+| 2026-08-20 | phase B: joint finetune from phase A (job 29415913, 2m26s) | gate | no sim — fold-test marginal LL minimum at epoch 0 in 5/5 folds; \|\|v\|\| static 1.474 -> 1.455-1.504 | — | — | arm dropped: pure overfit, no dose growth (note 10) |
+
+## 4. Notes
+
+1. Declared after the maintainer distinguished this branch from
+   `contribution-type-latent`: that one owns the per-agent disposition
+   latent, this one owns the group-level shared factor. Both descend from
+   #149's post-mortem; they can run in parallel.
+2. Estimation choice (quadrature over ELBO) removes the posterior-collapse
+   risk entirely: with dim 1 the marginal likelihood is exact, no encoder
+   is trained, and the latent is used iff it raises the data likelihood —
+   the honest in-model counterpart of the #146/#150 two-stage copula fits.
+3. Known headwind, stated upfront: #149 attributes most of the CG gap to
+   free-running state-tracking loss (teacher-forced spread ratio 0.784 vs
+   free-running ~0.59, human 0.847). The bet is that an episode-persistent
+   push compounds under free-running dynamics in a way #149's within-round
+   copula could not; the phase-A gate and the step-9 spread sanity check
+   are the cheap points to falsify this before burning a full evaluation
+   cycle.
+4. Plan revision (2026-08-20, maintainer): the standalone step-1
+   diagnostic was dropped after its first run had to be cancelled (BLAS
+   thread oversubscription on the CPU partition; also a coordination
+   scare with the parallel type-latent session's training job on the
+   shared Raven checkout). Rationale: frozen-base phase-A training
+   measures the same persistence signal at ~1x forward cost and inside
+   the pipeline that decides the experiment anyway. Diagnostic code kept
+   as analysis tooling; estimator validations recorded in step 1.
+5. Phase-A result as computed: criterion 1 passed decisively (||v||
+   1.475, 5.3x the ramp init, plateaued by epoch ~100-130; freeze
+   verified — plain LL constant to <=6e-7). Criterion 2 failed: held-out
+   delta +0.004264 nats, 3/5 folds, paired t p=0.385, while in-sample
+   improved in every fold. Learned v suppresses levels 0-3 and 17-19,
+   boosts 4-12; ~+-0.6 contribution units of persistent push, saturating.
+6. Maintainer caught a flaw in the gate: the frozen base is the
+   full-data reference artifact — trained on every episode, so the
+   fold-test episodes are in-sample for it (fold-test log loss 1.80-1.90
+   vs the reference training's honest fold-test ~2.85; ln 21 = 3.045).
+   Only v was genuinely held out. In-sample residuals under-represent
+   the persistent group structure, so the criterion-2 delta is
+   attenuated and the FAIL is unreliable in either direction. A rigorous
+   likelihood gate needs per-fold frozen bases (5 base retrains). Also:
+   the shipped v is plausibly under-dosed for free-running use, having
+   been fit against residuals the base had partly absorbed.
+7. Orchestrator decision (pre-dated the leakage finding, reinforced by
+   it): skip further likelihood arbitration and run Stage 1 with the
+   phase-A full-data artifact — the simulation is leakage-free and is
+   the arbiter anyway (§2); training turned out to cost 3m43s, so the
+   gate's save-a-cycle economics no longer bind. Phase B stays withheld
+   unless Stage 1 shows life on CG. Success bar unchanged: CG band
+   upgrade or [FAIL].
+8. Phase-A Stage 1: the mechanism works and is uniquely clean. Spread
+   ratio lifted off the independence floor in 4/4 pairings (mean 0.5860
+   -> 0.6619, floor 0.5834, human 0.8480; 29.0% of the gap closed) — z
+   demonstrably reaches free-running behavior. CG improved in all four
+   pairings (best 6.42, baseline pairing 8.007). The §6 anti-correlation
+   tax did NOT materialise: CA/CB/CD all improved — the first CG
+   mechanism in the log that does not charge the individual marginals.
+   Collateral: PD -0.654, SC -0.493, CE, CC, RCD, RCC, RCA, SA all
+   improved; only PA (+0.062) worsened. RCA's 2.03->1.94 band crossing
+   is discounted as noise (0.06 margin, the #153 standard). gnn_self
+   pairing's rows<=1 dropped 6->4 (guard is on the reference stack,
+   which held at 11/21) — logged for Stage 2 attention if reached.
+9. Quantified shortfall: CG < 5 needs spread ratio > 0.7158; the
+   baseline pairing delivered 38.4% of the required move (best pairing
+   59-74%). The remainder is #149's free-running state-tracking loss,
+   which a logit-level persistent push structurally cannot reach.
+   Phase B (joint finetune, base adapts around the latent) submitted as
+   the declared second arm; if it also lands > 5, the experiment closes
+   as [FAIL] with phase A as the better-documented arm.
+10. Phase B dropped without a sim (maintainer observation on wandb run
+   2ng46xio, confirmed in the metrics): fold-test marginal LL rises
+   monotonically from epoch 0 in all 5 folds — the init is the reference
+   base early-stopped at its own test optimum, so joint finetuning on
+   the same 100 episodes can only overfit (the leakage of note 6 makes
+   the fold curves doubly pessimistic) — and ||v|| did not grow, so the
+   dose phase B existed to deliver never materialised. The honest
+   epoch selection is 0 in 5/5 folds, i.e. phase B == phase A. Declining
+   to run its sim is the reverse of score-shopping: an arm whose only
+   winning path is seed luck is not an arm. Experiment closes as [FAIL]
+   per the band rule, phase A as the arm. Directions this points to,
+   in order: (i) this latent + free-running-aware training (schedsamp)
+   — the two mechanisms attack disjoint parts of the CG deficit (29%
+   spread-share closed here; the state-tracking share is untouched);
+   (ii) richer latent pathways (z into the RNN state, not just logits)
+   to raise the dose ceiling; (iii) a per-fold-base likelihood gate if
+   a future experiment needs an honest pre-sim gate (note 6).
