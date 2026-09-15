@@ -843,3 +843,34 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     verification asserts `predict` / `predict_std` bit-identity after
     reload, which still passes but no longer verifies the emission;
     `predict_proba` must join that check.
+15. (Step 2, confirmed) **Registry and CV plumbing in; `tests/baselines/` is
+    311 passed** (298 after step 1 + 13 new), `test_gaussian_mlp.py` 31
+    passed unchanged, flake8 per-file counts identical to HEAD. The
+    `prev_index` hazard of Note 14b is closed by one helper,
+    `prev_position(model, ordering, key)`, used by both call sites so they
+    cannot drift: the **pool** index `prep["col_of"]["prev_contribution"]`
+    travels to the worker and never reaches the estimator, while the **task
+    position** `cols.index(prev_col)` is what goes to
+    `build_model(..., prev_index=pos)` and indexes the same matrix as the
+    raw `Xtr[:, prev_pos]` handed to `fit`. In the real run the position is
+    0; the smoke deliberately placed it at pool 3 / position 2 and it
+    resolved correctly, and a mismatched index raises rather than fitting.
+    The `_SPEC` defaults (hidden 32, wd 0.0, lr 0.05, epochs 500) mirror
+    `gaussian_mlp`'s house defaults, **not** the incumbent's knobs, so
+    step 3's config must pin all four explicitly and step 4 must assert
+    them back off the saved bundle — an omitted key would silently train at
+    different hyperparameters and make the F1 comparison a confound rather
+    than a like-for-like test of the emission.
+16. (Step 2, caught before it broke step 4) **A duplicate `ce` column.**
+    `_METRIC` for this model is `"ce"`, and `main` both renames `mean_loss`
+    to the metric name and separately writes a `ce` column under
+    `show_ce` — so the CV CSV carried two columns named `ce` and `df[order]`
+    listed it twice. Fixed at the row dict (skip the duplicate when
+    `metric == "ce"`) and at the `order` list (key off `"ce_se"`). Gaussian
+    CSVs are byte-unchanged. The floor is a real number, not a crash,
+    because `floor_score` uses `ce_levels` (21) rather than `n_levels` (0
+    for this continuous config): **floor 2.9214 CV / 2.7180 test**, well
+    above the incumbent's 2.3101, so a floor win at step 4 would be an
+    unambiguous stop. A 20-epoch end-to-end smoke on the real train split
+    (rows 7457, matching the declaration) already orders the settings
+    `prev,0,20 < prev,20 < prev < floor`.

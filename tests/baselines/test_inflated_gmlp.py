@@ -2,8 +2,10 @@
 the `InflatedGaussianMLPRegressor` estimator (proper distribution over the 21
 levels, atoms that sit where the raw prev_contribution sits, colliding atoms
 that add, the atoms=() degeneracy, recovery of a planted repeat mass,
-determinism, joblib round-trip) and the binned-Gaussian convention it shares
-with `binned_logloss`.
+determinism, joblib round-trip), the binned-Gaussian convention it shares
+with `binned_logloss`, and its registry / CV plumbing in `baseline_models`
+(the griddable `atoms` knob, the CE metric and floor, and the task-local
+`prev_index` that must not be confused with the feature pool's column index).
 Invariants and rationale: notes/autoresearch_log/contribution-inflated-gmlp.md.
 
 Local test (CPU torch, no PyG):
@@ -228,3 +230,126 @@ def test_fit_with_the_wrong_prev_index_raises():
 def test_bad_atom_sets_rejected(atoms):
     with pytest.raises(ValueError):
         InflatedGaussianMLPRegressor(atoms=atoms)
+
+
+# --------------------------------------------------------------------------- #
+# (6) registry + CV plumbing (baseline_models / run_baseline_cv)
+# --------------------------------------------------------------------------- #
+from baseline_models import (  # noqa: E402
+    CE_MODELS,
+    NEEDS_PREV,
+    PREV_FEATURE,
+    build_model,
+    build_settings,
+    floor_score,
+    metric_name,
+    parse_atoms,
+    predict_scores,
+    prev_position,
+    resolve_model,
+    setting_keys,
+)
+
+MODEL = "gaussian_mlp_inflated"
+
+
+def _cfg(atoms):
+    return {
+        "data": {"target_type": "continuous", "model": MODEL},
+        "setting": {
+            "hidden": 8,
+            "weight_decay": 0.0003,
+            "lr": 0.01,
+            "epochs": 1000,
+            "atoms": atoms,
+        },
+    }
+
+
+def test_registered_for_continuous_targets():
+    assert resolve_model(_cfg("prev,0,20")) == MODEL
+    assert metric_name(MODEL) == "ce"
+    assert MODEL in NEEDS_PREV and MODEL in CE_MODELS
+    assert "atoms" in setting_keys(MODEL)
+    with pytest.raises(ValueError):
+        resolve_model({"data": {"target_type": "categorical", "model": MODEL}})
+
+
+def test_settings_expand_to_the_three_atom_sets():
+    """The declared grid: one griddable knob, three atom sets, everything else
+    pinned to the incumbent's setting."""
+    settings = build_settings(_cfg(["prev", "prev,20", "prev,0,20"]), MODEL)
+    assert [s["atoms"] for s in settings] == ["prev", "prev,20", "prev,0,20"]
+    assert {s["hidden"] for s in settings} == {8}
+    assert {s["epochs"] for s in settings} == {1000}
+    assert build_settings({"data": {}}, MODEL)[0]["atoms"] == "prev,0,20"
+
+
+@pytest.mark.parametrize("bad", ["prev,10", "10", "prev,prev", "body"])
+def test_unknown_atom_string_rejected(bad):
+    with pytest.raises(ValueError):
+        build_settings(_cfg(bad), MODEL)
+
+
+def test_parse_atoms_round_trips():
+    assert parse_atoms("prev, 0 ,20") == ("prev", "0", "20")
+    assert parse_atoms("") == () and parse_atoms(None) == ()
+
+
+def test_prev_position_is_the_task_position_not_the_pool_index():
+    """The whole hazard of the plumbing: col_of[PREV_FEATURE] is the column in
+    the feature POOL, while the estimator indexes the task's own matrix."""
+    feats = ["prev_punishment", PREV_FEATURE, "rounds_since_switch"]
+    col_of = {"prev_punishment": 7, PREV_FEATURE: 0, "rounds_since_switch": 19}
+    cols = [col_of[f] for f in feats]
+    assert prev_position(MODEL, feats, PREV_FEATURE) == 1
+    assert prev_position(MODEL, cols, col_of[PREV_FEATURE]) == 1
+    assert prev_position("gaussian_mlp", feats, PREV_FEATURE) is None
+
+
+def test_feature_set_without_prev_is_a_config_error():
+    with pytest.raises(ValueError, match=PREV_FEATURE):
+        prev_position(MODEL, ["prev_punishment"], PREV_FEATURE)
+    with pytest.raises(ValueError, match=PREV_FEATURE):
+        prev_position(MODEL, [7, 19], None)
+
+
+def test_build_model_needs_the_prev_index():
+    setting = build_settings(_cfg("prev,0,20"), MODEL)[0]
+    m = build_model(MODEL, setting, seed=3, prev_index=2)
+    assert isinstance(m, InflatedGaussianMLPRegressor)
+    assert m.atoms == ("prev", "0", "20") and m.prev_index == 2
+    assert (m.hidden, m.epochs, m.lr, m.weight_decay) == (8, 1000, 0.01, 0.0003)
+    with pytest.raises(ValueError, match="prev_index"):
+        build_model(MODEL, setting, seed=3)
+
+
+def test_a_wrong_prev_index_raises_instead_of_fitting():
+    """`prev_index` pointing at another feature must hard-error at fit, not
+    silently place the status-quo atom at the wrong level."""
+    X, y = toy_panel(300, 21)
+    Z = StandardScaler().fit_transform(X)
+    setting = build_settings(_cfg("prev,0,20"), MODEL)[0]
+    setting["epochs"] = 1
+    m = build_model(MODEL, setting, seed=3, prev_index=1)  # prev_punishment
+    with pytest.raises(ValueError, match="affine image"):
+        m.fit(Z, y, prev=X[:, 0])
+
+
+def test_predict_scores_reports_the_cross_entropy_twice(fitted):
+    """Primary metric and the show_ce column are the same 21-way CE."""
+    m, Z, y = fitted["m"], fitted["Z"], fitted["y"]
+    primary, ce = predict_scores(MODEL, m, Z, y, n_levels=0, show_ce=True)
+    assert primary == ce == m.nll(Z, y)
+    assert predict_scores(MODEL, m, Z, y, n_levels=0)[1] is None
+
+
+def test_floor_is_the_marginal_histogram(fitted):
+    """The floor is the multinomial branch's: the smoothed marginal histogram
+    of the levels, scored by the same cross-entropy."""
+    ytr, yte = fitted["y"][:2000], fitted["y"][2000:]
+    primary, ce = floor_score(MODEL, ytr, yte, n_levels=0, show_ce=True)
+    c = np.bincount(np.rint(ytr).astype(int), minlength=K) + 1.0
+    want = float(-np.mean(np.log((c / c.sum())[np.rint(yte).astype(int)])))
+    assert primary == ce == pytest.approx(want, rel=1e-12)
+    assert fitted["m"].nll(fitted["Z"], fitted["y"]) < primary

@@ -8,8 +8,9 @@ value reported:
   * ridge / gaussian (mu-head) -> signed standardized coefficient
   * multinomial (one coef per class) -> magnitude via --cat-metric:
     absmag (mean |coef|, default) / l2 (coef norm) / perm (delta in-sample log-loss).
-  * gaussian_mlp -> none: its mean map is not affine, so the coefficient view
-    raises. --save-best works for it (it never touches coefficients).
+  * gaussian_mlp / gaussian_mlp_inflated -> none: their mean map is not affine,
+    so the coefficient view raises. --save-best works for them (it never
+    touches coefficients).
 
 Usage:
     .venv/bin/python scripts/baselines/inspect_best_model.py out.csv \
@@ -37,9 +38,12 @@ from handcrafted_grid import load_config, prepare_data  # noqa: E402
 from gaussian_regressor import binned_logloss  # noqa: E402
 from baseline_models import (  # noqa: E402
     GAUSSIAN_MODELS,
+    NEEDS_PREV,
+    PREV_FEATURE,
     build_model,
     floor_score,
     predict_scores,
+    prev_position,
     resolve_model,
     setting_keys,
 )
@@ -52,13 +56,13 @@ def _feats_of(row):
     return [] if pd.isna(row["features"]) else str(row["features"]).split(";")
 
 
+_SETTING_CAST = {"epochs": int, "hidden": int, "atoms": str}
+
+
 def _row_setting(row, model, cfg):
     """(label, setting) for a CV-output row: read the model's swept hyper-parameter
     columns off the row. label is a short display string."""
-    setting = {
-        k: (int(row[k]) if k in ("epochs", "hidden") else float(row[k]))
-        for k in setting_keys(model)
-    }
+    setting = {k: _SETTING_CAST.get(k, float)(row[k]) for k in setting_keys(model)}
     label = " ".join(f"{k}={v}" for k, v in setting.items())
     return label, setting
 
@@ -68,11 +72,15 @@ def _y(prep, model):
 
 
 def _fit(prep, model, feats, setting, seed):
-    """Fit `model` on ALL of prep's rows with `setting`; return (m, scaler, cols)."""
+    """Fit `model` on ALL of prep's rows with `setting`; return (m, scaler, cols).
+    NEEDS_PREV models also get the RAW PREV_FEATURE column, and the position of
+    that feature INSIDE `feats` as prev_index (not its pool column index)."""
     cols = [prep["col_of"][f] for f in feats]
+    pos = prev_position(model, feats, PREV_FEATURE)
+    fit_kw = {} if pos is None else {"prev": prep["X"][:, cols[pos]]}
     sc = StandardScaler().fit(prep["X"][:, cols])
-    m = build_model(model, setting, seed).fit(
-        sc.transform(prep["X"][:, cols]), _y(prep, model)
+    m = build_model(model, setting, seed, prev_index=pos).fit(
+        sc.transform(prep["X"][:, cols]), _y(prep, model), **fit_kw
     )
     return m, sc, cols
 
@@ -137,7 +145,23 @@ def save_best(args, df, cfg, model, n_levels, metric_col, prep_tr):
     # (comparable to the multinomial / GNN). ridge: N(mu(x), sigma) homoscedastic;
     # gaussian / gaussian_mlp: N(mu(x), sigma(x)) from their trained heads.
     extra = []
-    if model in ("ridge",) + GAUSSIAN_MODELS:
+    if model in NEEDS_PREV:
+        # A proper categorical already: `test_metric` IS the 21-way CE. Report
+        # it under the key the Gaussian lineage uses, so the two are one number
+        # against one number.
+        Xte = sc.transform(prep_te["X"][:, cols])
+        bundle["prev_index"] = prev_position(model, feats, PREV_FEATURE)
+        bundle["test_logloss_binned"] = m.nll(Xte, prep_te["y_cont"])
+        w = m.mixture_probs(Xte).mean(0)
+        extra.append(
+            "  mean mixture weights = "
+            + ", ".join(f"pi_{n}={v:.4f}" for n, v in zip(("body",) + m.atoms, w))
+        )
+        extra.append(
+            f"  TEST binned log-loss = {bundle['test_logloss_binned']:.4f}   "
+            f"({m.k_levels}-way cross-entropy; the model's own objective)"
+        )
+    elif model in ("ridge",) + GAUSSIAN_MODELS:
         Xte, yte = sc.transform(prep_te["X"][:, cols]), prep_te["y_cont"]
         k = int(cfg["data"].get("categorical_levels", 21))
         if model == "ridge":  # point model -> homoscedastic sigma makes it sampleable
@@ -258,7 +282,9 @@ def main():
     args = ap.parse_args()
 
     df = pd.read_csv(args.csv)
-    metric_col = next(m for m in ("log_loss", "nll", "mse") if m in df.columns)
+    # "ce" last: a gaussian CSV carries both "nll" and a "ce" column, and its
+    # primary metric is the nll.
+    metric_col = next(m for m in ("log_loss", "nll", "mse", "ce") if m in df.columns)
     cfg = load_config(Path(args.config))
     model = resolve_model(cfg)
     n_levels = cfg["data"].get("categorical_levels", 0)
