@@ -1,0 +1,45 @@
+# contribution-inflated-gmlp, CANDIDATE: the status-quo- and corner-inflated
+# emission in the contribution slot of PR #174's stack. The binned-Gaussian body
+# gains explicit probability atoms at c = prev_contribution, c = 0 and c = 20
+# (atom set prev,0,20, chosen by CV cross-entropy; test 21-way CE 1.8817 against
+# the incumbent's 2.3101), and the shared per-(episode, group) latent is
+# re-estimated on that new trunk and stamped at copula_rho_p =
+# 0.048443521435665396, copula_rho_t = 0.0. The latent enters through the
+# discrete CDF inversion, so every agent's marginal is preserved exactly.
+# Everything else -- switch model, punisher, valid_model, seed, episodes,
+# rounds, pairing -- is byte-identical to the parent's config: only
+# contribution_model, output_dir and figure_name differ. Slug sits before
+# `_self_` so evaluation_sweep.py's DIR_PATTERN still parses contr/switch.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/baselines/contribution_gaussian_mlp_inflated_group_copula.joblib
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_exodus_k_onehot/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_infl_self_gaussian_mlp_inflated_group_copula_contr_gnn_joint_exodus_k_onehot_switch
+figure_name: 2g8a_infl_self_gaussian_mlp_inflated_group_copula_contr_gnn_joint_exodus_k_onehot_switch
+save_per_round: true
+basedir: .

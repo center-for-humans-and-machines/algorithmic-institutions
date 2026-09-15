@@ -1109,3 +1109,34 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     function's own correctness rests on step 5's suite at `sample=True`
     (Notes 23-25) and on step 8's rollout, which runs the stamped bundle
     through the adapter at `sample=True`.
+36. (Step 9, confirmed) **Both sim configs in.** Control
+    `23_2g8a_inflctl_self_gaussian_mlp_v2_group_copula_contr_gnn_joint_exodus_k_onehot_switch.yml`
+    differs from the parent's config in exactly **two** functional lines
+    (`output_dir`, `figure_name`); candidate
+    `23_2g8a_infl_self_gaussian_mlp_inflated_group_copula_contr_gnn_joint_exodus_k_onehot_switch.yml`
+    in exactly **three** (those plus `contribution_model` ->
+    `artifacts/baselines/contribution_gaussian_mlp_inflated_group_copula.joblib`,
+    verified present at 4728 bytes and sha256
+    `7bfe4d9b…99ed0` — the **stamped** bundle, not the 4175-byte unstamped
+    `..._best.joblib`, which would have run the candidate emission with no
+    group copula at all and looked superficially fine). Seed 42,
+    `n_episodes: 100`, `n_rounds: 24`, `switch_every: 4`, the single
+    `lin_multinomial_copula_self` pairing, `save_per_round: true`, the
+    switch and punisher artifacts and `valid_model` are byte-identical to
+    the parent's. Both output-dir names were run through
+    `evaluation_sweep.py`'s `DIR_PATTERN` rather than checked by eye, and
+    both parse (`contr` `gaussian_mlp_v2_group_copula` /
+    `gaussian_mlp_inflated_group_copula`, `switch`
+    `gnn_joint_exodus_k_onehot`).
+37. (Step 9, a plan revision the orchestrator made and is recording)
+    The byte-copy inherited a **header comment describing the wrong
+    experiment** — PR #170's gmlp group copula, naming its rho 0.0438 and
+    PR #167's stack — which on the candidate file actively misdescribes the
+    contributor it invokes. The plan's "exactly two / exactly three edits"
+    exists to protect the **protocol and the RNG context**, not to preserve
+    a stale comment, and YAML comments are not parsed into behaviour. Both
+    headers were therefore rewritten to describe what each config actually
+    is. Verified behaviour-neutral by comparing `yaml.safe_load` output
+    before and after (**identical** for both files) and by re-diffing
+    comment-stripped against the parent: still exactly 2 and 3 changed
+    lines.
