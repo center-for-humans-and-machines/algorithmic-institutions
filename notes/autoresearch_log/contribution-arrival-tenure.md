@@ -469,3 +469,31 @@ runner-up (candidate A) before any step ran.
    other experiments' dirs (`contribution-fresh-start`, `contribution-size-onehot`,
    `switch-exodus-k-onehot`, ...); the slug here collides with none of them, and the
    queue was empty at planning time.
+
+8. **Step 5, the candidate trunk (SLURM 30252677, 8m09s, inside the ~27 min §5
+   ceiling; sha256 `dc7227ed4846…`).** Provenance confirmed: the job's `aimanager`
+   resolved at `/u/certuer/autoresearch/contribution-arrival-tenure/src/aimanager/`,
+   not the shared checkout. Held-out log-loss at epoch 574 is **flat**: mean
+   1.997552 against M0's 1.989742, **+0.007811**, with the folds splitting 2 better /
+   3 worse and a per-fold spread (-0.0237 to +0.0397) several times the mean shift.
+   The hypothesis predicted a *gain*, so this is nominally against it — but the
+   honest reading is no measurable aggregate change, which the Declaration's own
+   arithmetic anticipates: arrivals are 5.5% of training rows, so a real
+   stratum-local improvement need not surface in a full-sample mean. This run
+   cannot separate "the feature does nothing" from "the feature fixes 5% of the
+   rows invisibly"; step 6's arrival-stratum teacher-forced diagnostic is what
+   separates them. Recomputed independently by the orchestrator from the fetched
+   parquet, with the recipe validated by reproducing M0's published 1.989742 and
+   its five folds exactly.
+
+9. **The model uses the feature, and the trunk demonstrably never had the
+   information.** Shuffle-importance at epoch 574: `rounds_since_arrival`
+   **+0.017590**, positive in all five folds and about half the weight of
+   `prev_punishment` (+0.036326) — so the "silently ignored" failure mode did not
+   occur. The neighbouring number is the striking one: shuffling **`agent_group`
+   costs essentially nothing** — -0.000156 in the candidate, +0.000863 in M0 — i.e.
+   destroying the group label leaves the model's predictions intact. That is direct
+   confirmation of the Declaration's claim that the GRU never recovered arrival from
+   `agent_group`, and it establishes the precondition the hypothesis needed: the new
+   feature carries information the trunk did not have. What it has not yet shown is
+   conversion into behaviour.
