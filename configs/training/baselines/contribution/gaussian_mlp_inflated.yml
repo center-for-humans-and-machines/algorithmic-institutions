@@ -1,0 +1,47 @@
+# Status-quo- and corner-inflated emission bolted onto the gaussian_mlp_v2
+# trunk (contribution-inflated-gmlp, log Declaration): a human repeats last
+# round's contribution exactly in 44% of rounds (79% at 20, 69% at 0), while
+# the pure-Gaussian trunk manages only 17% (47% / 36%) -- an explicit
+# probability atom at prev_contribution and at each corner, on top of the
+# same Gaussian body, lets one contributor hold a level and one group hold a
+# corner from round to round, which is what RCA scores directly and what CG
+# scores through the group-mean tails. Same trunk (Linear(7 -> 8) -> tanh),
+# same 7 declared features, same fit setting as the incumbent gaussian_mlp_v2
+# candidate -- only the emission head and the atom set are swept. Scratch
+# 4-fold CV test 21-way cross-entropy: incumbent (Gaussian body only) 2.3101,
+# corner-only atoms (0, 20) 2.0542, status-quo + corner atoms (prev, 0, 20)
+# 1.8855 -- the declared candidate.
+
+data:
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: contribution
+  target_type: continuous
+  mask: contribution_valid
+  exclude_flipped: True
+  switch_every: 4
+  model: gaussian_mlp_inflated
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/gaussian_mlp_inflated_cv.csv
+  show_ce: true          # the inflated model's primary metric IS the ce
+
+setting:               # incumbent's exact fit setting; atoms is the one
+                        # griddable knob, chosen by CV cross-entropy in step 4
+  hidden: 8
+  weight_decay: 0.0003
+  lr: 0.01
+  epochs: 1000
+  atoms: ["prev", "prev,20", "prev,0,20"]
+
+blocks:
+  B_declared:   # the incumbent's exact 7-feature core, verbatim, no alternatives
+    components: [prev_contribution, prev_punishment, prev_contribution_mean_group,
+                 prev_punishment_mean_group, prev_win_contribution_mean_group,
+                 switched_last_choice, rounds_since_switch]
+    sets:
+      - [prev_contribution, prev_punishment, prev_contribution_mean_group,
+         prev_punishment_mean_group, prev_win_contribution_mean_group,
+         switched_last_choice, rounds_since_switch]

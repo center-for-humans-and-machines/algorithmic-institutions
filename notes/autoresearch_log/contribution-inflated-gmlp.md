@@ -874,3 +874,24 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     unambiguous stop. A 20-epoch end-to-end smoke on the real train split
     (rows 7457, matching the declaration) already orders the settings
     `prev,0,20 < prev,20 < prev < floor`.
+17. (Step 3, confirmed) **Training config in, one file, nothing else
+    touched.** `configs/training/baselines/contribution/gaussian_mlp_inflated.yml`
+    differs from `gaussian_mlp_v2.yml` only in the header comment, the
+    model name, the CV output path, a reworded `show_ce` comment, the
+    `setting` block (the incumbent's grid pinned to its exact scalars 8 /
+    0.0003 / 0.01 / 1000 plus the one griddable `atoms`), and `blocks`
+    (the 15-set feature grid reduced to the single declared seven, in
+    order). Dry expansion, no fitting: 3 settings, 2 feature sets (floor +
+    `B_declared:s0`), **7457 rows**, `prev_contribution` at pool index 18
+    and task position 0. Note 15's confound is closed — all four
+    hyperparameters are pinned, so the emission is the only thing that
+    differs from the incumbent.
+18. (Step 3, a reported hazard that is not one) The implementer found that
+    `prev_position` **raises** on the floor feature set and read it as a
+    guard. It is neither a guard nor a crash: the runner never calls it
+    there. `run_baseline_cv.py:134` guards with `if cols else None`, and
+    `_score:110` returns the floor before any prev handling — which is why
+    step 2's end-to-end smoke produced floor rows normally. Verified by the
+    orchestrator directly in the code, not by re-running. Step 4's floor
+    check therefore stands as the plan writes it: read `features` off the
+    saved bundle, do not rely on an exception that will not be raised.
