@@ -21,6 +21,13 @@ worktree, never checked out over it -- written to a throwaway temp file and
 imported under its own module name, so the identity check does not lean on
 the code under test.
 
+The fetch is attempted at import time but is NOT allowed to fail collection
+of this module: on an isolated remote dir the worktree's `.git` is a pointer
+file to a path that does not exist there, so `git show` exits non-zero. Any
+failure to fetch is recorded in `LEGACY_UNAVAILABLE_REASON` and only the two
+tests that actually need the pre-change module skip, with that reason named
+explicitly; every other gate in this file imports and runs unchanged.
+
 Numerics of the node itself live in tests/vnode/test_group_vnode.py.
 Context: notes/autoresearch_log/contribution-group-vnode.md, plan step 4.
 """
@@ -108,14 +115,32 @@ def _load_pre_change_graph_module():
     """Fetch the `graph.py` that existed immediately before this change via
     `git show` and import it under its own module name -- never checked out
     over anything in this worktree, so gate (a) never leans on the code
-    under test."""
-    result = subprocess.run(
-        ["git", "show", f"{PRE_CHANGE_REV}:{PRE_CHANGE_PATH}"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    under test.
+
+    Returns `(module, reason)`. On success `module` is the imported legacy
+    module and `reason` is `None`. On any failure to run `git show` itself
+    (non-zero exit, e.g. no usable git repo on an isolated remote dir; git
+    not installed; ...) `module` is `None` and `reason` names the cause --
+    this function does not raise for that case, so importing this test
+    module never fails collection. A fetch that DOES succeed but returns the
+    wrong content (empty, or mentioning `group_vnode`) still raises: that
+    signals a bug in the fetch itself, not an environment limitation.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "show", f"{PRE_CHANGE_REV}:{PRE_CHANGE_PATH}"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        detail = (getattr(exc, "stderr", None) or str(exc)).strip()
+        reason = (
+            "pre-change graph.py unavailable: `git show` failed -- " f"{detail or exc}"
+        )
+        return None, reason
+
     source = result.stdout
     assert source, "git show returned nothing for the pre-change graph.py"
     assert "group_vnode" not in source, (
@@ -129,10 +154,10 @@ def _load_pre_change_graph_module():
     spec = importlib.util.spec_from_file_location("legacy_graph_pre_vnode", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module
+    return module, None
 
 
-LEGACY = _load_pre_change_graph_module()
+LEGACY, LEGACY_UNAVAILABLE_REASON = _load_pre_change_graph_module()
 
 SEED = 20260915
 N_AGENTS = 8
@@ -253,6 +278,8 @@ def test_off_by_default_matches_the_pre_change_module_bit_for_bit():
     -- explicitly including op1 / rnn_n / op2 -- torch.equal to one built
     from the graph.py that existed immediately before this change, under the
     same seed: construction draws no extra RNG with the flag off."""
+    if LEGACY is None:
+        pytest.skip(LEGACY_UNAVAILABLE_REASON)
     new_model = make_model(seed=SEED)
     legacy_model = make_model(seed=SEED, module=LEGACY)
 
@@ -276,6 +303,8 @@ def test_off_by_default_sampling_matches_the_pre_change_module():
     """predict_independent(sample=True) matches the pre-change module in
     both VALUES and RNG CONSUMPTION -- the licence step 13's control
     comparison rests on."""
+    if LEGACY is None:
+        pytest.skip(LEGACY_UNAVAILABLE_REASON)
     new_model = make_model(seed=SEED)
     legacy_model = make_model(seed=SEED, module=LEGACY)
     data = make_data(n_batch=2)
