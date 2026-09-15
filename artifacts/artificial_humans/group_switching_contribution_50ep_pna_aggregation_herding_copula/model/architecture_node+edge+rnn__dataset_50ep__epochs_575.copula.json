@@ -1,0 +1,29 @@
+{
+  "base_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_pna_aggregation/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "base_artifact_sha256": "e97e4cbfe309d5266741db17a5b02e70f8b5688f4cbebe75fb1418669b266ed5",
+  "copula_phi": 1.0,
+  "copula_rho": 0.06221744336427447,
+  "copula_switch_every": 1,
+  "date": "2026-09-15T19:26:45+00:00",
+  "estimator": "pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only",
+  "git_head": "unavailable: Command '['git', '-C', '/raven/u/certuer/autoresearch/pna-aggregation', 'rev-parse', 'HEAD']' returned non-zero exit status 128.",
+  "n_tensors_verified": 10,
+  "note": "dict-level copy of the base artifact plus the three copula fields; every pre-existing key verified bit-identical after reload; teacher-forced (sample=False) probabilities unchanged",
+  "output_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_pna_aggregation_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "output_artifact_sha256": "ac11f62d37c08dfa832992265ca8bcc0b9cccb756593a6e004023d7ff08b8364",
+  "params_json": "artifacts/artificial_humans/group_switching_contribution_50ep_pna_aggregation_herding_copula/calibration/copula_params.json",
+  "params_json_sha256": "e1a78505a74017eb1faf07bc58e101186b40c38d09e8aa618ebcfd08427444b1",
+  "phi_ci": [
+    0.7759925289919156,
+    1.670003352041146
+  ],
+  "phi_final_reason": "Orchestrator ruling under the step-10 phi rule, which this experiment fixed in its plan BEFORE any calibration number was seen: phi_hat >= 1 or a CI spanning 1 adopts phi_final = 1.0, the unit-root boundary (a latent held static for the whole episode). Both conditions hold here: phi_hat = 1.1469553544311266 with CI [0.7759925289919156, 1.670003352041146]. The estimator saturated at its boundary rather than measuring a real super-unit persistence, and phi = rho_lag1 / rho assumes a stationary latent-only dependence structure, which the prev_contribution feedback and PR #149's round-growing rho both bias upward. phi = 1.0 is exact in the sampler (z_next = z_prev, variance 1, marginals untouched) and conservative: it predicts cross-round cross-player dependence rho = 0.06221744336427447, still below the observed rho_lag1_cross = 0.07136062980566997. Identical to the ruling PR #165 recorded for the same estimator on the M0 trunk. The estimate itself is left unaltered above. Persistence-class boundary decision, not a tuned parameter; no evaluation score was involved.",
+  "phi_lag1_diagnostic": 1.1469553544311266,
+  "phi_stamped": 1.0,
+  "rho_ci": [
+    0.04307598661159193,
+    0.08029971122406011
+  ],
+  "script": "scripts/artificial_humans/make_contribution_copula_artifact.py",
+  "teacher_forced_rows_verified": 7457
+}
