@@ -1242,3 +1242,11 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     different experiment's isolated dir
     (`~/autoresearch/contribution-arrival-tenure`), disjoint from the sync
     target, so no `rsync --delete` race.
+45. (Step 10, one correction to Note 44's race check) The implementer's
+    own record, received after the orchestrator's independent check,
+    names the pre-sync job precisely: **30254147 `cg_copula_stamp`,
+    RUNNING** (not PENDING), `WorkDir=/u/certuer/autoresearch/contribution-arrival-tenure/.`
+    — still a different experiment's isolated dir and still disjoint from
+    the sync target, so the conclusion is unchanged. Recorded because the
+    log should name what was actually seen. Both accounts of step 10 agree
+    on every hash, both `sacct` rows, and the provenance lines.
