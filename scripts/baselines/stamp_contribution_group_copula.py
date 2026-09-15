@@ -33,9 +33,17 @@ Verifies, and prints:
   6. the sha256 of the new .joblib, on its own line (re-checked on Raven).
 
 Local run (CPU torch, no PyG):
-    uv run python scripts/baselines/stamp_contribution_group_copula.py
+    uv run python scripts/baselines/stamp_contribution_group_copula.py \
+        [--base B] [--params P] [--out O]
+
+`--base` / `--params` / `--out` default to the PR #170 constants below, so a
+bare run reproduces that stamp exactly. The provenance check that holds for
+ANY ``--base`` is that the base bundle on disk hashes to the sidecar's
+``base_bundle_sha256``; the additional ``EXPECTED_BASE_SHA256`` assert is kept
+for the default base only.
 """
 
+import argparse
 import hashlib
 import json
 import os
@@ -107,22 +115,28 @@ def sha256_of(path):
     return h.hexdigest()
 
 
-def load_inputs():
+def load_inputs(base_path=BASE_PATH, params_path=PARAMS_PATH):
     import joblib
 
-    base_sha = sha256_of(BASE_PATH)
-    assert base_sha == EXPECTED_BASE_SHA256, (
-        f"base bundle sha256 mismatch: got {base_sha}, expected "
-        f"{EXPECTED_BASE_SHA256} -- stop, do not stamp"
-    )
-    params = json.loads(PARAMS_PATH.read_text())
-    assert params["base_bundle_sha256"] == EXPECTED_BASE_SHA256, (
+    base_path = Path(base_path).resolve()
+    params_path = Path(params_path).resolve()
+    base_sha = sha256_of(base_path)
+    params = json.loads(params_path.read_text())
+    # the provenance check that matters, and it holds for any --base: the dose
+    # is model-conditional, so the sidecar must have been fitted on exactly the
+    # bundle being stamped.
+    assert params["base_bundle_sha256"] == base_sha, (
         "params sidecar's own base_bundle_sha256 disagrees with the base "
         f"bundle on disk: {params['base_bundle_sha256']!r} vs {base_sha!r}"
     )
-    base = joblib.load(BASE_PATH)
+    if base_path == BASE_PATH.resolve():
+        assert base_sha == EXPECTED_BASE_SHA256, (
+            f"base bundle sha256 mismatch: got {base_sha}, expected "
+            f"{EXPECTED_BASE_SHA256} -- stop, do not stamp"
+        )
+    base = joblib.load(base_path)
     print(f"base bundle sha256 verified: {base_sha}")
-    print(f"loaded params sidecar {PARAMS_PATH.relative_to(ROOT)}")
+    print(f"loaded params sidecar {params_path.relative_to(ROOT)}")
     return base, params
 
 
@@ -172,12 +186,13 @@ def build_new_bundle(base, params):
     return new
 
 
-def save_and_reload(new):
+def save_and_reload(new, out_path=OUT):
     import joblib
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(new, OUT)
-    return joblib.load(OUT)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(new, out_path)
+    return joblib.load(out_path)
 
 
 def check_predict_bit_identical(base, reloaded):
@@ -238,7 +253,7 @@ def _levels_over_fixed_episode(bundle):
     return np.stack(out), ad
 
 
-def check_adapter_equivalence(base, reloaded):
+def check_adapter_equivalence(base, reloaded, params):
     """Verification 4: base vs stamped adapters give the same levels on the
     deterministic path (sample=False). Verification 5: the stamped bundle's
     copula_rho_p / copula_rho_t come back through a sample=True adapter."""
@@ -256,7 +271,7 @@ def check_adapter_equivalence(base, reloaded):
     )
     rho_p = ad_sample.copula_rho_p
     rho_t = ad_sample.copula_rho_t
-    assert rho_p == 0.04378520865574197, rho_p
+    assert rho_p == float(params["rho_total"]), (rho_p, params["rho_total"])
     assert rho_t == 0.0, rho_t
     print(
         f"[5] adapter accepted the pair (gaussian_mlp contribution bundle); "
@@ -279,17 +294,45 @@ def check_lfs(joblib_path):
     return tracked
 
 
+def build_parser():
+    """The CLI. Every default is the module constant above, so a bare run is
+    the PR #170 stamp unchanged."""
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--base",
+        type=Path,
+        default=BASE_PATH,
+        help="trunk bundle to stamp the dose onto (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--params",
+        type=Path,
+        default=PARAMS_PATH,
+        help="params sidecar fitted on that trunk (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=OUT,
+        help="stamped bundle to write (default: %(default)s)",
+    )
+    return ap
+
+
 def main():
-    base, params = load_inputs()
+    args = build_parser().parse_args()
+    out_path = args.out.resolve()
+
+    base, params = load_inputs(args.base, args.params)
     new = build_new_bundle(base, params)
-    reloaded = save_and_reload(new)
+    reloaded = save_and_reload(new, out_path)
 
     check_predict_bit_identical(base, reloaded)
-    check_adapter_equivalence(base, reloaded)
-    check_lfs(OUT)
+    check_adapter_equivalence(base, reloaded, params)
+    check_lfs(out_path)
 
-    new_sha = sha256_of(OUT)
-    print(f"\nsaved {OUT.relative_to(ROOT)}")
+    new_sha = sha256_of(out_path)
+    print(f"\nsaved {out_path.relative_to(ROOT)}")
     print(
         f"  copula_rho_p={new['copula_rho_p']!r}  copula_rho_t={new['copula_rho_t']!r}"
     )
