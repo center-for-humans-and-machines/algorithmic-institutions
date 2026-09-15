@@ -371,8 +371,15 @@ runner-up (candidate A) before any step ran.
 
 ## 3. Results
 
-| date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
-|---|---|---|---|---|---|---|
+| date | change (one line) | target scores | rows <= 1 | mean | verdict |
+|---|---|---|---|---|---|
+| 2026-09-15 | (baseline) parent stack, PR #171 joint-exodus switch | RCD 2.764919035295771, RCA 1.5746350718021775 | 11/21 | 1.3040409569053069 | baseline |
+| 2026-09-15 | `rounds_since_arrival` onehot(5) node feature on the contributor, recalibrated copula (rho 0.06531229554742463, phi_final 1.0) | **RCD 2.0531226919689377**, **RCA 1.1668140834331391** | 10/21 | 1.3231246770373068 | **FAIL** -- gate 2 passes (+0.0190837201319999, ceiling 1.4344450525958377), gate 1 fails: RCD stays in 2-5 by **0.0531**, RCA stays in 1-2 |
+
+Gate 1 fails on both declared rows and gate 2 passes, which is the exact inverse
+of PR #163. RCD's raw discrepancy fell 0.22407563511388373 -> 0.16636958400251606
+against a band-upgrade threshold of 0.16021334822457585: the closed-loop pull slope
+moved **0.2061 -> 0.2638** where **0.2700** was needed, short by **0.0062** of slope.
 
 ## 4. Notes
 
@@ -518,3 +525,42 @@ runner-up (candidate A) before any step ran.
     simulation so the prediction is on the record and cannot be written after the
     fact. It changes nothing procedurally: the copula steps and the single evaluation
     run as planned, and the verdict comes from that evaluation alone (§2, §6).
+
+12. **Verdict: `[FAIL]`, by 0.0531 of score on RCD.** The mechanism did everything it
+    claimed and not quite enough of it. RCD 2.7649 -> 2.0531 is the largest single-row
+    improvement this slot has recorded on this stack, and RCA 1.5746 -> 1.1668 moved
+    with it -- both declared, both short of a band. Gate 2 passed with room
+    (1.3231 against a 1.4344 ceiling), so the targeted release did avoid #163's bill:
+    that experiment bought RCD and destroyed RCA (2.08 -> 5.91); this one improved
+    RCD *and* RCA and simply did not buy enough. The two failures are opposite in
+    kind, and together they bracket the mechanism: indiscriminate release is strong
+    but unaffordable, targeted release is affordable but weak.
+
+13. **The pre-simulation projection was right in direction and pessimistic in
+    magnitude.** Note 11 predicted a closed-loop pull near 0.24 from the
+    teacher-forced 0.220; the actual was **0.2638**, so the closed loop amplified the
+    conditional change more than the base model's 0.186 -> 0.206 relationship implied
+    -- plausibly the episode-persistent copula compounding a per-arrival change across
+    group-mates. A successor needs roughly **2.4% more slope**, which is a dose
+    question, not a mechanism question.
+
+14. **Where a successor should push, in order of evidence.** The arrival conditional
+    is still far from human: own-weight 0.637 vs 0.460, peer-weight 0.086 vs 0.280.
+    The feature told the model *when* someone arrived; it did not give the model
+    anything new to move *toward*, which is why the anchor released but the peer
+    weight did not rise. The natural small-delta successor is to pair the tenure
+    counter with an arrival-conditioned peer signal -- the receiving group's previous
+    mean is already available as `own_grp_prev_mean_contr` -- so the released weight
+    has somewhere to go. That is one feature interaction, not a new family, and it
+    addresses the half of the slope decomposition this experiment left untouched.
+
+15. **Collateral worth recording, none of it claimed (pre-declaration binds).** Two
+    undeclared rows band-upgraded -- SB 1.0653 -> 0.8830 (1-2 -> <= 1) and RCB 2.0242
+    -> 1.7843 (2-5 -> 1-2) -- and per the standing rule they are collateral, not a
+    success. Three rows band-downgraded: CB 0.8705 -> 1.0156 and CF 0.9329 -> 1.0757
+    both cross the ceiling by a hair, and **CG 4.2676 -> 5.0693 (2-5 -> > 5)** is the
+    real cost. CG is the known anti-correlate of the individual-fit rows (r ~ -0.7 to
+    -0.9, §6), and a mechanism that makes arrivals move more without giving them a
+    common target increases individual dispersion, which is precisely the CG failure
+    mode. That is the strongest argument for the note-14 successor: the missing peer
+    signal is the same thing CG wants.
