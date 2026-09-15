@@ -613,6 +613,7 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
+| 2026-09-15 | the contribution emission carries explicit probability atoms at `c = prev_contribution`, `c = 0` and `c = 20` on top of its binned-Gaussian body (atoms `prev,0,20` by CV cross-entropy), with the shared per-(episode, group) latent re-estimated on that trunk and entering through the discrete CDF inversion | **RCA 1.8623698102828565** (**band upgrade `2-5` -> `1-2`**, numerator 0.521450679896921 inside the 0.5599861821404022 limit by 0.038535502243481234); **CG 1.8424339346418144** (**band upgrade `2-5` -> `1-2`**, numerator 0.04872994482201432 inside the 0.052897359200548874 limit by 0.004167414378534552) | 11/21 (parent 11/21) | **1.1249010701182058** (parent 1.2226801514921317, ceiling 1.3449481666413449) | **SUCCESS on both gates — claimed on RCA; CG's crossing is real but not the declared corner-locking cause, U3(a) having failed at 0.0443 against its pre-registered 0.05** |
 
 ## 4. Notes
 
@@ -1250,3 +1251,90 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     the sync target, so the conclusion is unchanged. Recorded because the
     log should name what was actually seen. Both accounts of step 10 agree
     on every hash, both `sacct` rows, and the provenance lines.
+46. (Step 11, confirmed — scores re-derived by the orchestrator from
+    `scores.csv`, not taken on report) Control gate **PASSES**: the fetched
+    control parquet is `3cb8b3d7…fef3f`, byte-identical to the parent's
+    committed one, and the canonical frames compare `equals() == True`;
+    the candidate is `f0296f86…9312`. **Both declared targets crossed
+    `2-5` -> `1-2`: RCA 3.5067515217935101 -> 1.8623698102828565 (−1.644)
+    and CG 2.0792636187446272 -> 1.8424339346418144 (−0.237).** Gate 2
+    passes by 0.220047 — the mean **fell** 0.097779 to
+    **1.1249010701182058**, the lowest in this lineage. Rows <= 1 stays
+    11/21 but changes composition: gained CC, CD, CF; lost CB, SC, RCD.
+47. (Step 11, the honesty criteria) **U1 PASS** both clauses closed-loop:
+    P(c_t = c_{t−1}) 0.168424 -> **0.392989** (threshold 0.30; human
+    0.439973) and P(20 | prev 20) 0.467562 -> **0.681746** (threshold 0.65;
+    human 0.788975). **U2 PASS:** weighted RCA d 0.957123 -> 0.473222 with
+    `no_switch_allowed` carrying **0.829480** of the reduction against a
+    0.5 threshold. **U4 PASS comfortably**, not at the band top as the
+    proxy had it: P(c = 0) 0.084948 (human 0.093562), P(c = 20) 0.136927
+    (human 0.134442). **U3 splits: clause (a) FAILS** — P(group mean >= 18)
+    0.030714 -> **0.044278** against the pre-registered **0.05** (human
+    0.092452), short by 0.0057 — while **clause (b) PASSES**, SD(group
+    means) +10.120909 % against SD(individual) +9.236251 %.
+48. (Step 12, the orchestrator's ruling on what CG may be claimed as)
+    Three texts bear on this and they diverge, so the ruling is recorded in
+    full. The **Declaration's U3(a)** set a numeric threshold, tail
+    `>= 0.05`; **Ruling 2** paraphrased it directionally ("has not risen
+    from 0.0307 toward the human 0.0925"); **Note 43(a)**, written before
+    the data, named the **SD decomposition** as the decisive check. The
+    measured tail rose to 0.0443 — passing the paraphrase, failing the
+    number. **The pre-registered number binds, and my own looser
+    paraphrase loses to it**: a criterion is not re-read after seeing the
+    draw, which is the whole point of pre-registering it. So the declared
+    corner-locking signature **under-delivered**, and CG's crossing is
+    **not claimed as that mechanism**.
+      That is not the same as calling it noise. Note 43(a)'s check passes,
+    and in the *opposite* direction from the proxy: group-mean SD rises
+    faster than individual SD (+10.12 % vs +9.24 %), so the ratio moves
+    toward the human rather than away, and the channel is coherent end to
+    end — the status-quo atom makes a player hold a level, participant
+    episode means disperse (sd 3.474962 -> 3.849887 toward the human
+    5.068416), the composition component of group-mean variance carries
+    46 % of the rise, the whole gain sits in long-tenure cells (tenure
+    >= 4: 0.8955 -> 0.9375) and is absent before the first regrouping
+    (+0.0024). **CG crossed for a real mechanism — persistence — and not
+    for the declared one.** Gate 1 therefore rests on **RCA**, which needs
+    no such qualification: −1.644, all four round types improved, U1/U2/U4
+    all pass, and it is the row the proxy was calibrated to call.
+      Two costs qualify the CG reading and are stated with it: the move is
+    small in scoring units (0.237 of the noise ceiling, on a parent sitting
+    only 0.079 above the edge, numerator margin 0.0042), and the
+    candidate's within-cell scatter now **overshoots** the human (4.257521
+    vs 3.913758) where the parent matched it exactly (3.912623) — so part
+    of the group-mean SD rise is bought with internally noisier groups.
+49. (Step 11, RCA per round type — the mechanism is where it claims to be)
+    Parent -> candidate: `no_switch_allowed` (w 6902) 0.9064841108857336 ->
+    **0.3991390981680028**; `stayed_comp_changed` (1102) 1.092034226108636
+    -> 0.6946181436595247; `switched` (538) 1.2959492372772718 ->
+    0.943498001411534; `chose_to_stay` (182) 1.0590422508525956 ->
+    0.5519722814498933. **Every round type improved.** The extraction
+    reproduces PR #175's parent table exactly, which validates the read.
+    Note the contrast with step 8: the proxy had `switched` essentially
+    unmoved (1.699 -> 1.673), where the real sim drops it 0.35.
+50. (Step 11, the calibration record the next agent needs) **The proxy
+    inverted CG's sign** — predicted +0.174, realised −0.237, error 0.411,
+    the largest in the table — and the cause is **structural, not
+    stochastic**: a schedule-matched proxy freezes the parent's regrouping,
+    so it sees only the within-schedule part of the spread ratio, while the
+    realised gain lives in long-tenure cells and in participant-level
+    persistence accumulating across a *responsive* schedule. Note 39
+    flagged the S rows as structurally blind; this run shows **the
+    blindness leaks into CG**, because CG is a function of the grouping the
+    switch model produces. **A schedule-matched proxy must not be trusted
+    on any row that reads group composition.** What it did get right: RCA
+    to 0.048 (the one call Note 42 said it was entitled to make), the mean
+    to 0.035 conservatively, and 7 of 11 rows in the right band. Where its
+    error concentrates: the R-block guard costs, understating RCD by 0.358
+    and CF by 0.390 in the other direction.
+51. (Step 11, the knock-on set — reported, never claimed) The inverted
+    size -> per-capita-common-good map PR #174 note 20 named is
+    **unchanged in sign and slightly steeper**: singleton contribution
+    7.2924 -> 6.6811 against human 10.5309, n=8 11.2302 -> 11.6578 against
+    human 8.4530. The emission change does not touch this deficit, and
+    PR #175's `1/n` feature was aimed at it and failed on other rows. Also
+    unmoved: **sorting did not improve** — P(switch | own contribution −
+    own group mean) in the exploited-high bin fell further from human
+    (0.291 -> 0.268) and the punished-low bin collapsed (0.340 -> 0.249),
+    so Fable's Note 9 finding stands: the sorting lever is the switch
+    slot's, and this experiment did not reach it.
