@@ -930,3 +930,77 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     unpickles only with `scripts/baselines` on `sys.path`. This is not a
     new hazard for the cluster run: `linear_ah.py:42` already inserts that
     directory, which is how every existing gaussian bundle loads.
+22. (Step 5, confirmed) **The discrete inversion is in, and the silent-
+    fallthrough hazard of Note 14d is closed by construction.** The three
+    call sites now dispatch on four class-level family tuples
+    (`_INFLATED`, `_CATEGORICAL`, `_GAUSSIAN`, `_HOMOSCEDASTIC`), and both
+    `_sample_levels` and `_sample_levels_gaussian_copula` **raise** on an
+    unregistered model type instead of falling through to `predict` /
+    `predict_std` — which on this estimator are the mixture's body and
+    would have run the incumbent emission without erroring. The inflated
+    path is `c_i = F_i^{-1}(Phi(z_i))` over the row CDF of `_class_probs`,
+    the multinomial punisher's own idiom; `sample=False` returns the modal
+    level and draws nothing.
+23. (Step 5, bit-identity — the property that licenses the verdict)
+    Verified twice, independently. **Measured** by the implementer against
+    `git show HEAD:...linear_ah.py` loaded as a second module: every
+    `.joblib` in `artifacts/baselines/` x 3 seeds (42, 7, 12345) = 30
+    case/seed pairs, over a 6-round episode whose schedule contains a
+    switch and a collapse to one group, comparing the level array per
+    round, the `_copula_z` store, and RNG **position** (a trailing
+    `randn(1)` plus a `randn(3, float64)`, so a wrong draw count or dtype
+    would show) — all identical, including the parent's own
+    `contribution_gaussian_mlp_v2_group_copula` bundle at ρ_p = 0.0438.
+    **Structurally** by the orchestrator, reading the diff: for a Gaussian
+    bundle the only changes are membership tests over identical literal
+    tuples, `mu`/`sd` moved inside an `elif` that runs no RNG, and a new
+    branch that cannot fire — no RNG call moved, became conditional, or
+    changed dtype. Step 10's control run should therefore reproduce
+    `3cb8b3d7…fef3f`.
+24. (Step 5, mutation testing) PR #170 Note 22's two mutations were each
+    applied to the source, the suite run, and the file restored (verified
+    by `diff -q`). **(a)** drawing `zv` only when `rho_t > 0`: 5 tests
+    failed, including the candidate's own `rho_t = 0.0` shape. **(b)**
+    `setdefault` -> plain assignment: 11 failed, including the
+    switcher/receiving-group test. Both mutations are caught by new
+    inflated tests, not only by the inherited Gaussian ones — the
+    `rho_t = 0.0` configuration PR #170 left untested is now parametrised
+    in every invariant test. `tests/baselines/` **326 passed** (311 + 15),
+    `tests/` overall 510 passed, `test_punishment_copula.py` and
+    `test_gaussian_mlp.py` green unmodified.
+25. (Step 5, marginal preservation) In-test noise floor 0.01575, ~2.4x the
+    Gaussian module's because the atoms concentrate mass and raise the
+    binomial noise; 85 bins clear the >= 20-count filter. Worst analytic
+    gaps 3.45 / 3.19 / 2.05 SE at (ρ_p, ρ_t) = (0.3, 0) / (0, 0.3) /
+    (0.2, 0.2), i.e. 1.4-1.7x the floor. Replayed-z recovery is exact
+    (`np.array_equal(levels, invert(P, z))`), and the **levels' normal
+    scores recover only 0.60-0.65 of the latent correlation** against the
+    Gaussian path's ~0.92 (note 21's ~8 % attenuation) — the atoms widen
+    the CDF intervals, so the same stamped ρ_p delivers **less realised
+    within-group correlation through a discrete emission than through a
+    continuous one**. That is a prediction about the sim, recorded before
+    it runs: the dose re-estimated at step 6 is fitted on the same
+    emission, so it is the right number, but CG's realised lift may be
+    smaller than #170's at an equal ρ. On the real artifact: max |bin freq
+    − `predict_proba`| 0.00388 against a binomial SE of 0.00346 over
+    20 000 draws, and P(level == prev) = 0.2497.
+26. (Step 5, cluster and tooling) Raven `test_linear_manager` **1 passed**
+    under `AI_REMOTE_DIR='~/autoresearch/contribution-inflated-gmlp'`;
+    `squeue` showed one PENDING job in a *different* experiment's isolated
+    dir, disjoint from the sync target, so no `rsync --delete` race. Two
+    tooling facts for later steps: (a) `remote_test.sh` excludes
+    `artifacts/` as well as `plots/`, so on a fresh isolated dir
+    `test_linear_manager` fails with `FileNotFoundError` on a punisher
+    bundle until `artifacts/baselines/` is rsynced in (done, additive, no
+    `--delete`) — the known-benign list for this branch reads "`plots/`
+    **and `artifacts/`** exclusions"; (b) `black src/` reformats two files
+    unrelated to this experiment (`artificial_humans/train.py`,
+    `rl_manager.py`) that are already non-Black at HEAD, so lint stays
+    scoped to the files a step touches.
+27. (Step 5, binding on step 6) The dose script's round-trip arm **must
+    stamp `copula_rho_p` onto the bundle it hands `LinearAHAdapter`**.
+    Without it the adapter takes `_sample_levels`, which is still the
+    correct categorical law but consumes **one `th.multinomial` call
+    instead of 3n `randn`** — so the inflated bundle's independent path is
+    not RNG-comparable with a Gaussian bundle's. Either path samples the
+    right distribution; only the stream differs.

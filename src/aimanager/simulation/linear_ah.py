@@ -63,6 +63,20 @@ class LinearAHAdapter:
     # history buffers we accumulate over an episode (round -> per-agent array)
     _MEASURES = ("contribution", "punishment", "common_good")
 
+    # Emission families the level samplers dispatch on. A CATEGORICAL bundle
+    # carries the full discrete law (`predict_proba` + `classes_`) and is
+    # sampled from it; a GAUSSIAN one carries a heteroscedastic N(mu(x),
+    # sigma(x)) body that is rounded onto the level grid; HOMOSCEDASTIC (ridge)
+    # adds the bundle's scalar `sigma` to a point prediction. The dispatch is
+    # exhaustive and raises on anything else *by design*: `gaussian_mlp_inflated`
+    # inherits `predict` / `predict_std`, which return its mixture's BODY
+    # parameters, so a bundle falling through to the Gaussian arithmetic would
+    # quietly run the incumbent emission and raise nothing.
+    _INFLATED = ("gaussian_mlp_inflated",)
+    _CATEGORICAL = ("multinomial",) + _INFLATED
+    _GAUSSIAN = ("gaussian", "gaussian_mlp")
+    _HOMOSCEDASTIC = ("ridge",)
+
     def __init__(
         self,
         bundle,
@@ -122,10 +136,11 @@ class LinearAHAdapter:
         )
         assert self.copula_rho_p + self.copula_rho_t == 0.0 or (
             self.target == "contribution"
-            and self.model_type in ("gaussian", "gaussian_mlp")
+            and self.model_type in self._GAUSSIAN + self._INFLATED
         ), (
             "copula_rho_p / copula_rho_t are implemented for the Gaussian "
-            f"contribution sampler only, got target={self.target!r} "
+            "contribution sampler (and its inflated discrete emission) "
+            f"only, got target={self.target!r} "
             f"model={self.model_type!r}"
         )
         self.default_values = dict(bundle["default_values"])
@@ -285,16 +300,30 @@ class LinearAHAdapter:
     def _sample_levels(self, Xs, n_levels):
         """Discrete levels [n]; sample=False -> deterministic. Randomness is
         drawn from the torch RNG so th.manual_seed governs linear and GNN
-        sampling alike."""
-        if self.model_type == "multinomial":
+        sampling alike.
+
+        The dispatch over ``_CATEGORICAL`` / ``_GAUSSIAN`` / ``_HOMOSCEDASTIC``
+        is exhaustive and raises on anything else. `gaussian_mlp_inflated` is a
+        CATEGORICAL emission -- it owns a full 21-way ``predict_proba`` and
+        ``classes_ == arange(21)``, so ``_class_probs`` applies verbatim (its
+        bundle carries no ``temperature``, i.e. T = 1) -- while its inherited
+        ``predict`` / ``predict_std`` are the mixture's BODY parameters only:
+        falling through to the Gaussian arithmetic would silently sample the
+        incumbent emission instead."""
+        if self.model_type in self._CATEGORICAL:
             P = self._class_probs(Xs, n_levels)
             if self.sample:
                 lvl = th.multinomial(th.from_numpy(P), 1).reshape(-1)
                 return lvl.numpy().astype(np.int64)
             return P.argmax(1).astype(np.int64)
+        if self.model_type not in self._GAUSSIAN + self._HOMOSCEDASTIC:
+            raise ValueError(
+                f"no level sampler for model {self.model_type!r} "
+                f"(target={self.target!r})"
+            )
 
         mu = self.estimator.predict(Xs)
-        if self.model_type in ("gaussian", "gaussian_mlp") and self.sample:
+        if self.model_type in self._GAUSSIAN and self.sample:
             sd = self.estimator.predict_std(Xs)  # heteroscedastic sigma(x) head
             yhat = mu + th.randn(len(mu)).numpy() * sd
         elif self.sample and self.sigma > 0:  # ridge: homoscedastic scalar sigma
@@ -330,22 +359,41 @@ class LinearAHAdapter:
         return lvl.reshape(-1).clamp(0, n_levels - 1).numpy().astype(np.int64)
 
     def _sample_levels_gaussian_copula(self, Xs, n_levels, groups):
-        """Discrete levels [A] from the Gaussian contribution sampler with a
-        shared group latent replacing the independent standard normal:
+        """Discrete levels [A] from the contribution sampler with a shared
+        group latent replacing the independent standard normal:
 
             z_i = sqrt(rho_p) u_g(i) + sqrt(rho_t) v_g(i)
                   + sqrt(1 - rho_p - rho_t) e_i
 
-        then ``clip(rint(mu_i + sigma_i z_i), 0, n_levels - 1)``. Unlike the
-        multinomial punisher's ``_sample_levels_copula`` there is no CDF
-        inversion: a Gaussian emission takes the correlated normal directly.
+        The correlated normal is then turned into a level by the emission's own
+        law, and ONLY that last step depends on the model type:
+
+          * ``_GAUSSIAN`` bundles take the normal directly --
+            ``clip(rint(mu_i + sigma_i z_i), 0, n_levels - 1)`` -- because a
+            rounded N(mu_i, sigma_i) *is* their level law.
+          * ``_INFLATED`` bundles (``gaussian_mlp_inflated``) have no such
+            closed form: their law is the discrete mixture
+            ``predict_proba``, so the normal is pushed through the CDF,
+            ``c_i = F_i^{-1}(Phi(z_i))`` -- the same inversion the multinomial
+            punisher's ``_sample_levels_copula`` performs, on the row CDF of
+            ``_class_probs``. ``Phi(z_i)`` is Uniform(0, 1) marginally, so the
+            inversion reproduces each agent's row of ``predict_proba``
+            EXACTLY, for any (rho_p, rho_t); only the dependence changes.
+            ``sample=False`` returns the modal level and draws nothing.
+
+        The latent itself -- the draw order and count, the first-member map,
+        the persistent store and the arrival-group rule -- is built identically
+        for both, so the two emissions share one RNG stream and a control run
+        against an existing Gaussian bundle is bit-identical.
 
         Marginals are preserved EXACTLY, for any (rho_p, rho_t): the weights
         square to rho_p + rho_t + (1 - rho_p - rho_t) = 1 and u / v / e are
         independent standard normals, so each z_i is marginally exactly
-        N(0, 1) and each agent's pre-rounding law is exactly N(mu_i, sigma_i)
-        -- the same law the independent path draws from. ``rint`` and ``clip``
-        are monotone, so the discretised marginal is preserved too; only the
+        N(0, 1); the Gaussian emission's pre-rounding law is then exactly
+        N(mu_i, sigma_i) and the inflated emission's ``Phi(z_i)`` exactly
+        Uniform(0, 1) -- the same laws the independent path draws from.
+        ``rint`` / ``clip`` and the CDF inverse are monotone, so the
+        discretised marginal is preserved too; only the
         within-group dependence changes. That is why RCA (and the other
         marginal / per-agent rows) is a bug-detector here rather than a
         trade-off: a large move means the marginals are not preserved.
@@ -370,10 +418,23 @@ class LinearAHAdapter:
 
         Rationale: notes/autoresearch_log/contribution-gmlp-group-copula.md.
         """
-        mu = self.estimator.predict(Xs)
-        sd = self.estimator.predict_std(Xs)  # heteroscedastic sigma(x) head
-        if not self.sample:  # deterministic point prediction, no RNG consumed
-            return np.clip(np.rint(mu), 0, n_levels - 1).astype(np.int64)
+        if self.model_type in self._INFLATED:
+            P = self._class_probs(Xs, n_levels)  # the discrete mixture itself
+            if not self.sample:  # deterministic modal level, no RNG consumed
+                return P.argmax(1).astype(np.int64)
+        elif self.model_type in self._GAUSSIAN:
+            mu = self.estimator.predict(Xs)
+            sd = self.estimator.predict_std(Xs)  # heteroscedastic sigma(x) head
+            if not self.sample:  # deterministic point prediction, no RNG consumed
+                return np.clip(np.rint(mu), 0, n_levels - 1).astype(np.int64)
+        else:
+            # never silently fall through to the Gaussian arithmetic: on an
+            # inflated-style bundle `predict` / `predict_std` are the mixture's
+            # body and would run a different emission without raising.
+            raise ValueError(
+                f"the group copula has no emission for model {self.model_type!r} "
+                f"(target={self.target!r})"
+            )
 
         n = len(Xs)
         zu = th.randn(n, dtype=th.float64)  # persistent-latent innovations
@@ -394,6 +455,11 @@ class LinearAHAdapter:
             + np.sqrt(self.copula_rho_t) * v
             + np.sqrt(1.0 - self.copula_rho_p - self.copula_rho_t) * eps.numpy()
         )
+        if self.model_type in self._INFLATED:  # c_i = F_i^{-1}(Phi(z_i))
+            u_lvl = th.special.ndtr(th.from_numpy(z))
+            cum = th.from_numpy(np.cumsum(P, axis=1))
+            lvl = th.searchsorted(cum.contiguous(), u_lvl.reshape(-1, 1).contiguous())
+            return lvl.reshape(-1).clamp(0, n_levels - 1).numpy().astype(np.int64)
         return np.clip(np.rint(mu + sd * z), 0, n_levels - 1).astype(np.int64)
 
     # ------------------------------------------------------------------ #
