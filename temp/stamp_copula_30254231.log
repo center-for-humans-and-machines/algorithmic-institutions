@@ -1,0 +1,50 @@
+cwd        /raven/u/certuer/autoresearch/contribution-arrival-tenure
+aimanager  /raven/u/certuer/autoresearch/contribution-arrival-tenure/src/aimanager/__init__.py
+/u/certuer/algorithmic-institutions/.venv/lib/python3.9/site-packages/torch_geometric/typing.py:110: UserWarning: An issue occurred while importing 'torch-sparse'. Disabling its usage. Stacktrace: libcusparse.so.11: cannot open shared object file: No such file or directory
+  warnings.warn(f"An issue occurred while importing 'torch-sparse'. "
+/raven/u/certuer/autoresearch/contribution-arrival-tenure/src/aimanager/generic/data.py:111: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  df.groupby(["episode_id", "player_id"])["contribution_valid"]
+fatal: not a git repository: /Users/ertuerkan/Desktop/algorithmic-institutions/.git/worktrees/arrival-tenure
+base      artifacts/artificial_humans/group_switching_contribution_50ep_arrival_tenure/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+  sha256  dc7227ed484665f1837a81134f623aa5ee9e90fb4d15f4f229f8f199d2171047
+  keys    ['autoregressive', 'b_encoding', 'bias', 'copula_phi', 'copula_rho', 'copula_switch_every', 'default_values', 'edge_encoding', 'joint_exodus', 'joint_exodus_head', 'joint_exodus_switch_every', 'op1', 'op2', 'rnn_g', 'rnn_n', 'u_encoding', 'x_encoding', 'y_levels', 'y_name']
+params    artifacts/artificial_humans/group_switching_contribution_50ep_arrival_tenure_herding_copula/calibration/copula_params.json
+  sha256  306a9cac212c434e5b7d8be64b8e3e4a418afd569c815b60ad27dce041068a85
+  rho=0.06531229554742463 phi_lag1=1.2561382822840323
+  stamping copula_phi=1.0 (Pre-declared boundary ruling (plan step 8, inherited from PR #165): the lag-1 estimate phi=1.2561382822840323 (CI [0.9328437144598106, 1.950526511370351], which covers 1.0) is non-stationary for an AR(1) latent, so phi is clamped to the stationary boundary 1.0 -- a static episode-persistent latent. The raw estimate is retained above as the diagnostic. Decided before the run, not after seeing it.)
+wrote     artifacts/artificial_humans/group_switching_contribution_50ep_arrival_tenure_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+  sha256  d0338b16a225e47582cb649a09a677503237e120bf7fb9bfbb674e4451ac17ab
+  stamped {'copula_rho': 0.06531229554742463, 'copula_phi': 1.0, 'copula_switch_every': 1}
+  10 tensors compared bit-identically vs the base artifact
+  modules ['op1', 'op2', 'rnn_n']
+  loads   {'copula_rho': 0.06531229554742463, 'copula_phi': 1.0, 'copula_switch_every': 1}
+  probs   7457 teacher-forced train-split rows bit-identical to the base model's
+  sidecar artifacts/artificial_humans/group_switching_contribution_50ep_arrival_tenure_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.copula.json
+artifact verified bit-identical to the base outside the copula fields
+                                  
+================================= 
+Global information about the job: 
+================================= 
+  
+Job owner: certuer(51795)
+Job name:  cg_copula_stamp
+Node list: ravc4073
+Job start: Tue Sep 15 17:26:26 CEST 2026
+Job end:   Tue Sep 15 17:26:40 CEST 2026
+Work dir:  /u/certuer/autoresearch/contribution-arrival-tenure/.
+Command:   /raven/u/certuer/autoresearch/contribution-arrival-tenure/scripts/artificial_humans/stamp_copula_arrival_tenure.slurm
+  
+  
+  
+==========================================================================================
+Information on jobsteps (Note: MaxRSS/AveRSS is the maximum/average over all 
+tasks of the per-task memory high-water marks; cf. "man sacct"): 
+==========================================================================================
+  
+JobID            JobName NNodes NTasks  NCPUS       MaxRSS       AveRSS    Elapsed ExitCode
+------------- ---------- ------ ------ ------ ------------ ------------ ---------- --------
+30254231      cg_copula_      1             8                             00:00:14      0:0
+  
+Maximum memory per node: 0.245457 GB (defined as MaxRSS*Ntasks/NNodes)
+CPU utilization: 21.4 %
+  
