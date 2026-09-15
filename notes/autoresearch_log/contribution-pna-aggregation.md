@@ -402,7 +402,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       closed-loop P(|dc| >= 5) by own-group peer std tercile against the
       human, so the mechanism is read directly and not only through the score.
 
-- [ ] 15. *(Opus)* **Verdict and PR** — `[SUCCESS]` only if (CG < 2 **or** RCA <= 1) **and**
+- [x] 15. *(Opus)* **Verdict and PR** — `[SUCCESS]` only if (CG < 2 **or** RCA <= 1) **and**
       the 21-row mean <= 1.4344450525958377; otherwise `[FAIL]`. Fill the
       results table and Notes (scores exactly as computed). Open the PR with
       `--base auto/switch-joint-exodus`, body per §9 step 7 (Hypothesis /
@@ -745,3 +745,5 @@ an unverified number:
     clean effects in this record (+0.1424 across terciles, 3x) and **no model in
     the stack expresses more than a third of it**. That gap is the target; the
     neighbourhood is the thing to fix.
+26. **PR #178 opened** `[FAIL]`, based on `auto/switch-joint-exodus`. The remote
+    dir `~/autoresearch/pna-aggregation` is to be deleted when the PR closes.
