@@ -668,3 +668,36 @@ here, before anything ran:
    exercise real PyG. Hence step 6a: degrade the fetch to a skip, keep everything
    else. Vendoring a copy of the pre-change file into the repo was rejected -- a
    761-line duplicate that drifts is a worse artefact than a named skip.
+9. **Step 7, the candidate trunk (SLURM 30256343, 11m12s, exit 0:0).** 1.37x the
+   8:09 base run against the ~24-27 min §5 ceiling, so the budget gate passes and
+   the method is affordable -- a real question for an architecture that roughly
+   doubles the parameter count and adds a second recurrent path. Provenance: job
+   `Work dir` `/u/certuer/autoresearch/contribution-group-vnode/.`, and a
+   data-loading traceback in the log originates at that dir's own
+   `src/aimanager/generic/data.py:93`, so the job imported this branch's code and
+   not the shared checkout's. Artifact sha256
+   `714bf40be1b640a2df09395164ef053fce7a60de9c9d4e034b0f2627a6d01013`, loading with
+   `group_vnode True`, `group_vnode_hidden None`, `copula_rho 0.0` (nothing stamped
+   yet); fetched before any further launcher call and verified as real content
+   rather than an LFS stub.
+10. **The node uses the group, which M0 provably does not -- the mechanism is
+    real.** The `shuffle_feature = agent_group` held-out log-loss delta is
+    **+0.03366064935799473** (per fold +0.0444 / +0.0262 / +0.0322 / +0.0354 /
+    +0.0300 -- positive in every fold), against M0's
+    **+0.0008633987587345349** computed by the identical filter, i.e. **~39x
+    larger**. Permuting which group an agent belongs to now costs the model real
+    likelihood. This is the architectural claim of §1 confirmed on the trained
+    model rather than on a constructed test: M0's group blindness was not a
+    modelling choice but a capacity gap, and the virtual node closes it.
+11. **It is bought with ~1% of held-out likelihood, which is the gate-2 risk
+    named in advance.** Mean held-out log-loss at epoch 574 is
+    **2.008562759499938** against M0's **1.9897416823554699**, +0.018821, or
+    **0.95% of M0** -- almost exactly the 1% cost PR #173 note 17 found
+    propagating to every C row. The signs are mixed rather than uniform (folds 0
+    and 4 *improve*, -0.0258 and -0.0028; folds 1, 2, 3 worsen, +0.0215 / +0.0533
+    / +0.0480), so this is a variance-vs-capacity trade at a fixed 575-epoch
+    budget, not a uniformly worse model. Per amendment A3 nothing was retuned and
+    no re-run was made. The honest reading before the simulation: the mechanism is
+    installed and active, and the C block is now the thing most likely to fail
+    gate 2 -- exactly the anti-correlation §6 warns of, arriving through the
+    likelihood rather than through the sampler.
