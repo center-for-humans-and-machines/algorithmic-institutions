@@ -1,0 +1,52 @@
+{
+  "cell_key": "episode_round_agent_group",
+  "copula_switch_every": 1,
+  "data_file": "experiments/baseline/2group_8agent_50ep_bline_train.csv",
+  "data_file_holdout": "experiments/baseline/2group_8agent_50ep_bline_test.csv",
+  "data_note": "create_torch_data on the full human file (training defaults), restricted to the 40 single-copy train episodes; teacher-forced marginals from the source model; rows where contribution_valid",
+  "date": "2026-09-15T19:06:52+00:00",
+  "diag_pit": "randomized",
+  "diag_pit_rho": 0.04091717529700773,
+  "estimator": "pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only",
+  "git_head": "unavailable: Command '['git', '-C', '/raven/u/certuer/autoresearch/pna-aggregation', 'rev-parse', 'HEAD']' returned non-zero exit status 128.",
+  "holdout_rho": 0.12596229691113087,
+  "lag_step": 1,
+  "n_bootstrap": 200,
+  "n_bootstrap_phi": 200,
+  "n_cells": 1608,
+  "n_cross_pairs": 35317,
+  "n_cross_pairs_cross_player": 28714,
+  "n_cross_pairs_self": 6603,
+  "n_episodes": 40,
+  "n_pairs": 15090,
+  "n_rows": 7457,
+  "phi": 1.1469553544311266,
+  "phi_allpairs": 1.055802980377534,
+  "phi_ci": [
+    0.7759925289919156,
+    1.670003352041146
+  ],
+  "phi_drop_reason": null,
+  "phi_final": 1.0,
+  "phi_final_reason": "Orchestrator ruling under the step-10 phi rule, which this experiment fixed in its plan BEFORE any calibration number was seen: phi_hat >= 1 or a CI spanning 1 adopts phi_final = 1.0, the unit-root boundary (a latent held static for the whole episode). Both conditions hold here: phi_hat = 1.1469553544311266 with CI [0.7759925289919156, 1.670003352041146]. The estimator saturated at its boundary rather than measuring a real super-unit persistence, and phi = rho_lag1 / rho assumes a stationary latent-only dependence structure, which the prev_contribution feedback and PR #149's round-growing rho both bias upward. phi = 1.0 is exact in the sampler (z_next = z_prev, variance 1, marginals untouched) and conservative: it predicts cross-round cross-player dependence rho = 0.06221744336427447, still below the observed rho_lag1_cross = 0.07136062980566997. Identical to the ruling PR #165 recorded for the same estimator on the M0 trunk. The estimate itself is left unaltered above. Persistence-class boundary decision, not a tuned parameter; no evaluation score was involved.",
+  "phi_kept": true,
+  "phi_verdict": "PHI KEPT",
+  "preflight": {
+    "copula": 0.7976543027538294,
+    "human": 0.8472681041593946,
+    "independent": 0.7893514824752501
+  },
+  "rho": 0.06221744336427447,
+  "rho_ci": [
+    0.04307598661159193,
+    0.08029971122406011
+  ],
+  "rho_lag1_all": 0.06568936213547141,
+  "rho_lag1_cross": 0.07136062980566997,
+  "rho_se": 0.009325488740508392,
+  "roundtrip_max_bias": 0.007265744907264671,
+  "script": "scripts/artificial_humans/contribution_copula_rho.py",
+  "seed": 38381,
+  "source_model": "artifacts/artificial_humans/group_switching_contribution_50ep_pna_aggregation/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "source_model_sha256": "e97e4cbfe309d5266741db17a5b02e70f8b5688f4cbebe75fb1418669b266ed5"
+}
