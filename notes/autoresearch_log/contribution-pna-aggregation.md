@@ -322,7 +322,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       in the human direction; **whatever it says, the simulation runs** and the
       verdict comes only from step 14 (§2, §6). Numbers into Notes.
 
-- [ ] 9. *(Sonnet)* **Port the stamper precondition fix** — `git checkout
+- [x] 9. *(Sonnet)* **Port the stamper precondition fix** — `git checkout
       origin/auto/contribution-arrival-tenure --
       scripts/artificial_humans/make_contribution_copula_artifact.py` (PR #173
       step 7b as ported by #176 step 7: `NEUTRAL_FIELDS` and
@@ -332,7 +332,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       with `assert k not in base`. Shared code, admitted as a precondition on the
       same §4 ruling #173 and #176 recorded; it cannot alter a stamped value.
 
-- [ ] 10. *(Opus)* **Calibrate the copula on the selected trunk, with the stop-gate
+- [x] 10. *(Opus)* **Calibrate the copula on the selected trunk, with the stop-gate
       restated** — new `scripts/artificial_humans/calibrate_copula_pna_aggregation.slurm`,
       a copy of `calibrate_copula.slurm` with `BASE` = the selected step-6
       artifact and `PARAMS` =
@@ -354,7 +354,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       phi_hat <= 0 or CI including 0 -> stop-gate, as #165's step 8. Fetch and
       commit the params JSON and the job log (`git add -f`, the #165 precedent).
 
-- [ ] 11. *(Sonnet)* **Stamp** — new `scripts/artificial_humans/stamp_copula_pna_aggregation.slurm`
+- [x] 11. *(Sonnet)* **Stamp** — new `scripts/artificial_humans/stamp_copula_pna_aggregation.slurm`
       (copy of `stamp_copula.slurm`) invoking the step-9 stamper with `--params`
       (step 10), `--base` (the selected step-6 trunk) and `--out
       artifacts/artificial_humans/group_switching_contribution_50ep_pna_aggregation_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt`.
@@ -366,7 +366,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       `edge_encoding == [same_group]`. Fetch and commit the artifact (LFS) and
       its `.copula.json` sidecar.
 
-- [ ] 12. *(Sonnet)* **Simulation config** — new
+- [x] 12. *(Sonnet)* **Simulation config** — new
       `configs/simulation/manager_testing/23_2g8a_contr_pna_aggregation_self_gnnpnacopar1_contr_gnn_switch.yml`,
       a byte-copy of the parent's
       `23_2g8a_switch_joint_exodus_self_gnncopar1_contr_gnn_switch.yml` with
@@ -378,7 +378,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       `switch_every: 4`, `save_per_round: true` untouched (verify by `diff`: 6
       changed lines).
 
-- [ ] 13. *(Opus)* **Baseline control, then the candidate** — two simulations via
+- [x] 13. *(Opus)* **Baseline control, then the candidate** — two simulations via
       `AI_REMOTE_DIR=... scripts/simulate_cluster.sh` (squeue check first; all
       remote artifacts already fetched and committed, so the `--delete` sync is
       safe; ~ 2.5 min GPU each). First the parent's own config unchanged: its
@@ -392,7 +392,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       `aggregators` / `copula_rho` / `copula_phi` / `edge_encoding`. Fetch both
       output dirs with `fetch_cluster.sh` from the isolated dir.
 
-- [ ] 14. *(Opus)* **Evaluate** — `python -m aimanager evaluate <step-12 config>` locally,
+- [x] 14. *(Opus)* **Evaluate** — `python -m aimanager evaluate <step-12 config>` locally,
       with `aimanager.__file__` confirmed at this worktree's `src`. One
       simulation, one evaluation, no second stage (§3). Commit
       `per_round.parquet`, `evaluation/metrics.csv`, `evaluation/scores.csv`,
@@ -469,6 +469,12 @@ an unverified number:
 - **D. Undeclared rows are collateral.** CG and RCA are the only rows that can
   satisfy gate 1. A band upgrade on RCD, RCB or anything else is reported under
   Collateral and never claimed as the success (PR #173's pre-declaration ruling).
+
+## 3. Results
+
+| date | change (one line) | target scores | rows <= 1 | mean | verdict |
+|---|---|---|---|---|---|
+| 2026-09-15 | op1's `scatter_mean` over the 7 peer messages replaced by PNA `[mean, max, min, std]`, copula recalibrated on the retrained trunk (rho 0.06221744336427447, phi 1.0) | **CG 5.219405768565602** (baseline 4.267640451429015), **RCA 1.469150959664896** (baseline 1.574635071802178) | 12/21 (baseline 11/21) | 1.3508007785240026 (baseline 1.3040409569053069) | **FAIL** — gate 1 fails on both declared rows (CG *downgrades* 2-5 -> > 5; RCA improves but stays in 1-2), gate 2 passes (+0.0467598216186957, ceiling 1.4344450525958377) |
 
 ## 4. Notes
 
