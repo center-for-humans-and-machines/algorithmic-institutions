@@ -648,3 +648,100 @@ an unverified number:
     version would be the *less* informative of the two. Nothing is dropped — the
     diagnostic moves to where it discriminates. Step 8 remains report-only and
     cancels nothing (amendment C).
+18. **Steps 9-11 confirmed.** The stamper precondition port was required in
+    practice, not just in theory: arm A's trunk carries the three copula keys at
+    their neutral defaults, which the parent's stamper refuses outright.
+    Calibration SLURM **30256194** (11m06s): rho **0.06221744336427447**, SE
+    0.009325488740508392, CI [0.04307598661159193, 0.08029971122406011] —
+    excludes 0, so the stop-gate does not fire; round-trip max bias
+    0.007265744907264671; preflight independent 0.7893514824752501 -> copula
+    0.7976543027538294 against human 0.8472681041593946 (~14% of the gap, the
+    same share #165 bought). **rho fell from the parent's
+    0.06958238086256316 — the direction declaration risk 2 pre-registered**: a
+    trunk that conditions on dispersion absorbs part of the within-group
+    co-movement the copula had been carrying, so the two mechanisms partly
+    substitute. phi_hat **1.1469553544311266**, CI [0.7759925289919156,
+    1.670003352041146] spans 1, so the step-10 rule — fixed in the plan before
+    any number was seen — adopts `phi_final = 1.0`; the estimate is left
+    unaltered in the JSON and the job's exit `1:0` is the STOP-ESCALATE by
+    design. Stamp SLURM **30256404**: every weight tensor identical to the
+    trunk, all 7457 teacher-forced rows bit-identical, three fields round-trip.
+19. **Step 13's control gate passed exactly.** The parent's own config re-run in
+    this tree reproduced `per_round.parquet` at sha256
+    `0a34f8280bccb98a75fe002eb3669827358117ce56c44f7c10268f312904b7ab`, **bit
+    for bit** against the pointer committed on the parent branch. That is both
+    the licence to compare against the parent's `scores.csv` and the end-to-end
+    proof that steps 1-2 are inert for an artifact with no `aggregators` field.
+    The candidate's parquet differs (`c790bf0d...`), as it must. Sim jobs
+    **30256644** (control, 1m12s) and **30256645** (candidate, 2m24s).
+20. **Verdict: `[FAIL]`, and the primary target moved backwards a full band.**
+    CG 4.267640451429015 -> **5.219405768565602** (2-5 -> > 5). RCA
+    1.574635071802178 -> 1.469150959664896, a real improvement but inside the
+    same band, so no gate-1 upgrade. Mean 1.3040409569053069 ->
+    1.3508007785240026, inside the 1.4344450525958377 ceiling: gate 2 passes.
+    Rows <= 1 rose 11 -> 12 on SB.
+21. **Why CG got worse — both terms of the ratio moved away from human.**
+    Recomputed from the parquets, reproducing the suite's raw numerator exactly
+    (0.109930 / 0.134079):
+
+    | | SD of group means | SD of individuals | ratio |
+    |---|---|---|---|
+    | human | 5.3577 | 6.3179 | **0.8480** |
+    | baseline | 4.8322 | 6.5469 | 0.7381 |
+    | candidate | 4.7089 | 6.5957 | 0.7139 |
+
+    Group means converged *further* (4.8322 -> 4.7089, human 5.3577) while
+    individuals became *more* variable (6.5469 -> 6.5957, human 6.3179). CG
+    needs the opposite on both counts. This is the §6 anti-correlation running
+    in the unusual direction: the marginal C block improved across the board
+    (CA, CB, CD, CF all down, PD -0.130) and CG paid for it.
+22. **The mechanism diagnostic (moved here from step 8) inverts the
+    hypothesis.** P(|dc| >= 5) for an agent who stayed in their group, by the
+    own-group peer-contribution std of the previous round, human terciles at
+    2.517 / 4.761:
+
+    | | low std | mid | high std | slope | SD(dc) | mean peer std |
+    |---|---|---|---|---|---|---|
+    | human | 0.0708 | 0.1382 | **0.2132** | **+0.1424** | 3.703 | 3.8855 |
+    | baseline | 0.1164 | 0.1393 | 0.1568 | +0.0405 | 3.803 | 5.0601 |
+    | candidate | 0.1372 | 0.1511 | 0.1472 | **+0.0100** | 3.711 | 5.3423 |
+
+    **The human effect the declaration claimed is real and large** — people are
+    stable in a consensual group and volatile in a divided one, a 3x rise across
+    terciles. Every model is far too flat, and **giving the trunk explicit
+    access to spread flattened it further**, to essentially nothing. The
+    candidate did not become conditionally volatile; it became *uniformly* more
+    volatile, raising low-dispersion volatility 0.1164 -> 0.1372 against a human
+    0.0708. That extra unconditional individual noise is precisely the CG
+    denominator, which is why the ratio fell.
+23. **The most probable cause, and the successor it implies: the aggregators
+    were given the wrong neighbourhood.** `op1` aggregates over the **whole
+    7-peer room, both groups**, because the graph is fully connected and arm A
+    carries no `same_group` edge feature. In a two-group game the room's max,
+    min and std are dominated by *between-group* differences and are nearly
+    uninformative about own-group consensus — the quantity the human effect
+    above is keyed to. The declaration considered per-partition aggregation and
+    rejected it, reasoning that the `agent_group` one-hot already in the edge
+    MLP lets a saturating unit make the room statistics group-selective; this
+    result is evidence that it does not learn to. Note the sims already carry
+    **too much** within-group dispersion to begin with (mean peer std 5.06 /
+    5.34 vs human 3.89), so a statistic computed over the wrong set had room to
+    make things worse. A successor should aggregate **within the own group**
+    (masked per-partition scatter, or arm B's `same_group` bit as a hard gate
+    rather than a learned one) before concluding that multi-aggregation cannot
+    move CG. Arm B was not that experiment: its aggregation is equally
+    room-wide; the bit only feeds the edge MLP.
+24. **Collateral worth carrying forward.** `+` SB 1.065268 -> 0.963543, a band
+    upgrade (1-2 -> <= 1) and the twelfth row under the ceiling — **undeclared,
+    so collateral and not a claimed success** (amendment D, PR #173's rule). PD
+    -0.130, PB -0.072, PC -0.045, CB -0.049; RCA -0.106 within band. `-` CG as
+    above; RCD 2.764919 -> 3.075216 (the switching pull, worse within 2-5); SA
+    0.839601 -> 0.953386 and RSA +0.076, both still under or near the ceiling;
+    RCB +0.042 stays in 2-5.
+25. **What this rules out for the next agent.** Not "multi-aggregation does not
+    help CG" — what is ruled out is *room-wide* multi-aggregation, which is
+    measurably counterproductive (note 22). The 2018-style mean-aggregation
+    critique survives: the human dispersion response is one of the largest
+    clean effects in this record (+0.1424 across terciles, 3x) and **no model in
+    the stack expresses more than a third of it**. That gap is the target; the
+    neighbourhood is the thing to fix.
