@@ -61,7 +61,7 @@ def _row_setting(row, model, cfg):
 
 
 def _y(prep, model):
-    return prep["y_cat"] if model == "multinomial" else prep["y_cont"]
+    return prep["y_cat"] if model in ("multinomial", "xgb") else prep["y_cont"]
 
 
 def _fit(prep, model, feats, setting, seed):
@@ -186,7 +186,7 @@ def _fit_betas(
     Xs = sc.transform(prep["X"][:, cols])
     m = build_model(model, setting, seed).fit(Xs, y)
 
-    if model == "multinomial":
+    if model in ("multinomial", "xgb"):
 
         def _ll(Z):
             p = np.full((len(y), n_levels), 1e-12)
@@ -196,7 +196,10 @@ def _fit_betas(
             )
 
         base = _ll(Xs)
-        if cat_metric == "l2":
+        if model == "xgb" and cat_metric != "perm":
+            # trees have no coef_; absmag / l2 fall back to gain importance
+            vals = {f: float(v) for f, v in zip(feats, m.feature_importances_)}
+        elif cat_metric == "l2":
             vals = {
                 f: float(np.linalg.norm(m.coef_[:, j])) for j, f in enumerate(feats)
             }
@@ -265,11 +268,14 @@ def main():
         return
 
     cm = args.cat_metric
-    value_name = (
-        {"perm": "perm_dloss", "l2": "coef_l2", "absmag": "coef_absmag"}[cm]
-        if model == "multinomial"
-        else "std_beta"
-    )
+    if model == "multinomial":
+        value_name = {"perm": "perm_dloss", "l2": "coef_l2", "absmag": "coef_absmag"}[
+            cm
+        ]
+    elif model == "xgb":
+        value_name = "perm_dloss" if cm == "perm" else "gain"
+    else:
+        value_name = "std_beta"
     print(
         f"train rows={len(prep['fold_row'])}, "
         f"folds={sorted(set(prep['fold_row'].tolist()))}, value={value_name}"

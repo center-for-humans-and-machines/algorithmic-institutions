@@ -166,7 +166,7 @@ def main():
     )
     cfg = load_config(cfg_path)
     model = resolve_model(cfg)
-    cat = model == "multinomial"
+    cat = model in ("multinomial", "xgb")
     n_levels = cfg["data"].get("categorical_levels", 0)
     seed = cfg["cv"]["seed"]  # gaussian init seed reuses cv.seed
     settings = build_settings(cfg, model)  # validated + Cartesian expanded
