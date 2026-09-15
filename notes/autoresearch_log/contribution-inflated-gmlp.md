@@ -1218,3 +1218,27 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     (c) RCD's cost is twice its pre-registration (+0.263 against +0.13);
     with CG's sign flip these are the only two guard predictions that moved
     materially, the other nine reproducing within ~0.1.
+44. (Step 10, confirmed — verified by the orchestrator on Raven, not only
+    reported) Both sims `COMPLETED 0:0` in **00:02:45** each, jobs
+    **30254229** (control) and **30254230** (candidate), submitted into
+    `~/autoresearch/contribution-inflated-gmlp` under
+    `AI_REMOTE_DIR`. **The control reproduces PR #174's
+    `per_round.parquet` bit for bit:
+    `3cb8b3d72784afe09464e0048d27d7cb05f7a3b157780f296e99d168407fef3f`** —
+    so step 5's adapter edit is provably inert for a Gaussian bundle, and
+    the candidate may be judged against the parent's committed
+    `scores.csv`. **Activation confirmed:** the candidate's parquet is
+    `f0296f86478d98d49d452c71ca44c89d1351244636578b45839bfa8178159312`,
+    different, so the inflated branch was taken. Remote slot artifacts all
+    match: contribution `da42031a…0ea7c` (control) /
+    `7bfe4d9b…99ed0` (candidate, the stamped bundle), punisher
+    `9e3cf677…8cc2f`, switch `28dd4b40…c820d`. PROVENANCE in both logs:
+    `/raven/u/certuer/algorithmic-institutions/.venv/bin/python` — the
+    shared venv, as §9 intends — with `aimanager` resolving under
+    `/u/certuer/autoresearch/contribution-inflated-gmlp/src/`, and
+    `algorithmic-institutions/src` appears **zero** times in either log, so
+    no job imported the shared checkout's code. One draw each, seed 42, no
+    re-runs. A `squeue` check before syncing showed one PENDING job in a
+    different experiment's isolated dir
+    (`~/autoresearch/contribution-arrival-tenure`), disjoint from the sync
+    target, so no `rsync --delete` race.
