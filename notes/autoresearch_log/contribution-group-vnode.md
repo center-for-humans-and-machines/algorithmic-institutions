@@ -42,7 +42,7 @@ in this worktree (`per_round.parquet` sha256
 |---|---|---|---|---|
 | **CG** (primary target) | **4.267640451429015** | 2-5 | 0.11287345494901657 | 0.026448679600274437 |
 | **RCD** (secondary target) | **2.764919035295771** | 2-5 | 0.22148846810729983 | 0.08010667411228792 |
-| RCB (watch) | 2.0242478714062093 | 2-5 | 0.7041451592840497 | 0.3478552054965939 |
+| **RCB** (third target, declared by step 0) | **2.0242478714062093** | 2-5 | 0.7041451592840497 | 0.3478552054965939 |
 | RCA | 1.5746350718021775 | 1-2 | | |
 | RCC | 1.5810557625733717 | 1-2 | | |
 | RSA | 1.3222991041595975 | 1-2 | | |
@@ -75,14 +75,25 @@ in this worktree (`per_round.parquet` sha256
   (preflight below: human arrivals weight the receiving group's recent *history* at
   0.28, the parent's at 0.15).
 
-Gate 1 is met by either row leaving its band; gate 2 requires the 21-row mean
-<= 1.4344450525958377.
+- **RCB, third target, declared by step 0's measurement and not by argument (A0).**
+  Humans' response to being punished depends on their group's punishment climate
+  (interaction -0.5785, CI [-2.2347, -0.1818], excluding zero) and the parent sim gets
+  that dependence wrong in sign and magnitude (+0.1399, outside the human CI); the
+  virtual node is the object that carries the climate, so the row is declared. Band
+  2-5 -> 1-2 requires the resampled per-bin discrepancy below **0.6957104109931878**
+  (2 x ceiling) against the parent's 0.7041451592840497. **Stated plainly: that is a
+  move of only 0.0084 of raw discrepancy, 0.024 of score, so the row sits 1.2% from
+  its band edge and a crossing there is weak evidence beside CG or RCD -- it is a
+  declared target so that it *can* be read, not a result that would carry an
+  experiment on its own.** Where the real deficit sits: the three upper rate bins hold
+  89% of the raw statistic on 53% of the weight (human mean dc climbs 0.89 -> 2.01
+  across the bins, the parent's flattens 0.73 -> 0.10).
 
-**Watch items (reported whatever the verdict, never claimed):** **RCB** (2.0242, 0.024
-from the edge; the group's punishment climate does enter the virtual node, but RCB
-conditions on the player's *own* punishment rate and no clean one-sentence claim
-exists -- declaring a row 1.2% from an edge without one is shopping, PR #173 note 16);
-the marginal C block **CA / CB / CD / CF / CC / CE** (a retrained trunk re-randomises
+Gate 1 is met by any of the three target rows leaving its band; gate 2 requires the
+21-row mean <= 1.4344450525958377.
+
+**Watch items (reported whatever the verdict, never claimed):** the marginal C block
+**CA / CB / CD / CF / CC / CE** (a retrained trunk re-randomises
 everything the contributor does, and PR #173 note 17 shows a 1% likelihood cost
 propagating to every C row); **SA / SB / SC** through the common-good channel (PR #173
 note 18; SC is the parent's success row and the one most exposed to any
@@ -127,6 +138,68 @@ spread ratio by round thirds says the same: human 0.719 / 0.876 / 0.900, parent
 0.658 / 0.738 / 0.791 -- both grow (lock-in), the parent from the latent, the human
 from members converging on their group and the groups then drifting apart; the gap is
 widest in the middle third (0.138) where conformity compounds.
+
+**Punishment-climate interaction (step 0, pre-declaration).** Amendment A0's
+measurement, run locally on the same canonical frames as the preflight above
+(`convert.load_human`, single copy per game -- 50 games, 9,600 rows -- and
+`convert.load_sim` on the parent's `per_round.parquet`, sha256 `0a34f82...`
+confirmed, one pairing, 100 episodes), with the same episode-cluster bootstrap
+machinery the preflight used at **300 resamples, seed 0** (the preflight's own
+count for its human CIs; its main-table CIs used 200). Population: RCB's own,
+taken from the frozen `ResponseMetrics._rcb_population` -- punishment > 0,
+contribution < 20, `dc = c(t+1) - c(t)` valid: **n = 2,660 human / 4,955 parent**.
+`own_rate = p(t) / (20 - c(t))`; `climate` = the leave-one-out mean of the
+player's own current-group members' rates in the **same** round, over group-mates
+whose rate is defined -- members at contribution 20 (rate undefined, RCC's case)
+and no-input rows are dropped from the mean, which empties it for **116 / 2,660 =
+4.360902%** of human rows and **170 / 4,955 = 3.430878%** of parent rows; those
+rows are dropped from the fit (fitted n = 2,544 / 4,785). Model:
+`dc ~ own_rate + climate + own_rate x climate`.
+
+| `dc ~ own_rate + climate + own_rate x climate` | own_rate | climate | **interaction** | R² |
+|---|---|---|---|---|
+| **human** (n = 2,544, 50 episodes) | 0.36295273816181034 [-0.22099781084615291, 1.4048660681320564] | 0.7483657467520084 [0.23151820237240844, 2.252791474551691] | **-0.5784888432158086** [**-2.2347037710975943, -0.1818489123474606**] | 0.005393401378913865 |
+| **parent sim** (n = 4,785, 100 episodes) | -0.4249511850876603 [-0.7199232804156007, -0.23705011836648193] | 0.19390597252588004 [-0.10492511554671208, 0.6543523726468206] | **+0.13987819212243902** [-0.22336228831725252, 0.37652648372334935] | 0.010086447790802588 |
+
+Human intercepts 1.000343879934476 [0.6227436501050642, 1.2413881660886248],
+parent 0.7108906010336964 [0.5531551860073343, 0.9056856442867345].
+
+Split by RCB's four rate bins (same fit inside each bin; no bin's interaction CI
+excludes zero, so the effect is a pooled one and the bins are reported for
+location, not for inference):
+
+| bin | n (human / parent) | own_rate, human | interaction, human | own_rate, parent | interaction, parent |
+|---|---|---|---|---|---|
+| (0, 0.25] | 1,214 / 2,160 | 2.4564303398445935 [-2.170603400921234, 7.567692081935424] | -14.823696080948478 [-38.350805076241656, 8.23804134961163] | -2.54907092084357 [-5.194791114244655, 0.16661493946396264] | -5.560321028867625 [-11.026173794811175, 1.1713787516553746] |
+| (0.25, 0.5] | 653 / 1,087 | 1.9500782533981869 [-3.089272291357104, 9.837485167398535] | 7.9804286616575 [-8.206842880877034, 23.33426300900026] | -3.0012368857769216 [-6.553769653472654, 0.24609650640540182] | -0.43716889234650247 [-9.070850923699156, 8.124689401112727] |
+| (0.5, 1] | 435 / 838 | -0.916096169657199 [-6.640969172038876, 4.800813115586446] | -2.1378883059103555 [-12.611789272277967, 5.839843271882242] | -1.4825263525017303 [-4.620182172224934, 1.1480001396160588] | 0.4724967342677841 [-4.7041746149190775, 5.431458086310755] |
+| > 1 | 242 / 700 | -1.468810325544845 [-6.542785886912706, -0.38585898448378714] | 0.27751868771400656 [-3.601954517170127, 0.8346490842297946] | -0.5390557789546289 [-1.0966861207960734, -0.24280156479796497] | 0.2767870143705323 [-0.28490633776988655, 0.7893649102461832] |
+
+Context -- RCB's own numerator ingredients, per bin, on the full population
+(these reproduce `metrics.csv`'s raw `d` = 0.6887596736481019 exactly when
+averaged with RCB's human-frequency weights; the scored numerator 0.7041451592840497
+is the 500-repeat resampled mean of the same quantity):
+
+| bin | human mean dc (n) | parent mean dc (n) | abs Δ | weight | share of the raw statistic |
+|---|---|---|---|---|---|
+| (0, 0.25] | 0.8917609046849758 (1,238) | 0.7284886312973696 (2,243) | 0.1632722733876062 | 0.46541353383458645 | 0.11032748960467824 |
+| (0.25, 0.5] | 1.3407738095238095 (672) | 0.5084594835262689 (1,123) | 0.8323143259975406 | 0.25263157894736843 | 0.30528628548120135 |
+| (0.5, 1] | 1.6786469344608879 (473) | 0.5362485615650172 (869) | 1.1423983728958707 | 0.17781954887218046 | 0.29493707467612945 |
+| > 1 | 2.0144404332129966 (277) | 0.1 (720) | 1.9144404332129965 | 0.10413533834586466 | 0.28944915023799117 |
+
+**Reading.** In humans the punishment response is climate-dependent and the
+dependence is *negative*: alone in a calm group a punished player raises their
+contribution more the harder they were hit (own_rate +0.363), and that
+sensitivity is cancelled as the group's own punishment rate rises (interaction
+-0.578, CI excluding zero). The parent sim has neither half -- its own-rate main
+effect is *negative* (-0.425, punished harder means moving less) and its
+interaction is +0.140, the opposite sign and outside the human CI. The deficit
+grows monotonically with the rate bin: humans keep climbing (0.89 -> 2.01 across
+the bins) while the parent flattens (0.73 -> 0.10), so the three upper bins carry
+89% of RCB's raw discrepancy on 53% of the weight. Caveats stated with the
+result: R² is ~0.005 (this is a weak relation in very noisy per-round changes),
+the human interaction CI's near endpoint is -0.18 -- close to zero -- and no
+single bin's interaction is individually distinguishable from zero.
 
 **Why the trunk cannot express it.** M0 pools its seven incoming edge messages with
 a group-blind `scatter_mean`, the edge index is complete over all 8 agents regardless
@@ -487,7 +560,7 @@ here, before anything ran:
     script, the closed-loop own-group weight, group-punishment-climate weight,
     arrival own / receiving-group-history weights, the spread ratio by round thirds and
     the RCD slope, so the mechanism is read directly and not only through the score.
-    `[SUCCESS]` only if (CG < 2 or RCD < 2) **and** the 21-row mean <=
+    `[SUCCESS]` only if (CG < 2 or RCD < 2 or RCB < 2) **and** the 21-row mean <=
     1.4344450525958377; otherwise `[FAIL]`. Fill the results table and Notes; open the PR
     with `--base auto/switch-joint-exodus`, body per §9 step 7 (Hypothesis / Results /
     Collateral grouped +/-); delete `~/autoresearch/contribution-group-vnode` when the
@@ -500,3 +573,47 @@ here, before anything ran:
 | 2026-09-15 | (baseline) parent stack, PR #171 joint-exodus switch x PR #165 copula contributor x PR #160 severity-copula punisher | CG 4.267640451429015, RCD 2.764919035295771 | 11/21 | 1.3040409569053069 | baseline |
 
 ## 4. Notes
+
+1. **Step 0, the A0 measurement.** On RCB's own population (the frozen
+   `_rcb_population`; n = 2,660 human / 4,955 parent) the human punishment response
+   is climate-dependent -- `dc ~ own_rate + climate + own_rate x climate` gives an
+   interaction of **-0.5784888432158086**, 300-resample episode-cluster bootstrap CI
+   **[-2.2347037710975943, -0.1818489123474606]**, excluding zero -- while the parent
+   sim's is **+0.13987819212243902** [-0.22336228831725252, 0.37652648372334935],
+   the opposite sign and outside the human CI. Both halves of the pre-registered rule
+   fire, so **RCB is declared a third target**; its threshold and the plain statement
+   of how weak a crossing there would be are in §1.
+2. **Where RCB's discrepancy actually is.** Reproducing `metrics.csv`'s raw
+   `d = 0.6887596736481019` exactly from the per-bin means and RCB's human-frequency
+   weights shows the deficit is monotone in the rate bin: human mean dc 0.892 / 1.341 /
+   1.679 / 2.014 against the parent's 0.728 / 0.508 / 0.536 / 0.100, so the three upper
+   bins carry 89% of the statistic on 53% of the weight. The parent does not merely
+   under-react to punishment; it *inverts* the gradient (own-rate main effect -0.425
+   against the human +0.363).
+3. **Two things the step-0 numbers do not settle.** The relation is weak in absolute
+   terms (R² ~ 0.005 human, ~ 0.010 parent) and no single rate bin's interaction CI
+   excludes zero -- the effect is a pooled one, and the human CI's near endpoint
+   (-0.18) is close to zero; the rule was applied mechanically to the pre-registered
+   pooled specification and no variant was run. Separately, §2 step 14's `[SUCCESS]`
+   condition still reads "(CG < 2 or RCD < 2)" and was left untouched per this step's
+   scope -- the orchestrator has to decide whether the third target enters gate 1
+   there, as §1's gate sentence now says it does.
+
+4. **Orchestrator ruling on note 3 (before step 1).** Step 14's gate-1 condition is
+   corrected to `(CG < 2 or RCD < 2 or RCB < 2)`: RCB entered by a rule fixed before
+   its numbers were visible and §2 makes every declared row a gate-1 row, so excluding
+   it from the verdict line would be declaring a target and then not honouring it.
+   Two caveats are recorded with it, and bind how any RCB crossing is written up.
+   First, RCB's threshold is 0.0084 of raw discrepancy away, so a crossing there is
+   weak evidence beside CG or RCD and must be reported as such rather than as the
+   headline. Second, and more important, the channel this experiment declared is *not*
+   where most of RCB's deficit lives: note 2 shows the deficit is dominated by the
+   flattened own-rate gradient (human 0.89 -> 2.01 across the bins, parent 0.73 ->
+   0.10), and the virtual node supplies the group's punishment *climate*, not a
+   steeper response to the player's own punishment. The declared claim is the
+   interaction only. If RCB crosses, the write-up says which of the two moved.
+5. **The step-0 fit is also a provenance check.** Reconstructing `metrics.csv`'s raw
+   RCB statistic 0.6887596736481019 exactly from independently computed per-bin means
+   confirms the bins are weighted by human frequency rather than uniformly (uniform
+   would give 1.0131) -- worth knowing for any later reading of a per-bin figure, and
+   evidence that this step's population filter matches the frozen suite's.
