@@ -1004,3 +1004,72 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     instead of 3n `randn`** — so the inflated bundle's independent path is
     not RNG-comparable with a Gaussian bundle's. Either path samples the
     right distribution; only the stream differs.
+28. (Step 6, confirmed) **F2 passes: the dose is
+    `rho_total = 0.048443521435665396`**, 95 % CI
+    [0.02675017796883691, 0.06748487570258777], SE 0.010272335023860522 —
+    the CI excludes 0, so the experiment continues. LR 23.046568982113968.
+    **rows 7457 and within-cell pairs 15090 both reproduce** (asserted),
+    lag-1 pairs 28714; censored share 0.21577041705779804 (0.1026 at 0,
+    0.1132 at 20); 1814 cells, 1608 with >= 2 members. Round trip **PASS**,
+    max |bias| 0.007274625058280623 against tol 0.02. Power arm (0.03, 0)
+    recovers lag-1 0.03262316498716052, so the falsifier reading is live.
+    Falsifier `rho_lag1` 0.024927591372935834, CI
+    [0.006301366612174943, 0.043892804851301225] — provenance only, never
+    stamped. Sidecar
+    `artifacts/baselines/contribution_gaussian_mlp_inflated_group_copula.params.json`,
+    sha256 `5ff6f324b30b31ac5c6a7775269ce2d7fe4799a5b5af2f83923ef9c2a0326176`,
+    carrying `rho_p = rho_total`, `rho_t = 0.0` and
+    `base_bundle_sha256 687755b6…580b0a` (Note 19's bundle). Amendment B
+    held: every invocation passed `--bundle`, `--config` and `--out`
+    explicitly, and the parent's sidecar hashes
+    `6f042d88abe27e8dcc2ad39a4f3009408bd2ef0fe89644a2a7ee8a5e44ff18e4`,
+    identical to `git show HEAD:` of the same file (checked by the
+    orchestrator, not only reported).
+29. (Step 6, a pre-registered number that moved) **The measured dose is
+    0.0484, not the declaration's ~0.043** (scratch 0.0433) — +0.0051,
+    about 0.5 SE, and above the parent's stamped 0.04378520865574197.
+    Nothing was tuned: it is the single MLE on the committed bundle, whose
+    fit differs slightly from the prototype's (test CE 1.8817 vs 1.8855),
+    and §5's rule is that the dose is estimated once and used as-is.
+    Step 7 stamps **0.048443521435665396**; the declaration's ~0.043 is
+    superseded by this measurement, not by a choice.
+30. (Step 6, the marginal and the moment diagnostic) `score_bundle` now
+    returns `P = predict_proba` for the inflated bundle and
+    `bin_probs(mu, sigma)` otherwise, so a default run still reproduces
+    PR #170 exactly; the inflated `P` is floored at 1e-12 and renormalised
+    on `bin_probs`'s own convention, differing from the adapter's
+    `_class_probs` by at most 2.33e-12, with no observed level in a
+    floored bin (min p at the realised y is 2.53e-08). The moment
+    diagnostic was **replaced, not dropped**: the probit mid-PIT residual
+    `Phi^-1((F(c-1)+F(c))/2)` for the inflated bundle, the unchanged
+    `(c - mu)/sigma` for Gaussian ones, labelled everywhere it is printed
+    and recorded in the sidecar as `moment_residual`. **Every moment number
+    in this run is on the new residual and is not level-comparable with
+    PR #170's** — step 11 must not put them in one column.
+31. (Step 6, correcting Note 25's stated reason — the claim itself stands)
+    On the emission-matched mid-PIT residual the round trip recovers
+    0.0913-0.0932 at a true 0.10, i.e. the same ~8 % attenuation as the
+    Gaussian path. So the 0.60-0.65 recovery Note 25 measured is a property
+    of **scoring levels' normal scores**, not evidence that the estimator
+    is mis-dosed: the dose is fitted on this emission and is the right
+    number. The caution Note 25 raised about the **simulation** is
+    unaffected and still stands, but its reason is now sharper — what CG
+    feels is the correlation of the realised *levels*, and the atoms
+    concentrate mass so that a shared latent can move `u` a long way inside
+    one wide CDF interval without moving the level at all. Which way that
+    nets out for group-mean spread is genuinely open; it is measured at
+    steps 8 and 11, not argued here.
+32. (Step 6, two stale narratives for step 11 not to quote) (a) The
+    script's hard-coded closing CAVEAT asserts the human pairwise LR per
+    pair sits far above the arm at the same fitted rho — PR #170's finding
+    on the Gaussian marginal. On this marginal the human within-cell
+    LR/pair is **0.00153** against the (0.03, 0) arm's **0.00130**, i.e.
+    broadly consistent with an exchangeable-Gaussian shape. The narrative
+    was deliberately left untouched (rewriting it would be interpreting
+    this run's result), so step 11 must not cite it. (b) Corner clustering:
+    both-0 ratio **1.249** and both-20 ratio **1.496**, far below the
+    3.69x / 2.50x the declaration's Note 3 recorded on the old marginal —
+    **the atoms have absorbed most of the corner co-censoring excess**,
+    which is direct marginal-level evidence the emission does what it
+    claims, independent of any simulation. Round-thirds MLEs 0.0244 /
+    0.0362 / 0.0899 reproduce PR #170's late-round concentration.

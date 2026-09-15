@@ -2,13 +2,16 @@
 notes/autoresearch_log/contribution-gmlp-group-copula.md).
 
 ONE number sets this experiment's sampler: `rho_total`, the within-(episode,
-round, group) latent correlation of the gaussian_mlp_v2 contribution emission,
-fitted ONCE on the training split by the repo's interval-censored pairwise
-Gaussian-copula MLE (`punishment_copula_rho.rho_mle` / `pair_nll` / `bvn_cdf`
-/ `rect_points` / `cdf_bounds`, imported unmodified) against the 21-bin
-marginal the sampler actually realises (`gaussian_mlp_preflight.bin_probs`,
-tails folded into levels 0 and 20 -- exactly what `clip(rint(mu + sigma z))`
-produces). The dose is used as-is:
+round, group) latent correlation of the contribution emission, fitted ONCE on
+the training split by the repo's interval-censored pairwise Gaussian-copula MLE
+(`punishment_copula_rho.rho_mle` / `pair_nll` / `bvn_cdf` / `rect_points` /
+`cdf_bounds`, imported unmodified) against the 21-level marginal the sampler
+actually realises -- `gaussian_mlp_preflight.bin_probs` for a Gaussian bundle
+(tails folded into levels 0 and 20, exactly what `clip(rint(mu + sigma z))`
+produces) and `estimator.predict_proba` for a `gaussian_mlp_inflated` bundle,
+whose law is a mixture and whose body alone would be the wrong target. The dose
+is model-conditional for exactly that reason and is re-fitted on every trunk;
+it is used as-is:
 
     rho_p = rho_total   (one persistent latent per (episode, group))
     rho_t = 0
@@ -31,7 +34,10 @@ Also computed and printed prominently, but NEVER stamped:
     ~2.8-3.4 for the fully persistent reading. It is reported so the verdict
     cannot be re-read after the fact; it does not set the structure (grounds
     1-4 of the Declaration do).
-  * ATTENUATED MOMENT DIAGNOSTICS, round-thirds splits and out-of-sample
+  * ATTENUATED MOMENT DIAGNOSTICS on a residual whose definition follows the
+    emission -- `(c - mu) / sigma` for a Gaussian bundle, the probit mid-PIT
+    residual `Phi^-1((F(c - 1) + F(c)) / 2)` for the inflated mixture, which
+    has no single generating Gaussian -- round-thirds splits and out-of-sample
     test-split MLEs -- never used to choose anything. Log Note 20: the test
     split's lag-1 moment estimate (+0.0514) exceeds its own within-cell value
     (+0.0330) on 10 episodes, which is impossible under the model, so
@@ -48,7 +54,12 @@ Also computed and printed prominently, but NEVER stamped:
 
 Runs locally (CPU torch, no PyG):
     uv run python scripts/baselines/contribution_gmlp_copula_rho.py \
-        [--write-params]
+        [--write-params] [--bundle B] [--config C] [--out J]
+
+`--bundle` / `--config` / `--out` default to the PR #170 constants below, so a
+bare run reproduces that experiment exactly; they exist because the dose is
+model-conditional (it is fitted against the teacher-forced marginal of the
+bundle being stamped) and so must be re-fitted whenever the trunk is retrained.
 """
 
 import argparse
@@ -93,6 +104,7 @@ from punishment_copula_rho import (  # noqa: E402
     cdf_bounds,
     check_bvn,
     icc_oneway,
+    ndtri,
     pair_index,
     rect_points,
     rho_mle,
@@ -149,17 +161,71 @@ def git_sha():
 
 
 # --------------------------------------------------------------------------- #
-# marginals: the 21-bin law the sampler realises
+# marginals: the 21-level law the sampler realises
 # --------------------------------------------------------------------------- #
+INFLATED_MODELS = ("gaussian_mlp_inflated",)
+
+
 def score_bundle(bundle, rows):
-    """Teacher-forced (mu, sigma) of the bundle on ITS OWN 7 features and
-    scaler, plus the scaled design matrix the adapter's sampler consumes."""
+    """Teacher-forced 21-level marginal `P` of the bundle on ITS OWN features
+    and scaler, plus the scaled design matrix the adapter's sampler consumes
+    and the body's (mu, sigma).
+
+    `P` is THE law the copula is fitted against, so it must be the law the
+    adapter samples. Two emission families, one rule -- ask the estimator when
+    it owns a discrete law, discretise the Gaussian when it does not:
+
+      * ``gaussian_mlp_inflated``: `estimator.predict_proba(Xs)`, the mixture
+        of the binned Gaussian body with the status-quo and corner atoms.
+        `bin_probs(mu, sigma)` here would be THE BODY ALONE -- a distribution
+        the simulation never samples from, and the MLE would be calibrated
+        against it silently (log Note 14c).
+      * every Gaussian bundle: `bin_probs(mu, sigma, K)` exactly as before, so
+        a default run reproduces PR #170's dose unchanged.
+
+    (mu, sigma) are the body's parameters for an inflated bundle and are
+    returned for provenance only -- `moment_residuals` never uses them there.
+    """
     X = np.column_stack([rows["pool"][k][rows["mask"]] for k in bundle["features"]])
     Xs = bundle["scaler"].transform(X)
     est = bundle["estimator"]
     mu = np.asarray(est.predict(Xs), float).reshape(-1)
     sigma = np.asarray(est.predict_std(Xs), float).reshape(-1)
-    return Xs, mu, sigma
+    if bundle["model"] in INFLATED_MODELS:
+        P = np.asarray(est.predict_proba(Xs), float)
+        assert P.shape == (len(mu), K), f"predict_proba gave {P.shape}, want (N, {K})"
+        # the 1e-12 floor is `bin_probs`'s own convention, so both emissions
+        # reach the MLE on identical terms; it differs from the adapter's plain
+        # renormalisation (`_class_probs`) by at most 2.4e-12 on this bundle,
+        # and no observed level sits in a floored bin (min p at y = 2.5e-08).
+        P = np.clip(P, 1e-12, None)
+        P = P / P.sum(1, keepdims=True)
+    else:
+        P = bin_probs(mu, sigma, K)
+    return Xs, mu, sigma, P
+
+
+def moment_residuals(bundle, P, y, mu, sigma):
+    """(residual array, label) for the ATTENUATED MOMENT DIAGNOSTICS only --
+    never for the dose, which is the censored MLE on `P`.
+
+    `r = (c - mu) / sigma` presumes ONE Gaussian generates the level. Under the
+    inflated mixture there is no such Gaussian (log Note 14c), so the residual
+    is instead the probit of the discrete CDF interval -- the mid-PIT residual
+    `Phi^-1((F(c - 1) + F(c)) / 2)`, the standard randomised-quantile residual
+    with its randomisation replaced by the interval midpoint so the diagnostic
+    stays deterministic. It is the principled analogue: under a correct
+    marginal it is centred and roughly standard normal, and its within-cell
+    correlation attenuates the latent one exactly as the Gaussian residual's
+    does. It is NOT comparable in level with the parent's `(c - mu) / sigma`
+    numbers, and is labelled accordingly wherever it is printed.
+    """
+    if bundle["model"] in INFLATED_MODELS:
+        yi = np.asarray(y, int).reshape(-1)
+        upper = np.cumsum(P, axis=1)[np.arange(len(yi)), yi]
+        mid = upper - 0.5 * P[np.arange(len(yi)), yi]
+        return ndtri(np.clip(mid, 1e-12, 1.0 - 1e-12)), "probit mid-PIT of F(c)"
+    return (np.asarray(y, float) - mu) / sigma, "(c-mu)/sigma"
 
 
 # --------------------------------------------------------------------------- #
@@ -284,8 +350,7 @@ def roundtrip(
     Xs,
     rows,
     P,
-    mu,
-    sigma,
+    resid_of,
     cell_pairs,
     lag_pairs,
     arms,
@@ -305,7 +370,9 @@ def roundtrip(
 
     The attenuated moment share of each panel is printed alongside as a
     diagnostic only -- it calibrates how much the moment estimator on the human
-    residuals is pulled toward zero by the censoring and rounding.
+    residuals is pulled toward zero by the censoring and rounding. `resid_of`
+    is the SAME residual rule applied to the human rows (`moment_residuals`),
+    so the synthetic and human moment columns are comparable.
     """
     if n_rep is None:
         n_rep = N_ROUNDTRIP
@@ -329,7 +396,7 @@ def roundtrip(
                     2.0 * (fit_w[2] - fit_w[1]) / len(ii_w),
                     2.0 * (fit_l[2] - fit_l[1]) / len(ii_l),
                 )
-            r_syn = (y - mu) / sigma
+            r_syn = resid_of(y)
             mom_w.append(pooled_corr(r_syn, ii_w, jj_w)[0])
             mom_l.append(pooled_corr(r_syn, ii_l, jj_l)[0])
         tot, lag = float(np.mean(tots)), float(np.mean(lags))
@@ -474,29 +541,64 @@ def split_mles(P, rows, r, n_rounds):
 
 
 # --------------------------------------------------------------------------- #
-def main():
-    import joblib
-
-    t0 = time.time()
+def build_parser():
+    """The CLI. Every default is the module constant above, so a bare run is
+    the PR #170 recipe unchanged; the three paths exist so the SAME estimator
+    can be re-run on a retrained trunk (the dose is model-conditional)."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
         "--write-params",
         action="store_true",
         help="write the JSON sidecar step 7 stamps onto the bundle",
     )
-    args = ap.parse_args()
+    ap.add_argument(
+        "--bundle",
+        type=Path,
+        default=BUNDLE_PATH,
+        help="model bundle whose emission the dose is fitted to (default: "
+        "%(default)s)",
+    )
+    ap.add_argument(
+        "--config",
+        type=Path,
+        default=TRAIN_CFG,
+        help="training config supplying the data file and mask (default: "
+        "%(default)s)",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=OUT_JSON,
+        help="params sidecar written under --write-params (default: %(default)s)",
+    )
+    return ap
 
-    bundle = joblib.load(BUNDLE_PATH)
-    cfg = load_config(TRAIN_CFG)
+
+def main():
+    import joblib
+
+    t0 = time.time()
+    args = build_parser().parse_args()
+    # resolved up front so an out-of-tree path fails before the estimator runs
+    bundle_path = args.bundle.resolve()
+    cfg_path = args.config.resolve()
+    out_json = args.out.resolve()
+    bundle_rel = bundle_path.relative_to(ROOT)
+    cfg_rel = cfg_path.relative_to(ROOT)
+    out_rel = out_json.relative_to(ROOT)
+
+    bundle = joblib.load(bundle_path)
+    cfg = load_config(cfg_path)
     train_file = cfg["data"]["data_file"]
     print("=" * 78)
-    print("STEP 6 -- the dose of the contribution group copula (gaussian_mlp_v2)")
+    title = f"STEP 6 -- the dose of the contribution group copula ({bundle['model']})"
+    print(title)
     print("=" * 78)
-    print(f"bundle    {BUNDLE_PATH.relative_to(ROOT)}")
-    print(f"  sha256={sha256(BUNDLE_PATH)}")
+    print(f"bundle    {bundle_rel}")
+    print(f"  sha256={sha256(bundle_path)}")
     print(f"  model={bundle['model']} target={bundle['target']}")
     print(f"  features={bundle['features']}")
-    print(f"config    {TRAIN_CFG.relative_to(ROOT)}")
+    print(f"config    {cfg_rel}")
     print(
         f"data      {train_file} (mask={cfg['data']['mask']}, "
         f"exclude_flipped={cfg['data'].get('exclude_flipped')})"
@@ -504,10 +606,11 @@ def main():
     print(f"git       {git_sha()}")
 
     rows = build_rows(cfg)
-    Xs, mu, sigma = score_bundle(bundle, rows)
+    Xs, mu, sigma, P = score_bundle(bundle, rows)
     y = rows["y"].astype(np.int64)
-    P = bin_probs(mu, sigma, K)
-    r = (rows["y"] - mu) / sigma
+    inflated = bundle["model"] in INFLATED_MODELS
+    marginal_source = "estimator.predict_proba" if inflated else "bin_probs(mu, sigma)"
+    r, r_label = moment_residuals(bundle, P, y, mu, sigma)
     n_ep, n_agents, n_rounds = rows["shape"]
     cell, ii_w, jj_w = within_cell(rows)
     _, _, sizes = blocks(cell)
@@ -524,8 +627,9 @@ def main():
         f"  censored rows (y in {{0, {K - 1}}}): share={fmt(censored)}  "
         f"at 0={fmt((y == 0).mean())}  at {K - 1}={fmt((y == K - 1).mean())}"
     )
+    print(f"  21-level marginal P from {marginal_source}")
     print(
-        f"  standardised residual r=(c-mu)/sigma  mean={fmt(r.mean())}  "
+        f"  moment-diagnostic residual r={r_label}  mean={fmt(r.mean())}  "
         f"var={fmt(r.var(ddof=1))}"
     )
 
@@ -609,7 +713,10 @@ def main():
     print("\n" + "=" * 78)
     print("(c) DIAGNOSTICS -- printed, never used to choose anything")
     print("=" * 78)
-    print("attenuated moment shares (biased toward zero by censoring/rounding):")
+    print(
+        f"attenuated moment shares of r={r_label} (biased toward zero by "
+        f"censoring/rounding):"
+    )
     moments, icc = moment_diagnostics(r, rows)
     print("\nround-thirds splits (censored MLE and moment, train):")
     thirds = split_mles(P, rows, r, n_rounds)
@@ -625,10 +732,9 @@ def main():
     cfg_te = copy.deepcopy(cfg)
     cfg_te["data"]["data_file"] = train_file.replace("_train", "_test")
     rows_te = build_rows(cfg_te)
-    _, mu_te, sigma_te = score_bundle(bundle, rows_te)
+    _, mu_te, sigma_te, P_te = score_bundle(bundle, rows_te)
     y_te = rows_te["y"].astype(np.int64)
-    P_te = bin_probs(mu_te, sigma_te, K)
-    r_te = (rows_te["y"] - mu_te) / sigma_te
+    r_te, _ = moment_residuals(bundle, P_te, y_te, mu_te, sigma_te)
     cell_te, ii_wte, jj_wte = within_cell(rows_te)
     ii_lte, jj_lte = lag1_cross_pairs(
         rows_te["episode"], rows_te["round"], rows_te["group"], rows_te["agent"]
@@ -678,8 +784,7 @@ def main():
         Xs,
         rows,
         P,
-        mu,
-        sigma,
+        lambda yy: moment_residuals(bundle, P, yy, mu, sigma)[0],
         (ii_w, jj_w),
         (ii_l, jj_l),
         ROUNDTRIP_ARMS,
@@ -830,6 +935,8 @@ def main():
             n_pairs_within=int(len(ii_w)),
             n_pairs_lag1=int(len(ii_l)),
             estimator=ESTIMATOR_TAG,
+            marginal_source=marginal_source,
+            moment_residual=r_label,
             structure=STRUCTURE,
             cell_key="episode_round_group",
             data_file=train_file,
@@ -837,8 +944,9 @@ def main():
             n_rows=int(len(y)),
             n_episodes=int(n_ep),
             censored_share=censored,
-            base_bundle=str(BUNDLE_PATH.relative_to(ROOT)),
-            base_bundle_sha256=sha256(BUNDLE_PATH),
+            base_bundle_model=str(bundle["model"]),
+            base_bundle=str(bundle_rel),
+            base_bundle_sha256=sha256(bundle_path),
             git_sha=git_sha(),
             timestamp=datetime.now(timezone.utc).isoformat(),
             bvn_max_dev=None if err is None else float(err),
@@ -894,9 +1002,9 @@ def main():
                 ),
             ),
         )
-        OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
-        OUT_JSON.write_text(json.dumps(params, indent=2, sort_keys=True) + "\n")
-        print(f"\nwrote {OUT_JSON.relative_to(ROOT)}")
+        out_json.parent.mkdir(parents=True, exist_ok=True)
+        out_json.write_text(json.dumps(params, indent=2, sort_keys=True) + "\n")
+        print(f"\nwrote {out_rel}")
 
     print(f"\ntotal runtime {time.time() - t0:.1f}s")
 
