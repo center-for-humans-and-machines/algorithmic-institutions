@@ -791,3 +791,50 @@ here, before anything ran:
     (copula, other agents' own responses, and 24 rounds of compounding) --
     exactly the gap PR #157's peer-attention and conformity-mixture record
     warns is not guaranteed to survive that conversion.
+14. **Step 10, the recalibration (SLURM 30256907, 10m46s, exit 0:0 -- the clean
+    path, not `STOP-ESCALATE`).** `rho_hat = 0.0435568043640977`, SE
+    0.009443613923707331, 200-resample episode-cluster CI
+    [0.024859738353023016, 0.05941458216657012], excluding zero; pairwise LR
+    17.04702559141151 on 15090 pairs. Against PR #165's
+    **0.06958238086256316** that is **-37.4%**, and #165's point estimate lies
+    **above the new CI's upper bound** (as does #173's 0.0752). Round-trip gate
+    PASS (max |bias| 0.010098620450984919, tolerance 0.03). Data path identical
+    to #165 -- 7457 rows, 1608 cells, 15090 pairs over the 40 single-copy train
+    episodes -- and the base loaded at the step-7 sha256, so the movement is the
+    trunk, not the pipeline. **The PR #166 lesson is vindicated concretely:
+    carrying #165's rho over would have over-dosed the latent by more than half
+    again.** Per amendment A1, `rho_hat > 0` takes the stamp branch; step 11
+    stamps rho 0.0435568043640977, phi 1.0, switch_every 1.
+15. **The trunk absorbed the shared component, and the preflight says so more
+    directly than rho does.** The *copula-off* teacher-forced group-spread ratio
+    rose **0.7837119164031583 -> 0.8363286876779291** against a human
+    0.8472681041593946: the step-7 trunk on its own now reproduces most of the
+    one-step group spread that #165 needed a latent to buy, and the copula's
+    remaining one-step contribution shrank from +0.0091 to +0.0057. The
+    round-thirds rho falls in every third -- 0.0243 / 0.0515 / 0.0645 against
+    #165's 0.0345 / 0.0736 / 0.1187 -- with the largest fall (-45.6%) in the
+    final third, the lock-in regime the persistent group state is built to carry.
+    Consistent with step 8's own-group weight 0.040 -> 0.198. **The caution for
+    step 13:** all of this is measured under teacher forcing, where the model
+    reads real history. What the copula still has to supply is shared *variance*
+    under free-running dynamics compounding over 24 rounds, which is a different
+    job; a lower rho is evidence the trunk took over part of that channel, not
+    proof the closed-loop spread ratio lands where the preflight sits. #159,
+    #153 and #157 all died in exactly that gap.
+16. **Orchestrator ruling: phi stays at the pre-declared 1.0, and the tension is
+    recorded rather than resolved.** `phi_hat = 0.6182476558394783`, CI
+    [0.21163458285772926, 1.2637034657775452]. The CI includes 1, so the
+    pre-declared rule (§2 step 10, amendment A2, PR #165's boundary ruling) gives
+    `phi_final = 1.0`, and the implementer applied it mechanically without
+    hunting for a variant -- correct. It is recorded that this phi_hat, unlike
+    #165's 1.1588, does **not** saturate the boundary: the point estimate is
+    mean-reverting, and a rule written for a saturating estimate is now being
+    applied to one that is not. Two reasons to keep 1.0 anyway. The rule was
+    fixed before any number was visible and pre-declaration binds; revising it
+    now, having seen 0.618, is precisely the post-hoc discretion amendment A1
+    removed from the rho branch. And on the merits the CI is wide enough
+    ([0.21, 1.26]) that the data does not distinguish persistence levels, while
+    PR #150's arm comparison found the persistent latent wins and the
+    fast-reverting one regresses. **A successor should test phi_hat directly on
+    this trunk** -- it is the cleanest small-delta follow-up this experiment
+    leaves behind, and it is not claimable here.
