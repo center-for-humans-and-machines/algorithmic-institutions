@@ -580,5 +580,153 @@ on `src/`) once per step before staging.
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
+| 2026-09-15 | own-group size enters the gaussian_mlp_v2 contributor as the scalar `inv_group_size = 1/n`, the copula dose re-calibrated and re-stamped on the retrained trunk | **RCA 3.77942920878713862** (baseline 3.50675152179351013, band `2-5` -> `2-5`, moved **away** from the edge by +0.27267768699362849); **CA 1.60742009680253894** (baseline 1.60900781342564514, band `1-2` -> `1-2`, -0.00158771662310619) | 9/21 (baseline 11/21) | 1.285711232201906 (baseline 1.2226801514921317, ceiling 1.344948166641345) | **FAIL** -- gate 1 fails on both declared targets, gate 2 passes at +5.16 per cent |
+
+Evaluation stack (§3, parent-directed): the `1/n` contributor swapped into
+PR #174's stack -- one-hot-k joint-exodus GNN switch x PR #160 severity-copula
+multinomial punisher, single self pairing, seed 42, 100 episodes, 500/500
+repeats. Jobs 30248928 (control) and 30248932 (candidate), both
+`COMPLETED 0:0`, 2m39s each.
+
+**Provenance.** The control -- PR #174's own stack re-simulated on this
+branch's code -- reproduces the parent's `per_round.parquet` bit-identically
+(`3cb8b3d72784afe09464e0048d27d7cb05f7a3b157780f296e99d168407fef3f`, verified
+on Raven and again after the fetch), which is what licenses judging against
+the parent's committed `scores.csv`; the candidate's parquet differs
+(`9847866cdbcfd8247a405d6345c3cd5352d3af5dfe95afcdfaff08fe3f0fd4cb`), so the
+stamped bundle was exercised. Both job logs' PROVENANCE lines name the shared
+venv's interpreter with `aimanager` under
+`~/autoresearch/contribution-size-onehot/src/`, and `algorithmic-institutions/src`
+appears in neither.
+
+### The four falsifiers
+
+| gate | requirement | measured | outcome |
+|---|---|---|---|
+| **F1** | n=1 train residual within +-0.7 (from +2.599); CV NLL <= 2.7125 | **+0.0324** (SE 0.3084); **2.701708685478946** | **PASS** |
+| **F2** | rho CI excludes 0; rows 7457, pairs 15090; round-trip \|bias\| <= 0.02 | CI **[0.0243707374008924, 0.07135880810905465]**, all 200 resamples positive; 7457 / 15090; **0.006081112098515515** | **PASS** |
+| **F3a** | n=1 mean contribution >= 8.9 (from 7.292373) | **11.609091** (human 10.543379) | **PASS** (overshoots) |
+| **F3b1** | per-capita CG slope on n <= +0.30 (from +0.744905) | **-0.085252** (human -0.225541) | **PASS** |
+| **F3b2** | singleton per-capita CG >= 12.7 (from 9.828814) | **16.795000** (human 15.508431) | **PASS** (overshoots) |
+| **F3c** | `dc` on "-> alone" turns positive (from -0.364407) | **+1.618182** (human +1.632653) | **PASS** |
+| **F4** | CG, CC, CE all predicted worse | all three worse | **holds** -- no composition finding |
+
+All four falsifiers pass. The declared mechanism is installed and works; the
+declared rows did not move. That combination is the Declaration's own
+pre-registered expectation, and it is the finding.
 
 ## 4. Notes
+
+1. **The verdict is the pre-registered one.** The Declaration committed,
+   before any compute, to expecting `[FAIL]` on gate 1 with gate 2 holding,
+   on the measurement that RCA's `d = 0.957` is only 0.717 from the
+   size-change component and that a *perfect* size fix leaves `d = 0.739`
+   (~2.64, still `2-5`), while CA's size exposure explains R^2 = 0.001 of
+   human participant-mean variance. Realised: RCA 3.779, CA 1.607. The
+   maintainer accepted that expectation before the run, so this is an
+   experiment run to measure a mechanism and a knock-on, not a bid for a
+   band upgrade.
+
+2. **`1/n` beat one-hot on held-out likelihood, so the assignment's own
+   title was not followed.** Under the incumbent's exact CV procedure the
+   one-hot arm costs +2.1 per cent CV NLL (worse on 3 of 4 folds) and +13
+   per cent TEST NLL with binned CE flat -- PR #151's sigma-collapse tail
+   pathology from eight sparse standardised columns into a hidden layer of
+   8 on 7457 rows -- while `1/n` costs +0.3 per cent CV NLL and is *better*
+   than the incumbent on held-out binned CE, the head the simulation
+   samples. The maintainer's comment allowed either encoding. A scalar
+   reciprocal does bend: the tanh layer supplies the curvature, which is
+   why PR #173's failure was the *encoding* of size, not size itself.
+
+3. **The mechanism is installed, and it overshoots.** Contribution at n=1
+   goes 7.292373 -> 11.609091 against human 10.543379; the by-n slope goes
+   +0.401908 -> +0.069420 against human -0.151396; the within-player slope
+   of `dc` on Delta(1/n) goes -0.903177 -> +1.568357 against human
+   +1.679261. The sign inversion the maintainer identified is corrected,
+   past the human value rather than up to it.
+
+4. **The knock-on the maintainer flagged as unclaimable is confirmed, and
+   it is the largest real result here.** The per-capita CG gap (small
+   minus big) at \|Delta n\| = 6 goes **-6.542918 -> +1.922857** against
+   human +1.660126 under the `1.6c - p` convention (and -6.878337 ->
+   +1.591935 against human +0.638862 under the `common_good` column) --
+   the inverted size-to-common-good map flips sign. Downstream:
+   `P(full exodus | k=1)` 0.370787 -> **0.211765** (human 0.269231), the
+   full-exodus cell share 0.131094 -> **0.108137** (human 0.120430), and
+   the late SC anchors 6.19 / 6.32 at rounds 16 / 20 -> **5.98 / 5.90**
+   against human 5.92 / 5.84. SC falls 0.97984865931896636 ->
+   0.82077644349399559. **None of this is claimed**: SC was declared a
+   guard, it was already `<= 1`, and the maintainer pre-emptively ruled
+   the knock-on unclaimable. Pre-declaration binds.
+
+5. **RCA worsened rather than holding, and the reason is the closed loop.**
+   The Declaration predicted ~3.2-3.4, within band. All four round types
+   got worse, including `no_switch_allowed` (EMD 0.9065 -> 0.9854), which
+   carries 79 per cent of the weight and which no size feature should
+   touch. By own group size, n = 1 is the **only** size that improved
+   (2.4632 -> 2.2079) and it is 2.3 per cent of the type, worth ~0.006 of
+   weighted `d`.
+
+6. **The teacher-forced exact-repeat gain did not survive rollout, and that
+   is the RCA regression.** Step 3 measured the exact-repeat mass rising
+   teacher-forced (parent 0.2072 -> candidate 0.2124). Closed-loop the
+   ordering **reverses**: 0.168424 -> **0.160326**, against human 0.439973,
+   with kurtosis(dc) falling 6.1635 -> 5.5576 (human 10.6949). RCA scores
+   the closed-loop quantity. **A future agent should not trust a
+   teacher-forced marginal as a proxy for an R-block row** -- this is the
+   second experiment in the lineage where a teacher-forced reading pointed
+   the opposite way to the simulated one.
+
+7. **RCD took the largest single hit and was not on the risk side of the
+   guard list**: 0.73161386785466964 -> **1.70409239068844487** (+0.972,
+   `<= 1` -> `1-2`), roughly half the mean's rise. RCD is the switching-pull
+   regression slope; correcting the singleton level changed the
+   receiving-group contrast it regresses on. RCC followed (+0.198). The
+   Declaration guarded RCD by inheritance and predicted nothing for it;
+   any successor touching the size-to-payoff map should expect to pay
+   there first.
+
+8. **CG's realised cost is an order of magnitude smaller than the static
+   counterfactual predicted**: +0.063 (2.07926361874462717 ->
+   2.14275867002551346) against a predicted +0.69. The closed loop
+   recovers most of the group-mean spread the static shift destroys. Two
+   pre-simulation diagnostics had both pointed at a large CG cost -- the
+   singleton sigma narrowing 5.07 -> 4.52 against a human n=1 sd of 8.01,
+   and `icc_oneway` halving 0.053666022359650886 -> 0.029149530591338624
+   with the copula dose falling 11.8 per cent to 0.038604246255554815 --
+   and both over-stated it. **Static counterfactuals on this stack are
+   not reliable cost estimates**; CD was also predicted slightly worse and
+   improved (1.11566724966523689 -> 1.05437427185089216).
+
+9. **Where a successor should aim.** RCA is owned by the emission, not by
+   any feature: the closed-loop exact-repeat mass is 0.160 against a human
+   0.440, and no conditioning variable changed it in either direction by
+   more than 0.008. A distributional head that can place an atom at
+   `dc = 0` -- not a Gaussian, and not a deterministic regressor (PR #155)
+   -- is the only thing in view that addresses it. The size mechanism
+   itself is now installed and overshooting, so a successor wanting the
+   remaining size structure should damp it toward the human profile rather
+   than add more.
+
+10. **Two reproduction discrepancies, recorded so the next agent does not
+    chase them.** (a) The Declaration's human `P(full exodus | k=1) = 0.161`
+    could not be reproduced under either mask -- `switch_valid` gives
+    14/52 = 0.269231 and `switch_mask` gives 11/49 = 0.2245; parent and
+    candidate figures are unaffected (the sim has no timeouts) and the
+    parent's 33/89 and 20/112 reproduce exactly. (b) The Declaration's
+    parent SC anchors at rounds 16/20 (6.36 / 6.50, quoted second-hand)
+    measure here as 6.19 / 6.32, while the human 5.92 / 5.84 reproduces
+    exactly -- so the discrepancy is in that quoted figure's provenance,
+    not in the estimator.
+
+11. **Tooling, flagged not fixed.** PR #170's stamper carried a base-sha
+    check weaker than it reads: `load_inputs` compared the on-disk hash and
+    the sidecar's `base_bundle_sha256` each against the literal
+    `EXPECTED_BASE_SHA256`, never against each other, while its failure
+    message prints a comparison it was not making. Step 4 made bundle
+    against sidecar the primary assert. Also: `check_predict_bit_identical`
+    is not parametrised and builds its rows from `gaussian_mlp_v2.yml`
+    regardless of `--base` (safe here only because this experiment's
+    `data` block is byte-identical); `check_lfs` asserts nothing despite
+    reading like a gate; and verification 4 never exercises the copula,
+    since `sample=False` skips that path.
