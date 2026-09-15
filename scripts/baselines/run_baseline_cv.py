@@ -11,9 +11,11 @@ locked file and is never opened here); results are written best-to-worst to
 
 The estimator is chosen by data.target_type + data.model (see baseline_models):
 categorical -> multinomial logistic; continuous -> ridge (fast MSE), gaussian
-(heteroscedastic N(mu, sigma) by MLE) or gaussian_mlp (the same heads behind a
-2-layer net). With cv.show_ce, the gaussian runs also report a binned 21-way
-cross-entropy alongside their NLL.
+(heteroscedastic N(mu, sigma) by MLE), gaussian_mlp (the same heads behind a
+2-layer net) or gaussian_mlp_inflated (that trunk with probability atoms at the
+status quo and the corners). With cv.show_ce, the gaussian runs also report a
+binned 21-way cross-entropy alongside their NLL; for the inflated model that
+cross-entropy IS the primary metric, so it is reported once.
 
 Usage:
     .venv/bin/python scripts/baselines/run_baseline_cv.py [config.yml]
@@ -48,12 +50,15 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/baselines"))
 from handcrafted_grid import load_config, prepare_data  # noqa: E402
 from baseline_models import (  # noqa: E402
-    GAUSSIAN_MODELS,
+    CE_MODELS,
+    NEEDS_PREV,
+    PREV_FEATURE,
     build_model,
     build_settings,
     floor_score,
     metric_name,
     predict_scores,
+    prev_position,
     resolve_model,
     setting_keys,
 )
@@ -65,7 +70,17 @@ _W = {}
 
 
 def _init(
-    X, y, fold_row, model, n_levels, settings, dev_folds, seed, show_ce, ce_levels
+    X,
+    y,
+    fold_row,
+    model,
+    n_levels,
+    settings,
+    dev_folds,
+    seed,
+    show_ce,
+    ce_levels,
+    prev_col,
 ):
     th.set_num_threads(1)  # we parallelize across processes; keep torch single-threaded
     _W.update(
@@ -79,21 +94,32 @@ def _init(
         seed=seed,
         show_ce=show_ce,
         ce_levels=ce_levels,
+        prev_col=prev_col,  # POOL column index of PREV_FEATURE (or None)
     )
 
 
-def _score(Xtr, ytr, Xte, yte):
+def _score(Xtr, ytr, Xte, yte, prev_pos=None):
     """(primary, ce) per setting for one train/val split. Standardisation is fit
-    once on the fold's train; the floor (no features) is setting-independent."""
+    once on the fold's train; the floor (no features) is setting-independent.
+    `prev_pos` is the position of PREV_FEATURE inside this task's columns (see
+    baseline_models.prev_position); NEEDS_PREV models get it as `prev_index`
+    and get the matching RAW column as fit(..., prev=...)."""
     model, nl, settings = _W["model"], _W["nl"], _W["settings"]
     seed, show_ce, k = _W["seed"], _W["show_ce"], _W["ce_levels"]
     if Xtr.shape[1] == 0:
         return [floor_score(model, ytr, yte, nl, show_ce, k) for _ in settings]
     sc = StandardScaler().fit(Xtr)
     Ztr, Zte = sc.transform(Xtr), sc.transform(Xte)
+    fit_kw = {}
+    if model in NEEDS_PREV:
+        assert prev_pos is not None, (
+            f"model '{model}' requires the feature '{PREV_FEATURE}' in every "
+            "feature set -- config error"
+        )
+        fit_kw["prev"] = Xtr[:, prev_pos]  # RAW, unstandardised
     out = []
     for s in settings:
-        m = build_model(model, s, seed).fit(Ztr, ytr)
+        m = build_model(model, s, seed, prev_index=prev_pos).fit(Ztr, ytr, **fit_kw)
         out.append(predict_scores(model, m, Zte, yte, nl, show_ce, k))
     return out
 
@@ -104,9 +130,17 @@ def _worker(cols):
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
     X, y, fr, settings, dev = (_W["X"], _W["y"], _W["fr"], _W["settings"], _W["dev"])
     cols = list(cols)
+    # the task-local POSITION of PREV_FEATURE, not its pool column index
+    prev_pos = prev_position(_W["model"], cols, _W["prev_col"]) if cols else None
     n = np.sqrt(len(dev))
     per_fold = [
-        _score(X[fr != vf][:, cols], y[fr != vf], X[fr == vf][:, cols], y[fr == vf])
+        _score(
+            X[fr != vf][:, cols],
+            y[fr != vf],
+            X[fr == vf][:, cols],
+            y[fr == vf],
+            prev_pos,
+        )
         for vf in dev
     ]
     prim = np.array([[t[0] for t in fold] for fold in per_fold])  # [folds, settings]
@@ -173,7 +207,7 @@ def main():
     seed = cfg["cv"]["seed"]  # gaussian init seed reuses cv.seed
     settings = build_settings(cfg, model)  # validated + Cartesian expanded
     metric = metric_name(model)
-    show_ce = bool(cfg["cv"].get("show_ce", False)) and model in GAUSSIAN_MODELS
+    show_ce = bool(cfg["cv"].get("show_ce", False)) and model in CE_MODELS
     ce_levels = int(cfg["data"].get("categorical_levels", 21))
 
     prep = prepare_data(cfg, ROOT)
@@ -201,6 +235,7 @@ def main():
 
     col_of = prep["col_of"]
     tasks = [tuple(col_of[f] for f in feats) for _, feats in combos]
+    prev_col = col_of.get(PREV_FEATURE)  # POOL index; workers map it per task
 
     try:
         from tqdm import tqdm
@@ -226,6 +261,7 @@ def main():
             seed,
             show_ce,
             ce_levels,
+            prev_col,
         ),
     ) as ex:
         futs = {ex.submit(_worker, t): i for i, t in enumerate(tasks)}
@@ -246,7 +282,9 @@ def main():
                 "config": label,
                 "features": ";".join(feats),
             }
-            if ce_mean is not None:
+            # the inflated model's primary metric IS the ce, so mean_loss is
+            # already renamed to "ce" below -- don't write a duplicate column.
+            if ce_mean is not None and metric != "ce":
                 row["ce"], row["ce_se"] = ce_mean, ce_se
             rows.append(row)
 
@@ -256,7 +294,7 @@ def main():
     # column order: rank, metric, se, [ce, ce_se], swept settings, n, config, features
     order = (
         ["rank", metric, "se_loss"]
-        + (["ce", "ce_se"] if "ce" in df.columns else [])
+        + (["ce", "ce_se"] if "ce_se" in df.columns else [])
         + keys
         + ["n_features", "config", "features"]
     )

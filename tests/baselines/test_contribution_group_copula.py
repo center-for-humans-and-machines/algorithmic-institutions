@@ -1,4 +1,4 @@
-"""Unit tests for the Gaussian group-copula CONTRIBUTION sampler,
+"""Unit tests for the group-copula CONTRIBUTION sampler,
 ``LinearAHAdapter._sample_levels_gaussian_copula``: exact marginal
 preservation, recovery of BOTH correlation weights from the replayed latent
 ``z``, the fixed 3n-draw RNG stream, the lifetime of the persistent
@@ -6,6 +6,13 @@ per-(episode, group) latent, the arrival-group rule for switchers, and the
 bit-identical legacy path for bundles without ``copula_rho_p`` /
 ``copula_rho_t``. The ``__init__`` configuration gate is covered in
 tests/baselines/test_gaussian_mlp.py; this module tests the sampler.
+
+Section (g) repeats every one of those invariants for the INFLATED discrete
+emission (``gaussian_mlp_inflated``), which shares the latent but inverts it
+through ``predict_proba``'s row CDF instead of rounding ``mu + sigma z``, and
+adds the two checks that exist because the failure mode is silent: the
+inflated bundle must NOT reproduce the Gaussian path's levels, and an
+unknown model type must raise rather than fall through to it.
 
 Invariants and rationale:
 notes/autoresearch_log/contribution-gmlp-group-copula.md (Notes 21-23).
@@ -22,7 +29,7 @@ os.environ.setdefault("DISABLE_PANDERA_IMPORT_WARNING", "True")
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 import torch as th  # noqa: E402
-from scipy.special import ndtr  # noqa: E402
+from scipy.special import ndtr, ndtri  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]  # tests/baselines -> repo root
@@ -32,7 +39,10 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts/baselines"))
 
 from aimanager.simulation.linear_ah import LinearAHAdapter  # noqa: E402
-from gaussian_regressor import GaussianMLPRegressor  # noqa: E402
+from gaussian_regressor import (  # noqa: E402
+    GaussianMLPRegressor,
+    InflatedGaussianMLPRegressor,
+)
 
 N_CONTRIBUTIONS = 21  # contribution levels 0..20
 N_AGENTS = 8
@@ -621,3 +631,356 @@ def test_determinism_under_manual_seed(base_bundle):
     assert any(not np.array_equal(a, b) for a, b in zip(first, other))
     # genuinely drawing, not collapsed onto the rounded mean
     assert np.stack(first).std(0).max() > 0.0
+
+
+# --------------------------------------------------------------------------- #
+# (g) the INFLATED discrete emission under the same group latent
+#
+# `gaussian_mlp_inflated` shares every latent convention above but is a
+# CATEGORICAL emission: its law is `predict_proba`, not a rounded
+# N(mu(x), sigma(x)), and the sampler inverts the row CDF at `Phi(z)`
+# instead of rounding `mu + sigma z`. Its inherited `predict` / `predict_std`
+# return the mixture's BODY parameters, so a bundle that reached the Gaussian
+# arithmetic would sample the incumbent emission and raise nothing -- which is
+# why `test_inflated_is_not_the_gaussian_path` and
+# `test_unknown_model_type_raises` exist alongside the repeated invariants.
+# --------------------------------------------------------------------------- #
+N_EPISODES_INFLATED = 400  # the replay is ~2x the Gaussian cost per episode
+
+
+def inflated_bundle(**over):
+    """The toy bundle's data with an inflated emission fitted on it: 35 % of
+    the targets are planted as exact repeats of `prev_contribution`, so the
+    fitted atoms carry real mass (pi_prev ~ 0.38) and the discrete law is
+    genuinely far from its Gaussian body."""
+    from sklearn.preprocessing import StandardScaler
+
+    X = toy_features(500, 21)
+    rng = np.random.default_rng(22)
+    sd = 0.5 + 0.4 * X[:, 1]
+    y = np.clip(
+        0.6 * X[:, 0] + 4.0 * np.sin(X[:, 0] / 3.0) + rng.normal(0.0, 1.0, len(X)) * sd,
+        0,
+        20,
+    )
+    y = np.where(rng.random(len(X)) < 0.35, X[:, 0], y)  # planted repeat mass
+    scaler = StandardScaler().fit(X)
+    est = InflatedGaussianMLPRegressor(
+        hidden=16, epochs=400, lr=0.05, seed=0, atoms=("prev", "0", "20"), prev_index=0
+    ).fit(scaler.transform(X), y, prev=X[:, 0])
+    bundle = dict(
+        model="gaussian_mlp_inflated",
+        estimator=est,
+        scaler=scaler,
+        features=list(FEATS),
+        target="contribution",
+        n_levels=0,  # continuous bundle: the sampler uses n_contributions
+        default_values=dict(DEFAULTS),
+        switch_every=4,
+    )
+    bundle.update(over)
+    return bundle
+
+
+@pytest.fixture(scope="module")
+def inflated_base():
+    return inflated_bundle()
+
+
+def _probs_by_round(bundle, groups_by_round):
+    """The emission's [A, 21] row law per round, through the adapter's OWN
+    feature path on a deterministic probe adapter (no RNG consumed) -- the
+    inflated twin of `_mu_sd`. `_class_probs` rather than `predict_proba` so
+    the replay inverts exactly the array the sampler inverts."""
+    ad = _adapter(bundle, sample=False)
+    out = []
+    for t, g in enumerate(groups_by_round):
+        st = _state(t, g, groups_by_round[t - 1] if t else None)
+        if t == 0:
+            ad._reset_history()
+        ad._record(st, t)
+        pool = ad._build_pool(t)
+        X = np.column_stack([pool[f][0, :, t] for f in ad.features])
+        out.append(ad._class_probs(ad.scaler.transform(X), N_CONTRIBUTIONS))
+    return out
+
+
+def _invert(P, z):
+    """`c_i = F_i^{-1}(Phi(z_i))` on the row CDF -- the sampler's inversion,
+    reimplemented in numpy from the documented convention."""
+    cum = np.cumsum(P, axis=1)
+    u = ndtr(np.asarray(z, dtype=np.float64))
+    lvl = np.array([np.searchsorted(cum[i], u[i], side="left") for i in range(len(u))])
+    return np.clip(lvl, 0, N_CONTRIBUTIONS - 1).astype(np.int64)
+
+
+def _normal_scores(levels, P):
+    """Per-agent normal score of a realised level: the probit of the midpoint
+    of its CDF interval. The only way to read dependence off DISCRETE outcomes;
+    it attenuates heavily (the atoms make the intervals wide), which is why the
+    tolerance below is a band rather than a point."""
+    cum = np.cumsum(P, axis=1)
+    lo = np.concatenate([np.zeros((len(P), 1)), cum[:, :-1]], axis=1)
+    rows = np.arange(len(P))
+    mid = 0.5 * (lo[rows, levels] + cum[rows, levels])
+    return ndtri(np.clip(mid, 1e-12, 1.0 - 1e-12))
+
+
+# --- the gate and the two silent-failure guards ---------------------------- #
+def test_inflated_bundle_accepted_by_the_copula_gate(inflated_base):
+    ad = _adapter(_bundle(inflated_base, 0.15, 0.0))
+    assert ad.copula_rho_p == 0.15 and ad.copula_rho_t == 0.0
+    assert ad.model_type in ad._INFLATED and ad.model_type in ad._CATEGORICAL
+
+
+def test_inflated_is_not_the_gaussian_path(inflated_base):
+    """The failure this whole branch exists to prevent: `predict` / `predict_std`
+    on this estimator are the mixture's BODY, so an inflated bundle running the
+    Gaussian arithmetic would produce plausible numbers and raise nothing. Under
+    the SAME latent `z` the two emissions must therefore disagree -- and the
+    independent path must be a draw from `predict_proba`, not from the body."""
+    ad = _adapter(_bundle(inflated_base, 0.15, 0.0))
+    raw = toy_features(N_AGENTS, 33)  # per-agent prev levels 18/9/7/11/17/19/6/5
+    Xs = ad.scaler.transform(raw)
+    P = ad._class_probs(Xs, N_CONTRIBUTIONS)
+    mu, sd = ad.estimator.predict(Xs), ad.estimator.predict_std(Xs)
+
+    hits_inflated = hits_body = 0
+    for seed in range(6):
+        ad._reset_history()
+        th.manual_seed(seed)
+        got = ad._sample_levels_gaussian_copula(Xs, N_CONTRIBUTIONS, GROUPS)
+        z = _replay_z(0.15, 0.0, [GROUPS], 1, seed)[0, 0]
+
+        assert np.array_equal(
+            got, _invert(P, z)
+        ), f"seed {seed}: the sampler is not the CDF inversion of the latent"
+        body = np.clip(np.rint(mu + sd * z), 0, N_CONTRIBUTIONS - 1).astype(np.int64)
+        assert not np.array_equal(
+            got, body
+        ), f"seed {seed}: the inflated bundle reproduced the Gaussian body"
+        hits_inflated += int((got == raw[:, 0]).sum())
+        hits_body += int((body == raw[:, 0]).sum())
+    # the mechanism, not just a numerical difference: the atom puts mass on the
+    # previous level where the body (mu 5-11 against prev 5-19) rarely lands
+    assert hits_inflated > 3 * hits_body, (hits_inflated, hits_body)
+
+    # ...and the independent path is the categorical branch, not the body's
+    ind = _adapter(inflated_base)
+    th.manual_seed(5)
+    got = ind._sample_levels(Xs, N_CONTRIBUTIONS)
+    th.manual_seed(5)
+    want = (
+        th.multinomial(th.from_numpy(ind._class_probs(Xs, N_CONTRIBUTIONS)), 1)
+        .reshape(-1)
+        .numpy()
+        .astype(np.int64)
+    )
+    assert np.array_equal(got, want)
+    assert not np.array_equal(
+        got, np.clip(np.rint(mu), 0, N_CONTRIBUTIONS - 1).astype(np.int64)
+    )
+
+
+def test_unknown_model_type_raises(inflated_base):
+    """Neither sampler may fall through to the Gaussian arithmetic for a model
+    it does not know: a future emission must announce itself, not be sampled
+    wrongly in silence."""
+    ad = _adapter(dict(inflated_base, model="something_new"))
+    Xs = ad.scaler.transform(toy_features(N_AGENTS, 33))
+    with pytest.raises(ValueError, match="no level sampler"):
+        ad._sample_levels(Xs, N_CONTRIBUTIONS)
+    with pytest.raises(ValueError, match="no emission"):
+        ad._sample_levels_gaussian_copula(Xs, N_CONTRIBUTIONS, GROUPS)
+
+
+# --- marginal preservation ------------------------------------------------- #
+@pytest.fixture(scope="module")
+def inflated_marginal_reference(inflated_base):
+    """The emission's analytic per-agent law plus TWO independent-sampler runs
+    at different seeds, whose gap is the statistic's own noise floor at this
+    module's N_DRAW (Note 21's calibration, measured rather than guessed). The
+    floor is ~2.4x the Gaussian module's because the atoms concentrate the mass:
+    bigger bin probabilities carry bigger binomial noise."""
+    ad = _adapter(inflated_base)
+    Xs = ad.scaler.transform(toy_features(N_AGENTS, 33))
+    ind_a = _freqs(_draw_many(ad, Xs, 101, copula=False))
+    ind_b = _freqs(_draw_many(ad, Xs, 202, copula=False))
+    return dict(
+        Xs=Xs,
+        P=ad.estimator.predict_proba(Xs),  # the estimator's own law, untouched
+        ind=ind_a,
+        floor=float(np.abs(ind_a - ind_b).max()),
+    )
+
+
+@pytest.mark.parametrize("rho_p, rho_t", [(0.3, 0.0), (0.0, 0.3), (0.2, 0.2)])
+def test_inflated_marginals_preserved(
+    inflated_base, inflated_marginal_reference, rho_p, rho_t
+):
+    """`Phi(z)` is Uniform(0, 1) marginally whatever the weights, so inverting
+    the row CDF reproduces `predict_proba` exactly -- the property that makes
+    RCA and the other marginal rows bug-detectors rather than trade-offs here.
+
+    Same two checks as the Gaussian test: binomial SEs against the ANALYTIC
+    law, and the max bin gap against the independent sampler judged against the
+    floor between two independent runs. The SE threshold is 4.5 rather than 4.0
+    because the atoms push far more bins past the 20-expected-count filter -- 85
+    here -- so the maximum is taken over more draws from the null (observed
+    worst: 3.45 SEs; observed gaps 1.40-1.70x the floor).
+    """
+    ad = _adapter(_bundle(inflated_base, rho_p, rho_t))
+    P = inflated_marginal_reference["P"]
+    ind = inflated_marginal_reference["ind"]
+    floor = inflated_marginal_reference["floor"]
+    cop = _freqs(_draw_many(ad, inflated_marginal_reference["Xs"], 303, copula=True))
+
+    worst_se, worst_bin = 0.0, (None, None)
+    for a in range(N_AGENTS):
+        for lvl in range(N_CONTRIBUTIONS):
+            p = P[a, lvl]
+            if p * N_DRAW < 20:
+                continue
+            se = np.sqrt(p * (1.0 - p) / N_DRAW)
+            if abs(cop[a, lvl] - p) / se > worst_se:
+                worst_se, worst_bin = abs(cop[a, lvl] - p) / se, (a, lvl)
+    assert worst_se < 4.5, f"analytic gap {worst_se:.2f} SEs at {worst_bin}"
+
+    gap = float(np.abs(cop - ind).max())
+    assert gap <= 2.5 * floor, f"copula-vs-independent {gap:.5f} vs floor {floor:.5f}"
+
+
+# --- the latent, read back through the discrete levels --------------------- #
+@pytest.mark.parametrize("rho_p, rho_t", [(0.1, 0.1), (0.15, 0.0)])
+def test_inflated_correlation_recovery_from_replayed_z(inflated_base, rho_p, rho_t):
+    """The replay asserts FIRST that `z` inverted through the row CDF is
+    bit-for-bit what `predict` produced -- so the sampler provably takes the
+    inversion and nothing else -- and the weights are then recovered from `z`.
+
+    The levels' own dependence is checked separately, through their normal
+    scores: it recovers 0.60-0.65 of the latent correlation, the attenuation the
+    discretisation imposes (much stronger than the Gaussian path's ~8 %, because
+    the atoms make the CDF intervals wide). Hence a band, not a point -- but
+    still a direct check that the dependence survives into the LEVELS, and that
+    it stays absent between groups."""
+    groups_by_round = [GROUPS] * N_ROUNDS
+    ad = _adapter(_bundle(inflated_base, rho_p, rho_t))
+    th.manual_seed(7)
+    levels = np.stack(
+        [
+            np.stack(_run_episode(ad, groups_by_round)[0])
+            for _ in range(N_EPISODES_INFLATED)
+        ]
+    )
+    z = _replay_z(rho_p, rho_t, groups_by_round, N_EPISODES_INFLATED, 7)
+    P = _probs_by_round(inflated_base, groups_by_round)
+    implied = np.stack(
+        [
+            np.stack([_invert(P[t], z[e, t]) for t in range(N_ROUNDS)])
+            for e in range(N_EPISODES_INFLATED)
+        ]
+    )
+    assert np.array_equal(levels, implied), "replay does not reproduce predict"
+
+    within = _pooled_corr(z, _pairs(GROUPS, True), 0)
+    lagged = _pooled_corr(z, _pairs(GROUPS, True), 1)
+    cross = _pooled_corr(z, _pairs(GROUPS, False), 0)
+    assert within == pytest.approx(rho_p + rho_t, abs=0.02), f"within {within:.4f}"
+    assert lagged == pytest.approx(rho_p, abs=0.02), f"cross-round {lagged:.4f}"
+    assert cross == pytest.approx(0.0, abs=0.02), f"cross-group {cross:.4f}"
+
+    ns = np.stack(
+        [
+            np.stack([_normal_scores(levels[e, t], P[t]) for t in range(N_ROUNDS)])
+            for e in range(N_EPISODES_INFLATED)
+        ]
+    )
+    lvl_within = _pooled_corr(ns, _pairs(GROUPS, True), 0)
+    lvl_lagged = _pooled_corr(ns, _pairs(GROUPS, True), 1)
+    lvl_cross = _pooled_corr(ns, _pairs(GROUPS, False), 0)
+    assert 0.45 * (rho_p + rho_t) < lvl_within < 0.95 * (rho_p + rho_t), lvl_within
+    if rho_p > 0:
+        assert 0.45 * rho_p < lvl_lagged < 0.95 * rho_p, lvl_lagged
+    assert lvl_cross == pytest.approx(0.0, abs=0.02), f"cross-group {lvl_cross:.4f}"
+
+
+# --- the RNG stream, the latent's lifetime, the arrival-group rule --------- #
+@pytest.mark.parametrize("rho_p, rho_t", [(0.15, 0.0), (0.2, 0.1)])
+def test_inflated_rng_consumption_is_three_size_n_draws(inflated_base, rho_p, rho_t):
+    """Exactly 3n float64 draws, taken unconditionally -- including at
+    `rho_t = 0.0`, the candidate's own shape (Note 22, mutation (a)). The
+    inversion consumes nothing of its own."""
+    ad = _adapter(_bundle(inflated_base, rho_p, rho_t))
+    Xs = ad.scaler.transform(toy_features(N_AGENTS, 55))
+
+    th.manual_seed(9)
+    ad._sample_levels_gaussian_copula(Xs, N_CONTRIBUTIONS, GROUPS)
+    got_next = th.randn(1).item()
+
+    th.manual_seed(9)
+    for _ in range(3):
+        th.randn(N_AGENTS, dtype=th.float64)
+    assert th.randn(1).item() == got_next, "sampler is not 3n float64 draws"
+
+
+@pytest.mark.parametrize("rho_p, rho_t", [(0.15, 0.0), (0.2, 0.1)])
+def test_inflated_persistent_latent_constant_within_episode(
+    inflated_base, rho_p, rho_t
+):
+    """u_g is drawn once per (episode, group) and held, exactly as on the
+    Gaussian path (Note 22, mutation (b)): redrawing it each round would
+    silently convert the run into the transient-only arm."""
+    ad = _adapter(_bundle(inflated_base, rho_p, rho_t))
+    th.manual_seed(17)
+    _, snaps = _run_episode(ad, [GROUPS] * 6)
+    assert set(snaps[0]) == {0, 1}, snaps[0]
+    for t, snap in enumerate(snaps[1:], start=1):
+        assert snap == snaps[0], f"round {t}: {snap} != {snaps[0]}"
+
+
+def test_inflated_persistent_latent_redrawn_per_episode(inflated_base):
+    ad = _adapter(_bundle(inflated_base, 0.15, 0.0))
+    th.manual_seed(19)
+    _, first = _run_episode(ad, [GROUPS] * 3)
+    _, second = _run_episode(ad, [GROUPS] * 3)
+    assert set(second[0]) == set(first[0])
+    for gid in first[-1]:
+        assert second[-1][gid] != first[-1][gid], f"group {gid} kept its latent"
+
+
+def test_inflated_switcher_draws_from_the_receiving_group(inflated_base):
+    """The arrival-group rule under the inversion: at rho_p -> 1 the
+    idiosyncratic term vanishes, every agent here shares one row law, and a
+    group's members therefore land on one level -- so the mover's level
+    identifies whose u_g it inverted."""
+    ad = _adapter(_bundle(inflated_base, 0.999999, 0.0))
+    switched = [1, 0, 0, 0, 1, 1, 1, 1]  # agent 0 moves 0 -> 1
+    th.manual_seed(4)
+    levels, snaps = _run_episode(ad, [GROUPS, switched])
+    assert snaps[1] == snaps[0], "the switch redrew a persistent latent"
+
+    before, after = levels[0], levels[1]
+    assert len(set(before[:4].tolist())) == 1 and len(set(before[4:].tolist())) == 1
+    assert before[0] != before[4], "the two groups' latents coincide; seed unusable"
+    assert after[0] == after[4], "the switcher did not use the receiving latent"
+    assert after[0] != after[1], "the switcher stayed on its departing latent"
+
+
+def test_inflated_sample_false_is_the_modal_level_and_draws_nothing(inflated_base):
+    """`sample=False` returns the row's ARGMAX (the discrete mode), not the
+    rounded body mean, and consumes no RNG."""
+    groups_by_round = [GROUPS] * 3
+    ad = _adapter(_bundle(inflated_base, 0.3, 0.2), sample=False)
+    want = [
+        P.argmax(1).astype(np.int64)
+        for P in _probs_by_round(inflated_base, groups_by_round)
+    ]
+
+    th.manual_seed(42)
+    got, _ = _run_episode(ad, groups_by_round)
+    got_next = th.randn(1).item()
+    th.manual_seed(42)
+    assert th.randn(1).item() == got_next, "the deterministic path consumed the RNG"
+    for t, (w, g) in enumerate(zip(want, got)):
+        assert np.array_equal(w, g), f"round {t}: {w.tolist()} != {g.tolist()}"
+    assert ad._copula_z == {}

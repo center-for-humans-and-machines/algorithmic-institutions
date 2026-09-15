@@ -1,21 +1,33 @@
 """Step 7 (autoresearch step 7,
-notes/autoresearch_log/contribution-gmlp-group-copula.md): stamp the step-6
-fitted dose into a new model bundle.
+notes/autoresearch_log/contribution-inflated-gmlp.md): stamp a fitted group-
+copula dose onto a base bundle.
 
-Loads the base ``contribution_gaussian_mlp_v2_best.joblib`` bundle (asserting
-its sha256 against the value recorded in the step-6 params sidecar) and the
-sidecar JSON ``contribution_gaussian_mlp_v2_group_copula.params.json``, and
-writes ``contribution_gaussian_mlp_v2_group_copula.joblib`` = the base dict
-plus a fixed manifest of ``copula_*`` keys -- exactly ``rho_p =
+Loads a base bundle (``--base``, default ``contribution_gaussian_mlp_v2_best
+.joblib``) and a params sidecar (``--params``, default
+``contribution_gaussian_mlp_v2_group_copula.params.json``), and writes
+``--out`` (default ``contribution_gaussian_mlp_v2_group_copula.joblib``) =
+the base dict plus a fixed manifest of ``copula_*`` keys -- exactly ``rho_p =
 rho_total`` / ``rho_t = 0.0`` (the declared persistent-only dose), the
 sidecar's provenance for it, and the lag-1 falsifier reading carried for
 provenance only (never consumed by the sampler -- see
 ``src/aimanager/simulation/linear_ah.py``'s ``copula_rho_p`` / ``copula_rho_t``
-gate).
+gate). The three paths default to the PR #170 constants, so a bare run is
+that recipe unchanged; passing all three re-runs the same stamp for a
+different trunk (e.g. the inflated emission of this branch) -- see
+Amendment B, notes/autoresearch_log/contribution-inflated-gmlp.md: never run
+with defaults against a non-default sidecar, that would overwrite a
+committed bundle with the wrong stamp.
 
 Precedent: ``scripts/baselines/punishment_copula_rho.py::save_bundle`` (its
 ``NEW_KEYS`` manifest / identical-object-check pattern), reused here for a
 different bundle and a different key set.
+
+The primary provenance check is bundle-vs-sidecar: the sidecar's own
+``base_bundle_sha256`` must equal the sha256 of the ``--base`` bundle that
+was actually loaded, whatever ``--base`` is. The literal
+``EXPECTED_BASE_SHA256`` is a secondary check that applies only when
+``--base`` is left at its default (the PR #170 trunk) -- it is not a stand-in
+for the primary check on any other trunk.
 
 Verifies, and prints:
   1. every pre-existing key is the identical object in the new dict;
@@ -23,19 +35,28 @@ Verifies, and prints:
   3. reloaded from disk, ``predict`` / ``predict_std`` on the train rows are
      bit-identical (``np.array_equal``) to the base bundle's, using the
      step-2/step-6 row builder (``gmlp_group_copula_diagnostic.build_rows``);
+     when the estimator also exposes ``predict_proba`` (the inflated
+     emission's actual categorical surface -- ``predict``/``predict_std``
+     degrade to its Gaussian body and would pass even if the emission were
+     broken), that is checked bit-identical too;
   4. ``LinearAHAdapter`` built from the base and from the stamped bundle
      (``n_agents=8, n_contributions=21``) return identical levels on a fixed
-     state sequence with ``sample=False`` (the copula path is never taken
-     there, so this only guards against a broken reload);
+     6-round switching sequence with ``sample=False`` (the copula path is
+     never taken there, so this only guards against a broken reload);
   5. the reloaded bundle reports ``copula_rho_p`` / ``copula_rho_t`` through
-     the adapter, and the adapter accepts the pair (gaussian_mlp contribution
-     bundle -- the step-3 gate allows it);
+     the adapter, matching the sidecar's own ``rho_total`` / 0.0 -- never a
+     literal -- and the adapter accepts the pair (the step-3 gate allows it);
   6. the sha256 of the new .joblib, on its own line (re-checked on Raven).
 
 Local run (CPU torch, no PyG):
     uv run python scripts/baselines/stamp_contribution_group_copula.py
+    uv run python scripts/baselines/stamp_contribution_group_copula.py \\
+        --base artifacts/baselines/CANDIDATE_best.joblib \\
+        --params artifacts/baselines/CANDIDATE_group_copula.params.json \\
+        --out artifacts/baselines/CANDIDATE_group_copula.joblib
 """
 
+import argparse
 import hashlib
 import json
 import os
@@ -54,11 +75,15 @@ from aimanager.simulation.linear_ah import LinearAHAdapter  # noqa: E402
 from gmlp_group_copula_diagnostic import TRAIN_CFG, build_rows  # noqa: E402
 from handcrafted_grid import load_config  # noqa: E402
 
+# Today's constants -- the PR #170 recipe -- doubling as the CLI defaults, so
+# a bare run reproduces PR #170 exactly (Amendment B).
 BASE_PATH = ROOT / "artifacts/baselines/contribution_gaussian_mlp_v2_best.joblib"
 PARAMS_PATH = (
     ROOT / "artifacts/baselines/contribution_gaussian_mlp_v2_group_copula.params.json"
 )
 OUT = ROOT / "artifacts/baselines/contribution_gaussian_mlp_v2_group_copula.joblib"
+# Only checked when --base is left at its default (BASE_PATH above); see the
+# module docstring -- the bundle-vs-sidecar sha256 (load_inputs) is primary.
 EXPECTED_BASE_SHA256 = (
     "2f0b02e2588dbd8b2c4860ca3918d670095a6eb32851bcec931392c2d6a02e75"
 )
@@ -107,22 +132,34 @@ def sha256_of(path):
     return h.hexdigest()
 
 
-def load_inputs():
+def load_inputs(base_path, params_path):
     import joblib
 
-    base_sha = sha256_of(BASE_PATH)
-    assert base_sha == EXPECTED_BASE_SHA256, (
-        f"base bundle sha256 mismatch: got {base_sha}, expected "
-        f"{EXPECTED_BASE_SHA256} -- stop, do not stamp"
+    base_sha = sha256_of(base_path)
+    params = json.loads(params_path.read_text())
+
+    # PRIMARY check: the sidecar was fitted against exactly this bundle on
+    # disk, whatever --base is. This is what actually binds -- a sidecar
+    # fitted against a different trunk's marginal must never be stamped onto
+    # this one.
+    assert params["base_bundle_sha256"] == base_sha, (
+        "params sidecar's own base_bundle_sha256 disagrees with the --base "
+        f"bundle on disk: sidecar says {params['base_bundle_sha256']!r}, "
+        f"{base_path.relative_to(ROOT)} hashes to {base_sha!r} -- stop, do "
+        "not stamp"
     )
-    params = json.loads(PARAMS_PATH.read_text())
-    assert params["base_bundle_sha256"] == EXPECTED_BASE_SHA256, (
-        "params sidecar's own base_bundle_sha256 disagrees with the base "
-        f"bundle on disk: {params['base_bundle_sha256']!r} vs {base_sha!r}"
-    )
-    base = joblib.load(BASE_PATH)
+
+    # Secondary check, default --base only: pins the PR #170 recipe to its
+    # known trunk so a bare run is provably that recipe and nothing else.
+    if base_path == BASE_PATH:
+        assert base_sha == EXPECTED_BASE_SHA256, (
+            f"base bundle sha256 mismatch: got {base_sha}, expected "
+            f"{EXPECTED_BASE_SHA256} -- stop, do not stamp"
+        )
+
+    base = joblib.load(base_path)
     print(f"base bundle sha256 verified: {base_sha}")
-    print(f"loaded params sidecar {PARAMS_PATH.relative_to(ROOT)}")
+    print(f"loaded params sidecar {params_path.relative_to(ROOT)}")
     return base, params
 
 
@@ -172,17 +209,24 @@ def build_new_bundle(base, params):
     return new
 
 
-def save_and_reload(new):
+def save_and_reload(new, out_path):
     import joblib
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(new, OUT)
-    return joblib.load(OUT)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(new, out_path)
+    return joblib.load(out_path)
 
 
 def check_predict_bit_identical(base, reloaded):
     """Verification 3: predict / predict_std on the train rows, base vs
-    reloaded stamped bundle, bit-identical (np.array_equal, not allclose)."""
+    reloaded stamped bundle, bit-identical (np.array_equal, not allclose).
+
+    On an inflated bundle those two are the mixture's Gaussian BODY only --
+    they would stay bit-identical even if the emission actually sampled
+    (predict_proba) were broken by the reload. So when the estimator exposes
+    predict_proba (the inflated model's real categorical surface, per
+    gaussian_regressor.py's docstring), that is checked bit-identical too;
+    a bundle without it (the plain Gaussian models) is unaffected."""
     cfg = load_config(TRAIN_CFG)
     rows = build_rows(cfg)
     X = np.column_stack([rows["pool"][k][rows["mask"]] for k in base["features"]])
@@ -203,6 +247,20 @@ def check_predict_bit_identical(base, reloaded):
         f"[3] reload check on {len(X)} train rows: "
         f"predict bit-identical={mu_ok}  predict_std bit-identical={sd_ok}"
     )
+
+    has_proba = hasattr(base["estimator"], "predict_proba")
+    if has_proba:
+        P_base = np.asarray(base["estimator"].predict_proba(Xs_base))
+        P_new = np.asarray(reloaded["estimator"].predict_proba(Xs_new))
+        proba_ok = bool(np.array_equal(P_base, P_new))
+        assert proba_ok, "predict_proba() is NOT bit-identical after reload"
+        print(
+            f"[3b] reload check on {len(X)} train rows: "
+            f"predict_proba bit-identical={proba_ok} "
+            f"(shape={P_base.shape}, the emission actually sampled)"
+        )
+    else:
+        print("[3b] estimator has no predict_proba -- not an inflated model, skipped")
 
 
 def _adapter_state(t, groups, prev_groups=None, n_agents=N_AGENTS):
@@ -238,10 +296,12 @@ def _levels_over_fixed_episode(bundle):
     return np.stack(out), ad
 
 
-def check_adapter_equivalence(base, reloaded):
+def check_adapter_equivalence(base, reloaded, params):
     """Verification 4: base vs stamped adapters give the same levels on the
-    deterministic path (sample=False). Verification 5: the stamped bundle's
-    copula_rho_p / copula_rho_t come back through a sample=True adapter."""
+    deterministic path (sample=False), over the fixed 6-round switching
+    sequence GROUPS_BY_ROUND. Verification 5: the stamped bundle's
+    copula_rho_p / copula_rho_t come back through a sample=True adapter,
+    read against the sidecar's own rho_total -- never a literal."""
     levels_base, _ = _levels_over_fixed_episode(base)
     levels_new, _ = _levels_over_fixed_episode(reloaded)
     same = bool(np.array_equal(levels_base, levels_new))
@@ -256,11 +316,13 @@ def check_adapter_equivalence(base, reloaded):
     )
     rho_p = ad_sample.copula_rho_p
     rho_t = ad_sample.copula_rho_t
-    assert rho_p == 0.04378520865574197, rho_p
+    expected_rho_p = float(params["rho_total"])
+    assert rho_p == expected_rho_p, (rho_p, expected_rho_p)
     assert rho_t == 0.0, rho_t
     print(
-        f"[5] adapter accepted the pair (gaussian_mlp contribution bundle); "
-        f"reads copula_rho_p={rho_p!r} copula_rho_t={rho_t!r}"
+        f"[5] adapter accepted the pair (contribution bundle); reads "
+        f"copula_rho_p={rho_p!r} copula_rho_t={rho_t!r} "
+        f"(sidecar rho_total={expected_rho_p!r})"
     )
 
 
@@ -279,17 +341,45 @@ def check_lfs(joblib_path):
     return tracked
 
 
+def build_parser():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--base",
+        type=Path,
+        default=BASE_PATH,
+        help="base model bundle the dose is stamped onto (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--params",
+        type=Path,
+        default=PARAMS_PATH,
+        help="params sidecar carrying the fitted dose (default: %(default)s)",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=OUT,
+        help="stamped bundle written here (default: %(default)s)",
+    )
+    return ap
+
+
 def main():
-    base, params = load_inputs()
+    args = build_parser().parse_args()
+    base_path = args.base.resolve()
+    params_path = args.params.resolve()
+    out_path = args.out.resolve()
+
+    base, params = load_inputs(base_path, params_path)
     new = build_new_bundle(base, params)
-    reloaded = save_and_reload(new)
+    reloaded = save_and_reload(new, out_path)
 
     check_predict_bit_identical(base, reloaded)
-    check_adapter_equivalence(base, reloaded)
-    check_lfs(OUT)
+    check_adapter_equivalence(base, reloaded, params)
+    check_lfs(out_path)
 
-    new_sha = sha256_of(OUT)
-    print(f"\nsaved {OUT.relative_to(ROOT)}")
+    new_sha = sha256_of(out_path)
+    print(f"\nsaved {out_path.relative_to(ROOT)}")
     print(
         f"  copula_rho_p={new['copula_rho_p']!r}  copula_rho_t={new['copula_rho_t']!r}"
     )
