@@ -279,7 +279,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       aimanager; print(aimanager.__file__)'` resolves inside the isolated dir
       (#171 notes 7 / 24). Then run the Raven half of step 3.
 
-- [ ] 6. *(Sonnet)* **Train both arms on Raven** — `AI_REMOTE_DIR=... scripts/train_cluster.sh
+- [x] 6. *(Sonnet)* **Train both arms on Raven** — `AI_REMOTE_DIR=... scripts/train_cluster.sh
       --no-sync ah <arm-A config>` and the same for arm B (squeue check between;
       `--no-sync` after step 5's sync so nothing is deleted). Record per arm:
       SLURM job id, elapsed against the ~25 min ceiling, the in-job provenance
@@ -291,7 +291,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       (and `_sg`) and commit them (LFS `.pt`, plus the `metrics/` and
       `confusion_matrix/` parquets) before any further launcher call.
 
-- [ ] 7. *(Sonnet)* **Held-out fit check and arm selection (pre-declared rule)** — from each
+- [x] 7. *(Sonnet)* **Held-out fit check and arm selection (pre-declared rule)** — from each
       arm's `metrics/architecture_node+edge+rnn__dataset_50ep__epochs_575.parquet`
       (rows `name == log_loss`, `set == test`, `shuffle_feature` and
       `leave_one_in_shuffle_feature` null, `epoch == 574`): the five fold values
@@ -309,7 +309,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       against M0's (1.990605 / 3.831123 / 2.015537 at epoch 574). Log everything
       in Notes, unrounded.
 
-- [ ] 8. *(Opus)* **Pre-sim mechanism diagnostic, report-only** — a scratch teacher-forced
+- [x] 8. *(Opus)* **Pre-sim mechanism diagnostic, report-only** — a scratch teacher-forced
       script (not committed; PyG stand-ins locally as #176 did, or a CPU `sbatch`
       in the isolated dir — never login-node compute) over the 40-episode
       single-copy train split for M0 and the selected arm: (i) the expected
@@ -559,3 +559,86 @@ an unverified number:
 10. **Step 6 launched.** Arm A SLURM **30255929**, arm B **30255931**, both
     submitted with `--no-sync` after step 5's sync, both PENDING at submission
     (arm A queued behind `Nodes required for job are DOWN, DRAINED or reserved`).
+11. **The first training pair died at epoch 0, and the cause is a real bug in
+    the aggregator.** Jobs 30255929 / 30255931 (both arms) failed after 57 s with
+    `RuntimeError: probability tensor contains either inf, nan or element < 0`
+    at `encoder.decode`'s `th.multinomial` — before a single batch finished.
+    Diagnosis: `torch_scatter.scatter_std` ends in a bare `.sqrt()` on an
+    unclamped variance (`composite/std.py`: `out.div(count + 1e-6).sqrt()`).
+    The forward is a harmless 0.0, but **the backward of sqrt at 0 is
+    infinite**, so a single zero-variance neighbourhood turns every weight into
+    NaN on the first optimizer step. Probed directly on Raven: a 3-row group of
+    identical values returns `0.0` forward and `nan` gradients, while a group
+    with spread is unaffected. **This is not a corner case in this game** — a
+    neighbourhood is flat whenever every peer of an agent carries the same
+    `(prev_contribution, prev_punishment, agent_group)`, i.e. a merged group in
+    which nobody contributed and nobody was punished.
+12. **Fix (`ba322db`):** compute the population std two-pass in `_scatter_std`
+    and clamp the variance before the root, which is what PyG's own
+    `StdAggregation` — the reference PNA implementation — does; `_STD_EPS =
+    1e-5` is its value. Degenerate neighbourhoods now get a finite value
+    (`sqrt(1e-5)`) and **zero** gradient instead of poisoning the model, and
+    `torch_scatter.scatter_std` is no longer imported. Two regression tests pin
+    both halves: the finite gradient at zero variance, and agreement with
+    torch's own population std wherever there is real spread. The
+    empty-neighbourhood documentation test was updated — std is now the one
+    reduction whose empty fill is not 0. Local 399 passed, Raven re-run pending
+    at step 13's provenance check; `black`/`flake8` clean.
+13. **Step 6 confirmed** (`4584ae6` config, artifacts committed). Arm A SLURM
+    **30256024**, 00:08:43; arm B **30256025**, 00:08:45, both COMPLETED 0:0 —
+    **~1.0x M0's 8-9 min baseline**, far inside the 3x budget: four scatter
+    reductions and a 1,200-parameter-wider node MLP cost nothing measurable.
+    Both jobs resolve `aimanager` inside
+    `/u/certuer/autoresearch/pna-aggregation/src`; artifact sha256 prefixes
+    `e97e4cbfe309d5266741db17` (A) and `d52a97178d03bf9283c9e4f9` (B).
+14. **Step 7: the pre-declared rule selects arm A, and the fit gate does not
+    fire.** Test log_loss at epoch 574, by `cv_split`:
+
+    | fold | M0 | arm A | arm B |
+    |---|---|---|---|
+    | 0 | 2.048224 | 2.057607 | 2.044509 |
+    | 1 | 2.035988 | 2.062190 | 2.046579 |
+    | 2 | 1.963259 | 1.947110 | 1.951696 |
+    | 3 | 1.999429 | 2.020614 | 2.011004 |
+    | 4 | 1.901808 | 1.899679 | 1.916418 |
+    | **mean** | **1.9897416823554699** | **1.9974397423309853** | **1.9940412286073570** |
+
+    Arm B needed to beat arm A by more than 0.005 *and* on at least 4 of 5
+    folds; it managed **0.003398513723628316** on **3** of 5. Both conditions
+    fail, so **arm A** is selected — the simpler model, on M0's own information
+    set. Arm A is **+0.0076980599755154255** against M0, inside the 0.01
+    stop-gate, so the experiment continues (amendment B: the gate catches a
+    broken training, and nothing here is broken).
+15. **Both arms fit slightly *worse* than M0, as the declaration's risk 1
+    allowed for.** The extra expressivity is not buying teacher-forced
+    likelihood; the hypothesis needs it to buy closed-loop *dynamics*. Recorded
+    before the simulation, where the verdict comes from.
+16. **The aggregators are used — the sharpest contrast with PR #153.** First
+    layer weight mass of op1's node MLP, by input block:
+
+    | block | M0 | arm A | arm B |
+    |---|---|---|---|
+    | self (x) | 26.9% | 15.3% | 16.6% |
+    | mean | **73.1%** | 24.3% | 22.0% |
+    | max | — | 25.8% | 20.8% |
+    | min | — | 22.6% | 26.2% |
+    | std | — | 12.0% | 14.4% |
+
+    In arm A the three new statistics carry **60.4%** of the mass, with max and
+    min each outweighing the mean. #153's attention head *collapsed back to
+    uniform* (0.1430 / 0.1426 against a uniform 0.1429) when it lacked the group
+    bit; this one does not fall back on the mean. Weight mass is not functional
+    importance — the blocks carry different input scales — but a collapse would
+    be unmistakable and there is none.
+17. **Plan revision at step 8 (§9.4), recorded before the calibration ran.**
+    Step 8's teacher-forced regression of predictions on peer min/max/std is
+    replaced by note 16's weight-block read *here*, with the behavioral
+    diagnostic moved to **step 14**, where it is measured in the **closed loop**
+    (P(|dc| >= 5) by own-group peer-std tercile, sim against human) instead of
+    under teacher forcing. Reasons: the hypothesis is explicitly about
+    closed-loop dynamics, not teacher-forced fit (risk 1, note 15); step 14
+    already declares that exact read; and #175/#177 both found teacher-forced
+    readings pointing opposite to the simulated ones, so the teacher-forced
+    version would be the *less* informative of the two. Nothing is dropped — the
+    diagnostic moves to where it discriminates. Step 8 remains report-only and
+    cancels nothing (amendment C).
