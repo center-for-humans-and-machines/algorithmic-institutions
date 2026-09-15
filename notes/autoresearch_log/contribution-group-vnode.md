@@ -624,3 +624,19 @@ here, before anything ran:
    the orchestrator verifies gate (a) -- the off-flag bit-identity that licenses
    step 13's control comparison -- independently rather than on the subagent's
    report, and the gates are re-run against real PyG on Raven at step 6 either way.
+7. **Orchestrator ruling: the squeue gate is about the sync destination, not the
+   account.** Step 6's first dispatch stopped without touching Raven because
+   `squeue -u certuer` showed four RUNNING jobs. Two are an unrelated `Ekklesia`
+   project; two are a *sibling* autoresearch experiment (`~/autoresearch/pna-aggregation`,
+   contribution training, submitted ~20:41) in its own isolated dir. Reading
+   `scripts/train_cluster.sh` directly: with `AI_REMOTE_DIR` set the `rsync -azP
+   --delete` destination is `${REMOTE_PROJECT_DIR}` alone, i.e.
+   `~/autoresearch/contribution-group-vnode`, which does not yet exist; the shared
+   checkout and every sibling dir lie outside its scope. The hazard the gate exists
+   for (PR #173 note 11) is a `--delete` racing a job that needs the files being
+   deleted, so the correct predicate is **a job whose working directory is the
+   shared checkout or this experiment's own isolated dir** -- not any job on the
+   account. Under the account-wide reading no parallel experiment could ever sync,
+   which is precisely the situation `AI_REMOTE_DIR` was introduced to support.
+   Step 6 re-dispatched with the refined gate; the subagent was right to stop
+   rather than reason past a rule it had been given literally.
