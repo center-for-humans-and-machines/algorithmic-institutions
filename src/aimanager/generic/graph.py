@@ -1,12 +1,59 @@
 from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU
 import numpy as np
 import torch as th
-from torch_scatter import scatter_mean
+from torch_scatter import scatter_mean, scatter_max, scatter_min
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.conditional_bernoulli import sample_conditional_bernoulli
 from aimanager.generic.copula import sample_correlated_levels
 from aimanager.generic.encoder import Encoder, IntEncoder
 from aimanager.generic.joint_exodus import JointExodusHead
+
+
+def _scatter_max(src, index, dim=0, dim_size=None):
+    # scatter_max returns (values, argmax); only the values are the reduction.
+    return scatter_max(src, index, dim=dim, dim_size=dim_size)[0]
+
+
+def _scatter_min(src, index, dim=0, dim_size=None):
+    return scatter_min(src, index, dim=dim, dim_size=dim_size)[0]
+
+
+# Variance floor under the square root. `torch_scatter.scatter_std` ends in a
+# bare `.sqrt()` on an unclamped variance: the forward is fine (0.0), but the
+# backward of sqrt at 0 is infinite, so a single zero-variance neighbourhood
+# turns every weight into NaN on the first optimizer step. That case is not
+# exotic here -- it is every agent all of whose peers carry the same
+# (prev_contribution, prev_punishment, agent_group), e.g. a merged group in
+# which nobody contributed or was punished. Clamping the variance before the
+# root is what PyG's own `StdAggregation`, the reference PNA implementation,
+# does: degenerate neighbourhoods get a finite value and zero gradient instead
+# of poisoning the model. 1e-5 is StdAggregation's value.
+_STD_EPS = 1e-5
+
+
+def _scatter_std(src, index, dim=0, dim_size=None):
+    # Population std (unbiased=False), two-pass so it stays accurate, with the
+    # variance clamped before the root -- see `_STD_EPS`. Deliberately NOT
+    # `torch_scatter.scatter_std`, whose gradient is NaN on a zero-variance
+    # neighbourhood; `src/aimanager/tests/test_pna_aggregation.py` pins both
+    # the agreement with it away from the degenerate case and the finite
+    # gradient at it.
+    mean = scatter_mean(src, index, dim=dim, dim_size=dim_size)
+    centered = src - mean.index_select(dim, index)
+    var = scatter_mean(centered * centered, index, dim=dim, dim_size=dim_size)
+    return var.clamp(min=_STD_EPS).sqrt()
+
+
+# The reductions a NodeModel may apply to its incoming messages, PNA-style
+# (Corso et al. 2020): a mean over a multiset cannot carry its extremes or its
+# spread, whatever the edge model emits. All four share the signature
+# ``(src, index, dim, dim_size)`` so ``forward`` can dispatch on the name.
+AGGREGATORS = {
+    "mean": scatter_mean,
+    "max": _scatter_max,
+    "min": _scatter_min,
+    "std": _scatter_std,
+}
 
 
 class EdgeModel(th.nn.Module):
@@ -29,10 +76,23 @@ class EdgeModel(th.nn.Module):
 
 class NodeModel(th.nn.Module):
     def __init__(
-        self, x_features, edge_features, u_features, out_features, activation=None
+        self,
+        x_features,
+        edge_features,
+        u_features,
+        out_features,
+        activation=None,
+        aggregators=None,
     ):
         super().__init__()
-        in_features = x_features + edge_features + u_features
+        # `aggregators` is a list of `AGGREGATORS` keys, each reducing the
+        # incoming messages once; the results are concatenated, so the node MLP
+        # reads `len(aggregators)` blocks of `edge_features`. `None` is the
+        # legacy single mean and must stay bit-identical to it, widths
+        # included.
+        self.aggregators = aggregators
+        n_aggr = 1 if aggregators is None else len(aggregators)
+        in_features = x_features + n_aggr * edge_features + u_features
         if activation is None:
             self.node_mlp = Lin(in_features=in_features, out_features=out_features)
         else:
@@ -47,7 +107,21 @@ class NodeModel(th.nn.Module):
         # u: [B, F_u]
         # batch: [N] with max entry B - 1.
         row, col = edge_index
-        out = scatter_mean(edge_attr, col, dim=0, dim_size=x.size(0))
+        # `getattr`, not `self.aggregators`: every artifact saved before the
+        # multi-aggregator existed unpickles a NodeModel without the attribute,
+        # and those models must keep running. The legacy branch is the original
+        # expression verbatim -- same values, same RNG consumption.
+        aggregators = getattr(self, "aggregators", None)
+        if aggregators is None:
+            out = scatter_mean(edge_attr, col, dim=0, dim_size=x.size(0))
+        else:
+            out = th.cat(
+                [
+                    AGGREGATORS[a](edge_attr, col, dim=0, dim_size=x.size(0))
+                    for a in aggregators
+                ],
+                dim=-1,
+            )
         out = th.cat([x, out, u[batch]], dim=-1)
         out = self.node_mlp(out)
         return out
@@ -145,6 +219,7 @@ class GraphNetwork(th.nn.Module):
         add_rnn=True,
         add_edge_model=True,
         add_global_model=True,
+        aggregators=None,
         hidden_size=None,
         default_values={},
         copula_rho=0.0,
@@ -238,6 +313,30 @@ class GraphNetwork(th.nn.Module):
         self.joint_exodus = joint_exodus
         self.joint_exodus_switch_every = joint_exodus_switch_every
 
+        # PNA-style multi-aggregator at op1's peer-message aggregation; see
+        # notes/autoresearch_log/contribution-pna-aggregation.md. `None` is the
+        # legacy single mean, so an artifact saved without this key loads and
+        # behaves exactly as it does today. Degree scalers -- PNA's other half
+        # -- are deliberately not implemented: the room is a fixed fully
+        # connected 8-node graph, so the in-degree is the constant 7 and a
+        # log-degree scaler would be a constant multiplier.
+        assert aggregators is None or (
+            isinstance(aggregators, list)
+            and len(aggregators) > 0
+            and all(a in AGGREGATORS for a in aggregators)
+            and len(set(aggregators)) == len(aggregators)
+        ), (
+            "aggregators must be None or a non-empty list of distinct keys of "
+            f"{sorted(AGGREGATORS)}, got {aggregators!r}"
+        )
+        # The aggregators reduce the messages the edge model emits; with no
+        # edge model there is nothing to reduce and the widths below would be
+        # multiples of zero.
+        assert (
+            aggregators is None or add_edge_model
+        ), "aggregators require add_edge_model=True, there is nothing to reduce"
+        self.aggregators = aggregators
+
         if op1 is None:
             if add_edge_model:
                 edge_model = EdgeModel(
@@ -256,6 +355,7 @@ class GraphNetwork(th.nn.Module):
                 u_features=u_features,
                 out_features=hidden_size,
                 activation=Tanh(),
+                aggregators=aggregators,
             )
             x_features = hidden_size
 
@@ -338,6 +438,16 @@ class GraphNetwork(th.nn.Module):
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
             self.joint_exodus_head = joint_exodus_head
+            # A loaded artifact must not claim one aggregation and run
+            # another: the node MLP's input width is baked into the saved
+            # weights, and `aggregators` is what the forward dispatches on.
+            # `getattr` again, for the pre-change artifacts (see NodeModel).
+            loaded = getattr(op1.node_model, "aggregators", None)
+            assert loaded == aggregators, (
+                "op1's node model aggregates with "
+                f"{loaded!r} but the model is being built with "
+                f"aggregators={aggregators!r}"
+            )
 
         assert (self.joint_exodus_head is not None) == self.joint_exodus, (
             "joint_exodus and joint_exodus_head disagree: "
@@ -734,6 +844,7 @@ class GraphNetwork(th.nn.Module):
             "joint_exodus",
             "joint_exodus_head",
             "joint_exodus_switch_every",
+            "aggregators",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 

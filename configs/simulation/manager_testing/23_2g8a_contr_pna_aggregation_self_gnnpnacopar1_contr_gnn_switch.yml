@@ -1,0 +1,41 @@
+# auto/contribution-pna-aggregation: the parent stack
+# (23_2g8a_switch_joint_exodus_self_gnncopar1_contr_gnn_switch, PR #171) with
+# the contribution slot swapped to the PNA multi-aggregator trunk -- op1's
+# uniform scatter_mean over the 7 peer messages replaced by
+# [mean, max, min, std] -- recalibrated on that retrained trunk
+# (rho = 0.06221744336427447, phi = 1.0). Switch and punisher artifacts are
+# byte-identical to the parent's. Single pairing; protocol byte-identical to
+# the parent. Slug sits before `_self_` so evaluation_sweep.py's DIR_PATTERN
+# still parses contr/switch.
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_pna_aggregation_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_contr_pna_aggregation_self_gnnpnacopar1_contr_gnn_switch
+figure_name: 2g8a_contr_pna_aggregation_self_gnnpnacopar1_contr_gnn_switch
+save_per_round: true
+basedir: .
