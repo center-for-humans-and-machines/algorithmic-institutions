@@ -41,6 +41,61 @@ def _scatter_mean(src, index, dim=0, dim_size=None):
     return out / count.reshape(shape).clamp(min=1.0)
 
 
+def _scatter_extreme(src, index, dim, dim_size, largest):
+    """`scatter_max` / `scatter_min`: a (values, argmax) PAIR, not a tensor.
+
+    Empty neighbourhoods keep torch_scatter's zero fill (it initialises `out`
+    to the reduction's identity and masks that sentinel back to 0 when it
+    allocated `out` itself); see src/aimanager/tests/test_pna_aggregation.py.
+    """
+    assert dim == 0, "the stand-in only implements dim=0, which is all graph.py uses"
+    index = index.reshape(-1).to(th.int64)
+    if dim_size is None:
+        dim_size = int(index.max().item()) + 1 if index.numel() else 0
+    values = th.zeros((dim_size, *src.shape[1:]), dtype=src.dtype, device=src.device)
+    arg = th.full(values.shape, src.size(0), dtype=th.int64, device=src.device)
+    rows = th.arange(src.size(0), device=src.device)
+    for node in range(dim_size):
+        mask = index == node
+        if not bool(mask.any()):
+            continue
+        picked = src[mask]
+        value, where = picked.max(dim=0) if largest else picked.min(dim=0)
+        values[node] = value
+        arg[node] = rows[mask][where]
+    return values, arg
+
+
+def _scatter_max(src, index, dim=0, dim_size=None):
+    return _scatter_extreme(src, index, dim, dim_size, True)
+
+
+def _scatter_min(src, index, dim=0, dim_size=None):
+    return _scatter_extreme(src, index, dim, dim_size, False)
+
+
+def _scatter_std(src, index, dim=0, dim_size=None, unbiased=True):
+    """torch_scatter's own std, `unbiased` keyword included: graph.py passes
+    ``unbiased=False`` so a degree-1 node reduces to 0 rather than dividing by
+    zero."""
+    assert dim == 0, "the stand-in only implements dim=0, which is all graph.py uses"
+    index = index.reshape(-1).to(th.int64)
+    if dim_size is None:
+        dim_size = int(index.max().item()) + 1 if index.numel() else 0
+    shape = (dim_size,) + (1,) * (src.dim() - 1)
+    count = th.zeros(dim_size, dtype=src.dtype, device=src.device)
+    count.index_add_(0, index, th.ones_like(index, dtype=src.dtype))
+    count = count.reshape(shape).clamp(min=1.0)
+    total = th.zeros((dim_size, *src.shape[1:]), dtype=src.dtype, device=src.device)
+    total.index_add_(0, index, src)
+    deviation = src - (total / count)[index]
+    out = th.zeros_like(total)
+    out.index_add_(0, index, deviation * deviation)
+    if unbiased:
+        count = (count - 1.0).clamp(min=1.0)
+    return (out / (count + 1e-6)).sqrt()
+
+
 class _MetaLayer(th.nn.Module):
     """`torch_geometric.nn.MetaLayer`: edge model, then node model, then
     global model, each fed the outputs of the previous one."""
@@ -73,6 +128,9 @@ def _install_pyg_stand_ins():
         pass
     scatter = types.ModuleType("torch_scatter")
     scatter.scatter_mean = _scatter_mean
+    scatter.scatter_max = _scatter_max
+    scatter.scatter_min = _scatter_min
+    scatter.scatter_std = _scatter_std
     sys.modules.setdefault("torch_scatter", scatter)
     geometric = types.ModuleType("torch_geometric")
     geometric_nn = types.ModuleType("torch_geometric.nn")
