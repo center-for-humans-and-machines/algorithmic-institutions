@@ -80,6 +80,24 @@ def parse_agent_rounds(df, switch_every=None):
     else:
         df["switch_valid"] = df["switch_mask"]
 
+    # rounds since the agent last ARRIVED in a new group (node feature): 0 on
+    # the arrival round, then 1, 2, 3, capped at 4. Derived from the membership
+    # change itself (not from does_switch, which is labelled a round earlier).
+    # An agent that has not arrived anywhere yet sits at the cap -- rounds 0-3
+    # are static by design, so the earliest possible arrival is round 4.
+    arrived = (df["round_number"] > 0) & df["group_id"].ne(
+        by_player["group_id"].shift(1)
+    )
+    last_arrival = (
+        df["round_number"]
+        .where(arrived)
+        .groupby([df["episode_id"], df["player_id"]])
+        .ffill()
+    )
+    df["rounds_since_arrival"] = (
+        (df["round_number"] - last_arrival).fillna(4).clip(upper=4).astype(int)
+    )
+
     # own-group average contribution (node feature, #114 / M3): leave-one-out
     # mean of the agent's CURRENT-group members' PREVIOUS-round contribution.
     # Computed directly (current-group membership x t-1 contribution) so a
@@ -147,6 +165,8 @@ def get_default_values(df):
         # round-0 / absent cells inherit the contribution default (see #114):
         # the own-group prev mean of all-c_def previous contributions is c_def.
         "own_grp_prev_mean_contr": c_def,
+        # agents start settled: the cap, matching parse_agent_rounds' fill.
+        "rounds_since_arrival": 4,
     }
     return default_values
 
@@ -169,6 +189,7 @@ def create_torch_data_new(df, default_values=None):
         "switch_mask": th.bool,
         "switch_valid": th.bool,
         "own_grp_prev_mean_contr": th.float,
+        "rounds_since_arrival": th.int64,
     }
 
     n_groups = df["group_idx"].max() + 1
