@@ -497,3 +497,24 @@ runner-up (candidate A) before any step ran.
    `agent_group`, and it establishes the precondition the hypothesis needed: the new
    feature carries information the trunk did not have. What it has not yet shown is
    conversion into behaviour.
+
+10. **Step 6, teacher-forced diagnostic on the candidate trunk (report-only, gates
+    nothing).** Base reproduces the Declaration exactly, so the comparison is sound.
+    Arrivals (n=523): own-weight **0.707 -> 0.637** (human 0.460), peer 0.111 ->
+    0.086 (human 0.280), P(repeat) **0.329 -> 0.254** against a human 0.258 — that
+    cell is now essentially exact — P(|dc| >= 5) 0.201 -> 0.280 (human 0.354),
+    stratum NLL 2.338 -> 2.206. Stayers (n=8,037) barely move: own 0.759 -> 0.757,
+    peer 0.117 -> 0.120, NLL 1.7480 -> 1.7463, P(|dc| >= 5) 0.148 -> 0.144.
+    **The release is targeted, which is the whole design claim** — this is not
+    #163's indiscriminate shape, and it is why the flat aggregate likelihood of note
+    8 is consistent with a real stratum-local change. Verified independently by the
+    orchestrator by re-running the script on the candidate artifact.
+
+11. **The mechanism is real but weak, and gate 1 is in doubt before the simulation.**
+    Teacher-forced pull on the human switch events moved **0.186 -> 0.220** against a
+    human 0.430 — roughly 14% of the deficit closed. The base's teacher-forced 0.186
+    sat against a closed-loop 0.206, so if that relationship holds the candidate lands
+    near 0.24, short of the 0.2698 the RCD band upgrade needs. Recorded before the
+    simulation so the prediction is on the record and cannot be written after the
+    fact. It changes nothing procedurally: the copula steps and the single evaluation
+    run as planned, and the verdict comes from that evaluation alone (§2, §6).
