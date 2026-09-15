@@ -838,3 +838,40 @@ here, before anything ran:
     fast-reverting one regresses. **A successor should test phi_hat directly on
     this trunk** -- it is the cleanest small-delta follow-up this experiment
     leaves behind, and it is not claimable here.
+17. **Step 11, stamping (SLURM 30257600, 17s, exit 0:0).** Stamped artifact sha256
+    `379c2557e21922b12408f359d398fa21075ac31b5eeab425a564306233be8f0e`, carrying
+    `copula_rho 0.0435568043640977`, `copula_phi 1.0`, `copula_switch_every 1`,
+    all three round-tripping on load. **14 tensors compared bit-identically** to
+    the step-7 base, the compared modules being `op1`, `op2`, `rnn_n` and
+    **`group_vnode_module`** -- the virtual node's own GRU weights are therefore
+    verified untouched by stamping, which is what licenses attributing the
+    simulation's difference to the mechanism rather than to a stamping side
+    effect. The honesty check reports the **7,457** teacher-forced train-split
+    rows bit-identical to the base model's probabilities, so the stamp changed
+    the sampler and nothing else.
+18. **Two process failures at step 11, recorded because they cost four jobs and
+    neither was a modelling error.** First: **a local commit does not reach the
+    cluster.** Job 30257491 died in 4s on `assert k not in base` -- the isolated
+    dir still held the *pre-step-9* stamper, because the dir was last synced at
+    step 7 and the step-11 agent had `scp`'d only its own new `.slurm` wrapper.
+    Nine commits of source drift, invisible until an assert caught it. **Any step
+    that changes repository code after the initial sync must re-sync (or `scp`
+    every changed file, not just the new one) before the next remote job** -- and
+    the `rsync --delete` rule pushes toward `scp`, which is exactly what makes
+    shipping an incomplete set easy. This belongs with PR #171's isolation
+    findings. Second, and the orchestrator's own error: having intervened
+    directly on jobs the step-11 subagent still owned (it had a live monitor),
+    the two of us cancelled and resubmitted underneath each other, killing
+    30257219 and 30257556 at 0:00 elapsed. Once an orchestrator touches a
+    resource a subagent owns it must take the resource over or leave it alone,
+    not interleave; the agent was stopped and the step finished directly. No
+    seed, protocol parameter or artifact was affected by either -- the cost was
+    wall-clock only.
+19. **Scheduling note.** The first stamp submission sat `PENDING` on
+    `QOSGrpCpuLimit` -- the *project's* group CPU allocation, saturated by other
+    members of the account (214 jobs running on the partition), not by this
+    experiment. The wrapper was trimmed from 4 CPUs / 16 GB / 1 h to 1 CPU /
+    8 GB / 20 min for a job that loads a 34 KB model, sets three fields and runs
+    a 7,457-row forward pass; the pending reason changed to `(Priority)` and it
+    scheduled. Resource requests are scheduling, not protocol: no seed, episode
+    count, game parameter or model is touched by them, and §8 is not engaged.
