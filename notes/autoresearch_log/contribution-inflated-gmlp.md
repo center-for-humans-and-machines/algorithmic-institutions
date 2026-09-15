@@ -895,3 +895,38 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     orchestrator directly in the code, not by re-running. Step 4's floor
     check therefore stands as the plan writes it: read `features` off the
     saved bundle, do not rely on an exception that will not be raised.
+19. (Step 4, confirmed) **F1 passes decisively and the atom set is frozen
+    at `prev,0,20`.** CV cross-entropy on the training split ranks exactly
+    as the declaration predicted — `prev,0,20` **2.161016**, `prev,20`
+    2.168084, `prev` 2.186107, floor 2.921355 (the three floor rows tie by
+    construction) — so the selection is by likelihood alone and, per
+    Amendment A, is not revisited again. Bundle
+    `artifacts/baselines/contribution_gaussian_mlp_inflated_best.joblib`,
+    sha256 **687755b6c9f746f03844dbeec991a3f437036d3cd29f6f0a0505fd7130580b0a**,
+    4175 bytes, not LFS-tracked. **Test 21-way CE 1.8817206133537128**
+    against the incumbent's 2.3101098745482482 (**-18.5 %**) and a test
+    floor of 2.717958377177829. Read back off both bundles by the
+    orchestrator independently of the implementer: same seven features in
+    the same order, same `test_logloss_binned` key, and the candidate's
+    stored knobs are hidden 8 / wd 0.0003 / lr 0.01 / epochs 1000 with
+    `atoms ('prev','0','20')` and `prev_index 0` — so Note 15's confound is
+    closed on the artifact itself, not merely in the config, and the
+    emission is the only difference.
+20. (Step 4, the mechanism's signature at fit time) Mean fitted mixture
+    weights on the 1863 test rows: `pi_body` 0.6957, **`pi_prev` 0.2493**,
+    `pi_0` 0.0108, `pi_20` 0.0442. Implied vs realised on those rows:
+    P(c = prev) **0.398359 vs 0.502952**, P(20 | prev 20) 0.676935 vs
+    0.850785 (n 382), P(c = 0) 0.063567 vs 0.057434, P(c = 20) 0.168887 vs
+    0.219538 — every one within 0.001 of the scratch numbers the
+    declaration pre-registered. The repeat mass moved from the incumbent's
+    ~0.17 (Note 4) to 0.398 against the human 0.4395, so the mechanism is
+    real but **still under-delivers the observed repeat rate by about
+    0.10**. Recorded as a teacher-forced likelihood diagnostic only: it is
+    not U1, which is a closed-loop quantity measured on the rollout at
+    steps 8 and 11, and the two must not be conflated when the verdict is
+    written.
+21. (Orchestrator, checked while verifying step 4) The bundle pickles its
+    estimator under the bare module name `gaussian_regressor`, so it
+    unpickles only with `scripts/baselines` on `sys.path`. This is not a
+    new hazard for the cluster run: `linear_ah.py:42` already inserts that
+    directory, which is how every existing gaussian bundle loads.
