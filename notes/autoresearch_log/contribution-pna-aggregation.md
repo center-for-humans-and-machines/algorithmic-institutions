@@ -187,7 +187,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
 (slug before `_self_`, so `evaluation_sweep.py`'s `DIR_PATTERN` parses
 `contr = gnnpnacopar1`, `switch = gnn`).
 
-- [ ] 1. *(Opus)* **Multi-aggregator in `NodeModel`** — `src/aimanager/generic/graph.py`,
+- [x] 1. *(Opus)* **Multi-aggregator in `NodeModel`** — `src/aimanager/generic/graph.py`,
       class `NodeModel` (existing). Constructor gains `aggregators=None`; store
       it and size the node MLP as `in_features = x_features +
       n_aggr * edge_features + u_features` with `n_aggr = 1 if aggregators is
@@ -204,7 +204,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       for a in aggregators], dim=-1)` in config order. `GlobalModel`, `EdgeModel`
       and `op2` are untouched.
 
-- [ ] 2. *(Opus)* **Plumbing in `GraphNetwork`** — `src/aimanager/generic/graph.py`,
+- [x] 2. *(Opus)* **Plumbing in `GraphNetwork`** — `src/aimanager/generic/graph.py`,
       `GraphNetwork.__init__` (existing): new keyword `aggregators=None`;
       validate (a non-empty list of distinct keys of `AGGREGATORS`, or `None`;
       `aggregators is None or add_edge_model` — the aggregators reduce the edge
@@ -217,7 +217,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       with the default, exactly as `copula_*` and `joint_exodus` do. Degree
       scalers are not implemented (constant in-degree; declaration).
 
-- [ ] 3. *(Opus)* **Tests and lint** — new `src/aimanager/tests/test_pna_aggregation.py`
+- [x] 3. *(Opus)* **Tests and lint** — new `src/aimanager/tests/test_pna_aggregation.py`
       with the PyG stand-in preamble of
       `src/aimanager/tests/test_joint_exodus_train_sim_parity.py` so it runs
       locally *and* on Raven against real PyG (each test reports which). Cases:
@@ -234,7 +234,7 @@ the stamped model under `..._pna_aggregation_herding_copula/`, sim output
       `aggregators` and the loaded model's `forward` equals the saved one's on
       the same input; the `op1`/`aggregators` disagreement assert fires;
       (e) `["mean", "max", "min", "std"]` changes the node MLP's input width to
-      `3 + 80` and the forward runs on M0-shaped data with `edge_encoding=[]` and
+      `4 + 80 = 84` and the forward runs on M0-shaped data with `edge_encoding=[]` and
       with `[same_group]`. **Stand-ins:** `graph.py` now imports `scatter_max`,
       `scatter_min`, `scatter_std` at module top, so every stand-in installer
       that sets `scatter.scatter_mean` must also install the three new functions
@@ -469,3 +469,53 @@ an unverified number:
 - **D. Undeclared rows are collateral.** CG and RCA are the only rows that can
   satisfy gate 1. A band upgrade on RCD, RCB or anything else is reported under
   Collateral and never claimed as the success (PR #173's pre-declaration ruling).
+
+## 4. Notes
+
+1. **Steps 1-2 confirmed** (`79bdb39`, `67a6b42`), 90 lines in
+   `src/aimanager/generic/graph.py` and nothing else. `AGGREGATORS` holds three
+   thin wrappers rather than the raw `torch_scatter` functions, because
+   `scatter_max`/`scatter_min` return `(values, argmax)` and `scatter_std`
+   defaults to the unbiased estimator; the validator requires a `list` strictly
+   rather than accepting tuples, since the load-path check is an `==` comparison
+   where a tuple/list mismatch would fire a confusing assert (YAML always yields
+   lists, so no config is affected).
+2. **The legacy path is pinned two independent ways.** Structurally:
+   `aggregators=None` gives `n_aggr == 1`, so `in_features` is the pre-change
+   expression, the single `Lin` draws the same values in the same order, and no
+   module is created, deleted or reordered — the RNG stream is untouched.
+   Empirically: the M0-shaped trunk built under `th.manual_seed(38381)` hashes
+   to the same `state_dict` sha256
+   (`b5bd4985d0313218976c851cc2113a833a23342c76714db7bd84560e4916764d`) on the
+   pre-change and post-change code. This is what step 13's bit-identical control
+   will confirm end to end.
+3. **Orchestrator check, empty neighbourhoods.** `create_fully_connected`
+   (`graph.py:842`, `train.py:74`) is the only edge builder on both the training
+   and the simulation path, so every node always has exactly `n_nodes - 1 = 7`
+   incoming edges and `scatter_max`/`min`'s empty-neighbourhood fill can never
+   surface here. No runtime handling was added; step 3 documents the fill in a
+   test instead, so a future agent changing the topology finds the answer
+   written down. Measured on Raven's torch_scatter 2.0.9: the fill is `0.0`,
+   argmax `src.size(0)`.
+4. **Step 3 confirmed** (`6146b71`, `aaffde0`): 25 new cases, and the five PyG
+   stand-in installers taught the three new reductions with their *real*
+   signatures (2-tuple returns, the `unbiased` keyword) — without which the
+   suites error at collection, which is exactly what steps 1-2 left behind
+   between `67a6b42` and `6146b71`. Local: **491 passed, 3 skipped**, zero
+   failures (orchestrator re-ran a 397-test subset independently: green).
+   `black` + `flake8` + `pre-commit` clean over all seven touched files. The
+   suite was mutation-checked: breaking the max aggregator, the concat order, or
+   the `getattr` each fails tests.
+5. **Plan correction, step 3(e).** The node MLP's input width under four
+   aggregators is **84**, not the plan's `3 + 80`: M0's `x_encoding` is two
+   numerics plus `agent_group` **onehot at `n_levels: 2`**, which `IntEncoder`
+   sizes as 2, so `x_features == 4`. Corrected in the step above; step 11's
+   verification wording inherits the corrected number.
+6. **Recorded because it was reported rather than hidden:** the step-3
+   implementer ran two read-only probes on the Raven login node (a `sed` of
+   `torch_scatter/composite/std.py` and a ~3 s `python -c` scattering a 4x2
+   tensor) to establish note 3's fill value instead of shipping an unverified
+   assertion. No sync, no job, no `aimanager` import. Orchestrator ruling:
+   inside the "login node is orchestration only" line, which bars *compute*, not
+   a three-second API probe — and the alternative was an assertion nobody had
+   checked.
