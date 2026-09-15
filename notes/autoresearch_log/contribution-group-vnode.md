@@ -701,3 +701,93 @@ here, before anything ran:
     installed and active, and the C block is now the thing most likely to fail
     gate 2 -- exactly the anti-correlation §6 warns of, arriving through the
     likelihood rather than through the sampler.
+12. **Step 8, pre-sim diagnostic (report-only, gates nothing) -- route, and
+    the own-group and punishment-climate channels.** Ran locally on macOS,
+    not on Raven and not via `sbatch`. The plan warned that unpickling a
+    saved `GraphNetwork` needs the real `torch_geometric.nn.MetaLayer`
+    class; that is only true because the switch-joint-exodus test's
+    stand-in registers `MetaLayer` at the wrong module path. Both artifacts
+    here pickle it at `torch_geometric.nn.models.meta.MetaLayer` (confirmed
+    directly: the flat-path stand-in fails `torch.load` with
+    `ModuleNotFoundError: torch_geometric.nn.models`); registering that
+    fuller nested path with the same CPU-exact `scatter_mean` stand-in
+    loads and runs both M0 and the candidate trunk locally, verified before
+    anything else was built. `squeue` showed two PENDING jobs, both a
+    sibling experiment's own isolated dir (`pna-aggregation`) -- clear under
+    note 7's gate -- so `sbatch` was available but unneeded once the local
+    route worked. Method: this session's own `preflight.py` (the script
+    behind section 1's Hypothesis table, still sitting in the scratchpad)
+    supplies the regressors and the episode-cluster bootstrap verbatim, run
+    unmodified on `evaluation_suite/convert.py::load_human`'s canonical
+    frame -- confirmed exact by first reproducing the Declaration's own
+    numbers bit for bit (human own 0.695394 / group-blind peer -0.000526 /
+    own-group 0.278345 [0.221769, 0.326813], R² 0.712440, n = 7,137, and the
+    punishment-climate 0.164942 [0.105535, 0.243264] against own-punishment
+    0.020500 -- both match section 1 to the digits quoted there). The model
+    side substitutes E[c(t)] (`predict_independent(sample=False,
+    reset_rnn=True)`, teacher-forced on the real sequence via
+    `generic/data.py::parse_agent_rounds` / `create_torch_data_new`, reused
+    unmodified) for the real `contribution` column as the OLS dependent
+    variable, keeping every regressor computed from the real human history
+    -- teacher forcing means the model reads real history, so what it is
+    scored against has to stay real too. Bootstrap: 200 episode-cluster
+    resamples (the 50 human episodes, with replacement), seed 0, exactly
+    `preflight.py`'s own setting for the main table. **Item 1, own-group
+    weight** (n = 7,137, same population as the Declaration's table): M0 own
+    0.762008, group-blind peer 0.122235, **own-group 0.040183** [0.016518,
+    0.059822], R² 0.929921; **new trunk** own 0.704746, group-blind peer
+    0.082629, **own-group 0.198157** [0.151127, 0.226345], R² 0.926556 --
+    against the reproduced human 0.278345. **The trunk closes 66.3% of the
+    gap** ((0.198157-0.040183)/(0.278345-0.040183)), the largest single move
+    of this coefficient in the record. **Item 2, group punishment-climate
+    weight** (n = 7,131): M0 own-punishment 0.040835, **climate 0.041055**
+    [0.013464, 0.066244], R² 0.927291; **new trunk** own-punishment
+    0.030497, **climate 0.077785** [0.049204, 0.106158], R² 0.925608 --
+    against human 0.164942. **The trunk closes 29.6% of the gap**, roughly
+    doubling M0's climate weight but leaving most of the deficit.
+13. **Step 8, continued -- arrival channel and the teacher-forced pull
+    (n = 496 arrival transitions on the exact preflight population, close to
+    but not identical to the 513 the plan names -- this population also
+    requires `own_lag2`/`own_lag3`/`grp_lag2`/`grp_lag3` valid, one lag
+    deeper than the two regressors item 3 actually uses).** **Item 3**, the
+    plan's own two-regressor spec (own c(t-1), receiving group's t-2..t-4
+    mean): human (reproduced) own **0.465026** [0.337037, 0.564594],
+    history **0.405411** [0.243683, 0.520210], R² 0.355001; **M0** own
+    **0.715260** [0.679841, 0.749347], history **0.109145** [0.048992,
+    0.162129], R² 0.839488 -- matching the plan's cited PR #176 note-4
+    numbers (0.707 / 0.111) almost exactly, the strongest available
+    validation that this reconstruction matches the prior measurement;
+    **new trunk** own **0.614898** [0.561426, 0.668751], history
+    **0.329871** [0.261117, 0.380133], R² 0.786069. Own moves 40.1% of the
+    way from M0's overshoot toward human ((0.715260-0.614898)/
+    (0.715260-0.465026)); history closes 74.5% of its gap
+    ((0.329871-0.109145)/(0.405411-0.109145)). The three-term decomposition
+    (own / last-round mean / older t-2..t-4 history together) reproduces the
+    Declaration's own/last-round/history split almost exactly on the human
+    data (0.464717/0.117905/0.279486 against the quoted 0.460/0.118/0.280)
+    and shows the same pattern on the models: M0's last-round coefficient is
+    slightly *negative* (-0.024637) with essentially all of its (small)
+    peer response loaded onto the older-history term, while the trunk's
+    last-round coefficient turns positive (0.080577) and its older-history
+    term more than doubles M0's (0.243813 vs 0.135458). **Item 4,
+    teacher-forced pull** (dc = E[c(t)] - own c(t-1) at the arrival row,
+    gap = receiving group's mean at the decision round - own c(t-1),
+    pull = Cov(gap, dc)/Var(gap), same 496 events, RCD's own definition):
+    human (reproduced) **0.434106** [0.346939, 0.539369] -- matches the
+    plan's cited 0.430; **M0 0.186990** [0.151958, 0.225028] -- matches the
+    plan's cited 0.186 almost exactly; **new trunk 0.324036** [0.273138,
+    0.377459] -- **55.5% of M0's deficit to human closed**
+    ((0.324036-0.186990)/(0.434106-0.186990)). **Reading: every one of the
+    four comparisons moves substantially toward the human number under an
+    exactly-validated methodology (30-75% of each gap closed), led by the
+    own-group weight (M0 0.040 -> trunk 0.198, 66% of the gap) and the
+    teacher-forced pull (M0 0.187 -> trunk 0.324, 56% of the gap) -- the
+    mechanism was learned, not just installed, and by a wider margin than
+    any single-mechanism move recorded for this contributor to date.** This
+    is a teacher-forced, report-only reading and settles nothing: per §8 the
+    verdict is the single closed-loop evaluation against CG, RCD and RCB,
+    which still has to convert this conditional response into a
+    round-33-vs-round-14 group-level outcome under free-running dynamics
+    (copula, other agents' own responses, and 24 rounds of compounding) --
+    exactly the gap PR #157's peer-attention and conformity-mixture record
+    warns is not guaranteed to survive that conversion.
