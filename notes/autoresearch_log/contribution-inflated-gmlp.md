@@ -1140,3 +1140,81 @@ mechanism measured is CG-inert except this one, at roughly +0.002 of ratio.
     before and after (**identical** for both files) and by re-diffing
     comment-stripped against the parent: still exactly 2 and 3 changed
     lines.
+38. (Step 8, confirmed — the scored schedule-matched proxy, recorded before
+    step 10 is submitted, never a gate) Both stamped bundles rolled through
+    the real severity-copula punisher along the parent parquet's
+    `agent_group` schedule (100 x 24, torch seed 42), scored by
+    `score_all(n_repeats=500, seed=42)` against `convert.load_human`.
+    Rollout 26 s per arm, scoring 142 s. **The two declared rows split:**
+
+    | row | real parent | incumbent arm | candidate arm | delta | offset (inc − real) | predicted real |
+    |---|---|---|---|---|---|---|
+    | **RCA** | 3.50675152179351 | 3.412020623525348 | 1.8160716616190906 | **−1.5959489619062572** | −0.0947308982681623 | **1.910802559887253** |
+    | **CG** | 2.079263618744627 | 1.7895995114892012 | 1.9636526447857692 | **+0.1740531332965680** | −0.2896641072554260 | **2.2533167520411954** |
+
+    Means: real parent 1.2226801514921317, incumbent arm 1.2567619508793844,
+    candidate arm 1.1936925145764061, **predicted real 1.1596107151891535**
+    — 0.185 under the gate-2 ceiling 1.3449481666413449.
+39. (Step 8, calibration — what the proxy is and is not entitled to say)
+    SA / SB / SC are **bit-identical across arms**: the schedule is the
+    parent's and the switch model never reacts, so their zeros are
+    structural, not predictions. Over the 18 non-structural rows the
+    incumbent arm's mean |offset| is 0.2055 (median 0.1144); excluding RSA,
+    mean 0.1358, median 0.0959, max 0.3263. **Only 7 rows have
+    |delta| > |offset|** — PA, PB, RCA, RCB, RCC, RCD, RPA. **RSA must not
+    be read off this table at all**: its offset is 1.3895, ten times the
+    typical one, because it conditions fixed switch decisions on
+    received-punishment bins and the proxy's switches do not respond to
+    punishment.
+40. (Step 8, U1-U4 closed-loop on the rollout — not step 4's teacher-forced
+    numbers) **U1 PASS on both clauses:** P(c_t = c_{t−1}) 0.174402 →
+    **0.413804** (threshold >= 0.30; human 0.439973) and P(20 | prev 20)
+    0.459191 → **0.678290** (threshold >= 0.65; human 0.788975); the
+    incumbent arm reproduces the parent's declared 0.1684 / 0.468 to 0.006 /
+    0.009, so U1 is the tightest-calibrated quantity in the step. **U2
+    PASS:** full-sample human-weighted RCA d 0.931264 → 0.468841, and
+    `no_switch_allowed` (weight 6902) carries **0.8633** of the reduction
+    against a >= 0.5 threshold — the mechanism moved RCA where it claims to
+    live. `switched` is essentially unmoved (1.699 → 1.673). **U4 PASS at
+    the top of the band:** P(c = 0) 0.0740 → 0.1380 (limit 0.15, human
+    0.0936), P(c = 20) 0.0713 → 0.1305 (limit 0.17, human 0.1344).
+41. (Step 8, **U3's second clause fails, and it explains CG's sign flip**)
+    P(group-mean >= 18) does rise, 0.037715 → 0.051942 (threshold >= 0.05;
+    human 0.092452) — the corner atoms do put whole groups at the top
+    together. But SD(group means) rises 4.735185 → 5.251063 (+10.9 %) while
+    SD(individual) rises 5.905059 → 6.583996 (**+11.5 %**): the individual
+    spread rises *faster*, so the ratio CG actually scores falls
+    0.801886 → 0.797550, **away** from the human 0.848872. P(group-mean
+    <= 2) overshoots badly, 0.056233 → 0.113369 against human 0.078607.
+    This is Notes 25 / 31 realised: a shared latent can move `u` a long way
+    inside a wide CDF interval without moving the level, so the same dose
+    buys less realised within-group correlation through a discrete
+    emission — and the atoms lift both spreads, the individual one more.
+42. (Orchestrator's read before the sim runs, so the verdict cannot be
+    written backwards) **RCA is the call the proxy is entitled to make:**
+    delta −1.596 against a 0.095 offset is 17x the row's own error, the
+    largest signal-to-offset ratio in the table, and the incumbent arm
+    reproduces the real RCA to 0.095. Predicted real 1.911 — **0.089 inside
+    the 2.0 edge, a margin slightly smaller than the row's own offset**, so
+    the direction is not in doubt but the crossing is still near a coin
+    flip, tilted to crossing; one adverse offset puts it at 2.006.
+    **CG is predicted to move the wrong way** (+0.174, against the
+    declaration's pre-registered −0.08), to 2.253. Formally that predicts
+    nothing — |delta| 0.174 < |offset| 0.290 — but the sign flip is
+    mechanistic rather than noise-shaped, and U3 gives the mechanism. So
+    the maintainer's assigned row is now expected to *regress*, and the
+    experiment's case rests on RCA, which is exactly why Ruling 2 declared
+    both. **Amendment A holds: nothing is re-fitted, re-dosed or varied on
+    the strength of this table, and the simulation runs as configured.**
+43. (Step 8, binding on step 11) (a) If the real sim crosses CG anyway,
+    step 11 must check the **SD decomposition**, not just the group-mean
+    tail, before anything is claimed — here the tail rose while the ratio
+    fell, so the tail alone would have licensed a false claim; on this
+    evidence a CG crossing would most likely be noise. (b) Three guards sit
+    on a band boundary in the prediction and must be reported as measured
+    without treating the proxy as having called them: RCD 0.994268 (holds
+    `<= 1` by 0.006 — PR #175 lost RCD's band on a contribution change),
+    CB 1.011036 (leaves `<= 1` by 0.011), PB 0.997619 (holds by 0.002).
+    (c) RCD's cost is twice its pre-registration (+0.263 against +0.13);
+    with CG's sign flip these are the only two guard predictions that moved
+    materially, the other nine reproducing within ~0.1.
