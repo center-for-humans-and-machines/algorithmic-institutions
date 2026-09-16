@@ -158,5 +158,25 @@
     "pr": 177,
     "category": "structured-head",
     "rationale": "Replaces the emission with a status-quo- and corner-inflated binned Gaussian: a four-component mixture of a body distribution plus repeat/0/20 atoms with learned weights."
+  },
+  {
+    "pr": 178,
+    "category": "architecture",
+    "rationale": "Replaces the trunk's scatter_mean aggregation with a PNA-style multi-aggregator at the message-passing sites."
+  },
+  {
+    "pr": 179,
+    "category": "architecture",
+    "rationale": "Adds a recurrent per-group virtual node to the GraphNetwork that aggregates members and broadcasts persistent group state each round."
+  },
+  {
+    "pr": 180,
+    "category": "feature-engineering",
+    "rationale": "Re-encodes the decision-round index inside the joint exodus head as one-hot; contribution and punisher slots byte-identical."
+  },
+  {
+    "pr": 181,
+    "category": "architecture",
+    "rationale": "Adds an immediate-stimulus skip connection: op2 reads the post-op1 embedding alongside the post-RNN state; recurrent path untouched."
   }
 ]

@@ -30,6 +30,7 @@ CATEGORY_STYLE = {
     "nonlinear-emission": ("#eb6834", "^"),
     "feature-engineering": ("#1baf7a", "s"),
     "structured-head": ("#4a3aa7", "D"),
+    "architecture": ("#e87ba4", "v"),
 }
 FALLBACK_SUCCESS = ("#52514e", "P")  # a success outside the four (none today)
 FAIL_GREY = "#c9c8c3"

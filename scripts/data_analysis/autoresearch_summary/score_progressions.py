@@ -91,10 +91,10 @@ def fetch_pr_scores(e):
     want = e["metrics"]["mean"]
     sh(["git", "fetch", "origin",
         f"+refs/heads/{branch}:refs/remotes/origin/{branch}"])
-    files = json.loads(sh(
+    files = sh(
         ["gh", "api", f"repos/{{owner}}/{{repo}}/pulls/{pr}/files",
-         "--paginate", "--jq", "[.[].filename]"]
-    ))
+         "--paginate", "--jq", ".[].filename"]
+    ).splitlines()
     for path in files:
         if not path.endswith("evaluation/scores.csv"):
             continue
