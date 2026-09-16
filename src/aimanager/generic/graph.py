@@ -157,6 +157,7 @@ class GraphNetwork(th.nn.Module):
         group_vnode=False,
         group_vnode_module=None,
         group_vnode_hidden=None,
+        stimulus_skip=False,
         **_,
     ):
         super().__init__()
@@ -266,6 +267,25 @@ class GraphNetwork(th.nn.Module):
         self.group_vnode = group_vnode
         self.group_vnode_hidden = group_vnode_hidden
 
+        # Immediate-stimulus skip: a second route from THIS round's per-agent
+        # embedding to the `op2` readout, one that does not pass through the
+        # per-agent RNN -- what I just gave and what I just got for it should
+        # reach my next decision directly, not only through what I remember.
+        # See notes/autoresearch_log/contribution-punishment-response.md:
+        # teacher-forced on the human trajectories the trunk's punishment
+        # response is human-like (RCB statistic 0.0930, inside the 0.3479
+        # noise ceiling) and in self-play it collapses to a quarter of the
+        # human slopes (0.7973), with the (contribution, punishment)
+        # composition ruled out as the explanation -- what is left is the
+        # carried recurrent state drifting off the training manifold, and the
+        # per-agent GRU is today the ONLY route from `x_t` to the readout.
+        # Off by default: an artifact saved without this key loads with the
+        # skip absent and behaves exactly as it does today.
+        assert isinstance(
+            stimulus_skip, bool
+        ), f"stimulus_skip must be a bool, got {stimulus_skip!r}"
+        self.stimulus_skip = stimulus_skip
+
         if op1 is None:
             if add_edge_model:
                 edge_model = EdgeModel(
@@ -286,6 +306,18 @@ class GraphNetwork(th.nn.Module):
                 activation=Tanh(),
             )
             x_features = hidden_size
+            # The width the immediate-stimulus skip carries: the post-`op1`
+            # node embedding, the same tensor the group virtual node pools.
+            # Captured here because the RNN below overwrites `x_features`
+            # (both are `hidden_size`, but for different reasons).
+            skip_features = x_features
+            # The skip is defined against the per-agent RNN, so it needs one:
+            # with `add_rnn` off there is no memory to bypass and the readout
+            # would simply receive the same embedding twice.
+            assert not stimulus_skip or add_rnn, (
+                "stimulus_skip requires the per-agent RNN (add_rnn=True); "
+                "with no RNN there is no memory for the skip to bypass"
+            )
 
             if add_global_model:
                 gobal_model = GlobalModel(
@@ -330,11 +362,22 @@ class GraphNetwork(th.nn.Module):
             # is deliberately left at the per-agent width: it is what the
             # joint head below is built for and what `forward` hands to the
             # concatenation.
+            # The immediate-stimulus skip widens op2 the same way, and it is
+            # APPENDED AFTER the group state: the readout's input is laid out
+            # `[post-RNN embedding | group state | post-op1 embedding]`. That
+            # order leaves the group state on exactly the slice it occupies
+            # today and lets each later addition extend the tail; `forward`
+            # concatenates in exactly this order. Plain concatenation, no
+            # gate -- ties go to the simpler model.
             vnode_hidden = group_vnode_hidden or hidden_size
             self.op2 = MetaLayer(
                 None,
                 NodeModel(
-                    x_features=x_features + (vnode_hidden if group_vnode else 0),
+                    x_features=(
+                        x_features
+                        + (vnode_hidden if group_vnode else 0)
+                        + (skip_features if stimulus_skip else 0)
+                    ),
                     edge_features=0,
                     u_features=u_features,
                     out_features=y_features,
@@ -440,6 +483,13 @@ class GraphNetwork(th.nn.Module):
                 batch=batch,
                 h0=None if reset_rnn else self.vnode_h0,
             )
+        # The immediate-stimulus skip keeps that same post-`op1` embedding --
+        # this round's own stimulus -- and hands it to the readout directly,
+        # so it does not have to survive the update gate of a recurrent state
+        # that, in self-play, has drifted off the manifold it was trained on.
+        # Captured here because `rnn_n` overwrites `x` on the next line; the
+        # recurrent path itself is untouched.
+        x_skip = x if self.stimulus_skip else None
         if self.rnn_n is not None:
             x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
         if self.rnn_g is not None:
@@ -477,6 +527,12 @@ class GraphNetwork(th.nn.Module):
         # widened to receive it (see the constructor).
         if g_node is not None:
             x = th.cat([x, g_node], dim=-1)
+        # The skip is appended AFTER the group state, the layout op2 was
+        # built for: `[post-RNN embedding | group state | post-op1
+        # embedding]`. Both flags can be on at once, and each term is present
+        # exactly when its flag is.
+        if x_skip is not None:
+            x = th.cat([x, x_skip], dim=-1)
         x, _, _ = self.op2(x, edge_index, op2_edge_attr, u, batch)
         if self.bias:
             x = x + self.bias(data["b"])
@@ -829,6 +885,7 @@ class GraphNetwork(th.nn.Module):
             "group_vnode",
             "group_vnode_module",
             "group_vnode_hidden",
+            "stimulus_skip",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
