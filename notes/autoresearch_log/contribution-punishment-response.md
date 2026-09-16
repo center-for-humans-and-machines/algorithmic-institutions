@@ -183,3 +183,24 @@ _To be written after step 0._
    (0.2226 -> 0.1433 with both inputs one-hot) but is not shown to be the
    binding constraint. Step 0 measures the trunk itself before the change is
    fixed; the decision rule is recorded above, before its numbers exist.
+6. The sampler is not the cause, so there is no "fix the copula" direction here.
+   Re-measuring the within-band slopes on PR #179's two diagnostic runs, which
+   differ from the candidate only in the copula fields:
+
+   | run | 0-4 | 5-9 | 10-14 | 15-19 | scored d |
+   |---|---|---|---|---|---|
+   | human | +0.1397 | +0.1038 | -0.0767 | -0.1615 | 0 |
+   | candidate (rho 0.0436, phi 1) | +0.0619 | +0.0115 | -0.0082 | -0.0366 | 0.7973 |
+   | no copula (weight-identical trunk) | +0.0542 | +0.0044 | -0.0278 | **+0.0258** | 0.7451 |
+   | phi_hat 0.618 | +0.0393 | -0.0201 | -0.0209 | -0.0145 | 0.7029 |
+
+   Stripping the latent entirely leaves the response just as flat -- and flips
+   the top band's sign the wrong way. The attenuation is a property of the
+   trunk in the loop, not of the shared latent sitting on top of it. (The
+   phi_hat run's 0.7029 is closer to the 0.6957 edge on *worse* slopes, i.e.
+   bin-composition luck, and PR #179 already ruled phi_hat out as a CG trade.)
+7. Training cost is not a constraint here. Recent `train-ah` jobs on Raven
+   (`architecture_node+edge+rnn__d+`, SLURM 30256024/30256025/30256343) run
+   8m43s-11m12s, so §5's 3x budget is ~33 min; neither candidate change --
+   a wider input encoding or a wider `op2` readout -- moves training time
+   materially.
