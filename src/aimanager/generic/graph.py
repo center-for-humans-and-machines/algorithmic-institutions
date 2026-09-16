@@ -154,6 +154,7 @@ class GraphNetwork(th.nn.Module):
         joint_exodus=False,
         joint_exodus_head=None,
         joint_exodus_switch_every=None,
+        joint_exodus_round_onehot=None,
         group_vnode=False,
         group_vnode_module=None,
         group_vnode_hidden=None,
@@ -239,8 +240,37 @@ class GraphNetwork(th.nn.Module):
             "joint_exodus_switch_every is only meaningful with the joint "
             "exodus head enabled"
         )
+        # Decision-round encoding inside the head: `None` keeps the scalar
+        # r / 23 (PR #171), a positive int S gives the head one free logit
+        # offset per decision round instead. `bool` excluded for the same
+        # reason as above. This is the ONE place `joint_exodus_switch_every`
+        # stops being sampler-only: the head needs the cadence at TRAINING
+        # time to turn a round into its slot index. The config's two cadence
+        # values (`params.switch_every` and this one) must therefore agree --
+        # they are both 4 in every config that sets them, and
+        # `train.joint_exodus_loss` selects decision rounds from
+        # `switch_valid`, which `params.switch_every` builds.
+        assert joint_exodus_round_onehot is None or (
+            isinstance(joint_exodus_round_onehot, int)
+            and not isinstance(joint_exodus_round_onehot, bool)
+            and joint_exodus_round_onehot > 0
+        ), (
+            "joint_exodus_round_onehot must be None or a positive int, got "
+            f"{joint_exodus_round_onehot!r}"
+        )
+        assert joint_exodus or joint_exodus_round_onehot is None, (
+            "joint_exodus_round_onehot is only meaningful with the joint "
+            "exodus head enabled"
+        )
+        assert joint_exodus_round_onehot is None or (
+            joint_exodus_switch_every is not None
+        ), (
+            "joint_exodus_round_onehot needs joint_exodus_switch_every: the "
+            "head maps a round to its slot with that cadence"
+        )
         self.joint_exodus = joint_exodus
         self.joint_exodus_switch_every = joint_exodus_switch_every
+        self.joint_exodus_round_onehot = joint_exodus_round_onehot
 
         # Per-group virtual node: a learned, persistent group state pooled
         # from the post-`op1` embeddings and handed back to each of the
@@ -359,7 +389,10 @@ class GraphNetwork(th.nn.Module):
                 self.joint_exodus_head = joint_exodus_head
             elif joint_exodus:
                 self.joint_exodus_head = JointExodusHead(
-                    embed_size=x_features, hidden_size=hidden_size
+                    embed_size=x_features,
+                    hidden_size=hidden_size,
+                    round_onehot_slots=joint_exodus_round_onehot,
+                    round_onehot_every=joint_exodus_switch_every,
                 )
             else:
                 self.joint_exodus_head = None
@@ -826,6 +859,7 @@ class GraphNetwork(th.nn.Module):
             "joint_exodus",
             "joint_exodus_head",
             "joint_exodus_switch_every",
+            "joint_exodus_round_onehot",
             "group_vnode",
             "group_vnode_module",
             "group_vnode_hidden",
