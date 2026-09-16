@@ -948,3 +948,52 @@ here, before anything ran:
     regression. The damage is concentrated in the C block (CA, CC, CD all
     leaving <= 1) and in CG/RCD. A successor looking for the SB gain should
     seek it without paying CG, not by dropping the latent.
+26. **phi sweep (maintainer-requested, 2026-09-16): phi_hat = 0.6182476558394783
+    stamped on the same trunk with rho unchanged.** Artifact
+    `3ab685e1f9a06ec73be76af6f6904cf1115a16b25b52d2e1ebc9faa726da92f5`, 14
+    tensors bit-identical to the trunk, 7,457 rows bit-identical; SLURM 30265536
+    (stamp) + 30265580 (sim, 2m04s). With the copula ablation this gives a
+    three-point sweep of the latent's *memory* at fixed strength:
+
+    | | phi = 1 (#179) | phi = 0.618 | no latent |
+    |---|---|---|---|
+    | CG | **0.8990** (<= 1) | 1.2217 (1-2) | 2.4007 (2-5) |
+    | RCD | **1.3405** | 1.8511 | 2.3248 |
+    | RCC | 1.6596 | **1.5782** | 1.5872 |
+    | CE | 1.1107 | **0.9288** | 1.2907 |
+    | CF | 1.0762 | **0.9626** | 1.0962 |
+    | RSA | 1.3546 | **1.1198** | 1.5935 |
+    | mean | **1.0988** | 1.1156 | 1.2429 |
+    | spread ratio | **0.8512** | 0.8242 | 0.7845 |
+
+    (human spread ratio 0.8480.) **phi_hat is not a successor on its own:** it
+    band-*downgrades* CG (<= 1 -> 1-2) and raises the mean, confirming PR #150's
+    finding that persistence is what makes CG work. It does buy CE and CF band
+    upgrades, the best RCC of any run, and a marked RSA gain -- a genuine trade,
+    not a regression, and worth knowing for anyone who needs those rows.
+27. **The RCA-4 diagnosis was wrong, and the corrected version is a sharper
+    lever.** The orchestrator's hypothesis was that the frozen (phi = 1) latent
+    overrides event-driven responses, so lowering phi should repair RCA's
+    `stayed_comp_changed` stratum. It did not. Human **+0.0780**; phi = 1
+    **-0.0753**; phi = 0.618 **-0.0892** (slightly *more* wrong); no latent
+    **+0.0938** (nearly exact). The sign flip therefore tracks the **presence**
+    of the shared latent, not its persistence -- it is a `rho > 0` effect, and
+    phi is not the lever. Note that the trunk *alone* produces the human
+    response almost exactly, so the trunk has learned this behaviour correctly
+    and the sampler is overriding it. The RCC half of the hypothesis did hold
+    (1.6596 -> 1.5782, best of the four), so the "latent overrides individual
+    event responses" story is right for the ceiling and wrong for composition
+    change.
+28. **Recommended successor, on this evidence: a turnover-aware latent.** Make
+    the innovation injected into `z_cell` keyed to *membership change* rather
+    than to the clock -- a group that keeps its members persists, a group that
+    loses or gains one partly re-randomises. This is the one design the sweep
+    actually motivates: phi = 0.618 already injects fresh innovation every
+    round and did not repair RCA-4, so undirected refresh is not the fix;
+    what is missing is innovation **correlated with the composition event**, so
+    the trunk's own (correct) response shows through in exactly those rounds
+    instead of being pulled back toward a group level that no longer has the
+    same members. It is also behaviourally motivated rather than
+    metric-engineered: whether a group is "the same group" after half of it
+    leaves is a real question about the latent's identity. Cost: a small change
+    to `sample_correlated_levels`, no retraining, no recalibration.
