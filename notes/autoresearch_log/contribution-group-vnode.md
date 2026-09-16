@@ -911,3 +911,40 @@ here, before anything ran:
     the sequence because it is a case where a pre-declared caveat correctly
     forecast a specific failure -- the row was declared by a rule fixed in
     advance and it cost nothing to honour, since gate 1 was met twice elsewhere.
+23. **Ablation (maintainer-requested, 2026-09-16): the copula is still
+    necessary, and the two mechanisms are complementary rather than
+    substitutes.** Question raised at review: now that the trunk carries its
+    own persistent per-group state, is the latent redundant? Tested by
+    simulating the **unstamped** step-7 trunk (sha256 `714bf40b...`) in the
+    identical stack -- the two artifacts are weight-identical (14 tensors
+    `torch.equal`, step 11) and differ only in the three copula fields, so this
+    isolates the latent exactly. SLURM 30264514, 2m34s, exit 0:0, parquet
+    `98aae184...`; protocol byte-identical to the PR #179 candidate.
+    **Removing the copula costs two band downgrades**: CG
+    0.8990186987409446 -> **2.4007** (<= 1 -> 2-5) and RCD 1.3404794689903016
+    -> **2.3248** (1-2 -> 2-5); mean 1.0988293946890038 -> 1.2428880551,
+    rows <= 1 12/21 -> 9/21. The spread ratio falls **0.8512 -> 0.7845**
+    against human 0.8480 -- *further* from human, not closer.
+24. **The orchestrator's stated hypothesis for this ablation was wrong, and the
+    reason is instructive.** The prediction was that the copula might now be
+    over-dosing: its one-step contribution had shrunk to +0.0057, the closed
+    loop slightly overshot human spread (0.8512 vs 0.8480), and 24 rounds
+    compound whatever the sampler injects -- so the bare trunk was expected to
+    land nearer 0.8480. It did not. The mechanism the ablation exposes is that
+    **both** spreads collapse without the latent: sd(group means) 5.5119 ->
+    4.4314 *and* sd(individual) 6.4752 -> 5.6484. The copula is not adding
+    group-level offset on top of an otherwise-correct process; it is the source
+    of free-running *variance* that the deterministic trunk cannot generate
+    from its own conditional. This is exactly the distinction note 15 flagged
+    as untested -- "what the copula still has to supply is shared *variance*
+    under free-running dynamics, which is a different job" from the conditional
+    response the teacher-forced diagnostic measures -- and the ablation
+    confirms the two do not substitute. It also vindicates PR #166's rule as
+    *recalibrate*, not *remove*: rho fell 37% because the trunk absorbed part
+    of the channel, but the remaining 0.0436 is load-bearing.
+25. **Collateral within the ablation, for a successor's benefit.** Removing the
+    latent is not uniformly bad: **SB 1.1110 -> 0.8958** band-upgrades and CB
+    0.9529 -> 0.7958 improves, while RCB 2.3152 -> 2.1702 recovers part of its
+    regression. The damage is concentrated in the C block (CA, CC, CD all
+    leaving <= 1) and in CG/RCD. A successor looking for the SB gain should
+    seek it without paying CG, not by dropping the latent.
