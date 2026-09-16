@@ -230,3 +230,44 @@ SB — the ruling's primary criterion is the mean and does not depend on it.
    §2 gate 1 is unreachable on the row the mechanism targets. Escalated to the maintainer
    per §8 rather than quietly substituting a criterion; the ruling is recorded verbatim
    in the declaration and was fixed before any code was written or any number seen.
+3. **Training (step 6), SLURM 30266359, 00:04:28, exit 0:0.** Against the base
+   model's 00:04:17 (PR #171, SLURM 29870374) and the §5 budget ceiling of
+   ~12:50 — **G4 holds** with a 4% increase, which is what four extra input
+   dimensions on a 10-unit MLP should cost. Artifact
+   `artifacts/artificial_humans/switch_joint_exodus_round_onehot/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt`;
+   `joint_exodus_round_onehot: 5` and `joint_exodus_switch_every: 4` both
+   round-trip on load, head `in_features` 23 -> 27 as designed.
+4. **G2 holds: the joint fit improves.** Joint-exodus cross-entropy, mean over
+   the final 20 epochs across all 5 folds, **1.994373 -> 1.940754**, a fall of
+   **0.053619 nats**. The head is recorded on the train split only, so this is
+   an in-sample statement; it is nonetheless the statement the mechanism makes
+   — five free offsets fit the round-level count distribution better than one
+   shared direction in `r`.
+5. **G1 FAILS, and the prediction was wrong for a structural reason worth the
+   whole campaign's attention.** The guard predicted a bit-identical trunk: the
+   head is detached, so the joint loss sends it no gradient, and the head is
+   constructed last, so it perturbs no initialisation. **0 of 10 trunk tensors
+   are identical**, with max|delta| 0.35-0.95 — a different model, not drift.
+   The cause is neither of the two channels the guard considered. The head is
+   **40 parameters wider** (1,131 -> 1,171: `Linear(23 -> 10)` becomes
+   `Linear(27 -> 10)`), so its own initialisation draws 40 more values from the
+   **global** torch RNG. `train.py:381` then draws
+   `p_idx = th.randint(0, len(training_mask_pattern), (batch_size,))` from that
+   same global stream **once per batch**, to pick each batch's feature-masking
+   pattern. A shifted stream means a different masking sequence from the first
+   batch onward, hence a different training trajectory. Verified directly
+   (scratchpad `verify_rng.py`): with the same seed, trunk parameters are
+   identical at init — the "built last" comment is correct — while the next
+   `th.randint` draw differs, `[4,5,1,3,0,...]` against `[0,1,4,0,5,...]`.
+6. **What that costs, and why the experiment still stands.** The candidate is
+   therefore the base model plus the round one-hot **plus one random restart**,
+   and the two are not separable by any knob this pipeline has. The restart's
+   size is measurable: held-out per-agent log-loss **0.613127 -> 0.618378**
+   (+0.005251), accuracy 0.663020 -> 0.662550. The confound is **not specific
+   to this experiment** — it applies to every change that alters a module's
+   parameter count, including PR #174's own one-hot (`in_features` 23 -> 39)
+   and PR #179's virtual node. It is the campaign's standing condition rather
+   than something introduced here, and it is the reason a claim should rest on
+   a band-width movement rather than a hairline one. Reported rather than
+   worked around: no seed was changed, no variant was shopped, and the guard is
+   recorded as failed.
