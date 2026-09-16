@@ -190,7 +190,32 @@ remember -- the row that should move is **RCB**.
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
-| 2026-09-16 | (baseline) parent stack, PR #179 | RCB 2.3151705700149083 | 12/21 | 1.0988293946890038 | baseline |
+| 2026-09-16 | (baseline) parent stack, PR #179 | RCB 2.3151705700149083 | 12/21 | 1.09882939472699 | baseline |
+| 2026-09-16 | immediate-stimulus skip + copula recalibrated (rho 0.03949863621805423, phi 1.0) | **RCB 2.0867005460163575** | 12/21 | 1.1045228654552426 | **FAIL** |
+
+**Gate 1 FAILS.** RCB 2.3151705700149083 -> **2.0867005460163575** stays in band
+2-5: the resampled discrepancy falls 0.8053441343922023 -> **0.7258696472443746**
+against a band edge of 0.6957104109931878, so the row misses by **4.34%** of the
+statistic. The required reduction was 13.6%; the delivered reduction is **9.87%**,
+about 73% of it.
+
+**Gate 2 PASSES.** The 21-row mean rises 1.09882939472699 -> **1.1045228654552426**,
++0.52%, well inside the 1.208712334199689 ceiling. Rows <= 1 hold at 12/21.
+
+Since gate 1 fails, the experiment is a `[FAIL]` whatever gate 2 does.
+
+**The mechanism installed and is correctly signed in every band.** Slope of dc on
+punishment received, within contribution band:
+
+| band | human | parent | **candidate** | step 6's prediction | gap closed |
+|---|---|---|---|---|---|
+| 0-4 | +0.1397 | +0.0619 | **+0.0730** | +0.0715 | 14% |
+| 5-9 | +0.1038 | +0.0115 | **+0.0541** | +0.0439 | 46% |
+| 10-14 | -0.0767 | -0.0082 | **-0.0467** | -0.0223 | 56% |
+| 15-19 | -0.1615 | -0.0366 | **-0.0253** | -0.0510 | **-8%** |
+
+Three of the four bands improve, the 10-14 band's sign flips to human for the
+first time in this campaign, and the 15-19 band moves the wrong way.
 
 ## 4. Notes
 
@@ -277,3 +302,62 @@ remember -- the row that should move is **RCB**.
     +0.0087 / +0.1038, with no sign flip at all and n=35 in the top band. The
     union of the two splits -- the single copy, 50 episodes, n=2,660 -- is the
     canonical evaluation frame's population and is the number used above.
+13. **The verdict, plainly: the diagnosis was right and the remedy was
+    two-thirds of one.** Step 0 said the conditional is healthy and the loop
+    loses it; step 6 confirmed that at the sim's own states; the skip then
+    moved the loop's response in the correct direction in every band and still
+    missed the band edge by 4.34%. Nothing here was a wrong turn that better
+    execution would have avoided -- the mechanism is real and it is simply not
+    large enough on its own.
+14. **The pre-simulation gate predicted the outcome, and that is the most
+    transferable result here.** Step 6 teacher-forced the candidate over the
+    *parent's* realised states and predicted a statistic of 0.7098; the
+    candidate's own closed loop delivered a raw 0.7182 (scored 0.7259). A
+    forecast within 1.2% of raw discrepancy, made before any simulation was
+    spent, from a 63-second job. Any contribution-slot experiment can now screen
+    a trunk against RCB-family rows this way before committing a sim, and the
+    same construction generalises to any row that is a conditional of the
+    contribution model. That capability is worth more than this experiment's
+    own number.
+15. **Where the prediction was wrong is where the successor lives.** The two
+    bands step 6 got right are 0-4 and 5-9 (predicted +0.0715 / +0.0439,
+    realised +0.0730 / +0.0541). The two it got wrong diverged in *opposite*
+    directions: 10-14 overshot toward human (-0.0223 predicted, -0.0467
+    realised) while **15-19 undershot and moved away** (-0.0510 predicted,
+    -0.0253 realised, human -0.1615 -- the only band that got worse than the
+    parent's -0.0366). The high-contribution withdrawal response is the band
+    the candidate's own rollout reaches differently from the parent's, and it is
+    the one carrying 1.04 of raw human signal in the top rate bin.
+16. **The collateral says what the skip actually traded.** Two band upgrades --
+    CE 1.1107 -> 0.9098 and CF 1.0762 -> 0.8866, both 1-2 -> <= 1 -- and the
+    whole marginal C block improves (CA -0.113, CB -0.123, CC -0.098,
+    CD -0.126). Against that, three band downgrades: **CG 0.8990 -> 1.3101**
+    (<= 1 -> 1-2, the parent's headline row), **RCD 1.3405 -> 2.2051**
+    (1-2 -> 2-5, the largest single move in the table), and SC 0.9775 -> 1.0228
+    (<= 1 -> 1-2, by 0.023). The pattern is coherent and it is the point: CG and
+    RCD are the two rows that *depend on persistence* -- group-level spread
+    accumulating over an episode, and a switcher carrying the receiving group's
+    state. Handing the readout a route that bypasses the recurrent state buys
+    immediacy and sells exactly that persistence. The individual-fit rows, which
+    want immediacy, all improve.
+17. **That trade is the successor: gate the skip instead of concatenating it.**
+    §5's "ties go to the simpler model" chose a plain concatenation, and the
+    result is a model that weights the immediate stimulus and the carried state
+    at one fixed ratio for every round. The behaviour wants the opposite: the
+    stimulus should dominate on the rounds where something happened to you --
+    you were punished, your group changed -- and the memory should dominate
+    otherwise. A scalar gate on the skip's contribution, learned from the same
+    features, would let CG and RCD keep their persistence on quiet rounds while
+    RCB gets its response on loud ones. The tie-break was the right call under
+    the rule and the evidence now argues against it, which is the cleanest kind
+    of finding to hand on.
+18. **RCB is still the only row >= 2 in the candidate's table, and it now has
+    company**: RCD 2.2051 joins it. A successor stacked on PR #179 should expect
+    to defend both, and note that RCB alone at 2.0867 is now only 4.34% of
+    statistic from its edge -- the closest this row has been.
+19. The copula recalibration was correct to run and nearly a no-op: rho moved
+    -9.3% and the parent's value sat *inside* the new CI, unlike PR #179's
+    -37.4% with the old value above the upper bound. Worth recording as a
+    counter-example to the reflex that a retrained trunk always needs a very
+    different dose -- the rule is recalibrate and *look*, not recalibrate and
+    assume.
