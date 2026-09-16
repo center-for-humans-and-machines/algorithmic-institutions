@@ -147,7 +147,44 @@ recalibration.
 
 ## 2. Plan
 
-_To be written after step 0._
+**Step 0 fired branch (b).** Teacher-forced on the human data, the parent trunk's
+RCB statistic is **0.0930** -- *inside* the human-vs-human noise ceiling
+(0.3479), a score of **0.267**, band <= 1 -- against **0.7973** for the same
+trunk in the closed loop. Its within-band slopes are +0.1157 / +0.0791 /
++0.0425 / -0.1659 against human +0.1397 / +0.1038 / -0.0767 / -0.1615: neither
+clause of (a) is met (0-4 is +0.1157, above the +0.10 threshold; fewer than two
+bands sit below half the human value). SLURM 30266433, exit 0:0, 12 s; the
+script's self-check reproduces all four human slopes and all four human bin
+means to seven decimals on the identical population (weighted discrepancy
+1.49e-07), so the comparison is like for like.
+
+**What that means, and why the skip is the change.** The model is one
+deterministic map from (this round's features `x_t`, the carried state
+`h_{t-1}`) to next round's distribution. The same map produces a human-like
+punishment response when `x_t` and `h_{t-1}` come from the human trajectories
+and a quarter of it when they come from the model's own. The declaration's
+cell-level decomposition already showed the `(contribution, punishment)`
+composition is not the difference -- at the *same* cells the sim's responses are
+wrong (0.5707 against the teacher-forced 0.0930). What is left is `h`: in
+self-play the carried state leaves the manifold the model trained on, and the
+current round's stimulus is swamped, because the per-agent GRU is the **only**
+route from `x_t` to the readout. The skip opens a second route that does not
+pass through the update gate of a drifted state.
+
+**Behavioural rationale (one sentence, per §5):** what I just gave and what I
+just got for it should reach my next decision directly, not only through what I
+remember -- the row that should move is **RCB**.
+
+| # | step | implementer |
+|---|---|---|
+| 1 | **The immediate-stimulus skip in `GraphNetwork`.** `src/aimanager/generic/graph.py`, constructor and `forward`. Add a `stimulus_skip: bool = False` flag. When on, `op2`'s `NodeModel` takes `x_features + hidden_size` (plus the vnode width, unchanged), and `forward` keeps the post-`op1` node embedding and concatenates it to the post-RNN embedding at the `op2` readout. Plain concatenation, no gate (§5: ties go to the simpler model). Nothing new is constructed, so with the flag off the build is bit-identical and today's artifacts load unchanged. The recurrent path, the edge model, the vnode and the joint head are untouched. | **Opus** |
+| 2 | **Tests for the skip.** New `tests/skip/test_stimulus_skip.py`, modelled on `tests/vnode/test_group_vnode_graph.py`. Gates: (a) flag off -> `state_dict` shapes and forward outputs bit-identical to the flag absent; (b) flag on -> `op2`'s input width grows by exactly `hidden_size` and the skip carries gradient; (c) 24 single-round calls with `reset_rnn=False` reproduce one 24-round call, the simulation's calling convention; (d) a saved-and-reloaded model round-trips the flag. Run on Raven (PyG). | **Opus** |
+| 3 | **The training config.** New `configs/training/artificial_humans/contribution/group_switching_contribution_50ep_vnode_stimulus_skip.yml`, a copy of the parent's `..._group_vnode.yml` with `model_args.stimulus_skip: True` and `output_dir` -> `..._50ep_vnode_stimulus_skip`. Every other field byte-identical: seed 38381, 575 epochs, batch 4, lr 3e-4, 5-fold CV, same `x_encoding`, `shuffle_features`, data file and mask. | **Sonnet** |
+| 4 | **Train the candidate trunk.** `AI_REMOTE_DIR='~/autoresearch/contribution-punish-onehot' scripts/train_cluster.sh ah <config>`. Record held-out log loss against the parent's 2.008563 and wall time against §5's ~33 min ceiling. | **Sonnet** |
+| 5 | **Recalibrate and stamp the copula on the new trunk.** Per PR #166's lesson and PR #179's measurement that recalibration moved rho by -37%. New slurm pair copied from `scripts/artificial_humans/{calibrate,stamp}_copula_group_vnode.slurm` with the new paths; `contribution_copula_rho.py --roundtrip --preflight --write-params`, then `make_contribution_copula_artifact.py`. Report the new rho and phi against the parent's 0.0435568043640977 / 1.0 and whether the parent's value sits inside the new CI. | **Sonnet** |
+| 6 | **Pre-simulation mechanism gate: the response at sim-visited states.** Extend `scripts/data_analysis/rcb_teacher_forced.py` with a mode that teacher-forces a trunk on a *simulation's* `per_round.parquet` trajectories instead of the human CSV. Two checks: (i) the **parent** trunk on the **parent's** sim trajectories must reproduce the parent's flat closed-loop slopes -- that validates the whole diagnosis, since a teacher-forced pass over the realised states is the closed loop's conditional expectation; (ii) the **candidate** trunk on those same states predicts whether the skip actually restores the response off the human manifold. Report both, and the candidate's human-data teacher-forced numbers too (they must not regress). | **Opus** |
+| 7 | **Simulation.** New `configs/simulation/manager_testing/23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch.yml`, a copy of the parent's sim config with only the contribution artifact path swapped. Protocol untouched: 2 groups x 8 agents, 24 rounds, 100 episodes, seed 42, `save_per_round: true`, same switch predictor and same severity-copula punisher, single pairing. Run on Raven, fetch. | **Sonnet** |
+| 8 | **Evaluate and record.** `python -m aimanager evaluate <sim config>` locally; fill the results table and the watch items; verdict straight from §2 against RCB 2.3151705700149083 and the mean ceiling 1.2087123341579042. | **Sonnet** |
 
 ## 3. Results
 
@@ -204,3 +241,39 @@ _To be written after step 0._
    8m43s-11m12s, so §5's 3x budget is ~33 min; neither candidate change --
    a wider input encoding or a wider `op2` readout -- moves training time
    materially.
+8. **Step 0 settles it: the conditional is not broken, the states are.** The
+   trunk teacher-forced on human data scores RCB at **0.267** of the noise
+   ceiling; the same weights in self-play score **2.3152**. Since a
+   teacher-forced pass over a trajectory *is* that trajectory's conditional
+   expectation, the entire 8.7x is carried by which `(x_t, h_{t-1})` the loop
+   visits -- and note 4 already ruled out the `(contribution, punishment)`
+   composition as the explanation. What is left is the carried state.
+9. **The one-hot hypothesis is therefore answered in the negative, on the
+   trunk itself rather than on a surrogate.** A representation change to
+   `prev_punishment` addresses how well the conditional response is *learned*;
+   step 0 shows the conditional response is learned to within the noise
+   ceiling. There is nothing there to buy. This is the second independent
+   measurement pointing the same way (note 5 was the surrogate) and it is the
+   decisive one, because it is the actual trunk on the actual data.
+10. **One real weakness in the branch-(b) story, recorded before the sim.** The
+    10-14 band's sign is wrong even teacher-forced: the trunk gives **+0.0425**
+    where humans give **-0.0767**, so the midpoint sign flip is genuinely absent
+    from the conditional in that band (it is present at 103% of human in 15-19).
+    A skip connection does not obviously repair a wrong-signed conditional. The
+    bin-mean statistic hides this because the 10-14 rows are diluted across rate
+    bins; it is the most likely reason the candidate could move less than the
+    teacher-forced ceiling suggests, and it is the seed for a successor if this
+    experiment lands short.
+11. The step-0 script's alignment is pinned by four checks, not by argument: the
+    structural lag identity `prev_contribution[:,:,1:] == contribution[:,:,:-1]`,
+    the absence of any current-round feature in `x_encoding`, a lag profile
+    `corr(E[c_t], c_{t+k})` peaking at the conditioning lag (-2: 0.8694,
+    **-1: 0.9372**, 0: 0.8513, +1: 0.8129, +2: 0.7858), and the OLS slope of
+    `E[c_{t+1}]` on `c_t` at **+0.7709** against the human **+0.7686**. The
+    deliberately misaligned pairing is reported alongside and is visibly worse
+    (weighted discrepancy 0.2487 vs 0.0930).
+12. The 10-episode holdout is not usable for this measurement and is reported
+    for completeness only: its own *human* slopes are +0.1958 / +0.3523 /
+    +0.0087 / +0.1038, with no sign flip at all and n=35 in the top band. The
+    union of the two splits -- the single copy, 50 episodes, n=2,660 -- is the
+    canonical evaluation frame's population and is the number used above.
