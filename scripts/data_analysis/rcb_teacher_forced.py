@@ -34,10 +34,32 @@ and not the copula-stamped copy. The copula affects sampling only; this is a
 teacher-forced conditional measurement, so the two artifacts are weight-
 identical for this purpose.
 
+SIM MODE (step 6, the pre-simulation mechanism gate). With `--sim-parquet
+PATH` the trajectories come from a finished simulation's `per_round.parquet`
+instead of the human CSV, and everything else is unchanged: the same
+`create_torch_data` / `parse_agent_rounds` lag construction, the same human
+default values (so round 0's `prev_` priors are the ones the simulation's own
+environment used), the same teacher-forced forward pass, the same RCB
+population and the same human-frequency weights.
+
+The point of that mode: a teacher-forced pass over an ALREADY REALISED
+trajectory is exactly that trajectory's conditional expectation. So
+
+  * the PARENT trunk over the PARENT's own sim states must reproduce the
+    parent's flat closed-loop slopes -- if it does not, the "the states, not
+    the conditional" diagnosis (log note 8) is wrong;
+  * the CANDIDATE trunk over those same states predicts whether the
+    immediate-stimulus skip restores the response OFF the human manifold.
+
+Both modes use the BARE trunks, never the copula-stamped copies: the copula
+changes only how the marginals are turned into correlated draws, so for a
+teacher-forced conditional measurement the two artifacts are weight-identical.
+
 Measurement only: this script trains nothing and writes no artifact.
 
 Imports graph.py, so this runs on Raven only:
-    .venv/bin/python scripts/data_analysis/rcb_teacher_forced.py [--model PT]
+    .venv/bin/python scripts/data_analysis/rcb_teacher_forced.py \
+        [--model PT] [--sim-parquet plots/simulation/<run>/per_round.parquet]
 """
 
 import argparse
@@ -61,6 +83,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "baselines"))
 # It also installs the torch_geometric.nn.meta alias the legacy pickles need.
 import contribution_copula_rho as cc  # noqa: E402
 
+from aimanager.generic.data import create_torch_data  # noqa: E402
 from aimanager.generic.graph import GraphNetwork  # noqa: E402
 
 DEFAULT_MODEL = (
@@ -84,10 +107,165 @@ HUMAN_SLOPES = {"0-4": 0.1397, "5-9": 0.1038, "10-14": -0.0767, "15-19": -0.1615
 HUMAN_BIN_MEANS = np.array([0.891761, 1.340774, 1.678647, 2.014440])
 HUMAN_BIN_COUNTS = np.array([1238.0, 672.0, 473.0, 277.0])
 
+# the parent's OBSERVED closed-loop numbers on its own simulation, quoted in
+# the declaration -- the sim-mode self-check target (the observed column must
+# reproduce them, since the population is rebuilt here from the parquet)
+SIM_REF_SLOPES = {"0-4": 0.0619, "5-9": 0.0115, "10-14": -0.0082, "15-19": -0.0366}
+SIM_REF_STAT = 0.7973084747030883
+SIM_REF_DIR = "23_2g8a_contr_group_vnode_self_gnncopar1_contr_gnn_switch"
+
+# the simulation records one row per (episode, agent, round) with no timeouts;
+# these are the columns mem_to_df writes
+SIM_COLUMNS = [
+    "episode",
+    "participant_code",
+    "round_number",
+    "punishment",
+    "common_good",
+    "contribution",
+    "agent_group",
+    "group_id",
+    "run",
+]
+
 
 def f(x):
     """Unrounded float for the log."""
     return repr(float(x))
+
+
+# --------------------------------------------------------------------------- #
+# sim mode: a simulation's realised trajectories through the SAME loaders
+# --------------------------------------------------------------------------- #
+def sim_raw_frame(path):
+    """A simulation `per_round.parquet` reshaped into the raw agent-round
+    frame `parse_agent_rounds` consumes, so the tensors, the lag shift, the
+    defaults and the validity masks are all built by the human path's code.
+
+    Mapping, column by column:
+      * `participant_code` is written by `simulate.mem_to_df` as
+        "<agent index>_<episode>", so the agent index is the prefix; it is
+        the tensor's `player_idx` axis and is unique within an episode;
+      * `episode` is the tensor's batch axis; `global_group_id` is constant,
+        so the (global_group_id, episode_id) key that `parse_agent_rounds`
+        dense-ranks gives one row per simulated episode;
+      * `group_id` == `agent_group` (mem_to_df writes one from the other) is
+        the membership the environment used for THAT round: `recorder.add`
+        runs after `punish()`, and the switch is applied at the START of the
+        round, before `update_contribution` -- so the recorded group is the
+        one the contribution model conditioned on;
+      * there are no timeouts in a simulation -- the environment always feeds
+        a punishment and always records a contribution -- so `player_no_input`
+        and `manager_no_input` are 0 everywhere. That is ASSERTED below
+        (rows present, nothing missing) rather than assumed, and it is what
+        the frozen evaluation suite does too (`convert.load_sim` marks every
+        simulated row valid);
+      * `common_good` is recorded PER CAPITA by the environment
+        ((1.6*sum_c - sum_p) / n_valid), whereas `parse_agent_rounds` expects
+        the per-group pool and divides by the valid count itself. It is
+        multiplied back up here so the round trip is exact. (No contributor
+        `x_encoding` reads it; this only keeps the tensor honest.)
+    """
+    df = pd.read_parquet(path)
+    missing = [c for c in SIM_COLUMNS if c not in df.columns]
+    assert not missing, f"{path}: missing columns {missing}"
+    runs = sorted(df["run"].unique().tolist())
+    if len(runs) > 1:
+        print(f"  {len(runs)} runs in the parquet, keeping {runs[0]!r}")
+    df = df[df["run"] == runs[0]].copy()
+    assert (df["agent_group"] == df["group_id"]).all(), "agent_group != group_id"
+
+    agent = df["participant_code"].astype(str).str.split("_").str[0].astype(int)
+    raw = pd.DataFrame(
+        {
+            "episode_id": df["episode"].astype(int).to_numpy(),
+            "round_number": df["round_number"].astype(int).to_numpy(),
+            "player_id": agent.to_numpy(),
+            "global_group_id": "sim",
+            "group_id": df["group_id"].astype(int).to_numpy(),
+            "player_no_input": 0,
+            "manager_no_input": 0,
+            "contribution": df["contribution"].astype(float).to_numpy(),
+            "punishment": df["punishment"].astype(float).to_numpy(),
+            "common_good": df["common_good"].astype(float).to_numpy(),
+        }
+    )
+
+    # the simulation has no timeouts: assert the grid is complete and nothing
+    # is missing, which is what "every row is valid" means here
+    keys = ["episode_id", "player_id", "round_number"]
+    assert not raw.duplicated(keys).any(), "duplicate (episode, agent, round)"
+    n_ep = raw["episode_id"].nunique()
+    n_ag = raw["player_id"].nunique()
+    n_rd = raw["round_number"].nunique()
+    n_cells = n_ep * n_ag * n_rd
+    assert len(raw) == n_cells, f"incomplete grid: {len(raw)} rows vs {n_cells}"
+    for col in ("contribution", "punishment", "common_good", "group_id"):
+        assert raw[col].notna().all(), f"{col} has missing values"
+    assert set(raw["player_id"]) == set(range(n_ag)), "agent index not 0..n-1"
+    assert set(raw["round_number"]) == set(range(n_rd)), "round index not 0..T-1"
+    print(
+        f"  run={runs[0]!r} episodes={n_ep} agents={n_ag} rounds={n_rd} "
+        f"rows={len(raw)} (all valid: no timeouts)"
+    )
+
+    n_valid = raw.groupby(["episode_id", "round_number", "group_id"])[
+        "player_id"
+    ].transform("size")
+    raw["common_good"] = raw["common_good"] * n_valid
+    return raw, runs[0]
+
+
+def load_sim(path, defaults):
+    """`create_torch_data` on a simulation's realised rounds, with the HUMAN
+    default values -- the same numbers the simulation's own environment used
+    to fill round 0's `prev_` slots (`ArtificialHumanEnv.reset_state` fills
+    them from the artificial human's stored `default_values`). Passing them in
+    also stops the medians being recomputed from the simulation itself."""
+    raw, run = sim_raw_frame(path)
+    data, dv, _ = create_torch_data(raw, default_values=defaults)
+    assert dv is defaults or dv == defaults, "defaults were recomputed"
+    return data, run
+
+
+# A simulation's parquet records contribution, punishment, agent_group and
+# common_good and nothing else, so two derived training columns cannot be
+# rebuilt from it faithfully: `contribution_valid` (the environment's validity
+# model is not recorded -- every simulated row is taken as valid, as the frozen
+# evaluation suite also does) and `own_grp_prev_mean_contr` (which depends on
+# that validity and on a median recomputed per file). A model that reads either
+# would be fed something the closed loop did not feed it.
+SIM_UNFAITHFUL = {
+    "contribution_valid",
+    "prev_contribution_valid",
+    "recorded",
+    "prev_recorded",
+    "own_grp_prev_mean_contr",
+    "prev_own_grp_prev_mean_contr",
+}
+
+
+def check_sim_defaults(model, defaults):
+    """Round 0's priors must be the ones the closed loop used, and every
+    feature the model reads must be one the parquet rebuilds faithfully."""
+    md = getattr(model, "default_values", None) or {}
+    for k in ("contribution", "punishment"):
+        if k in md:
+            got, ref = float(md[k]), float(defaults[k])
+            assert got == ref, f"{k} default {got} != human {ref}"
+            print(f"  prev_{k} round-0 default = {f(ref)}  (model == human) OK")
+        else:
+            print(f"  model carries no {k} default; using human {f(defaults[k])}")
+
+    used = []
+    for attr in ("x_encoding", "u_encoding", "edge_encoding"):
+        enc = getattr(model, attr, None) or []
+        names = [e["name"] for e in enc]
+        print(f"  {attr} = {names}")
+        used += names
+    bad = sorted(set(used) & SIM_UNFAITHFUL)
+    assert not bad, f"model reads features the parquet cannot rebuild: {bad}"
+    print("  no encoded feature depends on unrecorded sim state           OK")
 
 
 # --------------------------------------------------------------------------- #
@@ -119,6 +297,10 @@ def stimulus_frame(model, data, idx, label):
     n_ep, n_agents, n_rounds = rows["shape"]
 
     e_pred, p_pred = dense_predictions(rows)  # E[c_t], P[c_t] given hist < t
+    lev = np.arange(p_pred.shape[-1], dtype=np.float64)
+    # Var[c_t | history < t] of the same teacher-forced marginal; used only by
+    # the sim mode's sampling-noise table, so no printed output changes here
+    v_pred = (p_pred * lev**2).sum(-1) - e_pred**2
     contr = sub["contribution"].numpy().astype(np.float64)
     punish = sub["punishment"].numpy().astype(np.float64)
     c_ok = sub[MASK].numpy().astype(bool)
@@ -143,6 +325,7 @@ def stimulus_frame(model, data, idx, label):
             "c_next": contr[:, :, t1][valid],
             "e_next": e_pred[:, :, t1][valid],  # aligned: predicts c_{t+1}
             "e_self": e_pred[:, :, t][valid],  # off-by-one: predicts c_t
+            "v_next": v_pred[:, :, t1][valid],  # Var[c_{t+1} | history]
         }
     )
     assert df["e_next"].notna().all() and df["e_self"].notna().all()
@@ -310,11 +493,11 @@ def show(tab):
     print(tab.to_string(index=False, float_format=lambda v: f"{v: .10f}"))
 
 
-def report(pop, label):
+def report(pop, label, observed="HUMAN"):
     print(f"\n================ {label} (RCB population n={len(pop)}) ============")
     for col, name in (
         ("dc_model", "(A/B) MODEL, teacher-forced E[c_t+1] - c_t"),
-        ("dc_human", "(C) HUMAN, observed c_t+1 - c_t"),
+        ("dc_human", f"(C) {observed}, observed c_t+1 - c_t"),
         ("dc_misaligned", "[diagnostic] MISALIGNED E[c_t] - c_t"),
     ):
         print(f"\n--- {name} ---")
@@ -349,10 +532,117 @@ def selfcheck(pop, label):
     return ok
 
 
+def selfcheck_sim(pop, label):
+    """Sim mode's (C): the OBSERVED column must reproduce the parent's own
+    closed-loop numbers, which is the proof that this population is the
+    evaluation suite's RCB population rebuilt from the same parquet."""
+    ok = True
+    slopes = band_slopes(pop, "dc_human").set_index("band")["slope"]
+    for band, ref in SIM_REF_SLOPES.items():
+        got = float(slopes[band])
+        print(f"  observed slope {band:>5}: {f(got)}  vs recorded sim {ref}")
+        if abs(got - ref) > 5e-3:
+            print(f"!! SELF-CHECK FAIL {label} slope {band}: {f(got)} vs {ref}")
+            ok = False
+    _, weighted = bin_means(pop, "dc_human")
+    print(f"  observed weighted discrepancy: {f(weighted)} vs {f(SIM_REF_STAT)}")
+    if abs(weighted - SIM_REF_STAT) > 5e-3:
+        print(f"!! SELF-CHECK FAIL {label} statistic: {f(weighted)}")
+        ok = False
+    print(f"\nSELF-CHECK {label}: {'PASS' if ok else 'FAIL'}")
+    return ok
+
+
+def sampling_noise(pop):
+    """How far the OBSERVED closed-loop numbers can sit from their own
+    conditional expectation by draw luck alone.
+
+    The teacher-forced column IS E[dc | state]; the observed column is one
+    realisation of it. Their difference is the sampling residual
+    c_{t+1} - E[c_{t+1} | history], whose variance the model states directly
+    (`v_next`). Along rounds those residuals are a martingale difference
+    sequence -- each is mean zero given everything before it -- so they are
+    uncorrelated, and the diagonal sum below is exact for that component.
+    Within one (episode, round, group) cell the copula correlates them, which
+    this ignores: the numbers are therefore a LOWER BOUND on the true spread,
+    and |z| is an upper bound.
+    """
+    print("\n--- sampling noise: observed vs its own conditional expectation ---")
+    rows = []
+    for band in BAND_LABELS:
+        sel = pop[pop["band"] == band]
+        pv = sel["p_t"].to_numpy(dtype=np.float64)
+        w = pv - pv.mean()
+        ss = float((w * w).sum())
+        var = float(((w / ss) ** 2 * sel["v_next"].to_numpy()).sum())
+        obs = ols_slope(pv, sel["dc_human"].to_numpy())
+        mod = ols_slope(pv, sel["dc_model"].to_numpy())
+        se = float(np.sqrt(var))
+        rows.append(
+            {
+                "band": band,
+                "n": int(len(sel)),
+                "slope_model": mod,
+                "slope_obs": obs,
+                "diff": obs - mod,
+                "se_indep": se,
+                "z": (obs - mod) / se if se > 0 else float("nan"),
+            }
+        )
+    print("(A) within-band slopes:")
+    show(pd.DataFrame(rows))
+
+    rows = []
+    for lab in RATE_LABELS:
+        sel = pop[pop["rate_bin"] == lab]
+        n = len(sel)
+        se = float(np.sqrt(sel["v_next"].sum())) / n if n else float("nan")
+        obs = float(sel["dc_human"].mean())
+        mod = float(sel["dc_model"].mean())
+        rows.append(
+            {
+                "rate_bin": lab,
+                "n": n,
+                "mean_model": mod,
+                "mean_obs": obs,
+                "diff": obs - mod,
+                "se_indep": se,
+                "z": (obs - mod) / se if se > 0 else float("nan"),
+            }
+        )
+    print("(B) RCB bin means:")
+    show(pd.DataFrame(rows))
+
+
+def run_sim_mode(model, sim_path, defaults):
+    """Teacher-force `model` over a simulation's realised trajectories."""
+    print(f"\nsim data  {cc.rel(sim_path)}")
+    check_sim_defaults(model, defaults)
+    data, run = load_sim(sim_path, defaults)
+    n_ep = data["contribution"].shape[0]
+    label = f"sim {Path(sim_path).parent.name}"
+    idx = np.arange(n_ep, dtype=np.int64)
+    df, dense = stimulus_frame(model, data, idx, label)
+    check_alignment(model, data, df, dense, label)
+    pop = rcb_population(df)
+    report(pop, label, observed="SIM")
+    sampling_noise(pop)
+    print("\n--- (C) self-check: observed sim vs the recorded closed loop ---")
+    return selfcheck_sim(pop, label)
+
+
 def main():
     t0 = time.time()
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--model", default=str(ROOT / DEFAULT_MODEL))
+    ap.add_argument(
+        "--sim-parquet",
+        default=None,
+        help=(
+            "teacher-force the trunk over a simulation's realised rounds "
+            "instead of the human CSV (step 6's mechanism gate)"
+        ),
+    )
     args = ap.parse_args()
     in_path = Path(args.model).resolve()
 
@@ -365,6 +655,13 @@ def main():
     print(f"  copula_rho={model.copula_rho} copula_phi={model.copula_phi}")
 
     data, pair_id, key_to_idx, defaults = cc.load_full()
+    if args.sim_parquet is not None:
+        ok = run_sim_mode(model, Path(args.sim_parquet).resolve(), defaults)
+        print(f"\nwall {time.time() - t0:.1f}s")
+        if not ok:
+            print("!! (C) does not reproduce the recorded sim -- INVALID")
+            sys.exit(2)
+        return
     tr_idx = cc.select_split(key_to_idx, cc.TRAIN, cc.N_TRAIN_EP)
     te_idx = cc.select_split(key_to_idx, cc.TEST, cc.N_TEST_EP)
     assert not set(tr_idx.tolist()) & set(te_idx.tolist()), "train/test overlap"
