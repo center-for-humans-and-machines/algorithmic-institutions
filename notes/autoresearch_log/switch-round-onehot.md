@@ -214,6 +214,7 @@ SB — the ruling's primary criterion is the mean and does not depend on it.
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
 | 2026-09-16 | (baseline) parent stack, PR #179 group-vnode contributor x PR #171 joint-exodus switch x PR #160 severity-copula punisher | SC 0.9774633985852937, SB 1.1109915195318010, RSA 1.3546243055859613 | 12/21 | 1.0988293946890038 | baseline |
+| 2026-09-16 | decision-round index one-hot over the 5 decision rounds, replacing the scalar `r / 23`, in the joint exodus head (`in_features` 23 -> 27); nothing else changed | **SC 1.3189670168** (band DOWN), SB 1.0166052445, RSA 1.2422478376 | 11/21 (parent 12/21) | **1.1195072129546739** (parent 1.0988293946890038) | **FAIL** -- all three of the ruling's criteria fail: the mean rises 0.0207, rows <= 1 fall 12 -> 11, and SC leaves the `<= 1` band |
 
 ## 4. Notes
 
@@ -271,3 +272,101 @@ SB — the ruling's primary criterion is the mean and does not depend on it.
    a band-width movement rather than a hairline one. Reported rather than
    worked around: no seed was changed, no variant was shopped, and the guard is
    recorded as failed.
+7. **Simulation (step 7), SLURM 30266528, 00:01:55, exit 0:0.** Protocol
+   byte-identical to the parent's run: seed 42, 100 episodes, 24 rounds,
+   `switch_every: 4`, single pairing `lin_multinomial_copula_self`, both other
+   slots the parent's own artifacts. 21 rows, 24 figures.
+8. **The mechanism installed, exactly and only where it was aimed.** The
+   declared defect was the switch rate at the late decision rounds. Per-round
+   switch rate, candidate minus human, against the parent's:
+
+   | decision round | 3 | 7 | 11 | 15 | 19 |
+   |---|---|---|---|---|---|
+   | human rate | 0.4419 | 0.2989 | 0.2453 | 0.2414 | 0.2513 |
+   | parent delta | -0.0331 | -0.0464 | +0.0047 | **+0.0524** | -0.0313 |
+   | candidate delta | -0.0194 | -0.0314 | +0.0509 | **-0.0039** | **+0.0049** |
+
+   Round 15 -- the 4th decision, the single largest error in the parent and the
+   one the hypothesis named -- goes **+0.0524 -> -0.0039**, and round 19 goes
+   -0.0313 -> +0.0049. Rounds 3 and 7 improve too. The five free offsets do what
+   they were claimed to do. Mean |delta| falls 0.03358 -> 0.02210, which is
+   **SB 1.1109915195 -> 1.0166052445**, the largest single-row improvement in
+   the run. The cost is round 11, which absorbs the redistribution (+0.0047 ->
+   +0.0509).
+9. **And it did not fix SC -- it broke it, 0.9774633986 -> 1.3189670168, a band
+   DOWNGRADE on the experiment's own target row.** The late-game sign reversal
+   did not go away; the whole curve moved up:
+
+   | after switch | 1st | 2nd | 3rd | 4th | 5th |
+   |---|---|---|---|---|---|
+   | human | 6.44 | 6.20 | 6.04 | 5.92 | 5.84 |
+   | parent delta | -0.05 | -0.05 | -0.05 | +0.38 | +0.32 |
+   | candidate delta | +0.14 | +0.08 | +0.11 | **+0.41** | **+0.48** |
+
+   The parent had three blocks essentially exact and two wrong. The candidate
+   has **none** exact, and the 4th and 5th are *worse* than the parent's.
+10. **Where the group sizes went, and the finding this experiment actually
+    produces.** SC's own object is the distribution of the larger group's size
+    from round 4 on:
+
+    | larger group | 4 (balanced) | 5 | 6 | 7 | 8 (merged) |
+    |---|---|---|---|---|---|
+    | human | 0.096 | 0.244 | 0.280 | 0.236 | 0.144 |
+    | parent | 0.108 | 0.212 | 0.248 | 0.238 | 0.194 |
+    | candidate | **0.074** | 0.186 | 0.288 | 0.238 | **0.214** |
+
+    The candidate moves mass **off the balanced end and onto the merged tail**:
+    P(L = 4) 0.108 -> 0.074 against human 0.096, P(L = 8) 0.194 -> 0.214 against
+    human 0.144. **G3 confirms the channel**: the full-exodus cell share rises
+    **0.1416 (130/918) -> 0.1477 (135/914)** against the human 0.1079, and the
+    movers-in-full-exodus share 0.3105 -> 0.3117. So: **the round one-hot buys
+    the per-round switch rate and pays for it on the merged tail.** Five free
+    offsets fix *how many* people move at each opportunity, but the head is a
+    joint over the *pair* `(m_0, m_1)` and nothing in this change touches which
+    pair realises a given rate. Routing the rate through full-group exodus is
+    the cheapest way to hit a marginal and the most segregating way to hit it,
+    so the marginal improves while the size distribution degrades. **When people
+    switch and how segregated they end up are separable, and this experiment
+    separated them in the wrong direction.**
+11. **RCD is the collateral that matters: 1.3404829181 -> 2.1292600224, a second
+    band downgrade** (1-2 -> 2-5), the row PR #179 had just won and PR #176 died
+    0.053 short of. RCD regresses a switcher's contribution change on the gap
+    between the receiving group's mean and their own. Under a full-group exodus
+    there is no receiving group to have a gap with -- the arrivals *are* the
+    group -- so raising the full-exodus share both thins and degenerates the
+    regression's support. It is the same mechanism as note 10, read on a
+    different row, and it is the strongest argument that the movement is the
+    head's and not the restart's.
+12. **Can the restart (note 5) explain this? Partly at most, and the direction
+    is against it.** G1's failure means the candidate is the base model plus the
+    one-hot plus one random restart, inseparably. But the restart is worth
+    +0.005251 of held-out per-agent log-loss, while the declared mechanism's own
+    prediction -- round 15 and round 19 -- landed precisely and in the predicted
+    direction (note 8), and the two damaged rows share one measured channel
+    (notes 10-11). A restart does not fix the exact two rounds a feature was
+    designed to fix. The honest statement is that SB's gain and SC's loss are
+    both attributable to the mechanism, with a restart-sized band of uncertainty
+    around every number in this log.
+13. **Verdict: FAIL, on all three of the maintainer's criteria.** The 21-row mean
+    **rises 1.0988293946890038 -> 1.1195072129546739** (+0.0206778182); rows
+    <= 1 **fall 12/21 -> 11/21**; and **SC, the declared row, leaves the `<= 1`
+    band** (0.9774633986 -> 1.3189670168). The declared secondary targets both
+    improved without upgrading: **SB 1.1109915195 -> 1.0166052445** (-0.0944,
+    still 1-2) and **RSA 1.3546243056 -> 1.2422478376** (-0.1124, still 1-2). §2
+    gate 1 is unmet on any declared row, so the verdict is a `[FAIL]` under the
+    unamended framework as well. 17 of the 21 rows improved; the experiment is
+    sunk by exactly two, and both are the same mechanism.
+14. **Successor, on this evidence: constrain the pair, not the clock.** The
+    round one-hot should be kept only in combination with something that stops
+    the rate being paid for out of the merged tail -- the open design is a head
+    whose grid is reweighted away from full-exodus cells (`m_g == k_g`), either
+    by an explicit dose term fitted to the human 0.1079 share or by a
+    composition feature that makes the pair, not just its marginals, a function
+    of the round. Note that the parent's own full-exodus share, 0.1416, was
+    already 31% above human before this experiment, and PR #174's U2 failed on
+    exactly this quantity on the other chain: **the merged tail is now an
+    unpaid debt on both chains**, and any switch-slot experiment that moves a
+    rate will keep being charged to it until something fixes it directly. The
+    round one-hot is not refuted as a component -- it demonstrably fixes SB --
+    it is refuted as a standalone change on a stack whose dose is already too
+    high.
