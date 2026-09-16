@@ -30,7 +30,8 @@ pipeline lives in `scripts/data_analysis/autoresearch_summary/`:
 | tree | `progress_tree.py` | `.../progress_tree.png` |
 | spine scores | `score_progressions.py` (fetches spine PRs' scores.csv via LFS; caches) | `data/spine_scores.json`, `.../score_progressions.png` |
 | breakdown | `score_breakdown.py` | `.../score_breakdown.png` |
-| build | `build_report.py` (interactive report; machinery view) | `plots/data_analysis/autoresearch_summary/report.html` |
+| machinery | `machinery.py` (drawn from the curated `data/stack_parts.json`) | `.../machinery.html` |
+| build | `build_report.py` (interactive report) | `plots/data_analysis/autoresearch_summary/report.html` |
 
 Outputs are regenerated end-to-end from the scripts; editing an output by
 hand is illegal. Intermediate `data/*.json` files are committed so the
