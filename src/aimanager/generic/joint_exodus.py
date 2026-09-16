@@ -170,10 +170,24 @@ class JointExodusHead(th.nn.Module):
 
     Input to the readout MLP: the two group-pooled embeddings concatenated in
     LABEL order, both valid-decider counts normalised as ``k / 8``, and the
-    round as ``r / 23`` -- the same numeric-encoder convention the model's own
-    ``round_number`` feature already uses (see ``ROUND_NORM``). No new
-    observable enters the model; the head only refactorises the label
-    distribution.
+    round -- either as ``r / 23``, the same numeric-encoder convention the
+    model's own ``round_number`` feature already uses (see ``ROUND_NORM``), or,
+    with ``round_onehot_slots`` set, as a one-hot over the decision rounds. No
+    new observable enters the model either way; the head only refactorises the
+    label distribution.
+
+    **Why the one-hot is a re-encoding and not a new feature.** At the decision
+    rounds the scalar takes exactly ``round_onehot_slots`` distinct values
+    (3/23, 7/23, 11/23, 15/23, 19/23 for a 24-round game at cadence 4), and
+    those are the only rounds the joint loss selects
+    (``train.joint_exodus_loss``) or the sampler fires on
+    (``graph._predict_encoded_joint_exodus``). The map from scalar to one-hot
+    is therefore a bijection on the realised support: no information is added
+    or removed. What changes is the inductive bias -- one direction in ``r``
+    shared through ``hidden_size`` tanh units with both pooled embeddings and
+    both sizes, against one free logit offset per decision round. Motivated by
+    a measured sign reversal in the late game; see
+    ``notes/autoresearch_log/switch-round-onehot.md``.
     """
 
     def __init__(
@@ -184,6 +198,8 @@ class JointExodusHead(th.nn.Module):
         max_group_size=MAX_GROUP_SIZE,
         n_groups=N_GROUPS,
         round_norm=ROUND_NORM,
+        round_onehot_slots=None,
+        round_onehot_every=None,
     ):
         super().__init__()
         assert n_groups == N_GROUPS, "the joint exodus grid is defined for 2 groups"
@@ -194,8 +210,35 @@ class JointExodusHead(th.nn.Module):
         self.n_groups = n_groups
         self.round_norm = float(round_norm)
         self.grid = max_group_size + 1
-        # two pooled vectors + two normalised sizes + the normalised round
-        in_features = n_groups * embed_size + n_groups + 1
+
+        # Decision-round encoding. ``None`` keeps the scalar ``r / 23`` the
+        # head shipped with (PR #171); a positive int S replaces it with a
+        # one-hot over the S decision rounds, which needs the cadence
+        # ``round_onehot_every`` to turn a round into its index. Both are
+        # validated here so a mis-set config fails at construction rather
+        # than silently training a different model.
+        assert round_onehot_slots is None or (
+            isinstance(round_onehot_slots, int)
+            and not isinstance(round_onehot_slots, bool)
+            and round_onehot_slots > 0
+        ), (
+            "round_onehot_slots must be None or a positive int, got "
+            f"{round_onehot_slots!r}"
+        )
+        assert round_onehot_slots is None or (
+            isinstance(round_onehot_every, int)
+            and not isinstance(round_onehot_every, bool)
+            and round_onehot_every > 0
+        ), (
+            "round_onehot_slots needs the decision cadence "
+            f"round_onehot_every as a positive int, got {round_onehot_every!r}"
+        )
+        self.round_onehot_slots = round_onehot_slots
+        self.round_onehot_every = round_onehot_every
+        n_round_features = 1 if round_onehot_slots is None else round_onehot_slots
+
+        # two pooled vectors + two normalised sizes + the round encoding
+        in_features = n_groups * embed_size + n_groups + n_round_features
         self.mlp = Seq(
             Lin(in_features=in_features, out_features=hidden_size),
             Tanh(),
@@ -273,9 +316,32 @@ class JointExodusHead(th.nn.Module):
             n_batch=n_batch,
             n_groups=1,
         )
-        rounds = rounds.reshape(n_batch, n_rounds, 1) / self.round_norm
+        rounds = rounds.reshape(n_batch, n_rounds, 1)
 
-        features = th.cat([pooled.flatten(-2, -1), sizes, rounds], dim=-1)
+        # `getattr`, not attribute access: `GraphNetwork.save` pickles this
+        # MODULE, so a head trained before the one-hot existed restores
+        # without these attributes and must keep taking the numeric path.
+        slots = getattr(self, "round_onehot_slots", None)
+        every = getattr(self, "round_onehot_every", None)
+        if slots is None:
+            round_feature = rounds / self.round_norm
+        else:
+            # The pooled round is an integer carried through a float mean of
+            # one value, so rounding recovers it exactly.
+            r = rounds.round().to(th.int64)
+            idx = th.div(r, every, rounding_mode="floor").clamp(0, slots - 1)
+            # Only a decision round gets a slot; every other round is an
+            # all-zero row. Those rounds are never selected by the joint loss
+            # (`train.joint_exodus_loss`) nor sampled from
+            # (`graph._predict_encoded_joint_exodus`), so the row is unused
+            # rather than a sixth category competing for the offsets.
+            is_decision = ((r + 1) % every) == 0
+            round_feature = th.zeros(
+                (n_batch, n_rounds, slots), dtype=x.dtype, device=x.device
+            )
+            round_feature.scatter_(-1, idx, is_decision.to(x.dtype))
+
+        features = th.cat([pooled.flatten(-2, -1), sizes, round_feature], dim=-1)
         logits = self.mlp(features)
         log_prob, _ = masked_joint_log_prob(
             logits, k, max_group_size=self.max_group_size
