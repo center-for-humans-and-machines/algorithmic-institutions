@@ -9,7 +9,12 @@ maintainer-designated frontier, at `11fe223`. Branch
 `auto/contribution-punishment-response`, worktree
 `.claude/worktrees/contribution-punish-onehot`, created from
 `origin/auto/contribution-group-vnode`; the PR opens with
-`--base auto/contribution-group-vnode`.
+`--base auto/contribution-group-vnode`. The isolated remote dir is
+`~/autoresearch/contribution-punish-onehot` -- delete it when this PR closes.
+(The worktree and remote dir keep the `punish-onehot` slug they were created
+with, before step 0 ruled the one-hot out; the branch, the configs, the
+artifacts and the sim dir all carry the `stimulus_skip` name the experiment
+actually landed on.)
 
 **Base model:** the parent's contributor -- the M0 GNN trunk plus the per-group
 virtual node, retrained (`group_switching_contribution_50ep_group_vnode`), with
