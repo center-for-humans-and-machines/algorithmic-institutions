@@ -1,0 +1,162 @@
+[
+  {
+    "pr": 146,
+    "category": "correlated-sampling",
+    "rationale": "Gaussian-copula sampling with one shared latent per manager-round pushed through each agent's multinomial CDF, marginals preserved, no retraining."
+  },
+  {
+    "pr": 147,
+    "category": "feature-engineering",
+    "rationale": "The M4 peer feature set with training-time input dropout on prev_contribution; model class unchanged."
+  },
+  {
+    "pr": 148,
+    "category": "feature-engineering",
+    "rationale": "Replaces the scalar prev_contribution feature with a 21-level one-hot encoding in the categorical baseline; pipeline otherwise unchanged."
+  },
+  {
+    "pr": 149,
+    "category": "correlated-sampling",
+    "rationale": "Copula sampling at the GNN contributor's free-running draw; sampling-layer change only, marginals untouched."
+  },
+  {
+    "pr": 150,
+    "category": "correlated-sampling",
+    "rationale": "Gaussian-copula with a shared per-(episode, round, group) latent over the switch Bernoullis, with an AR(1) persistence arm."
+  },
+  {
+    "pr": 151,
+    "category": "nonlinear-emission",
+    "rationale": "Replaces the Gaussian baseline's linear head with a 2-layer MLP under the same MLE objective."
+  },
+  {
+    "pr": 152,
+    "category": "autoregressive",
+    "rationale": "Teacher-forced autoregressive conditioning on same-round groupmate punishments with sequential agent-by-agent sampling."
+  },
+  {
+    "pr": 153,
+    "category": "architecture",
+    "rationale": "Single-head edge attention replacing scatter_mean aggregation in the GraphNetwork."
+  },
+  {
+    "pr": 154,
+    "category": "nonlinear-emission",
+    "rationale": "New gradient-boosted-tree (xgb) categorical model over the 21 levels in the contribution slot."
+  },
+  {
+    "pr": 155,
+    "category": "nonlinear-emission",
+    "rationale": "Swaps the categorical readout for a single scalar regression head trained with MSE and rounded to the grid."
+  },
+  {
+    "pr": 156,
+    "category": "nonlinear-emission",
+    "rationale": "Replaces the linear mean of the continuous baseline with a 2-layer MLP point regressor on plain MSE."
+  },
+  {
+    "pr": 157,
+    "category": "structured-head",
+    "rationale": "Restructures the emission as a gated two-component conformity mixture anchored on the own-group previous mean."
+  },
+  {
+    "pr": 158,
+    "category": "persistent-latent",
+    "rationale": "Per-agent, per-episode VAE-style latent appended to node features, trained by ELBO, sampled from the prior at simulation."
+  },
+  {
+    "pr": 159,
+    "category": "persistent-latent",
+    "rationale": "1D per-(group, episode) latent entering the emission logits, trained by exact Gauss-Hermite marginal likelihood."
+  },
+  {
+    "pr": 160,
+    "category": "correlated-sampling",
+    "rationale": "Gaussian-copula sampling for the multinomial punisher with a shared per-group-round latent; marginals preserved by construction."
+  },
+  {
+    "pr": 161,
+    "category": "autoregressive",
+    "rationale": "Swaps in the AR-GNN punisher with the gated ar_punishment edge feature and agent-by-agent predict_autoreg sampling."
+  },
+  {
+    "pr": 162,
+    "category": "correlated-sampling",
+    "rationale": "The AR(1) herding-copula switch sampler (rho, phi stamped on the artifact); independent path bit-identical without the fields."
+  },
+  {
+    "pr": 163,
+    "category": "training-regime",
+    "rationale": "Scheduled-sampling curriculum: training unrolls episodes and replaces prev_contribution with model draws at ramped probability."
+  },
+  {
+    "pr": 164,
+    "category": "correlated-sampling",
+    "rationale": "Copula-correlated predict_autoreg: a shared per-group-round latent drives each AR step's draw, rho recalibrated for the AR channel."
+  },
+  {
+    "pr": 165,
+    "category": "correlated-sampling",
+    "rationale": "AR(1) Gaussian-copula sampling ported to the contribution head, rho/phi from teacher-forced residual dependence."
+  },
+  {
+    "pr": 166,
+    "category": "correlated-sampling",
+    "rationale": "Sampling-time port of the calibrated switch copula artifact into the parent stack; no retraining, no recalibration."
+  },
+  {
+    "pr": 167,
+    "category": "nonlinear-emission",
+    "rationale": "Trains the gaussian_mlp estimator with a forced behaviorally-declared feature core; the nonlinear Gaussian MLP is the model."
+  },
+  {
+    "pr": 168,
+    "category": "correlated-sampling",
+    "rationale": "Recalibration grid over the switch copula's (rho, phi) within the built mechanism and calibration CIs."
+  },
+  {
+    "pr": 169,
+    "category": "structured-head",
+    "rationale": "Learned per-group leaver-count head with conditional-Bernoulli selection of which members leave."
+  },
+  {
+    "pr": 170,
+    "category": "correlated-sampling",
+    "rationale": "Marginal-preserving group copula at the gaussian_mlp_v2 sampler: equicorrelated normals with episode- and round-level shared components."
+  },
+  {
+    "pr": 171,
+    "category": "structured-head",
+    "rationale": "Round-level joint head over the pair of group leaver counts capturing between-group opposition, with conditional-Bernoulli member selection."
+  },
+  {
+    "pr": 172,
+    "category": "structured-head",
+    "rationale": "The joint exodus count-pair head reimplemented as a detached readout with conditional-Bernoulli selection on the gmlp stack."
+  },
+  {
+    "pr": 173,
+    "category": "feature-engineering",
+    "rationale": "Exposes the group-size per-capita return response to the contributor as an input feature; model otherwise unchanged."
+  },
+  {
+    "pr": 174,
+    "category": "feature-engineering",
+    "rationale": "Re-encodes the joint head's two group-size inputs as one-hot codes instead of numeric scalars; everything else byte-identical."
+  },
+  {
+    "pr": 175,
+    "category": "feature-engineering",
+    "rationale": "Adds inv_group_size to the feature pool and retrains the trunk at the incumbent's exact settings; no other change."
+  },
+  {
+    "pr": 176,
+    "category": "feature-engineering",
+    "rationale": "Adds an arrival-tenure input feature to the GNN contributor, motivated by the linear baselines' rounds_since_switch component; trunk otherwise unchanged."
+  },
+  {
+    "pr": 177,
+    "category": "structured-head",
+    "rationale": "Replaces the emission with a status-quo- and corner-inflated binned Gaussian: a four-component mixture of a body distribution plus repeat/0/20 atoms with learned weights."
+  }
+]
