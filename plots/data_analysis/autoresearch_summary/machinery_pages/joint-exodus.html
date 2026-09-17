@@ -1,0 +1,47 @@
+<title>The joint exodus head: switching as waves, not coin flips</title>
+<style>
+body { background: #fcfcfb; color: #1a1a19; font-family: system-ui,
+  sans-serif; margin: 2.5rem auto; max-width: 680px; padding: 0 20px;
+  line-height: 1.55; }
+h1 { font-size: 1.35rem; margin: 0.4rem 0 0.6rem; }
+h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #898781; margin: 1.6rem 0 0.3rem; }
+p { margin: 0.3rem 0; }
+.back a { color: #52514e; text-decoration: none; font-size: 0.9rem; }
+.back a:hover { text-decoration: underline; }
+.meta { color: #52514e; font-size: 0.9rem; }
+.meta a { color: #2a78d6; text-decoration: none; font-weight: 600; }
+.meta a:hover { text-decoration: underline; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; color: #fff; margin-right: 6px; }
+ul.code { list-style: none; padding: 0; margin: 0.3rem 0; }
+ul.code li { margin: 0.35rem 0; font-size: 0.9rem; color: #52514e; }
+ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
+ol.maths li { margin: 0.55rem 0; }
+code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
+  font-size: 0.82rem; color: #1a1a19; }
+</style>
+<p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
+<h1>The joint exodus head: switching as waves, not coin flips</h1>
+<p class="meta"><span class="chip" style="background:#4a3aa7">structured-head</span> installed by PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/171">#171</a> + <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/172">#172</a> &middot; switch bay of both machines (head plus the conditional-Bernoulli picker)</p>
+<h2>The problem</h2>
+<p>Every fourth round, players may switch groups. The stock predictor gave each player an independent stay-or-leave coin, but real regroup rounds come in waves: several players abandon a group at once, and a busy exodus from one group coincides with quiet in the other (the groups&#x27; leaver counts are anti-correlated at -0.47). Independent coins cannot produce lopsided groups, so the group-size row (SC) sat above 2 -- and an oracle test (PR #169) had proved that no fix inside a single group could ever close it.</p>
+<h2>The change</h2>
+<p>On decision rounds the per-player coins are bypassed (the dashed box on the drawing). One round-level head predicts the pair of leaver counts for the two groups jointly, capturing the opposition between them; a conditional-Bernoulli step then picks which members actually leave, weighted by each player&#x27;s own predicted probability -- so individual tendencies are respected within the drawn counts.</p>
+<h2>The maths, in plain English</h2>
+<ol class="maths"><li>The baseline: every fourth round, each player gets a probability p of leaving their group, and a coin is flipped per player, independently. Independent coins cannot produce coordinated waves -- that is a mathematical limit, not a fitting problem.</li>
+<li>Step A predicts HOW MANY leave, jointly for both groups. Take the per-player internal representations the network already computes, average them within each group, and append two plain numbers per group: its size and the round number.</li>
+<li>A small extra network maps that summary to a 9 x 9 table of probabilities -- one cell for every combination of &#x27;m0 players leave group 0 AND m1 players leave group 1&#x27; (each count 0..8) -- normalised by a softmax over the 81 cells. It is trained by cross-entropy: each real decision round says which cell actually happened, and the table learns to give that cell probability.</li>
+<li>Because the table is over the PAIR of counts, it can put extra probability on lopsided combinations -- a big exodus from one group in the same round as calm in the other -- which is exactly the anti-correlation (-0.47) that independent coins can never express.</li>
+<li>One safety detail: the gradient from this new head is blocked from flowing back into the shared network (the input is &#x27;detached&#x27;). The head is a pure add-on reader -- the per-player predictions everyone else relies on cannot be bent by it.</li>
+<li>Step B decides WHO leaves, given the drawn counts. If m of a group&#x27;s k members must leave, the probability that a particular set of m members is the one that leaves is proportional to the product of those members&#x27; individual odds p/(1-p). So the players the per-player head already considered restless are the likeliest picks -- individual character survives the group-level draw. This is the textbook &#x27;conditional Bernoulli&#x27; distribution.</li>
+<li>With at most 8 members per group there are at most 70 possible sets for any count, so the sampler simply lists all of them and computes each one exactly -- no approximation. (Products of odds are computed as sums of log-odds so probabilities near 0 or 1 don&#x27;t overflow.)</li>
+</ol>
+<h2>Where it lives in the code</h2>
+<ul class="code"><li><code>src/aimanager/generic/joint_exodus.py</code> &mdash; the 9 x 9 count-pair head and pool_by_group (the per-group averaging)</li>
+<li><code>src/aimanager/generic/conditional_bernoulli.py</code> &mdash; the exact who-leaves sampler (subset enumeration in log space)</li>
+<li><code>src/aimanager/generic/graph.py</code> &mdash; wiring into the GraphNetwork&#x27;s forward pass on decision rounds</li>
+</ul>
+<p class="meta">(paths as changed on PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/171">#171</a> + <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/172">#172</a>)</p>
+<h2>What it bought</h2>
+<p>SC 2.19 -&gt; 1.15 on the gnn machine (PR #171). The identical head, re-implemented on the gaussian-MLP machine as PR #172, took SC 2.67 -&gt; 1.30 there -- one method, two installations, one page. The one-hot sizes plate (#174) later re-tuned its inputs.</p>

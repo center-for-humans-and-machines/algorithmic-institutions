@@ -1,0 +1,45 @@
+<title>The herding copula: groups that drift together</title>
+<style>
+body { background: #fcfcfb; color: #1a1a19; font-family: system-ui,
+  sans-serif; margin: 2.5rem auto; max-width: 680px; padding: 0 20px;
+  line-height: 1.55; }
+h1 { font-size: 1.35rem; margin: 0.4rem 0 0.6rem; }
+h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #898781; margin: 1.6rem 0 0.3rem; }
+p { margin: 0.3rem 0; }
+.back a { color: #52514e; text-decoration: none; font-size: 0.9rem; }
+.back a:hover { text-decoration: underline; }
+.meta { color: #52514e; font-size: 0.9rem; }
+.meta a { color: #2a78d6; text-decoration: none; font-weight: 600; }
+.meta a:hover { text-decoration: underline; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; color: #fff; margin-right: 6px; }
+ul.code { list-style: none; padding: 0; margin: 0.3rem 0; }
+ul.code li { margin: 0.35rem 0; font-size: 0.9rem; color: #52514e; }
+ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
+ol.maths li { margin: 0.55rem 0; }
+code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
+  font-size: 0.82rem; color: #1a1a19; }
+</style>
+<p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
+<h1>The herding copula: groups that drift together</h1>
+<p class="meta"><span class="chip" style="background:#2a78d6">correlated-sampling</span> installed by PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/165">#165</a> &middot; contribution bay of the gnn machine</p>
+<h2>The problem</h2>
+<p>Real groups talk themselves into generosity or into collapse: over an episode, the two groups&#x27; average contributions drift apart. With every member sampled independently, simulated groups stayed glued to the grand average. The group-spread row (CG) was the stack&#x27;s worst score at 9.81 -- almost ten times the human-vs-human noise ceiling.</p>
+<h2>The change</h2>
+<p>The punisher&#x27;s shared-dice trick, moved to the contribution draw and given memory: the shared group number follows an AR(1) chain with full persistence (phi = 1.0), so it is effectively drawn once and carried through the whole episode. A group that starts lucky stays lucky -- which is what herding looks like from outside. Member histograms are again preserved; the mixing weight was re-estimated for the newer trunk (rho = 0.044) after PR #166 showed calibrations do not transfer between stacks.</p>
+<h2>The maths, in plain English</h2>
+<ol class="maths"><li>Same shared-dice trick as the punisher&#x27;s severity copula, applied where the contribution (0 to 20) is drawn: each member&#x27;s roll is a blend of one shared group number and their own private number, and each member&#x27;s own predicted probabilities stay exactly as the network computed them.</li>
+<li>The new ingredient is memory. Instead of a fresh group number every round, next round&#x27;s number is phi x (last round&#x27;s number) + sqrt(1 - phi^2) x (a fresh draw). With phi between 0 and 1 the group&#x27;s mood fades gradually; at the fitted phi = 1.0 it never fades -- one mood per group, drawn at the start of the episode and held for all 24 rounds. That is what makes a lucky group stay lucky.</li>
+<li>Fitting uses the real games, replayed with the model watching (the model is always shown the true history, never its own outputs). At every decision, note where the member&#x27;s actual contribution landed inside the model&#x27;s predicted distribution for them -- &#x27;you gave more than 80% of what I expected of you&#x27; -- a percentile.</li>
+<li>Convert each percentile to a bell-curve number z (the standard uniform-to-bell-curve conversion). If members were truly independent, groupmates&#x27; z values would be uncorrelated. How strongly they correlate within the same round fixes rho; how much of that correlation survives from one round to the next fixes phi. Both by maximum likelihood on the training half of the data only.</li>
+<li>Where it plugs in: between the network&#x27;s probability output and the dice. The trained network file just carries two extra numbers (rho, phi); a file without them samples independently, exactly as before. When the trunk changed in #179 the dial was re-fitted (rho = 0.044), because #166 showed a dial fitted on one model does not transfer to another.</li>
+</ol>
+<h2>Where it lives in the code</h2>
+<ul class="code"><li><code>src/aimanager/generic/copula.py</code> &mdash; the sampler (sample_correlated_levels): shared latent per (episode, round, group) cell, AR(1) carry-over, inverse-CDF lookup</li>
+<li><code>scripts/artificial_humans/contribution_copula_rho.py</code> &mdash; estimates rho and phi from teacher-forced quantiles</li>
+<li><code>scripts/artificial_humans/make_contribution_copula_artifact.py</code> &mdash; stamps copula_rho / copula_phi onto the model artifact; unstamped artifacts sample independently as before</li>
+</ul>
+<p class="meta">(paths as changed on PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/165">#165</a>)</p>
+<h2>What it bought</h2>
+<p>CG 9.81 -&gt; 4.16, plus band upgrades on RCD (how a switcher&#x27;s contribution converges to the new group) and RCA (round-to-round contribution change); the stack mean fell 1.69 -&gt; 1.29, the largest single mean drop of the campaign.</p>

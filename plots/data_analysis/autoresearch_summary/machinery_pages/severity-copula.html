@@ -1,0 +1,45 @@
+<title>The severity copula: one punishment mood per group</title>
+<style>
+body { background: #fcfcfb; color: #1a1a19; font-family: system-ui,
+  sans-serif; margin: 2.5rem auto; max-width: 680px; padding: 0 20px;
+  line-height: 1.55; }
+h1 { font-size: 1.35rem; margin: 0.4rem 0 0.6rem; }
+h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #898781; margin: 1.6rem 0 0.3rem; }
+p { margin: 0.3rem 0; }
+.back a { color: #52514e; text-decoration: none; font-size: 0.9rem; }
+.back a:hover { text-decoration: underline; }
+.meta { color: #52514e; font-size: 0.9rem; }
+.meta a { color: #2a78d6; text-decoration: none; font-weight: 600; }
+.meta a:hover { text-decoration: underline; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; color: #fff; margin-right: 6px; }
+ul.code { list-style: none; padding: 0; margin: 0.3rem 0; }
+ul.code li { margin: 0.35rem 0; font-size: 0.9rem; color: #52514e; }
+ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
+ol.maths li { margin: 0.55rem 0; }
+code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
+  font-size: 0.82rem; color: #1a1a19; }
+</style>
+<p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
+<h1>The severity copula: one punishment mood per group</h1>
+<p class="meta"><span class="chip" style="background:#2a78d6">correlated-sampling</span> installed by PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/160">#160</a> &middot; punisher bay of both machines</p>
+<h2>The problem</h2>
+<p>In the human games, everything a group is punished in a round comes from one manager making one decision: when the manager is harsh, everyone feels it. The simulation instead drew each member&#x27;s punishment separately, like eight independent dice, so simulated managers never had moods. The spread between group punishment averages (row PD) was pinned far below the human level, and no retraining could fix it -- it is a property of how the dice are thrown, not of the model.</p>
+<h2>The change</h2>
+<p>Keep each member&#x27;s predicted punishment probabilities exactly as they are, but couple the dice. Every group-round gets one shared &#x27;severity&#x27; random number, mixed with a little per-member noise (mixing weight rho = 0.35, estimated from the human data), and each member&#x27;s mixed number is translated back through their own predicted distribution. Individual histograms are untouched by construction -- only the togetherness of the draws changes.</p>
+<h2>The maths, in plain English</h2>
+<ol class="maths"><li>Start from what the model already outputs: for each group member, 31 probabilities -- one for every punishment level 0 to 30. None of these numbers are changed.</li>
+<li>Normally a member&#x27;s punishment is drawn by rolling one random number u between 0 and 1 and walking up their probabilities until the running total passes u. Independent rolls for everyone is what kept the groups too uniform -- so the only thing this unit changes is where u comes from.</li>
+<li>Each round, draw one shared bell-curve number g for the whole group (the manager&#x27;s &#x27;mood&#x27; that round) and one private bell-curve number e for each member. Blend them: w = sqrt(0.35) x g + sqrt(0.65) x e. Because 0.35 + 0.65 = 1, the blend w behaves exactly like a single fresh bell-curve draw -- that is the whole trick.</li>
+<li>Convert each member&#x27;s w back into a 0-to-1 number u (the standard bell-curve-to-uniform conversion) and use it as their roll. Each member still lands on every punishment level exactly as often as their own probabilities say. What changed: when the shared g is high, everyone&#x27;s roll is high together -- harsh rounds are harsh for the whole group.</li>
+<li>The strength 0.35 is not a guess. In the training games, count how often two groupmates were BOTH punished harder than their individual probabilities can explain. Independent rolls predict a certain number of such coincidences; the human data has clearly more. Slide the dial (called rho) from 0 upward and keep the value that makes the observed coincidences most plausible -- a maximum-likelihood fit. It lands at rho = 0.3508.</li>
+<li>Where it plugs in: after the model, at the last step of the simulation loop. The model is not retrained; setting rho = 0 gives back the old independent sampling, byte for byte.</li>
+</ol>
+<h2>Where it lives in the code</h2>
+<ul class="code"><li><code>scripts/baselines/punishment_copula_rho.py</code> &mdash; estimates rho from the training games (pairwise MLE)</li>
+<li><code>src/aimanager/simulation/linear_ah.py</code> &mdash; the sampler: reads copula_rho off the .joblib bundle and couples the draws; rho = 0 restores independent sampling bit-for-bit</li>
+</ul>
+<p class="meta">(paths as changed on PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/160">#160</a>)</p>
+<h2>What it bought</h2>
+<p>PD 2.93 -&gt; 1.53, a full band closer to the human data, with the stack mean falling 1.76 -&gt; 1.69. This change first landed as PR #146, was unmerged for process reasons, and was redone cleanly as PR #160 -- one method, counted once. It sits unchanged in both machines&#x27; punisher bays.</p>

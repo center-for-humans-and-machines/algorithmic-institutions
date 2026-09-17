@@ -1,0 +1,41 @@
+<title>One-hot group sizes: every size gets its own dial</title>
+<style>
+body { background: #fcfcfb; color: #1a1a19; font-family: system-ui,
+  sans-serif; margin: 2.5rem auto; max-width: 680px; padding: 0 20px;
+  line-height: 1.55; }
+h1 { font-size: 1.35rem; margin: 0.4rem 0 0.6rem; }
+h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #898781; margin: 1.6rem 0 0.3rem; }
+p { margin: 0.3rem 0; }
+.back a { color: #52514e; text-decoration: none; font-size: 0.9rem; }
+.back a:hover { text-decoration: underline; }
+.meta { color: #52514e; font-size: 0.9rem; }
+.meta a { color: #2a78d6; text-decoration: none; font-weight: 600; }
+.meta a:hover { text-decoration: underline; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; color: #fff; margin-right: 6px; }
+ul.code { list-style: none; padding: 0; margin: 0.3rem 0; }
+ul.code li { margin: 0.35rem 0; font-size: 0.9rem; color: #52514e; }
+ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
+ol.maths li { margin: 0.55rem 0; }
+code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
+  font-size: 0.82rem; color: #1a1a19; }
+</style>
+<p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
+<h1>One-hot group sizes: every size gets its own dial</h1>
+<p class="meta"><span class="chip" style="background:#1baf7a">feature-engineering</span> installed by PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/174">#174</a> &middot; plate on the joint exodus head, gaussian-MLP machine</p>
+<h2>The problem</h2>
+<p>The joint head read the two group sizes as raw numbers, which forces a straight-line effect: a group of 6 must matter exactly twice a group of 3. A sibling experiment on the contribution slot (PR #173) showed numeric size coding only travels half the distance -- size effects are not linear.</p>
+<h2>The change</h2>
+<p>The two size inputs are re-encoded as one-hot codes, so each possible size level gets its own learned weight. Everything else in the head is byte-identical.</p>
+<h2>The maths, in plain English</h2>
+<ol class="maths"><li>Before: each group&#x27;s size entered the exodus head as one scaled number (size / 8). A single number times a single learned weight forces a straight-line effect -- going from 2 to 4 members must matter exactly as much as going from 4 to 6.</li>
+<li>After: the size becomes a 9-position indicator (&#x27;one-hot&#x27;): size 3 is encoded as 0,0,0,1,0,0,0,0,0. Each position has its own learned weight, so the head can express, say, that the step from 2 to 3 members changes everything while the step from 5 to 6 changes almost nothing.</li>
+<li>The two size inputs become 18 inputs; the head, its training procedure, and every other feature stay byte-identical -- which is also why the improvement is attributable to the encoding change alone.</li>
+</ol>
+<h2>Where it lives in the code</h2>
+<ul class="code"><li><code>src/aimanager/generic/joint_exodus.py</code> &mdash; the size encoding at the head&#x27;s input (the only changed lines)</li>
+</ul>
+<p class="meta">(paths as changed on PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/174">#174</a>)</p>
+<h2>What it bought</h2>
+<p>SC 1.30 -&gt; 0.98 -- under the human noise ceiling -- with two more rows joining the &lt;= 1 club and the mean falling 1.262 -&gt; 1.223.</p>

@@ -1,0 +1,45 @@
+<title>The per-group virtual node: the group becomes a member</title>
+<style>
+body { background: #fcfcfb; color: #1a1a19; font-family: system-ui,
+  sans-serif; margin: 2.5rem auto; max-width: 680px; padding: 0 20px;
+  line-height: 1.55; }
+h1 { font-size: 1.35rem; margin: 0.4rem 0 0.6rem; }
+h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #898781; margin: 1.6rem 0 0.3rem; }
+p { margin: 0.3rem 0; }
+.back a { color: #52514e; text-decoration: none; font-size: 0.9rem; }
+.back a:hover { text-decoration: underline; }
+.meta { color: #52514e; font-size: 0.9rem; }
+.meta a { color: #2a78d6; text-decoration: none; font-weight: 600; }
+.meta a:hover { text-decoration: underline; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; color: #fff; margin-right: 6px; }
+ul.code { list-style: none; padding: 0; margin: 0.3rem 0; }
+ul.code li { margin: 0.35rem 0; font-size: 0.9rem; color: #52514e; }
+ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
+ol.maths li { margin: 0.55rem 0; }
+code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
+  font-size: 0.82rem; color: #1a1a19; }
+</style>
+<p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
+<h1>The per-group virtual node: the group becomes a member</h1>
+<p class="meta"><span class="chip" style="background:#e87ba4">architecture</span> installed by PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/179">#179</a> &middot; contribution bay of the gnn machine</p>
+<h2>The problem</h2>
+<p>Even with the herding copula bolted on at the sampling step, the network itself had nowhere to store &#x27;how this group is doing&#x27;: information between members passed through a single averaging step per round, and slowly-building group identity had no carrier. The group-spread row (CG) still read 4.27 and the switching-pull row (RCD) 2.76.</p>
+<h2>The change</h2>
+<p>A textbook remedy from the graph-network literature (Gilmer et al. 2017&#x27;s &#x27;master node&#x27;): each group gets a virtual member that aggregates everyone after message passing, keeps its own GRU memory from round to round, and broadcasts its state back to all members at the next round. Group state is now computed inside the network instead of imitated by correlated dice -- the copula remains only as a final light touch, recalibrated to rho = 0.044.</p>
+<h2>The maths, in plain English</h2>
+<ol class="maths"><li>Background in one sentence: the contribution network computes a representation (a vector of numbers) per player each round, lets players exchange information along connections, and gives each player a small recurrent memory -- but no object in the network IS a group.</li>
+<li>Each round, after the players have exchanged their messages: average the representations of each group&#x27;s current members into one vector, and append the group&#x27;s share of the population (members / 8) -- without that number, an average over 2 members and an average over 6 would look like the same state of the world.</li>
+<li>Feed that vector into a GRU -- a small recurrent memory unit that keeps a hidden state and updates it each time it sees a new input. There is one hidden state per group per episode (the learned update rule itself is shared), so the state becomes the group&#x27;s running summary of everything its members have been doing.</li>
+<li>Broadcast: each member&#x27;s own representation gets the group state attached to it just before the final layer that scores the 21 contribution levels. Every member of a group reads the SAME state -- which is what lets the whole group move coherently.</li>
+<li>Membership is looked up fresh every round, so a player who switches groups starts reading the new group&#x27;s memory from the switch round on. That is the mechanism behind a pattern measured in the human data: new arrivals weight the receiving group&#x27;s recent history at 0.28.</li>
+<li>No new training objective: the ordinary per-player prediction loss simply flows backwards through the broadcast and the averaging, so the group state learns to contain exactly whatever helps predict its members. (Edge case handled: an emptied group keeps its state ticking on zero input; nobody reads it until someone moves in.)</li>
+</ol>
+<h2>Where it lives in the code</h2>
+<ul class="code"><li><code>src/aimanager/generic/group_vnode.py</code> &mdash; GroupVirtualNode: the pool -&gt; GRU -&gt; broadcast cycle (reuses pool_by_group from joint_exodus)</li>
+<li><code>src/aimanager/generic/graph.py</code> &mdash; wiring: pooled after op1, state concatenated at the op2 readout</li>
+</ul>
+<p class="meta">(paths as changed on PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/179">#179</a>)</p>
+<h2>What it bought</h2>
+<p>CG 4.27 -&gt; 0.90, through two whole bands down to the human noise ceiling; RCD 2.76 -&gt; 1.34 and SC under 1; the stack mean fell 1.304 -&gt; 1.099 -- the frontier of the whole campaign.</p>

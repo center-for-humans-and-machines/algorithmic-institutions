@@ -5,6 +5,11 @@ tooltips) comes from data/stack_parts.json. Tinted units were installed by
 campaign PRs (tint = the method category, matching the progress tree);
 plain outlines are stock parts; green plates are feature retrofits.
 
+Every #PR pill links to a plain-language story page generated from the
+curated data/machinery_notes.json — one page per unique method, so the
+same change installed on both machines (e.g. the joint exodus head,
+PRs #171/#172) shares one page.
+
 Usage:
     python scripts/data_analysis/autoresearch_summary/machinery.py
 """
@@ -15,6 +20,11 @@ from pathlib import Path
 
 DATA = Path(__file__).parent / "data"
 OUT = Path("plots/data_analysis/autoresearch_summary/machinery.html")
+PAGES = OUT.parent / "machinery_pages"
+REPO = "center-for-humans-and-machines/algorithmic-institutions"
+
+# badge text ("#171") -> story page slug; filled from machinery_notes.json
+PR_SLUG = {}
 
 CAT_COLOR = {
     "correlated-sampling": "#2a78d6",
@@ -33,6 +43,15 @@ ASIDE_W = 150
 
 def esc(s):
     return html.escape(s, quote=True)
+
+
+def linked(badge, svg):
+    """Wrap a #PR pill's svg in a link to its story page, if it has one."""
+    slug = PR_SLUG.get(badge)
+    if not slug:
+        return svg
+    return (f'<a href="machinery_pages/{slug}.html">'
+            f'<title>the story behind {esc(badge)}</title>{svg}</a>')
 
 
 def part_box(x, y, w, part):
@@ -64,22 +83,22 @@ def part_box(x, y, w, part):
     )
     bottom = y + PART_H
     if part.get("badge"):
-        s.append(
+        s.append(linked(part["badge"], (
             f'<rect x="{x + w - 44}" y="{y - 8}" width="38" height="17" '
             f'rx="8" fill="{INK}"/>'
             f'<text x="{x + w - 25}" y="{y + 4.5}" fill="#fcfcfb" '
             f'text-anchor="middle" font-size="10">{esc(part["badge"])}</text>'
-        )
+        )))
     for plate in part.get("plates", []):
         pw = 140
-        s.append(
+        s.append(linked(plate["badge"], (
             f'<rect x="{x + w - pw - 10}" y="{bottom - 9}" width="{pw}" '
             f'height="18" rx="4" fill="{PLATE}" fill-opacity="0.2" '
             f'stroke="{PLATE}"/>'
             f'<text x="{x + w - pw / 2 - 10}" y="{bottom + 4}" '
             f'text-anchor="middle" font-size="9.5" fill="currentColor">'
             f'{esc(plate["label"])}  {esc(plate["badge"])}</text>'
-        )
+        )))
         bottom += 9
     return f'<g>{"".join(s)}</g>', bottom
 
@@ -187,6 +206,11 @@ def render_machine(machine):
     )
 
 
+NAV = """
+<p class="legend"><a href="report.html">&larr; campaign report</a>
+&nbsp;&middot;&nbsp; <a href="leaderboard.html">leaderboard</a></p>
+"""
+
 LEGEND = """
 <p class="legend">
 <span style="color:#e87ba4">&#9632;</span> architecture add-on &nbsp;
@@ -195,13 +219,71 @@ LEGEND = """
 <span style="color:#2a78d6">&#9632;</span> correlated-sampling unit &nbsp;
 <span style="color:#1baf7a">&#9632;</span> feature retrofit plate &nbsp;
 &#9633; stock part &nbsp; &#11044;<small>#PR</small> installed by
-&mdash; hover a tinted part for its story.
+&mdash; hover a tinted part for its story, <b>click a #PR pill</b> for
+the plain-language page.
 </p>
 """
+
+PAGE_STYLE = """<style>
+body { background: #fcfcfb; color: #1a1a19; font-family: system-ui,
+  sans-serif; margin: 2.5rem auto; max-width: 680px; padding: 0 20px;
+  line-height: 1.55; }
+h1 { font-size: 1.35rem; margin: 0.4rem 0 0.6rem; }
+h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #898781; margin: 1.6rem 0 0.3rem; }
+p { margin: 0.3rem 0; }
+.back a { color: #52514e; text-decoration: none; font-size: 0.9rem; }
+.back a:hover { text-decoration: underline; }
+.meta { color: #52514e; font-size: 0.9rem; }
+.meta a { color: #2a78d6; text-decoration: none; font-weight: 600; }
+.meta a:hover { text-decoration: underline; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; color: #fff; margin-right: 6px; }
+ul.code { list-style: none; padding: 0; margin: 0.3rem 0; }
+ul.code li { margin: 0.35rem 0; font-size: 0.9rem; color: #52514e; }
+ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
+ol.maths li { margin: 0.55rem 0; }
+code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
+  font-size: 0.82rem; color: #1a1a19; }
+</style>"""
+
+
+def render_page(note):
+    pr_links = " + ".join(
+        f'<a href="https://github.com/{REPO}/pull/{pr}">#{pr}</a>'
+        for pr in note["prs"]
+    )
+    chip = (f'<span class="chip" style="background:'
+            f'{CAT_COLOR[note["category"]]}">{esc(note["category"])}</span>')
+    maths = ('<ol class="maths">'
+             + "".join(f"<li>{esc(p)}</li>\n" for p in note.get("maths", []))
+             + "</ol>\n")
+    code = "".join(
+        f"<li><code>{esc(c['path'])}</code> &mdash; {esc(c['role'])}</li>\n"
+        for c in note.get("code", [])
+    )
+    return (
+        f"<title>{esc(note['title'])}</title>\n{PAGE_STYLE}\n"
+        f'<p class="back"><a href="../machinery.html">&larr; back to the '
+        f"machinery</a></p>\n<h1>{esc(note['title'])}</h1>\n"
+        f'<p class="meta">{chip} installed by PR {pr_links} &middot; '
+        f"{esc(note['where'])}</p>\n"
+        f"<h2>The problem</h2>\n<p>{esc(note['problem'])}</p>\n"
+        f"<h2>The change</h2>\n<p>{esc(note['change'])}</p>\n"
+        f"<h2>The maths, in plain English</h2>\n{maths}"
+        f"<h2>Where it lives in the code</h2>\n"
+        f'<ul class="code">{code}</ul>\n'
+        f'<p class="meta">(paths as changed on PR {pr_links})</p>\n'
+        f"<h2>What it bought</h2>\n<p>{esc(note['bought'])}</p>\n"
+    )
 
 
 def main():
     machines = json.loads((DATA / "stack_parts.json").read_text())["machines"]
+    notes = json.loads((DATA / "machinery_notes.json").read_text())
+    for slug, note in notes.items():
+        for pr in note["prs"]:
+            PR_SLUG[f"#{pr}"] = slug
     body = "\n".join(render_machine(m) for m in machines)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(
@@ -209,11 +291,18 @@ def main():
         "body { background: #fcfcfb; color: #1a1a19; font-family: system-ui,"
         " sans-serif; margin: 2rem auto; max-width: 1240px; }\n"
         "svg { max-width: 100%; height: auto; }\n"
+        "svg a { cursor: pointer; }\n"
+        "svg a:hover rect { stroke: #2a78d6; stroke-width: 1.5; }\n"
         "figure { margin: 0 0 2.5rem 0; }\n"
         ".legend { color: #52514e; font-size: 0.9rem; }\n"
-        "</style>\n" + LEGEND + body
+        ".legend a { color: #2a78d6; text-decoration: none; }\n"
+        ".legend a:hover { text-decoration: underline; }\n"
+        "</style>\n" + NAV + LEGEND + body
     )
-    print(f"wrote {OUT}")
+    PAGES.mkdir(parents=True, exist_ok=True)
+    for slug, note in notes.items():
+        (PAGES / f"{slug}.html").write_text(render_page(note))
+    print(f"wrote {OUT} and {len(notes)} pages in {PAGES}/")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,46 @@
+<title>The Gaussian-MLP trunk: bending the response curves</title>
+<style>
+body { background: #fcfcfb; color: #1a1a19; font-family: system-ui,
+  sans-serif; margin: 2.5rem auto; max-width: 680px; padding: 0 20px;
+  line-height: 1.55; }
+h1 { font-size: 1.35rem; margin: 0.4rem 0 0.6rem; }
+h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #898781; margin: 1.6rem 0 0.3rem; }
+p { margin: 0.3rem 0; }
+.back a { color: #52514e; text-decoration: none; font-size: 0.9rem; }
+.back a:hover { text-decoration: underline; }
+.meta { color: #52514e; font-size: 0.9rem; }
+.meta a { color: #2a78d6; text-decoration: none; font-weight: 600; }
+.meta a:hover { text-decoration: underline; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; color: #fff; margin-right: 6px; }
+ul.code { list-style: none; padding: 0; margin: 0.3rem 0; }
+ul.code li { margin: 0.35rem 0; font-size: 0.9rem; color: #52514e; }
+ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
+ol.maths li { margin: 0.55rem 0; }
+code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
+  font-size: 0.82rem; color: #1a1a19; }
+</style>
+<p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
+<h1>The Gaussian-MLP trunk: bending the response curves</h1>
+<p class="meta"><span class="chip" style="background:#eb6834">nonlinear-emission</span> installed by PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/167">#167</a> &middot; contribution bay of the gaussian-MLP machine (trunk plus the feature plate)</p>
+<h2>The problem</h2>
+<p>A linear model can only move contributions up and down in straight lines, but human reactions bend -- the response to punishment flattens near the extremes, and the reaction-by-round-type row (RCA) sat beyond 5. An earlier plain MLP attempt (PR #151) fit individuals better but wrecked the group dynamics, because nothing forced it to look at the group.</p>
+<h2>The change</h2>
+<p>A small 2-layer network predicts both the mean and the spread of each member&#x27;s next contribution, and its inputs are hand-forced to include the member&#x27;s own-group context (the green &#x27;group core forced&#x27; plate on the intake) -- so the extra flexibility works with the group signal instead of around it.</p>
+<h2>The maths, in plain English</h2>
+<ol class="maths"><li>The model&#x27;s claim: given what a member currently sees (their features x), their next contribution is a bell curve -- centre mu(x), spread sigma(x) -- and BOTH depend on the situation. A calm regular gets a narrow curve; an unpredictable member in a chaotic round gets a wide one.</li>
+<li>The network computing mu and sigma is deliberately tiny: the features pass through one hidden layer of 8 units with a tanh squashing function, then a plain linear layer outputs two numbers -- mu directly, and log(sigma) (predicting the log is the standard way to guarantee sigma stays positive without any constraints).</li>
+<li>Training maximises the likelihood of the real next contributions under those curves (the Gaussian negative-log-likelihood loss). This rewards two things at once: putting the centre in the right place, and being honestly wide when people genuinely are unpredictable -- a model that pretends to be sure gets punished by the same loss.</li>
+<li>In the simulation, a member&#x27;s contribution is one draw from their curve, rounded to the nearest whole number in 0..20, with anything beyond the ends clipped to 0 or 20.</li>
+<li>The &#x27;forced core&#x27; is a rule imposed on feature selection, not on the network. Feature sets are normally chosen freely by cross-validation -- and an earlier attempt (#151) showed a flexible network then buys individual accuracy by ignoring the group. Here every candidate feature set MUST contain the member&#x27;s own-group signals (like the group&#x27;s average contribution last round), so the extra flexibility has to work with the group context.</li>
+<li>Where it plugs in: this IS the trunk of the second stack -- the group copula (#170), the exodus head (#172, #174) and the inflated emission (#177) all attach to it.</li>
+</ol>
+<h2>Where it lives in the code</h2>
+<ul class="code"><li><code>scripts/baselines/gaussian_regressor.py</code> &mdash; GaussianMLPRegressor: the 2-layer heteroscedastic Gaussian model and its likelihood fit</li>
+<li><code>scripts/baselines/run_baseline_cv.py</code> &mdash; the cross-validation with the forced group core</li>
+<li><code>src/aimanager/simulation/linear_ah.py</code> &mdash; the simulation adapter that samples from N(mu, sigma) and rounds onto the grid</li>
+</ul>
+<p class="meta">(paths as changed on PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/167">#167</a>)</p>
+<h2>What it bought</h2>
+<p>RCA moved out of the worst band (&gt; 5 down to 2-5) with the mean easing 1.631 -&gt; 1.615. Modest on its own -- but this trunk is what the whole second machine is built on: the group copula (#170), the joint exodus head (#172, #174) and the inflated emission (#177) all bolt onto it.</p>
