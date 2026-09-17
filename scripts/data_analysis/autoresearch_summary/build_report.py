@@ -15,6 +15,7 @@ Usage:
 import html
 import json
 import math
+import re
 from pathlib import Path
 
 from progress_tree import (
@@ -26,6 +27,7 @@ from score_progressions import (
 )
 
 OUT = Path("plots/data_analysis/autoresearch_summary/report.html")
+METRIC_DEFS = Path("notes/evaluation_metric_defs.md")
 REPO = "center-for-humans-and-machines/algorithmic-institutions"
 INK, INK_2, GRID = "#0b0b0b", "#52514e", "#eceae6"
 
@@ -67,6 +69,45 @@ def marker(shape, x, y, color, size=7.5):
     path = " ".join(f"{px:.1f},{py:.1f}" for px, py in pts)
     return (f'<polygon points="{path}" fill="{color}" stroke="#fcfcfb" '
             f'stroke-width="1.5"/>')
+
+
+def metric_defs():
+    """{row: (name, one-line gloss)}, parsed from the definitions note.
+
+    Each row is defined there as `**CA -- <name>:** <body>`; the gloss is
+    the body's first sentence (the split is on period+space, so the bin
+    edges' decimals survive). Never hand-copied — the note is the source
+    of truth for what a row measures.
+    """
+    text = METRIC_DEFS.read_text()
+    defs = {}
+    for m in re.finditer(r"^\*\*([A-Z]{2,4}) -- ([^:]+):\*\* *(.+?)(?=\n\n|\Z)",
+                         text, re.M | re.S):
+        gloss = re.split(r"\.\s", m.group(3).replace("\n", " "))[0]
+        defs[m.group(1)] = (m.group(2).strip(), gloss.strip())
+    missing = [m for m in METRICS if m not in defs]
+    if missing:
+        raise SystemExit(f"{METRIC_DEFS}: no definition for {missing}")
+    return defs
+
+
+def metric_legend(rail=False):
+    """Static what-the-rows-mean legend, by slot; `rail` = narrow column."""
+    defs = metric_defs()
+    cols = []
+    for fam, color in FAMILY_COLOR.items():
+        rows = [m for m in METRICS if FAMILY[m] == fam]
+        items = "".join(
+            f'<div class="mrow"><b>{m}</b><span><span class="n">'
+            f'{esc(defs[m][0])}</span>'
+            + ("" if rail else f'<span class="g">{esc(defs[m][1])}</span>')
+            + '</span></div>' for m in rows)
+        cols.append(f'<div class="mcol"><h4 style="color:{color}">{fam}'
+                    f' &middot; {len(rows)} rows</h4>{items}</div>')
+    return (f'<div class="mlegend{" rail" if rail else ""}">'
+            f'<div class="mlhead">What the 21 score rows measure '
+            f'<small>(verbatim from <code>{METRIC_DEFS}</code>)</small></div>'
+            f'{"".join(cols)}</div>')
 
 
 def node_link(pr, pr_slug):
@@ -433,6 +474,32 @@ svg { max-width: 100%; height: auto; }
 #breakbox.sel.s-contribution .f-contribution,
 #breakbox.sel.s-switch .f-switch,
 #breakbox.sel.s-punisher .f-punisher { display: initial; }
+.mlegend { display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 2px 26px; border-top: 1px solid #e1e0d9; margin-top: 20px;
+  padding-top: 12px; }
+.mlegend .mlhead { grid-column: 1 / -1; font-size: 11.5px; color: #898781;
+  text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.mlegend .mlhead small { text-transform: none; letter-spacing: 0; }
+.mlegend .mlhead code { background: #f0efec; border-radius: 4px;
+  padding: 1px 5px; font-size: 11px; color: #52514e; }
+.mcol h4 { margin: 4px 0 5px; font-size: 12px; }
+.mrow { display: grid; grid-template-columns: 36px 1fr; gap: 6px;
+  margin: 5px 0; font-size: 12px; line-height: 1.4; align-items: baseline; }
+.mrow b { color: #1a1a19; font-variant-numeric: tabular-nums; }
+.mrow .n { color: #1a1a19; }
+.mrow .g { display: block; color: #898781; font-size: 11.5px; }
+.mlegend.rail { grid-template-columns: 1fr; border-top: 0; margin-top: 0;
+  padding-top: 0; gap: 0; }
+@media (max-width: 900px) { .mlegend { grid-template-columns: 1fr; } }
+.storywrap { display: grid; grid-template-columns: 1fr 232px; gap: 26px;
+  align-items: start; }
+.storyrail { position: sticky; top: 14px; border: 1px solid
+  rgba(11,11,11,0.10); border-radius: 12px; background: #ffffff;
+  padding: 13px 16px; max-height: calc(100vh - 40px); overflow-y: auto; }
+@media (max-width: 900px) {
+  .storywrap { grid-template-columns: 1fr; }
+  .storyrail { position: static; max-height: none; }
+}
 .mnav { display: flex; gap: 5px; flex-wrap: wrap; margin: 6px 0 14px; }
 .mnav button { border: 1.5px solid; border-radius: 999px; background: none;
   font: inherit; font-size: 12px; padding: 3px 11px; cursor: pointer; }
@@ -567,6 +634,7 @@ guides at the 1 / 2 / 5 band edges, log scale; titles colored by slot:
 {" ".join(f'<span style="color:{c}">{f}</span>'
           for f, c in FAMILY_COLOR.items())}).</p>
 <div class="grid21">{panels}</div>
+{metric_legend()}
 </section>
 <section class="layer" id="breakdown">
 <div class="treehead">
@@ -579,6 +647,7 @@ line for its values, or focus one or more slots:</p>
   </div>
 </div>
 <div class="two" id="breakbox">{breakdowns}</div>
+{metric_legend()}
 </section>
 <section class="layer" id="beforeafter">
 <p class="legend">The evaluation suite's own figure for each score row,
@@ -587,6 +656,7 @@ side by side. Pick a row &mdash; rows with two figures show both pairs.
 (SA has no figure; its score is a single rate.)</p>
 <div class="mnav">{ba_nav}</div>
 {ba_cards}
+{metric_legend()}
 </section>
 </div>
 <div id="tip"></div>

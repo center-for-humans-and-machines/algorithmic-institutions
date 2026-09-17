@@ -288,6 +288,7 @@ guides at the 1 / 2 / 5 band edges, log scale; titles colored by slot:
 {" ".join(f'<span style="color:{c}">{f}</span>'
           for f, c in FAMILY_COLOR.items())}).</p>
 <div class="grid21">{panels}</div>
+{br.metric_legend()}
 </section>
 <section class="layer" id="breakdown">
 <div class="treehead">
@@ -300,6 +301,7 @@ line for its values, or focus one or more slots:</p>
   </div>
 </div>
 <div class="two" id="breakbox">{breakdowns}</div>
+{br.metric_legend()}
 </section>
 <section class="layer" id="beforeafter">
 <p class="legend">The evaluation suite's own figure for each score row,
@@ -308,6 +310,7 @@ side by side. Pick a row &mdash; rows with two figures show both pairs.
 (SA has no figure; its score is a single rate.)</p>
 <div class="mnav">{ba_nav}</div>
 {inline_images(ba_cards)}
+{br.metric_legend()}
 </section>
 <section class="layer" id="machinery">
 {machinery_layer(pr_slug)}
@@ -335,7 +338,10 @@ better). Hover a band-upgrade count for the rows. Duplicates folded:
 <p class="legend">The plain-language story of every unique successful
 method &mdash; also reachable by clicking tree nodes and machinery
 pills.</p>
-{stories_layer(notes)}
+<div class="storywrap">
+<div>{stories_layer(notes)}</div>
+<aside class="storyrail">{br.metric_legend(rail=True)}</aside>
+</div>
 </section>
 </div>
 <div id="tip"></div>
