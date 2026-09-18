@@ -15,9 +15,21 @@ definitions in `notes/evaluation_metric_defs.md`).
 
 ## 2. The metrics
 
-Everything comes from one `evaluation/scores.csv` (21 rows), judged against
+Everything comes from one `evaluation/scores.csv` (22 rows), judged against
 the evaluation stack's own baseline scores (§3; on a parent `[SUCCESS]` PR,
-the parent's — §9). Two gates, both required for success:
+the parent's — §9). One protected row, then two gates, all required for
+success:
+
+**Protected row: RCE** (punishment response slope, the OLS slope of the
+next-round contribution change on the punishment received, per contribution
+band 0-4 / 5-9 / 10-14 / 15-19; humans +0.14 / +0.10 / -0.08 / -0.16). An
+experiment may not band-downgrade RCE against its baseline, may not flip
+any of the four band slopes away from the human sign, and may not halve any
+band's slope magnitude (a band's |slope| may not fall to half its baseline
+value or below). Any of the three is a `[FAIL]`, whatever the gates below
+say. Punishment-response experiments — punisher-slot changes, and any
+experiment whose declared target is the contributor's reaction to
+punishment — are judged on RCE: it is their target row for gate 1.
 
 1. **A band upgrade on a target row.** The scoring bands
    (<= 1 / 1-2 / 2-5 / > 5) are the classes: at least one row your
@@ -25,7 +37,7 @@ the parent's — §9). Two gates, both required for success:
    than its baseline — from > 5 into 2-5, from 2-5 into 1-2 or <= 1, from
    1-2 into <= 1. A within-band improvement, however large, is a `[FAIL]`
    with valuable notes, not a success.
-2. **The mean score holds.** The average over all 21 rows may not rise
+2. **The mean score holds.** The average over all 22 rows may not rise
    more than 10% above the evaluation stack's baseline mean (e.g. baseline
    1.76 -> ceiling 1.936). A band upgrade is allowed to cost a little
    elsewhere — but not to be bought by breaking the rest of the stack.
@@ -33,6 +45,17 @@ the parent's — §9). Two gates, both required for success:
 Nothing else gates. **Rows <= 1** (rows at or below the human-vs-human
 noise ceiling) is still computed and reported in every results table (§10),
 in the same column as always — context for the reader, not a criterion.
+
+**Re-baseline (`auto/punisher-current-contribution`).** Until that branch,
+both artificial punishers conditioned on round t-1's contribution while the
+human manager punishes round t's
+(`notes/autoresearch_log/punisher-current-contribution.md`). The fix
+retrains both punisher families, and since one punisher artifact sits in
+every stack it moves every row of every stack. The ledger's baselines — the
+score matrix and ranking of §3 and §6, and the confirmed scores of the
+frontier PRs — are therefore reset by that branch's stage D; scores
+recorded before it (21 rows, lagged punisher) are not comparable with scores
+after it (22 rows, RCE included, current-contribution punisher).
 
 ## 3. Evaluation protocol
 
@@ -85,8 +108,10 @@ direction the evaluations point to (§6) or a finding you make and document:
 
 - architecture changes,
 - new input features — only information the real player or manager observably
-  had at decision time (punishment models condition on round t-1, never on
-  the current round's contributions),
+  had at decision time (contribution models condition on round t-1;
+  punishment models may condition on the current round's contributions —
+  the manager sees them before punishing — but never on the current round's
+  punishments, payoffs or common good),
 - hyperparameter search, including selecting between variants by their
   evaluation score,
 - training-data handling within the conventions (GNNs train on the
@@ -131,7 +156,7 @@ target list: fetch your base model's deficit profile, then declare targets.
 
 | resource | what it gives you |
 |---|---|
-| `plots/data_analysis/evaluation/23_stack_sweep_updated/score_matrix.csv` | every score: 32 stacks x 21 rows |
+| `plots/data_analysis/evaluation/23_stack_sweep_updated/score_matrix.csv` | every score: 32 stacks x 21 rows (pre-fix sweep; 22 rows with RCE after the re-baseline, §2) |
 | `.../23_stack_sweep_updated/slot_report.jpg` | each slot option's rows, averaged over the other slots |
 | `.../23_stack_sweep_updated/slot_concordance.jpg` | whether a deficit / ranking is stable across contexts |
 | `plots/simulation/23_*/evaluation/scores.csv` + `visuals/` | per-stack scores and one figure per row |
