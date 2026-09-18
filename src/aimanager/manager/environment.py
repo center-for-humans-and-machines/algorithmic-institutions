@@ -160,6 +160,8 @@ class ArtificialHumanEnv:
             ),
             "does_switch": th.zeros(size, dtype=th.bool, device=self.device),
             "switch_mask": th.zeros(size, dtype=th.bool, device=self.device),
+            # the contribution copula's per-node latent (NaN without a copula)
+            "copula_z": th.full(size, float("nan"), device=self.device),
         }
 
         prev_state = {
@@ -337,6 +339,9 @@ class ArtificialHumanEnv:
 
         self.contribution = contribution
         self.contribution_valid = contribution_valid
+        z = getattr(self.artifical_humans, "copula_z_last", None)
+        if z is not None:
+            self.copula_z = z.to(self.device).reshape(self.copula_z.shape).float()
 
     def reset(self):
         self.round_number = th.zeros_like(self.round_number)
