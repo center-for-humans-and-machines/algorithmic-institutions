@@ -268,6 +268,16 @@ def test_human_response_pins(human):
         ">1": 277,
     }
     assert R.rcc(human).loc["contrast"] == pytest.approx(-7.035, abs=1e-3)
+    # low contributors comply, high contributors withdraw
+    rce = R.rce(human)
+    assert rce.tolist() == pytest.approx([0.1397, 0.1038, -0.0767, -0.1615], abs=1e-4)
+    assert R.weights("RCE", human).to_dict() == {
+        "0-4": 965,
+        "5-9": 929,
+        "10-14": 560,
+        "15-19": 206,
+    }
+    assert R.weights("RCE", human).sum() == R.weights("RCB", human).sum()
     assert R.rcd(human).loc["pull"] == pytest.approx(0.430247, abs=1e-5)
     # 539 Q4-study events minus 26 tainted by no-input masking
     events = R._switch_events(human).dropna(subset=["dc", "receiving_mean"])
@@ -505,6 +515,82 @@ def test_rcd_d(pull_frame):
         "contribution",
     ] = 5.0
     assert R.d("RCD", pull_frame, moved) == pytest.approx(1 / 3)
+
+
+@pytest.fixture()
+def slope_frame():
+    """One episode, two rounds, punished non-full contributors engineered
+    for exact per-band slopes: band 0-4 (a, b, c at contribution 2,
+    punished 2/4/6, dc 1/2/3 -> slope 0.5); band 5-9 (d, e at 7, punished
+    3/9, dc 4/1 -> slope -0.5); band 10-14 (f, g at 12, punished 1/5,
+    dc 0/0 -> slope 0); band 15-19 (h, i at 17, punished 8/9, dc -2/+2
+    -> slope 4). j is a full contributor and k unpunished:
+    both outside the population."""
+    rows = [
+        (0, "a", 0, 0, 2.0, 2.0, 3.0),
+        (0, "b", 0, 0, 2.0, 4.0, 4.0),
+        (0, "c", 0, 0, 2.0, 6.0, 5.0),
+        (0, "d", 0, 0, 7.0, 3.0, 11.0),
+        (0, "e", 0, 1, 7.0, 9.0, 8.0),
+        (0, "f", 0, 1, 12.0, 1.0, 12.0),
+        (0, "g", 0, 1, 12.0, 5.0, 12.0),
+        (0, "h", 0, 1, 17.0, 8.0, 15.0),
+        (0, "i", 0, 1, 17.0, 9.0, 19.0),
+        (0, "j", 0, 1, 20.0, 5.0, 10.0),
+        (0, "k", 0, 1, 3.0, 0.0, 9.0),
+    ]
+    rows = [(e, p, r, g, c, pun) for e, p, r, g, c, pun, _ in rows] + [
+        (e, p, 1, g, nxt, 0.0) for e, p, r, g, c, pun, nxt in rows
+    ]
+    return pd.DataFrame(
+        rows,
+        columns=[
+            "episode_id",
+            "participant_code",
+            "round_number",
+            "group_id",
+            "contribution",
+            "punishment",
+        ],
+    )
+
+
+def test_rce_slopes_and_weights(slope_frame):
+    stat = R.rce(slope_frame)
+    assert stat.loc["0-4"] == pytest.approx(0.5)
+    assert stat.loc["5-9"] == pytest.approx(-0.5)
+    assert stat.loc["10-14"] == pytest.approx(0.0)
+    assert stat.loc["15-19"] == pytest.approx(4.0)
+    assert R.weights("RCE", slope_frame).to_dict() == {
+        "0-4": 3,
+        "5-9": 2,
+        "10-14": 2,
+        "15-19": 2,
+    }
+    fit = R._rce_fit(slope_frame)
+    assert fit.loc["0-4", "se"] == pytest.approx(0.0)  # exact line: no residual
+    assert pd.isna(fit.loc["15-19", "se"])  # two points: no residual df
+
+
+def test_rce_d_and_empty_band(slope_frame):
+    # c lands on 7 instead of 5: 0-4 dc [1, 2, 5] -> slope 1.0, so
+    # d = |0.5 - 1.0| * 3 / 9 under the frame's own band counts
+    moved = slope_frame.copy()
+    moved.loc[
+        (moved["participant_code"] == "c") & (moved["round_number"] == 1),
+        "contribution",
+    ] = 7.0
+    assert R.d("RCE", slope_frame, moved) == pytest.approx(1 / 6)
+    # equal doses in a band leave no slope: the band counts as empty
+    flat = slope_frame.copy()
+    flat.loc[flat["participant_code"] == "i", "punishment"] = 8.0
+    with pytest.raises(ValueError, match="RCE: empty strata \\['15-19'\\]"):
+        R.d("RCE", slope_frame, flat)
+    # a side with no punished rows in a band is empty there too
+    no_low = slope_frame.copy()
+    no_low.loc[no_low["contribution"] == 2.0, "punishment"] = 0.0
+    with pytest.raises(ValueError, match="RCE: empty strata \\['0-4'\\]"):
+        R.d("RCE", slope_frame, no_low)
 
 
 def test_rsa_shares_and_weights(pull_frame):
