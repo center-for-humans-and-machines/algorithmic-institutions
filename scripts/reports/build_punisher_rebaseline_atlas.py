@@ -14,13 +14,14 @@ def b64(p):
 
 # ---------- data ----------
 CASES = [
-    ("a_vnode", "a", "PR 179 group vnode", "GNN trunk + contribution copula", 179),
-    ("b_skip", "b", "PR 181 stimulus skip", "GNN trunk + direct stimulus path", 181),
-    ("c_infl", "c", "PR 177 inflated gmlp", "Gaussian-MLP, inflated emission", 177),
-    ("d_kexo", "d", "PR 174 k-one-hot gmlp", "Gaussian-MLP v2 + k-one-hot switch", 174),
-    ("e_lin", "e1", "main gnn stack, linear punisher", "sweep reference, multinomial", None),
-    ("e_gnn", "e2", "main gnn stack, GNN punisher", "sweep reference, GNN punisher", None),
+    ("a_vnode", "a", "PR #179 group vnode", "graph-network players with a per-group memory node (the vnode), plus the contribution copula", 179),
+    ("b_skip", "b", "PR #181 stimulus skip", "graph-network players with a direct path from punishment received to the output (the skip)", 181),
+    ("c_infl", "c", "PR #177 inflated Gaussian-MLP", "Gaussian-MLP players with an inflated output spread", 177),
+    ("d_kexo", "d", "PR #174 k-one-hot Gaussian-MLP", "Gaussian-MLP v2 players with the joint-exodus, k-one-hot switch model", 174),
+    ("e_lin", "e1", "main branch, linear manager", "the main sweep's reference stack with the multinomial (linear) manager", None),
+    ("e_gnn", "e2", "main branch, graph-network manager", "the main sweep's reference stack with the graph-network manager", None),
 ]
+CASELBL = {c: f"{short} · {name}" for c, short, name, _, _ in CASES}
 ROWS = ["CA","CB","CC","CD","CE","CF","CG","SA","SB","SC","PA","PB","PC","PD","RCA","RCB","RCC","RCD","RCE","RSA","RPA","RPB"]
 ROWNAME = {"CA":"participant means","CB":"round means","CC":"group means","CD":"raw contributions","CE":"signed group differences","CF":"boundary shares","CG":"group-spread ratio","SA":"switch rate","SB":"switch timing","SC":"segregation","PA":"punishment levels","PB":"punishment by round","PC":"punished share","PD":"punishment spread ratio","RCA":"change by round type","RCB":"reaction to punishment (bins)","RCC":"reaction at the ceiling","RCD":"switching pull","RCE":"punishment response slope","RSA":"switching after punishment","RPA":"the manager's policy","RPB":"punishment by group size"}
 
@@ -156,9 +157,9 @@ def score_cards():
     for i,(c,short,name,desc,pr) in enumerate(CASES):
         out.append(f'<div class="bacard{" on" if i==1 else ""}" data-case="{c}">'
                    f'<p class="legend">{esc(name)} &middot; {esc(desc)}' + (f' &middot; <a href="{PR}{pr}" target="_blank" rel="noopener">PR #{pr}</a>' if pr else "") +
-                   '. Before: the source simulation rescored with the 22-row suite. After: the same contributor and switch models, punisher retrained on the current contribution.</p>'
+                   '. Before: the stack as originally accepted, with the simulated manager that punished last round. After: the same player and switch models, with the manager retrained on the current round.</p>'
                    f'<div class="twocol"><div class="tablewrap"><table class="scores"><thead><tr><th>row</th><th class="num">before</th><th class="num">after</th><th class="num">&Delta;</th><th>band</th></tr></thead><tbody>{score_table(c)}</tbody></table></div>'
-                   f'<div><h4>RCE band slopes</h4>{slope_svg(c)}<p class="legend">Human {" / ".join(f"{v:+.3f}" for v in HUMAN_SLOPES)} (comply low, withdraw high). Signs vs human: before {esc(bands[(c,"before")]["signs_vs_human"])}, after {esc(bands[(c,"after")]["signs_vs_human"])}.</p>'
+                   f'<div><h4>RCE: response slope per contribution band</h4>{slope_svg(c)}<p class="legend">Each bar is the slope of next-round change on punishment received, for punished players who gave 0&ndash;4, 5&ndash;9, 10&ndash;14 or 15&ndash;19 points. Humans: {" / ".join(f"{v:+.3f}" for v in HUMAN_SLOPES)}, so low contributors give more when punished and high contributors give less. Slope signs matching the humans: before {esc(bands[(c,"before")]["signs_vs_human"])}, after {esc(bands[(c,"after")]["signs_vs_human"])}.</p>'
                    f'<div class="keyline"><span class="sw hum"></span>human <span class="sw bef"></span>before <span class="sw aft"></span>after</div></div></div></div>')
     return "\n".join(out)
 
@@ -168,7 +169,11 @@ def mech_table():
     for k in order:
         m = mech[k]
         cls = "hum" if k=="human" else ("aft" if k.endswith("after") else "")
-        label = "human managers" if k=="human" else k.replace("_"," ")
+        if k == "human":
+            label = "real human managers"
+        else:
+            case, stage = k.rsplit(" ", 1)
+            label = f"{CASELBL[case]}, {stage}"
         rows.append(f'<tr class="{cls}"><td>{esc(label)}</td>'
                     f'<td class="num">{float(m["P(p>0|c_t=20)"]):.3f}</td><td class="num">{float(m["P(p>0|c_t<=4)"]):.3f}</td>'
                     f'<td class="num">{float(m["P(p>0|c_t=20,c_t-1<=4)"]):.2f} / {float(m["P(p>0|c_t<=4,c_t-1=20)"]):.2f}</td>'
@@ -180,19 +185,32 @@ def overview_tiles():
     mb = means["b_skip_after"]
     return f'''
 <div class="tiles">
-  <div class="tile"><span class="k">RPA, the manager's policy</span><span class="v">1.23&ndash;1.56 &rarr; 0.68&ndash;0.89</span><span class="s">all six stacks, band 1&ndash;2 &rarr; at the ceiling</span></div>
-  <div class="tile"><span class="k">RCB, reaction to punishment</span><span class="v">&minus;0.5 to &minus;0.9</span><span class="s">every stack; two cross into band 1&ndash;2</span></div>
-  <div class="tile"><span class="k">best 22-row mean</span><span class="v">{mb:.3f}</span><span class="s">PR 181 stimulus-skip trunk, 13 rows at the ceiling</span></div>
-  <div class="tile"><span class="k">RCE, protected</span><span class="v">0.70&ndash;0.89</span><span class="s">gmlp chain and skip trunk keep all four human signs</span></div>
+  <div class="tile"><span class="k">RPA, how the manager punishes</span><span class="v">1.23&ndash;1.56 &rarr; 0.68&ndash;0.89</span><span class="s">all six stacks move from the 1&ndash;2 band to at or under the ceiling</span></div>
+  <div class="tile"><span class="k">RCB, reaction to punishment</span><span class="v">&minus;0.5 to &minus;0.9</span><span class="s">better in every stack; two move from 2&ndash;5 into 1&ndash;2, one goes under 1</span></div>
+  <div class="tile"><span class="k">best mean over the 22 rows</span><span class="v">{mb:.3f}</span><span class="s">PR #181 stimulus-skip stack, 13 rows at or under the ceiling</span></div>
+  <div class="tile"><span class="k">RCE, response slope (protected)</span><span class="v">0.70&ndash;0.89</span><span class="s">the skip stack and both Gaussian-MLP stacks keep all four human response signs</span></div>
+</div>'''
+
+ABOUT = '''
+<h2>What this is about</h2>
+<div class="twocol">
+<div>
+<p class="legend" style="color:var(--ink)"><b>The game.</b> Eight people play 24 rounds in two groups of four. Each round every player receives 20 points and puts any share into the group's common pot; the pot is multiplied by 1.6 and split equally, so the group does best when everyone contributes and a free-rider does best of all. Each group has a manager who can punish individual players by up to 30 points, which costs the pot as well as the player. Every fourth round, players may switch to the other group. Fifty such games were played by real people.</p>
+<p class="legend" style="color:var(--ink)"><b>The models.</b> The project trains three models on those games: simulated players that decide how much to contribute, a switch model that decides who changes groups, and a simulated manager that decides punishments. One combination of the three is a <em>stack</em>, and each model's place in it is a <em>slot</em>. The stacks matter because a learning manager will later be trained by playing against the simulated players. If they react to punishment differently from real people, it learns the wrong lessons.</p>
+</div>
+<div>
+<p class="legend" style="color:var(--ink)"><b>What a score means.</b> Twenty-two rows each compare one statistic of the simulated games with the same statistic in the real games: how much people give, how often they switch, how they react to punishment, how the manager punishes. A score is a ratio: the simulation's distance from the human data, divided by how far two halves of the human data are from each other (the <em>noise ceiling</em>). At or under 1 means the simulation is as close to the humans as humans are to themselves; 1&ndash;2 is a minor deviation, 2&ndash;5 a clear one, above 5 the behaviour is not reproduced.</p>
+<p class="legend" style="color:var(--ink)"><b>What happened here.</b> In one working day, four investigations traced a stubborn deficit in the reaction-to-punishment row to the simulated manager: on every branch of the code it punished the previous round's contribution, whereas real managers punish the current one. The manager was retrained, a sharper measure of the players' response (RCE) was added, and every stack was rescored under the fix.</p>
+</div>
 </div>'''
 
 STEPS = [
- ("The question", "Are the copula units a good fix for correlated model error, and why is the punishment response, RCB, stuck above 2 on every stack?", "two questions, one session"),
- ("Four investigations", "Copula mechanics and justification; RCB's anatomy; a check of the punisher's timing; a Raven tooling check that found no usable checkout.", "read-only, fable agents"),
- ("Held-out test", "Retrain with 5 folds held out: the trunk's punishment response generalises (0.095 held-out vs 0.082 in-sample), so the self-play gap is closed-loop.", "PR #183"),
- ("A better instrument", "RCE, the within-band response slope, ranks stacks almost independently of RCB (Spearman 0.28) and tracks the human signs (&minus;0.88).", "branch rcb-alternative-response-slope"),
- ("Fix and retrain", "The punisher had punished last round's contribution on every branch. Both punishers retrained on the current round; CV log loss improves.", "auto/punisher-current-contribution"),
- ("Re-baseline", "Five stacks rerun under the fixed punisher, all 22 rows rescored, ledger reset, RCE made the first protected row.", "PR #184"),
+ ("Two questions", "First: the <em>copula</em>, a shared random number that makes the members of one group act alike, fixes the group-spread rows far better than its small fitted strength predicts. Is that a real mechanism or a patch? Second: the row scoring how simulated players react to punishment (RCB) had been stuck above 2 in every stack. Why?", "the starting point"),
+ ("Four investigations", "Read-only surveys of the code, the experiment record and the data: how the copula works and what justifies it; what RCB actually measures; whether the simulated manager punishes at the right time; and whether the compute cluster had a usable checkout (it did not).", "no models changed"),
+ ("Held-out test", "Is the players' reaction to punishment learned, or memorised from the training games? Retrained five times with 10 games held out each time, the reaction on unseen games (0.095) matches the in-sample one (0.082). It is learned; it only goes flat when the players play against the simulated manager.", "PR #183"),
+ ("A better instrument", "RCB compares bin averages and can be matched without the right cause and effect. A new row, RCE, measures how much more a player gives per extra point of punishment. Over 40 stacks the two rank the stacks almost independently (rank correlation 0.28); RCE tracks whether the human response signs are reproduced (&minus;0.88), RCB does not (&minus;0.08).", "branch rcb-alternative-response-slope"),
+ ("Fix and retrain", "The simulated manager punished last round's contribution on every branch of the code. Both manager models were retrained on the current round, and their fit to the human data (cross-validated log loss) improves.", "branch auto/punisher-current-contribution"),
+ ("Re-baseline", "Five stacks rerun under the fixed manager and all 22 rows rescored. The experiment record (the <em>ledger</em>) was reset to the new numbers, and RCE became the first <em>protected row</em>: one no future experiment may worsen.", "PR #184"),
 ]
 
 def steps_html():
@@ -200,61 +218,61 @@ def steps_html():
 
 STORIES = [
  dict(id="copula", chip="correlated-sampling", color="var(--c-blue)", title="The copula question: a variance source wearing a correlation's clothes",
-  meta=f'PRs <a href="{PR}160">#160</a>, <a href="{PR}165">#165</a>, <a href="{PR}170">#170</a>, <a href="{PR}179">#179</a> &middot; punisher and contribution bays of both machines',
-  problem="Group members decide independently given the true state, but the model does not see the whole state, so its errors across members are correlated. The copula adds one shared per-group random number to every member's draw, keeping each marginal exactly as fitted. The maintainer comment on PR #140 stated the distinction precisely and measured it: after conditioning on observed state, within-group residual correlation for contributions is 0.07, one sixth of the raw co-movement.",
-  finding="With rho at 0.04 to 0.07 the copula should barely move a dispersion row. Instead CG went 9.81 to 4.16 to 0.90. The effect is compounding: a static per-episode latent run through 50 closed-loop rounds becomes large, roughly 15 times its one-step preflight prediction. The ablation on the vnode trunk reads it the same way: the copula supplies free-running variance the deterministic trunk cannot generate. That is the same disease the RCB work found, a trunk that is fine teacher-forced and collapses in self-play.",
-  maths=["A Bayesian or ensemble treatment of parameter uncertainty addresses a different term. One posterior draw per run biases every agent in every group the same way, which does nothing for a within-group spread ratio. A draw per group per episode moves CG but is as mechanistically wrong as the copula.",
-         "The principled hierarchical version, a group random effect fitted jointly, is PR #159: its maximum-likelihood dose reached only 38 percent of the required move.",
-         "So the copula stays defensible as a phenomenological group-heterogeneity term under three conditions the protocol already enforces or nearly enforces: marginals preserved per draw, dose from likelihood not from the metric, and no distortion of individual responses. The third is the one to watch; PR #168 and PR #179 both report the latent choosing who moves partly by group draw."],
-  code=["<code>src/aimanager/generic/copula.py</code> sample_correlated_levels, AR(1) latent per (episode, group)", "<code>src/aimanager/simulation/linear_ah.py</code> _sample_levels_copula and _sample_levels_gaussian_copula", "<code>scripts/baselines/punishment_copula_rho.py</code> pairwise MLE for rho, now with --bundle/--out"],
-  bought="A cheap test settles the open question: train five seeds of the trunk, measure per-cell disagreement teacher-forced, compare with the fitted rho. If disagreement sits well below 0.04, the epistemic term is negligible and the copula stays. The surprise of this session points the same way: after the punisher fix the severity rho rose from 0.35 to 0.43, which fits a better-specified marginal leaving residuals that are more purely the manager's shared mood."),
+  meta=f'PRs <a href="{PR}160">#160</a>, <a href="{PR}165">#165</a>, <a href="{PR}170">#170</a>, <a href="{PR}179">#179</a> &middot; the copula is used in both the manager and the player models',
+  problem="Members of a real group act alike: they see the same situation and read it the same way. Simulated players drawn one at a time do not, so the rows that measure how far groups drift apart (CG, the group-spread ratio, and SC, segregation) scored badly in early stacks. The fix in use is the copula: one shared random number per group (the <em>latent</em>) is mixed into every member's draw, so members move together while each member's own probability distribution over choices (the <em>marginal</em>) stays exactly as fitted. The maintainer's comment on PR #140 set the standard for when this is legitimate. Only the co-movement the model cannot explain from what it sees is a sampling problem, and for contributions that part is small: a within-group correlation of 0.07, one sixth of the raw co-movement.",
+  finding="With a fitted strength (rho) of 0.04 to 0.07 the copula should barely move a group-spread row. Instead CG went from 9.81 to 4.16 (PR #165) to 0.90 (PR #179). The effect compounds: a shared number held fixed for a whole game and fed through 50 rounds of the models reacting to each other grows to roughly 15 times its one-step prediction. The ablation on PR #179 reads it the same way: the copula supplies free-running variation that the deterministic network cannot generate on its own. That is the same disease the RCB work found, a network that behaves when fed the real human history and goes flat when it plays against the other models.",
+  maths=["A Bayesian or ensemble treatment (several trained copies of the model, one drawn at random per game) addresses a different term. One draw per run shifts every player in every group the same way, which does nothing for a within-group spread ratio. A draw per group per game moves CG, but is as mechanistically wrong as the copula.",
+         "The principled version, a per-group random effect fitted jointly with the model, is PR #159: the strength the likelihood allowed reached only 38 percent of the required move.",
+         "So the copula stays defensible as a descriptive group-heterogeneity term under three conditions the protocol already enforces or nearly enforces: each player's marginal preserved per draw, strength set by likelihood rather than by the score it improves, and no distortion of individual responses. The third is the one to watch; PR #168 and PR #179 both report the shared number partly deciding <em>who</em> moves, not just how much the group moves."],
+  code=["<code>src/aimanager/generic/copula.py</code> sample_correlated_levels, a per-(game, group) latent with round-to-round persistence", "<code>src/aimanager/simulation/linear_ah.py</code> _sample_levels_copula and _sample_levels_gaussian_copula", "<code>scripts/baselines/punishment_copula_rho.py</code> pairwise maximum-likelihood fit of rho, now with --bundle/--out"],
+  bought="A cheap test settles the open question: train five copies of the network with different random seeds, measure how much they disagree per situation when fed the real history, and compare with the fitted rho. If the disagreement sits well below 0.04, model uncertainty is negligible and the copula stays. One surprise here points the same way: after the manager fix, the manager's own copula strength rose from 0.35 to 0.43, which fits a better-specified model leaving residuals that are more purely the manager's shared mood."),
  dict(id="rcb", chip="evaluation", color="var(--c-amber)", title="RCB is a weak instrument for the thing the manager needs",
-  meta='reports/rcb_alternative_comparison.md &middot; 40 stacks',
-  problem="The RL manager's only lever is punishment, so the contributors' conditional response to punishment is the causal channel it will exploit. RCB bins the next-round contribution change by punishment rate, which is punishment over shortfall. The rate mixes contribution level with dose, and in a joint human regression the rate coefficient has the wrong sign once level and dose are controlled.",
-  finding="Bin means can be matched without the mechanism. The categorical-contributor stacks hold three of the five best RCB scores while their high contributors give more when punished, zero or one of four slope signs right. The Gaussian-MLP chain is mid-pack on RCB and at the noise ceiling on the slope row. Across 40 stacks the two rows rank almost independently, Spearman 0.28; RCE correlates at &minus;0.88 with the number of human-signed slopes, RCB at &minus;0.08.",
-  maths=["RCE: within each contribution band (0-4, 5-9, 10-14, 15-19) the OLS slope of next-round change on punishment received, over RCB's population of punished non-full contributors. Human slopes +0.140, +0.104, &minus;0.077, &minus;0.161: comply when punished at low contribution, withdraw at high.",
-         "Canonical discrepancy: human-n-weighted mean absolute slope difference over the four bands, scored against a human-versus-human resampling ceiling of 0.086.",
-         "The ceiling is large relative to the effect, three quarters of the mean human slope, so a model with no response scores 1.42 and one with half the response 0.82. A two-band variant (0-9 versus 10-19) keeps the ranking with usable band edges if RCE is ever to gate alone."],
+  meta='reports/rcb_alternative_comparison.md &middot; 40 stacks &middot; both rows are defined side by side on the Response instrument tab',
+  problem="The learning manager's only lever is punishment, so what the simulated players must get right is how they respond to it. RCB was the row scoring that. It takes punished players, sorts them by punishment rate (punishment divided by the shortfall from 20) and compares the average next-round change in each rate bin. The rate mixes how much a player gave with how hard they were hit, and in a regression on the human data the rate has the wrong sign once level and dose are controlled.",
+  finding="Bin averages can be matched without the mechanism. The stacks with categorical players hold three of the five best RCB scores, yet their high contributors give more when punished, matching zero or one of the four human slope signs. The Gaussian-MLP line is mid-pack on RCB and at the noise ceiling on the slope row. Across 40 stacks the two rows rank the stacks almost independently (Spearman rank correlation 0.28); RCE correlates at &minus;0.88 with the number of human-signed slopes, RCB at &minus;0.08.",
+  maths=["RCE: within each contribution band (0&ndash;4, 5&ndash;9, 10&ndash;14, 15&ndash;19) the slope of a straight-line fit of next-round change on punishment received, over the same punished players RCB uses. Human slopes +0.140, +0.104, &minus;0.077, &minus;0.161: comply when punished at low contribution, withdraw at high.",
+         "The score is the average absolute slope difference over the four bands, weighted by how many humans fall in each band, divided by a human-versus-human resampling ceiling of 0.086.",
+         "That ceiling is large relative to the effect, three quarters of the mean human slope, so a model with no response at all scores 1.42 and one with half the response 0.82. A two-band variant (0&ndash;9 versus 10&ndash;19) keeps the ranking with usable band edges if RCE is ever to decide acceptance alone."],
   code=["<code>src/aimanager/evaluation_suite/metrics.py</code> ResponseMetrics.rce, rce_weights, _rce_fit", "<code>src/aimanager/evaluation_suite/visuals.py</code> RCE_line figure", "<code>notes/autoresearch.md</code> section 2: RCE is the first protected row, 22 rows"],
-  bought="RCE sits beside RCB as the first protected row: no accepted experiment may band-downgrade it, flip a human sign, or halve a band's slope. Under that rule PRs #171, #172 and #179 would not have passed as written, since each traded the punishment response for a mean gain."),
+  bought="RCE sits beside RCB as the first protected row: no accepted experiment may worsen its score band, flip a human sign, or halve a band's slope. Under that rule PRs #171, #172 and #179 would not have passed as written; each traded away the punishment response for a better mean."),
  dict(id="holdout", chip="diagnosis", color="var(--c-teal)", title="Learned, not memorised: the held-out teacher-forced test",
   meta=f'<a href="{PR}183">PR #183</a> &middot; branch rcb-holdout-teacher-forced &middot; 5 folds, Raven A100, 2.5 minutes each',
-  problem="PR #181 reported that the vnode trunk, teacher-forced on human trajectories, scores 0.093 on RCB against 0.797 in self-play, and read the gap as state drift. That number was in-sample: the shipped artifact trains on all 50 games, flip-doubled, so a GRU over memorised trajectories matches bin means almost by construction. Flat self-play was equally consistent with a response that never generalised.",
-  finding="Retrained five times with a 10-game fold held out and teacher-forced through the model that never saw each game, the pooled held-out statistic is 0.095, the pooled in-sample 0.082, the shipped artifact 0.093: within 0.013 of each other, all inside the 0.348 ceiling, eight times below self-play. The two low bands, 71 percent of the population, are at 83 to 94 percent of human strength held-out.",
-  maths=["Two secondary deficits are real and are not closed-loop: the 10-14 band has the wrong sign under every condition (never learned) and the 15-19 withdrawal is about 40 percent as strong held-out as in-sample (partly memorised).",
-         "So the relevant fix family is closed-loop: the gated stimulus skip, and a punisher whose doses resemble the human ones. Feature and regularisation work can only address the two secondary bands."],
+  problem="A simulated player's reaction to punishment can be read in two ways. <em>Teacher-forced</em>: feed the network the real human history round by round and read off only its predicted next contribution. <em>Self-play</em> (closed loop): let the models generate the whole game themselves, each round's inputs being the models' own earlier outputs. PR #181 reported that the group-vnode players react almost like humans teacher-forced (raw RCB gap 0.093, well inside the 0.348 noise ceiling) but not in self-play (0.797), and read the gap as drift of the simulated game state. But the 0.093 came from a model trained on all 50 games: a network with memory, tested on games it has memorised, matches averages almost by construction. The flat self-play result was equally consistent with a reaction that never generalised beyond the training games.",
+  finding="Retrained five times, each time with 10 games held out, and teacher-forced through the copy that never saw each game, the pooled held-out statistic is 0.095, the pooled in-sample 0.082, the shipped model 0.093: within 0.013 of each other, all inside the 0.348 ceiling, eight times below self-play. In the two low contribution bands, 71 percent of the punished population, the held-out reaction is 83 to 94 percent of human strength.",
+  maths=["Two secondary deficits are real and are not closed-loop: the 10&ndash;14 band has the wrong sign under every condition (never learned) and the 15&ndash;19 withdrawal is about 40 percent as strong held-out as in-sample (partly memorised).",
+         "So the fixes worth pursuing act on the closed loop: the stimulus skip (a direct path from punishment received to the output) and a simulated manager whose punishments resemble the human ones. Work on input features or regularisation can only address the two secondary bands."],
   code=["<code>scripts/data_analysis/rcb_holdout_teacher_forced.py</code>", "<code>configs/training/artificial_humans/contribution/group_switching_contribution_50ep_group_vnode_holdout_folds.yml</code>", "<code>notes/autoresearch_log/rcb-holdout-teacher-forced.md</code>"],
-  bought="It removed the wrong branch of the decision tree before any modelling effort went there, and it left a reusable fold harness."),
- dict(id="lag", chip="correctness", color="var(--c-red)", title="The lagged punisher: punishing last round on every branch",
-  meta=f'<a href="{PR}184">PR #184</a> &middot; commits 7ad1ddd, c74bc0e, ce70a09 &middot; both punisher families',
-  problem="The AH punisher decided round t's punishment from prev_contribution, the contribution of round t&minus;1. The human manager punishes the current round: the stored common good equals 1.6 times this round's contributions minus this round's punishments in every valid row, punishment tracks current contribution (r &minus;0.28) better than the previous one (&minus;0.19), and the cross-tab is unambiguous, 57 percent punished after dropping from 20 to 4 versus 18 percent after rising from 4 to 20. Every simulation flattened or flipped that contrast.",
-  finding="Training and simulation were consistent, so it was not a train-versus-sim bug but a consistent model of the wrong mechanism, inherited from the contributor's leak rule as a 'GNN convention'. A scan of all 60-plus branches found no punisher config ever trained on the current contribution, and the feature-legality validator hard-errored on any attempt, so the autoresearch loop could not have fixed it by itself. The repo's own model-config report had recommended the fix and it was never implemented.",
-  maths=["The fix admits contribution and its group means for the punishment target while same-round punishment, payoff and common good stay illegal; the adapters already had the current value at the last index and simply never read it.",
-         "Both punishers retrained: linear CV log loss 1.366 to 1.347, GNN 1.203 to 1.176. Teacher-forced on human data, the OLS slope on the current contribution goes from about zero to about &minus;0.13 (human &minus;0.24), the cross-tab flips to the human ordering, and the severity gradient across bands returns.",
-         "Residual: full contributors are still punished 10 to 14 percent of the time against 4 percent in humans, and the slope is half the human one. That is a functional-form limit of the punisher, not timing."],
-  code=["<code>scripts/baselines/handcrafted_grid.py</code> PUNISHMENT_LEGAL_CURRENT, illegal_current_features", "<code>src/aimanager/simulation/linear_ah.py</code>, <code>src/aimanager/manager/api_manager.py</code> adapters", "<code>configs/training/baselines/punishment/multinomial_current_contr.yml</code>, <code>configs/training/artificial_humans/punishment/rnn_edge_50ep_doubled_current_contr.yml</code>", "<code>src/aimanager/tests/test_punisher_current_contribution.py</code>, 128 tests pass on Raven"],
-  bought="RPA, the manager's policy row, drops from 1.2 to 1.6 into 0.7 to 0.9 in all six stacks, and RCB falls by 0.5 to 0.9 everywhere. RCC does not move, because the residual full-contributor punishment is exactly what RCC's population is made of."),
- dict(id="rebase", chip="re-baseline", color="var(--c-ink)", title="The re-baseline: what the fixed punisher did to the frontier",
+  bought="It removed the wrong branch of the decision tree before any modelling effort went there, and it left a reusable held-out-fold harness."),
+ dict(id="lag", chip="correctness", color="var(--c-red)", title="The lagged manager: punishing last round on every branch",
+  meta=f'<a href="{PR}184">PR #184</a> &middot; commits 7ad1ddd, c74bc0e, ce70a09 &middot; both manager models, linear and graph-network',
+  problem="In the real game the manager sees this round's contributions and punishes them in the same round. The data proves it: the recorded pot equals 1.6 times this round's contributions minus this round's punishments in every valid row; punishment correlates with the current contribution (&minus;0.28) more than with the previous one (&minus;0.19); and a player who just dropped from 20 to 4 or less is punished 57 percent of the time, one who just rose from 4 or less to 20 only 18 percent. The simulated manager, on every branch of the code, decided round t's punishment from round t&minus;1's contribution. Every simulation flattened or flipped that contrast.",
+  finding="Training and simulation agreed with each other, so this was not a bug in one of them but a consistent model of the wrong mechanism. The one-round lag was inherited from the player model, where it is correct (a player cannot see this round's punishment before contributing), as a 'GNN convention'. A scan of all 60-plus branches found no manager config ever trained on the current contribution, and the feature-legality check hard-errored on any attempt, so the automated experiment loop (<em>autoresearch</em>: AI agents propose, run and score one change per PR) could not have fixed it by itself. The repo's own model-config report had recommended the fix; it was never implemented.",
+  maths=["The fix allows the current contribution and its group means as inputs for the manager, while same-round punishment, payoff and pot stay forbidden because they already contain the answer. The code that prepares the inputs already had the current value in place and simply never read it.",
+         "Both manager models retrained: cross-validated log loss (lower is better) 1.366 to 1.347 for the linear model, 1.203 to 1.176 for the graph network. Fed the human data, the regression weight of punishment on the current contribution goes from about zero to about &minus;0.13 (human &minus;0.24), the rose-versus-dropped contrast flips to the human ordering, and punishment again falls with contribution.",
+         "Residual: full contributors are still punished 10 to 14 percent of the time when fed the human data, and 12 to 16 percent in the closed-loop simulations, against 4 percent for real managers; the weight on the current contribution is half the human one. That is a limit of the manager's functional form, not of timing."],
+  code=["<code>scripts/baselines/handcrafted_grid.py</code> PUNISHMENT_LEGAL_CURRENT, illegal_current_features", "<code>src/aimanager/simulation/linear_ah.py</code>, <code>src/aimanager/manager/api_manager.py</code> input adapters", "<code>configs/training/baselines/punishment/multinomial_current_contr.yml</code>, <code>configs/training/artificial_humans/punishment/rnn_edge_50ep_doubled_current_contr.yml</code>", "<code>src/aimanager/tests/test_punisher_current_contribution.py</code>, 128 tests pass on Raven"],
+  bought="RPA, the row scoring how the manager punishes, drops from 1.2&ndash;1.6 into 0.7&ndash;0.9 in all six stacks, and RCB falls by 0.5 to 0.9 everywhere. RCC, the reaction at the ceiling, does not move, because the full contributors still being punished are exactly the population RCC is made of."),
+ dict(id="rebase", chip="re-baseline", color="var(--c-ink)", title="The re-baseline: what the fixed manager did to the frontier",
   meta=f'<a href="{PR}184">PR #184</a> &middot; five stacks, six runs &middot; ledger reset in notes/autoresearch.md',
-  problem="Every accepted stack was scored against a punisher that punished last round. The fix moves all 22 rows, so no band-upgrade gate applies; the honest artifact is a re-baseline with the new numbers per stack.",
-  finding="The means barely moved because the RPA and RCB gains are offset by collateral: contribution marginals and the segregation row SC worsen by 0.15 to 0.4 in several stacks, and the vnode trunk loses three rows from the at-or-under-1 count. The contributors were not retrained and did not need to be, since they learn from human data, but their closed-loop states shift under a different punisher and that is what these rows show.",
-  maths=["Skip trunk (b): mean 1.096 to 1.036, 13 rows at the ceiling, RCD 2.21 to 1.31, all four RCE signs right. The best mean on record.",
-         "Gaussian-MLP chain (c, d): RCE 0.85 and 0.70 with all signs right; c pushes RCB under 1.",
-         "Vnode trunk (a): loses the human sign in two RCE bands, RCE 1.10 to 1.27. Under the new protected-row rule that is a violation.",
-         "Sweep reference with the GNN punisher: mean 1.866 to 1.709, the largest single improvement, but two RCE signs lost through near-zero bands."],
-  code=["<code>scripts/data_analysis/curpun_rebaseline.py</code>, <code>scripts/simulation/run_curpun_reruns.sh</code>", "<code>plots/data_analysis/evaluation/punisher_current_contr/</code> tables and mechanism_selfplay.csv", "<code>plots/simulation/*_curpun/</code> five sim dirs with per_round.parquet and 22-row evaluations"],
-  bought="Evidence for the lineage decision: the skip trunk or the Gaussian-MLP chain, not the vnode line the ledger sat on. Caveats: the 32-stack matrix was not rerun, cases c and d ran on the gmlp code tree with the three lag-fix commits cherry-picked, and the severity rho rose rather than fell."),
- dict(id="next", chip="successor", color="var(--c-muted)", title="What this leaves for a successor",
+  problem="Every accepted stack had been scored against a manager that punished last round. The fix changes every simulated game, so all 22 rows move at once and the usual rule for accepting an experiment (a score-band upgrade on a declared row, with the mean within 10 percent) does not apply. The honest artifact is a <em>re-baseline</em>: every stack rerun under the fixed manager, every row rescored, and the experiment record (the ledger in notes/autoresearch.md) reset to the new numbers.",
+  finding="The means barely moved, because the RPA and RCB gains are offset elsewhere: the contribution distribution rows and the segregation row SC worsen by 0.15 to 0.4 in several stacks, and the group-vnode stack loses three rows from its count at or under 1. The player models were not retrained and did not need to be, since they learn from human data; but the states they reach in self-play shift under a different manager, and that is what these rows show.",
+  maths=["Stimulus-skip stack (b, PR #181): mean 1.096 to 1.036, 13 rows at or under the ceiling, RCD (switching pull) 2.21 to 1.31, all four RCE signs right. The best mean on record.",
+         "Gaussian-MLP stacks (c and d, PRs #177 and #174): RCE 0.85 and 0.70 with all signs right; c pushes RCB under 1.",
+         "Group-vnode stack (a, PR #179): loses the human sign in two RCE bands, RCE 1.10 to 1.27. Under the new protected-row rule that is a violation.",
+         "Main-branch reference with the graph-network manager (e2): mean 1.866 to 1.709, the largest single improvement, but two RCE signs lost through near-zero bands."],
+  code=["<code>scripts/data_analysis/curpun_rebaseline.py</code>, <code>scripts/simulation/run_curpun_reruns.sh</code>", "<code>plots/data_analysis/evaluation/punisher_current_contr/</code> tables and mechanism_selfplay.csv", "<code>plots/simulation/*_curpun/</code> five simulation folders with per_round.parquet and the 22-row evaluations"],
+  bought="Evidence for which model line to build on next (the <em>lineage</em>, a chain of experiments each starting from the last): the stimulus-skip stack or the Gaussian-MLP line, not the group-vnode line the ledger sat on. Caveats: the 32-stack sweep was not rerun; cases c and d ran on the Gaussian-MLP code tree with the three fix commits copied over; and the manager's copula strength rose rather than fell."),
+ dict(id="next", chip="successor", color="var(--c-muted)", title="What this leaves for whoever continues",
   meta="ordered by expected value per hour",
   problem="Six threads are open. None is blocked.",
   finding="",
-  maths=["Punisher functional form: P(p>0 | contribution 20) is still three to four times human and the slope on the current contribution half of human. A punishment-target model with a ceiling-aware term is the natural next punisher experiment; it is what RCC needs.",
-         "Gated stimulus skip on the contributor: PR #181's successor note, now judged on the protected RCE row rather than RCB.",
-         "Lineage: cherry-pick a combined trunk from the skip lineage and the gmlp chain once the fixed-punisher numbers are accepted; the divergence is 17 files.",
-         "Seed ensemble for the copula question: five seeds, per-cell disagreement versus rho 0.04.",
-         "Manager action support: humans rarely punished above 10 or punished high contributors, about 300 rows. Bound the RL manager near the shortfall or audit where a trained policy operates.",
-         "Rerun the 32-stack sweep matrix under the fixed punisher so the ledger's deficit profiles are post-fix."],
-  code=["<code>notes/autoresearch_log/punisher-current-contribution.md</code> successor section", "Raven clean-up once PR #184 closes: four isolated dirs under ~/repros/ai-runs/"],
+  maths=["The manager's functional form: a full contributor is still punished three to four times as often as by a human manager, and the weight on the current contribution is half the human one. A manager model with a term that knows 20 is the ceiling is the natural next experiment; it is what RCC needs.",
+         "A gated stimulus skip on the player model: the follow-up PR #181 proposed, now to be judged on the protected RCE row rather than on RCB.",
+         "Lineage: once the fixed-manager numbers are accepted, combine the stimulus-skip line and the Gaussian-MLP line into one code tree; they differ in 17 files.",
+         "The seed ensemble for the copula question: five seeds, per-situation disagreement versus a rho of 0.04.",
+         "Where the learning manager will act: humans rarely punished above 10 points or punished high contributors, about 300 rows in total. Either keep the learning manager's punishments near the shortfall, or audit where a trained policy actually operates.",
+         "Rerun the 32-stack sweep under the fixed manager so the ledger's deficit profiles are all post-fix."],
+  code=["<code>notes/autoresearch_log/punisher-current-contribution.md</code>, successor section", "Raven clean-up once PR #184 closes: four isolated folders under ~/repros/ai-runs/"],
   bought=""),
 ]
 
@@ -269,12 +287,12 @@ def story_html(s):
     return "".join(parts)
 
 ledger = [
- ("PR #182", f"{PR}182", "open", "Bookkeeping for main: gitignore CLAUDE.local.md, Raven account lines, evaluation metric notes."),
- ("PR #183", f"{PR}183", "open", "Held-out teacher-forced RCB test, stacked on the PR 181 branch."),
- ("PR #184", f"{PR}184", "open", "[REBASELINE] punisher on the current contribution, RCE protected, ledger reset."),
- ("rcb-alternative-response-slope", "", "merged into #184", "RCE row, tests, comparison report over 40 stacks."),
- ("auto/punisher-current-contribution-sims", "", "documentation", "Rerun configs, runner, before column."),
- ("auto/punisher-current-contribution-gmlp", "", "documentation", "Gmlp code tree plus the three lag-fix commits, used for cases c and d."),
+ ("PR #182", f"{PR}182", "open", "Bookkeeping for the main branch: ignore the local config file, cluster account lines, the evaluation metric notes."),
+ ("PR #183", f"{PR}183", "open", "The held-out teacher-forced test of the players' reaction to punishment, built on top of the PR #181 branch."),
+ ("PR #184", f"{PR}184", "open", "The re-baseline: manager retrained on the current contribution, RCE made a protected row, ledger reset."),
+ ("rcb-alternative-response-slope", "", "merged into PR #184", "The RCE row, its tests, and the comparison report over 40 stacks."),
+ ("auto/punisher-current-contribution-sims", "", "documentation", "The rerun configs, the runner script, and the 'before' column of the score tables."),
+ ("auto/punisher-current-contribution-gmlp", "", "documentation", "The Gaussian-MLP code tree plus the three fix commits copied over; used for cases c and d."),
 ]
 def ledger_html():
     out=[]
@@ -370,7 +388,7 @@ page = f'''<title>Punisher Rebaseline Atlas</title>
 <style>{CSS}</style>
 <div class="wrap">
 <h1>Punisher Rebaseline Atlas</h1>
-<p class="sub">One session on the artificial-humans stacks, 18 September 2026: the copula question, why the punishment response was stuck, the punisher that punished last round on every branch, and the five stacks rerun under the fix. Companion to the Autoresearch Atlas of PRs #146&ndash;#181.</p>
+<p class="sub">Real people played a public-goods game with a punishing manager; this project trains simulated players and a simulated manager to behave like them. This page reports one working day, 18 September 2026, on those simulations: the copula question, why the simulated players seemed not to react to punishment, the discovery that the simulated manager punished last round's contribution on every branch of the code, and the five stacks rerun under the fix. Companion to the Autoresearch Atlas of experiments #146&ndash;#181.</p>
 <nav>
   <button type="button" class="on" data-layer="overview">Overview</button>
   <button type="button" data-layer="scores">Before / after</button>
@@ -381,74 +399,93 @@ page = f'''<title>Punisher Rebaseline Atlas</title>
 </nav>
 
 <section class="layer on" id="overview">
+{ABOUT}
+<h2>The headline numbers</h2>
+<p class="legend">Each tile is one row of the 22-row score card, before and after the manager fix. RPA scores how the manager punishes, RCB and RCE score how the players react to punishment. A row is <em>protected</em> when no future experiment may make it worse.</p>
 {overview_tiles()}
-<h2>How the session ran</h2>
+<h2>How the work unfolded</h2>
 <ol class="steps">{steps_html()}</ol>
 <h2>The one-paragraph reading</h2>
-<p class="legend" style="max-width:76ch;font-size:14px;color:var(--ink)">The punisher fix worked where it applied directly: the manager-policy row and the binned reaction row move a full band in every stack, and in self-play the punisher now punishes low contributors more than full ones with the human ordering in the cross-tab. It did not move the reaction at the ceiling, because the retrained punisher still punishes full contributors three to four times too often, a functional-form limit rather than timing. Collateral in the contribution marginals and segregation kept the means roughly flat. The evidence for the trunk decision now favours the stimulus-skip lineage or the Gaussian-MLP chain, both of which keep all four human response signs under the fixed punisher, over the vnode line that the ledger had been sitting on.</p>
+<p class="legend" style="max-width:76ch;font-size:14px;color:var(--ink)">Where the fix applies directly it worked: the row scoring how the manager punishes (RPA) and the reaction-to-punishment row (RCB) improve by a full score band in every stack, and the simulated manager now punishes low contributors more than full ones, in the same order as the real managers do. It did not move the reaction at the ceiling (RCC), because the retrained manager still punishes full contributors three to four times too often; that is a limit of the manager's functional form, not of timing. The gains were offset elsewhere: the contribution distributions and the segregation row got slightly worse, so the 22-row means stayed roughly flat. For the choice of which model line to build on, the evidence now favours the stimulus-skip stack (PR #181) or the Gaussian-MLP line (PRs #174, #177), both of which keep all four human response signs under the fixed manager, over the group-vnode line (PR #179) on which the experiment record had been built.</p>
 </section>
 
 <section class="layer" id="scores">
-<p class="legend">Pick a stack. Scores are multiples of the human-versus-human noise ceiling: at or under 1 is inside the noise, 1&ndash;2 minor, 2&ndash;5 clear deviation, above 5 not reproduced. Negative &Delta; is an improvement. The shaded row is RCE, the protected response row.</p>
+<p class="legend">Every row of the score card, for each of the six stacks that were rerun. Pick a stack: one combination of player, switch and manager model. Each row compares one statistic of the simulated games with the same statistic in the real games. Scores are multiples of the human-versus-human noise ceiling: at or under 1 is indistinguishable from real data, 1&ndash;2 a minor deviation, 2&ndash;5 a clear one, above 5 not reproduced. A negative &Delta; is an improvement. The shaded row is RCE, the protected response row. Two player-model families appear: graph-network players pass messages between all eight players and keep a memory across rounds; Gaussian-MLP players draw each contribution from a bell curve whose centre and width a small neural network predicts.</p>
 <div class="mnav" id="case-nav">{case_buttons()}</div>
 {score_cards()}
 </section>
 
 <section class="layer" id="response">
-<h2>RCB and RCE rank the stacks almost independently</h2>
-<p class="legend">Forty stacks: the 32-stack main sweep plus eight autoresearch PR stacks, each scored on RCB (bin means by punishment rate) and on RCE (within-band response slope). Spearman rank correlation 0.28 overall, 0.11 within the sweep. Hover a point for the stack and its sign count. Vertical guide at RCB 2, horizontal at RCE 1.</p>
+<h2>Two ways to measure the reaction to punishment</h2>
+<p class="legend">The learning manager's only lever is punishment, so the one thing the simulated players must get right is how they react to it. Two rows score that reaction. To tell them apart, take a player who gave 3 points, was punished 5 points, and gave 8 the next round: a change of +5.</p>
 <div class="twocol">
-<div>{scatter_svg()}<div class="keyline"><span class="sw gnn"></span>gnn contributor <span class="sw cat"></span>categorical <span class="sw gau"></span>gaussian <span class="sw rid"></span>ridge <span class="sw pr"></span>PR stacks</div></div>
+<div>
+<h4>RCB, reaction to punishment (the old row)</h4>
+<p class="legend" style="color:var(--ink)">RCB works with the punishment <em>rate</em>: punishment divided by the shortfall from 20. Our player's rate is 5 / 17 = 0.29, which lands in the 0.25&ndash;0.5 bin. RCB records the +5 as one entry in that bin's average, then compares the four bin averages (rates up to 0.25, 0.25&ndash;0.5, 0.5&ndash;1, above 1) with the human ones. Real players give more after harder punishment: on average +0.9, +1.3, +1.7 and +2.0 across the four bins.</p>
+<p class="legend" style="color:var(--ink)"><b>Why it can be fooled.</b> The rate mixes how much someone gave with how hard they were hit. A rate above 1 is reached both by a low contributor punished heavily and by a high contributor punished lightly, and those two react in opposite directions. A simulation can match the bin averages by having the right mix of players in each bin, even if none of them responds to the dose. In the human data, once level and dose are held fixed, a higher rate goes with a smaller change, not a larger one.</p>
+</div>
+<div>
+<h4>RCE, punishment response slope (the new row)</h4>
+<p class="legend" style="color:var(--ink)">RCE first sorts punished players by what they gave: 0&ndash;4, 5&ndash;9, 10&ndash;14 or 15&ndash;19 points. Our player is in the 0&ndash;4 band. Within each band it fits a straight line of next-round change against punishment received and keeps the slope: how many more points a player gives per extra point of punishment. Real players comply at low levels and withdraw at high ones: slopes +0.140, +0.104, &minus;0.077, &minus;0.161. The score is the weighted gap between the simulated and the human slopes over the four bands.</p>
+<p class="legend" style="color:var(--ink)"><b>Why it was added but does not decide alone.</b> Its noise ceiling is large. Two halves of the human data differ by 0.086 in slope, about three quarters of the human slopes themselves. So a simulation whose players ignore punishment entirely scores 1.42, a 'minor deviation', and one with half the human response scores 0.82, at the ceiling. RCE therefore sits beside RCB as a protected row: no experiment may worsen its score band, flip one of the four human signs, or halve a band's slope.</p>
+</div>
+</div>
+<h2>RCB and RCE rank the stacks almost independently</h2>
+<p class="legend">Forty stacks, the 32 combinations of the main sweep plus eight from accepted experiments, each scored on both rows. Spearman rank correlation 0.28 overall, 0.11 within the sweep: a good RCB score says little about RCE. Hover a point for the stack and how many of its four slope signs match the human ones. Vertical guide at RCB 2, horizontal at RCE 1.</p>
+<div class="twocol">
+<div>{scatter_svg()}<div class="keyline"><span class="sw gnn"></span>graph-network players <span class="sw cat"></span>categorical players <span class="sw gau"></span>gaussian players <span class="sw rid"></span>ridge players <span class="sw pr"></span>experiment (PR) stacks</div></div>
 <div>
 <h4>Why they disagree</h4>
-<p class="legend" style="color:var(--ink)">RCB tracks who gets punished at which level; RCE tracks how they respond to the dose. The categorical stacks (red) hold three of the five best RCB scores while their high contributors give more when punished, zero or one human sign of four. The Gaussian-MLP chain (PR stacks, blue, lower left) is mid-pack on RCB and at the ceiling on RCE.</p>
+<p class="legend" style="color:var(--ink)">RCB tracks who gets punished at which level; RCE tracks how they respond to the dose. The stacks with categorical players (red) hold three of the five best RCB scores, yet their high contributors give more when punished, matching zero or one of the four human signs. The Gaussian-MLP line (blue, lower left) is mid-pack on RCB and at the ceiling on RCE. Over the 40 stacks RCE correlates at &minus;0.88 with the number of human-signed slopes, RCB at &minus;0.08.</p>
 <h4>Noise ceilings</h4>
 <div class="tablewrap"><table><thead><tr><th>row</th><th class="num">ceiling</th><th class="num">no response scores</th><th class="num">half response scores</th></tr></thead>
 <tbody><tr><td>RCB</td><td class="num">0.348</td><td class="num">3.64</td><td class="num">1.83</td></tr><tr><td>RCE, four bands</td><td class="num">0.086</td><td class="num">1.42</td><td class="num">0.82</td></tr><tr><td>RCE, two bands</td><td class="num">0.060</td><td class="num">2.15</td><td class="num">&ndash;</td></tr></tbody></table></div>
-<p class="legend">Ceilings from 500 human-versus-human resampling repeats, seed 42. RCE's ceiling is large relative to the effect, which is why it sits beside RCB as a protected row rather than replacing it.</p>
+<p class="legend">Ceilings from 500 human-versus-human resampling repeats (seed 42): each repeat splits the 50 real games in half and measures the distance between the halves. 'No response' is a simulation whose players ignore punishment; 'half response' one whose slopes are half the human ones. The two-band variant (0&ndash;9 versus 10&ndash;19) has a tighter ceiling and is the candidate if RCE is ever to decide acceptance alone.</p>
 </div></div>
 <h2>Figures from the evaluation suite</h2>
 <div class="figrow">
 <figure><img src="{IMG['rcb_vs_rce']}" alt="RCB score against RCE score across stacks"><figcaption>RCB versus RCE scores over the 40 stacks, from reports/rcb_alternative_comparison.md.</figcaption></figure>
-<figure><img src="{IMG['rce_four']}" alt="RCE slopes, human versus four stacks"><figcaption>RCE band slopes, human against four representative stacks, before the punisher fix.</figcaption></figure>
-<figure><img src="{IMG['b_rce']}" alt="RCE figure for the stimulus-skip stack after the fix"><figcaption>RCE_line for the PR 181 skip trunk under the fixed punisher: all four human signs, RCE 0.89.</figcaption></figure>
-<figure><img src="{IMG['a_rce']}" alt="RCE figure for the vnode stack after the fix"><figcaption>RCE_line for the PR 179 vnode trunk under the fixed punisher: two signs lost through near-zero bands, RCE 1.27.</figcaption></figure>
+<figure><img src="{IMG['rce_four']}" alt="RCE slopes, human versus four stacks"><figcaption>RCE slopes per contribution band, humans against four representative stacks, before the manager fix.</figcaption></figure>
+<figure><img src="{IMG['b_rce']}" alt="RCE figure for the stimulus-skip stack after the fix"><figcaption>The RCE figure for the PR #181 stimulus-skip stack under the fixed manager: all four human signs, RCE 0.89.</figcaption></figure>
+<figure><img src="{IMG['a_rce']}" alt="RCE figure for the vnode stack after the fix"><figcaption>The RCE figure for the PR #179 group-vnode stack under the fixed manager: two signs lost through near-zero bands, RCE 1.27.</figcaption></figure>
 </div>
 </section>
 
 <section class="layer" id="mechanism">
 <h2>Does the simulated manager punish what it sees?</h2>
-<p class="legend">Closed-loop simulations, 19,200 agent-rounds each, against the human managers over 8,914 valid rows. The cross-tab reads: probability of punishment when a player just rose to 20 from 4 or less / when a player just dropped to 4 or less from 20. OLS is the regression of punishment on current and previous contribution. Shaded rows are after the fix.</p>
-<div class="tablewrap"><table class="mech"><thead><tr><th>simulation</th><th class="num">P(punished | gave 20)</th><th class="num">P(punished | gave &le; 4)</th><th class="num">cross-tab rose / dropped</th><th class="num">mean punishment if punished, by band 0-4 / 5-9 / 10-14 / 15-19 / 20</th><th class="num">OLS current / previous</th></tr></thead>
+<p class="legend">This tab checks the simulated manager directly, before and after the fix. Each row is one stack's self-play simulation (the models playing against each other, 19,200 player-rounds), compared with the real managers over 8,914 valid rows. The columns: how often a player who gave the full 20 is punished; how often one who gave 4 or less is; a timing check, the punishment probability when a player just rose to 20 from 4 or less against when they just dropped to 4 or less from 20 (a manager reacting to this round punishes the drop, one reacting to last round punishes the rise); the average punishment when punished, by contribution band; and the regression weights of punishment on this round's and last round's contribution (ordinary least squares). Shaded rows are after the fix.</p>
+<div class="tablewrap"><table class="mech"><thead><tr><th>simulation</th><th class="num">P(punished | gave 20)</th><th class="num">P(punished | gave &le; 4)</th><th class="num">timing check: rose / dropped</th><th class="num">mean punishment if punished, by band 0-4 / 5-9 / 10-14 / 15-19 / 20</th><th class="num">regression weight, current / previous</th></tr></thead>
 <tbody>{mech_table()}</tbody></table></div>
-<p class="legend">Before the fix every simulation had a near-zero coefficient on the current contribution and about &minus;0.08 on the previous one, the reverse of the human pattern, and punished full contributors five to nine times too often. After the fix the current-round coefficient is &minus;0.12 to &minus;0.17 against the human &minus;0.24, the cross-tab has the human ordering, and the severity gradient across bands is back. What remains is the ceiling: full contributors are still punished three to four times too often, and the mean punishment at 20 is too light. That residual is what keeps RCC unmoved.</p>
+<p class="legend">Before the fix every simulated manager had a near-zero weight on the current contribution and about &minus;0.08 on the previous one, the reverse of the human pattern, and punished full contributors five to nine times too often. After the fix the current-round weight is &minus;0.12 to &minus;0.17 against the human &minus;0.24, the timing check has the human ordering, and punishment again falls as contribution rises. What remains is the ceiling: full contributors are still punished three to four times too often, and when they are punished the amount is too small. That residual is why RCC, the reaction at the ceiling, did not move.</p>
 <div class="figrow">
-<figure><img src="{IMG['b_rpa']}" alt="RPA figure for the stimulus-skip stack after the fix"><figcaption>RPA, the manager's policy, for the skip trunk under the fixed punisher: 1.23 to 0.69.</figcaption></figure>
-<figure><img src="{IMG['d_rce']}" alt="RCE figure for the k-one-hot gmlp stack after the fix"><figcaption>RCE_line for the PR 174 Gaussian-MLP stack under the fixed punisher: the strongest response on record, RCE 0.70.</figcaption></figure>
+<figure><img src="{IMG['b_rpa']}" alt="RPA figure for the stimulus-skip stack after the fix"><figcaption>RPA, how the manager punishes at each contribution level, for the PR #181 stimulus-skip stack under the fixed manager: 1.23 to 0.69.</figcaption></figure>
+<figure><img src="{IMG['d_rce']}" alt="RCE figure for the k-one-hot gmlp stack after the fix"><figcaption>The RCE figure for the PR #174 Gaussian-MLP stack under the fixed manager: the strongest response on record, RCE 0.70.</figcaption></figure>
 </div>
 </section>
 
 <section class="layer" id="stories">
-<p class="legend">The plain-language story of each finding, in the order the session reached them.</p>
+<p class="legend">The plain-language story of each finding, in the order they were reached. Each card starts from the game, says what was found, gives the details, and points to where it lives in the code.</p>
 {"".join(story_html(s) for s in STORIES)}
 </section>
 
 <section class="layer" id="ledger">
 <h2>Pull requests and branches</h2>
+<p class="legend">Where the work lives. A branch is one line of code changes; a pull request (PR) proposes merging it into the main branch.</p>
 <div class="tablewrap"><table><thead><tr><th>item</th><th>state</th><th>what it holds</th></tr></thead><tbody>{ledger_html()}</tbody></table></div>
 <h2>Numbers that changed hands</h2>
+<p class="legend">The quantities the work moved, for anyone who needs to quote or check them.</p>
 <div class="tablewrap"><table><thead><tr><th>quantity</th><th class="num">before</th><th class="num">after</th><th>source</th></tr></thead><tbody>
-<tr><td>Linear punisher, CV log loss</td><td class="num">1.366</td><td class="num">1.347</td><td>stage C, same split and seed</td></tr>
-<tr><td>GNN punisher, CV log loss</td><td class="num">1.203</td><td class="num">1.176</td><td>Raven job, 7 min 47 s on one A100</td></tr>
-<tr><td>Severity copula rho</td><td class="num">0.351</td><td class="num">0.427</td><td>pairwise MLE, CI 0.351&ndash;0.528</td></tr>
-<tr><td>Teacher-forced OLS on current contribution, linear</td><td class="num">+0.054</td><td class="num">&minus;0.125</td><td>human &minus;0.242</td></tr>
-<tr><td>Held-out teacher-forced RCB, vnode trunk</td><td class="num">0.093 in-sample</td><td class="num">0.095 held-out</td><td>PR #183</td></tr>
-<tr><td>Rows in the evaluation suite</td><td class="num">21</td><td class="num">22</td><td>RCE added, RCF dropped</td></tr>
+<tr><td>Linear manager model, cross-validated log loss (lower is better)</td><td class="num">1.366</td><td class="num">1.347</td><td>same data split and seed</td></tr>
+<tr><td>Graph-network manager model, cross-validated log loss</td><td class="num">1.203</td><td class="num">1.176</td><td>Raven job, 7 min 47 s on one A100 GPU</td></tr>
+<tr><td>Manager copula strength (rho)</td><td class="num">0.351</td><td class="num">0.427</td><td>pairwise maximum likelihood, confidence interval 0.351&ndash;0.528</td></tr>
+<tr><td>Regression weight of punishment on the current contribution, linear manager fed human data</td><td class="num">+0.054</td><td class="num">&minus;0.125</td><td>human &minus;0.242</td></tr>
+<tr><td>Raw RCB gap of the group-vnode players fed human data</td><td class="num">0.093 shipped model, in-sample</td><td class="num">0.095 held-out</td><td>PR #183</td></tr>
+<tr><td>Rows in the score card</td><td class="num">21</td><td class="num">22</td><td>RCE added, RCF dropped</td></tr>
 </tbody></table></div>
 <h2>Clean-up once PR #184 closes</h2>
 <ul class="code">
-<li>Raven: <code>~/repros/ai-runs/punisher-current-contr</code>, <code>…-gmlp</code>, <code>…-train</code>, <code>…-tests</code></li>
-<li>Local worktree <code>.claude/worktrees/curpun-gmlp</code>; documentation branches for the sims and the gmlp setup</li>
+<li>On the Raven cluster: <code>~/repros/ai-runs/punisher-current-contr</code>, <code>…-gmlp</code>, <code>…-train</code>, <code>…-tests</code></li>
+<li>Local worktree <code>.claude/worktrees/curpun-gmlp</code>; the documentation branches for the simulations and the Gaussian-MLP setup</li>
 <li>The Raven checkout itself, <code>~/repros/algorithmic-institutions</code> with <code>~/algorithmic-institutions</code> symlinked, stays</li>
 </ul>
 </section>
