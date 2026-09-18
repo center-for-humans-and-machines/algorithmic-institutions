@@ -55,7 +55,9 @@ every stack it moves every row of every stack. The ledger's baselines — the
 score matrix and ranking of §3 and §6, and the confirmed scores of the
 frontier PRs — are therefore reset by that branch's stage D; scores
 recorded before it (21 rows, lagged punisher) are not comparable with scores
-after it (22 rows, RCE included, current-contribution punisher).
+after it (22 rows, RCE included, current-contribution punisher). Stage D
+re-ran the top stack and the four frontier stacks; the post-fix baselines
+are the table in §3.
 
 ## 3. Evaluation protocol
 
@@ -72,21 +74,42 @@ with the `run` column filtered to your punisher pairing. There is no
 confirmation sweep — winning in your base model's best context is the
 claim. (When the maintainer targets a parent `[SUCCESS]` PR, the stack and
 baseline come from the parent instead — §9.) E.g. a lin-switch candidate
-evaluates inside `gnn x lin x multinomial` (rows <= 1: 9/21, mean 1.845);
-GNN contribution, GNN switch, and multinomial punisher candidates all
-evaluate inside the top stack itself.
+evaluates inside `gnn x lin x multinomial` (pre-fix sweep figures: rows
+<= 1: 9/21, mean 1.845 — that stack has no post-fix sim yet; re-run it with
+the current-contribution punisher before using it as a baseline); GNN
+contribution, GNN switch, and multinomial punisher candidates all evaluate
+inside the top stack itself.
 
 Artifact paths for any stack are read off its sim config,
 `configs/simulation/manager_testing/23_2g8a_self_<contr>_contr_<switch>_switch.yml`
 (which also carries the shared `valid_model` — plumbing, not a slot). The
-current top of the ranking, `gnn x gnn x multinomial` (rows <= 1: 11/21,
-mean 1.759):
+current top of the ranking, `gnn x gnn x multinomial` (post-fix, 22 rows:
+rows <= 1: 13/22, mean 1.7405; sim
+`plots/simulation/23_2g8a_self_gnn_contr_gnn_switch_curpun`, run
+`lin_multinomial_self`; the pre-fix sweep figure was 11/21, mean 1.759):
 
 | slot | model | artifact |
 |---|---|---|
 | contribution | `gnn` | `artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt` |
 | switch | `gnn` | `artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt` |
-| punisher | `lin_multinomial` | `artifacts/baselines/punishment_multinomial_best_with_contr.joblib` |
+| punisher | `lin_multinomial` | `artifacts/baselines/punishment_multinomial_current_contr.joblib` (copula-stamped copy for the frontier stacks: `punishment_multinomial_current_contr_severity_copula.joblib`) |
+
+**Post-fix baselines (stage D of `auto/punisher-current-contribution`,
+22 rows, RCE included; full tables in
+`plots/data_analysis/evaluation/punisher_current_contr/rebaseline_table.md`).**
+These replace the confirmed scores in the frontier PRs' bodies and the
+pre-fix rows of the score matrix for these stacks; a successor of one of
+these stacks is judged against the row here, at full precision in the
+`_curpun` sim's `evaluation/scores.csv`:
+
+| stack (sim dir `plots/simulation/<...>_curpun`) | punisher | rows <= 1 | mean | RCE (bands 0-4 / 5-9 / 10-14 / 15-19) |
+|---|---|---|---|---|
+| PR #179 `23_2g8a_contr_group_vnode_self_gnncopar1_contr_gnn_switch` | lin_multinomial copula | 9/22 | 1.1079 | 1.2682 (+0.049 / -0.007 / -0.017 / +0.040) |
+| PR #181 `23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch` | lin_multinomial copula | 13/22 | 1.0357 | 0.8942 (+0.095 / +0.020 / -0.058 / -0.160) |
+| PR #177 `23_2g8a_infl_self_gaussian_mlp_inflated_group_copula_contr_gnn_joint_exodus_k_onehot_switch` | lin_multinomial copula | 12/22 | 1.1012 | 0.8508 (+0.068 / +0.109 / -0.020 / -0.193) |
+| PR #174 `23_2g8a_kexo_self_gaussian_mlp_v2_group_copula_contr_gnn_joint_exodus_k_onehot_switch` | lin_multinomial copula | 8/22 | 1.1880 | 0.7046 (+0.120 / +0.071 / -0.112 / -0.205) |
+| main `23_2g8a_self_gnn_contr_gnn_switch` | lin_multinomial | 13/22 | 1.7405 | 0.9976 (+0.064 / +0.092 / +0.044 / -0.098) |
+| main `23_2g8a_self_gnn_contr_gnn_switch` | gnn | 8/22 | 1.7094 | 1.0048 (+0.073 / +0.050 / +0.013 / +0.029) |
 
 Only the human maintainer refreshes the score matrix (and with it this
 ranking), when a candidate is accepted.
@@ -156,7 +179,7 @@ target list: fetch your base model's deficit profile, then declare targets.
 
 | resource | what it gives you |
 |---|---|
-| `plots/data_analysis/evaluation/23_stack_sweep_updated/score_matrix.csv` | every score: 32 stacks x 21 rows (pre-fix sweep; 22 rows with RCE after the re-baseline, §2) |
+| `plots/data_analysis/evaluation/23_stack_sweep_updated/score_matrix.csv` | every score: 32 stacks x 21 rows (pre-fix sweep, lagged punisher — deficit profiles only; post-fix baselines for the six re-run stacks, 22 rows, are in §3 and `plots/data_analysis/evaluation/punisher_current_contr/rebaseline_table.csv`) |
 | `.../23_stack_sweep_updated/slot_report.jpg` | each slot option's rows, averaged over the other slots |
 | `.../23_stack_sweep_updated/slot_concordance.jpg` | whether a deficit / ranking is stable across contexts |
 | `plots/simulation/23_*/evaluation/scores.csv` + `visuals/` | per-stack scores and one figure per row |
