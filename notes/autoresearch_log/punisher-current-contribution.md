@@ -41,7 +41,7 @@
 | 3 | The two configs of the naming contract; `--bundle` / `--out` on `punishment_copula_rho.py` so the stamped copy can carry its name. | A (done) |
 | 4 | Tests that round t's contribution reaches the punisher at round t on the linear and the GNN path, plus the legality rule (`src/aimanager/tests/test_punisher_current_contribution.py`); all tests green on Raven. | A (done) |
 | 5 | Protocol: RCE as the first protected row in `notes/autoresearch.md` §2, the row count 21 -> 22, the re-baseline paragraph, §5's feature rule corrected. | A (done) |
-| 6 | Train the multinomial punisher on the new config, stamp the copula, train the GNN punisher on Raven; record CV / test log-loss against the old bundle's 1.3031 (floor 1.3561) and the GNN's 1.2030. | C |
+| 6 | Train the multinomial punisher on the new config, stamp the copula, train the GNN punisher on Raven; record CV / test log-loss against the old bundle's 1.3031 (floor 1.3561) and the GNN's 1.2030. | C (done) |
 | 7 | Re-run the most promising stacks with the new punishers (23-family protocol), fetch, evaluate. | C |
 | 8 | Re-baseline the ledger: new score matrix and ranking with RCE, reset the confirmed scores of the frontier PRs, record the before/after of every row for the top stack. | D |
 
@@ -54,7 +54,34 @@
 
 ### Stage C: training and simulation
 
-_(to be filled by stage C: log-loss of both punishers against their lagged predecessors, copula rho against 0.0395 / 0.0436, wall time, the stacks re-run and their sim dirs)_
+Stage C trained the two punishers and re-stamped the copula (commits `224c86e`, `44997a6`); the simulations of plan step 7 are stage D's. Remote isolated dir: `~/repros/ai-runs/punisher-current-contr-train` (left in place for stage D).
+
+**Multinomial punisher** (`multinomial_current_contr.yml`, locally, 4-fold CV on the locked train split, seed 38381, 7,345 rows). The full 5-feature set ranks first; no block-OFF subset outranks it, so the artifact is the rank-1 row (`data/baselines/punishment_cv_multinomial_current_contr.csv`, force-added past the `data/` ignore):
+
+| rank | features | CV log loss |
+|---|---|---|
+| 1 | contribution, prev_contribution, prev_punishment, round_number, is_first | 1.3465 (se 0.058) |
+| 2 | contribution, prev_contribution, prev_punishment | 1.3534 |
+| 3 | floor | 1.4355 |
+| 4 | round_number, is_first | 1.4411 |
+
+Against the lagged bundle `punishment_multinomial_best_with_contr.joblib` on the same split and seed: CV 1.3465 vs 1.3661, train 1.2716 vs 1.3007, locked test 1.2468 vs 1.3031 (floor 1.3561): the old bundle beat the floor by 0.053 on test, the new one by 0.109. Permutation importance (in-sample delta log loss): prev_punishment 0.195, contribution 0.122, prev_contribution 0.026, round_number 0.025, is_first 0.012. The fitted coefficients say where the lag went: on the p = 0 logit, standardized, `contribution` +1.165 (per raw unit +0.180) against `prev_contribution` -0.339 (per raw unit -0.054); in the old bundle `prev_contribution` carried +0.411 (per raw unit +0.065). The level-weighted mean coefficient over the p > 0 classes is -0.183 on `contribution` and +0.015 on `prev_contribution`: the current contribution now carries the whole "contributed more -> punished less and less severely" response, and the lag flips to a small opposite-sign residual, the same pattern as the human OLS (-0.242 / +0.067).
+
+**Severity copula** (`punishment_copula_rho.py --roundtrip` on the new bundle, 15,291 within-cell pairs): rho = 0.4273, SE 0.0459, 95% CI [0.3514, 0.5283], against the old 0.3508 [0.2780, 0.4232]. Round-trip gate PASS (max |bias| 0.013, tolerance 0.03); out-of-sample MLE on the test split 0.332 (old script run: not recorded). The stamped copy is weight-identical to the plain bundle plus the eight `copula_*` keys (the script's reload assert plus an explicit coef/intercept/scaler comparison). The prediction that rho would *drop* was wrong: the within-round co-movement of punishments is not explained by the shared current contribution, it gets stronger once each marginal conditions on c_t. A plausible reading: the manager's per-round severity level is a group-level mood that the marginal cannot absorb, and conditioning on c_t sharpens the marginals so the residual latent correlation is less attenuated.
+
+**GNN punisher** (`rnn_edge_50ep_doubled_current_contr.yml`, Raven job 30304102, 7 min 47 s on one A100 for the 5-fold CV plus the full fit, within the ~12 min budget; wandb `uzh2g9ju`). Final-epoch CV log loss 1.1756 (best-epoch 1.1755 +- 0.1027 over folds) against 1.2030 (1.2028 +- 0.0868) for the lagged `punishment_rnn_edge_50ep_doubled`; `punishment_baseline.py`'s `GNN_REF` is now 1.1756. Artifact fetched to `artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_current_contr/` (model, metrics, confusion matrix; LFS).
+
+**Mechanism check** (`scripts/data_analysis/punisher_mechanism_check.py`, teacher-forced on the 50 single-copy human games, 8,914 valid rows, no simulation; the human row is the observed data on the same rows, the model rows are predicted P(p > 0) and E[p] under each model's own round-0 defaults; the linears run locally, the GNNs on Raven's login node). OLS is of (predicted) expected punishment on c_t and c_{t-1} over the 8,431 rows with a valid previous contribution; E[p | p>0] per band is sum E[p] / sum P(p>0):
+
+| punisher | P(p>0 \| c_t=20) | P(p>0 \| c_t<=4) | P(p>0 \| c_t=20, c_{t-1}<=4) / (c_t<=4, c_{t-1}=20) | E[p \| p>0] 0-4 / 5-9 / 10-14 / 15-19 / 20 | OLS c_t / c_{t-1} | NLL |
+|---|---|---|---|---|---|---|
+| human | 0.038 | 0.467 | 0.179 / 0.571 | 7.99 / 4.98 / 4.27 / 3.87 / 7.00 | -0.242 / +0.067 | -- |
+| lin old (lagged) | 0.207 | 0.380 | 0.561 / 0.282 | 6.57 / 5.82 / 5.48 / 5.36 / 5.29 | +0.054 / -0.172 | 1.328 |
+| lin new (c_t) | 0.136 | 0.448 | 0.309 / 0.651 | 7.20 / 5.60 / 4.77 / 4.22 / 3.94 | -0.125 / -0.030 | 1.283 |
+| gnn old (lagged) | 0.158 | 0.379 | 0.386 / 0.302 | 6.49 / 5.77 / 5.44 / 5.39 / 5.97 | +0.019 / -0.131 | 1.188 |
+| gnn new (c_t) | 0.105 | 0.432 | 0.301 / 0.532 | 7.26 / 5.48 / 4.80 / 4.63 / 5.11 | -0.128 / -0.022 | 1.144 |
+
+Both new punishers now respond to the current round: the OLS on c_t goes from ~0 to about -0.13 (human -0.24) and the lag coefficient from -0.13/-0.17 to ~-0.03 (human +0.07); the cross-tab flips to the human ordering (punish the low contributor who was high last round more than the reverse); the severity gradient across bands reappears (7.2 -> 4.2/4.6 against the flat ~5.5 of the lagged models; human 8.0 -> 3.9). What remains short: P(p>0 | c_t=20) is 0.10-0.14 against the human 0.04 -- a linear-in-c_t logit cannot produce the human step at 20 (E[p | p>0] at c_t = 20 is 7.0 in the humans, a few heavy punishments of full contributors, which the models spread into many light ones), and the response slope on c_t is half the human one. NLL (in-sample, 40 of the 50 episodes trained on) drops 1.328 -> 1.283 and 1.188 -> 1.144.
 
 ### Stage D: re-baseline
 
@@ -65,3 +92,4 @@ _(to be filled by stage D: the new score matrix, the new ranking, the RCE band s
 1. Stage A: the lag was a modelling error, not an indexing bug -- training and simulation were consistently lagged, so no artifact trained before this branch is affected in any way other than by conditioning on the wrong round. The fix is a legal-set change plus two configs; every code path already carried c_t at the right index.
 2. Stage A: `punishment_baseline.py` (the GNN-parity diagnostic) now lists `contribution` too, so its printed baseline is comparable to the new GNN config, not the old one; its `GNN_REF` constant still quotes the lagged GNN's 1.2030 until stage C replaces it.
 3. Stage A: RCF was dropped after the merge (its `KINDS` entry, methods, tests, and definition paragraph); the comparison report keeps its RCF discussion as a record of the choice.
+4. Stage C: the copula prediction failed in the predicted direction -- rho rose from 0.351 to 0.427 with c_t in the marginal instead of dropping -- so the copula copy is stamped as calibrated, not as a smaller correction; stage D should read RPA/RCC/RCB/RCE from the sims before anyone reasons further about why. The residual gap the mechanism check leaves (P(p>0 | c_t = 20) 0.10-0.14 vs human 0.04, half the human OLS slope on c_t) is a functional-form limit of both families, a separate experiment, not a stage of this one.
