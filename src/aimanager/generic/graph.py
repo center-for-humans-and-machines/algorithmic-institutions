@@ -154,6 +154,7 @@ class GraphNetwork(th.nn.Module):
         joint_exodus=False,
         joint_exodus_head=None,
         joint_exodus_switch_every=None,
+        joint_exodus_size_encoding=None,
         group_vnode=False,
         group_vnode_module=None,
         group_vnode_hidden=None,
@@ -207,7 +208,7 @@ class GraphNetwork(th.nn.Module):
         # Joint exodus head, a round-level joint over the pair of leaver
         # counts (m_0, m_1); see notes/autoresearch_log/switch-joint-exodus.md
         # and generic/joint_exodus.py. Off by default: an artifact saved
-        # without these two keys loads with the head absent and behaves
+        # without these three keys loads with the head absent and behaves
         # exactly as it does today.
         assert isinstance(
             joint_exodus, bool
@@ -240,8 +241,26 @@ class GraphNetwork(th.nn.Module):
             "joint_exodus_switch_every is only meaningful with the joint "
             "exodus head enabled"
         )
+        # How the head encodes the two valid-decider counts (ported from
+        # auto/switch-exodus-k-onehot, see generic/joint_exodus.py). `None`
+        # means "not specified" and builds the numeric head, so an artifact
+        # saved before the key existed loads unchanged (its pickled head
+        # defaults itself -- see `JointExodusHead.__setstate__`).
+        assert (
+            joint_exodus_size_encoding is None
+            or joint_exodus_size_encoding in JointExodusHead.SIZE_ENCODINGS
+        ), (
+            "joint_exodus_size_encoding must be None or one of "
+            f"{JointExodusHead.SIZE_ENCODINGS}, got "
+            f"{joint_exodus_size_encoding!r}"
+        )
+        assert joint_exodus or joint_exodus_size_encoding is None, (
+            "joint_exodus_size_encoding is only meaningful with the joint "
+            "exodus head enabled"
+        )
         self.joint_exodus = joint_exodus
         self.joint_exodus_switch_every = joint_exodus_switch_every
+        self.joint_exodus_size_encoding = joint_exodus_size_encoding
 
         # Per-group virtual node: a learned, persistent group state pooled
         # from the post-`op1` embeddings and handed back to each of the
@@ -402,7 +421,9 @@ class GraphNetwork(th.nn.Module):
                 self.joint_exodus_head = joint_exodus_head
             elif joint_exodus:
                 self.joint_exodus_head = JointExodusHead(
-                    embed_size=x_features, hidden_size=hidden_size
+                    embed_size=x_features,
+                    hidden_size=hidden_size,
+                    size_encoding=joint_exodus_size_encoding or "numeric",
                 )
             else:
                 self.joint_exodus_head = None
@@ -448,6 +469,20 @@ class GraphNetwork(th.nn.Module):
             "group_vnode and group_vnode_module disagree: "
             f"{self.group_vnode} vs {type(self.group_vnode_module).__name__}"
         )
+        # A saved dict carries the key AND the pickled head, and they are two
+        # independent records of the same fact: the dict could advertise
+        # `"onehot"` while the head it ships actually runs the 23-wide numeric
+        # MLP. Nothing downstream would notice, so the disagreement is refused
+        # here. The key is legitimately `None` on an artifact saved before it
+        # existed, whose head defaults itself to numeric, so that case is left
+        # alone.
+        if self.joint_exodus_size_encoding is not None:
+            head_encoding = getattr(self.joint_exodus_head, "size_encoding", None)
+            assert head_encoding == self.joint_exodus_size_encoding, (
+                "joint_exodus_size_encoding and the head's own size_encoding "
+                f"disagree: {self.joint_exodus_size_encoding!r} vs "
+                f"{head_encoding!r}"
+            )
 
     def forward(self, data, reset_rnn=True, return_joint=False, decider_mask=None):
         x = data["x"]
@@ -882,6 +917,7 @@ class GraphNetwork(th.nn.Module):
             "joint_exodus",
             "joint_exodus_head",
             "joint_exodus_switch_every",
+            "joint_exodus_size_encoding",
             "group_vnode",
             "group_vnode_module",
             "group_vnode_hidden",
