@@ -59,6 +59,34 @@ after it (22 rows, RCE included, current-contribution punisher). Stage D
 re-ran the top stack and the four frontier stacks; the post-fix baselines
 are the table in §3.
 
+**Frozen noise model, and how contributor-trunk changes are judged.** The
+copula parameters -- the correlation strength rho and the persistence phi,
+per model family -- are frozen (§8). No experiment recalibrates them as a
+side effect of changing a trunk; altering either is its own declared
+experiment. The reason is attribution: a recalibration riding along with a
+trunk change makes the two indistinguishable.
+
+For the same reason, a **contributor-trunk change is judged with the copula
+disabled**, on the state-spread diagnostic, alongside the usual gates. The
+diagnostic is the decomposition Var(c) = Var(E[c | history]) +
+Var(residual) over a free-running simulation, against the human histories
+(`scripts/data_analysis/copula_closed_loop_variance.py`, §7). Human
+Var(E[c|hist]) is 27.9; the stimulus-skip trunk with the copula disabled
+sits at 18.9 with its residual variance already correct at 11.4. That gap
+is the open defect the group-spread row CG only indirectly reports: the
+copula's episode-long persistence supplies most of CG by compounding (a
+factor of 5.3 on the group's episode mean), and by the late rounds the
+carried state has absorbed the latent, so CG measured with the copula on
+does not tell you whether a trunk change helped. Report the copula-off
+Var(E[c|hist]) for any contributor-slot candidate.
+
+Evidence for both rules: `notes/autoresearch_log/copula-closed-loop-variance.md`,
+`copula-missing-state.md` and `copula-seed-ensemble.md`. The human residual
+dependence is a round-local shock with a one-round echo, not the
+episode-long latent that is shipped, but the shipped shape is kept for now
+because nothing yet replaces the variance it supplies; see
+`doc/plans/post-rebaseline-program.md`.
+
 ## 3. Evaluation protocol
 
 The metrics are a property of a full stack, so candidates are always scored
@@ -216,6 +244,7 @@ template (2 groups x 8 agents, 24 rounds, 100 episodes, seed 42,
 | fetch results | `scripts/fetch_cluster.sh <remote_path>` | local |
 | evaluate | `python -m aimanager evaluate <sim config>` | local |
 | sweep (maintainer matrix refresh) | `python scripts/data_analysis/evaluation_sweep.py <name> <sim dirs>` | local |
+| state-spread diagnostic (contributor slot) | `python scripts/data_analysis/copula_closed_loop_variance.py` | local |
 | tests | `scripts/remote_test.sh` (PyG) / `pytest` (eval suite) | Raven / local |
 
 ## 8. Frozen surface
@@ -227,6 +256,10 @@ Never modified by agents, under any experiment:
 - `experiments/` (the human data),
 - scoring parameters (500 repeats, master seed 42) and the simulation
   protocol (episode count, seeds, game parameters),
+- the copula parameters per model family (rho and phi): contribution
+  rho 0.0395 / phi 1.0, punisher severity rho 0.4273, switch rho 0.1165 /
+  phi 0.704 -- a retrain of the model a copula is stamped on carries the
+  frozen value over rather than refitting it (§2),
 - the evaluation-stack selection (§3) — the sweep's score matrix and the
   ranking rule — and other branches' (or merged) log files.
 
