@@ -519,6 +519,14 @@ def main():
         default=OUT,
         help="where to save the bundle with copula_rho stamped on it",
     )
+    ap.add_argument(
+        "--stamp-rho",
+        type=float,
+        default=None,
+        help="stamp this rho instead of the refit (the copula parameters are "
+        "frozen by protocol across punisher retrains); the refit and its "
+        "bootstrap are still computed and printed for the record",
+    )
     args = ap.parse_args()
     bundle_path = args.bundle if args.bundle.is_absolute() else ROOT / args.bundle
     out_path = args.out if args.out.is_absolute() else ROOT / args.out
@@ -686,6 +694,12 @@ def main():
         print(f"group-spread ratio copula       {f(cop)}  (rho={f(rho_hat)})")
         print(f"group-spread ratio human        {f(human)}")
 
+    if args.stamp_rho is not None:
+        print(
+            f"\nSTAMPING the frozen rho={f(args.stamp_rho)} (refit "
+            f"{f(rho_hat)} [{f(ci[0])}, {f(ci[1])}] printed for the record only)"
+        )
+        rho_hat, se, ci = args.stamp_rho, float("nan"), (float("nan"), float("nan"))
     save_bundle(bundle, tr["X"], rho_hat, se, ci, train_file, len(ii), out=out_path)
     print(f"total runtime {time.time() - t0:.1f}s")
 

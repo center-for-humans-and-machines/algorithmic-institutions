@@ -165,3 +165,49 @@ def test_gnn_punisher_data_reads_current_contribution():
     assert tuple(x.shape) == (2, 8, 2, 2)
     np.testing.assert_allclose(x[0, :4, -1, 0].numpy() * 20, C1[:4], atol=1e-5)
     np.testing.assert_allclose(x[0, :4, -1, 1].numpy() * 20, C0[:4], atol=1e-5)
+
+
+def test_linear_punisher_reads_ceiling_indicator():
+    feats = ["contribution", "contribution_max", "contribution_zero"]
+    ah = _adapter(feats)
+    ah.get_punishments(_rounds())
+    X = ah.estimator.seen[-1]
+    np.testing.assert_array_equal(X[:, 0], C1)
+    np.testing.assert_array_equal(X[:, 1], [float(c == 20) for c in C1])
+    np.testing.assert_array_equal(X[:, 2], [float(c == 0) for c in C1])
+    # legal for the punishment target, illegal for the contribution target
+    import aimanager.simulation.linear_ah  # noqa: F401
+    from handcrafted_grid import validate_feature_legality
+
+    validate_feature_legality(
+        {"data": {"target": "punishment"}, "blocks": {"b": {"sets": [feats]}}}
+    )
+    with pytest.raises(ValueError, match="contribution target"):
+        validate_feature_legality(
+            {
+                "data": {"target": "contribution"},
+                "blocks": {"b": {"sets": [["contribution_max"]]}},
+            }
+        )
+
+
+def test_gnn_punisher_data_has_ceiling_indicator():
+    import torch as th
+
+    from aimanager.generic.encoder import Encoder
+    from aimanager.manager.api_manager import create_data
+
+    data = create_data(_rounds(), ["a", "b"], DEFAULTS)
+    assert data["contribution_max"].dtype == th.bool
+    assert data["contribution_max"][0, :4, -1].tolist() == [c == 20 for c in C1[:4]]
+    assert data["contribution_max"][0, :4, 0].tolist() == [c == 20 for c in C0[:4]]
+    # other-group cells hold the default contribution -> never the maximum
+    assert not data["contribution_max"][0, 4:, :].any()
+    enc = Encoder(
+        [{"etype": "bool", "name": "contribution_max"}], refrence="punishment"
+    )
+    x = enc(**data)
+    assert tuple(x.shape) == (2, 8, 2, 1)
+    np.testing.assert_array_equal(
+        x[0, :4, -1, 0].numpy(), [float(c == 20) for c in C1[:4]]
+    )

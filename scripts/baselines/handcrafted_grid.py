@@ -170,6 +170,8 @@ def _switched_last_choice(arrival, switch_every):
 CURRENT_VALUED = frozenset(
     [
         "contribution",
+        "contribution_max",
+        "contribution_zero",
         "punishment",
         "payoff",
         "common_good",
@@ -205,6 +207,8 @@ CURRENT_VALUED = frozenset(
 PUNISHMENT_LEGAL_CURRENT = frozenset(
     [
         "contribution",
+        "contribution_max",
+        "contribution_zero",
         "contribution_mean_group",
         "contribution_mean_other",
         "contribution_mean_gap",
@@ -288,6 +292,12 @@ def build_feature_pool(d, switch_every):
     p = npd["punishment"].astype(float)
     cg = npd["common_good"].astype(float)  # own group's per-capita cg
     f["contribution"] = c
+    # the endpoints of the contribution scale as indicators: the human manager
+    # almost never punishes a full contributor (P(p>0 | c_t = 20) = 0.04 vs
+    # 0.20 in the 15-19 band) but punishes a zero contributor most of the
+    # time (0.47); a linear term in c_t interpolates both steps away.
+    f["contribution_max"] = (c == ENDOWMENT).astype(float)
+    f["contribution_zero"] = (c == 0).astype(float)
     f["punishment"] = p
     f["common_good"] = cg
     f["payoff"] = _payoff(c, p, cg)
