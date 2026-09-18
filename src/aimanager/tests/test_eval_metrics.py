@@ -278,10 +278,6 @@ def test_human_response_pins(human):
         "15-19": 206,
     }
     assert R.weights("RCE", human).sum() == R.weights("RCB", human).sum()
-    rcf = R.rcf(human)
-    assert rcf.loc["0-4 x 10+"] == pytest.approx(3.7675, abs=1e-4)
-    assert rcf.loc["15-19 x 10+"] == pytest.approx(-4.5, abs=1e-4)
-    assert R.weights("RCF", human).loc["15-19 x 10+"] == 20
     assert R.rcd(human).loc["pull"] == pytest.approx(0.430247, abs=1e-5)
     # 539 Q4-study events minus 26 tainted by no-input masking
     events = R._switch_events(human).dropna(subset=["dc", "receiving_mean"])
@@ -529,8 +525,7 @@ def slope_frame():
     3/9, dc 4/1 -> slope -0.5); band 10-14 (f, g at 12, punished 1/5,
     dc 0/0 -> slope 0); band 15-19 (h, i at 17, punished 8/9, dc -2/+2
     -> slope 4). j is a full contributor and k unpunished:
-    both outside the population. RCF: 0-4 x 1-3 [1] (a), 0-4 x 4-9 [2, 3]
-    (b, c), 5-9 x 1-3 [4] (d), 5-9 x 4-9 [1] (e)."""
+    both outside the population."""
     rows = [
         (0, "a", 0, 0, 2.0, 2.0, 3.0),
         (0, "b", 0, 0, 2.0, 4.0, 4.0),
@@ -596,19 +591,6 @@ def test_rce_d_and_empty_band(slope_frame):
     no_low.loc[no_low["contribution"] == 2.0, "punishment"] = 0.0
     with pytest.raises(ValueError, match="RCE: empty strata \\['0-4'\\]"):
         R.d("RCE", slope_frame, no_low)
-
-
-def test_rcf_cell_means(slope_frame):
-    stat = R.rcf(slope_frame)
-    assert stat.loc["0-4 x 1-3"] == pytest.approx(1.0)
-    assert stat.loc["0-4 x 4-9"] == pytest.approx(2.5)
-    assert stat.loc["5-9 x 1-3"] == pytest.approx(4.0)
-    assert stat.loc["5-9 x 4-9"] == pytest.approx(1.0)
-    assert pd.isna(stat.loc["0-4 x 10+"])
-    assert len(stat) == 12
-    w = R.weights("RCF", slope_frame)
-    assert w.loc["0-4 x 4-9"] == 2 and w.loc["15-19 x 4-9"] == 2
-    assert w.sum() == 9  # j (full) and k (unpunished) are out
 
 
 def test_rsa_shares_and_weights(pull_frame):

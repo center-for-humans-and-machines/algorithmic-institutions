@@ -36,9 +36,6 @@ RCB_LABELS = ["(0,0.25]", "(0.25,0.5]", "(0.5,1]", ">1"]
 RCE_EDGES = [-0.5, 4.5, 9.5, 14.5, 19.5]
 RCE_LABELS = ["0-4", "5-9", "10-14", "15-19"]
 
-RCF_EDGES = [0.0, 3.0, 9.0, float("inf")]
-RCF_LABELS = ["1-3", "4-9", "10+"]
-
 RSA_EDGES = [0.0, 3.0, 15.0, float("inf")]
 RSA_LABELS = ["1-3", "4-15", "16+"]
 
@@ -292,7 +289,6 @@ class ResponseMetrics(MetricGroup):
         "RCC": "statistic",
         "RCD": "statistic",
         "RCE": "statistic",
-        "RCF": "statistic",
         "RSA": "statistic",
         "RPA": "stratified_distribution",
         "RPB": "stratified_distribution",
@@ -362,22 +358,6 @@ class ResponseMetrics(MetricGroup):
     def rce_weights(self, df):
         """Human frequency of each contribution band."""
         return self._rce_fit(df)["n"]
-
-    def rcf(self, df):
-        """Punishment response cells: mean dc per (contribution band x
-        punishment bin) cell over RCB's population -- the same dose
-        response as RCE, read off cell means instead of a slope."""
-        pop = self._rcf_population(df)
-        stat = pop.groupby(["band", "punishment_bin"], observed=False)["dc"].mean()
-        stat.index = [f"{b} x {p}" for b, p in stat.index]
-        return stat.rename("RCF")
-
-    def rcf_weights(self, df):
-        """Human frequency of each (band x punishment bin) cell."""
-        pop = self._rcf_population(df)
-        w = pop.groupby(["band", "punishment_bin"], observed=False).size()
-        w.index = [f"{b} x {p}" for b, p in w.index]
-        return w
 
     def rsa(self, df):
         """Switch share at valid opportunities per received-punishment
@@ -462,11 +442,6 @@ class ResponseMetrics(MetricGroup):
         return pd.DataFrame(rows, index=["slope", "se", "n"]).T.astype(
             {"slope": float, "se": float, "n": int}
         )
-
-    def _rcf_population(self, df):
-        pop = self._rce_population(df)
-        pop["punishment_bin"] = pd.cut(pop["punishment"], RCF_EDGES, labels=RCF_LABELS)
-        return pop
 
     def _with_dc(self, df):
         df = df.sort_values(PARTICIPANT + ["round_number"]).copy()

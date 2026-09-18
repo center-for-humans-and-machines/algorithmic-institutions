@@ -178,9 +178,6 @@ Canonical: abs Δ of the regression slope (the pull coefficient).
 **RCE -- punishment response slope:** over RCB's population (punished non-full contributors with a valid contribution change), split into contribution bands 0-4, 5-9, 10-14, 15-19, the OLS slope of the contribution change on the punishment received; how the reaction depends on the dose at a fixed contribution level, which is the channel a manager actually controls. RCB's rate mixes level and dose (a rate above one is reached by a low contributor punished heavily and by a high contributor punished lightly), and its bin means can be matched by the right composition without any within-level response; the slope cannot. Humans comply at low levels and withdraw at high ones (slopes +0.14, +0.10, -0.08, -0.16). The unpunished are left out on purpose: their contribution change sits below the punished rows' regression line in every band (a step at zero dose, the extensive margin), so pooling them would blend that step into the dose response and flip the 10-14 sign. A band whose punishments are all equal has no slope and counts as empty.
 Canonical: abs Δ of the slope per band, averaged over the 4 bands with human-frequency weights.
 
-**RCF -- punishment response cells:** the same population as RCE, cut into (contribution band x punishment bin) cells with punishment bins 1-3, 4-9, 10+; the mean contribution change per cell. The cell view of RCE: it needs no linearity, but its 12 cells are thin at the top (the 15-19 x 10+ cell holds 20 human rows) and it is read off means, so it is the more descriptive and less powerful of the two.
-Canonical: abs Δ per cell, averaged over the 12 cells with human-frequency weights.
-
 **RSA -- switching after punishment:** the share of punished players who switch
 at the next opportunity, split by punishment size bins 1-3, 4-15, 16+; who
 leaves after being punished.
