@@ -25,9 +25,25 @@ next-round contribution change on the punishment received, per contribution
 band 0-4 / 5-9 / 10-14 / 15-19; humans +0.14 / +0.10 / -0.08 / -0.16). An
 experiment may not band-downgrade RCE against its baseline, may not flip
 any of the four band slopes away from the human sign, and may not halve any
-band's slope magnitude (a band's |slope| may not fall to half its baseline
-value or below). Any of the three is a `[FAIL]`, whatever the gates below
-say. Punishment-response experiments — punisher-slot changes, and any
+band's slope magnitude. Any of the three is a `[FAIL]`, whatever the gates
+below say.
+
+The magnitude clause carries two qualifications, both added after it
+misfired twice on its first outing (PRs #190 and #192). A band's |slope|
+falling to half its baseline value or below is a `[FAIL]` **only if** (a)
+the candidate's slope is not closer to the human value than the baseline's
+was, and (b) the change exceeds one pooled standard error of the two
+slopes. Qualification (a) exists because the clause is a magnitude test on
+a signed quantity: on the 10-14 band of PR #192's reference stack it fired
+on a slope moving from +0.013, the wrong sign, to -0.001, toward the human
+-0.077 — an improvement. Qualification (b) exists because the 10-14 band's
+baseline magnitude is routinely around 0.05, so a single-seed fluctuation
+of 0.03 trips a relative threshold; that band is also the one PR #183
+showed is never learned, with the wrong sign teacher-forced and held out.
+Report every band's slope with its standard error, its row count, and the
+change in pooled standard errors, so a firing can be read. Neither
+qualification changes a verdict recorded before it: PRs #190 and #192 both
+failed gate 1 independently. Punishment-response experiments — punisher-slot changes, and any
 experiment whose declared target is the contributor's reaction to
 punishment — are judged on RCE: it is their target row for gate 1.
 

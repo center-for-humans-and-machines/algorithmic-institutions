@@ -1,4 +1,4 @@
-# [ACTIVE] Post-rebaseline program: four steps
+# [DONE] Post-rebaseline program: four steps
 
 ## Context
 
@@ -64,7 +64,35 @@ The punisher lag fix (PR #184) moved the manager-policy row from the 1.23-1.56 r
 
 Steps 1, 2 and 3 are independent and run in parallel, each on its own branch against `auto/punisher-current-contribution` with its own isolated cluster directory. Step 4 lands alongside them and governs how 2 and 3 are judged.
 
-Step 1 gates the decision that follows this program. If the location-scale head holds up, the next experiment is a combined head on the frontier trunk: the graph body with its per-group node and direct punishment path, and an ordinal location-scale emission with explicit inflation at both corners and at repeat-previous, which is designed to keep the categorical head's corner behaviour while gaining the monotone-shift structure. If it does not hold up, the combined architecture reduces to whatever step 3 shows, and the contraction has to be attacked another way, most plausibly through the gated version of the direct punishment path.
+Step 1 gated the decision that follows this program, and it came back negative. See the results below.
+
+This file moves to `doc/plans/archive/` once PRs #189 to #192 close.
+
+## Results
+
+All four steps executed. Two of the three experiments failed their declared gates, and both failures are more informative than a pass would have been.
+
+**Step 1 -- falsified, PR #191.** The hypothesis was wrong in its mechanism and in its consequence. The categorical head's off-manifold gain is the flattest and highest of the three heads, 0.957 to 1.023 on the common set and the only one that rises at the extremes, so the 21 free logits were never failing to extrapolate a monotone shift. No head's gain decays with distance. On copula-off state spread the Gaussian heads retain less, not more: 16.51 for the inflated head and 13.30 for v2 against the categorical 18.88. Normalising each model by its own fit to human histories, which is the reading most favourable to the Gaussian heads, the inflated head ties at 0.668 with a bootstrap interval of 0.575 to 0.802 against the categorical 0.676, and v2 is clearly lower at 0.570. The gain probe is unconfounded, unlike the state-spread table, and both order the heads the same way. The combined head is dead as motivated; the graph body was not tested here and remains the best performer; the corner-and-repeat inflation earns its place inside the Gaussian lineage but has nothing to offer a categorical head that already gets corners for free.
+
+The step also produced a sharper characterisation of the defect than the one it was aimed at. Human group-mean spread rises across the episode, 4.19 then 5.54 then 6.09 by round block, and both copula-off arms stall or reverse in the last third. The contraction is a failure of late divergence, not a level offset. And within every stack the copula is worth about twice what the head choice is worth, with PR #186 already showing all of that value sits in the persistence rather than the correlation.
+
+**Step 2 -- fails gate 1, PR #192.** The mechanism the hypothesis named is now essentially exact. The simulated punish rate at the ceiling is 0.040 against the human 0.038, from 0.122 before, and the severity there is 8.02 against the human 7.00, from 3.84. The declared row RCC moved 1.5298 to 1.2969, the largest move that row has ever had, but not across a band, so gate 1 fails. Gate 2 passes at 1.0331 against a 1.1393 ceiling, and the protected row holds on the gated stack with every band's change inside one standard error. The graph-punisher reference stack improved substantially: mean 1.7094 to 1.6603 and rows at the ceiling 8 to 11.
+
+The substantive finding is the decomposition of why RCC missed. The punisher's half is complete: the fabricated population is gone, 12.4% of full contributors punished before against 4.0% after and 3.9% in humans. What remains is that a punished full contributor in simulation drops 3.75 next round where a human drops 8.66. The contributor under-reacts to a heavy ceiling punishment by about 2.3 times, no punisher change can move that, and RCC is the only row that measures it, because RCE's population is the punished non-full contributors by construction. This is a contributor-slot defect with a ready baseline for a successor.
+
+The regression weight on the current contribution did not move anywhere, staying near -0.14 against the human -0.242. That deficit is untouched and remains live.
+
+**Step 3 -- fails gate 1 and the protected row, PR #190.** Swapping only the one-hot group-size switch head into the frontier stack improved every pure switch-slot row and damaged the response rows. Group spread 1.554 to 1.101, switch timing gained a band, segregation 1.427 to 1.329 without a band, switching pull 1.309 to 1.689 the wrong way. Gate 2 passes and rows at the ceiling rise 13 to 14, so it is a targeted failure. The attribution answer: only segregation, switch timing and group spread are pure switch-slot rows and all three improved, while switching pull and RCE are joint rows by construction. Declaring switching pull as a switch-slot target was a mis-specification in this plan. One stack cannot separate whether the head needs the Gaussian contributor or clashes with the stimulus-skip contributor specifically.
+
+Undeclared and worth a follow-up: switching after punishment regressed the most of any row, 1.070 to 1.644. Right number of switches and right group sizes, wrong people leaving after being punished.
+
+**Step 4 -- done, PR #189, amended.** The freeze and the copula-off judging rule landed as planned. The protected-row magnitude clause then misfired twice on its first outing and has been amended with two qualifications: it does not fire when the candidate's slope is closer to the human value than the baseline's was, and it fires only when the change exceeds one pooled standard error. On PR #192's reference stack it had fired on a slope moving from the wrong sign toward the human value, which is an improvement. Neither qualification changes a recorded verdict, because both failing experiments failed gate 1 independently.
+
+## Where this leaves the next round
+
+The target is the late-divergence failure, and neither the emission head nor the noise model is the lever. Real groups keep pulling apart as an episode runs and the models stop. The candidates are the group-level feedback channel, meaning whatever makes a group's drift reinforce itself, the group-trend feature from PR #187 as the cheapest probe of that signal, and a persistent group state that survives self-play, which the per-group virtual node only partly delivers.
+
+Two contributor-slot defects are now isolated with baselines ready. The under-reaction to heavy ceiling punishment, 3.75 against the human 8.66, from step 2. And the response slope on the current contribution, near -0.14 against the human -0.242, which no change so far has moved.
 
 ## Explicitly out of scope
 
