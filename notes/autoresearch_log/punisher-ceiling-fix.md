@@ -66,11 +66,11 @@ Reference stack (`23_2g8a_self_gnn_contr_gnn_switch_curpun`): `lin_multinomial_s
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
 | 2026-09-18 | (baseline) parent's current-contribution copula punisher, PR #181 stack (`_curpun`) | RCC 1.5298, RPA 0.6930, RCB 1.5454, RCE 0.8942 | 13/22 | 1.0357 | baseline |
-| | 2026-09-19 | **the ceiling indicator on the copula lin_multinomial**, PR 181 stack (`_ceiling`) | RCC **1.2969**, RPA 0.6620, RCB 1.6591, RCE 0.8823 | 14/22 | 1.0331 | **FAIL** (gate 1: RCC stays in band 1-2) | |
+| 2026-09-19 | **the ceiling indicator on the copula lin_multinomial**, PR 181 stack (`_ceiling`) | RCC **1.2969**, RPA 0.6620, RCB 1.6591, RCE 0.8823 | 14/22 | 1.0331 | **FAIL** (gate 1: RCC stays in band 1-2) |
 | 2026-09-18 | (baseline) parent's plain multinomial, main gnn x gnn (`_curpun`, run `lin_multinomial_self`) | RCC 1.6181, RPA 0.6838, RCB 1.0206, RCE 0.9976 | 13/22 | 1.7405 | baseline (reference) |
-| | 2026-09-19 | the ceiling indicator on the plain multinomial, main gnn x gnn (`_ceiling`, run `lin_multinomial_self`) | RCC 1.4615, RPA 0.6626, RCB 1.1492, RCE 0.9900 | 13/22 | 1.6616 | reported (not gated) | |
+| 2026-09-19 | the ceiling indicator on the plain multinomial, main gnn x gnn (`_ceiling`, run `lin_multinomial_self`) | RCC 1.4615, RPA 0.6626, RCB 1.1492, RCE 0.9900 | 13/22 | 1.6616 | reported (not gated) |
 | 2026-09-18 | (baseline) parent's GNN punisher, main gnn x gnn (`_curpun`, run `gnn_self`) | RCC 1.3005, RPA 0.8884, RCB 1.2133, RCE 1.0048 | 8/22 | 1.7094 | baseline (reference) |
-| | 2026-09-19 | the ceiling indicator on the GNN punisher, main gnn x gnn (`_ceiling`, run `gnn_self`) | RCC 1.1109, RPA 0.8066, RCB 1.0886, RCE 0.9157 | 11/22 | 1.6603 | reported (not gated) | |
+| 2026-09-19 | the ceiling indicator on the GNN punisher, main gnn x gnn (`_ceiling`, run `gnn_self`) | RCC 1.1109, RPA 0.8066, RCB 1.0886, RCE 0.9157 | 11/22 | 1.6603 | reported (not gated) |
 
 ### Step 1: the diagnosis on the human data (measured)
 
