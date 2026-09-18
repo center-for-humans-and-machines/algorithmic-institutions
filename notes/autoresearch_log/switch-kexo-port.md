@@ -50,7 +50,7 @@ Behavioral rationale of the head itself (from experiment #174): humans never emp
 
 ### The run
 
-Raven, `AI_REMOTE_DIR=~/repros/ai-runs/switch-kexo-port`, one simulation job, 1 min 44 s, exit 0. `per_round.parquet` is 100 episodes x 24 rounds x 8 agents = 19,200 rows, the same shape as the baseline sim, and the fetched local copy is byte-identical to the cluster's (sha256 `d94f9a9b37cdfede5e0b65c0c85203ff1efdc46e4d898016b19cae2d93bb471f`). Evaluated with `PYTHONPATH=<worktree>/src python -m aimanager evaluate <config>`: 22 metric rows, RCE present, scoring 500 repeats at seed 42. The noise-ceiling denominators in `evaluation/scores.csv` are identical to the baseline's to full precision, so before and after are scored against the same ceiling.
+Raven, `AI_REMOTE_DIR=~/repros/ai-runs/switch-kexo-port`, one simulation job (SLURM id 30317123, name `f6fd855c`), 1 min 44 s, exit code 0:0; submitted by the predecessor agent, not resubmitted here. Its run record is `.log/simulation/manager_testing/23_2g8a_switch_kexo_port_.../f6fd855c/` on the cluster, and the `switch_model` in the archived `config.yml` there is the k-one-hot artifact. `per_round.parquet` is 100 episodes x 24 rounds x 8 agents = 19,200 rows, the same shape as the baseline sim, and the fetched local copy is byte-identical to the cluster's (sha256 `d94f9a9b37cdfede5e0b65c0c85203ff1efdc46e4d898016b19cae2d93bb471f`). Evaluated with `PYTHONPATH=<worktree>/src python -m aimanager evaluate <config>`: 22 metric rows, RCE present, scoring 500 repeats at seed 42. The noise-ceiling denominators in `evaluation/scores.csv` are identical to the baseline's to full precision, so before and after are scored against the same ceiling.
 
 ### Per row
 
