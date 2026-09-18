@@ -642,6 +642,9 @@ class GraphNetwork(th.nn.Module):
                 phi=self.copula_phi,
             )
             y_pred[:, r] = levels
+            # The per-node latent of the round just sampled, for the sim log
+            # (`copula_z` in per_round.parquet); read-only, no RNG use.
+            self.copula_z_last = z_cell[cell_id].reshape(n_batch, n_nodes)
             # Only a decision round advances the AR(1) latent (ruling D6): the
             # predictor runs every round, so advancing per call would decay the
             # realized persistence to phi ** copula_switch_every. The store is

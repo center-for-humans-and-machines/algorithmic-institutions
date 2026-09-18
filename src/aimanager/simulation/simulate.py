@@ -73,6 +73,13 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
     )
 
     df_sim = punishments.merge(common_good).merge(contributions).merge(agent_group)
+    if "copula_z" in recorder.memory:
+        copula_z = using_multiindex(
+            recorder.memory["copula_z"].squeeze(1).numpy(),
+            columns=columns,
+            value_name="copula_z",
+        )
+        df_sim = df_sim.merge(copula_z)
 
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
     df_sim["payoff"] = (
