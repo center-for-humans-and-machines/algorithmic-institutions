@@ -1,0 +1,99 @@
+rows=9320 games=50 pairs=19133
+
+=== 1. baseline: within-group co-movement, cross-member pairs ===
+                                        quantity    value    ci_lo    ci_hi
+                 raw contribution, plain Pearson 0.483193 0.396686 0.567193
+                   raw contribution, pair moment 0.456363      NaN      NaN
+                   level residual, plain Pearson 0.031634 0.013462 0.049733
+                     level residual, pair moment 0.027415      NaN      NaN
+                 latent (mid-PIT), plain Pearson 0.037147      NaN      NaN
+                   latent (mid-PIT), pair moment 0.036294 0.017918 0.052664
+            latent (randomised PIT), pair moment 0.029912      NaN      NaN
+                 latent, pairwise MLE (50 games) 0.047871 0.028440 0.067011
+           latent, pairwise MLE (40 train games) 0.039499      NaN      NaN
+  level residual, plain Pearson (40 train games) 0.026193      NaN      NaN
+raw contribution, plain Pearson (40 train games) 0.468455      NaN      NaN
+
+--- baseline by split (point estimates) ---
+                                 split  n_rows  n_pairs  raw_pearson  lvl_pearson  pit_moment      mle
+                                   all    9320    19133     0.483193     0.031634    0.036294 0.047871
+                      round 0 excluded    8934    18572     0.495998     0.038417    0.039586 0.052837
+                            rounds 0-7    3108     5992     0.269106     0.020533    0.011676 0.013567
+                           rounds 8-15    3105     6686     0.518772     0.034256    0.047711 0.068128
+                          rounds 16-23    3107     6455     0.599205     0.049345    0.054608 0.083943
+  membership changed this block (t>=4)    6987    14854     0.487979     0.033434    0.036049 0.048242
+membership unchanged this block (t>=4)     786     2031     0.749636     0.107833    0.093105 0.124633
+         membership changed this round    1723     3615     0.421330     0.042537    0.031724 0.054266
+
+=== 2. candidates: regression and share of co-movement explained ===
+grp_pun_last           share: pit_moment +0.013 [-0.008,+0.074]  lvl -0.003 [-0.010,+0.088]  mle +0.012 [-0.005,+0.053]  | t_cellmean +0.91 r2 0.001
+grp_pun_last3          share: pit_moment +0.004 [-0.005,+0.052]  lvl +0.001 [-0.007,+0.089]  mle +0.004 [-0.003,+0.038]  | t_cellmean +0.60 r2 0.000
+grp_share_pun_last     share: pit_moment +0.076 [+0.012,+0.198]  lvl +0.006 [-0.026,+0.149]  mle +0.063 [+0.008,+0.146]  | t_cellmean +2.30 r2 0.008
+rounds_since_change    share: pit_moment +0.019 [-0.001,+0.114]  lvl +0.032 [+0.006,+0.135]  mle +0.026 [+0.004,+0.120]  | t_cellmean -2.03 r2 0.004
+left_at_last           share: pit_moment -0.002 [-0.010,+0.026]  lvl -0.004 [-0.016,+0.021]  mle -0.001 [-0.007,+0.040]  | t_cellmean +0.46 r2 0.000
+joined_at_last         share: pit_moment +0.000 [-0.005,+0.034]  lvl +0.007 [-0.005,+0.051]  mle +0.001 [-0.003,+0.036]  | t_cellmean +0.40 r2 0.000
+size_now               share: pit_moment -0.010 [-0.034,+0.015]  lvl -0.011 [-0.042,+0.042]  mle -0.006 [-0.023,+0.034]  | t_cellmean -0.14 r2 0.000
+stable_block           share: pit_moment -0.001 [-0.007,+0.025]  lvl +0.001 [-0.008,+0.028]  mle +0.003 [-0.003,+0.044]  | t_cellmean -0.94 r2 0.000
+other_mean_last        share: pit_moment +0.003 [-0.003,+0.069]  lvl +0.010 [-0.002,+0.100]  mle +0.001 [-0.006,+0.044]  | t_cellmean -1.04 r2 0.001
+other_size_now         share: pit_moment -0.010 [-0.034,+0.015]  lvl -0.011 [-0.042,+0.042]  mle -0.006 [-0.023,+0.034]  | t_cellmean +0.14 r2 0.000
+gap_last               share: pit_moment +0.010 [-0.001,+0.083]  lvl +0.046 [+0.002,+0.203]  mle +0.016 [-0.001,+0.085]  | t_cellmean +1.26 r2 0.002
+own_mean_last          share: pit_moment +0.007 [-0.003,+0.038]  lvl +0.038 [+0.003,+0.112]  mle +0.015 [-0.011,+0.080]  | t_cellmean +1.18 r2 0.001
+own_mean_last3         share: pit_moment -0.002 [-0.007,+0.013]  lvl +0.013 [-0.010,+0.071]  mle -0.003 [-0.021,+0.042]  | t_cellmean -0.14 r2 0.000
+own_trend              share: pit_moment +0.041 [+0.004,+0.126]  lvl +0.041 [-0.001,+0.149]  mle +0.040 [+0.016,+0.127]  | t_cellmean +2.85 r2 0.005
+own_sd_last            share: pit_moment +0.024 [-0.006,+0.116]  lvl +0.034 [-0.030,+0.143]  mle +0.014 [-0.008,+0.074]  | t_cellmean -3.58 r2 0.007
+early_type             share: pit_moment -0.001 [-0.005,+0.030]  lvl +0.010 [-0.005,+0.061]  mle -0.002 [-0.012,+0.039]  | t_cellmean -0.04 r2 0.000
+cum_mean               share: pit_moment -0.003 [-0.010,+0.014]  lvl +0.011 [-0.008,+0.074]  mle -0.006 [-0.025,+0.036]  | t_cellmean -0.31 r2 0.000
+round                  share: pit_moment +0.006 [-0.007,+0.041]  lvl +0.007 [-0.016,+0.059]  mle +0.006 [-0.003,+0.061]  | t_cellmean -0.69 r2 0.000
+fe_game                share: pit_moment +0.142 [+0.036,+0.341]  lvl +0.199 [+0.097,+0.512]  mle +0.153 [+0.053,+0.387]
+fe_game_group          share: pit_moment +0.305 [+0.157,+0.673]  lvl +0.483 [+0.255,+1.153]  mle +0.319 [+0.171,+0.715]
+fe_session             share: pit_moment +0.012 [-0.015,+0.050]  lvl +0.008 [-0.029,+0.041]  mle +0.010 [-0.012,+0.037]
+
+=== 3. forward selection over the legal candidates (criterion: pit_moment) ===
+step 1: +grp_share_pun_last   rho 0.0363 -> 0.0335  drop +0.0028 [+0.0003,+0.0083]  KEEP
+step 2: +own_sd_last          rho 0.0335 -> 0.0316  drop +0.0020 [+0.0003,+0.0044]  KEEP
+step 3: +own_trend            rho 0.0316 -> 0.0300  drop +0.0015 [+0.0002,+0.0040]  KEEP
+step 4: +rounds_since_change  rho 0.0300 -> 0.0293  drop +0.0007 [-0.0000,+0.0035]  STOP (CI includes 0)
+
+joint set: ['grp_share_pun_last', 'own_sd_last', 'own_trend']
+      scale  rho_before  rho_after    share  share_lo  share_hi
+ pit_moment    0.036294   0.030030 0.172578  0.096609  0.367972
+lvl_pearson    0.031634   0.028434 0.101158  0.023525  0.372870
+pit_pearson    0.037147   0.030797 0.170937  0.096120  0.366446
+        mle    0.047871   0.041004 0.143436  0.091827  0.288027
+              term  beta_pit         t
+             const  0.027544  1.450580
+grp_share_pun_last  0.141131  2.475786
+       own_sd_last -0.020883 -4.676349
+         own_trend  0.011536  2.946165
+
+--- reference sets ---
+                         set  rho_pit_moment  rho_lvl_pearson  rho_pit_pearson  rho_mle  share_pit_moment  share_lvl_pearson  share_pit_pearson  share_mle
+        all legal candidates        0.027070         0.023419         0.027743 0.036835          0.254149           0.259706           0.253161   0.230533
+                     game FE        0.031131         0.025349         0.031835 0.040561          0.142252           0.198697           0.142986   0.152693
+            (game, group) FE        0.025207         0.016364         0.025663 0.032580          0.305474           0.482719           0.309135   0.319417
+joint set + (game, group) FE        0.018927         0.012435         0.019337 0.025667          0.478496           0.606908           0.479442   0.463831
+
+=== 4. persistence of the leftover within-group residual ===
+                                      0                1
+stage                before partialling  after joint set
+acf_lag1_cellmean              0.116532         0.097588
+acf_lag2_cellmean             -0.014652        -0.022229
+acf_lag3_cellmean              0.028359         0.059089
+acf_lag4_cellmean              0.046667         0.054027
+acf_lag8_cellmean              0.025542         0.039476
+rho_cross_lag1                 0.024342         0.019543
+rho_cross_lag2                -0.001733         -0.00216
+rho_cross_lag3                -0.006298        -0.000126
+rho_cross_lag4                -0.000066         0.001537
+rho_cross_lag6                -0.010702        -0.008825
+rho_cross_lag8                 0.000872         0.002816
+rho_cross_lag12               -0.006662        -0.006161
+var_static_cellmean            0.016747           0.0189
+var_local_cellmean             0.207694          0.20267
+static_share                   0.074616           0.0853
+rho_within                     0.036294          0.03003
+rho_lag1_cross                 0.024342         0.019543
+phi_moment                     0.670687         0.650772
+rho_within_mle                 0.047871         0.041004
+rho_lag1_cross_mle             0.033303         0.028486
+phi_mle                        0.695693         0.694698
