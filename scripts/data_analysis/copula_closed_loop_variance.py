@@ -263,6 +263,29 @@ def latent_regression():
         out[f"{label}_r2"] = r**2
         out[f"{label}_var_explained"] = r**2 * y.var(ddof=1)
         out[f"{label}_var_gmean"] = y.var(ddof=1)
+    # the latent's ONE-SHOT per-round effect: the teacher-forced residual
+    # c - E[c | history] regressed on z (the compounding factor is the group-mean
+    # slope above over this)
+    tf = pd.read_parquet(OUT / "tf_A.parquet")
+    # the tensor's episode axis is parse_agent_rounds' dense rank of the STRING
+    # key "sim__<episode>", i.e. lexicographic order of the episode number
+    order = sorted(df["episode"].unique(), key=lambda e: f"sim__{e}")
+    tf["episode"] = np.asarray(order)[tf["episode"]]
+    z = df.assign(agent=df["participant_code"].str.split("_").str[0].astype(int))
+    tf = tf.merge(
+        z[["episode", "agent", "round_number", "copula_z"]].rename(
+            columns={"round_number": "round"}
+        ),
+        on=["episode", "agent", "round"],
+    )
+    resid = tf["c"] - tf["e"]
+    out["resid_on_z_slope"] = np.cov(tf["copula_z"], resid)[0, 1] / tf["copula_z"].var(
+        ddof=1
+    )
+    out["e_on_z_slope"] = np.cov(tf["copula_z"], tf["e"])[0, 1] / tf["copula_z"].var(
+        ddof=1
+    )
+    out["compounding_factor"] = out["cell_slope"] / out["resid_on_z_slope"]
     # phi = 1: the latent is constant over the episode -- check it
     zvar = df.groupby(["episode", "agent_group"])["copula_z"].std().max()
     out["latent_static_within_episode"] = bool(zvar < 1e-6)
@@ -348,6 +371,10 @@ def analyse():
         decomp[arm]["resid_corr_rounds_2_24"] = pair_corr(tf[tf["round"] > 0], "resid")
         decomp[arm]["pred_sd_mean"] = tf["sd"].mean()
         decomp[arm]["resid_sd"] = tf["resid"].std()
+        # Var(c) = Var(E[c | history]) + Var(residual): states vs noise
+        decomp[arm]["var_c"] = tf["c"].var()
+        decomp[arm]["var_cond_mean"] = tf["e"].var()
+        decomp[arm]["var_resid"] = tf["resid"].var()
     long = pd.concat(per_round.values()).reset_index()
     long.to_csv(OUT / "per_round.csv", index=False)
     cols = ["sd_group_mean", "sd_individual", "ratio", "resid_corr", "zresid_corr",
