@@ -371,6 +371,10 @@ def load_ah_model(
             device=device,
             switch_sample=switch_sample,
         )
+    if str(path).endswith(".ensemble.yml"):
+        from aimanager.simulation.ensemble_ah import SeedEnsembleAH
+
+        return SeedEnsembleAH.load(path, device=device)
     from aimanager.artificial_humans import GraphNetwork
 
     return GraphNetwork.load(path, device=device)
