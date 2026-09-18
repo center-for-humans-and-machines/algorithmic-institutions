@@ -33,6 +33,12 @@ DECISION_ROUNDS = pd.Index([3, 7, 11, 15, 19], name="round_number")
 RCB_EDGES = [0.0, 0.25, 0.5, 1.0, float("inf")]
 RCB_LABELS = ["(0,0.25]", "(0.25,0.5]", "(0.5,1]", ">1"]
 
+RCE_EDGES = [-0.5, 4.5, 9.5, 14.5, 19.5]
+RCE_LABELS = ["0-4", "5-9", "10-14", "15-19"]
+
+RCF_EDGES = [0.0, 3.0, 9.0, float("inf")]
+RCF_LABELS = ["1-3", "4-9", "10+"]
+
 RSA_EDGES = [0.0, 3.0, 15.0, float("inf")]
 RSA_LABELS = ["1-3", "4-15", "16+"]
 
@@ -285,6 +291,8 @@ class ResponseMetrics(MetricGroup):
         "RCB": "statistic",
         "RCC": "statistic",
         "RCD": "statistic",
+        "RCE": "statistic",
+        "RCF": "statistic",
         "RSA": "statistic",
         "RPA": "stratified_distribution",
         "RPB": "stratified_distribution",
@@ -343,6 +351,34 @@ class ResponseMetrics(MetricGroup):
     def rcd_weights(self, df=None):
         return pd.Series({"pull": 1.0})
 
+    def rce(self, df):
+        """Punishment response slope: per contribution band, the OLS slope
+        of dc on punishment received over punished non-full contributors
+        (RCB's population) -- how the next-round change depends on the
+        dose, at a fixed level. NaN where a band is empty or every
+        punishment in it is the same."""
+        return self._rce_fit(df)["slope"].rename("RCE")
+
+    def rce_weights(self, df):
+        """Human frequency of each contribution band."""
+        return self._rce_fit(df)["n"]
+
+    def rcf(self, df):
+        """Punishment response cells: mean dc per (contribution band x
+        punishment bin) cell over RCB's population -- the same dose
+        response as RCE, read off cell means instead of a slope."""
+        pop = self._rcf_population(df)
+        stat = pop.groupby(["band", "punishment_bin"], observed=False)["dc"].mean()
+        stat.index = [f"{b} x {p}" for b, p in stat.index]
+        return stat.rename("RCF")
+
+    def rcf_weights(self, df):
+        """Human frequency of each (band x punishment bin) cell."""
+        pop = self._rcf_population(df)
+        w = pop.groupby(["band", "punishment_bin"], observed=False).size()
+        w.index = [f"{b} x {p}" for b, p in w.index]
+        return w
+
     def rsa(self, df):
         """Switch share at valid opportunities per received-punishment
         bin, over punished contributors -- who leaves after being
@@ -396,6 +432,40 @@ class ResponseMetrics(MetricGroup):
         ].copy()
         rate = pop["punishment"] / (20 - pop["contribution"])
         pop["rate_bin"] = pd.cut(rate, RCB_EDGES, labels=RCB_LABELS)
+        return pop
+
+    def _rce_population(self, df):
+        pop = self._rcb_population(df)
+        pop["band"] = pd.cut(pop["contribution"], RCE_EDGES, labels=RCE_LABELS)
+        return pop
+
+    def _rce_fit(self, df):
+        """Per contribution band: OLS slope of dc on punishment, its
+        standard error and the row count (one frame, RCE_LABELS index).
+        The unpunished are left out on purpose: their dc sits off the
+        punished rows' regression line in every band (a step at zero
+        dose), so pooling them would blend that extensive margin into
+        the dose response."""
+        pop = self._rce_population(df)
+        rows = {}
+        for band in RCE_LABELS:
+            g = pop[pop["band"] == band]
+            x, y, n = g["punishment"], g["dc"], len(g)
+            if n < 2 or x.var() == 0:
+                rows[band] = (float("nan"), float("nan"), n)
+                continue
+            slope = x.cov(y) / x.var()
+            resid = y - y.mean() - slope * (x - x.mean())
+            sxx = ((x - x.mean()) ** 2).sum()
+            se = ((resid**2).sum() / (n - 2) / sxx) ** 0.5 if n > 2 else float("nan")
+            rows[band] = (slope, se, n)
+        return pd.DataFrame(rows, index=["slope", "se", "n"]).T.astype(
+            {"slope": float, "se": float, "n": int}
+        )
+
+    def _rcf_population(self, df):
+        pop = self._rce_population(df)
+        pop["punishment_bin"] = pd.cut(pop["punishment"], RCF_EDGES, labels=RCF_LABELS)
         return pop
 
     def _with_dc(self, df):
