@@ -27,6 +27,14 @@ on Raven only (pass none to skip them):
 
     python scripts/data_analysis/punisher_mechanism_check.py \
         [--linear NAME=PATH ...] [--gnn NAME=PATH ...] [--out CSV]
+
+Closed-loop (self-play) version: `--sim NAME=PATH[:RUN]` reads a finished
+simulation's per_round.parquet (one run; RUN is the pairing name, e.g.
+`gnn_self`, default: the parquet's only run) and computes the same statistics
+from the realised punishments, exactly as the human row is computed from the
+observed ones -- every sim row is valid, and c_{t-1} is the same agent's
+contribution in the previous round of the episode. `--sim` alone (with a bare
+`--linear --gnn`, no artifacts) gives the human row next to the sim rows.
 """
 
 import argparse
@@ -117,6 +125,26 @@ def gnn_proba(model, data):
     return proba.double().numpy()[m]
 
 
+def sim_rows(parquet, run=None):
+    """Observed rows of one run of a sim's per_round.parquet, in rows_of format."""
+    df = pd.read_parquet(parquet)
+    if run is not None:
+        df = df[df["run"] == run]
+    else:
+        assert df["run"].nunique() == 1, f"pick a run: {sorted(df['run'].unique())}"
+    df = df.sort_values(["episode", "participant_code", "round_number"])
+    g = df.groupby(["episode", "participant_code"])
+    c_prev = g["contribution"].shift(1)
+    prev_ok = c_prev.notna().to_numpy()
+    return dict(
+        mask=np.ones(len(df), bool),
+        y=df["punishment"].to_numpy(float),
+        c=df["contribution"].to_numpy(float),
+        c_prev=c_prev.fillna(0).to_numpy(float),
+        prev_ok=prev_ok,
+    )
+
+
 def stats(P, r):
     """P: [N, 31] predicted (or one-hot observed) punishment distribution."""
     lev = np.arange(N_LEVELS, dtype=float)
@@ -146,6 +174,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--linear", nargs="*", default=None, metavar="NAME=PATH")
     ap.add_argument("--gnn", nargs="*", default=None, metavar="NAME=PATH")
+    ap.add_argument("--sim", nargs="*", default=[], metavar="NAME=PATH[:RUN]")
     ap.add_argument("--out", default=None, help="write the table as CSV")
     args = ap.parse_args()
     linear = (
@@ -184,6 +213,14 @@ def main():
             d, _ = tensors(df, default_values=model.default_values or dv)
             table[name] = stats(gnn_proba(model, d), rows_of(d))
             print(f"{name}: {path} x={[e['name'] for e in model.x_encoding]}")
+
+    for spec in args.sim:
+        name, path = spec.split("=", 1)
+        path, _, run = path.partition(":")
+        rs = sim_rows(ROOT / path, run or None)
+        table[name] = stats(np.eye(N_LEVELS)[rs["y"].astype(int)], rs)
+        table[name]["nll"] = np.nan  # realised draws, not a predictive distribution
+        print(f"{name}: {path} run={run or '(only)'} rows={len(rs['y'])}")
 
     T = pd.DataFrame(table).T
     pd.set_option("display.width", 250)
