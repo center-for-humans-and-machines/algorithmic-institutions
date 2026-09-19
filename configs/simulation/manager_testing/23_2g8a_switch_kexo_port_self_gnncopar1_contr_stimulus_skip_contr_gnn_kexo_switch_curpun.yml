@@ -1,0 +1,47 @@
+# switch-kexo-port candidate: the frontier stack of PR #181 as re-baselined
+# by auto/punisher-current-contribution
+# (23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_curpun -- vnode
+# GNN contributor with the immediate-stimulus skip and its recalibrated copula,
+# current-contribution lin_multinomial punisher with its severity copula) with
+# ONLY the switch slot swapped: the numeric joint-exodus head
+# (switch_joint_exodus) is replaced by the one-hot group-size joint-exodus
+# head of experiment #174 (switch_exodus_k_onehot, trained on the
+# auto/switch-exodus-k-onehot branch; see
+# notes/autoresearch_log/switch-kexo-port.md). Contributor, copulas, punisher,
+# valid_model and protocol are byte-identical to the source config; only
+# switch_model, output_dir and figure_name differ. Copulas are NOT
+# recalibrated. The `_curpun` suffix keeps the dir out of
+# evaluation_sweep.py's DIR_PATTERN like the re-baseline dirs.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_exodus_k_onehot/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_current_contr_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_switch_kexo_port_self_gnncopar1_contr_stimulus_skip_contr_gnn_kexo_switch_curpun
+figure_name: 2g8a_switch_kexo_port_self_gnncopar1_contr_stimulus_skip_contr_gnn_kexo_switch_curpun
+save_per_round: true
+basedir: .

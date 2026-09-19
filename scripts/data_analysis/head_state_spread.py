@@ -75,6 +75,19 @@ ARMS = {  # arm -> (bundle, sim dir)
     ),
     "d_kexo_rho0": ("v2", "23_2g8a_head_diag_d_kexo_rho0"),
 }
+# The switch-matched CATEGORICAL arms. PR #186's arms A and B ran with
+# switch_joint_exodus while every Gaussian arm here runs with
+# switch_exodus_k_onehot, which left the switch model as the one cross-lineage
+# difference in the headline table. These two close it: the same stimulus-skip
+# contributor (copula on / off) under the Gaussian arms' own switch head.
+GNN_ARMS = {
+    "e_skip_kexo": (  # copula on -- PR #190's committed run, job 30317123
+        "23_2g8a_switch_kexo_port_self_gnncopar1_contr_stimulus_skip"
+        "_contr_gnn_kexo_switch_curpun"
+    ),
+    "e_skip_kexo_rho0": "23_2g8a_head_diag_e_skip_kexo_rho0",  # copula off
+}
+
 DELTAS = [-6, -4, -2, 2, 4, 6]
 COMMON = (6, 14)  # own previous contribution range that stays in-grid for all deltas
 
@@ -318,6 +331,63 @@ def gain_gaussian():
     pd.concat(tabs).to_csv(OUT / "gain_gaussian.csv", index=False)
 
 
+def gnn_teacher_force():
+    """PR #186's teacher-forcing, run over the two switch-matched categorical
+    arms. The BARE stimulus-skip trunk (copula_rho == 0) supplies
+    E[c | history] at each arm's own realised states, exactly as
+    `copula_closed_loop_variance.teacher_force` does for arms A/B/C -- the
+    same function (`ccv.tf_frame` -> `cc.teacher_forced_rows`), so the new rows
+    are produced by the code that produced the quoted ones.
+
+    Also re-runs the human pass, whose Var(E[c|hist]) must reproduce PR #186's
+    27.93: that is the check that this path is measuring the same thing.
+    """
+    tree = Path(os.environ["HEAD_DIAG_TREE"]).expanduser().resolve()
+    sys.path.insert(0, str(tree / "src"))
+    sys.path.insert(0, str(tree / "scripts" / "artificial_humans"))
+    sys.path.insert(0, str(tree / "scripts" / "data_analysis"))
+    import contribution_copula_rho as cc
+    import torch as th
+    from rcb_teacher_forced import check_sim_defaults, load_sim
+
+    from aimanager.generic.graph import GraphNetwork
+
+    OUT.mkdir(parents=True, exist_ok=True)
+    trunk = tree / (
+        "artifacts/artificial_humans"
+        "/group_switching_contribution_50ep_vnode_stimulus_skip"
+        "/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt"
+    )
+    model = GraphNetwork.load(str(trunk), device="cpu")
+    model.eval()
+    assert model.copula_rho == 0.0, "teacher-force the BARE trunk"
+
+    data, _, key_to_idx, defaults = cc.load_full()
+    tr = cc.select_split(key_to_idx, cc.TRAIN, cc.N_TRAIN_EP)
+    te = cc.select_split(key_to_idx, cc.TEST, cc.N_TEST_EP)
+    idx = np.array(sorted(set(tr.tolist()) | set(te.tolist())))
+    df = ccv.tf_frame(model, data, idx)
+    df["episode"] = idx[df["episode"]]
+    df.to_parquet(OUT / "tf_human_skip.parquet", index=False)
+    v = (df["c"] - df["e"]).var()
+    print(f"human under the bare skip trunk: {len(df)} rows, "
+          f"var(c) {df['c'].var():.3f}, var(E) {df['e'].var():.3f} "
+          f"(PR #186: 27.93), var(resid) {v:.3f} (PR #186: 11.79)")  # fmt: skip
+
+    check_sim_defaults(model, defaults)
+    for arm, name in GNN_ARMS.items():
+        path = SIM / name / "per_round.parquet"
+        if not path.exists():
+            print(f"arm {arm}: {path} missing, skipped")
+            continue
+        sim, _ = load_sim(path, defaults)
+        n_ep = sim["contribution"].shape[0]
+        with th.no_grad():
+            df = ccv.tf_frame(model, sim, np.arange(n_ep))
+        df.to_parquet(OUT / f"tf_{arm}.parquet", index=False)
+        print(f"arm {arm}: {len(df)} rows, var(E) {df['e'].var():.3f}")
+
+
 def gain_gnn():
     """The categorical stimulus-skip trunk (PR #186's arm B model), run under
     that PR's code tree (HEAD_DIAG_TREE) on Raven: its loaders give the same
@@ -372,7 +442,7 @@ def decomposition(df, tf):
     d["var_c"] = tf["c"].var()
     d["var_cond_mean"] = tf["e"].var()
     d["var_resid"] = tf["resid"].var()
-    d["var_mu"] = tf["mu"].var()
+    d["var_mu"] = tf["mu"].var() if "mu" in tf else np.nan
     d["n_rows"] = len(tf)
     return d
 
@@ -389,7 +459,13 @@ def bootstrap_retention(n_boot=2000, seed=0):
     for key in BUNDLES:
         tf = pd.read_parquet(OUT / f"tf_human_{key}.parquet")
         hum[key] = [g["e"].to_numpy() for _, g in tf.groupby("episode")]
-    for arm, (key, _) in ARMS.items():
+    arms = {a: k for a, (k, _) in ARMS.items()}
+    hs = OUT / "tf_human_skip.parquet"
+    if hs.exists():
+        tf = pd.read_parquet(hs)
+        hum["skip_categorical"] = [g["e"].to_numpy() for _, g in tf.groupby("episode")]
+        arms.update({a: "skip_categorical" for a in GNN_ARMS})
+    for arm, key in arms.items():
         path = OUT / f"tf_{arm}.parquet"
         if not path.exists():
             continue
@@ -430,7 +506,16 @@ def analyse():
         arm = f"human ({key})"
         dec.append(dict(arm=arm, model=key, **decomposition(human, tf)))
         per_round[arm] = ccv.spread_by_round(human).join(ccv.residual_by_round(tf))
-    for arm, (key, name) in ARMS.items():
+    hs = OUT / "tf_human_skip.parquet"
+    if hs.exists():
+        tf = pd.read_parquet(hs)
+        dec.append(
+            dict(arm="human (skip recomputed)", model="skip_categorical",
+                 **decomposition(human, tf))
+        )  # fmt: skip
+    arms = {a: (k, n) for a, (k, n) in ARMS.items()}
+    arms.update({a: ("skip_categorical", n) for a, n in GNN_ARMS.items()})
+    for arm, (key, name) in arms.items():
         p = OUT / f"tf_{arm}.parquet"
         if not p.exists():
             continue
@@ -453,7 +538,7 @@ def analyse():
                  "sd_group_mean", "sd_individual", "ratio",
                  "resid_corr_all_rounds"]  # fmt: skip
     head = pd.concat([PR186[head_cols], dec[head_cols]], ignore_index=True)
-    ref = {"skip_categorical": float(PR186.loc[0, "var_cond_mean"])}
+    ref = {"skip_categorical": float(PR186.loc[0, "var_cond_mean"])}  # 27.93
     for key in BUNDLES:
         row = dec.loc[dec["arm"] == f"human ({key})", "var_cond_mean"]
         ref[key] = float(row.iloc[0])
@@ -519,6 +604,7 @@ def plot(per_round, piv):
         "human (infl)": "#222222", "human (v2)": "#666666",
         "c_infl": "#1f77b4", "c_infl_rho0": "#aec7e8",
         "d_kexo": "#2ca02c", "d_kexo_rho0": "#98df8a",
+        "e_skip_kexo": "#d62728", "e_skip_kexo_rho0": "#ff9896",
     }  # fmt: skip
     panels = [
         ("sd_group_mean", "(i) SD of group-mean contribution"),
@@ -558,6 +644,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--teacher-force", action="store_true")
     ap.add_argument("--gain", action="store_true")
+    ap.add_argument("--gnn-tf", action="store_true")
     ap.add_argument("--gnn-gain", action="store_true")
     ap.add_argument("--analyse", action="store_true")
     a = ap.parse_args()
@@ -565,6 +652,8 @@ if __name__ == "__main__":
         teacher_force()
     if a.gain:
         gain_gaussian()
+    if a.gnn_tf:
+        gnn_teacher_force()
     if a.gnn_gain:
         gain_gnn()
     if a.analyse:
