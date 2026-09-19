@@ -125,6 +125,18 @@ def parse_agent_rounds(df, switch_every=None):
 
 MAX_CONTRIBUTION = 20  # the per-round endowment (reports/basics.md)
 
+# What the game charged, paid out and showed everyone when a player gave no
+# input: zero. Verified on the human data by the accounting identity
+# common_good == 1.6 * sum(contribution) - sum(punishment), which holds to
+# 1.4e-14 on all 516 group-rounds containing a timed-out player when that
+# player's contribution is counted as 0, and fails on every one of them
+# (mean |residual| 15.6) when it is counted as the imputed median of 9.
+# `default_values["contribution"]` is the right fill for an ABSENT cell and
+# for a target that must not be learned from; it is the wrong value to hand
+# a model as a FEATURE the real manager saw.
+# See notes/autoresearch_log/punisher-timeout-feature.md.
+MISSING_CONTRIBUTION = 0
+
 
 def shift(tensor, default):
     tensor = th.roll(tensor, 1, 2)
