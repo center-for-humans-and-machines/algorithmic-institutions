@@ -1,0 +1,58 @@
+# The ceiling multinomial punisher (multinomial_ceiling.yml: contribution,
+# contribution_max, prev_contribution, prev_punishment, round_number,
+# is_first, C = 1.0) with an explicit flag for whether the player gave input
+# this round. 558 of the punisher's training rows are timed-out players: the
+# game charged them 0 (verified by the accounting identity, see the log) and
+# the manager punished none of them, while players who chose 0 were punished
+# 43.5% of the time. With `contribution` alone the two populations are one
+# row set and the model averages them; the RL manager already observes
+# `contribution_valid` (configs/training/rl_manager/03_2g8a_sum.yml). The
+# grid carries the parent's set alongside the candidate so the CV comparison
+# is on the record; the artifact is the set carrying contribution_valid.
+# See notes/autoresearch_log/punisher-timeout-feature.md.
+#
+# Produces artifacts/baselines/punishment_multinomial_timeout.joblib:
+#   .venv/bin/python scripts/baselines/run_baseline_cv.py \
+#       configs/training/baselines/punishment/multinomial_timeout.yml
+#   .venv/bin/python scripts/baselines/inspect_best_model.py \
+#       data/baselines/punishment_cv_multinomial_timeout.csv \
+#       --config configs/training/baselines/punishment/multinomial_timeout.yml \
+#       --save-best --name punishment_multinomial_timeout.joblib
+# and the severity-copula-stamped copy (rho carried over unchanged from
+# punishment_multinomial_ceiling_severity_copula.joblib, the copula
+# parameters being frozen by protocol; the refit is printed for the record):
+#   .venv/bin/python scripts/baselines/punishment_copula_rho.py --roundtrip \
+#       --bundle artifacts/baselines/punishment_multinomial_timeout.joblib \
+#       --out artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib \
+#       --stamp-rho 0.4273
+data:
+  # TRAIN split only. Same locked split as contribution/switch (episode-level;
+  # the mask differs). Test fold lives in the _test sibling file and is NOT
+  # touched here. See split_baseline_holdout.py.
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: punishment
+  target_type: categorical
+  categorical_levels: 31        # punishment is an integer 0..30
+  mask: punishment_valid        # rounds where the manager gave input
+  exclude_flipped: true         # train file is already undoubled; no-op safety filter
+  switch_every: 4
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/punishment_cv_multinomial_timeout.csv
+
+setting:              # multinomial logistic; only C is valid here
+  C: 1.0
+
+blocks:
+  B1_self:                    # what was contributed, whether it was given at all, own lags
+    components: [contribution, contribution_max, contribution_valid, prev_contribution, prev_punishment]
+    sets:
+      - [contribution, contribution_max, prev_contribution, prev_punishment]
+      - [contribution, contribution_max, contribution_valid, prev_contribution, prev_punishment]
+
+  B7_structural:              # is_first: round 0's prev_* are imputed medians
+    components: [round_number, is_first]
+    sets: [[round_number, is_first]]
