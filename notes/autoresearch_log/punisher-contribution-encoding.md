@@ -26,6 +26,8 @@ Reference stack (`23_2g8a_self_gnn_contr_gnn_switch_ceiling`): `lin_multinomial_
 
 **Target rows:** RPA and RCC (gate 1: a band improvement on one of them). Watch rows: RCB (the row the parent's notes name as the slope's most plausible carrier), PA/PB/PC/PD (punishment marginals), and RCE (protected).
 
+**A note on the declaration that the reader should have up front.** RPA already sits at 0.6620 on the gated stack, which is the best band there is (<= 1). A band upgrade on RPA is therefore not available, and gate 1 can only be carried by RCC on this stack -- the same single-row bar the parent failed. RPA is kept as a declared target because it is the row the hypothesis speaks to most directly and its movement is the honest read on whether the mechanism changed at all, but it cannot decide the gate. This is stated before the results rather than after them.
+
 ### Hypothesis
 
 **The defect (established by the parent, not re-derived).** The parent fixed the punisher at the contribution ceiling: the punish rate at c_t = 20 went 0.122 -> 0.040 against the human 0.038 and the severity there 3.84 -> 8.02 against the human 7.00. It did not touch the other half of the same defect. The OLS weight of punishment on the current contribution is about -0.14 in every stack (frontier -0.143, ref_lin -0.120, ref_gnn -0.187) against the human -0.242, so the simulated manager's sensitivity to how much someone gave is roughly half a real manager's. The parent's own notes declare this a live, separately declarable defect.
@@ -61,8 +63,8 @@ Reference stack (`23_2g8a_self_gnn_contr_gnn_switch_ceiling`): `lin_multinomial_
 | 2 | Add the one-hot to the linear feature pool and the punishment legal set (`handcrafted_grid.py`), switch the GNN's `contribution` to `onehot` in the config, document it (`baseline_feature_defs.md`), tests on both paths. | done |
 | 3 | Retrain the linear punisher locally (`multinomial_contr_bins.yml`, 4-fold CV, seed 38381); report CV against the parent's 1.3446. | done |
 | 4 | Stamp the severity copula carrying rho = 0.4273 over unchanged; report the refit for the record, do not stamp it. | done |
-| 5 | Retrain the GNN punisher on Raven (`rnn_edge_50ep_doubled_contr_bins.yml`); report CV against the parent's 1.1743. | |
-| 6 | Teacher-forced mechanism check of both new punishers against the parent's artifacts and the human row. | |
+| 5 | Retrain the GNN punisher on Raven (`rnn_edge_50ep_doubled_contr_bins.yml`); report CV against the parent's 1.1743. | done |
+| 6 | Teacher-forced mechanism check of both new punishers against the parent's artifacts and the human row. | done |
 | 7 | Re-run the two stacks, fetch, evaluate all 22 rows (`PYTHONPATH=<worktree>/src`), self-play mechanism table. | |
 | 8 | Judge under the gates with RCE protected (amended magnitude clause); log; PR against the parent. | |
 
@@ -126,6 +128,32 @@ Artifact `artifacts/baselines/punishment_multinomial_contr_bins.joblib`, feature
 `scripts/baselines/punishment_copula_rho.py --roundtrip --stamp-rho 0.4273` writes `artifacts/baselines/punishment_multinomial_contr_bins_severity_copula.joblib`: the plain bundle's weights bit-identical after reload (the script's own `predict_proba` comparison over the first 100 rows) plus the `copula_*` keys, carrying **rho = 0.4273 unchanged** from the parent. The protocol freezes the copula parameters per model family when only the marginal is retrained, so the carried value is the stamped one.
 
 The refit on the new marginal is recorded and deliberately **not** stamped: rho **0.4623**, 95% CI [0.3909, 0.5522], out-of-sample MLE on the test split 0.3643. That is higher than the parent's refit of 0.4300 [0.357, 0.521] and than the stamped 0.4273, though 0.4273 sits inside the new interval. A marginal that over-fits its contribution levels leaves more of the within-round co-movement unexplained for the copula to absorb, which is the direction the refit moved; it is one more reading of the same over-fitting and not an independent finding. As on the parent branch the stamped bundle carries NaN for `copula_rho_se` and the interval, because those describe the refit and the refit is not what was stamped.
+
+### Step 5: the GNN punisher retrained (measured)
+
+`configs/training/artificial_humans/punishment/rnn_edge_50ep_doubled_contr_bins.yml` on Raven, job **30318234**, 7 min 38 s on one A100 for the 5-fold CV plus the full fit (the parent's was 6 min 54 s; the extra time is the wider input layer, 24 encoded dimensions against 5). Final-epoch CV log loss **1.1940** against the parent's **1.1743**; best-epoch 1.1936 +- 0.1112 over folds against 1.1742 +- 0.1126; globally best epoch 1240 against 1249.
+
+The GNN loses **+0.0197** of log loss where the linear lost +0.0711, and the ratio is the point. The multinomial is linear in `contribution` on every class logit and gains 651 free coefficients from the one-hot; the GNN's MLP head could already bend its numeric input into any shape it wanted, so replacing that input with 21 units adds parameters to a model that was not short of expressiveness and costs a quarter as much. Both move the same way, which is the reading that matters: on this data, more freedom in c_t is a cost, not a gain, in both families.
+
+Artifact `artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_contr_bins/`. `punishment_baseline.py`'s `GNN_REF` stays at 1.1756, as on the parent branch.
+
+### Step 6: the mechanism, teacher-forced (measured)
+
+`scripts/data_analysis/punisher_mechanism_check.py` replaying the 50 single-copy human games, 8,914 valid rows, no simulation; each model sees the human history and never its own draws, under its own stored `default_values`. The linears run locally, the GNNs on Raven's login node. Tables: `mechanism_teacher_forced_linear.csv` and `mechanism_teacher_forced_gnn.csv` in `plots/data_analysis/evaluation/punisher_contribution_encoding/`.
+
+| punisher | P(p>0 \| c_t=20) | P(p>0 \| c_t<=4) | (c_t=20, c_{t-1}<=4) / (c_t<=4, c_{t-1}=20) | E[p \| p>0] 0-4 / 5-9 / 10-14 / 15-19 / 20 | OLS c_t / c_{t-1} | NLL |
+|---|---|---|---|---|---|---|
+| human | 0.038 | 0.467 | 0.179 / 0.571 | 7.99 / 4.98 / 4.27 / 3.87 / 7.00 | **-0.242** / +0.067 | -- |
+| lin ceiling (parent) | 0.053 | 0.431 | 0.224 / 0.635 | 7.43 / 5.46 / 4.44 / 3.76 / 7.47 | **-0.125** / -0.031 | 1.271 |
+| lin onehot | 0.053 | 0.420 | 0.218 / 0.588 | 7.63 / 5.22 / 4.26 / 4.04 / 7.52 | **-0.133** / -0.026 | 1.238 |
+| gnn ceiling (parent) | 0.063 | 0.424 | 0.245 / 0.468 | 7.37 / 5.44 / 4.70 / 4.49 / 6.00 | **-0.144** / -0.010 | 1.132 |
+| gnn onehot | 0.058 | 0.431 | 0.238 / 0.503 | 7.55 / 5.30 / 4.65 / 4.47 / 6.66 | **-0.159** / +0.001 | 1.117 |
+
+**The ceiling the parent won survives in both families**, which was the one thing the replacement of `contribution_max` by the one-hot's level-20 column had to preserve: the linear punisher is unchanged at 0.053 with severity 7.47 -> 7.52, and the GNN improves slightly, 0.063 -> 0.058 with severity 6.00 -> 6.66 against the human 7.00. The design reasoning about the indicator being subsumed was correct.
+
+**The slope moves by 0.008 and 0.015.** -0.125 -> -0.133 on the linear punisher and -0.144 -> -0.159 on the GNN, against the human -0.242: 7% and 15% of each model's own gap. The prediction of the human-data check (-0.1255 -> -0.1329 for the linear, to four decimals) is reproduced by the shipped artifact.
+
+One number needs reading carefully so it is not mistaken for a win. The teacher-forced **NLL improves in both** (1.271 -> 1.238, 1.132 -> 1.117) while the cross-validated log loss got clearly worse (1.3446 -> 1.4157, 1.1743 -> 1.1940). There is no contradiction: 40 of the 50 replayed episodes are in the training split, so this NLL is largely in-sample, and a model with 651 extra coefficients fits the rows it was trained on better by construction. The CV numbers are the honest ones and they point the other way. A successor reading only the mechanism table would draw the wrong conclusion.
 
 ## 4. Notes
 
