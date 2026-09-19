@@ -58,9 +58,9 @@ Reference stack (`23_2g8a_self_gnn_contr_gnn_switch_ceiling`): `lin_multinomial_
 | # | step | status |
 |---|---|---|
 | 1 | Human-data check before any cluster time: fit the 31-class punishment model with the parent's encoding, with the one-hot and with a spline basis; report cross-validated log loss and the implied OLS slope on c_t against the human -0.242. | done -- **refuted** |
-| 2 | Add the one-hot to the linear feature pool and the punishment legal set (`handcrafted_grid.py`), switch the GNN's `contribution` to `onehot` in the config, document it (`baseline_feature_defs.md`), tests on both paths. | |
-| 3 | Retrain the linear punisher locally (`multinomial_contr_bins.yml`, 4-fold CV, seed 38381); report CV against the parent's 1.3446. | |
-| 4 | Stamp the severity copula carrying rho = 0.4273 over unchanged; report the refit for the record, do not stamp it. | |
+| 2 | Add the one-hot to the linear feature pool and the punishment legal set (`handcrafted_grid.py`), switch the GNN's `contribution` to `onehot` in the config, document it (`baseline_feature_defs.md`), tests on both paths. | done |
+| 3 | Retrain the linear punisher locally (`multinomial_contr_bins.yml`, 4-fold CV, seed 38381); report CV against the parent's 1.3446. | done |
+| 4 | Stamp the severity copula carrying rho = 0.4273 over unchanged; report the refit for the record, do not stamp it. | done |
 | 5 | Retrain the GNN punisher on Raven (`rnn_edge_50ep_doubled_contr_bins.yml`); report CV against the parent's 1.1743. | |
 | 6 | Teacher-forced mechanism check of both new punishers against the parent's artifacts and the human row. | |
 | 7 | Re-run the two stacks, fetch, evaluate all 22 rows (`PYTHONPATH=<worktree>/src`), self-play mechanism table. | |
@@ -108,6 +108,24 @@ Two things that are not the encoding account for almost the whole gap. **The tra
 (The table's -0.1234 is the artifact's -0.1255 rebuilt from the full 50-game file restricted to the train episodes rather than from the train CSV, which is why its row count is 7,377 and not 7,345; the 32-row difference comes from `create_torch_data`'s per-file defaults and does not move the number materially.)
 
 **Decision.** The declared hypothesis is refuted on the human data. Per section 9 the experiment is still run to its verdict -- a refuted hypothesis with a measured end-to-end failure is what stops the next agent retrying it -- and the one-hot is kept as the candidate rather than swapping in the least-bad spline, because a fully saturated encoding of c_t is the decisive test: if 21 free levels do not steepen the response, no encoding of c_t will. The indicator is replaced, not kept, as declared.
+
+### Step 2: the change on both paths
+
+`CONTRIBUTION_ONEHOT` (21 names, `contribution_is_00 ... contribution_is_20`) joins the linear feature pool in `build_feature_pool`, `CURRENT_VALUED` and `PUNISHMENT_LEGAL_CURRENT`, so the columns are legal for the punishment target and rejected with the same hard error as `contribution` for the contribution target. The GNN needed no code change at all: `generic/encoder.py`'s `IntEncoder` has supported `encoding: onehot` since before this campaign, so the config switches `contribution` from `numeric` to `onehot` and drops the `contribution_max` bool. Four tests pin it, two of them new: the linear adapter's design matrix is `np.eye(21)[c_t]` row for row, the GNN's encoded node feature is the same matrix, and its level-20 column equals the parent's `contribution_max` tensor exactly. 132 tests pass on Raven (`remote_test.sh --test-only` against the isolated dir, with `plots/simulation/22_2g8a_linear_self_ridge_contr/per_round.parquet` shipped separately because the sync excludes `plots/`).
+
+### Step 3: the linear punisher retrained (measured)
+
+`configs/training/baselines/punishment/multinomial_contr_bins.yml` run as its header says: 4-fold CV on the locked train split, seed 38381, the grid's folds, C = 1.0. The rank-1 row is the declared one-hot set (the B1 block carries it alone, so the grid cannot re-select the parent's encoding and save the wrong artifact), with CV log loss **1.4157** against the parent's **1.3446**, and locked test **1.2544** against **1.2234**. Both numbers reproduce step 1 to four decimals.
+
+The size of the loss is worth stating plainly. The constant floor -- the marginal punishment distribution with no features at all -- is **1.4355** on the same folds. The parent's six features beat that floor by 0.091; the one-hot's twenty-five beat it by 0.020. Twenty-one dummies times thirty-one classes is 651 coefficients fitted on about 5,500 rows per fold at C = 1.0, and the model spends nearly all of its advantage over the marginal on them. Train log loss goes the other way (1.2043 against the parent's, so the extra parameters do fit the training rows), which is what overfitting looks like from both sides.
+
+Artifact `artifacts/baselines/punishment_multinomial_contr_bins.joblib`, features `contribution_is_00 ... contribution_is_20, prev_contribution, prev_punishment, round_number, is_first`; CV table `data/baselines/punishment_cv_multinomial_contr_bins.csv`.
+
+### Step 4: the severity copula, stamped rather than refit (measured)
+
+`scripts/baselines/punishment_copula_rho.py --roundtrip --stamp-rho 0.4273` writes `artifacts/baselines/punishment_multinomial_contr_bins_severity_copula.joblib`: the plain bundle's weights bit-identical after reload (the script's own `predict_proba` comparison over the first 100 rows) plus the `copula_*` keys, carrying **rho = 0.4273 unchanged** from the parent. The protocol freezes the copula parameters per model family when only the marginal is retrained, so the carried value is the stamped one.
+
+The refit on the new marginal is recorded and deliberately **not** stamped: rho **0.4623**, 95% CI [0.3909, 0.5522], out-of-sample MLE on the test split 0.3643. That is higher than the parent's refit of 0.4300 [0.357, 0.521] and than the stamped 0.4273, though 0.4273 sits inside the new interval. A marginal that over-fits its contribution levels leaves more of the within-round co-movement unexplained for the copula to absorb, which is the direction the refit moved; it is one more reading of the same over-fitting and not an independent finding. As on the parent branch the stamped bundle carries NaN for `copula_rho_se` and the interval, because those describe the refit and the refit is not what was stamped.
 
 ## 4. Notes
 
