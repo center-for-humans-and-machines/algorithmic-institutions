@@ -18,8 +18,15 @@ Writes plots/data_analysis/evaluation/seed_spread_noise_floor/:
   slopes per arm, each with its across-arm sd and range;
 - levels.csv: the simulated contribution level and the share of players
   giving nothing per arm, against the human values (PR #194's open question);
+- ceiling_stability.csv: per row, how many of the six arms score at or under
+  the noise ceiling -- the rows <= 1 count is its column sum;
 - verdicts.csv: the movements PRs #190 / #192 / #193 / #194 turned on, each
-  divided by the seed sd of the same quantity.
+  divided by the seed sd of the same quantity, and whether the quoted "after"
+  value falls inside the six arms' own range;
+- arm_ranks.csv: where each arm sits among the six on the headline
+  aggregates -- the check on whether the baseline the recent PRs compared
+  against is a typical draw or a favourable one;
+- per_row_spread.jpg: the same per-row picture, band boundaries marked.
 
 Usage (repo root):
     PYTHONPATH=src python scripts/data_analysis/seed_spread_noise_floor.py
@@ -28,8 +35,12 @@ Usage (repo root):
 import os
 import sys
 
+import matplotlib
 import numpy as np
 import pandas as pd
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(__file__))
 from curpun_rebaseline import (  # noqa: E402
@@ -83,6 +94,11 @@ VERDICTS = [
     ("#194", "RCE 0-4 slope (clearest erosion)", "slope:0-4", 0.087, 0.048),
     ("#194", "RCE 5-9 slope", "slope:5-9", 0.038, 0.014),
     ("#194", "RCE 15-19 slope", "slope:15-19", -0.130, -0.037),
+    ("#194", "CA (collateral, left band <= 1)", "row:CA", 0.856, 1.205),
+    ("#194", "CB (collateral, left band <= 1)", "row:CB", 0.794, 1.148),
+    ("#194", "CC (collateral, left band <= 1)", "row:CC", 0.896, 1.075),
+    ("#194", "CD (collateral, left band <= 1)", "row:CD", 0.795, 1.174),
+    ("#194", "PD (collateral, left band <= 1)", "row:PD", 0.7598, 1.0933),
     ("#194", "22-row mean", "mean", 1.0331, 1.0983),
     ("#194", "mean contribution level", "level:mean_c", 9.324, 10.355),
     ("#194", "share giving nothing", "level:share_c0", 0.082, 0.054),
@@ -161,6 +177,76 @@ def load_rce_slopes():
     )
 
 
+def ceiling_table(scores):
+    """Per row, how many of the six arms land at or under the noise ceiling.
+    The rows <= 1 count that several verdicts quoted is this column's sum, so
+    its instability is the sum of the per-row flips listed here."""
+    n = (scores[ARM_NAMES] <= 1).sum(axis=1)
+    out = pd.DataFrame(
+        {
+            "arms_le1": n,
+            "status": np.where(
+                n == len(ARM_NAMES),
+                "always <= 1",
+                np.where(n == 0, "never <= 1", "flips on the seed alone"),
+            ),
+        }
+    )
+    out.index.name = "row"
+    return out
+
+
+def arm_ranks(scores, agg_df, levels):
+    """Where each arm sits among the six. A candidate is judged against one
+    fixed baseline arm, so whether that arm is typical or extreme decides how
+    much of any verdict is the baseline's own draw."""
+    sc = scores[ARM_NAMES]
+    out = pd.DataFrame(
+        {
+            "rows_best": (sc.rank(axis=1) == 1).sum(),
+            "rows_worst": (sc.rank(axis=1) == len(ARM_NAMES)).sum(),
+            "mean_22": agg_df.loc["mean_22", ARM_NAMES],
+            "mean_22_rank": agg_df.loc["mean_22", ARM_NAMES].rank(),
+            "rows_le1": agg_df.loc["rows_le1", ARM_NAMES],
+            "rows_le1_rank": agg_df.loc["rows_le1", ARM_NAMES].rank(ascending=False),
+            "mean_c_err": (levels["mean_c"] - HUMAN["mean_c"]).abs(),
+        }
+    )
+    out.index.name = "arm"
+    return out
+
+
+def spread_figure(rows, path):
+    """Six arms per row, with the band boundaries the rows are judged on."""
+    order = list(rows.index)[::-1]
+    fig, ax = plt.subplots(figsize=(8.5, 8.0))
+    for b in BOUNDS[:2]:
+        ax.axvline(b, color="0.35", lw=1, ls="--", zorder=0)
+    for i, m in enumerate(order):
+        r = rows.loc[m]
+        c = "tab:blue" if r["gateable_on_one_run"] else "tab:red"
+        ax.plot([r["min"], r["max"]], [i, i], color=c, lw=2, alpha=0.45, zorder=1)
+        ax.scatter(
+            r[ARM_NAMES].astype(float).values,
+            [i] * len(ARM_NAMES),
+            s=18,
+            color=c,
+            zorder=2,
+        )
+        ax.scatter([r["mean"]], [i], marker="|", s=240, color="black", zorder=3)
+    ax.set_yticks(range(len(order)))
+    ax.set_yticklabels(order)
+    ax.set_ylim(-0.7, len(order) - 0.3)
+    ax.set_xlabel("score (1.0 = human-vs-human noise ceiling)")
+    ax.set_title(
+        "Six same-architecture contributors, everything else identical\n"
+        "red: a band boundary lies inside one seed sd of the six-arm mean"
+    )
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+
+
 def per_row_table(scores):
     out = scores.copy()
     st = scores[ARM_NAMES].apply(lambda r: pd.Series(spread(r.values)), axis=1)
@@ -189,6 +275,9 @@ def main():
     scores = load_scores()
     rows = per_row_table(scores)
     rows.to_csv(os.path.join(OUT_DIR, "per_row.csv"))
+    ceiling = ceiling_table(scores)
+    ceiling.to_csv(os.path.join(OUT_DIR, "ceiling_stability.csv"))
+    spread_figure(rows, os.path.join(OUT_DIR, "per_row_spread.jpg"))
 
     agg = {
         "mean_22": {a: scores[a].mean() for a in ARM_NAMES},
@@ -216,6 +305,8 @@ def main():
     ses.to_csv(os.path.join(OUT_DIR, "rce_band_se.csv"))
 
     levels = load_levels()
+    ranks = arm_ranks(scores, agg_df, levels)
+    ranks.to_csv(os.path.join(OUT_DIR, "arm_ranks.csv"))
     lv = levels.copy()
     for k, v in HUMAN.items():
         lv.loc["human", k] = v
@@ -225,19 +316,20 @@ def main():
     lv.to_csv(os.path.join(OUT_DIR, "levels.csv"))
     lst.to_csv(os.path.join(OUT_DIR, "levels_spread.csv"))
 
-    sd_of = {
-        "mean": agg_df.loc["mean_22", "sd"],
-        "rows_le1": agg_df.loc["rows_le1", "sd"],
+    stat_of = {
+        "mean": agg_df.loc["mean_22"],
+        "rows_le1": agg_df.loc["rows_le1"],
     }
     for b in BANDS:
-        sd_of[f"slope:{b}"] = agg_df.loc[f"rce_slope_{b}", "sd"]
+        stat_of[f"slope:{b}"] = agg_df.loc[f"rce_slope_{b}"]
     for m in METRIC_ORDER:
-        sd_of[f"row:{m}"] = rows.loc[m, "sd"]
+        stat_of[f"row:{m}"] = rows.loc[m]
     for k in ["mean_c", "share_c0"]:
-        sd_of[f"level:{k}"] = lst.loc[k, "sd"]
+        stat_of[f"level:{k}"] = lst.loc[k]
     vd = []
     for pr, what, kind, before, after in VERDICTS:
-        sd = sd_of[kind]
+        st = stat_of[kind]
+        sd = st["sd"]
         vd.append(
             dict(
                 pr=pr,
@@ -248,6 +340,9 @@ def main():
                 seed_sd=sd,
                 in_seed_sd=abs(after - before) / sd,
                 inside_floor=abs(after - before) <= sd,
+                arm_min=st["min"],
+                arm_max=st["max"],
+                after_in_arm_range=bool(st["min"] <= after <= st["max"]),
             )
         )
     vdf = pd.DataFrame(vd)
@@ -266,8 +361,13 @@ def main():
         "nearest band boundary (1 / 2 / 5) in units of the seed sd. Below 1 the "
         "row's band is not decided by the model.\n",
         md_table(show, "{:.4f}") + "\n",
+        "## Rows at or under the ceiling\n",
+        "The rows <= 1 count is the sum of `arms_le1` over the 22 rows.\n",
+        md_table(ceiling, "{:.4f}") + "\n",
         "## Aggregates\n",
         md_table(agg_df, "{:.4f}") + "\n",
+        "## Where each arm sits among the six\n",
+        md_table(ranks, "{:.4f}") + "\n",
         "## Contribution level (PR #194's open question)\n",
         md_table(lv, "{:.4f}") + "\n",
         md_table(lst, "{:.4f}") + "\n",
@@ -283,6 +383,10 @@ def main():
     print(agg_df.to_string())
     print()
     print(lv.to_string())
+    print()
+    print(ceiling["status"].value_counts().to_string())
+    print()
+    print(ranks.to_string())
     print()
     print(vdf.to_string())
     print(f"\n-> {OUT_DIR}/")
