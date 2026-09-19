@@ -102,12 +102,24 @@ def spread(values):
 
 
 def load_scores():
-    cols = {}
+    """The 22 scores per arm, with the noise-ceiling denominators asserted
+    identical across arms -- they are a human-vs-human quantity and must not
+    depend on which contributor ran, or the six scores are not comparable."""
+    cols, denom = {}, None
     for name, d in ARMS:
-        s = read_scores(os.path.join(SIM, d, "evaluation", "scores.csv"), PAIRING)
+        path = os.path.join(SIM, d, "evaluation", "scores.csv")
+        s = read_scores(path, PAIRING)
         assert s is not None, f"{name}: no scores at {d}"
         assert s.notna().all(), f"{name}: missing rows {s[s.isna()].index.tolist()}"
         cols[name] = s
+        raw = pd.read_csv(path)
+        raw = raw[raw["run"] == RUN + PAIRING].set_index("metric")
+        dn = raw["denominator"].reindex(METRIC_ORDER)
+        if denom is None:
+            denom = dn
+        else:
+            off = (dn - denom).abs().idxmax()
+            assert np.allclose(dn, denom), f"{name}: denominators differ, worst {off}"
     return pd.DataFrame(cols).reindex(METRIC_ORDER)
 
 
