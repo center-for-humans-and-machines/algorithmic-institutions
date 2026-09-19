@@ -20,6 +20,13 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16GB
 #
+# The estimator is pure CPU (the model is loaded with device="cpu"), but the
+# mpib_cpu QOS group limit was saturated for the whole session, so this runs
+# on the gpu partition, where the account had capacity. The GPU is unused;
+# only the allocation's 4 CPUs matter, exactly as on the `small` partition.
+#SBATCH --constraint="gpu"
+#SBATCH --gres=gpu:a100:1
+#
 #SBATCH --time=02:00:00
 
 set -e
