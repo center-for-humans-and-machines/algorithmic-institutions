@@ -18,6 +18,12 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=8GB
 #
+# Pure CPU work, but the mpib_cpu QOS group limit was saturated for the whole
+# session, so this runs on the gpu partition where the account had capacity.
+# The GPU is unused.
+#SBATCH --constraint="gpu"
+#SBATCH --gres=gpu:a100:1
+#
 #SBATCH --time=00:20:00
 
 set -e
