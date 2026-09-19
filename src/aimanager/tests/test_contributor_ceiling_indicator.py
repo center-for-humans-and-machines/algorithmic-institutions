@@ -100,8 +100,11 @@ def test_masking_the_contribution_target_leaves_the_indicator_intact():
     )
     assert th.equal(masked["prev_contribution_max"], before)
     assert th.equal(masked["prev_contribution"], data["prev_contribution"])
-    # the target itself did get masked, so the check above is not vacuous
-    assert not th.equal(masked["contribution"], data["contribution"])
+    # the target did get masked (into `contribution_masked`, the tensor the
+    # autoregressive head reads), so the check above is not vacuous -- and
+    # there is no `prev_contribution_masked` for the indicator to shadow
+    assert not th.equal(masked["contribution_masked"], data["contribution"])
+    assert "prev_contribution_masked" not in masked
 
 
 class _ScriptedHuman:
