@@ -22,7 +22,11 @@ Two stages, because the trunk unpickles torch_geometric modules:
               scripts/data_analysis/copula_recal_closed_loop_variance.py \\
               --teacher-force              # writes tf_<arm>.parquet
   local:  python scripts/data_analysis/copula_recal_closed_loop_variance.py \\
-              --analyse [--scores]         # tables + figures
+              --analyse                    # tables + figures
+
+`--scores` is inherited from the port and is NOT used here: it wants a
+`scores.csv` for every arm, and arm C (copula off) is a diagnostic that is
+deliberately never scored. The 22 rows come from `copula_recal_table.py`.
 
 Outputs under
 plots/data_analysis/evaluation/contribution_copula_recalibrated/copula_closed_loop/.
