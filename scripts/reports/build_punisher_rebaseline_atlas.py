@@ -1,12 +1,72 @@
-import base64, csv, json, html, math, os
+import ast, base64, csv, json, html, math, os, re, subprocess
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
+REPO = Path("/Users/brinkmann/repros/algorithmic-institutions")
+CACHE = HERE / "data"
 D = Path("/Users/brinkmann/repros/algorithmic-institutions/.claude/worktrees/agent-a80d622b939db4c1c")
 R = Path("/Users/brinkmann/repros/algorithmic-institutions/.claude/worktrees/agent-a91a63a720dcceb19")
-OUT = Path("/private/tmp/claude-502/-Users-brinkmann-repros-algorithmic-institutions/0d1455de-e561-4680-a5f1-1b8fb90f1f18/scratchpad/atlas/punisher_rebaseline_atlas.html")
+OUT = HERE / "punisher_rebaseline_atlas.html"
 PC = D / "plots/data_analysis/evaluation/punisher_current_contr"
 RA = R / "plots/data_analysis/evaluation/rcb_alternative"
 PR = "https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/"
+
+# ---------- committed files on other branches (LFS-smudged, cached beside this script) ----------
+def gitfile(branch, path):
+    dst = CACHE / branch.replace("/", "-") / Path(path).name
+    if not dst.exists():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        raw = subprocess.run(["git", "-C", str(REPO), "show", f"origin/{branch}:{path}"],
+                             capture_output=True, check=True).stdout
+        if raw.startswith(b"version https://git-lfs"):
+            raw = subprocess.run(["git", "-C", str(REPO), "lfs", "smudge"], input=raw,
+                                 capture_output=True, check=True).stdout
+        dst.write_bytes(raw)
+    return dst
+
+def drows(branch, path):
+    with open(gitfile(branch, path)) as f:
+        return list(csv.DictReader(f))
+
+def dkey(branch, path, col):
+    return {r[col]: r for r in drows(branch, path)}
+
+def djson(branch, path):
+    return json.loads(gitfile(branch, path).read_text())
+
+def md_table(branch, path, marker):
+    """Rows of the first markdown table whose header line contains `marker`."""
+    lines = gitfile(branch, path).read_text().splitlines()
+    i = next(k for k, l in enumerate(lines) if marker in l and l.startswith("|"))
+    out = []
+    for l in lines[i + 2:]:
+        if not l.startswith("|"):
+            break
+        out.append([c.strip().strip("*").strip() for c in l.strip().strip("|").split("|")])
+    return {r[0]: r for r in out}
+
+def md_tables(branch, path, marker):
+    """Every markdown table in `path` whose header line contains `marker`, keyed by first cell."""
+    lines = gitfile(branch, path).read_text().splitlines()
+    out = []
+    for i, l in enumerate(lines):
+        if not (l.startswith("|") and marker in l):
+            continue
+        rows = {}
+        for l2 in lines[i + 2:]:
+            if not l2.startswith("|"):
+                break
+            cells = [c.strip().strip("*").strip() for c in l2.strip().strip("|").split("|")]
+            rows[cells[0]] = cells
+        out.append(rows)
+    return out
+
+def lead(cell):
+    """The leading signed number of a cell like '+0.013 +- 0.019 (n 1375)'."""
+    return float(re.match(r"\s*([+-]?[0-9.]+)", cell).group(1))
+
+def F(v):
+    return float(v)
 
 def esc(s): return html.escape(str(s), quote=True)
 def b64(p):
@@ -44,7 +104,6 @@ bands = {}
 with open(PC / "rce_bands.csv") as f:
     for row in csv.DictReader(f):
         bands[(row["case"], row["stage"])] = row
-HUMAN_SLOPES = [0.140, 0.104, -0.077, -0.161]
 BANDS = ["0-4","5-9","10-14","15-19"]
 
 mech = {}
@@ -56,6 +115,69 @@ cmp_rows = []
 with open(RA / "comparison_table.csv") as f:
     for row in csv.DictReader(f):
         cmp_rows.append(row)
+
+# ---------- the seven pull requests that followed the re-baseline ----------
+B_CL, B_MS, B_SE = "auto/copula-closed-loop-variance", "auto/copula-missing-state", "auto/copula-seed-ensemble"
+B_HS, B_CE, B_SK = "auto/head-state-spread-diagnostic", "auto/punisher-ceiling-fix", "auto/switch-kexo-port"
+P_CL = "plots/data_analysis/evaluation/copula_closed_loop/"
+P_MS = "plots/data_analysis/evaluation/copula_missing_state/"
+P_SE = "plots/data_analysis/copula_seed_ensemble/"
+P_HS = "plots/data_analysis/evaluation/head_state_spread/"
+P_CE = "plots/data_analysis/evaluation/punisher_ceiling_fix/"
+P_SK = "plots/data_analysis/evaluation/switch_kexo_port/"
+
+# PR #186: the three-arm ablation of the shared draw
+cl_dec = dkey(B_CL, P_CL + "cg_decomposition.csv", "arm")
+cl_blk = {(r["arm"], r["rounds"]): r for r in drows(B_CL, P_CL + "round_blocks.csv")}
+cl_sc = dkey(B_CL, P_CL + "scores_22.csv", "row")
+cl_rce = dkey(B_CL, P_CL + "rce_bands.csv", "arm")
+with open(gitfile(B_CL, P_CL + "latent_regression.csv")) as f:
+    cl_lat = dict(csv.reader(f))
+
+# PR #187: what the shared error is made of, on the human data
+ms_base = dkey(B_MS, P_MS + "baseline.csv", "quantity")
+ms_joint = dkey(B_MS, P_MS + "joint_model.csv", "scale")
+ms_cand = dkey(B_MS, P_MS + "candidates.csv", "candidate")
+ms_ref = dkey(B_MS, P_MS + "reference_sets.csv", "set")
+ms_pers = dkey(B_MS, P_MS + "persistence_boot.csv", "stage")
+ms_fwd = drows(B_MS, P_MS + "forward_selection.csv")
+
+# PR #188: five copies of the model, trained with different random seeds
+se_sum = djson(B_SE, P_SE + "train40_summary.json")
+se_dis = dkey(B_SE, P_SE + "train40_disagreement.csv", "quantity")
+se_sim = {r["metric"]: F(r["score"]) for r in drows(
+    B_SE, "plots/simulation/23_2g8a_contr_stimulus_skip_seed_ensemble_self_gnncopar1_contr_gnn_switch_curpun/evaluation/scores.csv")}
+se_mean = sum(se_sim.values()) / len(se_sim)
+se_le1 = sum(1 for v in se_sim.values() if v <= 1)
+
+# PR #191 (step 1): emission head and the spread of the states the players reach
+hs_head = dkey(B_HS, P_HS + "headline.csv", "arm")
+hs_boot = dkey(B_HS, P_HS + "retention_bootstrap.csv", "arm")
+hs_blk = {(r["arm"], r["rounds"]): r for r in drows(B_HS, P_HS + "round_blocks.csv")}
+hs_gain = {(r["model"], r["delta"]): r for r in drows(B_HS, P_HS + "gain_curves.csv") if r["set"] == "common_6_14"}
+hs_recon = md_tables(B_HS, "notes/autoresearch_log/head-state-spread-diagnostic.md", "mean predictive variance")[0]
+GAIN_D = ["-6", "-4", "-2", "2", "4", "6"]
+
+# PR #192 (step 2): the manager at the contribution ceiling
+ce_ba = dkey(B_CE, P_CE + "before_after.csv", "metric")
+ce_mech = dkey(B_CE, P_CE + "mechanism_selfplay.csv", "")
+ce_tf = dkey(B_CE, P_CE + "mechanism_teacher_forced.csv", "")
+ce_logit = dkey(B_CE, P_CE + "human_ceiling_logit.csv", "")
+ce_cv = drows(B_CE, "data/baselines/punishment_cv_multinomial_ceiling.csv")[0]
+ce_cv0 = drows(B_CE, "data/baselines/punishment_cv_multinomial_current_contr.csv")[0]
+ce_rcc = md_table(B_CE, "notes/autoresearch_log/punisher-ceiling-fix.md", "dc, punished")
+
+def ce_mean(col): return sum(F(ce_ba[r][col]) for r in ROWS) / len(ROWS)
+def ce_le1(col): return sum(1 for r in ROWS if F(ce_ba[r][col]) <= 1)
+
+ce_sl = md_tables(B_CE, P_CE + "before_after.md", "| RCE slopes |")   # frontier, ref_lin, ref_gnn
+ce_se = [ast.literal_eval(m) for m in re.findall(r"protected-row checks: (\{.*\})", gitfile(B_CE, P_CE + "before_after.md").read_text())]
+
+# PR #190 (step 3): the other lineage's group-switching component
+sk_cmp = dkey(B_SK, P_SK + "compare.csv", "metric")
+sk_rce = dkey(B_SK, P_SK + "rce_bands.csv", "stage")
+
+HUMAN_SLOPES = [F(sk_rce["human"]["slope_" + b]) for b in BANDS]
 
 def band_of(v):
     if v is None or (isinstance(v,float) and math.isnan(v)): return "na"
@@ -69,6 +191,19 @@ def fmt(v, d=2, sign=False):
     if v is None: return "&ndash;"
     s = f"{v:+.{d}f}" if sign else f"{v:.{d}f}"
     return s.replace("-", "&minus;")
+
+NUM = ' class="num"'
+def tbl(heads, rows, cls=""):
+    th = "".join("<th%s>%s</th>" % (NUM if h.startswith("~") else "", h.lstrip("~")) for h in heads)
+    body = []
+    for r in rows:
+        tds = "".join("<td%s>%s</td>" % (NUM if h.startswith("~") else "", c) for h, c in zip(heads, r))
+        body.append("<tr>%s</tr>" % tds)
+    return '<div class="tablewrap"><table class="%s"><thead><tr>%s</tr></thead><tbody>%s</tbody></table></div>' % (cls, th, "".join(body))
+
+def ci(lo, hi, d=3):
+    sg = F(lo) < 0 or F(hi) < 0
+    return f"[{fmt(F(lo), d, sign=sg)}, {fmt(F(hi), d, sign=sg)}]"
 
 IMG = {
     "rcb_vs_rce": b64(RA / "RCB_vs_RCE_scores.jpg"),
@@ -132,6 +267,58 @@ def scatter_svg():
     out.append('</svg>')
     return "\n".join(out)
 
+# ---------- SVG: grouped bars, shared helper ----------
+def grouped_bars(groups, series, ymin, ymax, ticks, label, tickfmt="{:.0f}", W=640, H=270,
+                 labels_last=False, base=None, vfmt="{:.2f}"):
+    """groups: [(group label, [v1, v2, ...])]; series: [(name, css class)].
+    Bars run from `base` (default ymin, i.e. a true zero baseline) to the value."""
+    if base is None: base = ymin
+    L, Rm, T, B = 40, 12, 22, 40
+    def y(v): return T + (ymax - v) / (ymax - ymin) * (H - T - B)
+    gw = (W - L - Rm) / len(groups)
+    n = len(series)
+    bw = (gw * 0.80) / n - 2
+    out = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="{esc(label)}">']
+    for tv in ticks:
+        yy = y(tv)
+        out.append(f'<line x1="{L}" x2="{W-Rm}" y1="{yy:.1f}" y2="{yy:.1f}" class="grid{" zero" if tv == base else ""}"/>')
+        out.append(f'<text x="{L-6}" y="{yy+4:.1f}" class="tick" text-anchor="end">{tickfmt.format(tv)}</text>')
+    for i, (glab, vals) in enumerate(groups):
+        x0 = L + i * gw + gw * 0.10
+        for j, v in enumerate(vals):
+            if v is None: continue
+            x = x0 + j * (bw + 2)
+            top = min(y(base), y(v)); h = abs(y(v) - y(base))
+            out.append(f'<rect x="{x:.1f}" y="{top:.1f}" width="{bw:.1f}" height="{max(h,1.0):.1f}" rx="2" class="bar {series[j][1]}">'
+                       f'<title>{esc(glab)} &middot; {esc(series[j][0])}: {vfmt.format(v)}</title></rect>')
+            if labels_last and i == len(groups) - 1:
+                out.append(f'<text x="{x+bw/2:.1f}" y="{top-4:.1f}" class="tick" text-anchor="middle">{v:.1f}</text>')
+        out.append(f'<text x="{L + i*gw + gw/2:.1f}" y="{H-14}" class="tick" text-anchor="middle">{glab}</text>')
+    out.append('</svg>')
+    return "\n".join(out)
+
+def keyline(series):
+    return '<div class="keyline">' + " ".join(f'<span class="sw {c}"></span>{esc(nm)}' for nm, c in series) + '</div>'
+
+SPREAD_SERIES = [("real people", "hum"), ("categorical players", "s1"), ("inflated Gaussian players", "s2"), ("plain Gaussian players", "s3")]
+def spread_svg():
+    arms = ["e_skip_kexo_rho0", "c_infl_rho0", "d_kexo_rho0"]
+    groups = []
+    for blk, lab in (("1-8", "rounds 1–8"), ("9-16", "rounds 9–16"), ("17-24", "rounds 17–24")):
+        vals = [F(cl_blk[("human", blk)]["sd_group_mean"])] + [F(hs_blk[(a, blk)]["sd_group_mean"]) for a in arms]
+        groups.append((lab, vals))
+    return grouped_bars(groups, SPREAD_SERIES, 0, 7, [0, 2, 4, 6],
+                        "How far apart the groups drift, by third of the game", labels_last=True)
+
+GAIN_SERIES = [("categorical players", "s1"), ("inflated Gaussian players", "s2"), ("plain Gaussian players", "s3")]
+def gain_svg():
+    models = ["skip_categorical", "infl", "v2"]
+    groups = [(("+" if d[0] != "-" else "−") + d.lstrip("-+"),
+               [F(hs_gain[(m, d)]["gain_e"]) for m in models]) for d in GAIN_D]
+    return grouped_bars(groups, GAIN_SERIES, 0.82, 1.06, [0.85, 0.90, 0.95, 1.00, 1.05],
+                        "How much each model still moves when pushed away from real situations",
+                        tickfmt="{:.2f}", H=250, base=1.0)
+
 # ---------- HTML pieces ----------
 def case_buttons():
     return "".join(f'<button type="button" class="{"on" if i==1 else ""}" data-case="{c}" id="case-{c}">{esc(short)} <small>{esc(name)}</small></button>' for i,(c,short,name,_,_) in enumerate(CASES))
@@ -182,13 +369,17 @@ def mech_table():
     return "\n".join(rows)
 
 def overview_tiles():
-    mb = means["b_skip_after"]
+    spread_sim = F(cl_dec["B"]["var_cond_mean"]); spread_hum = F(cl_dec["human"]["var_cond_mean"])
+    ceil_b = F(ce_mech["frontier before"]["P(p>0|c_t=20)"]); ceil_a = F(ce_mech["frontier after"]["P(p>0|c_t=20)"])
+    ceil_h = F(ce_mech["human"]["P(p>0|c_t=20)"])
+    dc_sim = abs(F(ce_rcc["frontier after"][2])); dc_hum = abs(F(ce_rcc["human"][2]))
+    best = min(ce_mean("frontier_after"), F(sk_cmp["mean"]["after"]), means["b_skip_after"])
     return f'''
 <div class="tiles">
-  <div class="tile"><span class="k">RPA, how the manager punishes</span><span class="v">1.23&ndash;1.56 &rarr; 0.68&ndash;0.89</span><span class="s">all six stacks move from the 1&ndash;2 band to at or under the ceiling</span></div>
-  <div class="tile"><span class="k">RCB, reaction to punishment</span><span class="v">&minus;0.5 to &minus;0.9</span><span class="s">better in every stack; two move from 2&ndash;5 into 1&ndash;2, one goes under 1</span></div>
-  <div class="tile"><span class="k">best mean over the 22 rows</span><span class="v">{mb:.3f}</span><span class="s">PR #181 stimulus-skip stack, 13 rows at or under the ceiling</span></div>
-  <div class="tile"><span class="k">RCE, response slope (protected)</span><span class="v">0.70&ndash;0.89</span><span class="s">the skip stack and both Gaussian-MLP stacks keep all four human response signs</span></div>
+  <div class="tile"><span class="k">how varied the situations get</span><span class="v">{spread_sim:.1f} vs {spread_hum:.1f}</span><span class="s">with the shared-noise machinery switched off, the simulated games reach two thirds of the variety of real ones. This is the one defect left standing.</span></div>
+  <div class="tile"><span class="k">punished after giving everything</span><span class="v">{ceil_b*100:.1f}% &rarr; {ceil_a*100:.1f}%</span><span class="s">real managers {ceil_h*100:.1f}%. An indicator for &ldquo;gave the maximum&rdquo; made the simulated manager behave almost exactly like a real one here (PR #192).</span></div>
+  <div class="tile"><span class="k">how hard players take that punishment</span><span class="v">&minus;{dc_sim:.2f} vs &minus;{dc_hum:.2f}</span><span class="s">points a punished full contributor gives up next round. The simulated players under-react by about {dc_hum/dc_sim:.1f} times, and only the players can fix it.</span></div>
+  <div class="tile"><span class="k">the best 22-row mean on record</span><span class="v">{best:.3f}</span><span class="s">from PR #190, which failed both the row it had declared and the protected response row. Two of the seven experiments since the re-baseline failed their gate; a third falsified its own hypothesis.</span></div>
 </div>'''
 
 ABOUT = '''
@@ -200,7 +391,8 @@ ABOUT = '''
 </div>
 <div>
 <p class="legend" style="color:var(--ink)"><b>What a score means.</b> Twenty-two rows each compare one statistic of the simulated games with the same statistic in the real games: how much people give, how often they switch, how they react to punishment, how the manager punishes. A score is a ratio: the simulation's distance from the human data, divided by how far two halves of the human data are from each other (the <em>noise ceiling</em>). At or under 1 means the simulation is as close to the humans as humans are to themselves; 1&ndash;2 is a minor deviation, 2&ndash;5 a clear one, above 5 the behaviour is not reproduced.</p>
-<p class="legend" style="color:var(--ink)"><b>What happened here.</b> In one working day, four investigations traced a stubborn deficit in the reaction-to-punishment row to the simulated manager: on every branch of the code it punished the previous round's contribution, whereas real managers punish the current one. The manager was retrained, a sharper measure of the players' response (RCE) was added, and every stack was rescored under the fix.</p>
+<p class="legend" style="color:var(--ink)"><b>What was wrong.</b> A stubborn deficit in the reaction-to-punishment row turned out to come from the simulated manager: on every branch of the code it punished the <em>previous</em> round's contribution, whereas real managers punish the current one. The manager was retrained, a sharper measure of the players' response (RCE) was added, and every stack was rescored under the fix.</p>
+<p class="legend" style="color:var(--ink)"><b>Where it stands now.</b> Seven further experiments narrowed what is left. The simulated players' round-by-round randomness is the right size and their one-step reaction to punishment is learned rather than memorised, so neither is the problem. What is wrong is that the simulated games stay too much alike: real groups keep pulling apart as a game runs and the simulated ones stop. Three smaller defects are cleanly isolated. Two of the four most recent steps failed the bar they had set themselves and a third came back against the hypothesis its own author had proposed. Those three results are the most useful things on this page.</p>
 </div>
 </div>'''
 
@@ -211,6 +403,9 @@ STEPS = [
  ("A better instrument", "RCB compares bin averages and can be matched without the right cause and effect. A new row, RCE, measures how much more a player gives per extra point of punishment. Over 40 stacks the two rank the stacks almost independently (rank correlation 0.28); RCE tracks whether the human response signs are reproduced (&minus;0.88), RCB does not (&minus;0.08).", "branch rcb-alternative-response-slope"),
  ("Fix and retrain", "The simulated manager punished last round's contribution on every branch of the code. Both manager models were retrained on the current round, and their fit to the human data (cross-validated log loss) improves.", "branch auto/punisher-current-contribution"),
  ("Re-baseline", "Five stacks rerun under the fixed manager and all 22 rows rescored. The experiment record (the <em>ledger</em>) was reset to the new numbers, and RCE became the first <em>protected row</em>: one no future experiment may worsen.", "PR #184"),
+ ("Three answers on the shared error", "Why do the members of one simulated group get things wrong together? Three experiments, run side by side. The models' own randomness is already the right size; observable group facts explain a seventh of what is left; the models' uncertainty about themselves is far too small to be the cause. What the patch really supplies is variety, not correlation.", "PRs #186, #187, #188"),
+ ("A programme, and a freeze", "Four steps declared in advance: test a different output design, fix the manager at the contribution ceiling, borrow the other model line's group-switching component, and change the rules so that the noise settings stop moving underneath every experiment.", "PR #189"),
+ ("Two failed, one was falsified", "The output design test came back the opposite way round from its own hypothesis. The ceiling fix worked as a mechanism and still missed its target row, which turned out to be measuring the players and not the manager. The borrowed switching component improved every pure switching measure and damaged the response ones.", "PRs #190, #191, #192"),
 ]
 
 def steps_html():
@@ -219,13 +414,14 @@ def steps_html():
 STORIES = [
  dict(id="copula", chip="correlated-sampling", color="var(--c-blue)", title="The copula question: a variance source wearing a correlation's clothes",
   meta=f'PRs <a href="{PR}160">#160</a>, <a href="{PR}165">#165</a>, <a href="{PR}170">#170</a>, <a href="{PR}179">#179</a> &middot; the copula is used in both the manager and the player models',
-  problem="Members of a real group act alike: they see the same situation and read it the same way. Simulated players drawn one at a time do not, so the rows that measure how far groups drift apart (CG, the group-spread ratio, and SC, segregation) scored badly in early stacks. The fix in use is the copula: one shared random number per group (the <em>latent</em>) is mixed into every member's draw, so members move together while each member's own probability distribution over choices (the <em>marginal</em>) stays exactly as fitted. The maintainer's comment on PR #140 set the standard for when this is legitimate. Only the co-movement the model cannot explain from what it sees is a sampling problem, and for contributions that part is small: a within-group correlation of 0.07, one sixth of the raw co-movement.",
+  problem=f"Members of a real group act alike: they see the same situation and read it the same way. Simulated players drawn one at a time do not, so the rows that measure how far groups drift apart (CG, the group-spread ratio, and SC, segregation) scored badly in early stacks. The fix in use is the copula: one shared random number per group (the <em>latent</em>) is mixed into every member's draw, so members move together while each member's own probability distribution over choices (the <em>marginal</em>) stays exactly as fitted. The maintainer's comment on PR #140 set the standard for when this is legitimate. Only the co-movement the model cannot explain from what it sees is a sampling problem, and that part is small. PR #140 put it at 0.07 from a straight-line fit of the situation; measured against the graph network's own expectation it is smaller still, {F(ms_base['level residual, plain Pearson']['value']):.3f} out of a raw {F(ms_base['raw contribution, plain Pearson']['value']):.2f} (PR #187), so the network already accounts for {(1-F(ms_base['level residual, plain Pearson']['value'])/F(ms_base['raw contribution, plain Pearson']['value']))*100:.0f} per cent of why group members move together.",
   finding="With a fitted strength (rho) of 0.04 to 0.07 the copula should barely move a group-spread row. Instead CG went from 9.81 to 4.16 (PR #165) to 0.90 (PR #179). The effect compounds: a shared number held fixed for a whole game and fed through 50 rounds of the models reacting to each other grows to roughly 15 times its one-step prediction. The ablation on PR #179 reads it the same way: the copula supplies free-running variation that the deterministic network cannot generate on its own. That is the same disease the RCB work found, a network that behaves when fed the real human history and goes flat when it plays against the other models.",
-  maths=["A Bayesian or ensemble treatment (several trained copies of the model, one drawn at random per game) addresses a different term. One draw per run shifts every player in every group the same way, which does nothing for a within-group spread ratio. A draw per group per game moves CG, but is as mechanistically wrong as the copula.",
+  maths=[f"A Bayesian or ensemble treatment (several trained copies of the model, one drawn at random per game) was the standing alternative. It has since been measured and it does not work: five copies disagree by {F(se_dis['sd_E_between_seeds']['mean']):.2f} contribution points per player-round, which translates to a shared-draw strength of {se_sum['implied_rho']:.4f} against the fitted {se_sum['rho_copula_json']:.4f}, and the disagreement halves in about a round rather than lasting a game (PR #188).",
          "The principled version, a per-group random effect fitted jointly with the model, is PR #159: the strength the likelihood allowed reached only 38 percent of the required move.",
-         "So the copula stays defensible as a descriptive group-heterogeneity term under three conditions the protocol already enforces or nearly enforces: each player's marginal preserved per draw, strength set by likelihood rather than by the score it improves, and no distortion of individual responses. The third is the one to watch; PR #168 and PR #179 both report the shared number partly deciding <em>who</em> moves, not just how much the group moves."],
+         "So the copula stays defensible as a descriptive group-heterogeneity term under three conditions the protocol already enforces or nearly enforces: each player's marginal preserved per draw, strength set by likelihood rather than by the score it improves, and no distortion of individual responses. The third is the one to watch; PR #168 and PR #179 both report the shared number partly deciding <em>who</em> moves, not just how much the group moves.",
+         f"What the three follow-ups changed is the reading of what it is <em>for</em>. Its strength is right and is worth about a fifth of the group-spread gap; its persistence, which was never fitted, carries the rest and does so by compounding &mdash; a push of {F(cl_lat['resid_on_z_slope']):.2f} points per round becomes a shift of {F(cl_lat['cell_slope']):.2f} in a group's level (PR #186). On the real games the shared deviation has no lasting part at all: pooled over every pair of rounds two or more apart it is {fmt(F(ms_pers['before partialling']['lag>=2_moment']),3)}, interval {ci(ms_pers['before partialling']['lag>=2_lo'], ms_pers['before partialling']['lag>=2_hi'])} (PR #187)."],
   code=["<code>src/aimanager/generic/copula.py</code> sample_correlated_levels, a per-(game, group) latent with round-to-round persistence", "<code>src/aimanager/simulation/linear_ah.py</code> _sample_levels_copula and _sample_levels_gaussian_copula", "<code>scripts/baselines/punishment_copula_rho.py</code> pairwise maximum-likelihood fit of rho, now with --bundle/--out"],
-  bought="A cheap test settles the open question: train five copies of the network with different random seeds, measure how much they disagree per situation when fed the real history, and compare with the fitted rho. If the disagreement sits well below 0.04, model uncertainty is negligible and the copula stays. One surprise here points the same way: after the manager fix, the manager's own copula strength rose from 0.35 to 0.43, which fits a better-specified model leaving residuals that are more purely the manager's shared mood."),
+  bought="The open question at the time was a cheap seed-ensemble test. It has since been run, twice over: the Shared mistakes tab lays out the three experiments that settled it. The short answer is that the copula's persistence is doing a job nothing has yet replaced, that the shape it uses has no counterpart in the human data, and that both settings are now frozen so no future experiment can move them as a side effect. One detail from the re-baseline still fits that reading: the manager's own copula strength rose from 0.35 to 0.43 after the timing fix, which is what a better-specified model leaving residuals that are more purely the manager's shared mood would do."),
  dict(id="rcb", chip="evaluation", color="var(--c-amber)", title="RCB is a weak instrument for the thing the manager needs",
   meta='reports/rcb_alternative_comparison.md &middot; 40 stacks &middot; both rows are defined side by side on the Response instrument tab',
   problem="The learning manager's only lever is punishment, so what the simulated players must get right is how they respond to it. RCB was the row scoring that. It takes punished players, sorts them by punishment rate (punishment divided by the shortfall from 20) and compares the average next-round change in each rate bin. The rate mixes how much a player gave with how hard they were hit, and in a regression on the human data the rate has the wrong sign once level and dose are controlled.",
@@ -262,17 +458,66 @@ STORIES = [
          "Main-branch reference with the graph-network manager (e2): mean 1.866 to 1.709, the largest single improvement, but two RCE signs lost through near-zero bands."],
   code=["<code>scripts/data_analysis/curpun_rebaseline.py</code>, <code>scripts/simulation/run_curpun_reruns.sh</code>", "<code>plots/data_analysis/evaluation/punisher_current_contr/</code> tables and mechanism_selfplay.csv", "<code>plots/simulation/*_curpun/</code> five simulation folders with per_round.parquet and the 22-row evaluations"],
   bought="Evidence for which model line to build on next (the <em>lineage</em>, a chain of experiments each starting from the last): the stimulus-skip stack or the Gaussian-MLP line, not the group-vnode line the ledger sat on. Caveats: the 32-stack sweep was not rerun; cases c and d ran on the Gaussian-MLP code tree with the three fix commits copied over; and the manager's copula strength rose rather than fell."),
+ dict(id="sharederr", chip="shared error", color="var(--c-teal)", title="Why the simulated players get things wrong together",
+  meta=f'<a href="{PR}186">PR #186</a>, <a href="{PR}187">PR #187</a>, <a href="{PR}188">PR #188</a> &middot; three experiments run side by side &middot; all the numbers are on the Shared mistakes tab',
+  problem="Two people in the same group face the same situation and then decide for themselves. So once the situation is known, their two choices should be independent of each other, and if the model's <em>mistakes</em> still move together inside a group, the model is missing part of the situation. The models are fitted one player at a time, so nothing in them produces that togetherness; the patch is a shared random number per group per game, mixed into every member's choice. It is calibrated small, about 0.04, and yet it is worth several score bands on the rows that measure how far groups drift apart. That mismatch is what the three experiments were for.",
+  finding=f"The shared number is doing two jobs and only one of them is the job it is named for. Redraw it every round and it reproduces the human within-group co-movement almost exactly ({F(cl_dec['C']['resid_corr_all_rounds']):.3f} against {F(cl_dec['human']['resid_corr_all_rounds']):.3f}) while buying about a fifth of the group-spread gap. Hold it for the whole game, which is what ships, and it buys the rest by compounding: a push of {F(cl_lat['resid_on_z_slope']):.2f} contribution points in the round it is drawn becomes a shift of {F(cl_lat['cell_slope']):.2f} in the group's level, {F(cl_lat['compounding_factor']):.1f} times over. Meanwhile the players' own round-by-round randomness is already right &mdash; leftover variance {F(cl_dec['B']['var_resid']):.1f} against the human {F(cl_dec['human']['var_resid']):.1f} &mdash; and what is short is the variety of situations they reach: {F(cl_dec['B']['var_cond_mean']):.1f} against {F(cl_dec['human']['var_cond_mean']):.1f}.",
+  maths=[f"Can the missing part of the situation simply be handed to the model? Only a seventh of it. The best three observable group facts &mdash; how many of your group were punished last round, which way the group is drifting, how far apart its members are &mdash; explain {F(ms_joint['mle']['share'])*100:.0f} per cent of the leftover co-movement, interval {F(ms_joint['mle']['share_lo'])*100:.0f} to {F(ms_joint['mle']['share_hi'])*100:.0f} per cent; everything legal together explains {F(ms_ref['all legal candidates']['share_mle'])*100:.0f} per cent.",
+         f"Is it a lasting group trait? No. Between two different members of a group the shared deviation is {F(ms_pers['before partialling']['lag0_moment']):.3f} within a round, {F(ms_pers['before partialling']['lag1_moment']):.3f} one round later, and {fmt(F(ms_pers['before partialling']['lag>=2_moment']),3)} pooled over every pair two or more rounds apart, interval {ci(ms_pers['before partialling']['lag>=2_lo'], ms_pers['before partialling']['lag>=2_hi'])}. It is a shock in one round with a two-thirds echo into the next. The shipped setting holds one number for all 24 rounds, which has no counterpart in the data, and is kept only because nothing replaces the variety it supplies.",
+         f"Is it the model's own uncertainty? Also no, which closes the Bayesian route. Five copies of the model trained with different random seeds disagree by {F(se_dis['sd_E_between_seeds']['mean']):.2f} contribution points per player-round, an eighth of one model's own spread. That is worth a shared-draw strength of {se_sum['implied_rho']:.4f} against the fitted {se_sum['rho_copula_json']:.4f}, whose interval starts at {se_sum['rho_copula_json_ci'][0]:.3f}, and it decays by half in about a round. Run as a simulation, one copy per game scores like having no machinery at all: group spread {se_sim['CG']:.2f} against {F(cl_sc['CG']['A']):.2f} with it and {F(cl_sc['CG']['B']):.2f} without.",
+         "Caveat: five copies trained on the same data is the narrowest kind of ensemble, so that last number is a lower bound. Resampling the games themselves would be wider and has not been tried."],
+  code=["<code>scripts/data_analysis/copula_closed_loop_variance.py</code>, the three-arm ablation and the variety diagnostic", "<code>scripts/data_analysis/copula_missing_state.py</code> and its analysis companion", "<code>src/aimanager/simulation/ensemble_ah.py</code> SeedEnsembleAH, one trained copy drawn per game"],
+  bought="Three routes closed and one defect named, in a day of cluster time and no new models worth keeping. The two shared-noise settings are now frozen, so no experiment can move them as a side effect of changing something else, and a change to the players is judged with the machinery switched off, on the variety measure, because with it on the row that was being used cannot tell you whether the change helped."),
+ dict(id="head", chip="step 1, falsified", color="var(--c-blue)", title="The output design that was supposed to hold the line, and did the opposite",
+  meta=f'<a href="{PR}191">PR #191</a> &middot; three short simulations, nothing trained &middot; the hypothesis was the author\'s own',
+  problem="A simulated player picks a number from 0 to 20. One family of models scores all 21 possibilities separately; another predicts a centre and a width and draws from a bell curve. The argument for building a combined model around the bell curve went like this: when a simulated game wanders somewhere no real game went, 21 unconnected scores have nothing tying them together and should sag back toward the average, while a single centre keeps tracking. If that were true it would explain the drift, and it would decide which of the two model lines to build on.",
+  finding=f"It is wrong in its mechanism and wrong in its consequence. Pushing the recent group level 2, 4 and 6 points away from anything real, the 21-score design tracks the shift most closely of the three and is the only one that does not sag at the extremes ({F(hs_gain[('skip_categorical','-6')]['gain_e']):.2f} to {F(hs_gain[('skip_categorical','6')]['gain_e']):.2f}, against {F(hs_gain[('infl','6')]['gain_e']):.2f} and {F(hs_gain[('v2','6')]['gain_e']):.2f} at the far end). With the shared-noise machinery off it also holds the most variety in the situations it reaches, {F(hs_head['e_skip_kexo_rho0']['var_cond_mean']):.2f} against {F(hs_head['c_infl_rho0']['var_cond_mean']):.2f} and {F(hs_head['d_kexo_rho0']['var_cond_mean']):.2f}. Scored against each model's own fit to real games &mdash; the reading most favourable to the bell curve &mdash; one ties at {F(hs_head['c_infl_rho0']['retention']):.3f} against {F(hs_head['e_skip_kexo_rho0']['retention']):.3f} and the other is clearly worse at {F(hs_head['d_kexo_rho0']['retention']):.3f}.",
+  maths=[f"The sharper finding is not the one it was aimed at. Real groups keep drifting further apart as the game runs: the spread of group averages goes {F(cl_blk[('human','1-8')]['sd_group_mean']):.2f}, {F(cl_blk[('human','9-16')]['sd_group_mean']):.2f}, {F(cl_blk[('human','17-24')]['sd_group_mean']):.2f} across the three thirds. With the machinery off, both bell-curve models stall or reverse in the last third ({F(hs_blk[('c_infl_rho0','9-16')]['sd_group_mean']):.2f} to {F(hs_blk[('c_infl_rho0','17-24')]['sd_group_mean']):.2f}; {F(hs_blk[('d_kexo_rho0','9-16')]['sd_group_mean']):.2f} to {F(hs_blk[('d_kexo_rho0','17-24')]['sd_group_mean']):.2f}) where the 21-score design keeps climbing ({F(hs_blk[('e_skip_kexo_rho0','9-16')]['sd_group_mean']):.2f} to {F(hs_blk[('e_skip_kexo_rho0','17-24')]['sd_group_mean']):.2f}). All three fall well short. The defect is a failure of late divergence, not a level offset.",
+         f"Within every model, the shared-noise machinery is worth about twice what the choice of output design is worth: the variety measure goes {F(hs_head['c_infl_rho0']['retention']):.3f} to {F(hs_head['c_infl']['retention']):.3f} and {F(hs_head['d_kexo_rho0']['retention']):.3f} to {F(hs_head['d_kexo']['retention']):.3f} when it is switched on, a bigger move than any head difference. So the lever with headroom is something that carries a group's state across rounds, not the shape of one round's output.",
+         f"The one confound was closed rather than argued about. The two model lines also used different group-switching components, so a matched pair was run. It moves the 21-score design's variety measure by {F(hs_head['e_skip_kexo_rho0']['retention'])-F(hs_head['skip B (no copula)']['retention']):.3f}, two orders of magnitude less than the gap it was supposed to explain away, and the ordering is unchanged.",
+         f"One component of the bell-curve family does earn its place, inside that family: the extra weight it puts on the corners and on repeating last round's number. Without it the plain bell curve emits {(F(hs_recon['human (v2)'][1])/F(hs_recon['human (v2)'][2])-1)*100:.0f} per cent less randomness than its own errors, on real games, turn out to need. A design that already gets the corners for free has nothing to take from it."],
+  code=["<code>scripts/data_analysis/head_state_spread.py</code>, five stages, everything regenerable from committed inputs", "<code>plots/data_analysis/evaluation/head_state_spread/</code> headline, gain curves, bootstrap and round blocks"],
+  bought="The combined design is dead as argued for, at the cost of three two-minute simulations and no training at all. A negative result that arrives before the build rather than after it is the cheapest thing in this whole record."),
+ dict(id="ceiling", chip="step 2, failed its row", color="var(--c-red)", title="Fixing the manager at the ceiling found the fault was in the players",
+  meta=f'<a href="{PR}192">PR #192</a> &middot; one flag added to both manager models &middot; two short retrainings and two simulations',
+  problem=f"Real managers almost never punish someone who gave the full 20 &mdash; {F(ce_mech['human']['P(p>0|c_t=20)'])*100:.1f} per cent of the time &mdash; and when they do they punish hard, {F(ce_mech['human']['E[p|p>0] 20']):.1f} points on average. Both simulated managers read the amount given as a single number on a scale, so neither can make a sharp break at exactly 20; they read the ceiling off the 15-to-19 band just below it. The result was that the simulation punished full contributors {F(ce_mech['frontier before']['P(p>0|c_t=20)'])*100:.1f} per cent of the time and too lightly. One row of the score card is built entirely out of punished full contributors, so the simulation was inventing the very population that row measures, and that row was the one thing the manager timing fix had not moved.",
+  finding=f"The flag works and the experiment still fails. In the simulated games the punish rate at the ceiling goes to {F(ce_mech['frontier after']['P(p>0|c_t=20)']):.3f} against the real {F(ce_mech['human']['P(p>0|c_t=20)']):.3f} &mdash; right to a thousandth &mdash; and the severity there from {F(ce_mech['frontier before']['E[p|p>0] 20']):.2f} to {F(ce_mech['frontier after']['E[p|p>0] 20']):.2f} against the real {F(ce_mech['human']['E[p|p>0] 20']):.2f}. The target row moved {fmt(F(ce_ba['RCC']['frontier_after'])-F(ce_ba['RCC']['frontier_before']),3,sign=True)}, from {F(ce_ba['RCC']['frontier_before']):.4f} to {F(ce_ba['RCC']['frontier_after']):.4f}, the largest move it has ever had, and did not cross a score band. The declared target was a band, so the verdict is a failure.",
+  maths=[f"Splitting the row into its parts says where the remaining distance is, and it is not the manager's. The invented population is gone: {ce_rcc['frontier before'][6]} of full contributors punished before, {ce_rcc['frontier after'][6]} after, {ce_rcc['human'][6]} in the real games. What is left is that a punished full contributor in the simulation gives up {abs(F(ce_rcc['frontier after'][2])):.2f} points the next round where a real person gives up {abs(F(ce_rcc['human'][2])):.2f}. That is the players under-reacting by about {abs(F(ce_rcc['human'][2]))/abs(F(ce_rcc['frontier after'][2])):.1f} times, and no change to the manager can touch it.",
+         f"A second defect is untouched and now separately live: the simulated manager's punishment falls with contribution at {fmt(F(ce_mech['frontier after']['OLS c_t']),3)} per point against the real {fmt(F(ce_mech['human']['OLS c_t']),3)}, a little over half the human strength. The flag changes this by at most {max(abs(F(t[a]['OLS c_t'])-F(t[b]['OLS c_t'])) for t,a,b in ((ce_tf,'lin new (c_t)','lin ceiling'),(ce_tf,'gnn new (c_t)','gnn ceiling'),(ce_mech,'frontier before','frontier after'),(ce_mech,'ref_lin before','ref_lin after'),(ce_mech,'ref_gnn before','ref_gnn after'))):.3f} in any condition and was never meant to. Nobody should read &ldquo;the manager was fixed at the ceiling&rdquo; as &ldquo;the manager's response to contribution was fixed&rdquo;.",
+         f"What went the wrong way: the older reaction-to-punishment row got worse, {F(ce_ba['RCB']['frontier_before']):.3f} to {F(ce_ba['RCB']['frontier_after']):.3f}, precisely because removing the punishments at the ceiling removed the rows where its denominator was smallest, leaving it shaped entirely by the slope defect above. Group spread also rose on this stack while falling on the reference one.",
+         f"On the real games the flag is worth {fmt(F(ce_logit['+max']['contribution_max_coef']))} on the log-odds scale and takes the fitted rate at the ceiling from {F(ce_logit['linear']['fit_P(p>0|c=20)']):.3f} onto the observed {F(ce_logit['+max']['fit_P(p>0|c=20)']):.3f}; the fit over all punishment levels improves from {F(ce_cv0['log_loss']):.4f} to {F(ce_cv['log_loss']):.4f}. A companion flag for &ldquo;gave nothing&rdquo; was tested and dropped."],
+  code=["<code>scripts/data_analysis/punisher_ceiling_check.py</code>, the diagnosis on the real games before anything was built", "<code>scripts/baselines/handcrafted_grid.py</code> the derived indicator and its legality, <code>src/aimanager/generic/data.py</code> and <code>manager/api_manager.py</code> the same on the graph path"],
+  bought=f"The manager's half of the row is finished and the other half is named, with a decomposition table ready to serve as the baseline for whoever declares against the players. The graph-network reference stack improved broadly on the way past: mean {ce_mean('ref_gnn_before'):.4f} to {ce_mean('ref_gnn_after'):.4f}, rows at or under the ceiling {ce_le1('ref_gnn_before')} to {ce_le1('ref_gnn_after')}. Whether artifacts from a failed experiment are worth merging anyway is a maintainer's call; the mechanism evidence says yes and the gate says no."),
+ dict(id="switchport", chip="step 3, failed", color="var(--c-amber)", title="The right number of switches, the wrong people leaving",
+  meta=f'<a href="{PR}190">PR #190</a> &middot; one component swapped, one two-minute simulation &middot; no retraining',
+  problem="Every fourth round, players may move to the other group. Real people never empty a group of five or more and often abandon a singleton, so group size matters in a lumpy way that one smooth curve cannot follow. The other model line has a component that gives each possible group size its own free setting, and the stack built around it posts the best switching numbers in the whole set. The question was whether those numbers belong to that component or to the players it was paired with. Swapping only the component across is the cheapest way to find out.",
+  finding=f"Every measure that is purely about who ends up in which group improved, and every measure of how players respond got worse. Switch timing gained a score band, {F(sk_cmp['SB']['before']):.3f} to {F(sk_cmp['SB']['after']):.3f}; group spread fell sharply, {F(sk_cmp['CG']['before']):.3f} to {F(sk_cmp['CG']['after']):.3f}; segregation improved without crossing a band, {F(sk_cmp['SC']['before']):.3f} to {F(sk_cmp['SC']['after']):.3f}. The switching-pull row went the wrong way, {F(sk_cmp['RCD']['before']):.3f} to {F(sk_cmp['RCD']['after']):.3f}, and the protected response row was violated: in the 10-to-14 band the slope fell from {fmt(F(sk_rce['before']['slope_10-14']),3)} to {fmt(F(sk_rce['after']['slope_10-14']),3)}, about a third of what it was. The 22-row mean is the lowest on record at {F(sk_cmp['mean']['after']):.4f} and the experiment still fails, because the mean is not what it declared.",
+  maths=["The row split is the useful result. Only segregation, switch timing and group spread are decided by the switching component alone. The switching-pull row is the slope of a <em>switcher's contribution change</em> on the gap to the group they join: the component picks who goes, the players decide what they then give. Declaring that row as a target was a mis-specification in the plan itself, independent of how the run came out.",
+         f"Undeclared and the largest single regression: switching after being punished, {F(sk_cmp['RSA']['before']):.3f} to {F(sk_cmp['RSA']['after']):.3f}. Right number of switches, right group sizes, wrong people leaving after a punishment. That is a concrete mismatch and the most informative follow-up in the set.",
+         f"One seed, one run, no repeats, so the small movements carry no measured spread. The gate miss is safe &mdash; the switching-pull row moves by {abs(F(sk_cmp['RCD']['delta'])):.2f} and neither target comes near a band edge &mdash; but the protected-row violation rests on a single run's band slope over {int(F(sk_rce['after']['n_10-14'])):,} observations, and anyone wanting to overturn it should refit that band across seeds rather than argue about it.",
+         "What it cannot settle: whether the component needs the other line's players or clashes with these ones specifically. Both fit this run and they imply different successors. Pairing it with a third set of players separates them, at one simulation each."],
+  code=["<code>src/aimanager/generic/joint_exodus.py</code>, the size encoding ported across with a default so older components keep loading", "<code>plots/data_analysis/evaluation/switch_kexo_port/</code> the 22-row comparison and the band slopes"],
+  bought="A rule for every future switching experiment: declare only the rows the component actually decides. And one clear counter-example to the premise the whole lineage merge rested on, that the two lines' strengths are separable and additive."),
+ dict(id="protocol", chip="step 4, repaired", color="var(--c-ink)", title="A safety rule that failed two experiments it should not have",
+  meta=f'<a href="{PR}189">PR #189</a> &middot; not an experiment &middot; the plan and the rules it is judged by',
+  problem="One row of the score card is protected, because it is the one thing a learning manager will depend on: how much more a player gives per extra point of punishment. No experiment may worsen its score band, flip any of the four human signs, or halve a band's slope. The last clause is a magnitude test on a signed quantity, and the bands it guards are thin &mdash; one of them, the middle range, has been known since the held-out test to have the wrong sign in every condition, learned or not.",
+  finding=f"It fired twice on its first outing, and both firings were wrong. Once on a change of {ce_se[1]['change_in_se']['15-19']:.2f} standard errors on the thinnest band in the suite, which on a single run is not distinguishable from noise. Once on a slope moving from {fmt(lead(ce_sl[2]['before'][3]),3,sign=True)}, the wrong sign, to {fmt(lead(ce_sl[2]['after'][3]),3,sign=True)}, toward the human {fmt(HUMAN_SLOPES[2],3,sign=True)} &mdash; a change of {ce_se[2]['change_in_se']['10-14']:.2f} standard errors, and an improvement read as an erosion, because a magnitude test cannot tell a slope passing through zero in the right direction from one wasting away.",
+  maths=["Two qualifications were added. The clause does not fire when the new slope is closer to the human value than the old one was, and it fires only when the change exceeds one pooled standard error of the two slopes. Neither changes a verdict already recorded: both failing experiments failed their declared row independently, so the repair cannot be read as rescuing anything.",
+         "Every experiment that touches the row now reports each band's slope with its standard error, its row count and the change in pooled standard errors, so a reader can tell erosion from noise without re-running anything.",
+         "The other half of this step is the freeze. The two shared-noise settings are added to the surface no experiment may modify, and a change to the players is judged with the machinery switched off, on the variety measure. Before the freeze, a recalibration rode along with every change to the players, so a player experiment and a noise experiment moved at once and could not be told apart."],
+  code=["<code>notes/autoresearch.md</code> sections 2 and 8, the protected row, the freeze and the frozen surface", "<code>doc/plans/post-rebaseline-program.md</code>, the four steps as declared and then as they came out"],
+  bought="A rule that fails experiments over differences too small to be real, and once over an improvement, is worse than no rule, because it teaches the people it governs to argue with it instead of respecting it. It is now stated with the arithmetic that makes a firing readable."),
  dict(id="next", chip="successor", color="var(--c-muted)", title="What this leaves for whoever continues",
-  meta="ordered by expected value per hour",
-  problem="Six threads are open. None is blocked.",
+  meta="one large defect and three small ones, each with a baseline ready",
+  problem=f"The target is the late-divergence failure. Real groups keep pulling apart as a game runs and the models stop: with the shared-noise machinery switched off, the variety of situations the simulation reaches is {F(cl_dec['B']['var_cond_mean']):.1f} against the human {F(cl_dec['human']['var_cond_mean']):.1f}, while the randomness inside each round is already correct. Neither the output design nor the noise model is the lever; both have been tested and neither is. What is wanted is something that carries a group's state across rounds and survives the models playing against each other.",
   finding="",
-  maths=["The manager's functional form: a full contributor is still punished three to four times as often as by a human manager, and the weight on the current contribution is half the human one. A manager model with a term that knows 20 is the ceiling is the natural next experiment; it is what RCC needs.",
-         "A gated stimulus skip on the player model: the follow-up PR #181 proposed, now to be judged on the protected RCE row rather than on RCB.",
-         "Lineage: once the fixed-manager numbers are accepted, combine the stimulus-skip line and the Gaussian-MLP line into one code tree; they differ in 17 files.",
-         "The seed ensemble for the copula question: five seeds, per-situation disagreement versus a rho of 0.04.",
-         "Where the learning manager will act: humans rarely punished above 10 points or punished high contributors, about 300 rows in total. Either keep the learning manager's punishments near the shortfall, or audit where a trained policy actually operates.",
-         "Rerun the 32-stack sweep under the fixed manager so the ledger's deficit profiles are all post-fix."],
-  code=["<code>notes/autoresearch_log/punisher-current-contribution.md</code>, successor section", "Raven clean-up once PR #184 closes: four isolated folders under ~/repros/ai-runs/"],
+  maths=[f"<b>The players under-react to a heavy punishment at the ceiling.</b> A punished full contributor gives up {abs(F(ce_rcc['frontier after'][2])):.2f} points next round where a real person gives up {abs(F(ce_rcc['human'][2])):.2f}. The manager's side of that row is finished, the population is now the right size, and the decomposition table is the baseline. Only one row in the suite measures it, so it has nowhere else to show up.",
+         f"<b>The manager's response to contribution is about half the human strength</b>, {fmt(F(ce_mech['frontier after']['OLS c_t']),3)} per point against {fmt(F(ce_mech['human']['OLS c_t']),3)}. Nothing so far has moved it. It wants a bent response rather than another flag, and it is the row the older reaction-to-punishment measure would most plausibly follow.",
+         f"<b>The wrong people leave after being punished.</b> The borrowed switching component gets the number of switches and the group sizes right and regressed that row hardest, {F(sk_cmp['RSA']['before']):.3f} to {F(sk_cmp['RSA']['after']):.3f}. It is diagnosable and cheap.",
+         "Deliberately out of scope: the three group facts from the missing-state experiment are worth folding into the next retrain of the players but account for a seventh of a small quantity and do not justify a cycle of their own. Rollout training is the wrong tool for this defect, for a reason that is now understood.",
+         "Still open and not closable by anything above: the middle contribution band has the wrong sign in every condition, including when the model is fed real games and when it is held out, so no closed-loop fix will supply it. And the manager's room to act &mdash; real managers rarely punished above 10 points or punished high contributors, about 300 rows of evidence in total &mdash; must either be bounded or audited before a learning manager explores there.",
+         "Bookkeeping that would otherwise mislead: the 32-stack sweep has not been rerun under the fixed manager, so the deficit profiles in the experiment record are all from before it."],
+  code=["<code>doc/plans/post-rebaseline-program.md</code>, the four steps and their results in one place", "<code>notes/autoresearch_log/</code>, one log per experiment, each with its own successor section", "Raven clean-up as each pull request closes: one isolated folder per experiment under ~/repros/ai-runs/"],
   bought=""),
 ]
 
@@ -286,6 +531,169 @@ def story_html(s):
     parts.append("</article>")
     return "".join(parts)
 
+# ---------- the shared-error tab ----------
+def shared_error_section():
+    A, Bm, C, H = cl_dec["A"], cl_dec["B"], cl_dec["C"], cl_dec["human"]
+    arms = tbl(["what was measured", "~real people", "~machinery on", "~machinery off", "~number redrawn each round"], [
+        ["how varied the situations the players reach", fmt(F(H["var_cond_mean"]),1), fmt(F(A["var_cond_mean"]),1), f'<b>{fmt(F(Bm["var_cond_mean"]),1)}</b>', fmt(F(C["var_cond_mean"]),1)],
+        ["how much randomness is left in one round", fmt(F(H["var_resid"]),1), fmt(F(A["var_resid"]),1), fmt(F(Bm["var_resid"]),1), fmt(F(C["var_resid"]),1)],
+        ["how far apart the group averages sit", fmt(F(H["sd_group_mean"])), fmt(F(A["sd_group_mean"])), fmt(F(Bm["sd_group_mean"])), fmt(F(C["sd_group_mean"]))],
+        ["leftover co-movement inside a group", fmt(F(H["resid_corr_all_rounds"]),3), fmt(F(A["resid_corr_all_rounds"]),3), fmt(F(Bm["resid_corr_all_rounds"]),3), f'<b>{fmt(F(C["resid_corr_all_rounds"]),3)}</b>'],
+        ["the group-spread score CG", "&ndash;", fmt(F(cl_sc["CG"]["A"])), fmt(F(cl_sc["CG"]["B"])), fmt(F(cl_sc["CG"]["C"]))],
+        ["mean over all 22 rows", "&ndash;", fmt(F(cl_sc["mean"]["A"]),3), fmt(F(cl_sc["mean"]["B"]),3), fmt(F(cl_sc["mean"]["C"]),3)],
+    ])
+    pb = ms_pers["before partialling"]
+    echo = tbl(["how far apart the two rounds are", "~shared co-movement", "~95% interval"], [
+        ["the same round", fmt(F(pb["lag0_moment"]),3), ci(pb["lag0_lo"], pb["lag0_hi"])],
+        ["one round apart", fmt(F(pb["lag1_moment"]),3), ci(pb["lag1_lo"], pb["lag1_hi"])],
+        ["two rounds apart", fmt(F(pb["lag2_moment"]),3), ci(pb["lag2_lo"], pb["lag2_hi"])],
+        ["<b>two or more, pooled over every pair</b>", f'<b>{fmt(F(pb["lag>=2_moment"]),3)}</b>', ci(pb["lag>=2_lo"], pb["lag>=2_hi"])],
+        ["share of it that is a lasting group trait", fmt(F(pb["static_share"])), ci(pb["static_share_lo"], pb["static_share_hi"], 2)],
+    ])
+    lag = se_sum["persistence_lag_corr"]
+    seeds = tbl(["what was measured", "~value"], [
+        ["how far apart the five copies' predictions sit, per player and round", f'{F(se_dis["sd_E_between_seeds"]["mean"]):.2f} points'],
+        ["how wide one copy's own prediction already is, same rounds", f'{F(se_dis["sd_pred_ensemble_mean"]["mean"]):.2f} points'],
+        ["so the disagreement is, as variance", f'{se_sum["ratio_var_E_to_var_pred"]*100:.0f}% of what one model already spreads'],
+        ["is the disagreement shared inside a group?", f'yes: {se_sum["corr_E_mean"]:.2f} on the choice scale, {se_sum["corr_latent_mean"]:.2f} on the fitted scale'],
+        ["<b>what that is worth as a shared-draw strength</b>", f'<b>{se_sum["implied_rho"]:.4f}</b> by arithmetic, {se_sum["rho_synthetic_mean"]:.4f} when measured the way the real one is'],
+        ["the strength actually fitted, for comparison", f'{se_sum["rho_copula_json"]:.4f}, interval {se_sum["rho_copula_json_ci"][0]:.3f} to {se_sum["rho_copula_json_ci"][1]:.3f}'],
+        ["how long the disagreement lasts, 1 / 2 / 3 / 5 / 10 rounds on", " / ".join(f'{lag[k]:.2f}' for k in ("1","2","3","5","10"))],
+        ["how much of it belongs to the group and game at all", f'{se_sum["persistence_icc_episode"]*100:.0f}%'],
+    ])
+    return f'''
+<p class="legend">Three experiments, run side by side, asking the same question three ways: when the simulated players get something wrong, why do the members of one group get it wrong <em>together</em>? Each one is laid out below as an answer, with what it measured and what it rules out. This is the clearest thing on this page, and it needs no background beyond the game.</p>
+
+<h2>The principle</h2>
+<div class="twocol">
+<div>
+<p class="legend" style="color:var(--ink)">Two people in the same group face the same situation and then decide for themselves. So once you know the situation &mdash; what everyone gave last round, who was punished, how big the group is &mdash; their two choices should be independent of each other. Turn that around and it becomes a test. If the model's <em>mistakes</em> still move together within a group after the situation has been accounted for, then the model is missing part of the situation. Naming the missing part is the whole question.</p>
+</div>
+<div>
+<p class="legend" style="color:var(--ink)">The models are fitted one player at a time, so nothing in them makes group members move together. The patch in use is a <em>shared draw</em>: one random number per group per game, mixed into every member's choice so that they lean the same way. Two settings control it. Its <b>strength</b> is fitted from how much of the model's leftover error is genuinely shared, and comes out small, about {F(ms_base["latent, pairwise MLE (40 train games)"]["value"]):.3f}. Its <b>persistence</b> is separate and was never fitted: the shipped version holds the same number for all 24 rounds.</p>
+</div>
+</div>
+
+<h2>Answer one: it is mostly not a correlation at all</h2>
+<p class="legend">{esc("PR #186")} ran the same simulation three times &mdash; with the machinery on, with it off, and with the shared number redrawn every round instead of held for the whole game &mdash; and then asked the model what it would have expected at each point it actually reached.</p>
+{arms}
+<p class="legend">Read across the bottom two rows first: switching the machinery off costs a whole score band on group spread. Now read the top two. The players' round-by-round randomness is <b>already correct</b> &mdash; the leftover variance is {fmt(F(Bm["var_resid"]),1)} against the human {fmt(F(H["var_resid"]),1)}, and it barely moves between arms. What is short is the variety of situations the simulated games reach: {fmt(F(Bm["var_cond_mean"]),1)} against {fmt(F(H["var_cond_mean"]),1)}, about two thirds. Redrawing the number every round reproduces the human within-group co-movement almost exactly ({fmt(F(C["resid_corr_all_rounds"]),3)} against {fmt(F(H["resid_corr_all_rounds"]),3)}) and yet buys only about a fifth of the group-spread gap. Holding it for the whole game buys the rest, and it does so by <em>compounding</em>: the shared number pushes a player by {F(cl_lat["resid_on_z_slope"]):.2f} points in the round it is drawn, but because the players react to each other round after round, a group's level ends up shifted by {F(cl_lat["cell_slope"]):.2f} points &mdash; {F(cl_lat["compounding_factor"]):.1f} times the push.</p>
+<p class="legend"><b>What this rules out.</b> The reading that the machinery is simply supplying a missing correlation. It supplies a correlation of about the right size, and that part is worth a fifth of one row. The rest of its value is refilling variety that the players fail to generate when they play against each other &mdash; which is a defect in the players, not a missing sampler.</p>
+
+<h2>Answer two: the missing part is a one-round echo, not a group trait</h2>
+<p class="legend">{esc("PR #187")} stayed on the real games. It asked the model what it expected round by round, took what was left over, and tried to explain the shared part of it with group facts the model cannot currently see: how many of your group were punished last round, which way the group is drifting, how far apart its members are.</p>
+<div class="twocol">
+<div>
+<p class="legend" style="color:var(--ink)">In the raw data, two members of a group move together strongly: {fmt(F(ms_base["raw contribution, plain Pearson"]["value"]),3)}. Once the model's own expectation is subtracted, {fmt(F(ms_base["level residual, plain Pearson"]["value"]),3)} is left &mdash; the model already explains {(1-F(ms_base["level residual, plain Pearson"]["value"])/F(ms_base["raw contribution, plain Pearson"]["value"]))*100:.0f} per cent of it. Of that remainder, the best three observable group facts explain {F(ms_joint["mle"]["share"])*100:.0f} per cent, interval {F(ms_joint["mle"]["share_lo"])*100:.0f} to {F(ms_joint["mle"]["share_hi"])*100:.0f} per cent; every legal fact together explains {F(ms_ref["all legal candidates"]["share_mle"])*100:.0f} per cent. The two that carry it are the share of the group punished last round ({F(ms_cand["grp_share_pun_last"]["share_mle"])*100:.0f} per cent) and the group's contribution trend ({F(ms_cand["own_trend"]["share_mle"])*100:.0f} per cent). Adding all three to the model would move the strength, measured here over all fifty games rather than the forty it was fitted on, from {F(ms_joint["mle"]["rho_before"]):.4f} to about {F(ms_joint["mle"]["rho_after"]):.3f} &mdash; well inside its own interval. They are worth having for what they say about behaviour, not for the dose.</p>
+</div>
+<div>
+{echo}
+<p class="legend">Shared co-movement between two <em>different</em> players of the same group, at increasing distances in time. A lasting group trait would give the same value at every distance.</p>
+</div>
+</div>
+<p class="legend"><b>What this rules out.</b> Two things. First, that the fix is simply to feed the model the group facts it is missing: they account for a seventh of a quantity that is already small. Second, and more important, the <em>shape</em> the machinery uses. In the real games the shared deviation is a shock in one round with about a two-thirds echo into the next ({F(pb["phi_lag1"]):.2f}) and nothing at all beyond that. The shipped setting holds one number fixed for 24 rounds, and there is no counterpart to that in the human data. It is kept anyway, because nothing yet replaces the variety it supplies &mdash; a caveat, not an endorsement.</p>
+
+<h2>Answer three: the model's uncertainty about itself is far too small</h2>
+<p class="legend">The standing proposal was to replace the hand-set number with the model's own uncertainty: train several copies of the model, draw one at random per game, and let the size of the shared error come from how much the copies disagree. {esc("PR #188")} trained five copies, identical but for the random seed, and measured it.</p>
+{seeds}
+<p class="legend">The copies do disagree in a shared way &mdash; members of one group are pushed together, which is the right shape. But the size is about a sixth of the fitted strength and sits below the bottom of its confidence interval, and the time structure is wrong: the disagreement halves in roughly a round, because the same fixed weights meet a different situation each round, where the machinery needs something that holds for the whole game. Run as an actual simulation, one copy per game scores like having no machinery at all: group-spread score {se_sim["CG"]:.2f}, against {F(cl_sc["CG"]["A"]):.2f} with the machinery and {F(cl_sc["CG"]["B"]):.2f} with it switched off, and the 22-row mean rises to {se_mean:.3f} with {se_le1} rows at or under the ceiling instead of {int(F(cl_sc["rows <= 1"]["A"]))}.</p>
+<p class="legend"><b>What this rules out.</b> The Bayesian route, at least as a five-seed ensemble measures it. For this to supply what the machinery supplies, the spread over trained copies would have to be six to eight times wider <em>and</em> persistent across a whole game, which a fixed set of weights meeting drifting situations is not. Caveat: five seeds on the same data is the narrowest kind of ensemble, so this is a lower bound; resampling the games themselves would be wider, and has not been tried.</p>
+
+<h2>What all three leave standing</h2>
+<p class="legend" style="max-width:76ch;font-size:14px;color:var(--ink)">One defect. The simulated games do not reach the variety of situations the real ones do &mdash; {fmt(F(Bm["var_cond_mean"]),1)} against {fmt(F(H["var_cond_mean"]),1)} &mdash; while the randomness inside each round is already right. Everything the shared draw was doing beyond its small honest job was covering that up. Three of the 22 rows are symptoms of it: how far the groups drift apart, how strongly a switcher is pulled toward the group they join, and the flattened reaction to punishment when the models play each other. The next tab shows what that defect actually looks like: real groups keep pulling apart through the last third of a game, and the models stop.</p>
+'''
+
+# ---------- the four-step tab ----------
+def four_steps_section():
+    steps = tbl(["step", "what was tried", "verdict"], [
+        ["1 &middot; the output design", "whether a different way of producing a number resists the drift better", '<span class="pill">hypothesis falsified</span>'],
+        ["2 &middot; the manager at the ceiling", "an indicator telling the manager a player gave the maximum", '<span class="pill">failed its declared row</span>'],
+        ["3 &middot; the borrowed switch component", "the other model line's group-switching component, dropped into this one", '<span class="pill">failed, and failed the protected row</span>'],
+        ["4 &middot; the rules", "freeze the noise settings; judge players with the machinery off", '<span class="pill">done, then repaired</span>'],
+    ])
+    b, hd = hs_boot, hs_head
+    ret = tbl(["players", "~variety of situations reached", "~as a share of what the same model manages on real games", "~95% interval"], [
+        ["categorical, the current design", fmt(F(hd["e_skip_kexo_rho0"]["var_cond_mean"]),2), f'<b>{F(hd["e_skip_kexo_rho0"]["retention"]):.3f}</b>', ci(b["e_skip_kexo_rho0"]["ret_lo"], b["e_skip_kexo_rho0"]["ret_hi"])],
+        ["inflated Gaussian", fmt(F(hd["c_infl_rho0"]["var_cond_mean"]),2), f'{F(hd["c_infl_rho0"]["retention"]):.3f}', ci(b["c_infl_rho0"]["ret_lo"], b["c_infl_rho0"]["ret_hi"])],
+        ["plain Gaussian", fmt(F(hd["d_kexo_rho0"]["var_cond_mean"]),2), f'{F(hd["d_kexo_rho0"]["retention"]):.3f}', ci(b["d_kexo_rho0"]["ret_lo"], b["d_kexo_rho0"]["ret_hi"])],
+    ])
+    mech = tbl(["", "~punished after giving everything", "~how hard, when punished at the ceiling", "~punishment falls with contribution by"], [
+        [lab, fmt(F(ce_mech[k]["P(p>0|c_t=20)"]),3), fmt(F(ce_mech[k]["E[p|p>0] 20"]),2), fmt(F(ce_mech[k]["OLS c_t"]),3, sign=True)]
+        for k, lab in (("human", "<b>real managers</b>"), ("frontier before", "the simulated manager, before"),
+                       ("frontier after", "the simulated manager, with the indicator"),
+                       ("ref_gnn before", "the graph-network manager, before"), ("ref_gnn after", "the graph-network manager, after"))
+    ], cls="mech")
+    d = ce_rcc
+    dec = tbl(["", "~next-round change if punished", "~how many such players", "~next-round change if not punished", "~share punished"], [
+        ["<b>real people</b>", fmt(F(d["human"][2])), d["human"][3], fmt(F(d["human"][4])), d["human"][6]],
+        ["the simulation, before", fmt(F(d["frontier before"][2])), d["frontier before"][3], fmt(F(d["frontier before"][4])), d["frontier before"][6]],
+        ["the simulation, with the indicator", f'<b>{fmt(F(d["frontier after"][2]))}</b>', d["frontier after"][3], fmt(F(d["frontier after"][4])), f'<b>{d["frontier after"][6]}</b>'],
+    ], cls="mech")
+    att = tbl(["row", "~the component in its own model line", "~the component moved over here", "~this line as it was"], [
+        [f'{r} <span class="rn">{esc(ROWNAME[r])}</span>', fmt(scores[r]["d_kexo_after"]), fmt(F(sk_cmp[r]["after"])), fmt(F(sk_cmp[r]["before"]))]
+        for r in ("SC", "SB", "CG", "RCD", "RCE", "RSA")
+    ])
+    return f'''
+<p class="legend">After the three answers above, four things were done next, all declared in writing before any of them ran: three experiments and one change to the rules by which experiments are judged. Each block says what was tried, what happened and what it means. Two of the three experiments failed the bar they had set themselves. The third set no bar, because it was a measurement rather than a candidate, and it came back against the hypothesis its own author had proposed. Those are the results worth reading.</p>
+{steps}
+
+<h2>Step 1 &mdash; the output design, and what it found instead</h2>
+<div class="twocol">
+<div>
+<p class="legend" style="color:var(--ink)"><b>What was tried.</b> The players pick a number from 0 to 20. One family of models scores all 21 possibilities separately; another predicts a centre and a width and draws from a bell curve. The argument for the second was that when a simulated game wanders somewhere no real game went, a model with 21 unconnected scores has nothing holding them together and should sag back toward its average, while one that shifts a single centre keeps tracking. If true, that would explain the drift, and the two model lines should be merged around the bell-curve design. No training was needed &mdash; three short simulations and a probe over the real games.</p>
+<p class="legend" style="color:var(--ink)"><b>What happened.</b> The opposite, on every measurement. Pushing the recent group level 2, 4 and 6 points away from anything real, the 21-score design tracks the shift most closely of the three and is the only one that does not sag at the extremes. With the shared-noise machinery off, it also holds the most variety in the situations it reaches. Reading it the way most favourable to the bell-curve models &mdash; scoring each against its own fit to real games &mdash; one ties and one is clearly worse.</p>
+<p class="legend" style="color:var(--ink)"><b>What it means.</b> The combined design is dead as argued for. One piece of the bell-curve family still earns its place inside that family: the extra weight it puts on the corners and on repeating last round's number, which is what keeps its randomness honest. But it has nothing to offer a design that gets the corners for free.</p>
+</div>
+<div>
+<h4>How much each model still moves when pushed away from real situations</h4>
+{gain_svg()}
+<p class="legend">Bars hang from the line at 1.00, which is where a model shifts its prediction one-for-one with the push; the shorter the bar, the better the model tracks. The six groups are the six pushes, from 6 points down to 6 points up, over the same set of player-rounds for all three models. The 21-score design tracks most closely everywhere and is the only one that rises above the line at the extremes. Neither bell-curve model decays with distance either, so nothing here fails to extrapolate.</p>
+{keyline(GAIN_SERIES)}
+</div>
+</div>
+<h4>Variety of situations reached, with the shared-noise machinery off</h4>
+{ret}
+<p class="legend">All three are short of the human {fmt(F(cl_dec["human"]["var_cond_mean"]),1)}. The share column divides each model by what that same model manages when it is fed real games, so a model is not penalised for being a worse fit in the first place; on that reading the inflated bell-curve model ties with the current design and the plain one is worse.</p>
+
+<div class="twocol">
+<div>
+<h4>The sharper finding: the groups stop pulling apart</h4>
+<p class="legend" style="color:var(--ink)">The same measurements produced a better description of the defect than the one they were aimed at. Real groups keep drifting further apart as a game runs, all the way to the last round. With the shared-noise machinery off, every model starts in about the right place and then stalls or reverses in the last third. So the drift is not a model that is uniformly too tame; it is a model that stops accumulating differences after about round 16. That is a missing slow process, not a missing output design &mdash; and it is why the next round of work is aimed at something that can carry a group's state across rounds.</p>
+<p class="legend">Caveat kept from the experiment: within every model, the shared-noise machinery is worth about twice what the choice of output design is worth, and the earlier work showed all of that value sits in its persistence rather than its correlation.</p>
+</div>
+<div>
+<h4>How far apart the groups drift, by third of the game</h4>
+{spread_svg()}
+<p class="legend">Standard deviation of group averages, real people against three sets of simulated players with the shared-noise machinery switched off. Labels on the last third.</p>
+{keyline(SPREAD_SERIES)}
+</div>
+</div>
+
+<h2>Step 2 &mdash; the manager at the contribution ceiling</h2>
+<p class="legend"><b>What was tried.</b> Real managers almost never punish someone who gave the full 20, and when they do they punish hard. Both simulated managers treat the amount given as one number on a scale, so neither can make a sharp break at exactly 20; they read the ceiling off the 15-to-19 band and punish full contributors three to four times too often, too lightly. The row that scores the reaction at the ceiling was the one thing the manager fix had not moved. So both managers got one extra input: a yes-or-no flag saying the player gave the maximum. On the real games the flag is worth {fmt(F(ce_logit["+max"]["contribution_max_coef"]))} on the log-odds scale ({esc("p = ")}{F(ce_logit["+max"]["contribution_max_p"]):.3f}) and takes the fitted rate at the ceiling from {fmt(F(ce_logit["linear"]["fit_P(p>0|c=20)"]),3)} onto the observed {fmt(F(ce_logit["+max"]["fit_P(p>0|c=20)"]),3)}; the model's fit over all punishment levels improves from {F(ce_cv0["log_loss"]):.4f} to {F(ce_cv["log_loss"]):.4f}. A companion flag for &ldquo;gave nothing&rdquo; was tested and dropped.</p>
+{mech}
+<p class="legend"><b>What happened.</b> The mechanism is now essentially exact. In the simulated games the manager punishes a full contributor {fmt(F(ce_mech["frontier after"]["P(p>0|c_t=20)"]),3)} of the time against the real {fmt(F(ce_mech["human"]["P(p>0|c_t=20)"]),3)}, where before it was {fmt(F(ce_mech["frontier before"]["P(p>0|c_t=20)"]),3)}; the severity there goes from {fmt(F(ce_mech["frontier before"]["E[p|p>0] 20"]),2)} to {fmt(F(ce_mech["frontier after"]["E[p|p>0] 20"]),2)} against the real {fmt(F(ce_mech["human"]["E[p|p>0] 20"]),2)}. The target row moved {fmt(F(ce_ba["RCC"]["frontier_after"])-F(ce_ba["RCC"]["frontier_before"]),3, sign=True)}, from {fmt(F(ce_ba["RCC"]["frontier_before"]),3)} to {fmt(F(ce_ba["RCC"]["frontier_after"]),3)} &mdash; the largest move that row has ever had &mdash; and still did not cross a score band, so the experiment is recorded as a failure. The 22-row mean is flat at {ce_mean("frontier_after"):.4f} against {ce_mean("frontier_before"):.4f} and the protected response row holds. The graph-network reference stack improved more broadly: mean {ce_mean("ref_gnn_before"):.4f} to {ce_mean("ref_gnn_after"):.4f}, rows at or under the ceiling {ce_le1("ref_gnn_before")} to {ce_le1("ref_gnn_after")}.</p>
+{dec}
+<p class="legend"><b>What it means.</b> Splitting the target row into its parts says exactly where the remaining distance sits, and it is not the manager's. The manager's half is finished: the invented population of punished full contributors is gone, {d["frontier before"][6]} before against {d["frontier after"][6]} after and {d["human"][6]} in the real games. What is left is the players. A punished full contributor in the simulation gives up {fmt(abs(F(d["frontier after"][2])),2)} points the next round where a real person gives up {fmt(abs(F(d["human"][2])),2)} &mdash; an under-reaction of about {abs(F(d["human"][2]))/abs(F(d["frontier after"][2])):.1f} times, which no change to the manager can touch. A second defect is untouched and stays live: the simulated manager's punishment falls with contribution at {fmt(F(ce_mech["frontier after"]["OLS c_t"]),3)} per point against the real {fmt(F(ce_mech["human"]["OLS c_t"]),3)}, a little over half the human strength, and the indicator does not move it.</p>
+
+<h2>Step 3 &mdash; borrowing the other line's group-switching component</h2>
+<p class="legend"><b>What was tried.</b> Two model lines have been developed in parallel. The other one posts the best switching numbers in the whole set, and the piece most likely to be responsible is its group-switching component, which gives each possible group size its own free setting instead of forcing one smooth curve through them. The test was cheap: change nothing but that one piece and run the simulation once.</p>
+{att}
+<p class="legend"><b>What happened.</b> Every measure that is purely about who ends up in which group improved, and every measure of how players respond got worse. Switch timing gained a score band, segregation improved without crossing one, the group-spread row improved sharply, and the switching-pull row moved the wrong way. The protected response row was violated: in the 10-to-14 band the slope fell from {fmt(F(sk_rce["before"]["slope_10-14"]),3)} to {fmt(F(sk_rce["after"]["slope_10-14"]),3)}, about a third of what it was. The 22-row mean is the lowest on record at {F(sk_cmp["mean"]["after"]):.4f} and it still fails, because the mean is not what it declared.</p>
+<p class="legend"><b>What it means.</b> The split in the table is the useful result. Only the first three rows are decided by the switching component alone; the last three depend on what the players do once the groups have been set, so they were never the right targets. Declaring the switching-pull row as a target was a mistake in the plan itself, independent of how the run came out. One further thing went wrong that nobody had declared: switching after being punished regressed more than any other row, {fmt(F(sk_cmp["RSA"]["before"]),3)} to {fmt(F(sk_cmp["RSA"]["after"]),3)}. Right number of switches, right group sizes, wrong people leaving. One run on one seed cannot separate whether the component needs the other line's players or clashes with these ones specifically.</p>
+
+<h2>Step 4 &mdash; changing the rules, and then repairing them</h2>
+<div class="twocol">
+<div>
+<p class="legend" style="color:var(--ink)"><b>What was tried.</b> Two rule changes, so that the results above mean what they say. First, the shared-noise settings are frozen: until now a recalibration rode along with every change to the players, so a player experiment and a noise experiment moved at once and could not be told apart. Changing either setting is now its own declared experiment. Second, a change to the players is judged with the machinery switched off, on the variety measure against the human {fmt(F(cl_dec["human"]["var_cond_mean"]),1)}, alongside the usual checks &mdash; because while the persistence is supplying most of the group-spread row by compounding, that row cannot tell you whether a change to the players helped.</p>
+</div>
+<div>
+<p class="legend" style="color:var(--ink)"><b>What happened.</b> The rule protecting the response row misfired on its first outing and had to be amended. It says a band's slope may not fall to half its previous value or less. It fired twice on reference stacks: once on a change of {ce_se[1]["change_in_se"]["15-19"]:.2f} standard errors on the thinnest band in the suite, and once on a slope going from {fmt(lead(ce_sl[2]["before"][3]),3,sign=True)} to {fmt(lead(ce_sl[2]["after"][3]),3,sign=True)}, toward the human {fmt(HUMAN_SLOPES[2],3,sign=True)} &mdash; an improvement read as an erosion, because a magnitude test on a signed quantity cannot tell the difference. Two qualifications were added: the rule does not fire when the new slope is closer to the human value than the old one, and it fires only when the change exceeds one pooled standard error. Neither changes a verdict already recorded, because both failing experiments failed their declared row independently.</p>
+<p class="legend"><b>What it means.</b> A safety rule that fails experiments over differences too small to be real, and once over an improvement, is worse than no rule, because it teaches people to argue with it. It is now stated with the arithmetic that makes a firing readable, and every experiment touching that row reports its slopes with standard errors.</p>
+</div>
+</div>
+'''
+
 ledger = [
  ("PR #182", f"{PR}182", "open", "Bookkeeping for the main branch: ignore the local config file, cluster account lines, the evaluation metric notes."),
  ("PR #183", f"{PR}183", "open", "The held-out teacher-forced test of the players' reaction to punishment, built on top of the PR #181 branch."),
@@ -293,6 +701,13 @@ ledger = [
  ("rcb-alternative-response-slope", "", "merged into PR #184", "The RCE row, its tests, and the comparison report over 40 stacks."),
  ("auto/punisher-current-contribution-sims", "", "documentation", "The rerun configs, the runner script, and the 'before' column of the score tables."),
  ("auto/punisher-current-contribution-gmlp", "", "documentation", "The Gaussian-MLP code tree plus the three fix commits copied over; used for cases c and d."),
+ ("PR #186", f"{PR}186", "open &middot; result", "The shared draw run three ways: on, off, and redrawn every round. Establishes that the players' per-round randomness is right and the variety of situations is two thirds of the human value. No model proposed."),
+ ("PR #187", f"{PR}187", "open &middot; result", "What the shared mistake is made of, measured on the real games: observable group facts explain a seventh of it, and the rest is a one-round echo with no lasting part. No model trained, no simulation run."),
+ ("PR #188", f"{PR}188", "open &middot; result", "Five copies of the players trained with different random seeds. Their disagreement is about a sixth of the shared draw's strength and decays in a round, which closes the Bayesian route."),
+ ("PR #189", f"{PR}189", "open &middot; protocol", "The four-step plan, the freeze on the shared-noise settings, and the rule that a change to the players is judged with the machinery off. Later amended: the protected-row magnitude clause gained two qualifications after firing wrongly twice."),
+ ("PR #190", f"{PR}190", "open &middot; fail", "Step 3. The other line's group-switching component moved across. Every pure switching measure improved and every response measure worsened; the protected row was violated. Lowest 22-row mean on record and still a failure."),
+ ("PR #191", f"{PR}191", "open &middot; result", "Step 1. The emission-head comparison, which falsified its own hypothesis: the current design extrapolates best and holds the most variety. Also the sharpest description of the defect, as a failure of late divergence."),
+ ("PR #192", f"{PR}192", "open &middot; fail", "Step 2. A &lsquo;gave the maximum&rsquo; flag for both managers. The mechanism at the ceiling is now essentially exact, the declared row moved more than it ever has and still did not cross a band, and the remainder decomposes onto the players."),
 ]
 def ledger_html():
     out=[]
@@ -341,7 +756,8 @@ ol.steps p.meta{font-size:12px;color:var(--faint)}
 .mnav button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
 .bacard{display:none}.bacard.on{display:block}
 .twocol{display:grid;grid-template-columns:1.15fr 1fr;gap:20px;align-items:start}
-.tablewrap{overflow-x:auto}
+.twocol>*{min-width:0}
+.tablewrap{overflow-x:auto;min-width:0;max-width:100%}
 table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13px}
 thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line)}
 th.num,td.num{text-align:right;font-variant-numeric:tabular-nums}
@@ -359,6 +775,8 @@ svg{max-width:100%;height:auto;display:block}
 svg .grid{stroke:var(--grid);stroke-width:1}svg .grid.zero{stroke:var(--line2);stroke-width:1.2}
 svg .tick{fill:var(--muted);font-size:11px;font-family:inherit}
 svg .bar.hum{fill:var(--hum)}svg .bar.bef{fill:var(--bef)}svg .bar.aft{fill:var(--aft)}
+svg .bar.s1{fill:var(--c-blue)}svg .bar.s2{fill:var(--c-amber)}svg .bar.s3{fill:var(--c-red)}
+.sw.s1{background:var(--c-blue)}.sw.s2{background:var(--c-amber)}.sw.s3{background:var(--c-red)}
 svg .pt{fill-opacity:.85;stroke:var(--bg);stroke-width:1}
 svg .pt.gnn{fill:var(--c-teal)}svg .pt.cat{fill:var(--c-red)}svg .pt.gau{fill:var(--c-amber)}svg .pt.rid{fill:var(--c-muted)}svg .pt.pr{fill:var(--c-blue)}
 .keyline{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px}
@@ -388,12 +806,14 @@ page = f'''<title>Punisher Rebaseline Atlas</title>
 <style>{CSS}</style>
 <div class="wrap">
 <h1>Punisher Rebaseline Atlas</h1>
-<p class="sub">Real people played a public-goods game with a punishing manager; this project trains simulated players and a simulated manager to behave like them. This page reports one working day, 18 September 2026, on those simulations: the copula question, why the simulated players seemed not to react to punishment, the discovery that the simulated manager punished last round's contribution on every branch of the code, and the five stacks rerun under the fix. Companion to the Autoresearch Atlas of experiments #146&ndash;#181.</p>
+<p class="sub">Real people played a public-goods game with a punishing manager; this project trains simulated players and a simulated manager to behave like them. This page reports two working days, 18 and 19 September 2026, on those simulations: the discovery that the simulated manager punished last round's contribution on every branch of the code and the stacks rerun under the fix; three experiments on why the simulated players' mistakes come in groups; and a four-step programme of which two steps failed the bar they had set themselves. Companion to the Autoresearch Atlas of experiments #146&ndash;#181.</p>
 <nav>
   <button type="button" class="on" data-layer="overview">Overview</button>
   <button type="button" data-layer="scores">Before / after</button>
   <button type="button" data-layer="response">Response instrument</button>
   <button type="button" data-layer="mechanism">Punisher mechanism</button>
+  <button type="button" data-layer="shared">Shared mistakes</button>
+  <button type="button" data-layer="steps4">Four steps</button>
   <button type="button" data-layer="stories">Stories</button>
   <button type="button" data-layer="ledger">Ledger</button>
 </nav>
@@ -401,12 +821,20 @@ page = f'''<title>Punisher Rebaseline Atlas</title>
 <section class="layer on" id="overview">
 {ABOUT}
 <h2>The headline numbers</h2>
-<p class="legend">Each tile is one row of the 22-row score card, before and after the manager fix. RPA scores how the manager punishes, RCB and RCE score how the players react to punishment. A row is <em>protected</em> when no future experiment may make it worse.</p>
+<p class="legend">Where things stand after the manager fix and the seven experiments that followed it. The first tile is the one defect still open; the next two are the piece of it that has been closed and the piece that has been isolated; the last is the best overall score on record and what it cost to get there.</p>
 {overview_tiles()}
 <h2>How the work unfolded</h2>
 <ol class="steps">{steps_html()}</ol>
 <h2>The one-paragraph reading</h2>
-<p class="legend" style="max-width:76ch;font-size:14px;color:var(--ink)">Where the fix applies directly it worked: the row scoring how the manager punishes (RPA) and the reaction-to-punishment row (RCB) improve by a full score band in every stack, and the simulated manager now punishes low contributors more than full ones, in the same order as the real managers do. It did not move the reaction at the ceiling (RCC), because the retrained manager still punishes full contributors three to four times too often; that is a limit of the manager's functional form, not of timing. The gains were offset elsewhere: the contribution distributions and the segregation row got slightly worse, so the 22-row means stayed roughly flat. For the choice of which model line to build on, the evidence now favours the stimulus-skip stack (PR #181) or the Gaussian-MLP line (PRs #174, #177), both of which keep all four human response signs under the fixed manager, over the group-vnode line (PR #179) on which the experiment record had been built.</p>
+<p class="legend" style="max-width:76ch;font-size:14px;color:var(--ink)">The manager fix worked where it applies: the row scoring how the manager punishes and the reaction-to-punishment row improve by a full score band in every stack, and a later indicator for &ldquo;gave the maximum&rdquo; made the simulated manager's behaviour at the ceiling essentially exact. What is left is one defect and three smaller ones. The defect is that the simulated games do not become as varied as the real ones: real groups keep pulling apart through the last third of a game and the models flatten out, and the shared-noise machinery has been covering that up by supplying variety rather than the correlation it is named for. The three smaller ones are all now cleanly isolated with a baseline ready: the simulated players under-react to heavy punishment at the ceiling by about {abs(F(ce_rcc["human"][2]))/abs(F(ce_rcc["frontier after"][2])):.1f} times, the simulated manager's punishment falls with contribution at about half the human strength, and the borrowed group-switching component sends the wrong people away after being punished. Two of the four most recent steps failed their declared gate, and a third falsified the hypothesis its own author proposed &mdash; that a bell-curve output would resist the drift better than the design already in use. It is the design already in use that resists it best.</p>
+</section>
+
+<section class="layer" id="shared">
+{shared_error_section()}
+</section>
+
+<section class="layer" id="steps4">
+{four_steps_section()}
 </section>
 
 <section class="layer" id="scores">
@@ -427,7 +855,7 @@ page = f'''<title>Punisher Rebaseline Atlas</title>
 <div>
 <h4>RCE, punishment response slope (the new row)</h4>
 <p class="legend" style="color:var(--ink)">RCE first sorts punished players by what they gave: 0&ndash;4, 5&ndash;9, 10&ndash;14 or 15&ndash;19 points. Our player is in the 0&ndash;4 band. Within each band it fits a straight line of next-round change against punishment received and keeps the slope: how many more points a player gives per extra point of punishment. Real players comply at low levels and withdraw at high ones: slopes +0.140, +0.104, &minus;0.077, &minus;0.161. The score is the weighted gap between the simulated and the human slopes over the four bands.</p>
-<p class="legend" style="color:var(--ink)"><b>Why it was added but does not decide alone.</b> Its noise ceiling is large. Two halves of the human data differ by 0.086 in slope, about three quarters of the human slopes themselves. So a simulation whose players ignore punishment entirely scores 1.42, a 'minor deviation', and one with half the human response scores 0.82, at the ceiling. RCE therefore sits beside RCB as a protected row: no experiment may worsen its score band, flip one of the four human signs, or halve a band's slope.</p>
+<p class="legend" style="color:var(--ink)"><b>Why it was added but does not decide alone.</b> Its noise ceiling is large. Two halves of the human data differ by 0.086 in slope, about three quarters of the human slopes themselves. So a simulation whose players ignore punishment entirely scores 1.42, a 'minor deviation', and one with half the human response scores 0.82, at the ceiling. RCE therefore sits beside RCB as a protected row: no experiment may worsen its score band, flip one of the four human signs, or halve a band's slope. The last of those three had to be qualified twice after it fired on two experiments it should not have &mdash; see the Four steps tab.</p>
 </div>
 </div>
 <h2>RCB and RCE rank the stacks almost independently</h2>
@@ -456,7 +884,7 @@ page = f'''<title>Punisher Rebaseline Atlas</title>
 <p class="legend">This tab checks the simulated manager directly, before and after the fix. Each row is one stack's self-play simulation (the models playing against each other, 19,200 player-rounds), compared with the real managers over 8,914 valid rows. The columns: how often a player who gave the full 20 is punished; how often one who gave 4 or less is; a timing check, the punishment probability when a player just rose to 20 from 4 or less against when they just dropped to 4 or less from 20 (a manager reacting to this round punishes the drop, one reacting to last round punishes the rise); the average punishment when punished, by contribution band; and the regression weights of punishment on this round's and last round's contribution (ordinary least squares). Shaded rows are after the fix.</p>
 <div class="tablewrap"><table class="mech"><thead><tr><th>simulation</th><th class="num">P(punished | gave 20)</th><th class="num">P(punished | gave &le; 4)</th><th class="num">timing check: rose / dropped</th><th class="num">mean punishment if punished, by band 0-4 / 5-9 / 10-14 / 15-19 / 20</th><th class="num">regression weight, current / previous</th></tr></thead>
 <tbody>{mech_table()}</tbody></table></div>
-<p class="legend">Before the fix every simulated manager had a near-zero weight on the current contribution and about &minus;0.08 on the previous one, the reverse of the human pattern, and punished full contributors five to nine times too often. After the fix the current-round weight is &minus;0.12 to &minus;0.17 against the human &minus;0.24, the timing check has the human ordering, and punishment again falls as contribution rises. What remains is the ceiling: full contributors are still punished three to four times too often, and when they are punished the amount is too small. That residual is why RCC, the reaction at the ceiling, did not move.</p>
+<p class="legend">Before the fix every simulated manager had a near-zero weight on the current contribution and about &minus;0.08 on the previous one, the reverse of the human pattern, and punished full contributors five to nine times too often. After the fix the current-round weight is &minus;0.12 to &minus;0.17 against the human &minus;0.24, the timing check has the human ordering, and punishment again falls as contribution rises. What remains is the ceiling: full contributors are still punished three to four times too often, and when they are punished the amount is too small. That residual is why RCC, the reaction at the ceiling, did not move. It was closed later, by giving both managers a flag for &ldquo;gave the maximum&rdquo;: the punish rate at the ceiling goes to {fmt(F(ce_mech["frontier after"]["P(p>0|c_t=20)"]),3)} against the real {fmt(F(ce_mech["human"]["P(p>0|c_t=20)"]),3)} and the severity to {fmt(F(ce_mech["frontier after"]["E[p|p>0] 20"]),2)} against {fmt(F(ce_mech["human"]["E[p|p>0] 20"]),2)}. RCC still did not cross a band, for a reason that turned out to be about the players rather than the manager &mdash; the Four steps tab has it.</p>
 <div class="figrow">
 <figure><img src="{IMG['b_rpa']}" alt="RPA figure for the stimulus-skip stack after the fix"><figcaption>RPA, how the manager punishes at each contribution level, for the PR #181 stimulus-skip stack under the fixed manager: 1.23 to 0.69.</figcaption></figure>
 <figure><img src="{IMG['d_rce']}" alt="RCE figure for the k-one-hot gmlp stack after the fix"><figcaption>The RCE figure for the PR #174 Gaussian-MLP stack under the fixed manager: the strongest response on record, RCE 0.70.</figcaption></figure>
@@ -481,10 +909,19 @@ page = f'''<title>Punisher Rebaseline Atlas</title>
 <tr><td>Regression weight of punishment on the current contribution, linear manager fed human data</td><td class="num">+0.054</td><td class="num">&minus;0.125</td><td>human &minus;0.242</td></tr>
 <tr><td>Raw RCB gap of the group-vnode players fed human data</td><td class="num">0.093 shipped model, in-sample</td><td class="num">0.095 held-out</td><td>PR #183</td></tr>
 <tr><td>Rows in the score card</td><td class="num">21</td><td class="num">22</td><td>RCE added, RCF dropped</td></tr>
+<tr><td>Chance a full contributor is punished, in the simulation</td><td class="num">{fmt(F(ce_mech["frontier before"]["P(p>0|c_t=20)"]),3)}</td><td class="num">{fmt(F(ce_mech["frontier after"]["P(p>0|c_t=20)"]),3)}</td><td>real managers {fmt(F(ce_mech["human"]["P(p>0|c_t=20)"]),3)}; PR #192</td></tr>
+<tr><td>How hard, when they are punished at the ceiling</td><td class="num">{fmt(F(ce_mech["frontier before"]["E[p|p>0] 20"]),2)}</td><td class="num">{fmt(F(ce_mech["frontier after"]["E[p|p>0] 20"]),2)}</td><td>real managers {fmt(F(ce_mech["human"]["E[p|p>0] 20"]),2)}; now a slight overshoot</td></tr>
+<tr><td>RCC, the reaction at the ceiling, on the frontier stack</td><td class="num">{fmt(F(ce_ba["RCC"]["frontier_before"]),4)}</td><td class="num">{fmt(F(ce_ba["RCC"]["frontier_after"]),4)}</td><td>largest move that row has had; still band 1&ndash;2, so the experiment failed</td></tr>
+<tr><td>Next-round drop of a punished full contributor</td><td class="num">{fmt(F(ce_rcc["frontier before"][2]))}</td><td class="num">{fmt(F(ce_rcc["frontier after"][2]))}</td><td>real people {fmt(F(ce_rcc["human"][2]))}; the players' defect, not the manager's</td></tr>
+<tr><td>Linear manager model, cross-validated log loss, with the ceiling flag</td><td class="num">{F(ce_cv0["log_loss"]):.4f}</td><td class="num">{F(ce_cv["log_loss"]):.4f}</td><td>same split and seed; 31 classes, so the margin is small by construction</td></tr>
+<tr><td>Variety of situations reached, machinery off</td><td class="num">{fmt(F(cl_dec["A"]["var_cond_mean"]),1)} with it on</td><td class="num">{fmt(F(cl_dec["B"]["var_cond_mean"]),1)}</td><td>real games {fmt(F(cl_dec["human"]["var_cond_mean"]),1)}; the open defect</td></tr>
+<tr><td>Within-group co-movement left after the model's own expectation</td><td class="num">{fmt(F(ms_base["raw contribution, plain Pearson"]["value"]),3)} raw</td><td class="num">{fmt(F(ms_base["level residual, plain Pearson"]["value"]),3)}</td><td>the network already explains {(1-F(ms_base["level residual, plain Pearson"]["value"])/F(ms_base["raw contribution, plain Pearson"]["value"]))*100:.0f} per cent of it</td></tr>
+<tr><td>Shared-draw strength: what five trained copies imply, against what is fitted</td><td class="num">{se_sum["implied_rho"]:.4f}</td><td class="num">{se_sum["rho_copula_json"]:.4f}</td><td>fitted interval {se_sum["rho_copula_json_ci"][0]:.3f} to {se_sum["rho_copula_json_ci"][1]:.3f}; PR #188</td></tr>
+<tr><td>Lowest 22-row mean on record</td><td class="num">{means["b_skip_after"]:.4f}</td><td class="num">{F(sk_cmp["mean"]["after"]):.4f}</td><td>PR #190, which failed its declared row and the protected one</td></tr>
 </tbody></table></div>
-<h2>Clean-up once PR #184 closes</h2>
+<h2>Clean-up as the pull requests close</h2>
 <ul class="code">
-<li>On the Raven cluster: <code>~/repros/ai-runs/punisher-current-contr</code>, <code>…-gmlp</code>, <code>…-train</code>, <code>…-tests</code></li>
+<li>On the Raven cluster, one isolated folder per experiment: <code>~/repros/ai-runs/punisher-current-contr</code>, <code>…-gmlp</code>, <code>…-train</code>, <code>…-tests</code>, <code>copula-cl-variance</code>, <code>copula-missing-state</code>, <code>copula-ensemble</code>, <code>head-diagnostic</code>, <code>head-diag-cat</code>, <code>punisher-ceiling</code>, <code>switch-kexo-port</code></li>
 <li>Local worktree <code>.claude/worktrees/curpun-gmlp</code>; the documentation branches for the simulations and the Gaussian-MLP setup</li>
 <li>The Raven checkout itself, <code>~/repros/algorithmic-institutions</code> with <code>~/algorithmic-institutions</code> symlinked, stays</li>
 </ul>
