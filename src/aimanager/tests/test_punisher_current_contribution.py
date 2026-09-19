@@ -211,3 +211,49 @@ def test_gnn_punisher_data_has_ceiling_indicator():
     np.testing.assert_array_equal(
         x[0, :4, -1, 0].numpy(), [float(c == 20) for c in C1[:4]]
     )
+
+
+def test_linear_punisher_reads_contribution_onehot():
+    from handcrafted_grid import CONTRIBUTION_ONEHOT, validate_feature_legality
+
+    assert len(CONTRIBUTION_ONEHOT) == 21
+    feats = list(CONTRIBUTION_ONEHOT)
+    ah = _adapter(feats)
+    ah.get_punishments(_rounds())
+    X = ah.estimator.seen[-1]
+    np.testing.assert_array_equal(X, np.eye(21)[C1])
+    # the level-20 column IS contribution_max, the level-0 column is _zero
+    np.testing.assert_array_equal(X[:, 20], [float(c == 20) for c in C1])
+    np.testing.assert_array_equal(X[:, 0], [float(c == 0) for c in C1])
+    # legal for the punishment target, illegal for the contribution target
+    validate_feature_legality(
+        {"data": {"target": "punishment"}, "blocks": {"b": {"sets": [feats]}}}
+    )
+    with pytest.raises(ValueError, match="contribution target"):
+        validate_feature_legality(
+            {
+                "data": {"target": "contribution"},
+                "blocks": {"b": {"sets": [["contribution_is_07"]]}},
+            }
+        )
+
+
+def test_gnn_punisher_onehot_encodes_current_contribution():
+    import torch as th
+
+    from aimanager.generic.encoder import Encoder
+    from aimanager.manager.api_manager import create_data
+
+    data = create_data(_rounds(), ["a", "b"], DEFAULTS)
+    enc = Encoder(
+        [{"name": "contribution", "n_levels": 21, "encoding": "onehot"}],
+        refrence="punishment",
+    )
+    x = enc(**data)
+    assert tuple(x.shape) == (2, 8, 2, 21)
+    np.testing.assert_array_equal(x[0, :4, -1].numpy(), np.eye(21)[C1[:4]])
+    np.testing.assert_array_equal(x[0, :4, 0].numpy(), np.eye(21)[C0[:4]])
+    # the level-20 column reproduces the ceiling bool the parent added
+    np.testing.assert_array_equal(
+        x[..., 20].to(th.bool).numpy(), data["contribution_max"].numpy()
+    )

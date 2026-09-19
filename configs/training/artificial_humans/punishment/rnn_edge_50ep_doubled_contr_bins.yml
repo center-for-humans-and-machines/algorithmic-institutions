@@ -1,0 +1,73 @@
+description: >-
+  Punishment predictor on the pair-augmented (doubled) 50ep dataset, as
+  rnn_edge_50ep_doubled_ceiling.yml (node+edge+rnn, hidden 20, no
+  autoregression, no agent_group) with the current round's `contribution`
+  entering as a full 21-level one-hot instead of a numeric input, and the
+  `contribution_max` bool dropped because the one-hot's level-20 column IS
+  that indicator. The parent fixed the punisher at the ceiling but left its
+  OLS response to c_t at about -0.14 against the human -0.242; the
+  hypothesis under test is that a numeric input forces one shape stretched
+  across the range and that per-level freedom lets the middle be as steep
+  as the data wants. NB the linear half of this experiment refutes that on
+  the human data before any training (one-hot costs +0.0711 of CV log loss
+  and moves the slope by 0.007); the GNN is retrained anyway so the verdict
+  is measured end to end. Features are (contribution [onehot],
+  prev_contribution, prev_punishment, is_first). See
+  notes/autoresearch_log/punisher-contribution-encoding.md.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 8
+  memory: 32
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: punishment_valid
+  switch_every: 4
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep_doubled
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: []
+  basedir: .
+  output_dir: artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_contr_bins
+  model_args:
+    y_levels: 31
+    y_name: punishment
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: contribution
+        n_levels: 21
+        encoding: onehot
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - etype: bool
+        name: is_first
+  optimizer_args:
+    lr: 1.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 1250
+    batch_size: 10
+    clamp_grad: 1
+    eval_period: 10
+    l1_entropy: 0
+  device: cuda
+  autoregression: false

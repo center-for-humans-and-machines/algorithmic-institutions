@@ -1,0 +1,81 @@
+# The ceiling multinomial punisher (multinomial_ceiling.yml: contribution,
+# contribution_max, prev_contribution, prev_punishment, round_number,
+# is_first, C = 1.0) with the current contribution entering as a full
+# 21-level one-hot instead of a number, replacing both `contribution` and
+# `contribution_max` -- `contribution_is_20` IS the ceiling indicator, and
+# ties go to the simpler model. The parent fixed the punisher at the ceiling
+# and left its OLS response to c_t at -0.1255 against the human -0.2417; the
+# hypothesis is that one numeric input forces one shape stretched across the
+# range.
+#
+# The one-hot is deliberately NOT the evaluation's contribution binning
+# ({0}, 1-5, 6-10, 11-15, 16-19, {20}, which RPA is defined on): a per-value
+# indicator introduces no boundary at all.
+#
+# scripts/data_analysis/punisher_contribution_encoding_check.py REFUTES the
+# hypothesis on the human data before any training: the one-hot costs +0.0711
+# of 4-fold CV log loss (1.3446 -> 1.4157) and moves the implied slope only
+# to -0.1329, and natural splines at 4 and 6 df agree with a tenth of the
+# parameters. The retrain runs anyway so the verdict is measured end to end.
+# The B1 block carries the one-hot alone, so the rank-1 row is the declared
+# change and not the parent's encoding re-selected. See
+# notes/autoresearch_log/punisher-contribution-encoding.md.
+#
+# Produces artifacts/baselines/punishment_multinomial_contr_bins.joblib:
+#   .venv/bin/python scripts/baselines/run_baseline_cv.py \
+#       configs/training/baselines/punishment/multinomial_contr_bins.yml
+#   .venv/bin/python scripts/baselines/inspect_best_model.py \
+#       data/baselines/punishment_cv_multinomial_contr_bins.csv \
+#       --config configs/training/baselines/punishment/multinomial_contr_bins.yml \
+#       --save-best --name punishment_multinomial_contr_bins.joblib
+# and the severity-copula-stamped copy (rho carried over unchanged from
+# punishment_multinomial_ceiling_severity_copula.joblib, the copula
+# parameters being frozen by protocol; the refit is printed for the record):
+#   .venv/bin/python scripts/baselines/punishment_copula_rho.py --roundtrip \
+#       --bundle artifacts/baselines/punishment_multinomial_contr_bins.joblib \
+#       --out artifacts/baselines/punishment_multinomial_contr_bins_severity_copula.joblib \
+#       --stamp-rho 0.4273
+data:
+  # TRAIN split only. Same locked split as contribution/switch (episode-level;
+  # the mask differs). Test fold lives in the _test sibling file and is NOT
+  # touched here. See split_baseline_holdout.py.
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: punishment
+  target_type: categorical
+  categorical_levels: 31        # punishment is an integer 0..30
+  mask: punishment_valid        # rounds where the manager gave input
+  exclude_flipped: true         # train file is already undoubled; no-op safety filter
+  switch_every: 4
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/punishment_cv_multinomial_contr_bins.csv
+
+setting:              # multinomial logistic; only C is valid here
+  C: 1.0
+
+blocks:
+  B1_self:                    # what was just contributed, per level, own lags
+    components: [contribution_is_00, contribution_is_01, contribution_is_02,
+                 contribution_is_03, contribution_is_04, contribution_is_05,
+                 contribution_is_06, contribution_is_07, contribution_is_08,
+                 contribution_is_09, contribution_is_10, contribution_is_11,
+                 contribution_is_12, contribution_is_13, contribution_is_14,
+                 contribution_is_15, contribution_is_16, contribution_is_17,
+                 contribution_is_18, contribution_is_19, contribution_is_20,
+                 prev_contribution, prev_punishment]
+    sets:
+      - [contribution_is_00, contribution_is_01, contribution_is_02,
+         contribution_is_03, contribution_is_04, contribution_is_05,
+         contribution_is_06, contribution_is_07, contribution_is_08,
+         contribution_is_09, contribution_is_10, contribution_is_11,
+         contribution_is_12, contribution_is_13, contribution_is_14,
+         contribution_is_15, contribution_is_16, contribution_is_17,
+         contribution_is_18, contribution_is_19, contribution_is_20,
+         prev_contribution, prev_punishment]
+
+  B7_structural:              # is_first: round 0's prev_* are imputed medians
+    components: [round_number, is_first]
+    sets: [[round_number, is_first]]

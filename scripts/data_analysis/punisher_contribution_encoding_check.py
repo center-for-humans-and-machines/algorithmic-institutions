@@ -162,11 +162,7 @@ def fold_logloss(X, y, fold):
     for k in sorted(set(fold.tolist())):
         tr, te = fold != k, fold == k
         m, sc = _fit(X[tr], y[tr])
-        ll.append(
-            log_loss(
-                y[te], _proba(m, sc, X[te]), labels=list(range(N_LEVELS))
-            )
-        )
+        ll.append(log_loss(y[te], _proba(m, sc, X[te]), labels=list(range(N_LEVELS))))
     return float(np.mean(ll)), float(np.std(ll) / np.sqrt(len(ll)))
 
 
@@ -189,9 +185,12 @@ def split_rows(cfg, data_file=None):
         cfg = {**cfg, "data": {**cfg["data"], "data_file": data_file}}
     prep = prepare_data(cfg, ROOT)
     base = np.column_stack([prep["X"][:, prep["col_of"][f]] for f in BASE])
-    return base, prep["X"][:, prep["col_of"]["contribution"]], prep["y_cat"], prep[
-        "fold_row"
-    ]
+    return (
+        base,
+        prep["X"][:, prep["col_of"]["contribution"]],
+        prep["y_cat"],
+        prep["fold_row"],
+    )
 
 
 def mechanism_rows(default_values):
@@ -305,8 +304,16 @@ def main():
         )
 
     T = pd.DataFrame(rows).T
-    T.loc["human", ["slope_artifact", "slope_artifact_c_t-1", "slope_oof50",
-                    "P(p>0|c=20)", "E[p|p>0]_at_20"]] = [hs, hsp, hs, hpos, hsev]
+    T.loc[
+        "human",
+        [
+            "slope_artifact",
+            "slope_artifact_c_t-1",
+            "slope_oof50",
+            "P(p>0|c=20)",
+            "E[p|p>0]_at_20",
+        ],
+    ] = [hs, hsp, hs, hpos, hsev]
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         T.to_csv(args.out)
@@ -341,9 +348,7 @@ def decompose(dv_tr, human_slope, out=None, encoding="numeric+max", n_draws=20):
     df = pd.read_csv(FULL)
     df = df[df["experiment_name"].isin(EXPERIMENTS)]
     df = df[~df["global_group_id"].str.contains("(flipped)", regex=False)]
-    data, _, _ = create_torch_data(
-        df, default_values=dv_tr, switch_every=SWITCH_EVERY
-    )
+    data, _, _ = create_torch_data(df, default_values=dv_tr, switch_every=SWITCH_EVERY)
     pool = build_feature_pool(data, SWITCH_EVERY)
     pv = data["punishment_valid"].numpy()
     both = pv & data["contribution_valid"].numpy()
@@ -360,12 +365,11 @@ def decompose(dv_tr, human_slope, out=None, encoding="numeric+max", n_draws=20):
 
     # the replay row set: the mechanism rows
     mc, mcp = pool["contribution"][both], pool["prev_contribution"][both]
-    ok = (
-        data["prev_contribution_valid"].numpy() & (data["round_number"].numpy() > 0)
-    )[both]
+    ok = (data["prev_contribution_valid"].numpy() & (data["round_number"].numpy() > 0))[
+        both
+    ]
     Xm = np.column_stack(
-        [contribution_basis(encoding, mc)[0]]
-        + [pool[f][both][:, None] for f in BASE]
+        [contribution_basis(encoding, mc)[0]] + [pool[f][both][:, None] for f in BASE]
     )
 
     def slope_of(fit_mask, label=None):
