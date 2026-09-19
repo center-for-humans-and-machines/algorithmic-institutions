@@ -172,6 +172,7 @@ CURRENT_VALUED = frozenset(
         "contribution",
         "contribution_max",
         "contribution_zero",
+        "contribution_valid",
         "punishment",
         "payoff",
         "common_good",
@@ -209,6 +210,7 @@ PUNISHMENT_LEGAL_CURRENT = frozenset(
         "contribution",
         "contribution_max",
         "contribution_zero",
+        "contribution_valid",
         "contribution_mean_group",
         "contribution_mean_other",
         "contribution_mean_gap",
@@ -275,6 +277,7 @@ def build_feature_pool(d, switch_every):
             "agent_group",
             "recorded",
             "prev_recorded",
+            "contribution_valid",
         )
     }
     f = {}
@@ -298,6 +301,13 @@ def build_feature_pool(d, switch_every):
     # time (0.47); a linear term in c_t interpolates both steps away.
     f["contribution_max"] = (c == ENDOWMENT).astype(float)
     f["contribution_zero"] = (c == 0).astype(float)
+    # Did the player give input at all? A timed-out player is recorded (and
+    # charged) at 0, so without this flag the punisher cannot tell them from
+    # a player who chose to give nothing -- two populations the human manager
+    # punished at 0% and 43.5%. Round t's input status, known to the manager
+    # before it punishes: legal for the punishment target, illegal for the
+    # contribution target (it is part of that target's own draw).
+    f["contribution_valid"] = npd["contribution_valid"].astype(float)
     f["punishment"] = p
     f["common_good"] = cg
     f["payoff"] = _payoff(c, p, cg)

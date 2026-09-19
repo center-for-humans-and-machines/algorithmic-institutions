@@ -49,7 +49,13 @@ MASK = "punishment_valid"
 TARGET = "punishment"
 # The manager punishes round t after seeing round t's contributions, so the
 # current contribution is the punisher's key input (alongside the lags).
-FEATS = ["contribution", "prev_contribution", "prev_punishment", "is_first"]
+FEATS = [
+    "contribution",
+    "contribution_valid",
+    "prev_contribution",
+    "prev_punishment",
+    "is_first",
+]
 GNN_REF = 1.1756  # rnn_edge_50ep_doubled_current_contr final-epoch test log loss
 
 
