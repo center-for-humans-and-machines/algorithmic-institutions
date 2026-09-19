@@ -1,0 +1,43 @@
+# Contributor ceiling indicator, state-spread diagnostic arm 1 (BASELINE,
+# copula OFF): the parent branch's frontier stack with the contributor's
+# copula-stamped artifact replaced by the BARE trunk it was stamped from
+# (copula_rho = 0). Everything else -- switch model, punisher, seed, episode
+# count, rounds -- is byte-identical to
+# 23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_ceiling.
+# The noise machinery is disabled so the closed loop's state spread can be
+# read without the copula refilling it (PR #186's arm B, on this branch's
+# punisher). Not evaluated; read by
+# scripts/data_analysis/contributor_state_spread.py.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_ceiling_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_contr_skip_copoff_self_gnncopar1_contr_gnn_switch_ceiling
+figure_name: 2g8a_contr_skip_copoff_self_gnncopar1_contr_gnn_switch_ceiling
+save_per_round: true
+basedir: .

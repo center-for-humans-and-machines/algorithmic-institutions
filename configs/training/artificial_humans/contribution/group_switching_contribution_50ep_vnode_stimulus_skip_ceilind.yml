@@ -1,0 +1,78 @@
+description: >-
+  Contributor ceiling indicator (auto/contributor-ceiling-indicator): the
+  stimulus-skip contributor the frontier stack runs
+  (group_switching_contribution_50ep_vnode_stimulus_skip) plus one bool node
+  feature, prev_contribution_max -- the player contributed the whole
+  endowment (20) last round. The lagged counterpart of the contribution_max
+  the parent branch gave the punisher. Its parent fixed the punisher's half
+  of RCC completely and left the contributor's: a simulated player who gave
+  the maximum and was then punished cuts back 3.75 the next round where a
+  real person cuts back 8.66. `prev_contribution` is encoded numerically
+  (linspace(0, 1, 21)), so the exact level 20 is hard to detect; the explicit
+  bool is what moved the punisher's ceiling behaviour onto the human number.
+  Everything else is byte-identical to the parent: node+edge+rnn
+  architecture, group_vnode and stimulus_skip both on, hidden=20, lr=3e-4,
+  575 epochs, batch 4, 5-fold CV, seed 38381, the same numeric
+  prev_contribution / prev_punishment encodings and the same
+  shuffle_features (unchanged on purpose -- the shuffle diagnostic draws from
+  the global RNG, so adding to it would move the training trajectory), same
+  data file, mask, and experiment names.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 575
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_ceilind
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    group_vnode: True
+    stimulus_skip: True
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - etype: bool
+        name: prev_contribution_max
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: False
