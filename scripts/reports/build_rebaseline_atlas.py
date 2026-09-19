@@ -6,7 +6,7 @@ from the CSVs of the punisher re-baseline (worktree D), the RCE comparison
 committed analysis files of the seven PRs that landed after the re-baseline,
 read straight off their branches with gitfile() and cached beside this script.
 """
-import ast, base64, csv, html, io, json, math, re, subprocess
+import ast, base64, csv, html, io, json, math, re, statistics, subprocess
 from pathlib import Path
 
 import pandas as pd
@@ -82,6 +82,33 @@ def lead(cell):
     return float(re.match(r"\s*([+-]?[0-9.]+)", cell).group(1))
 
 
+def _kv(body):
+    """'a=1, b=[x], c={...}' -> dict, values literal-eval'd where they parse."""
+    out = {}
+    for k, v in re.findall(r"(\w+)=(\{[^}]*\}|\[[^\]]*\]|[^,]+)", body):
+        try:
+            out[k] = ast.literal_eval(v.strip())
+        except (ValueError, SyntaxError):
+            out[k] = v.strip()
+    return out
+
+
+def pchecks(branch, path):
+    """Every 'protected-row checks[ (amended rule)]:' record in a before_after.md."""
+    out = []
+    for line in gitfile(branch, path).read_text().splitlines():
+        if line.startswith("protected-row checks"):
+            body = line.split(":", 1)[1].strip()
+            out.append(ast.literal_eval(body) if body.startswith("{") else _kv(body))
+    return out
+
+
+def verdicts(branch, path):
+    """Every 'verdict: ...' line of a before_after.md, as dicts."""
+    return [_kv(m) for m in
+            re.findall(r"^verdict: (.*)$", gitfile(branch, path).read_text(), re.M)]
+
+
 F = float
 
 # ---------------------------------------------------------------- template
@@ -95,6 +122,8 @@ SPINE = {"gnn": "#6b6a66", "gmlp": "#b08968"}
 SLOT = {"contribution": "#2a78d6", "switch": "#eb6834", "punisher": "#1baf7a"}
 INK, PAPER, GREY, MUTED, GRID = "#0b0b0b", "#fcfcfb", "#c9c8c3", "#52514e", "#eceae6"
 FIX = SLOT["punisher"]
+NOISE = "#8a6d1e"   # one new accent: measurement noise (PR #195's seed floor)
+ALERT = "#d03b3b"   # already the failed-gate ring; also marks the open escalation
 
 # case key, spine, PR, label, punisher pair, short label, story for the before node
 CASES = [
@@ -233,6 +262,92 @@ CE_SLOPE_MAX = max(abs(F(t[a]["OLS c_t"]) - F(t[b]["OLS c_t"])) for t, a, b in (
 sk_cmp = dkey(B_SK, P_SK + "compare.csv", "metric")
 sk_rce = dkey(B_SK, P_SK + "rce_bands.csv", "stage")
 
+# ------------------------------- the four PRs that followed the four-step programme
+B_SS, B_TO = "auto/seed-spread-noise-floor", "auto/punisher-timeout-feature"
+B_ST, B_CR = "auto/sim-timeout-imputation", "auto/contribution-copula-recalibrated"
+P_SS = "plots/data_analysis/evaluation/seed_spread_noise_floor/"
+P_TO = "plots/data_analysis/evaluation/punisher_timeout_feature/"
+P_ST = "plots/data_analysis/evaluation/sim_timeout_imputation/"
+P_CR = "plots/data_analysis/evaluation/contribution_copula_recalibrated/"
+L_SS = "notes/autoresearch_log/seed-spread-noise-floor.md"
+L_TO = "notes/autoresearch_log/punisher-timeout-feature.md"
+L_ST = "notes/autoresearch_log/sim-timeout-imputation.md"
+L_CR = "notes/autoresearch_log/contribution-copula-recalibrated.md"
+
+# PR #195: the same contributor architecture trained six ways, one stack, one draw
+ARMS = ["seed_1", "seed_2", "seed_3", "seed_4", "seed_5", "shipped"]
+ss_row = dkey(B_SS, P_SS + "per_row.csv", "row")
+ss_agg = dkey(B_SS, P_SS + "aggregates.csv", "quantity")
+ss_rank = dkey(B_SS, P_SS + "arm_ranks.csv", "arm")
+ss_stab = dkey(B_SS, P_SS + "ceiling_stability.csv", "row")
+ss_lev = dkey(B_SS, P_SS + "levels.csv", "arm")
+ss_levsd = dkey(B_SS, P_SS + "levels_spread.csv", "")
+ss_verd = drows(B_SS, P_SS + "verdicts.csv")
+ss_se = dkey(B_SS, P_SS + "rce_band_se.csv", "")
+# the six members' training fit, recorded in the log (PR #188's cross-validated log losses)
+_cv = re.search(r"cross-validated log losses as ([0-9.–/ ]+) against the shipped artifact's ([0-9.]+)",
+                gitfile(B_SS, L_SS).read_text())
+SS_CV = ([F(v) for v in _cv.group(1).replace("/", " ").split()], F(_cv.group(2)))
+# how far apart the six arms' draws actually are, pairwise
+SS_COINCIDE = [F(v) for v in re.search(
+    r"contribution entries, ([\d.]+)% to ([\d.]+)% coincide", gitfile(B_SS, L_SS).read_text()).groups()]
+
+# PR #196: can the manager tell a timeout from a chosen zero?
+to_ba = dkey(B_TO, P_TO + "before_after.csv", "metric")
+to_tf = dkey(B_TO, P_TO + "mechanism_teacher_forced.csv", "")
+to_sl = md_tables(B_TO, P_TO + "before_after.md", "| RCE slopes |")     # frontier, ref_lin, ref_gnn
+to_pc = pchecks(B_TO, P_TO + "before_after.md")
+to_vd = verdicts(B_TO, P_TO + "before_after.md")[0]
+_to_log = gitfile(B_TO, L_TO).read_text()
+# the human manager at a timeout and at a chosen zero, and the accounting identity
+TO_HUM = dict(zip(("timeout", "zero_all", "zero_mask"),
+                  [F(v) for v in re.search(
+                      r"punished \*\*([\d.]+)%\*\* of them; players who chose to contribute 0 were punished "
+                      r"\*\*([\d.]+)%\*\* of the time over all rows and \*\*([\d.]+)%\*\*", _to_log).groups()]))
+TO_ID = md_table(B_TO, L_TO, "group-rounds the identity holds on")
+TO_N, TO_AR, TO_GR = (int(re.search(r"all (\d+) timed-out agent-rounds record", _to_log).group(1)),
+                      *[int(v.replace(",", "")) for v in re.search(
+                          r"\(([\d,]+) agent-rounds, ([\d,]+) group-rounds\)", _to_log).groups()])
+TO_T = F(re.search(r"a paired \*\*t = ([-\d.]+)\*\* over five folds", _to_log).group(1))
+TO_PRED = F(re.search(r"confirmed to within ([\d.]+) on a number nobody tuned", _to_log).group(1))
+TO_CV = {k: [F(x) for x in re.search(p, _to_log).groups()] for k, p in (
+    ("lin", r"cross-validated log loss \*\*([\d.]+) -> ([\d.]+)\*\*"),
+    ("lin_test", r"locked test fold, untouched during selection: \*\*([\d.]+) -> ([\d.]+)\*\*"),
+    ("gnn", r"The graph family: CV log loss \*\*([\d.]+) -> ([\d.]+)\*\*"))}
+
+# PR #197: what a timed-out player's contribution looks like to each model
+st_ba = dkey(B_ST, P_ST + "before_after.csv", "metric")
+st_dec = dkey(B_ST, P_ST + "copula_closed_loop/cg_decomposition.csv", "arm")
+st_blk = {(r["arm"], r["rounds"]): r for r in drows(B_ST, P_ST + "copula_closed_loop/round_blocks.csv")}
+st_sl = md_tables(B_ST, P_ST + "before_after.md", "| RCE slopes |")
+st_pc = pchecks(B_ST, P_ST + "before_after.md")
+st_vd = verdicts(B_ST, P_ST + "before_after.md")[0]
+st_pb, st_pa = djson(B_ST, P_ST + "probe_before.json"), djson(B_ST, P_ST + "probe_after.json")
+ST_MODEL = {m["label"]: m for m in st_pb["models"]}
+ST_MODEL_A = {m["label"]: m for m in st_pa["models"]}
+PREV_B = ST_MODEL["contribution"]["served_at_timeout_cells"]["prev_contribution"]
+PREV_A = ST_MODEL_A["contribution"]["served_at_timeout_cells"]["prev_contribution"]
+# arms of the state-spread diagnostic: A parent+copula, B candidate+copula, C candidate off, D parent off
+ST_ARM = {"parent_on": "A", "cand_on": "B", "cand_off": "C", "parent_off": "D"}
+
+# PR #198: was the shared-noise strength calibrated against the defect?
+cr_ba = dkey(B_CR, P_CR + "before_after.csv", "metric")
+cr_dec = dkey(B_CR, P_CR + "copula_closed_loop/cg_decomposition.csv", "arm")
+cr_par = djson(B_CR, "artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip"
+                     "_herding_copula_recal/calibration/copula_params.json")
+cr_pc = pchecks(B_CR, P_CR + "before_after.md")
+cr_vd = verdicts(B_CR, P_CR + "before_after.md")[0]
+_cr_log = gitfile(B_CR, L_CR).read_text()
+CR_SHA = re.search(r"output sha256 \*\*`([0-9a-f]{64})`\*\*", _cr_log).group(1)
+CR_FIELDS = int(re.search(r"finds \*\*all (\d+) estimate and provenance fields identical\*\*", _cr_log).group(1))
+CR_MIN = int(re.search(r"the refit \(measured -- Raven job \d+, (\d+) min", _cr_log).group(1))
+CR_FIGS = int(re.search(r"`metrics.csv` and all (\d+) figures", _cr_log).group(1))
+# the open escalation, quoted from the two logs that raise it
+ESCALATION = re.search(r"(`convert.load_human` NaNs the human's timed-out contributions[^*]*?frozen surface \(§8\))",
+                       gitfile(B_ST, L_ST).read_text()).group(1)
+ESC_HTML = re.sub(r"`([^`]+)`", r"<code>\1</code>", ESCALATION)
+ESC_PLAIN = ESCALATION.replace("`", "")
+
 # --------------------------------------------------- the runs that followed the re-baseline
 # key, parent, spine, PR, kind, short label, long label, verdict, one-line note
 FOLLOW = [
@@ -244,6 +359,15 @@ FOLLOW = [
      "reference rerun, reported not gated", "the protected-row clause misfired here on the thinnest band"),
     ("h_cgnn", "e_gnn", "gnn", 192, "step", "c&middot;gnn", "PR #192 ceiling flag, main-sweep GNN punisher",
      "reference rerun, reported not gated", "the broadest improvement of the four runs; 8 -> 11 rows at or under the ceiling"),
+    ("m_tout", "f_ceil", "gnn", 196, "step", "timeout",
+     "PR #196 the punisher is told whether the player gave any input at all",
+     "FAIL -- gate 1", "the declared row cleared the noise floor in the right direction and still held its band"),
+    ("n_simto", "m_tout", "gnn", 197, "step", "sim 0",
+     "PR #197 the simulation serves the recorded 0, not the imputed 9, to the contribution model",
+     "FAIL -- gate 1 and the protected row", "a confirmed serving defect, fixed; its whole cost falls on the group-spread rows"),
+    ("o_recal", "n_simto", "gnn", 198, "step", "rho",
+     "PR #198 the contribution copula refitted against the corrected serving path",
+     "FAIL -- the hypothesis is refuted", "the refit returns the shipped strength to the last digit; every row moves by exactly zero"),
     ("j_off", "b_skip", "gnn", 186, "abl", "no copula", "PR #186 arm B: the shared-noise machinery switched off",
      "ablation, not an experiment", "what the frontier scores with nothing coupling the group's draws"),
     ("k_redraw", "b_skip", "gnn", 186, "abl", "redrawn", "PR #186 arm C: the shared draw redrawn every round",
@@ -272,9 +396,29 @@ VEC["i_kexo"] = {"before": {r: F(sk_cmp[r]["before"]) for r in ROWS},
 VEC["j_off"] = {"before": {r: F(cl_sc[r]["A"]) for r in ROWS}, "after": {r: F(cl_sc[r]["B"]) for r in ROWS}}
 VEC["k_redraw"] = {"before": {r: F(cl_sc[r]["A"]) for r in ROWS}, "after": {r: F(cl_sc[r]["C"]) for r in ROWS}}
 VEC["l_seeds"] = {"before": {r: F(cl_sc[r]["A"]) for r in ROWS}, "after": {r: se_sim[r] for r in ROWS}}
+VEC["m_tout"] = {"before": {r: F(to_ba[r]["frontier_before"]) for r in ROWS},
+                 "after": {r: F(to_ba[r]["frontier_after"]) for r in ROWS}}
+VEC["n_simto"] = {"before": {r: F(st_ba[r]["frontier_before"]) for r in ROWS},
+                  "after": {r: F(st_ba[r]["frontier_after"]) for r in ROWS}}
+VEC["o_recal"] = {"before": {r: F(cr_ba[r]["before"]) for r in ROWS},
+                  "after": {r: F(cr_ba[r]["after"]) for r in ROWS}}
 for k in FKEYS:  # each follow-up's own baseline must be its parent's post-fix state
     p = FOL[k][1]
     assert all(abs(VEC[k]["before"][r] - _after(p)[r]) < 1e-9 for r in ROWS), k
+
+# PR #195's six arms, as profiles against their own six-arm mean (no before/after)
+SEED_SD = {r: F(ss_row[r]["sd"]) for r in ROWS}
+SSMEAN = {r: F(ss_row[r]["mean"]) for r in ROWS}
+SD_MEAN, SD_LE1 = F(ss_agg["mean_22"]["sd"]), F(ss_agg["rows_le1"]["sd"])
+VMEAN_SS = F(ss_agg["mean_22"]["mean"])
+SD_ROW = statistics.median(SEED_SD.values())            # the typical row's seed sd
+SPAN_ROW = statistics.median(F(ss_row[r]["range"]) for r in ROWS)
+UNGATE = [r for r in ROWS if ss_row[r]["gateable_on_one_run"] == "False"]
+AKEYS = ["arm_" + a for a in ARMS]
+for a in ARMS:
+    VEC["arm_" + a] = {"before": dict(SSMEAN), "after": {r: F(ss_row[r][a]) for r in ROWS}}
+# the control PR #195 claims: its shipped arm reproduces PR #192's after column digit for digit
+assert all(abs(VEC["arm_shipped"]["after"][r] - VEC["f_ceil"]["after"][r]) < 1e-12 for r in ROWS)
 
 VMEAN = {k: {st: sum(VEC[k][st][r] for r in ROWS) / len(ROWS) for st in ("before", "after")} for k in VEC}
 VLE1 = {k: {st: sum(1 for r in ROWS if VEC[k][st][r] <= 1) for st in ("before", "after")} for k in VEC}
@@ -316,13 +460,42 @@ SHORT = {c: CASE[c][5] for c in ORDER}
 SPINEOF = {c: CASE[c][1] for c in ORDER}
 for k, par, sp, pr, kind, short, label, verdict, note in FOLLOW:
     LABEL[k], SHORT[k], SPINEOF[k] = label, short, sp
+for a in ARMS:
+    SHORT["arm_" + a] = a.replace("seed_", "seed ")
 TIPNAME = {c: LABEL[c] for c in list(ORDER) + FKEYS}
+
+# ---------------------------------------------------- the measurement floor (PR #195)
+# every movement below is quoted in units of its own row's seed standard deviation:
+# how far that row travels when nothing changes but the contributor's training seed.
+row_sd = lambda k, r: abs(VEC[k]["after"][r] - VEC[k]["before"][r]) / SEED_SD[r]
+mean_sd = lambda k: abs(VMEAN[k]["after"] - VMEAN[k]["before"]) / SD_MEAN
+le1_sd = lambda k: abs(VLE1[k]["after"] - VLE1[k]["before"]) / SD_LE1
+n_legible = lambda k: sum(1 for r in ROWS if row_sd(k, r) >= 1)
+# a node is "inside the floor" when its whole-stack movement is smaller than the floor
+INSIDE = {k for k in list(ORDER) + FKEYS if mean_sd(k) < 1}
+FLOOR_NOTE = ("the floor is the contributor-retrain spread measured on the frontier stack "
+              "(PR #195); on the other stacks it is a lower bound, not a full error bar")
+# PR #195's own re-reading of the verdicts recorded before it, by PR and movement
+sv = lambda pr, key: next(v for v in ss_verd if v["pr"] == pr and v["movement"].startswith(key))
+sv_sd = lambda pr, key: F(sv(pr, key)["in_seed_sd"])
+sv_in = lambda pr, key: sv(pr, key)["inside_floor"] == "True"
+# summaries of a before/after table that carries one column per arm
+colmean = lambda tbl, col: sum(F(tbl[r][col]) for r in ROWS) / len(ROWS)
+colle1 = lambda tbl, col: sum(1 for r in ROWS if F(tbl[r][col]) <= 1)
+colsd = lambda tbl, a, b: abs(colmean(tbl, b) - colmean(tbl, a)) / SD_MEAN
+
+
+def floor_tip(k):
+    m = (f" | mean move {mean_sd(k):.2f} seed sd"
+         f"{' -- not distinguishable from a retrain' if k in INSIDE else ''}"
+         f" | rows moving more than their own seed sd: {n_legible(k)}/22")
+    return m
 
 
 def node_tip(k, stage_word=None):
     t = (f"{TIPNAME[k]} ({SPINEOF[k]} spine) | mean {f3(VMEAN[k]['before'])} -> {f3(VMEAN[k]['after'])}"
          f" | rows <= 1: {VLE1[k]['before']} -> {VLE1[k]['after']}"
-         f" | RCE {arrow(k, 'RCE')} ({band_arrow(k, 'RCE')})")
+         f" | RCE {arrow(k, 'RCE')} ({band_arrow(k, 'RCE')})" + floor_tip(k))
     return t if stage_word is None else f"{stage_word}: {t}"
 
 
@@ -339,7 +512,9 @@ def stack_cards():
     pun = (f"a multinomial logistic regression over 31 punishment levels, now retrained on the current round's contribution "
            f"(it used to read last round's), its group draws coupled by the severity copula, recalibrated from rho {RHO['before']:.3f} to {RHO['after']:.3f}; "
            f"PR #192 added a gave-the-maximum flag on top, which made the behaviour at the ceiling essentially exact and still missed its band, "
-           f"so the flag is not merged")
+           f"and PR #196 a gave-no-input flag, which earns its place in this linear family "
+           f"(cross-validated log loss {TO_CV['lin'][0]:.4f} &rarr; {TO_CV['lin'][1]:.4f}) and nothing in the graph one &mdash; "
+           f"neither flag is merged")
     return ('<div class="stacks">\n' +
             card("gnn", "the gnn stack",
                  "a graph neural network: members exchange messages each round, each keeps a small recurrent memory; "
@@ -358,8 +533,12 @@ def stack_cards():
 
 
 # ---------------------------------------------------------------- 2. progress tree
-FAILED = {"f_ceil", "i_kexo"}   # the two declared experiments that missed their gate
-STEP_OFF = {"f_ceil": 50, "i_kexo": 96, "g_clin": 50, "h_cgnn": 50}
+FAILED = {"f_ceil", "i_kexo", "m_tout", "n_simto", "o_recal"}   # missed their declared gate
+# x of each rerun's "before" node: the frontier's gap is wide because five runs hang in it
+XB = {"e_lin": 110, "e_gnn": 310, "a_vnode": 510, "b_skip": 710, "d_kexo": 1140, "c_infl": 1340}
+STEP_OFF = {"f_ceil": 92, "i_kexo": 140, "g_clin": 50, "h_cgnn": 50,
+            "m_tout": 104, "n_simto": 54, "o_recal": 54}
+SEED_RAIL = 56   # offset of PR #195's six-arm rail from the frontier's post-fix node
 DIAGS = [  # diagnostics with no 22-row score: parked on a strip under the runs they inform
     ("b_skip", "#187", "sharederr",
      "PR #187, diagnostic: what the shared error is made of, measured on the 50 human games. No simulation "
@@ -375,8 +554,8 @@ DIAGS = [  # diagnostics with no 22-row score: parked on a strip under the runs 
 
 
 def tree_svg():
-    W, Hh = 1300, 610
-    x0, x1, ytop, ybot, ydiag = 56, 1276, 60, 500, 540
+    W, Hh = 1540, 610
+    x0, x1, ytop, ybot, ydiag = 56, 1516, 60, 500, 540
     m_lo, m_hi = 0.95, 1.95
     y = lambda m: ybot - (m - m_lo) / (m_hi - m_lo) * (ybot - ytop)
     o = [f'<svg viewBox="0 0 {W} {Hh}" font-family="system-ui, sans-serif">']
@@ -385,16 +564,20 @@ def tree_svg():
                  f'<text x="{x0-8}" y="{y(g)+3:.1f}" text-anchor="end" font-size="10" fill="{MUTED}">{g:.1f}</text>')
     o.append(f'<text x="14" y="280" font-size="11" fill="{MUTED}" transform="rotate(-90 14 280)" text-anchor="middle">stack mean score over 22 rows (lower is better)</text>')
     o.append(f'<text x="{(x0+x1)/2:.1f}" y="592" font-size="11" fill="{MUTED}" text-anchor="middle">'
-             'the six reruns: hollow = before (lagged punisher), filled = after (current-contribution punisher); '
-             'square = a follow-up run scored against the filled node it hangs off, diamond = an ablation of it, '
-             'triangle = a diagnostic with no 22-row score</text>')
-    xb = {c: 110 + i * 200 for i, c in enumerate(ORDER)}
+             'hollow = before the punisher fix, filled = after it; square = a follow-up run scored against the node '
+             'it hangs off, diamond = an ablation of it, triangle = a diagnostic with no 22-row score, '
+             'six-tick rail = one model on six training seeds</text>')
+    xb = {c: XB[c] for c in ORDER}
     xa = {c: xb[c] + 70 for c in ORDER}
     pb = {c: (xb[c], y(MEAN[c]["before"])) for c in ORDER}
     pa = {c: (xa[c], y(MEAN[c]["after"])) for c in ORDER}
-    xf = {k: xa[FOL[k][1]] + STEP_OFF[k] for k in STEPKEYS}
+    xf = {}
+    for k in STEPKEYS:      # FOLLOW order, so a chained run's parent is already placed
+        p = FOL[k][1]
+        xf[k] = (xa[p] if p in ORDER else xf[p]) + STEP_OFF[k]
     xf.update({k: xa[FOL[k][1]] + 26 for k in ABLKEYS})
     pf = {k: (xf[k], y(VMEAN[k]["after"])) for k in FKEYS}
+    pos = lambda k: pa[k] if k in ORDER else pf[k]
     # lineage spines between the before states: main -> #179 -> #181 (gnn), main -> #174 -> #177 (gmlp)
     def spine(a, b, sp, dashed=False):
         (ax, ay), (bx, by) = pb[a], pb[b]
@@ -419,25 +602,52 @@ def tree_svg():
         (bx, by), (ax, ay) = pb[c], pa[c]
         o.append(f'<line class="v-success{cls}" x1="{bx:.1f}" y1="{by:.1f}" x2="{ax:.1f}" y2="{ay:.1f}" stroke="{FIX}" stroke-width="2.4"/>')
         tip = esc(NODE_TIP[c])
+        halo = (f'<circle cx="{ax:.1f}" cy="{ay:.1f}" r="12.5" fill="none" stroke="{NOISE}" stroke-width="1.2" '
+                f'stroke-dasharray="2 3"/>' if c in INSIDE else "")
         o.append(f'<a href="#story-rebaseline" class="node v-success{cls}" data-tip="before: {tip}">'
                  f'<circle cx="{bx:.1f}" cy="{by:.1f}" r="7.5" fill="{PAPER}" stroke="{SPINE[sp]}" stroke-width="2"/>'
                  f'<text x="{bx:.1f}" y="{by-13:.1f}" text-anchor="middle" font-size="9" fill="{MUTED}">{esc(CASE[c][5])}</text></a>')
-        o.append(f'<a href="#story-punisher" class="node v-success{cls}" data-tip="after the punisher fix: {tip}">'
+        o.append(f'<a href="#story-punisher" class="node v-success{cls}" data-tip="after the punisher fix: {tip}">{halo}'
                  f'<circle cx="{ax:.1f}" cy="{ay:.1f}" r="7.5" fill="{SPINE[sp]}" stroke="{PAPER}" stroke-width="1.5"/>'
                  f'<text x="{ax:.1f}" y="{ay+18:.1f}" text-anchor="middle" font-size="9" fill="{MUTED}">{f3(MEAN[c]["after"])}</text></a>')
     # the k-one-hot switch head is borrowed from the gaussian-MLP line: mark where it came from
     (kx, ky), (dx, dy) = pf["i_kexo"], pa["d_kexo"]
     o.append(f'<line class="t-gmlp" x1="{dx:.1f}" y1="{dy:.1f}" x2="{kx:.1f}" y2="{ky:.1f}" stroke="{SPINE["gmlp"]}" '
              f'stroke-width="1.4" stroke-dasharray="3 4" stroke-opacity="0.8"/>')
-    # the follow-up runs: squares, hung off the post-fix node they were scored against
+    # PR #195's six arms: one model, six training seeds, on the frontier's own stack.
+    # A rail, not a node -- it is a measurement of the scoreboard, not a step along it.
+    sx = xa["b_skip"] + SEED_RAIL
+    arm_y = sorted((VMEAN["arm_" + a]["after"], a) for a in ARMS)
+    rtip = esc("PR #195, a measurement rather than an experiment: the frontier's contributor architecture "
+               "trained six ways (five fresh seeds plus the shipped artifact) and run through one stack with "
+               "everything else held identical. 22-row means "
+               + " / ".join(f3(m) for m, _ in arm_y) + f"; six-arm mean {f3(VMEAN_SS)} against the shipped "
+               f"{f3(VMEAN['arm_shipped']['after'])}, which is the lowest of the six. A typical row moves by "
+               f"sd {SD_ROW:.3f} on the training draw alone and ten of the 22 cannot be gated on one run.")
+    o.append(f'<g class="node t-gnn" data-tip="{rtip}">'
+             f'<line x1="{sx:.1f}" y1="{y(arm_y[0][0]):.1f}" x2="{sx:.1f}" y2="{y(arm_y[-1][0]):.1f}" '
+             f'stroke="{NOISE}" stroke-width="1.6"/>'
+             + "".join(f'<line x1="{sx-5:.1f}" y1="{y(m):.1f}" x2="{sx+5:.1f}" y2="{y(m):.1f}" '
+                       f'stroke="{NOISE}" stroke-width="{2.2 if a == "shipped" else 1.3}"/>'
+                       for m, a in arm_y)
+             + f'<circle cx="{sx:.1f}" cy="{y(VMEAN_SS):.1f}" r="3.6" fill="{NOISE}" stroke="{PAPER}" stroke-width="1.2"/>'
+             f'<text x="{sx:.1f}" y="{y(arm_y[-1][0])-9:.1f}" text-anchor="middle" font-size="8.5" fill="{NOISE}">6 retrains</text>'
+             f'<text x="{sx-7:.1f}" y="{y(VMEAN_SS)+3:.1f}" text-anchor="end" font-size="8" fill="{NOISE}">{f3(VMEAN_SS)}</text>'
+             '</g>')
+    o.append(f'<line class="t-gnn" x1="{pa["b_skip"][0]:.1f}" y1="{pa["b_skip"][1]:.1f}" x2="{sx:.1f}" '
+             f'y2="{y(VMEAN_SS):.1f}" stroke="{NOISE}" stroke-width="1" stroke-dasharray="2 3" stroke-opacity="0.7"/>')
+    # the follow-up runs: squares, hung off the node they were scored against
     for k in STEPKEYS:
-        par = FOL[k][1]; (px, py) = pa[par]; (fx, fy) = pf[k]
-        story = "ceiling" if FOL[k][3] == 192 else "switchport"
+        par = FOL[k][1]; (px, py) = pos(par); (fx, fy) = pf[k]
+        story = {192: "ceiling", 190: "switchport", 196: "timeout",
+                 197: "simtimeout", 198: "recal"}[FOL[k][3]]
         o.append(f'<line class="t-gnn" x1="{px:.1f}" y1="{py:.1f}" x2="{fx:.1f}" y2="{fy:.1f}" stroke="{FCOL["step"]}" stroke-width="2"/>')
         tip = esc(node_tip(k) + f" | verdict: {re.sub('<[^>]+>', '', FOL[k][7])}")
-        ring = (f'<circle cx="{fx:.1f}" cy="{fy:.1f}" r="11.5" fill="none" stroke="#d03b3b" stroke-width="1.3" stroke-dasharray="3 3"/>'
+        ring = (f'<circle cx="{fx:.1f}" cy="{fy:.1f}" r="11.5" fill="none" stroke="{ALERT}" stroke-width="1.3" stroke-dasharray="3 3"/>'
                 if k in FAILED else "")
-        o.append(f'<a href="#story-{story}" class="node t-gnn" data-tip="{tip}">{ring}'
+        halo = (f'<rect x="{fx-11:.1f}" y="{fy-11:.1f}" width="22" height="22" rx="4" fill="none" stroke="{NOISE}" '
+                f'stroke-width="1.2" stroke-dasharray="2 3"/>' if k in INSIDE else "")
+        o.append(f'<a href="#story-{story}" class="node t-gnn" data-tip="{tip}">{ring}{halo}'
                  f'<rect x="{fx-6.5:.1f}" y="{fy-6.5:.1f}" width="13" height="13" rx="2" fill="{FCOL["step"]}" stroke="{PAPER}" stroke-width="1.5"/>'
                  f'<text x="{fx:.1f}" y="{fy-14:.1f}" text-anchor="middle" font-size="9" fill="{MUTED}">{FOL[k][5]}</text>'
                  f'<text x="{fx:.1f}" y="{fy+19:.1f}" text-anchor="middle" font-size="9" fill="{MUTED}">{f3(VMEAN[k]["after"])}</text></a>')
@@ -473,20 +683,38 @@ def tree_svg():
 # ---------------------------------------------------------------- 3. all 22 scores
 SCOLS = list(ORDER) + STEPKEYS
 SCLBL = {**{c: CASE[c][5].replace("main · ", "") for c in ORDER},
-         **{k: FOL[k][5] for k in STEPKEYS}}
+         **{k: FOL[k][5] for k in STEPKEYS},
+         # these columns are 17.6 units apart, so the three longest labels are abbreviated
+         "m_tout": "tout", "n_simto": "sim0", "o_recal": "rho"}
 SSTORY = {**{c: "rebaseline" for c in ORDER},
-          **{k: ("ceiling" if FOL[k][3] == 192 else "switchport") for k in STEPKEYS}}
+          **{k: {192: "ceiling", 190: "switchport", 196: "timeout", 197: "simtimeout",
+                 198: "recal"}[FOL[k][3]] for k in STEPKEYS}}
 
 
 def small_chart(r):
     ylog = lambda v: 98.6 - 29.89 * math.log(v)
     col = SLOT[ROWSLOT[r]]
-    o = [f'<svg viewBox="0 0 210 150" font-family="system-ui, sans-serif">'
-         f'<text x="116.0" y="13" text-anchor="middle" font-size="11" font-weight="600" fill="{col}">{r}</text>']
+    sd, mu = SEED_SD[r], SSMEAN[r]
+    o = [f'<svg viewBox="0 0 256 150" font-family="system-ui, sans-serif">']
+    # the measurement floor, drawn first so every marker sits on top of it: +-1 seed sd
+    # around the six-arm mean of PR #195, i.e. how far this row moves on the training draw
+    ntip = esc(f"{r} measurement floor (PR #195): six-arm mean {f3(mu)}, seed sd {sd:.3f}, "
+               f"range {f3(F(ss_row[r]['min']))}-{f3(F(ss_row[r]['max']))} over six retrains of one "
+               f"architecture. {ss_stab[r]['status']}; "
+               f"{'not gateable on a single run' if r in UNGATE else 'gateable on a single run'}. "
+               f"The band is +-1 seed sd around the six-arm mean; a segment inside it is dashed.")
+    o.append(f'<g class="node" data-tip="{ntip}">'
+             f'<rect x="30" y="{ylog(mu + sd):.1f}" width="220" height="{ylog(mu - sd) - ylog(mu + sd):.1f}" '
+             f'fill="{NOISE}" fill-opacity="0.13"/>'
+             f'<line x1="30" y1="{ylog(mu):.1f}" x2="250" y2="{ylog(mu):.1f}" stroke="{NOISE}" '
+             f'stroke-opacity="0.5" stroke-dasharray="3 3"/></g>')
+    o.append(f'<text x="140.0" y="13" text-anchor="middle" font-size="11" font-weight="600" fill="{col}">{r}</text>')
+    o.append(f'<text x="250.0" y="13" text-anchor="end" font-size="7" fill="{NOISE}">'
+             f'seed sd {sd:.3f}{" &middot; ungateable" if r in UNGATE else ""}</text>')
     if r == "RCE":
-        o.append(f'<text x="116.0" y="22" text-anchor="middle" font-size="7" font-weight="600" fill="#4a3aa7">protected row</text>')
+        o.append(f'<text x="140.0" y="22" text-anchor="middle" font-size="7" font-weight="600" fill="#4a3aa7">protected row</text>')
     for g in (1, 2, 5):
-        o.append(f'<line x1="30" y1="{ylog(g):.1f}" x2="204" y2="{ylog(g):.1f}" stroke="{GRID}"/>'
+        o.append(f'<line x1="30" y1="{ylog(g):.1f}" x2="250" y2="{ylog(g):.1f}" stroke="{GRID}"/>'
                  f'<text x="26" y="{ylog(g)+3:.1f}" text-anchor="end" font-size="8" fill="{MUTED}">{g}</text>')
     o.append(f'<line x1="128.8" y1="26" x2="128.8" y2="134" stroke="{GRID}" stroke-dasharray="2 3"/>')
     for i, c in enumerate(SCOLS):
@@ -494,16 +722,21 @@ def small_chart(r):
         step = c in STEPKEYS
         sp = SPINEOF[c]; mc = FCOL["step"] if step else SPINE[sp]
         b, a = VEC[c]["before"][r], VEC[c]["after"][r]
-        base = "its post-fix baseline" if step else "before the punisher fix"
-        tip = esc(f"{LABEL[c]} ({sp} spine) - {r} {f3(b)} -> {f3(a)} ({band_arrow(c, r)}), against {base}")
+        base = "its own baseline" if step else "before the punisher fix"
+        n_sd = row_sd(c, r)
+        legible = n_sd >= 1
+        tip = esc(f"{LABEL[c]} ({sp} spine) - {r} {f3(b)} -> {f3(a)} ({band_arrow(c, r)}), against {base}"
+                  f" | {sgn(a - b)} = {n_sd:.2f} seed sd (floor {sd:.3f})"
+                  f" | {'legible' if legible else 'NOT distinguishable from a retrain'}")
         if step:
             m1 = (f'<rect x="{x-5.4:.1f}" y="{ylog(b)-2.7:.1f}" width="5.4" height="5.4" rx="1" fill="{PAPER}" stroke="{mc}" stroke-width="1.4"/>'
                   f'<rect x="{x:.1f}" y="{ylog(a)-2.7:.1f}" width="5.4" height="5.4" rx="1" fill="{mc}" stroke="{PAPER}" stroke-width="1"/>')
         else:
             m1 = (f'<circle cx="{x-2.7:.1f}" cy="{ylog(b):.1f}" r="3.2" fill="{PAPER}" stroke="{mc}" stroke-width="1.4"/>'
                   f'<circle cx="{x+2.7:.1f}" cy="{ylog(a):.1f}" r="3.2" fill="{mc}" stroke="{PAPER}" stroke-width="1"/>')
+        seg = "" if legible else ' stroke-dasharray="1.6 1.6"'
         o.append(f'<a href="#story-{SSTORY[c]}" class="node" data-tip="{tip}">'
-                 f'<line x1="{x-2.7:.1f}" y1="{ylog(b):.1f}" x2="{x+2.7:.1f}" y2="{ylog(a):.1f}" stroke="{mc}" stroke-width="1.8"/>'
+                 f'<line x1="{x-2.7:.1f}" y1="{ylog(b):.1f}" x2="{x+2.7:.1f}" y2="{ylog(a):.1f}" stroke="{mc}" stroke-width="1.8"{seg}/>'
                  f'{m1}</a>')
         o.append(f'<text x="{x:.1f}" y="142" text-anchor="middle" font-size="6" fill="{MUTED}">{SCLBL[c]}</text>')
     o.append("</svg>")
@@ -563,8 +796,13 @@ def shrink_all(width=800, quality=78):
         _b64cache[p] = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
-BA_STAGES = ["before", "after", "ceiling"]
+BA_STAGES = ["before", "after", "ceiling", "timeout", "simtimeout"]
 CEIL_RUN = {"b_skip": "f_ceil", "e_gnn": "h_cgnn"}   # which #192 run each column's ceiling figure is
+# the two later runs that committed the suite's own figures, per column
+LATE_SIM = {
+    "timeout": (B_TO, {"b_skip": SIM["b_skip"] + "_timeout", "e_gnn": SIM["e_gnn"] + "_timeout"}, "m_tout"),
+    "simtimeout": (B_ST, {"b_skip": SIM["b_skip"] + "_simtimeout", "e_gnn": SIM["e_gnn"] + "_simtimeout"}, "n_simto"),
+}
 
 
 def fig_files(r):
@@ -573,6 +811,14 @@ def fig_files(r):
 
 
 def fig_path(c, st, fname):
+    if st in LATE_SIM:
+        branch, sims, _ = LATE_SIM[st]
+        if c not in sims:
+            return None
+        try:
+            return gitfile(branch, f"plots/simulation/{sims[c]}/evaluation/visuals/{fname}")
+        except subprocess.CalledProcessError:
+            return None
     if st == "ceiling":
         if c not in CE_SIM:
             return None
@@ -585,17 +831,28 @@ def fig_path(c, st, fname):
 
 
 def ba_cards():
+    EMBEDDED.clear(); MISSING.clear()
     rows = [r for r in ROWS if fig_files(r)]
     def stack_name(c): return CASE[c][3].split(",")[0]
     def figure(r, fname, c, st):
         d = fig_path(c, st, fname)
-        k = CEIL_RUN.get(c) if st == "ceiling" else c
-        stg = "after" if st == "ceiling" else st
-        v, m = (VEC[k][stg][r], VMEAN[k][stg]) if k else (None, None)
+        if st in LATE_SIM:   # the later runs scored the frontier and the GNN reference
+            tbl = {"timeout": to_ba, "simtimeout": st_ba}[st]
+            col = {"b_skip": "frontier_after", "e_gnn": "ref_gnn_after"}.get(c)
+            v = F(tbl[r][col]) if col else None
+            m = sum(F(tbl[q][col]) for q in ROWS) / len(ROWS) if col else None
+        else:
+            k = CEIL_RUN.get(c) if st == "ceiling" else c
+            stg = "before" if st == "before" else "after"
+            v, m = (VEC[k][stg][r], VMEAN[k][stg]) if k else (None, None)
         who = {"before": "lagged punisher", "after": "current-contribution punisher",
-               "ceiling": "+ the gave-the-maximum flag (PR #192)"}[st]
-        num = f" ({r} {f3(v)}, mean {f3(m)})" if k else ""
+               "ceiling": "+ the gave-the-maximum flag (PR #192)",
+               "timeout": "+ the timed-out-player flag (PR #196)",
+               "simtimeout": "+ the recorded 0 served to the contributor (PR #197)"}[st]
+        num = f" ({r} {f3(v)}, mean {f3(m)})" if v is not None else ""
         cap = f"{st}: {esc(stack_name(c))}, {who}{num}"
+        if st == "simtimeout" and c == "b_skip":
+            cap += "; PR #198's recalibrated run reproduces this one byte for byte, so it has no column"
         if c.startswith("e_"):
             cap += "; the sim's figure shows every manager of that run, the GNN punisher is gnn_self"
         if d is not None and d.read_bytes()[:3] == b"\xff\xd8\xff":
@@ -603,6 +860,7 @@ def ba_cards():
             return f'<figure><img src="{b64(d)}" loading="lazy" alt="{esc(fname)} ({c} {st})"><figcaption>{cap}</figcaption></figure>'
         MISSING.append((r, fname, c, st))
         why = ("the ceiling flag was only run on the frontier stack and the main-sweep reference" if st == "ceiling" else
+               "the later runs were only made on the frontier stack and the main-sweep GNN reference" if st in LATE_SIM else
                "the source sim dir carries no visuals" if c == "d_kexo" else
                "no before figure exists: the source sims were scored with the 21-row suite and only rescored, not re-plotted")
         return (f'<figure><div style="border:1px dashed #e1e0d9;border-radius:6px;aspect-ratio:14/9;display:grid;place-items:center;'
@@ -627,10 +885,14 @@ def machinery_svg():
         o.append(f'<rect x="{x}" y="60" width="360" height="500" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.35"/>'
                  f'<text x="{x+180}" y="84" text-anchor="middle" font-size="13" font-weight="600" fill="currentColor">{title}</text>')
         if sub: o.append(f'<text x="{x+180}" y="99" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.7">{sub}</text>')
-    def box(x, y, t1, t2, tint=None, title=None, pills=(), changed=False):
+    def box(x, y, t1, t2, tint=None, title=None, pills=(), changed=False, alert=False):
         cx = x + 140
         fill = f'fill="{tint}" fill-opacity="0.14" stroke="{tint}"' if tint else 'fill="none" stroke="currentColor" stroke-opacity="0.6"'
         o.append("<g>" + (f"<title>{esc(title)}</title>" if title else "") +
+                 (f'<rect x="{x-8}" y="{y-8}" width="296" height="78" rx="11" fill="none" stroke="{ALERT}" '
+                  f'stroke-width="1.8" stroke-dasharray="7 3"/>'
+                  f'<text x="{x-4}" y="{y-14}" font-size="9.5" font-weight="600" fill="{ALERT}">'
+                  f'open escalation &#8212; maintainer</text>' if alert else "") +
                  (f'<rect x="{x-4}" y="{y-4}" width="288" height="70" rx="9" fill="none" stroke="{FCOL["step"]}" '
                   f'stroke-width="1.2" stroke-dasharray="4 4"/>' if changed else "") +
                  f'<rect x="{x}" y="{y}" width="280" height="62" rx="6" {fill}/>'
@@ -650,35 +912,56 @@ def machinery_svg():
         o.append(f'<line x1="{cx}" y1="{y1}" x2="{cx}" y2="{y2}" stroke="currentColor" marker-end="url(#arr)"{ms}/>')
         if label: o.append(f'<text x="{cx+8}" y="{(y1+y2)/2+4}" font-size="10" fill="currentColor" opacity="0.75">{label}</text>')
     # bay 1: players
-    bay(30, "PLAYERS BAY", "three tests since the re-baseline, none of them merged")
-    box(70, 108, "contribution trunk", "gnn skip trunk kept; the location-scale head lost",
+    bay(30, "PLAYERS BAY", "five tests since the re-baseline, none of them merged")
+    box(70, 108, "contribution trunk", "gnn skip trunk kept; its lagged input was faked",
         None, f"PR #191 tested the gaussian-MLP's location-scale head against these 21 free logits and it lost: "
         f"copula-off variety {F(hs_head['e_skip_kexo_rho0']['var_cond_mean']):.2f} for the categorical trunk against "
         f"{F(hs_head['c_infl_rho0']['var_cond_mean']):.2f} (inflated) and {F(hs_head['d_kexo_rho0']['var_cond_mean']):.2f} (v2), human "
-        f"{F(cl_dec['human']['var_cond_mean']):.2f}. The hypothesis was its own author's and it was falsified.",
-        [("#191", "head")], changed=True)
+        f"{F(cl_dec['human']['var_cond_mean']):.2f}. The hypothesis was its own author's and it was falsified. "
+        f"PR #197 then found the trunk's own lagged input was wrong in simulation: a timed-out player's contribution "
+        f"reached it as the imputed 9 on {st_pb['timeouts']}/{st_pb['agent_rounds']} = {st_pb['timeout_rate']:.2%} of agent-rounds, "
+        f"now the recorded 0. With the shared-noise machinery off that lifts the variety of states reached from "
+        f"{F(st_dec[ST_ARM['parent_off']]['var_cond_mean']):.2f} to {F(st_dec[ST_ARM['cand_off']]['var_cond_mean']):.2f} "
+        f"against the human {F(st_dec['human']['var_cond_mean']):.2f} with no randomness added -- direct progress on the "
+        f"one defect the campaign has left. The run still failed its gate: the cost lands on the group-spread rows.",
+        [("#191", "head"), ("#197", "simtimeout")], changed=True)
     arrow_(210, 170, 208, "per-agent marginals")
-    box(70, 212, "group copula unit", "herding latent -- strength and persistence now frozen",
+    box(70, 212, "group copula unit", "herding latent -- frozen; its strength now closed",
         SLOT["contribution"], f"PRs #186/#187/#188: the strength is right -- redrawn every round it reproduces the human within-group co-movement "
         f"({F(cl_dec['C']['resid_corr_all_rounds']):.3f} against {F(cl_dec['human']['resid_corr_all_rounds']):.3f}; as shipped, "
         f"{F(cl_dec['A']['resid_corr_all_rounds']):.3f}) -- but the episode-long persistence, never fitted, supplies most of the group-spread row by "
-        f"compounding ({F(cl_lat['compounding_factor']):.1f} times). PR #189 froze both settings.",
-        [("#186", "sharederr"), ("#189", "protocol")], changed=True)
+        f"compounding ({F(cl_lat['compounding_factor']):.1f} times). PR #189 froze both settings. "
+        f"PR #198 unfroze the strength once, to test whether it had been calibrated in the presence of PR #197's defect: "
+        f"it had not and could not have been, because it is fitted against human data where the recorded 0 was always "
+        f"correct. The refit returns rho = {cr_par['rho']:.10f}, the shipped value to the last digit, all {CR_FIELDS} "
+        f"params fields identical and the stamped artifact the same file by sha256. Every row moves by exactly zero. "
+        f"The strength is closed as a route to the group-spread row; the shape is not.",
+        [("#186", "sharederr"), ("#189", "protocol"), ("#198", "recal")], changed=True)
     arrow_(210, 274, 312)
     box(70, 316, "switch model", "joint exodus head; the k-one-hot port was rejected",
         None, f"PR #190 swapped in the gaussian-MLP line's k-one-hot group-size head: SB {F(sk_cmp['SB']['before']):.3f} -> {F(sk_cmp['SB']['after']):.3f}, "
         f"CG {F(sk_cmp['CG']['before']):.3f} -> {F(sk_cmp['CG']['after']):.3f}, but RCD {F(sk_cmp['RCD']['before']):.3f} -> {F(sk_cmp['RCD']['after']):.3f} "
-        f"and RSA {F(sk_cmp['RSA']['before']):.3f} -> {F(sk_cmp['RSA']['after']):.3f}. Failed gate 1 and the protected row.",
-        [("#190", "switchport")], changed=True)
+        f"and RSA {F(sk_cmp['RSA']['before']):.3f} -> {F(sk_cmp['RSA']['after']):.3f}. Failed gate 1 and the protected row -- "
+        f"and its declared target SC moved {sv_sd('#190', 'SC'):.2f} seed sd, inside the floor PR #195 later measured. "
+        f"PR #197 expected the timeout defect to reach this slot too and probed it with every predict call wrapped: on this "
+        f"stack the switch encoder reads {', '.join(ST_MODEL['switch']['reads'])} and never a contribution key at all, "
+        f"so the defect does not reach it. Measured, not assumed.",
+        [("#190", "switchport"), ("#197", "simtimeout")], changed=True)
     arrow_(210, 378, 470)
     o.append(f'<text x="218" y="430" font-size="10.5" fill="currentColor">contributions c_t (0..20)</text><circle cx="210" cy="475" r="3.5" fill="currentColor"/>')
     # bay 2: punisher
     bay(420, "PUNISHER BAY", "the manager: one joint decision per group-round")
-    box(460, 108, "feature intake -- fixed, then extended", "c_t (#184) + gave-the-maximum flag (#192, not merged)",
+    box(460, 108, "feature intake -- fixed, then extended twice", "c_t, then flags for c = 20 and for no input at all",
         FIX, f"PR #184: the punisher reads the contribution it punishes; before that, prev contribution only, one round late "
         f"(CV log loss lin {CV['lin'][0]:.4f} -> {CV['lin'][1]:.4f}, GNN {CV['gnn'][0]:.4f} -> {CV['gnn'][1]:.4f}). PR #192 added an "
-        f"indicator for c_t = 20 on both families ({F(ce_cv0['log_loss']):.4f} -> {F(ce_cv['log_loss']):.4f}); the experiment failed its gate, so whether it merges is a maintainer's call.",
-        [("#184", "punisher"), ("#192", "ceiling")], changed=True)
+        f"indicator for c_t = 20 on both families ({F(ce_cv0['log_loss']):.4f} -> {F(ce_cv['log_loss']):.4f}); the experiment failed its gate, so whether it merges is a maintainer's call. "
+        f"PR #196 added the other end: a flag for whether the player gave any input at all, so a timeout is no longer "
+        f"read as a chosen zero. Real managers punished a timed-out player {TO_HUM['timeout']:.2f}% of the time and a genuine zero "
+        f"{TO_HUM['zero_all']:.1f}%. It earns its place on the linear family (CV {TO_CV['lin'][0]:.4f} -> {TO_CV['lin'][1]:.4f}, locked test "
+        f"{TO_CV['lin_test'][0]:.4f} -> {TO_CV['lin_test'][1]:.4f}) and nothing on the graph one ({TO_CV['gnn'][0]:.4f} -> {TO_CV['gnn'][1]:.4f}, "
+        f"t = -0.46). The declared row RCC moved {arrow('m_tout', 'RCC')} "
+        f"({row_sd('m_tout', 'RCC'):.2f} seed sd, legible) and still held its band.",
+        [("#184", "punisher"), ("#192", "ceiling"), ("#196", "timeout")], changed=True)
     o.append(f'<text x="600" y="184" text-anchor="middle" font-size="9.5" fill="currentColor" opacity="0.6" text-decoration="line-through">was: prev contribution (round t-1) only</text>')
     arrow_(600, 192, 208)
     box(460, 212, "multinomial logistic trunk / GNN punisher", f"31 levels - test log loss {CV['lin_test'][0]:.3f} -> {CV['lin_test'][1]:.3f} (floor {CV['floor']:.3f})",
@@ -694,19 +977,31 @@ def machinery_svg():
     o.append(f'<text x="608" y="430" font-size="10.5" fill="currentColor">punishments p_t (0..30)</text><circle cx="600" cy="475" r="3.5" fill="currentColor"/>')
     # bay 3: scoring
     bay(810, "SCORING BAY", "the 22-row evaluation suite, 500 repeats, seed 42")
-    box(850, 108, "RCE: punishment response slope", "protected row -- its magnitude clause repaired (#189)",
+    box(850, 108, "RCE: punishment response slope", "protected row -- repaired, then made noise-aware",
         "#4a3aa7", f"RCE: OLS slope of next-round change on punishment received, per contribution band; human {' / '.join(sgn(v) for v in HUMAN_SLOPES)}; ceiling {CEIL['RCE']:.4f}. "
-        f"PR #189 added two qualifications after the halving clause fired twice on its first outing, once on an improvement.",
-        [("RCE", "rce"), ("#189", "protocol")], changed=True)
+        f"PR #189 added two qualifications after the halving clause fired twice on its first outing, once on an improvement. "
+        f"PR #195 then measured the row itself: RCE's own seed sd is {SEED_SD['RCE']:.3f} and it is one of the ten rows that "
+        f"cannot be judged on a single run -- it lands in band <= 1 in exactly one arm of six. Its band-drop clause now needs a "
+        f"drop larger than that, and its sign clause is retired on the 10-14 and 15-19 bands, where retraining an unchanged "
+        f"model flips the sign on its own ({sgn(F(ss_agg['rce_slope_10-14']['min']))} to {sgn(F(ss_agg['rce_slope_10-14']['max']))} "
+        f"across six retrains).",
+        [("RCE", "rce"), ("#189", "protocol"), ("#195", "noise")], changed=True)
     arrow_(990, 170, 208, "beside RCB, not instead")
     box(850, 212, "held-out teacher-forced test", f"5 folds: held-out {HO['pooled_held_out']:.3f} vs in-sample {HO['pooled_in_sample']:.3f}",
         "#e87ba4", f"PR #183: the contributor's reaction to punishment is learned, not memorised (pooled held-out {HO['pooled_held_out']:.4f}, in-sample {HO['pooled_in_sample']:.4f}, self-play {PR179_SELFPLAY_RCB:.3f}).",
         [("#183", "holdout")])
     arrow_(990, 274, 312, "so the closed loop is the culprit")
-    box(850, 316, "ledger + frozen surface", "six reruns, then four follow-ups: two failed their gate",
+    box(850, 316, "ledger + frozen surface", "six reruns, seven follow-ups: five missed their gate",
         "#6b6a66", f"PR #184 stage D reset every baseline; PR #189 added the two shared-noise settings to the surface no experiment may move, "
-        f"and made contributor changes judged with the machinery switched off, on the variety measure against the human {F(cl_dec['human']['var_cond_mean']):.1f}.",
-        [("#184", "rebaseline"), ("#189", "protocol")], changed=True)
+        f"and made contributor changes judged with the machinery switched off, on the variety measure against the human {F(cl_dec['human']['var_cond_mean']):.1f}. "
+        f"PR #195 reset the scoreboard again: the frontier's baseline is now the six-arm mean of its own reseed ensemble "
+        f"(22-row mean {VMEAN_SS:.4f} not {VMEAN['arm_shipped']['after']:.4f}, rows <= 1 {int(F(ss_agg['rows_le1']['mean']))} not "
+        f"{VLE1['f_ceil']['after']}, RCC {SSMEAN['RCC']:.4f} not {VEC['arm_shipped']['after']['RCC']:.4f}), because the shipped "
+        f"draw ranks first of six on every aggregate while its training fit is ordinary -- selection, not merit. "
+        f"OPEN ESCALATION, and this box is where it lives: the suite scores a simulated timeout and drops a human one. "
+        f"{ESC_PLAIN}. A validity column in per_round.parquet plus one where() in load_sim fixes it; "
+        f"no agent may touch that directory, so it needs the maintainer.",
+        [("#184", "rebaseline"), ("#189", "protocol"), ("#195", "noise")], changed=True, alert=True)
     arrow_(990, 378, 470)
     o.append(f'<text x="998" y="430" font-size="10.5" fill="currentColor">scores.csv (22 rows)</text><circle cx="990" cy="475" r="3.5" fill="currentColor"/>')
     # round loop
@@ -714,22 +1009,52 @@ def machinery_svg():
              '<text x="600" y="497" text-anchor="middle" font-size="11" fill="currentColor">round t: contributions c_t -&gt; the manager sees c_t and punishes -&gt; common good = 1.6 &#215; sum c_t &#8722; sum p_t -&gt; payoffs</text>'
              '<path d="M 1170 522 L 30 522" stroke="currentColor" stroke-dasharray="6 5" stroke-opacity="0.6" fill="none" marker-end="url(#arr)"/>'
              '<text x="600" y="542" text-anchor="middle" font-size="10.5" fill="currentColor" opacity="0.75">feeds round t+1 as prev contribution / prev punishment (24 rounds x 100 episodes, seed 42); every 4th round the switch bay regroups</text>'
-             '<text x="600" y="578" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">the players\' models are the ones their PRs shipped; the re-baseline changed only the manager\'s input</text>'
-             '<text x="600" y="596" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">the dashed outlines are the parts the seven later PRs touched: of those, only the protocol change and the freeze landed</text></svg>')
+             '<text x="600" y="574" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">the players\' models are the ones their PRs shipped; the re-baseline changed only the manager\'s input</text>'
+             '<text x="600" y="590" text-anchor="middle" font-size="10" fill="currentColor" opacity="0.6">the dashed outlines are the parts the eleven later PRs touched: of those, only the protocol change, the freeze and the noise-aware gates landed</text>'
+             f'<text x="600" y="608" text-anchor="middle" font-size="10" fill="{ALERT}">the red outline is an open escalation for the maintainer: '
+             'the scoring bay drops a human timeout from every metric and scores a simulated one, so the two sides are not measured alike</text></svg>')
     return "".join(o)
 
 
 # ---------------------------------------------------------------- 7. leaderboard
 FSLOT = {"f_ceil": "punisher", "g_clin": "punisher", "h_cgnn": "punisher", "i_kexo": "switch",
-         "j_off": "contribution", "k_redraw": "contribution", "l_seeds": "contribution"}
+         "j_off": "contribution", "k_redraw": "contribution", "l_seeds": "contribution",
+         "m_tout": "punisher", "n_simto": "contribution", "o_recal": "contribution"}
+NPILL = (f'<span class="pill" style="background:{NOISE}">%s</span>')
+
+
+def noise_cell(k):
+    """What survives the measurement floor, in the note column of every record."""
+    bits = [f"&Delta; mean {mean_sd(k):.2f} seed sd",
+            f"&Delta; rows &le; 1 {le1_sd(k):.2f} sd",
+            f"{n_legible(k)}/22 rows move more than their own seed sd"]
+    exact = all(VEC[k]["after"][r] == VEC[k]["before"][r] for r in ROWS)
+    pill = NPILL % ("every delta exactly zero &mdash; identical artifact" if exact else
+                    "&Delta; mean inside the floor" if k in INSIDE else
+                    f"&Delta; mean {mean_sd(k):.1f}&times; the floor")
+    return (f'<div style="margin:3px 0 1px">{pill}</div>'
+            f'<span class="means">{" &middot; ".join(bits)}</span>')
+
+
+def up_detail(k):
+    """Band upgrades and downgrades, each with how far it moved in its own seed sd."""
+    def fmt(rows):
+        return ", ".join(f"{r} {row_sd(k, r):.2f} sd" + ("" if row_sd(k, r) >= 1 else " [inside the floor]")
+                         for r in rows.split(", ") if r)
+    return fmt(ST[k]["up_rows"]), fmt(ST[k]["down_rows"])
 
 
 def lb_rows():
-    out = [dict(pr=CASE[c][2], label=CASE[c][3], slot="punisher", stack=CASE[c][1], note=CASE[c][4], **ST[c])
-           for c in ORDER]
+    out = []
+    for c in ORDER:
+        u, d = up_detail(c)
+        out.append(dict(pr=CASE[c][2], label=CASE[c][3], slot="punisher", stack=CASE[c][1],
+                        note=f"{CASE[c][4]}{noise_cell(c)}", **{**ST[c], "up_rows": u, "down_rows": d}))
     for k, par, sp, pr, kind, short, label, verdict, note in FOLLOW:
+        u, d = up_detail(k)
         out.append(dict(pr=pr, label=label, slot=FSLOT[k], stack=sp,
-                        note=f"{verdict} &middot; {note} &middot; baseline: {SHORT[par]} after the fix", **ST[k]))
+                        note=f"{verdict} &middot; {note} &middot; baseline: {SHORT[par]}{noise_cell(k)}",
+                        **{**ST[k], "up_rows": u, "down_rows": d}))
     return out
 
 
@@ -777,6 +1102,14 @@ def stories():
     cb = lambda r, c: F(ce_ba[r][c])
     sk = lambda r, st: F(sk_cmp[r][st])
     under = abs(F(ce_rcc["human"][2])) / abs(F(ce_rcc["frontier after"][2]))
+    # helpers for the four PRs that followed the four-step programme
+    arm = lambda a: VMEAN["arm_" + a]["after"]
+    tf = lambda a, k: F(to_tf[a][k])
+    sd_of = lambda k, r: f"{arrow(k, r)} ({row_sd(k, r):.2f} seed sd)"
+    stab = lambda status: [r for r in ROWS if ss_stab[r]["status"] == status]
+    se_ratio = [F(ss_agg[f"rce_slope_{b}"]["sd"]) / F(ss_agg[f"rce_slope_{b}"]["within_run_se"]) for b in BANDS]
+    sd_var = lambda a: F(st_dec[ST_ARM[a]]["var_cond_mean"])
+    sd_cg = lambda a: F(st_dec[ST_ARM[a]]["cg_ratio"])
     out = []
     out.append(story("punisher", "The current-contribution punisher: punishing this round, not last round",
         "correctness", FIX, f"installed by PR {pr_link(184)} &middot; punisher bay of both machines, linear and GNN family",
@@ -845,7 +1178,25 @@ def stories():
          "Means and counts: " + "; ".join(f"{CASE[c][5]} {f3(MEAN[c]['before'])} &rarr; {f3(MEAN[c]['after'])}, rows &lt;= 1 {LE1[c]['before']} &rarr; {LE1[c]['after']}" for c in ORDER) + ".",
          f"The lineage reading: the #181 skip stack now holds the best mean on record ({f3(MEAN[best]['after'])}, {LE1[best]['after']} rows at or under the ceiling) with all four RCE signs; the Gaussian-MLP line keeps all four signs with the strongest response (#174 RCE {f3(float(S['d_kexo']['after']['RCE']))}); the #179 vnode line, on which the ledger sat, loses two RCE signs and three &lt;= 1 rows; the GNN-punisher run is the largest net mean gain ({f3(MEAN['e_gnn']['before'])} &rarr; {f3(MEAN['e_gnn']['after'])}) but has the weakest marginals. Successors of #179 and of the GNN-punisher run inherit the after column as their RCE baseline.",
          "Caveats: the 32-stack sweep matrix was not re-run, so the ranking rule of &sect;3 stays defined on the pre-fix matrix until the maintainer refreshes it; the copula rho rose (the previous card); the sign flips in #179 and the GNN-punisher run are bands with |slope| under 0.04 before and after.",
-         f"Since this card was written the frontier's mean has been beaten twice, by runs that both failed their gate: the ported switch head reads {VMEAN['i_kexo']['after']:.4f} with {VLE1['i_kexo']['after']} rows at or under the ceiling and the ceiling flag {VMEAN['f_ceil']['after']:.4f} with {VLE1['f_ceil']['after']}, against the frontier's {VMEAN['b_skip']['after']:.4f} and {VLE1['b_skip']['after']}. Neither is a lineage step: a gate is a band change on a row declared in advance, and neither got one. The ledger's frontier is still the #181 skip stack as re-baselined here."],
+         f"Since this card was written the frontier's mean has been beaten by four runs, every one of which failed its gate: "
+         f"the ported switch head reads {VMEAN['i_kexo']['after']:.4f}, the ceiling flag {VMEAN['f_ceil']['after']:.4f}, the "
+         f"timeout flag {VMEAN['m_tout']['after']:.4f} (the lowest on record, {VLE1['m_tout']['after']} rows at or under the "
+         f"ceiling) and the serving fix {VMEAN['n_simto']['after']:.4f}, against the frontier's {VMEAN['b_skip']['after']:.4f} "
+         f"and {VLE1['b_skip']['after']}. None is a lineage step: a gate is a band change on a row declared in advance, and "
+         f"none got one. The ledger's frontier is still the #181 skip stack as re-baselined here.",
+         f"<b>Two of those comparisons should never have been read as results at all.</b> {pr_link(195)} has since measured "
+         f"how far this evaluation moves when nothing changes but the contributor's training seed: the 22-row mean by "
+         f"sd {SD_MEAN:.4f} and the rows-at-the-ceiling count by sd {SD_LE1:.2f}, swinging from "
+         f"{int(F(ss_agg['rows_le1']['min']))} to {int(F(ss_agg['rows_le1']['max']))}. The ceiling flag's mean move is "
+         f"{mean_sd('f_ceil'):.2f} of that floor and the switch port's {mean_sd('i_kexo'):.2f} &mdash; <b>neither is "
+         f"distinguishable from a retrain</b>, and the &ldquo;lowest mean on record&rdquo; line above ranks draws as much as "
+         f"models. The same measurement resets this card's own baselines: the frontier stack's honest scores are the six-arm "
+         f"mean of its own ensemble, 22-row mean {VMEAN_SS:.4f} rather than {VMEAN['arm_shipped']['after']:.4f} and "
+         f"{int(F(ss_agg['rows_le1']['mean']))} rows at the ceiling rather than {VLE1['f_ceil']['after']}. The six reruns "
+         f"above changed a punisher artifact rather than a contributor seed, so the floor applies to them only as a lower "
+         f"bound &mdash; but {len([c for c in ORDER if c in INSIDE])} of the six moved their mean by less than it "
+         f"({', '.join(SHORT[c].replace('main &middot; ', '') for c in ORDER if c in INSIDE)}), which is as much as to say "
+         f"the punisher fix is visible in <em>which rows</em> moved, not in the stack average."],
         ["<code>scripts/data_analysis/curpun_rebaseline.py</code> &mdash; writes rebaseline_table.{csv,md} and rce_bands.csv from the before and after scores",
          "<code>scripts/simulation/run_curpun_reruns.sh</code> &mdash; submit / fetch / evaluate for the five _curpun configs, with the gmlp-lineage checkout for cases c and d",
          "<code>configs/simulation/manager_testing/*_curpun.yml</code> &mdash; the five rerun configs, byte-identical to their sources except for the punisher path and output dir",
@@ -903,7 +1254,12 @@ def stories():
          f"Caveat, and it matters: five copies trained on the same {se_sum['n_episodes']} games is the narrowest kind of ensemble, so "
          f"{se_sum['implied_rho']:.4f} is a <b>lower bound</b> on the model's uncertainty, not a measurement of it. Resampling the games themselves "
          f"would be wider and has not been tried. The conclusion that the ensemble cannot substitute for the machinery is safe by a factor of five; "
-         f"the exact number is not."],
+         f"the exact number is not.",
+         f"One later check this card passes: {pr_link(195)}'s noise floor is small next to everything measured here. The three "
+         f"arms move the 22-row mean by {mean_sd('j_off'):.1f}, {mean_sd('k_redraw'):.1f} and {mean_sd('l_seeds'):.1f} times "
+         f"the floor and the group-spread row by more again, so the decomposition above is not a story about training draws. "
+         f"The one number that should be read with the floor beside it is the ceiling count, which swings by "
+         f"{SD_LE1:.1f} rows on the seed alone."],
         ["<code>scripts/data_analysis/copula_closed_loop_variance.py</code> &mdash; the three-arm ablation, the variance decomposition and the latent regression",
          "<code>scripts/data_analysis/copula_missing_state.py</code> and its analysis companion &mdash; the candidate screen, the joint fit and the persistence bootstrap",
          "<code>src/aimanager/simulation/ensemble_ah.py</code> &mdash; SeedEnsembleAH, one trained copy drawn per game",
@@ -996,7 +1352,18 @@ def stories():
          f"The reference reruns are reported, not gated. The graph-punisher one improved broadly on the way past: mean "
          f"{VMEAN['h_cgnn']['before']:.4f} &rarr; {VMEAN['h_cgnn']['after']:.4f}, rows at or under the ceiling {VLE1['h_cgnn']['before']} &rarr; "
          f"{VLE1['h_cgnn']['after']}; the linear one {VMEAN['g_clin']['before']:.4f} &rarr; {VMEAN['g_clin']['after']:.4f}. The protected-row clause "
-         f"fired on both of them, and both firings were wrong &mdash; that is the next card."],
+         f"fired on both of them, and both firings were wrong &mdash; that is the next card.",
+         f"<b>Read under the floor {pr_link(195)} later measured, this card keeps its verdict and loses two of its numbers.</b> "
+         f"The declared row is the part that survives: RCC moved {sv_sd('#192', 'RCC'):.2f} seed sd, legibly and in the right "
+         f"direction, and genuinely did not cross its band &mdash; and RCC is one of the twelve rows that can be gated on a "
+         f"single run at all. What does not survive is the context around it. The 22-row mean moved "
+         f"{sv_sd('#192', '22-row mean'):.2f} of its floor and the rows-at-the-ceiling count {sv_sd('#192', 'rows'):.2f} of "
+         f"its own, so &ldquo;{VLE1['f_ceil']['before']} &rarr; {VLE1['f_ceil']['after']} rows at the ceiling&rdquo; is a "
+         f"property of the draw, not of the flag; and the two rows the branch reported as collateral, RCB at "
+         f"{sv_sd('#192', 'RCB'):.2f} sd and CG at {sv_sd('#192', 'CG'):.2f} sd, are inside the floor in the other direction "
+         f"&mdash; they were not damage either. The baseline it beat was itself the six-arm minimum on RCC "
+         f"({VEC['arm_shipped']['after']['RCC']:.4f} against the ensemble's {SSMEAN['RCC']:.4f}), which is the hardest "
+         f"version of the comparison and the one recorded."],
         ["<code>scripts/data_analysis/punisher_ceiling_check.py</code> &mdash; the diagnosis on the real games, before anything was built",
          "<code>scripts/baselines/handcrafted_grid.py</code> &mdash; the derived contribution_max indicator and its legality; "
          "<code>src/aimanager/generic/data.py</code> and <code>src/aimanager/manager/api_manager.py</code> &mdash; the same on the graph path",
@@ -1041,7 +1408,18 @@ def stories():
          f"estimate of how much that slope moves between seeds. It is recorded as the rule reads; anyone wanting to overturn it should refit that band "
          f"across seeds rather than argue about it.",
          f"What it cannot settle: whether the component needs the gaussian-MLP contributor or clashes with this one specifically. Both readings fit "
-         f"this run and they imply different successors. Pairing it with a third set of players separates them, at one simulation each."],
+         f"this run and they imply different successors. Pairing it with a third set of players separates them, at one simulation each.",
+         f"<b>The caveat above has since been measured, and it cuts both ways.</b> {pr_link(195)} retrained the frontier's "
+         f"contributor six times and scored all six: the declared target SC moved {sv_sd('#190', 'SC'):.2f} seed sd here, "
+         f"which is <b>inside the floor</b> &mdash; the row this branch was judged on never really moved, so the gate-1 miss "
+         f"was never close and the &ldquo;improvement without crossing a band&rdquo; was not an improvement either. The other "
+         f"declared target RCD moved {sv_sd('#190', 'RCD'):.2f} sd, outside it and genuinely the wrong way. The largest "
+         f"regression, RSA at {sv_sd('#190', 'RSA'):.2f} sd, is real and reaches a value no arm of the reseeded ensemble "
+         f"reaches &mdash; that one stands exactly as written. And the protected-row violation this branch was failed on "
+         f"survives the arithmetic without being settled by it: the 10-14 band slope moved {sv_sd('#190', 'RCE 10-14'):.2f} "
+         f"seed sd, past the floor, but that band runs {sgn(F(ss_agg['rce_slope_10-14']['min']))} to "
+         f"{sgn(F(ss_agg['rce_slope_10-14']['max']))} across six retrains of an unchanged model, which is why the sign clause "
+         f"is now retired there. The branch asked for exactly this measurement; it got it, and its verdict is unchanged."],
         ["<code>src/aimanager/generic/joint_exodus.py</code> &mdash; the size encoding ported across with a default so older components keep loading",
          "<code>configs/simulation/manager_testing/23_2g8a_switch_kexo_port_...yml</code> &mdash; the frontier config with one line changed",
          "<code>plots/data_analysis/evaluation/switch_kexo_port/</code> &mdash; the 22-row comparison and the band slopes",
@@ -1077,61 +1455,398 @@ def stories():
          f"be read that way: largest band change {max(ce_se[0]['change_in_se'].values()):.2f} standard errors, so the row is intact.",
          f"Deliberately not done: {pr_link(187)} showed the human dependence has the shape of a one-round echo rather than the episode-long "
          f"persistence that ships. Changing the shape now would cost the group-spread row and the high-contribution withdrawal slope with nothing in "
-         f"place to replace the variance they borrow from it. Keep the shipped shape, stop letting it move, and measure past it."],
+         f"place to replace the variance they borrow from it. Keep the shipped shape, stop letting it move, and measure past it.",
+         f"<b>The rule has since been amended a second time, and this one is bigger than the first.</b> {pr_link(195)} "
+         f"measured what the whole scoreboard does when only the training seed changes, and &sect;2 was rewritten around it. "
+         f"A band upgrade now counts only if the target row also moves by more than that row's seed sd, and ten rows cannot "
+         f"serve as a gate-1 target on a single run at all. The <b>symmetry rule</b> applies the same threshold to losses: a "
+         f"row worsening by less than its floor is not a cost, it is a retrain &mdash; because a threshold applied to gains "
+         f"alone would make improvement nearly impossible, one row having to beat the noise to help while twenty-one could "
+         f"hurt by luck. Gate 2 is deliberately left where it is ({SD_MEAN:.4f} against a margin of about "
+         f"{0.10 * VMEAN['arm_shipped']['after']:.3f}, roughly two floors) as the backstop against many sub-floor losses "
+         f"accumulating. And the protected row takes the same treatment: RCE's band-drop clause fires only on a drop larger "
+         f"than {SEED_SD['RCE']:.3f}, and its sign clause is retired on the 10-14 and 15-19 bands, where an unchanged model "
+         f"flips sign on its own. None of this reverses a recorded verdict either &mdash; every failure failed on a band its "
+         f"target did not cross."],
         ["<code>notes/autoresearch.md</code> &sect;2 and &sect;8 &mdash; the protected row, its two qualifications, the freeze and the frozen surface",
          "<code>doc/plans/post-rebaseline-program.md</code> &mdash; the four steps as declared and then as they came out",
          "<code>src/aimanager/evaluation_suite/metrics.py</code> &mdash; the per-band standard errors and row counts the reports now carry"],
         f"A rule that fails experiments over differences too small to be real, and once over an improvement, is worse than no rule: it teaches the "
         f"people it governs to argue with it instead of respecting it. It is now stated with the arithmetic that makes a firing readable."))
+    out.append(story("noise", "The noise floor: how far the whole scoreboard moves when nothing changes",
+        "measurement", NOISE,
+        f"PR {pr_link(195)} &middot; six arms, no training, no model proposed &middot; the frontier stack, contributor "
+        f"artifact swapped and everything else held identical",
+        f"Every verdict on this page rests on one training run and one simulation, and the protocol had no notion of "
+        f"run-to-run variability. The three experiments before this one were decided on margins that might sit inside it. "
+        f"So: take the contributor architecture the frontier already accepts, train it six ways &mdash; {pr_link(188)}'s five "
+        f"seeds plus the shipped artifact &mdash; and run all six through the same stack under the same simulation seed, "
+        f"the same punisher, the same switch model and the same copula parameters, carried bit for bit rather than refitted. "
+        f"Nothing else differs. Whatever the 22 rows then do is the measurement error of the scoreboard.",
+        f"Six arms, {int(F(ss_lev['seed_1']['n'])):,} agent-rounds each, 22 rows each with identical noise-ceiling denominators. "
+        f"The six contributors are genuinely different models (pairwise, only "
+        f"{SS_COINCIDE[0]:.1f}-{SS_COINCIDE[1]:.1f}% of their contribution draws coincide) "
+        f"and genuinely exchangeable: on the training objective the five members score "
+        f"{min(SS_CV[0]):.4f}-{max(SS_CV[0]):.4f} and the shipped artifact {SS_CV[1]:.4f}, an ordinary draw.",
+        [f"<b>A typical row moves by sd {SD_ROW:.3f} and spans {SPAN_ROW:.2f} end to end</b> (per-row sds "
+         f"{min(SEED_SD.values()):.3f} to {max(SEED_SD.values()):.3f}). The 22-row mean moves by sd {SD_MEAN:.4f} "
+         f"(range {F(ss_agg['mean_22']['range']):.4f}) against a gate-2 margin of about "
+         f"{0.10 * VMEAN['arm_shipped']['after']:.3f} &mdash; that gate sits at roughly two floors, which is why it stands. "
+         f"And the count of rows at or under the human-vs-human ceiling swings from {int(F(ss_agg['rows_le1']['min']))} to "
+         f"{int(F(ss_agg['rows_le1']['max']))}, sd {SD_LE1:.2f}: <b>the least stable number in the suite, and one several "
+         f"verdicts had quoted as though it were a property of the model</b>.",
+         f"<b>Ten of the 22 rows cannot be judged from a single training run.</b> A band boundary lies inside one seed sd of "
+         f"their six-arm mean and the six arms genuinely land in two bands: {', '.join(UNGATE)}. "
+         f"{len(stab('always <= 1'))} rows are always at the ceiling ({', '.join(stab('always <= 1'))}), "
+         f"{len(stab('never <= 1'))} never are ({', '.join(stab('never <= 1'))}), and the rest flip on the draw alone. "
+         f"<b>RCE, the protected row, is one of the ten</b>: it sits in band &lt;= 1 in exactly one arm of six "
+         f"(its sd is {SEED_SD['RCE']:.3f}, its six-arm mean {SSMEAN['RCE']:.4f} against the shipped "
+         f"{VEC['arm_shipped']['after']['RCE']:.4f}).",
+         f"Every clause of the protected-row rule turns out to be decided by the training draw. Two of RCE's four band "
+         f"slopes change sign across six retrains of the same model: the 10-14 band runs "
+         f"{sgn(F(ss_agg['rce_slope_10-14']['min']))} to {sgn(F(ss_agg['rce_slope_10-14']['max']))} and the 15-19 band "
+         f"{sgn(F(ss_agg['rce_slope_15-19']['min']))} to {sgn(F(ss_agg['rce_slope_15-19']['max']))}. On all four bands the "
+         f"seed spread is larger than the <em>within-run</em> sampling error ({min(se_ratio):.2f}-{max(se_ratio):.2f} times "
+         f"it): retraining moves a slope further than resampling the same run does, and the standard errors every report "
+         f"carries had been understating the real uncertainty.",
+         f"<b>The frontier is the bottom of its own spread, and that is not a coincidence anyone can rule out.</b> The shipped "
+         f"contributor is first of six on the 22-row mean ({VMEAN['arm_shipped']['after']:.4f} against the six-arm "
+         f"{VMEAN_SS:.4f}), first on rows &lt;= 1 ({VLE1['f_ceil']['after']} against {int(F(ss_agg['rows_le1']['mean']))}), "
+         f"holds the six-arm minimum on {ss_rank['shipped']['rows_best']} of 22 rows including RCC "
+         f"({VEC['arm_shipped']['after']['RCC']:.4f} against the members' {min(F(ss_row['RCC'][a]) for a in ARMS[:5]):.4f}"
+         f"-{max(F(ss_row['RCC'][a]) for a in ARMS[:5]):.4f}) and lands "
+         f"{F(ss_rank['seed_5']['mean_c_err']) / F(ss_rank['shipped']['mean_c_err']):.0f} times closer to the human "
+         f"contribution level than the nearest member &mdash; while its training fit is unremarkable. The obvious mechanism "
+         f"is selection: it became the frontier by scoring well on this evaluation, and every candidate since has been "
+         f"measured against a favourable tail. The protocol's answer is to make the frontier's baseline the six-arm mean "
+         f"vector, which is a change to the scoreboard and not to any model.",
+         f"<b>What this does to the verdicts already on this page.</b> {pr_link(190)}'s declared target SC moved "
+         f"{sv_sd('#190', 'SC'):.2f} seed sd &mdash; inside the floor, so its gate-1 miss was never in doubt but its "
+         f"target never really moved either; its largest regression RSA at {sv_sd('#190', 'RSA'):.2f} sd is real. "
+         f"{pr_link(192)}'s 22-row mean moved {sv_sd('#192', '22-row mean'):.2f} sd and its rows &lt;= 1 count "
+         f"{sv_sd('#192', 'rows'):.2f} sd &mdash; neither is distinguishable from a retrain &mdash; while its declared "
+         f"RCC move at {sv_sd('#192', 'RCC'):.2f} sd is, and the two rows it was faulted for worsening "
+         f"(RCB {sv_sd('#192', 'RCB'):.2f} sd, CG {sv_sd('#192', 'CG'):.2f} sd) are not. Two further experiments "
+         f"({pr_link(193)} and {pr_link(194)}) sit between {pr_link(192)} and the timeout run and are not plotted here; "
+         f"the floor re-reads them too, and it explains most of what {pr_link(194)} was faulted for.",
+         f"<b>What it does not cover.</b> The simulation draw, the punisher and switch slots' own retrain spread, and any "
+         f"interaction between them. Six draws give an sd with about 30% relative uncertainty, and every omission points the "
+         f"same way: the true run-to-run variability is larger than this, not smaller. A second seed per candidate was "
+         f"considered and rejected &mdash; it doubles the cost of exactly the marginal experiments and leaves the "
+         f"<em>baseline</em> single-seeded, which makes the comparison worse, not better."],
+        ["<code>scripts/data_analysis/seed_spread_noise_floor.py</code> &mdash; the six-arm comparison, the per-row spread "
+         "and the re-reading of the recorded verdicts",
+         "<code>plots/data_analysis/evaluation/seed_spread_noise_floor/per_row.csv</code> &mdash; the per-row seed sd this "
+         "page now prints beside every score; <code>aggregates.csv</code>, <code>arm_ranks.csv</code>, "
+         "<code>ceiling_stability.csv</code>, <code>verdicts.csv</code>",
+         "<code>scripts/artificial_humans/carry_contribution_copula_params.py</code> &mdash; the copula stamped, not "
+         "refitted, onto each member, so the arms differ only in the training draw",
+         "<code>notes/autoresearch.md</code> &sect;2 &mdash; the noise-aware gate, the symmetry rule, the amended "
+         "protected-row clauses and the six-arm baseline"],
+        f"An error bar for a scoreboard that had none, at the cost of six two-minute simulations and no training at all. "
+        f"Gate 1 now requires a band upgrade that also clears the target row's seed sd; a movement smaller than its row's "
+        f"floor counts neither for nor against an experiment, which is a rule about losses as much as gains; and the "
+        f"frontier is scored against the mean of its own ensemble rather than the draw that happened to win. "
+        f"<b>No verdict on this page is reversed and none should be</b> &mdash; every failure failed on a band its target "
+        f"did not cross &mdash; but several of the numbers around those verdicts should never have been read as results."))
+    out.append(story("timeout", "The manager and the player who said nothing at all",
+        "correctness, failed its row", FIX,
+        f"PR {pr_link(196)} &middot; one flag added to both punisher families &middot; two retrainings, two simulations "
+        f"&middot; the first run judged under the noise floor",
+        f"Sometimes a player simply did not answer. The game charged them 0, paid out on 0 and showed everyone 0, and the "
+        f"human manager could see that no input had arrived: over the 50 games they punished a timed-out player "
+        f"<b>{TO_HUM['timeout']:.2f}% of the time</b> and a player who <em>chose</em> to give nothing "
+        f"<b>{TO_HUM['zero_all']:.1f}%</b>. The artificial punisher could not tell the two apart, so every timeout was served "
+        f"to it as a defiant zero. The declared target was RCC, the reaction at the ceiling, through the punisher's response "
+        f"to low contributions.",
+        f"Step 0 checked the premise with an accounting identity rather than an argument: the stored common good of a group "
+        f"in a round must equal 1.6 &times; its contributions minus its punishments. Under the recorded 0 that holds on "
+        f"<b>{TO_ID['the recorded 0'][1]}</b> group-rounds; under the imputed 9 it fails on every one of the "
+        f"{TO_GR - int(TO_ID['the imputed 9'][1].split('/')[0].replace(',', '').strip())} that contain a timeout. It also "
+        f"<em>relocated</em> the fix: the imputed 9 never reaches the training data at all (all {TO_N} timed-out "
+        f"agent-rounds record 0), it is injected by the environment at simulation time. So one half of this branch is a fix "
+        f"to what the manager is <em>served</em>, and the other is a new input: a flag saying the input was missing.",
+        [f"<b>The gate.</b> RCC {sd_of('m_tout', 'RCC')} &mdash; it moved further than its own noise floor, in the predicted "
+         f"direction, and still did not cross the band, missing by {F(to_vd['rcc_after']) - 1:.4f}, which is itself "
+         f"{(F(to_vd['rcc_after']) - 1) / SEED_SD['RCC']:.2f} seed sd. Gate 2 passes (mean "
+         f"{VMEAN['m_tout']['before']:.4f} &rarr; {VMEAN['m_tout']['after']:.4f} against a ceiling of "
+         f"{F(to_vd['gate2_ceiling']):.4f}, a move of {mean_sd('m_tout'):.2f} seed sd) and the protected row holds, every "
+         f"band inside {max(to_pc[0]['change_in_se'].values()):.2f} pooled standard errors. The baseline it had to beat was "
+         f"the six-arm <em>minimum</em> on RCC, {(SSMEAN['RCC'] - VEC['arm_shipped']['after']['RCC']) / SEED_SD['RCC']:.1f} "
+         f"seed sd below the ensemble mean: a favourable draw to start from.",
+         f"<b>The correctness result is separate from the gate, and it is real &mdash; on one family only.</b> For the linear "
+         f"punisher the flag earns its place: cross-validated log loss {TO_CV['lin'][0]:.4f} &rarr; {TO_CV['lin'][1]:.4f}, "
+         f"locked test {TO_CV['lin_test'][0]:.4f} &rarr; {TO_CV['lin_test'][1]:.4f}, and teacher-forced its weight on the "
+         f"current contribution goes {tf('lin_ceiling_parent', 'OLS c_t'):.3f} &rarr; {tf('lin_timeout_new', 'OLS c_t'):.3f} "
+         f"against the human {tf('human', 'OLS c_t'):.3f} &mdash; closing "
+         f"{(tf('lin_timeout_new', 'OLS c_t') - tf('lin_ceiling_parent', 'OLS c_t')) / (tf('human', 'OLS c_t') - tf('lin_ceiling_parent', 'OLS c_t')):.0%} "
+         f"of the gap, at a magnitude {pr_link(193)} had predicted in advance to within {TO_PRED}. For the graph punisher it "
+         f"earns nothing and costs something: CV {TO_CV['gnn'][0]:.4f} &rarr; {TO_CV['gnn'][1]:.4f} at a paired t of {TO_T:.2f}, "
+         f"a slope moving <em>away</em> from the human ({tf('gnn_ceiling_parent', 'OLS c_t'):.3f} &rarr; "
+         f"{tf('gnn_timeout_new', 'OLS c_t'):.3f}) and a teacher-forced likelihood that worsens "
+         f"({tf('gnn_ceiling_parent', 'nll'):.4f} &rarr; {tf('gnn_timeout_new', 'nll'):.4f}). The graph architecture already "
+         f"reconstructs &ldquo;this player gave no input&rdquo; from its recurrent state; the explicit channel displaces "
+         f"capacity rather than adding information.",
+         f"<b>Other legible movements on the frontier</b>, each past its own floor: RCB {sd_of('m_tout', 'RCB')}, the largest "
+         f"gain; CG {sd_of('m_tout', 'CG')}; PB {sd_of('m_tout', 'PB')}; RPB {sd_of('m_tout', 'RPB')}; and the one real cost, "
+         f"<b>RSA {sd_of('m_tout', 'RSA')}, a band downgrade</b> that no protection clause covers and that carries forward as "
+         f"a watch row. The watch row RCD moved {sd_of('m_tout', 'RCD')} &mdash; not distinguishable from a retrain, and "
+         f"reported as such rather than claimed.",
+         f"<b>The loudest number in the run is on a stack that was not gated.</b> On the main-sweep GNN-punisher reference the "
+         f"punishment family blows out far beyond anything the floor explains: mean "
+         f"{colmean(to_ba, 'ref_gnn_before'):.4f} &rarr; {colmean(to_ba, 'ref_gnn_after'):.4f} "
+         f"({colsd(to_ba, 'ref_gnn_before', 'ref_gnn_after'):.2f} seed sd), rows &lt;= 1 "
+         f"{colle1(to_ba, 'ref_gnn_before')} &rarr; {colle1(to_ba, 'ref_gnn_after')}, with RPB, PA, PB and RPA each moving "
+         f"between 8 and 28 seed sd. The linear reference barely moves ({colmean(to_ba, 'ref_lin_before'):.4f} &rarr; "
+         f"{colmean(to_ba, 'ref_lin_after'):.4f}, {colsd(to_ba, 'ref_lin_before', 'ref_lin_after'):.2f} sd &mdash; not "
+         f"legible). Same feature, opposite outcomes, and the recommendation follows the measurement: keep it in the linear "
+         f"punisher, do not carry it into the graph one."],
+        ["<code>scripts/baselines/handcrafted_grid.py</code> &mdash; <code>contribution_valid</code> in the feature pool and "
+         "the punishment legal set; <code>src/aimanager/generic/data.py</code> and "
+         "<code>src/aimanager/manager/api_manager.py</code> &mdash; the same on the graph path",
+         "<code>src/aimanager/simulation/linear_ah.py</code>, <code>src/aimanager/simulation/simulate.py</code> &mdash; the "
+         "manager is served the recorded 0 on both simulation paths",
+         "<code>configs/training/baselines/punishment/multinomial_timeout.yml</code>, "
+         "<code>configs/training/artificial_humans/punishment/rnn_edge_50ep_doubled_timeout.yml</code> &mdash; the two retrains",
+         "<code>plots/data_analysis/evaluation/punisher_timeout_feature/</code> &mdash; before_after.{csv,md} with every seed "
+         "sd beside its delta, and the teacher-forced mechanism tables",
+         "<code>notes/autoresearch_log/punisher-timeout-feature.md</code> &mdash; the log, the accounting identity and the "
+         "artifact-provenance resolution"],
+        f"A data-handling defect settled by arithmetic rather than by intent, a feature that belongs in one punisher family "
+        f"and not the other, and RCC left within one noise floor of its band &mdash; so the next change to that row decides it. "
+        f"It also left two things open on purpose: the same substitution was still reaching the contributor and the switch "
+        f"model, which is the next card, and RSA is now a watch row nobody has claimed."))
+    out.append(story("simtimeout", "The nine that was never there: what the players were being shown",
+        "correctness, failed its row", SLOT["contribution"],
+        f"PR {pr_link(197)} &middot; nothing retrained &mdash; every slot loads the same file on disk as its parent, "
+        f"under the same seed &middot; four simulations and a probe",
+        f"The previous card fixed what the <em>manager</em> was served and deliberately left the other two slots alone, so "
+        f"that its own rows stayed attributable. The defect was still there: during simulation the environment overwrote a "
+        f"timed-out player's contribution with the default of 9 before the state was passed on, although the game charged 0, "
+        f"paid out on 0, showed everyone 0 and stores 0 in the training tensors. The parent's note said this reached the "
+        f"switch model as a 9 that round and the contribution model as a 9 the round before. This branch measured which half "
+        f"of that is actually true, fixed it, and re-ran.",
+        f"A probe wrapped every model's <code>predict</code> call and recorded the state keys each encoder actually consumes "
+        f"and the value served at each timed-out cell, on the real machinery. On {st_pb['timeouts']} timed-out cells in "
+        f"{st_pb['agent_rounds']:,} agent-rounds ({st_pb['timeout_rate']:.2%}, against {TO_N / TO_AR:.1%} in the human data), "
+        f"the contribution model's <code>prev_contribution</code> read 9.0 on all "
+        f"{PREV_B['9.0'] - PREV_A['9.0']} of the cells that are not round-0 lag defaults (those "
+        f"{PREV_A['9.0']} keep the 9, exactly as the training tensors' own shift does), and now reads 0.0 on all "
+        f"{PREV_A['0.0']}. The switch model in this stack "
+        f"reads {', '.join(ST_MODEL['switch']['reads'])} &mdash; <b>never a contribution key at all</b>, so the defect never "
+        f"reached it. Half the parent's prediction was right and half was wrong, and the probe is what settled which.",
+        [f"<b>This is direct progress on the one defect the campaign has left.</b> With the shared-noise machinery switched "
+         f"off &mdash; which is how &sect;2 says a contributor change must be judged &mdash; the variety of situations the "
+         f"simulation reaches rises from {sd_var('parent_off'):.2f} to {sd_var('cand_off'):.2f} against the human "
+         f"{F(st_dec['human']['var_cond_mean']):.2f}, while the randomness inside each round was already about right "
+         f"({F(st_dec[ST_ARM['cand_off']]['var_resid']):.2f} against the human "
+         f"{F(st_dec['human']['var_resid']):.2f}) and stays so. <b>No randomness was added to get it</b>: the model is "
+         f"simply conditioning on a value the game actually used, on the rounds where the game used it.",
+         f"<b>The gates fail and the cost is legible.</b> No declared target upgraded a band: CG {sd_of('n_simto', 'CG')}, "
+         f"SC {sd_of('n_simto', 'SC')}, <b>SB {sd_of('n_simto', 'SB')}, a band downgrade</b>, and SA "
+         f"{sd_of('n_simto', 'SA')} &mdash; not distinguishable from a retrain. Gate 2 passes "
+         f"({VMEAN['n_simto']['before']:.4f} &rarr; {VMEAN['n_simto']['after']:.4f} against a ceiling of "
+         f"{F(st_vd['gate2_ceiling']):.4f}). RCC goes {sd_of('n_simto', 'RCC')} &mdash; which means the previous card's "
+         f"{VEC['m_tout']['after']['RCC']:.4f} was measured with a wrong lag, and anyone continuing that line must "
+         f"re-baseline first. PD improves legibly, {sd_of('n_simto', 'PD')}. In all, {22 - n_legible('n_simto')} of the 22 "
+         f"rows move by less than their own seed sd.",
+         f"<b>The protected row fires, on the band where an unchanged model flips sign anyway.</b> RCE's 10-14 slope goes "
+         f"{lead(st_sl[0]['before'][3]):+.3f} to {lead(st_sl[0]['after'][3]):+.3f} (human {HUMAN_SLOPES[2]:+.3f}), a change of "
+         f"{st_pc[0]['change_in_se']['10-14']:.2f} pooled standard errors and "
+         f"{st_pc[0]['change_in_seed_sd']['10-14']:.2f} seed sd, so the amended magnitude clause fires. Context rather than "
+         f"excuse: {pr_link(195)} measured that band running {sgn(F(ss_agg['rce_slope_10-14']['min']))} to "
+         f"{sgn(F(ss_agg['rce_slope_10-14']['max']))} across six retrains of an unchanged model, which is why the sign clause "
+         f"is retired there; the slope crossed zero rather than reversing. The row's score itself, "
+         f"{sd_of('n_simto', 'RCE')}, is not distinguishable from a retrain and its band holds.",
+         f"<b>Why the cost is all in the group-spread rows, and why that is informative.</b> With the shared-noise machinery "
+         f"off the fix leaves the group-spread ratio flat ({sd_cg('parent_off'):.4f} &rarr; {sd_cg('cand_off'):.4f} against "
+         f"the human {F(st_dec['human']['cg_ratio']):.4f}); with it on, the ratio falls further below the human "
+         f"({sd_cg('parent_on'):.4f} &rarr; {sd_cg('cand_on'):.4f}). The mis-served nines had been a spurious source of "
+         f"between-group dispersion inside the closed loop, sitting on top of a copula calibrated to supply exactly that "
+         f"dispersion. The stack whose contributor carries no such machinery improves instead: the linear-punisher reference "
+         f"goes {colmean(st_ba, 'ref_lin_before'):.4f} &rarr; {colmean(st_ba, 'ref_lin_after'):.4f} "
+         f"({colsd(st_ba, 'ref_lin_before', 'ref_lin_after'):.2f} seed sd, legible) with rows &lt;= 1 "
+         f"{colle1(st_ba, 'ref_lin_before')} &rarr; {colle1(st_ba, 'ref_lin_after')}. That asymmetry is the whole result, and "
+         f"the next card tests the reading of it.",
+         f"<b>This comparison has no noise floor at all, and that is unusual enough to say plainly.</b> Nothing was retrained: "
+         f"both runs load the same artifacts under seed 42, so the difference contains none of the "
+         f"{SD_ROW:.3f}-per-row training spread the floor describes. There is no better draw to be had by re-running, which "
+         f"means the cost above is as real as the gain.",
+         f"<b>An open escalation, and it is the reason the environment's substitution was kept rather than removed.</b> "
+         f"{ESC_HTML}. Recording the 0 in the simulation's own output would push "
+         f"about {st_pb['timeout_rate']:.1%} of <em>scored</em> rows to a hard zero against human rows that are not there at "
+         f"all, so the substitution was intercepted at serving and left in the recording. The suite is frozen surface and no "
+         f"agent may change it: <b>a maintainer has to decide</b>, and the fix is a validity column in "
+         f"<code>per_round.parquet</code> plus one <code>where()</code> in <code>load_sim</code>."],
+        ["<code>src/aimanager/manager/environment.py</code> &mdash; the new <code>served_state()</code>: contribution and "
+         "prev_contribution read the recorded 0 wherever the validity flag is false, round 0 excluded; the env's own "
+         "dynamics, accounting and recorded output are untouched",
+         "<code>src/aimanager/simulation/linear_ah.py</code> &mdash; the validity mask threaded through the env-driven path "
+         "so a linear bundle cannot hit the same defect",
+         "<code>scripts/data_analysis/sim_timeout_serving_probe.py</code> &mdash; the probe that reports what each encoder "
+         "reads and what it is served; <code>probe_before.json</code> / <code>probe_after.json</code>",
+         "<code>plots/data_analysis/evaluation/sim_timeout_imputation/</code> &mdash; before_after.{csv,md} and the "
+         "state-spread decomposition with the copula on and off",
+         "<code>notes/autoresearch_log/sim-timeout-imputation.md</code> &mdash; the log, including why the recorded output "
+         "keeps the 9 and the escalation that follows from it"],
+        f"The last place in the pipeline where a model was shown a value the game never used, found and closed &mdash; and "
+        f"{sd_var('cand_off') - sd_var('parent_off'):+.2f} of state variety bought without adding a single unit of noise, "
+        f"which is the first movement on the late-divergence defect that did not come out of the copula. The verdict is still "
+        f"a failure: no declared target upgraded, SB downgraded, and the protected row fired. Both facts are true and neither "
+        f"cancels the other."))
+    out.append(story("recal", "A refutation, measured four times over: the copula never saw the defect",
+        "refuted", SLOT["contribution"],
+        f"PR {pr_link(198)} &middot; nothing retrained; one scalar restamped &middot; the one parameter &sect;2 allows an "
+        f"experiment to unfreeze, unfrozen once and on the record",
+        f"The previous card's reading of its own cost was that the herding copula had been <em>calibrated in the presence of "
+        f"the defect</em> &mdash; that its strength had quietly absorbed the dispersion the mis-served nines were supplying, "
+        f"so removing them left a debt. That is a testable claim and it points at a specific number: the shared-noise "
+        f"strength rho, shipped at {cr_par['rho']:.4f}. If the reading is right, refitting rho against a model that no longer "
+        f"sees those nines should give a larger value, by more than the estimator's own spread, and stamping it should recover "
+        f"the group-spread row.",
+        f"The parameter was unfrozen exactly once, with the existing estimator, the same base trunk by sha256, the same flags "
+        f"and the same seed as the job that produced the shipped value, then stamped onto a copy of the contributor and run "
+        f"through the frontier stack and the noise-off arm. Nothing else moved: the persistence stayed at its frozen "
+        f"{cr_par['phi_final']:.1f} and the switch-every at {cr_par['copula_switch_every']}.",
+        [f"<b>The refit returns the shipped value to the last digit</b>: rho = {cr_par['rho']:.17f}, a difference of exactly "
+         f"zero, with bootstrap SE {cr_par['rho_se']:.4f} and 95% interval "
+         f"[{cr_par['rho_ci'][0]:.4f}, {cr_par['rho_ci'][1]:.4f}]. Four independent equalities follow and each was measured "
+         f"rather than argued: all {CR_FIELDS} estimate and provenance fields of the parameter file identical (only the date "
+         f"and the git head differ); the stamped artifact identical to the shipped one in all 64 hex digits of its sha256 "
+         f"(<code>{CR_SHA[:12]}&hellip;</code>); the simulation's per-round output byte-identical; and all 22 rows, the mean "
+         f"and the rows &lt;= 1 count exactly unchanged &mdash; every delta 0.0000, i.e. 0.00 of its seed sd.",
+         f"<b>Why it could not have been otherwise.</b> rho is fitted by pairwise-likelihood maximum likelihood against "
+         f"<em>human</em> histories, teacher-forced, from a training tensor in which a timed-out player's contribution and the "
+         f"lag that follows it are the recorded 0. The imputed 9 lived only on the simulation serving path, which the "
+         f"estimator neither imports nor executes. The refit was a null by construction and it measured as one &mdash; but the "
+         f"chain was run end to end anyway, so that someone who does not trust the argument can check the equalities.",
+         f"<b>The consequence is a correction to the previous card, not to this one.</b> The mis-served nines were not a bias "
+         f"the calibration had internalised; they were a spurious source of between-group dispersion inside the closed loop, "
+         f"sitting on top of a correctly fitted copula. Removing them did not create calibration debt &mdash; <b>it exposed a "
+         f"group-spread deficit the defect had been covering</b>. That also explains the asymmetry the parent found most "
+         f"informative: the reference stack has no copula compounding the spurious dispersion, so the fix simply made it more "
+         f"correct.",
+         f"<b>And the route is closed, not merely unhelpful.</b> The only rho the estimator supports is the one it measures; "
+         f"choosing a larger one because the group-spread row would score better is tuning at a metric's definition rather "
+         f"than at behaviour, which &sect;5 forbids, and the calibration script's own pre-flight says in as many words that "
+         f"rho is never tuned to that ratio. <b>The copula's strength is closed as a route to CG. Its shape is not</b>: with "
+         f"the machinery off the stack reaches {sd_var('cand_off'):.2f} of the human "
+         f"{F(st_dec['human']['var_cond_mean']):.2f} worth of state variety while its residual variance is already right, so "
+         f"the gap is in what the model conditions on. {pr_link(187)} separately measured the human dependence to be a "
+         f"round-local shock with a one-round echo rather than the episode-long latent that ships.",
+         f"<b>Two controls fell out of the run and both are worth more than the experiment.</b> The simulation is "
+         f"bit-reproducible across isolated remote directories, GPU nodes and sessions &mdash; both arms reproduced the "
+         f"parent's recorded output byte for byte &mdash; and so is the evaluation: re-running the scorer over the parent's "
+         f"own simulation rewrote every table and all {CR_FIGS} figures and left the working tree clean. <b>A before/after on "
+         f"unchanged artifacts therefore has a noise floor of exactly zero</b>, which is the opposite end of the same "
+         f"question {pr_link(195)} answered for retraining.",
+         f"<b>One trap, flagged because it nearly became a second undeclared change.</b> The estimator writes its lag-1 ratio "
+         f"as <code>phi</code> and never writes <code>phi_final</code>; the stamping script falls back to the bare "
+         f"<code>phi</code> when <code>phi_final</code> is absent. A refit of rho alone would silently have stamped "
+         f"<code>copula_phi = {cr_par['phi']:.4f}</code> over the frozen {cr_par['phi_final']:.1f} &mdash; a second change to "
+         f"a separately frozen parameter. A small script now carries the ruling across and refuses to guess."],
+        ["<code>scripts/artificial_humans/contribution_copula_rho.py</code> &mdash; the estimator, unchanged, re-run with the "
+         "same flags and seed; <code>freeze_phi_in_params.py</code> &mdash; the guard against the fallback above",
+         "<code>artifacts/artificial_humans/..._herding_copula_recal/calibration/copula_params.json</code> &mdash; the "
+         "refitted parameter file quoted here, field for field the shipped one",
+         "<code>plots/data_analysis/evaluation/contribution_copula_recalibrated/</code> &mdash; the 22 rows with every delta "
+         "at 0.0000 beside its seed sd, and the state-spread arms",
+         "<code>notes/autoresearch_log/contribution-copula-recalibrated.md</code> &mdash; the log, the four equalities and "
+         "the two reproducibility controls"],
+        f"A hypothesis refuted at the only point where it was testable, for {CR_MIN} minutes of estimator time; a correction to "
+        f"how the previous experiment's cost should be read; one route to the group-spread row closed for good and the "
+        f"remaining one named; and two bit-reproducibility controls the campaign did not have. A refutation is worth what a "
+        f"confirmation would have been, and the serving fix stands on its own measurement either way."))
     out.append(story("successor", "What this leaves for a successor",
         "successor", "#898781",
-        f"after the four-step programme &middot; one large defect and three small ones, each with a baseline ready "
+        f"after the four-step programme and the four runs that followed it &middot; one large defect, three isolated faults "
+        f"in the player models and one escalation a maintainer has to take "
         f"&middot; <code>doc/plans/post-rebaseline-program.md</code> and one log per experiment",
-        f"The re-baseline left six open threads. Seven pull requests later, most of them are closed and the picture is narrower and harder. "
-        f"<b>The target is the late-divergence failure.</b> Real groups keep pulling apart as a game runs and the models stop: with the shared-noise "
-        f"machinery switched off, the variety of situations the simulation reaches is {F(cl_dec['B']['var_cond_mean']):.1f} against the human "
-        f"{F(cl_dec['human']['var_cond_mean']):.1f}, while the randomness inside each round is already correct "
-        f"({F(cl_dec['B']['var_resid']):.1f} against {F(cl_dec['human']['var_resid']):.1f}). Neither the output design nor the noise model is the "
-        f"lever &mdash; both were tested and neither is. What is wanted is something that carries a group\u2019s state across rounds and survives the "
-        f"models playing against each other: a group-level feedback channel, the group-trend feature from {pr_link(187)} as the cheapest probe of it, "
-        f"or a persistent group state that the per-group virtual node only partly delivers.",
-        f"Nothing is declared yet. Below are the three defects that are cleanly isolated with a baseline ready, then what is deliberately out of "
-        f"scope and what stays open. Two of the four programme steps failed their gate and a third falsified the hypothesis its own author had "
-        f"proposed; none of that is blocked work, it is the map.",
-        [f"<b>The players under-react to a heavy punishment at the ceiling.</b> A punished full contributor gives up "
-         f"{abs(F(ce_rcc['frontier after'][2])):.2f} points the next round where a real person gives up {abs(F(ce_rcc['human'][2])):.2f}, about "
-         f"{under:.1f} times too little. The manager\u2019s side of RCC is finished ({pr_link(192)}), the population is now the right size "
-         f"({ce_rcc['frontier after'][6]} of full contributors punished against the human {ce_rcc['human'][6]}), and the decomposition table is the "
-         f"baseline. RCC is the only row in the suite that measures it, so it has nowhere else to show up, and it must be declared against the "
-         f"contributor rather than the punisher.",
-         f"<b>The manager\u2019s response to contribution is about half the human strength</b>, {cm('frontier after', 'OLS c_t'):.3f} per point "
-         f"against {cm('human', 'OLS c_t'):.3f}. Nothing so far has moved it: the timing fix did not, and the ceiling flag changes it by at most "
-         f"{CE_SLOPE_MAX:.3f} in any condition. It wants a bent response rather than another flag, and it is the row the older binned reaction "
-         f"measure (RCB {cb('RCB', 'frontier_before'):.3f} &rarr; {cb('RCB', 'frontier_after'):.3f} on the ceiling branch) would most plausibly follow.",
-         f"<b>Groups stop diverging late in a game.</b> The spread of group averages across the three thirds of an episode goes "
-         f"{blk('human (infl)')} for real people; with the machinery off the frontier trunk reaches {blk('e_skip_kexo_rho0')} and both bell-curve "
-         f"arms stall or reverse ({blk('c_infl_rho0')}; {blk('d_kexo_rho0')}). This is the large one, it is a property of the deterministic map "
-         f"iterated off the human trajectories, and the shared-noise machinery has been masking it by supplying "
-         f"{persist_share:.0%} of the group-spread row through persistence alone.",
-         f"One undeclared follow-up worth more than its cost: the wrong people leave after being punished. {pr_link(190)} got the number of switches "
-         f"and the group sizes right and regressed that row hardest, {sk('RSA', 'before'):.3f} &rarr; {sk('RSA', 'after'):.3f}. Diagnosable and cheap, "
-         f"on one simulation.",
-         f"Deliberately out of scope. The three group facts from {pr_link(187)} are worth folding into the next contributor retrain but account for "
-         f"about a seventh of a small quantity and do not justify a cycle of their own. The rollout-training family is the wrong tool for this "
-         f"defect, for a reason that is now understood. The copula question this page raised &mdash; whether the manager\u2019s shared mood is an "
-         f"episode-level or a round-level latent &mdash; was answered for the <em>contributor\u2019s</em> copula by {pr_link(187)} (a one-round echo, "
-         f"no lasting part) and remains open for the manager\u2019s severity copula, which was not measured.",
-         f"Still open and not closable by anything above: the middle contribution band (10-14) has the wrong sign in every condition, teacher-forced "
-         f"and held out alike, so no closed-loop fix will supply it. The manager\u2019s room to act must be bounded or audited before a learning "
-         f"manager explores it: real managers rarely punished above 10 points or punished high contributors, about 300 rows of evidence in total. "
-         f"And the 32-stack sweep matrix still has not been rerun under the fixed punisher, so the ledger\u2019s deficit profiles are all pre-fix."],
-        ["<code>doc/plans/post-rebaseline-program.md</code> &mdash; the four steps as declared and as they came out, in one place",
+        f"Eleven pull requests since the re-baseline, and the picture is narrower, harder, and now measured. "
+        f"<b>The target is still the late-divergence failure</b>: real groups keep pulling apart as a game runs and the "
+        f"models stop. With the shared-noise machinery switched off &mdash; which is how a contributor change must be judged "
+        f"&mdash; the variety of situations the simulation reaches is {sd_var('cand_off'):.2f} against the human "
+        f"{F(st_dec['human']['var_cond_mean']):.2f}, while the randomness inside each round is already correct "
+        f"({F(st_dec[ST_ARM['cand_off']]['var_resid']):.2f} against {F(st_dec['human']['var_resid']):.2f}). "
+        f"Two routes to it are now closed by measurement rather than by argument: the output design is not the lever "
+        f"({pr_link(191)}) and neither is the shared-noise strength ({pr_link(198)}, which refits to the shipped value "
+        f"exactly and therefore cannot be tuned). One route has just opened: {pr_link(197)} moved that number for the first "
+        f"time without adding noise, from {sd_var('parent_off'):.2f} to {sd_var('cand_off'):.2f}, by fixing what the model "
+        f"was being shown. What remains is the copula's <em>shape</em> &mdash; {pr_link(187)} measured the human dependence "
+        f"to be a round-local shock with a one-round echo, not the episode-long latent that ships &mdash; and anything that "
+        f"carries a group's state across rounds and survives the models playing against each other.",
+        f"Nothing is declared yet. Below: the three faults that are cleanly isolated in the player models with a baseline "
+        f"ready, the one open escalation, the standing manager-side defect, and what is deliberately out of scope. "
+        f"Every declaration from here has to name its target row's seed sd and say whether the movement it expects can be "
+        f"seen at all &mdash; ten of the 22 rows cannot serve as a gate-1 target on a single run, and the frontier's "
+        f"baseline is now the mean of its own six-arm ensemble rather than the draw that happened to win ({pr_link(195)}).",
+        [f"<b>Fault 1, the players under-react to a heavy punishment at the ceiling.</b> A punished full contributor gives up "
+         f"{abs(F(ce_rcc['frontier after'][2])):.2f} points the next round where a real person gives up "
+         f"{abs(F(ce_rcc['human'][2])):.2f}, about {under:.1f} times too little. The manager's side of RCC is finished "
+         f"({pr_link(192)}), the population is the right size ({ce_rcc['frontier after'][6]} of full contributors punished "
+         f"against the human {ce_rcc['human'][6]}), and the decomposition table is the baseline. RCC is the only row that "
+         f"measures it and it must be declared against the contributor. Two cautions: RCC is <em>gateable</em> "
+         f"(seed sd {SEED_SD['RCC']:.3f}) but its shipped baseline was the six-arm <em>minimum</em>, so the honest baseline "
+         f"is {SSMEAN['RCC']:.4f} rather than {VEC['arm_shipped']['after']['RCC']:.4f}; and the row's current value on the "
+         f"corrected serving path is {VEC['n_simto']['after']['RCC']:.4f}, not the {VEC['m_tout']['after']['RCC']:.4f} the "
+         f"timeout branch recorded with a wrong lag. Re-baseline before declaring.",
+         f"<b>Fault 2, the wrong people leave after being punished.</b> Two separate experiments have now damaged this row "
+         f"and neither meant to: {pr_link(190)} got the number of switches and the group sizes right and regressed RSA "
+         f"hardest ({sk('RSA', 'before'):.3f} &rarr; {sk('RSA', 'after'):.3f}, {sv_sd('#190', 'RSA'):.2f} seed sd &mdash; the "
+         f"largest legible movement in that run), and {pr_link(196)} downgraded its band as a side effect "
+         f"({sd_of('m_tout', 'RSA')}). No protection clause covers it. It is a concrete mismatch, diagnosable on one "
+         f"simulation, and it is the cheapest open item on this page.",
+         f"<b>Fault 3, the middle contribution band has the wrong sign and never learned it.</b> RCE's 10-14 slope is wrong "
+         f"teacher-forced and held out alike ({pr_link(183)}: pooled held-out {sgn(HO_SLOPES['pooled_held_out'][2])}, "
+         f"in-sample {sgn(HO_SLOPES['pooled_in_sample'][2])}, human {sgn(HUMAN_SLOPES[2])}), so no closed-loop fix will "
+         f"supply it. What {pr_link(195)} adds is that <b>this band cannot be used as evidence either way on a single run</b>: "
+         f"across six retrains of an unchanged model it runs {sgn(F(ss_agg['rce_slope_10-14']['min']))} to "
+         f"{sgn(F(ss_agg['rce_slope_10-14']['max']))} and its seed spread exceeds the within-run standard error. The sign "
+         f"clause is retired there for exactly that reason. Fixing it is a training-side question, and it needs more than "
+         f"one seed on both sides to be answered.",
+         f"<b>The open escalation, and it is not an agent's to close.</b> The evaluation suite does not measure the two sides "
+         f"alike: {ESC_HTML}. About {st_pb['timeout_rate']:.1%} of simulated agent-rounds therefore enter every contribution "
+         f"and response row at a value the game never used, with no human counterpart to compare against &mdash; and it is "
+         f"the reason {pr_link(197)} intercepted the substitution at serving instead of removing it. This is now the last "
+         f"place in the pipeline where the imputed 9 is doing work. The fix is small &mdash; a "
+         f"<code>contribution_valid</code> column in <code>per_round.parquet</code> and one <code>where()</code> in "
+         f"<code>load_sim</code> &mdash; and <code>evaluation_suite/</code> is frozen surface, so <b>a maintainer has to make "
+         f"the call</b>. Until then every C and R row on this page carries that asymmetry.",
+         f"<b>Still standing on the manager's side: its response to contribution is about half the human strength</b>, "
+         f"{cm('frontier after', 'OLS c_t'):.3f} per point against {cm('human', 'OLS c_t'):.3f}. Nothing has moved it far: "
+         f"the timing fix did not, the ceiling flag changes it by at most {CE_SLOPE_MAX:.3f} in any condition, and the "
+         f"timeout flag closed "
+         f"{(tf('lin_timeout_new', 'OLS c_t') - tf('lin_ceiling_parent', 'OLS c_t')) / (tf('human', 'OLS c_t') - tf('lin_ceiling_parent', 'OLS c_t')):.0%} "
+         f"of it teacher-forced but only in the linear family. It wants a bent response rather than another flag.",
+         f"<b>A second maintainer decision, cheap and already computed.</b> {pr_link(195)}'s six arms are committed, so the "
+         f"frontier can be re-baselined on the six-arm mean at no cost: 22-row mean {VMEAN_SS:.4f} rather than "
+         f"{VMEAN['arm_shipped']['after']:.4f}, rows &lt;= 1 {int(F(ss_agg['rows_le1']['mean']))} rather than "
+         f"{VLE1['f_ceil']['after']}, RCE {SSMEAN['RCE']:.4f} rather than {VEC['arm_shipped']['after']['RCE']:.4f}. "
+         f"It makes the frontier look worse and the comparisons honest, and it moves the baselines of the open branches. "
+         f"The cheap check it suggests is whether the <em>next</em> accepted model also lands at the extreme of its own "
+         f"reseed ensemble; if it does, the selection is structural rather than accidental.",
+         f"<b>Deliberately out of scope.</b> The three group facts from {pr_link(187)} are worth folding into the next "
+         f"contributor retrain but account for about a seventh of a small quantity. The rollout-training family is the wrong "
+         f"tool for this defect, for a reason that is now understood. Whether the <em>manager's</em> shared mood is an "
+         f"episode-level or a round-level latent was answered for the contributor's copula ({pr_link(187)}) and is still "
+         f"open for the severity copula, which was never measured. A refit of the contribution copula's persistence is "
+         f"unasked and its machinery now exists ({pr_link(198)}). The manager's room to act must be bounded or audited "
+         f"before a learning manager explores it: real managers rarely punished above 10 points or punished high "
+         f"contributors, about 300 rows of evidence in total. And the 32-stack sweep matrix still has not been rerun under "
+         f"the fixed punisher, so the ledger's deficit profiles are all pre-fix."],
+        ["<code>doc/plans/post-rebaseline-program.md</code> &mdash; the four steps as declared and as they came out",
          "<code>notes/autoresearch_log/</code> &mdash; one log per experiment, each with its own successor section and caveats",
-         "<code>notes/autoresearch.md</code> &sect;2, &sect;3, &sect;8 &mdash; the protected row and its two qualifications, the post-fix baselines, the frozen surface",
+         "<code>notes/autoresearch.md</code> &sect;2 &mdash; the noise-aware gate, the symmetry rule, the amended "
+         "protected-row clauses and the six-arm frontier baseline; &sect;8 &mdash; the frozen surface the escalation sits on",
+         "<code>plots/data_analysis/evaluation/seed_spread_noise_floor/per_row.csv</code> &mdash; the seed sd every future "
+         "declaration has to quote beside its target row",
          "Raven clean-up as each pull request closes: one isolated folder per experiment under <code>~/repros/ai-runs/</code>"],
-        f"A map with three isolated defects and one large one, each with a baseline a successor can declare against; a protocol that judges "
-        f"punishment-response work on the mechanism rather than on a composition row, and noise-model work as its own experiment; and three negative "
-        f"results that cost three simulations between them and removed three branches of the decision tree before any model was built on them."))
+        f"A map with one large defect, three isolated faults in the player models, one manager-side defect and one "
+        f"escalation &mdash; each with a baseline a successor can declare against, and each now quoted beside the noise it "
+        f"has to beat. The protocol judges punishment-response work on the mechanism rather than on a composition row, "
+        f"noise-model work as its own experiment, and no movement at all below its own row's measurement floor. "
+        f"Five of the eleven later runs failed their gate and two falsified hypotheses their own authors had proposed; "
+        f"none of that is blocked work, it is the map."))
     return "\n\n".join(out)
 
 
@@ -1149,11 +1864,20 @@ def page():
                    f'&nbsp; <span style="color:{FCOL["step"]}">&#9473;&#9632;</span> a follow-up run, scored against the filled node it hangs off '
                    f'&nbsp; <span style="color:{FCOL["abl"]}">&#9670;</span> an ablation of the frontier, not a candidate '
                    f'&nbsp; <span style="color:#e87ba4">&#9650;</span> a diagnostic with no 22-row score, parked on the strip under the runs it informs '
-                   f'&nbsp; <span style="color:#d03b3b">&#9711;</span> a red ring marks an experiment that missed its declared gate\n'
+                   f'&nbsp; <span style="color:{ALERT}">&#9711;</span> a red ring marks an experiment that missed its declared gate\n'
+                   f'&nbsp; <span style="color:{NOISE}">&#9478;</span> the six-tick rail is PR #195: the same contributor architecture '
+                   f'trained on six seeds and run through this stack with everything else identical, so its height is the spread of '
+                   f'one stack\'s mean when nothing changes but the training draw. It is a measurement, not a step: nothing moved '
+                   f'along it. The thick tick is the shipped artifact, which is the lowest of the six, and the dot is the six-arm mean '
+                   f'that is now the frontier\'s baseline.\n'
+                   f'&nbsp; <span style="color:{NOISE}">&#9711;</span> a gold dotted ring marks a node whose whole-stack score moved '
+                   f'by less than that spread &mdash; <b>its mean is not distinguishable from a retrain</b> '
+                   f'({", ".join(SHORT[k].replace("main &middot; ", "") for k in list(ORDER) + STEPKEYS if k in INSIDE)}). '
+                   f'{FLOOR_NOTE}.\n'
                    "&nbsp; (solid = lineage spine from the main-sweep stack, dashed = the same stack under the GNN punisher, dotted gaussian-MLP line = "
                    "the k-one-hot switch component borrowed from that spine, dotted step = best mean on record so far) "
-                   "&mdash; hover a node for its mean, rows &lt;= 1 and RCE before &rarr; after, click it for its story. "
-                   "Two of the four follow-up experiments failed their gate and are shown, not hidden.\n</p>")
+                   "&mdash; hover a node for its mean, rows &lt;= 1, RCE before &rarr; after and how far it moved in seed sd; click it for its story. "
+                   "Five of the seven follow-up experiments failed their gate and are shown, not hidden.\n</p>")
     return f"""<meta charset="utf-8">
 <title>Rebaseline Atlas</title>
 {STYLES[0]}
@@ -1162,11 +1886,16 @@ def page():
 <h1>Rebaseline Atlas</h1>
 <p class="sub">The companion to the Autoresearch Atlas: the frontier stacks rerun after the simulated
 manager was fixed to punish the current round's contribution (PR #184), scored on 22 rows including
-the new, protected RCE row -- six runs, before and after, on two spines -- and then the seven pull
+the new, protected RCE row -- six runs, before and after, on two spines -- and then the eleven pull
 requests that followed it: three ablations of the shared-noise machinery, a falsified test of the
-output design, a ceiling fix and a switch-component port that both missed their gate, and the
-protocol change that froze the noise settings and repaired its own safety rule. Hover any node for
-its numbers; click it for the plain-language story.</p>
+output design, a ceiling fix and a switch-component port that both missed their gate, the protocol
+change that froze the noise settings and repaired its own safety rule, and then four runs that
+changed what the page can claim. One of them measured how far the whole scoreboard moves when
+nothing changes but a training seed -- a typical row by sd {SD_ROW:.3f}, the count of rows at the
+human ceiling between {int(F(ss_agg['rows_le1']['min']))} and {int(F(ss_agg['rows_le1']['max']))} --
+so every score here now carries its own measurement noise, and several
+earlier results turn out to sit inside it. Hover any node for its numbers and how far it moved in
+units of that noise; click it for the plain-language story.</p>
 <nav>
   <button class="on" data-layer="tree">Progress tree</button>
   <button data-layer="scores">All 22 scores</button>
@@ -1181,7 +1910,7 @@ its numbers; click it for the plain-language story.</p>
 {stack_cards()}
 
 <div class="treehead">
-  <p class="legend">Focus a spine, or select both (nothing is hidden, including the two
+  <p class="legend">Focus a spine, or select both (nothing is hidden, including the five
   experiments that failed their gate):</p>
   <div class="focus">
     <button data-key="gnn" data-color="{SPINE['gnn']}">gnn
@@ -1198,28 +1927,41 @@ its numbers; click it for the plain-language story.</p>
 
 </section>
 <section class="layer" id="scores">
-<p class="legend">Every evaluation row for the six reruns, grouped by spine
+<p class="legend"><b>Every row now carries its own measurement noise.</b> The
+<span style="background:{NOISE};opacity:0.35">&nbsp;&nbsp;&nbsp;</span> gold band on each chart is
+&plusmn;1 seed standard deviation around the six-arm mean of PR #195 &mdash; how far that row travels
+when six copies of one contributor architecture, differing only in their training seed, are run
+through the same stack with everything else identical. The gold figure at the top right is that
+standard deviation; {len(UNGATE)} of the 22 rows are marked <em>ungateable</em>, meaning a band
+boundary falls inside one deviation and the six arms genuinely land in two bands, so a single run
+cannot decide them ({", ".join(UNGATE)} &mdash; RCE, the protected row, among them).
+<b>A segment drawn dashed moved by less than its row's deviation and is not distinguishable from a
+retrain.</b> Columns: the six reruns grouped by spine
 (<span style="color:{SPINE['gnn']}">&#9473; gnn</span>: main-lin, main-gnn, #179, #181;
 <span style="color:{SPINE['gmlp']}">&#9473; gaussian-MLP</span>: #174, #177), then, past the dotted
-divider, the four <span style="color:{FCOL['step']}">&#9632; follow-up runs</span> of PRs #192 and
-#190 (ceil = the ceiling flag on the frontier, kexo = the ported switch head, c&middot;lin and
-c&middot;gnn = the ceiling flag on the two main-sweep references). In each column the hollow marker is
-the score before that run's own change and the filled one after, joined by a short segment: for the
-first six that is before and after the punisher fix, for the last four it is the post-fix baseline
-and the follow-up (guides at the 1 / 2 / 5 band edges, log scale; titles colored by slot:
-<span style="color:{SLOT['contribution']}">contribution</span> <span style="color:{SLOT['switch']}">switch</span> <span style="color:{SLOT['punisher']}">punisher</span>;
-RCE is the protected row). The three ablation arms have no column here because each is an ablation of
-one of these columns; their profiles are the fourth panel of the Score breakdown. Hover a pair for
-the numbers and the band change.</p>
+divider, the seven <span style="color:{FCOL['step']}">&#9632; follow-up runs</span> (ceil = the
+ceiling flag on the frontier, kexo = the ported switch head, c&middot;lin and c&middot;gnn = the
+ceiling flag on the two main-sweep references, tout = the punisher's timed-out-player flag,
+sim0 = the recorded 0 served to the contributor, rho = the copula refit, whose every delta is
+exactly zero). In each column the hollow marker is the score before that run's own change and the
+filled one after: for the first six that is before and after the punisher fix, for the last seven the
+run's own baseline and the run (guides at the 1 / 2 / 5 band edges, log scale; titles colored by slot:
+<span style="color:{SLOT['contribution']}">contribution</span> <span style="color:{SLOT['switch']}">switch</span> <span style="color:{SLOT['punisher']}">punisher</span>).
+The ablation arms and the six seed arms have no column here; their profiles are the last two panels of
+the Score breakdown. Hover a pair for the numbers, the band change and the movement in seed sd; hover
+the band for the row's own spread.</p>
 <div class="grid21">{"".join(small_chart(r) for r in ROWS)}</div>
 </section>
 <section class="layer" id="breakdown">
 <div class="treehead">
 <p class="legend">All 22 rows, colored by the slot each row measures. The first two panels are the
 two spines' reruns: solid = after the punisher fix, dashed = before. The third is the four follow-up
-runs of PRs #192 and #190 and the fourth the three ablations of the frontier's shared-noise
-machinery; in both, dashed = that run's own post-fix baseline and solid = the run. The bold line is
-the 22-row mean (always shown) &mdash; hover a line for its values, or focus one or more slots:</p>
+runs of PRs #192 and #190, the fourth the timeout chain of PRs #196, #197 and #198, and the fifth the
+three ablations of the frontier's shared-noise machinery; in all three, dashed = that run's own
+baseline and solid = the run. <b>The sixth is not a lineage at all</b>: it is PR #195's six arms, one
+contributor architecture trained on six seeds, each against the six-arm mean &mdash; the fan it draws
+is the noise every other panel has to beat. The bold line is the 22-row mean (always shown) &mdash;
+hover a line for its values, or focus one or more slots:</p>
   <div class="focus">
     <button data-key="contribution" data-color="{SLOT['contribution']}">contribution</button>    <button data-key="switch" data-color="{SLOT['switch']}">switch</button>    <button data-key="punisher" data-color="{SLOT['punisher']}">punisher</button>
   </div>
@@ -1227,18 +1969,24 @@ the 22-row mean (always shown) &mdash; hover a line for its values, or focus one
 <div class="two" id="breakbox">{breakdown_svg([c for c in ORDER if CASE[c][1] == "gnn"], 'gnn spine: ' + " &#8594; ".join(esc(CASE[c][5]) for c in ORDER if CASE[c][1] == "gnn") + ', before (dashed) and after (solid)')}
 {breakdown_svg([c for c in ORDER if CASE[c][1] == "gmlp"], 'gaussian-MLP spine: ' + " &#8594; ".join(esc(CASE[c][5]) for c in ORDER if CASE[c][1] == "gmlp") + ', before (dashed) and after (solid)')}
 {breakdown_svg(["g_clin", "h_cgnn", "f_ceil", "i_kexo"], 'follow-up runs (#192, #190): each against its own post-fix baseline (dashed)', ("baseline", "after"))}
+{breakdown_svg(["m_tout", "n_simto", "o_recal"], 'the timeout chain (#196, #197, #198): each against its own baseline (dashed)', ("baseline", "after"))}
 {breakdown_svg(ABLKEYS, 'ablations of the frontier (#186, #188): the frontier itself is the dashed line', ("frontier", "arm"))}
+{breakdown_svg(AKEYS, 'the measurement floor (#195): one model, six training seeds', ("six-arm mean", "arm"))}
 </div>
 </section>
 <section class="layer" id="beforeafter">
-<p class="legend">The evaluation suite's own figure for each score row, in three states: before the
-punisher fix (the source sim, lagged punisher), after it (the _curpun rerun), and after the ceiling
-flag of PR #192 on top of that. Three stacks, one column each: #181 stimulus skip, #174 k-one-hot
-Gaussian-MLP, and the main-sweep stack with the GNN punisher. First line = before, second = after,
-third = ceiling; rows with two figures show both. Pick a row. (SA has no figure; its score is a
-single rate. The #174 source sim carries no visuals; no before figure exists for RCE, which was added
-to the suite after those sims were plotted; and the ceiling flag was only run on the frontier stack
-and the main-sweep reference, so the #174 column has no third figure.)</p>
+<p class="legend">The evaluation suite's own figure for each score row, in five states, each one
+change further along the frontier's lineage: before the punisher fix (the source sim, lagged
+punisher), after it (the _curpun rerun), after the ceiling flag of PR #192, after the
+timed-out-player flag of PR #196, and after PR #197 stopped serving the contributor an imputed 9.
+Three stacks, one column each: #181 stimulus skip, #174 k-one-hot Gaussian-MLP, and the main-sweep
+stack with the GNN punisher; rows with two figures show both. Pick a row. (SA has no figure; its
+score is a single rate. The #174 source sim carries no visuals and none of the later runs was made on
+that stack; no before figure exists for RCE, which was added to the suite after those sims were
+plotted; the ceiling flag ran only on the frontier and the main-sweep reference. <b>PR #198 has no
+column</b>: its simulation reproduced PR #197's recorded output byte for byte, so its figures are the
+same files. Every figure here is downscaled to 800 px on the long edge to keep the page under 14 MB;
+they are displayed at about a third of the page width, so nothing visible is lost.)</p>
 {mnav}
 {cards}
 </section>
@@ -1251,23 +1999,32 @@ and the main-sweep reference, so the #174 column has no third figure.)</p>
 <span style="color:#e87ba4">&#9632;</span> diagnostic &nbsp;
 <span style="color:#6b6a66">&#9632;</span> ledger &nbsp;
 &#9633; stock part &nbsp; &#11044;<small>#PR</small> installed by &nbsp;
-<span style="color:{FCOL['step']}">&#11040;</span> dashed outline = a part one of the seven later PRs
-touched; the tooltip says whether the change landed, was frozen, or was measured and rejected
+<span style="color:{FCOL['step']}">&#11040;</span> dashed outline = a part one of the eleven later PRs
+touched; the tooltip says whether the change landed, was frozen, or was measured and rejected &nbsp;
+<span style="color:{ALERT}">&#11040;</span> red dashed outline = an open escalation a maintainer has
+to decide, because the part sits in a directory no agent may modify
 &mdash; hover a tinted or outlined part for its story, <b>click a pill</b> for
 the plain-language page.
 </p>
-<h2>One round of the simulation loop, with the punisher's input fixed (lowest 22-row mean on record: {SHORT[best]}, {f3(VMEAN[best]['after'])}, rows &lt;= 1: {VLE1[best]['after']}/22 &mdash; from an experiment that failed its gate; the ledger's frontier is still {SHORT['b_skip']} at {f3(MEAN['b_skip']['after'])})</h2>
+<h2>One round of the simulation loop, with the punisher's input fixed (lowest 22-row mean on record: {SHORT[best]}, {f3(VMEAN[best]['after'])}, rows &lt;= 1: {VLE1[best]['after']}/22 &mdash; from an experiment that failed its gate; the ledger's frontier is still {SHORT['b_skip']}, now baselined at the six-arm mean {f3(VMEAN_SS)} rather than the single run's {f3(MEAN['b_skip']['after'])})</h2>
 <figure>
 {machinery_svg()}
 </figure>
 
 </section>
 <section class="layer" id="lb">
-<p class="legend">Thirteen records, each scored against its own before state: the six reruns against
-the same stack under the lagged punisher, the four follow-up runs of PRs #192 and #190 against their
-post-fix baseline, and the three ablation arms against the frontier they ablate. The note column
-carries the verdict as the log recorded it &mdash; two of the four declared experiments failed their
-gate, and the ablations were never candidates. Pick the ranking criterion:</p>
+<p class="legend">Sixteen records, each scored against its own before state: the six reruns against
+the same stack under the lagged punisher, the seven follow-up runs against their own baseline, and
+the three ablation arms against the frontier they ablate. The note column carries the verdict as the
+log recorded it &mdash; five of the seven declared experiments failed their gate, and the ablations
+were never candidates. <b>It also carries the noise.</b> Every record says how far its mean moved in
+units of PR #195's seed standard deviation, how far its rows-at-the-ceiling count moved in units of
+its own, and how many of the 22 rows moved by more than their own; a
+<span class="pill" style="background:{NOISE}">&Delta; mean inside the floor</span> tag means the
+whole-stack movement is smaller than what a retrain produces on its own, so <b>that record's place in
+the ranking is a draw and not a result</b>. The band-upgrade tooltip gives each upgraded and
+downgraded row with its own movement in seed sd, marking those inside the floor. Pick the ranking
+criterion:</p>
 <div class="seg" id="lb-seg"></div>
 <table>
   <thead><tr>
@@ -1281,17 +2038,30 @@ gate, and the ablations were never candidates. Pick the ranking criterion:</p>
 </table>
 <p class="legend">&Delta; values are after &minus; before over the
 22 rows; &Delta; rows &gt; 2 ranks reversed (fewer badly-missed rows is
-better). Hover a band-upgrade count for the rows. The PR column is the stack's PR; the two
-main-sweep reruns carry the re-baseline PR #184. Ties break on &Delta; mean. A good &Delta; is not a
-pass: a gate is a band change on a row declared in advance, which is why PR #192 sits high here and
-still failed, and why the lowest 22-row mean on record (PR #190) is a failure too.</p>
+better). Hover a band-upgrade count for the rows and their movements in seed sd. The PR column is the
+stack's PR; the two main-sweep reruns carry the re-baseline PR #184. Ties break on &Delta; mean.
+A good &Delta; is not a pass: a gate is a band change on a row declared in advance, which is why
+PR #192 sits high here and still failed, and why the lowest 22-row mean on record (PR #196) is a
+failure too. <b>And a &Delta; is not automatically real.</b> The mean's own seed standard deviation is
+{SD_MEAN:.4f} and the rows-at-the-ceiling count's is {SD_LE1:.2f}, so {len([k for k in list(ORDER) + FKEYS if k in INSIDE])}
+of these sixteen records have a mean movement smaller than a retrain of an unchanged model produces &mdash;
+they are tagged, and their rank should be read as a tie rather than an ordering. The floor was measured on
+the frontier stack by retraining its contributor six ways; on the other stacks it is a lower bound rather
+than a full error bar, because their punisher or switch slot differs too. Two records need a further
+caveat of their own: PR #198's every delta is exactly 0.0000 because its artifact is byte-identical to its
+baseline's, so its floor really is zero rather than merely small; and the six reruns' own baselines are the
+pre-fix scores of a different punisher, which this floor does not cover at all.</p>
 </section>
 <section class="layer" id="stories">
-<p class="legend">The plain-language story of the re-baseline and of the seven pull requests that
-followed it, in eleven cards &mdash; also reachable by clicking tree nodes, score markers and
-machinery pills. The last five are the post-re-baseline programme: two of its four steps failed
+<p class="legend">The plain-language story of the re-baseline and of the eleven pull requests that
+followed it, in fifteen cards &mdash; also reachable by clicking tree nodes, score markers and
+machinery pills. Cards six to ten are the post-re-baseline programme: two of its four steps failed
 their gate, one falsified the hypothesis its own author had proposed, and the fourth had to repair
-the safety rule it had just written.</p>
+the safety rule it had just written. The four after them are what changed the page's terms: a
+measurement of the scoreboard's own noise, which several earlier results turn out to sit inside; a
+manager that can now tell a timeout from a chosen zero; a simulation that stopped showing the players
+a number the game never used; and a recalibration that refuted the reading of the run before it, four
+times over and to the last digit. The last card is what all of it leaves open.</p>
 
 {stories()}
 </section>
