@@ -29,6 +29,16 @@ import yaml
 
 ENDOWMENT = 20.0  # per-round private endowment (reports/basics.md)
 
+# One indicator per possible contribution: the maximally flexible encoding of
+# c_t, i.e. one free shape per contributed amount instead of one shape stretched
+# across the range. Deliberately NOT the evaluation's contribution bins -- a
+# per-value one-hot introduces no boundary at all. `contribution_is_20` is
+# `contribution_max`, so the one-hot replaces the indicator rather than joining
+# it (notes/autoresearch_log/punisher-contribution-encoding.md).
+CONTRIBUTION_ONEHOT = tuple(
+    f"contribution_is_{i:02d}" for i in range(int(ENDOWMENT) + 1)
+)
+
 
 # --------------------------------------------------------------------------- #
 # config / data loading
@@ -172,6 +182,7 @@ CURRENT_VALUED = frozenset(
         "contribution",
         "contribution_max",
         "contribution_zero",
+        *CONTRIBUTION_ONEHOT,
         "punishment",
         "payoff",
         "common_good",
@@ -209,6 +220,7 @@ PUNISHMENT_LEGAL_CURRENT = frozenset(
         "contribution",
         "contribution_max",
         "contribution_zero",
+        *CONTRIBUTION_ONEHOT,
         "contribution_mean_group",
         "contribution_mean_other",
         "contribution_mean_gap",
@@ -298,6 +310,9 @@ def build_feature_pool(d, switch_every):
     # time (0.47); a linear term in c_t interpolates both steps away.
     f["contribution_max"] = (c == ENDOWMENT).astype(float)
     f["contribution_zero"] = (c == 0).astype(float)
+    # ... and the whole scale as indicators, one per contributed amount
+    for i, name in enumerate(CONTRIBUTION_ONEHOT):
+        f[name] = (c == i).astype(float)
     f["punishment"] = p
     f["common_good"] = cg
     f["payoff"] = _payoff(c, p, cg)
