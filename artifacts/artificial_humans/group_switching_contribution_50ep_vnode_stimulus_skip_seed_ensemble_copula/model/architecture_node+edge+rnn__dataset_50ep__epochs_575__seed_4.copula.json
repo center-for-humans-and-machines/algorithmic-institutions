@@ -1,0 +1,29 @@
+{
+  "base_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_seed_ensemble/model/architecture_node+edge+rnn__dataset_50ep__epochs_575__seed_4.pt",
+  "base_artifact_sha256": "07d8754614af991644a26b7630c5af808d004851b28dd52ef0a44ed27fa11143",
+  "copula_phi": 1.0,
+  "copula_rho": 0.03949863621805423,
+  "copula_switch_every": 1,
+  "date": "2026-09-19T01:02:06+00:00",
+  "estimator": "pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only",
+  "git_head": "unavailable: Command '['git', '-C', '/raven/u/levinb/repros/ai-runs/seed-spread', 'rev-parse', 'HEAD']' returned non-zero exit status 128.",
+  "n_tensors_verified": 14,
+  "note": "dict-level copy of the base artifact plus the three copula fields; every pre-existing key verified bit-identical after reload; teacher-forced (sample=False) probabilities unchanged",
+  "output_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_seed_ensemble_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575__seed_4.pt",
+  "output_artifact_sha256": "46c0d9c0fe8b0428fb0dc78df85236a3abd6acbd04e17712c5e60a8a6a9b70bb",
+  "params_json": "artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_seed_ensemble_copula/calibration/copula_params__seed_4.json",
+  "params_json_sha256": "29f2b0bff40348aa06c773bf6c6c95ac956b17afdd81748b8bf05dff261f1725",
+  "phi_ci": [
+    0.3158474446777937,
+    1.8397134740915884
+  ],
+  "phi_final_reason": "carried unchanged from artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/calibration/copula_params.json (phi_final 1.0); the original ruling is quoted next",
+  "phi_lag1_diagnostic": 0.8122045431305637,
+  "phi_stamped": 1.0,
+  "rho_ci": [
+    0.018089565319783816,
+    0.056620768540509354
+  ],
+  "script": "scripts/artificial_humans/make_contribution_copula_artifact.py",
+  "teacher_forced_rows_verified": 7457
+}
