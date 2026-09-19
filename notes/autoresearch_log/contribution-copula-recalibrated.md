@@ -94,6 +94,10 @@ Before spending a job on the refit I established what `contribution_copula_rho.p
 
 Two things follow, and the second is worth more than the first. **The noise-off arm is untouched by a recalibration**, as it must be -- it loads the bare trunk, which no stamping ever writes to, so `Var(E[c | history]) = 21.360` and the group-spread ratio 0.7815 carry over from the parent unchanged. And **the simulation is bit-reproducible across remote dirs, nodes and sessions**: the parent asserted "the runs are deterministic given the artifacts and the seed" (its note 4) without measuring it; this run measures it, on a different GPU node in a different isolated remote dir, at the level of the recorded output rather than of the scores.
 
+### Step 4a: the evaluation environment reproduces the parent's 22 rows (control, measured)
+
+Before scoring anything new, `python -m aimanager evaluate` (with `PYTHONPATH=<worktree>/src`, §Hygiene) was re-run over the **parent's own** `_simtimeout` simulation. It rewrote `evaluation/scores.csv`, `evaluation/metrics.csv` and all 25 figures, and `git status` came back **clean** -- every byte identical to what the parent committed. The scoring is deterministic under its master seed 42 and this worktree's environment reproduces it, so any difference the recalibration produces downstream is the recalibration's, not the scorer's.
+
 ## 4. Notes
 
 1. **Step 1 was done before the refit, and it turns the experiment into a sharp test rather than a fishing trip.** The hypothesis in the parent's successor note is that the frontier's copula "was calibrated in the presence of the defect". Reading the estimator's input surface says it was not: `rho` is fitted teacher-forced against human histories, where a timed-out player's contribution and its lag are the recorded 0, and the imputed 9 exists only inside `environment.update_contribution` at simulation time. The refit is therefore a prediction with two possible outcomes, both informative: an unchanged `rho` refutes the absorption story, and a changed one would mean something about the estimator's inputs moved that step 1 missed.
