@@ -57,18 +57,18 @@ Step 0 verified the premise of part 1 and **relocated it**: the imputed 9 never 
 | 1 | Add `contribution_valid` to the linear feature pool and the punishment legal set; make the manager's view of a timed-out player read the recorded 0 on both simulation paths; unit tests on both paths. | **done** |
 | 2 | Retrain the linear punisher locally (`multinomial_timeout.yml`, 4-fold CV, seed 38381); report CV against 1.3446. | **done** |
 | 3 | Stamp the severity copula carrying rho = 0.4273 over unchanged; report the refit for the record. | **done** |
-| 4 | Retrain the GNN punisher on Raven (`rnn_edge_50ep_doubled_timeout.yml`); report CV against 1.1743. | **done** (session 2, job 30319268) |
-| 5 | Teacher-forced mechanism check of both new punishers against the parent's artifacts and the human row. | **linear done; GNN needs Raven** |
-| 6 | Re-run the two stacks, fetch, evaluate all 22 rows (`PYTHONPATH=<worktree>/src`), self-play mechanism table, RCE band slopes with standard errors. | **BLOCKED -- needs Raven** (table script written and self-tested; baseline half verified) |
-| 7 | Judge under the gates with RCE protected; measure the blast radius on the other slots; log; PR against the parent. | **blast radius done; verdict BLOCKED** |
+| 4 | Retrain the GNN punisher on Raven (`rnn_edge_50ep_doubled_timeout.yml`); report CV against 1.1743. | **done** (job 30319268; reproduced from the committed tree by job 30323407, session 3 -- provenance confirmed) |
+| 5 | Teacher-forced mechanism check of both new punishers against the parent's artifacts and the human row. | **done** (session 3; linear rows reproduce to 13 s.f.) |
+| 6 | Re-run the two stacks, fetch, evaluate all 22 rows (`PYTHONPATH=<worktree>/src`), self-play mechanism table, RCE band slopes with standard errors. | **done** (session 3, jobs 30324040 / 30324041; 22 and 44 rows scored) |
+| 7 | Judge under the gates with RCE protected; measure the blast radius on the other slots; log; PR against the parent. | **done** -- verdict **[FAIL]**, section 6 |
 
-The cluster was unreachable for session 1 and went down again 24 minutes into session 2 (the persistent SSH ControlMaster to Raven dies and only the maintainer can restore it -- see section 5). Everything that can be established without a live cluster is established and committed. **No verdict is claimed and no PR is opened**, because the result is not established until step 6 runs.
+The cluster was unreachable for session 1 and went down again 24 minutes into session 2; it stayed up for the whole of session 3, which ran every remaining step. The plan is complete and the verdict is **[FAIL]** on the gates with a real, one-sided correctness gain -- see section 6. Steps 0-4 were carried over from sessions 1 and 2 and were not re-derived.
 
 ## 3. Results
 
 | date | change (one line) | target scores | rows <= 1 | mean | verdict |
 |---|---|---|---|---|---|
-| 2026-09-19 | punisher reads the recorded 0 for a timeout and gains `contribution_valid` | pending -- both stacks unrun (training done: linear CV 1.3446 -> 1.3271, GNN 1.1743 -> 1.1719) | pending | pending | **pending -- see section 5** |
+| 2026-09-19 | punisher reads the recorded 0 for a timeout and gains `contribution_valid` | **RCC 1.2969 -> 1.0769** (-0.2200, 1.35 seed sd; band 1-2 held, gate 1 missed by 0.077 = 0.47 seed sd) | 14 -> **15/22** (+1, 0.32 seed sd) | 1.0331 -> **0.9824** (gate 2 ceiling 1.1364, **pass**) | **[FAIL]** -- gate 1 not cleared; see section 6 |
 
 ### Step 0: is 0 the game's real value for a timed-out player? (measured -- **premise confirmed**)
 
@@ -136,7 +136,7 @@ The parent's stored 1.1743 reproduces to four decimals from its own committed me
 
 This is a real asymmetry with the linear family, where the same feature moved CV log loss 1.3446 -> 1.3271 (-0.0175) and the locked test 1.2234 -> 1.1934 (-0.0300). The obvious reading is that the graph punisher, with its RNN state and edge model, can already infer "this player gave no input" from context the linear model has no way to represent -- the flag tells it something it had largely reconstructed. That is a hypothesis, not a measurement; the teacher-forced mechanism table of step 5 is what would test it, and it has not run.
 
-**Artifact provenance, stated plainly because it is not the usual one.** The committed artifact under `artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_timeout/` is job 30319268's, which ran at 03:13-03:20 on 2026-09-19 -- *before* this branch's five commits were made at 08:06-08:08, from a sync of session 1's uncommitted working tree. It is attributable anyway, and here is why: the remote `job.yml` reproduces the committed config's `params` block field for field, including the `contribution_valid` bool in `x_encoding`; a full re-sync of the committed tree in session 2 transferred only five files (`simulate.py`, `test_punisher_current_contribution.py`, the two `_timeout` sim configs and this log), none of which is on the GNN training path; and the artifact's own weights show the extra input channel -- the edge MLP's first layer is 20x12 against the parent's 20x10 (two endpoints x one new node feature) and the node MLP's 20x26 against 20x25. Session 2 nevertheless resubmitted the identical training from the verified committed tree as **job 30323407**, which was still `PENDING` ("nodes required are DOWN, DRAINED or reserved") when the connection died. That job will overwrite the remote artifact dir; see section 5.
+**Artifact provenance, stated plainly because it is not the usual one.** The committed artifact under `artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_timeout/` is job 30319268's, which ran at 03:13-03:20 on 2026-09-19 -- *before* this branch's five commits were made at 08:06-08:08, from a sync of session 1's uncommitted working tree. It is attributable anyway, and here is why: the remote `job.yml` reproduces the committed config's `params` block field for field, including the `contribution_valid` bool in `x_encoding`; a full re-sync of the committed tree in session 2 transferred only five files (`simulate.py`, `test_punisher_current_contribution.py`, the two `_timeout` sim configs and this log), none of which is on the GNN training path; and the artifact's own weights show the extra input channel -- the edge MLP's first layer is 20x12 against the parent's 20x10 (two endpoints x one new node feature) and the node MLP's 20x26 against 20x25. Session 2 nevertheless resubmitted the identical training from the verified committed tree as **job 30323407**, which was still `PENDING` when that connection died. **It has since completed, and session 3 fetched and compared it: the caveat above is resolved and this paragraph's reasoning is superseded by measurement.** The two builds agree to a max weight difference of 2.0e-05 and a cross-validated log-loss difference of 9.2e-08. See section 5, step 0.
 
 ### Step 2 (cluster unit tests): submitted, no result
 
@@ -196,109 +196,161 @@ The consequence for reading this branch: **step 2's CV gain and step 4's mechani
 
 **Note 3 -- what this does not touch.** `punishment_baseline.py`'s `GNN_REF` stays at 1.1756, as on the parent. The contributor's under-reaction to a heavy punishment at the ceiling, which the parent isolated as the live owner of the remaining RCC gap (`dc | punished, c_t = 20` at -3.75 against the human -8.66), is untouched here and remains the strongest candidate for the next declaration. If RCC fails to clear its band on this branch despite the slope moving, that decomposition is where to look first, and the parent's table is the baseline for it.
 
-## 5. Status after session 2 -- what ran, what the cluster took away, what is left
+## 5. Session 3 -- everything that was blocked, run
 
-Session 2 opened with Raven reachable (`ssh raven`, user `levinb`, empty queue) and lost it again **24 minutes in**. The failure is worth recording exactly, because the next session will meet it: the local SSH **ControlMaster for raven died** between 08:22:58, when `remote_test.sh` checked it and reported it active, and 08:23, when the next call returned `Permission denied (gssapi-with-mic,password)`. It cannot be rebuilt by an agent. Raven offers only GSSAPI and password auth; the local Kerberos cache is empty (`klist` -> "Cache not found"), so there is no credential to authenticate with. The `gate2` master is still alive with a delegated ticket valid to 2026-10-17, but raven's host key is in neither `~/.ssh/known_hosts` nor `/etc/ssh/ssh_known_hosts` on gate2, so hopping from there would mean accepting a host key on the maintainer's behalf -- not an agent's decision. **The maintainer restores this by running `ssh raven` locally; nothing else works.**
+Raven was reachable for the whole session (user `levinb`, empty queue on arrival). Every step section 5 of the previous revision left open has now run. Nothing in sections 1-4 was re-derived.
 
-### What session 2 got
+### Step 0 (new): the provenance question is settled -- the committed artifact is confirmed
 
-| step | result |
+Job **30323407**, the identical GNN training resubmitted from the *verified committed tree*, completed at 08:24:28-08:31:20 (6 min 52 s, exit 0) and had overwritten the remote artifact dir. It was fetched to a scratch path **before any sync** and compared against the committed build from job 30319268, which had run from session 1's uncommitted working tree and carried the caveat.
+
+| comparison | result |
 |---|---|
-| 4 -- GNN punisher trained | **done**, final-epoch CV **1.1719** against the parent's 1.1743, paired t = -0.46 over folds. Artifact committed. See section 3. |
-| baseline half of step 6's table | **done and verified.** `punisher_timeout_table.py` written and self-tested; its "before" column reproduces every declared baseline number exactly -- frontier RCC 1.2969, RCB 1.6591, RCD 1.2515, RCE 0.8823, mean 1.0331, rows <= 1 14/22; ref_lin mean 1.6616, 13/22, RCC 1.4615, RCE 0.9900; ref_gnn mean 1.6603, 11/22, RCC 1.1109, RCE 0.9157. Only the "after" column is missing. |
-| 2 -- cluster unit tests | **no result.** Fixture shipped, run dispatched, connection died mid-call, empty log. |
-| 5 -- mechanism table with the GNN rows | **not run** (needs `torch_scatter`, i.e. the cluster). |
-| 6 -- the two simulations, fetch, evaluate | **not run.** |
-| 7 -- verdict | **not reached.** No PR. |
+| tensor parameters | 10 tensors, identical keys and shapes (edge MLP 20x12, node MLP 20x26 -- the extra input channel in both) |
+| **max abs weight difference** | **1.958e-05** (at `rnn_n.weight_ih_l0`, mean abs weight 0.216 -- a relative 9e-5) |
+| non-tensor config fields | **all 20 identical**, including `x_encoding` (with the `contribution_valid` bool), `default_values`, `copula_rho` |
+| **final-epoch CV test log loss** | **1.1718653908** (committed) vs **1.1718654823** (clean) -- difference **9.2e-08** |
+| max per-fold CV difference | 1.347e-06 (folds 1.0859 / 1.2399 / 1.0879 / 1.0883 / 1.3574 in both) |
+| best epoch | **1249 in both**, best-epoch CV agreeing to 7 decimals |
+| `log_loss` max difference over *all* epochs and folds | 8.25e-06 |
+| largest difference anywhere in the metrics frame | 7.09e-03, **every one of them on `mean_absolute_error` under the stochastic `sampling` strategy** -- a sampling-seed artifact, not a model difference |
 
-### The seed noise floor, and how the result must be read when it arrives
+**The two builds agree to GPU non-determinism and nothing more.** The CV difference of 9.2e-08 is six orders of magnitude below the fold-to-fold spread of the metric itself (sd 0.1229), and the deterministic quantity the branch is judged on (`log_loss`) never differs by more than 8e-06 at any epoch of any fold. **The provenance caveat on job 30319268 is resolved: the committed artifact is what the committed config and the committed tree produce.** It is therefore kept as committed -- no artifact was replaced -- and the committed build was pushed back over the remote dir before the simulations ran, so the gated runs use exactly the bytes the PR ships. 30323407's build is archived off-tree for the record; the queue was empty afterwards, so no `scancel` was needed.
 
-PR #195 (`auto/seed-spread-noise-floor`) measured, after session 1 stopped, how far this evaluation moves when nothing changes but a training seed: **a typical row travels sd 0.138**, the 22-row mean sd 0.047 against a gate-2 margin of 0.103, and the rows <= 1 count sd 3.16 with a range of 6 to 14. It changed the contributor, not the punisher, so it is not this experiment's own variance -- but it is the right scale for reading any row that moves, and no movement below it should be called a result.
+### Step 2 (cluster unit tests): all four now run, and pass
 
-The numbers this branch will be judged on, each with its floor:
+`scripts/remote_test.sh --test-only -- -k test_punisher_current_contribution -v` on Raven: **12 passed, 547 deselected, 20.36 s**, no failures and no errors. The four that cannot run locally for want of `torch_scatter` are among them:
 
-| quantity | baseline | seed sd | note |
-|---|---|---|---|
-| **RCC** (declared target, gate 1: band 1-2 -> <= 1, i.e. < 1.0) | 1.2969 | **0.1631** | gateable (boundary 2.6 sd away), but the baseline 1.2969 is the **six-arm minimum**, 1.7 sd below the arm mean -- the target is a favourable draw to beat |
-| **22-row mean** (gate 2: <= 1.1364) | 1.0331 | **0.0473** | the whole 10% allowance is 2.2 seed sd wide |
-| **RCE** (protected) | 0.8823 | **0.1063** | **ungateable on one run**: the band boundary sits 0.64 sd away and only one arm of six reaches `<= 1` -- and that one arm is this baseline |
-| RCE band slopes +0.087 / +0.038 / -0.043 / -0.130 | | 0.0182 / 0.0223 / 0.0263 / 0.0564 | the 10-14 and 15-19 slopes change sign across six retrains of an unchanged model |
-| RCB / RCD (watch) | 1.6591 / 1.2515 | 0.1425 / 0.2698 | both gateable |
-| rows <= 1 | 14/22 | **3.16** | report, never conclude |
+- `test_gnn_punisher_sees_zero_and_the_flag_for_a_timeout` **PASSED** -- the GNN serving path reads value 0 / flag 1 for a genuine zero and value 0 / flag 0 for a timeout, other-group cells keeping the model's default fill;
+- `test_simulation_round_carries_the_env_validity_flag` **PASSED** -- `make_round` carries the env's realised flag rather than inferring it;
+- `test_gnn_punisher_data_reads_current_contribution` and `test_gnn_punisher_data_has_ceiling_indicator` **PASSED** (the parent's two, unbroken).
 
-`punisher_timeout_table.py` carries these as `SEED_SD` / `UNGATEABLE` and emits `seed_sd`, `in_seed_sd`, `legible` and `ungateable` columns, so the table itself marks any movement smaller than a retrain. It also applies the **amended magnitude clause** the maintainer set for this branch -- a halved RCE band slope fires only when the candidate's slope is *not* closer to the human value **and** the change exceeds one pooled standard error -- while still printing the raw `magnitude_halved` list beside it, so the parent's reading stays visible.
+This closes the one genuinely unknown thing about the change: **both punisher serving paths are now tested end to end on the platform they run on.**
 
-### The commands that are left
+### Step 5: the mechanism table, with the graph rows (measured)
 
-Run from this worktree, `/Users/brinkmann/repros/algorithmic-institutions/.claude/worktrees/agent-abeff61f385511d28`. Local python is `/Users/brinkmann/repros/algorithmic-institutions/.venv/bin/python` (this worktree has no venv of its own).
+**A defect in the handover command, found and worked around.** The command recorded in the previous revision passes the same two names (`ceiling_parent`, `timeout_new`) to `--linear` and to `--gnn`. `punisher_mechanism_check.py` accumulates rows into a dict keyed by name (`table[name] = stats(...)`), so the GNN rows silently *overwrote* the linear ones and the table came out with three rows instead of five. Re-run with distinct names (`lin_*`, `gnn_*`); the script itself needs no change.
 
-```bash
-ssh raven                                        # maintainer, separate terminal
-export AI_REMOTE_DIR=~/repros/ai-runs/punisher-timeout
+Teacher-forced over the 50 single-copy human games, 8,914 valid rows, OLS over the 8,431 with a valid previous contribution. Each model sees the human history and never its own draws.
 
-# 0. FIRST, before any sync. Job 30323407 (the identical training resubmitted
-#    from the committed tree) was PENDING when the connection died. If it has
-#    since run it has overwritten the remote artifact dir, and a full sync
-#    deletes it. Fetch it to a scratch path and compare against the committed
-#    metrics parquet: same seed, same config, same data, so any difference is
-#    GPU non-determinism and the two should agree to ~1e-3. If they do, the
-#    committed artifact is confirmed; if they diverge, prefer 30323407's and
-#    say so. Then `scancel 30323407` if it is still queued.
-rsync -az raven:'~/repros/ai-runs/punisher-timeout/artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_timeout' /tmp/gnn_replication/
+| punisher | P(p>0 \| c_t=20) | P(p>0 \| c_t<=4) | (c_t=20, c_{t-1}<=4) / (c_t<=4, c_{t-1}=20) | E[p \| p>0] 0-4 / 5-9 / 10-14 / 15-19 / 20 | OLS c_t | OLS c_{t-1} | NLL |
+|---|---|---|---|---|---|---|---|
+| **human** | **0.038** | **0.467** | **0.179 / 0.571** | 7.99 / 4.98 / 4.27 / 3.87 / **7.00** | **-0.242** | **+0.067** | -- |
+| lin + ceiling (parent) | 0.053 | 0.431 | 0.224 / 0.635 | 7.43 / 5.46 / 4.43 / 3.76 / 7.47 | -0.125 | -0.031 | 1.2705 |
+| **lin + ceiling + timeout** | 0.053 | 0.475 | 0.202 / 0.784 | 7.43 / 5.45 / 4.38 / 3.68 / 7.44 | **-0.173** | +0.005 | **1.2664** |
+| gnn + ceiling (parent) | 0.063 | 0.424 | 0.245 / 0.468 | 7.37 / 5.44 / 4.70 / 4.49 / 6.00 | **-0.144** | -0.010 | **1.1316** |
+| **gnn + ceiling + timeout** | 0.061 | 0.443 | 0.268 / **0.574** | 7.04 / 5.65 / 5.01 / 4.86 / 6.12 | **-0.132** | -0.021 | 1.1403 |
 
-# 1. The four cluster-only unit tests. The fixture is already on the cluster;
-#    re-ship it after any full sync, which excludes plots/ and does not carry it.
-rsync -az plots/simulation/22_2g8a_linear_self_ridge_contr/per_round.parquet \
-  raven:'~/repros/ai-runs/punisher-timeout/plots/simulation/22_2g8a_linear_self_ridge_contr/'
-scripts/remote_test.sh --test-only -- -k test_punisher_current_contribution -v
+**The control holds.** The two linear rows reproduce the values measured in session 2 to thirteen significant figures -- the only differences are in the last bit or two of the OLS solve (e.g. -0.17304686843430872 against -0.17304686843431405). The table is trustworthy, and the graph rows can be read against it.
 
-# 2. Step 5 -- the mechanism table with the GNN rows, on Raven's login node.
-#    The two linear rows are already measured (section 3) and must reproduce
-#    exactly; that reproduction is the control on the whole table.
-PYTHONPATH=src python scripts/data_analysis/punisher_mechanism_check.py \
-  --linear ceiling_parent=artifacts/baselines/punishment_multinomial_ceiling.joblib \
-           timeout_new=artifacts/baselines/punishment_multinomial_timeout.joblib \
-  --gnn ceiling_parent=artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_ceiling/model/architecture_node+edge+rnn__dataset_50ep_doubled.pt \
-        timeout_new=artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_timeout/model/architecture_node+edge+rnn__dataset_50ep_doubled.pt \
-  --out plots/data_analysis/evaluation/punisher_timeout_feature/mechanism_teacher_forced.csv
+**The graph rows answer the successor question, and the answer is no.** The hypothesis carried forward was that the GNN punisher gained nothing from the flag because its RNN and edge model had already reconstructed "this player gave no input" from context. The first half is confirmed and the second half is refuted in the way that matters:
 
-# 3. Step 6 -- both stacks (the parent took ~2 min 25 s each on one A100).
-#    Use --no-sync once artifacts are on the cluster and unfetched.
-scripts/simulate_cluster.sh \
-  configs/simulation/manager_testing/23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_timeout.yml
-scripts/simulate_cluster.sh --no-sync \
-  configs/simulation/manager_testing/23_2g8a_self_gnn_contr_gnn_switch_timeout.yml
-scripts/fetch_cluster.sh \
-  plots/simulation/23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_timeout/
-scripts/fetch_cluster.sh plots/simulation/23_2g8a_self_gnn_contr_gnn_switch_timeout/
+- the graph punisher's parent slope on the current contribution, **-0.144, was already closer to the human -0.242 than the linear parent's -0.125** -- so there was indeed less of a gap to close, as predicted;
+- but the flag moved it **the wrong way**, -0.144 -> **-0.132**, *away* from the human by +0.012, where the same flag moved the linear punisher -0.125 -> -0.173, *toward* the human by -0.048;
+- and the graph punisher's teacher-forced NLL **worsened**, 1.1316 -> 1.1403, while the linear's improved 1.2705 -> 1.2664;
+- its severity bands also moved away from the human in four of five (7.37->7.04 against 7.99, 5.44->5.65 against 4.98, 4.70->5.01 against 4.27, 4.49->4.86 against 3.87).
 
-# 4. Evaluate all 22 rows locally. PYTHONPATH=src is not optional: without it
-#    the shared venv's editable install resolves `aimanager` to the main
-#    checkout, which lacks the RCE row and silently scores 21.
-PYTHONPATH=src /Users/brinkmann/repros/algorithmic-institutions/.venv/bin/python \
-  -m aimanager evaluate \
-  configs/simulation/manager_testing/23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_timeout.yml
-PYTHONPATH=src /Users/brinkmann/repros/algorithmic-institutions/.venv/bin/python \
-  -m aimanager evaluate \
-  configs/simulation/manager_testing/23_2g8a_self_gnn_contr_gnn_switch_timeout.yml
+The one graph row that improves markedly is the cross-tab `P(p>0 | c_t<=4, c_{t-1}=20)`, 0.468 -> **0.574** against the human 0.571 -- it lands almost exactly on the human value, where the linear punisher overshoots it (0.635 -> 0.784). That is the cell the previous revision flagged as the one to watch, and the two families move through it in opposite directions.
 
-# 5. Step 7 -- the before/after table. Already written, already self-tested,
-#    no edits needed: it reads the `_ceiling` dirs as before and the `_timeout`
-#    dirs as after, and prints the gate verdict with the seed floor beside it.
-PYTHONPATH=src /Users/brinkmann/repros/algorithmic-institutions/.venv/bin/python \
-  scripts/data_analysis/punisher_timeout_table.py
-```
+So the honest reading is stronger than "the flag is redundant for the GNN": **for the graph punisher the flag is mildly counterproductive on the mechanism it was aimed at.** The CV log loss said nothing (t = -0.46); the mechanism table says the little it does is in the wrong direction; and section 6's self-play numbers say it is actively harmful in closed loop.
 
-**Then judge.** Gate 1: RCC < 1.0. Gate 2: the 22-row mean <= 1.1364. RCE protected at 0.8823 with the amended magnitude clause, every band slope reported with its standard error and row count. RPA (0.6620) is reported, **not** declared, and is not a gate -- it already sits in the best band. The reference stack is reported, not gated. And say plainly, in the verdict itself, whether each movement clears the seed floor in the table above; a band upgrade that moves RCC by less than 0.163 is a draw, not a finding.
+### Step 6: both stacks re-run, fetched and evaluated
 
-## 6. For a successor
+Raven jobs **30324040** (frontier, 2 min 06 s) and **30324041** (reference, 3 min 19 s), both `COMPLETED`, exit 0, on `ravg1095`, submitted with `--no-sync` against the committed artifacts. Both evaluated locally with `PYTHONPATH=<worktree>/src`: the frontier scored **22 rows / 1 pairing** and the reference **44 rows / 2 pairings**, so the protected row RCE is present in all three columns and nothing was silently dropped.
 
-1. **The serving-side defect in the other two slots is real, measured, and still there.** This branch intercepts the environment's imputed 9 only on the two punisher paths. `linear_ah._pool_from_env`, which serves the contribution and switch models, still passes `cv=None`, and the GNN contributor reads `self.state` directly. So during simulation a timed-out player is shown to the **switch** model as having contributed 9 that round (it reads the current-round contribution directly, block B1) and to the **contributor** model as having contributed 9 the round before (it is prev-anchored, through `prev_contribution` and the group means). In the human data the `valid_model` fires on **560 / 19,200 = 2.9% of agent-rounds**, and the simulated rate can only be measured by running a stack. This was left unfixed **on purpose**, so that any movement in the 22 rows on this branch is attributable to the punisher alone. It is a separately declarable defect in the contributor and switch slots and a successor should take it: the fix is the same one-line shape already applied on the punisher side, and the natural target rows are the S family and CG.
+Every "before" number the table script reads reproduces the declared baseline exactly -- frontier RCC 1.2969, RCB 1.6591, RCD 1.2515, RCE 0.8823, mean 1.0331, 14/22; ref_lin mean 1.6616, 13/22, RCC 1.4615, RCE 0.9900; ref_gnn mean 1.6603, 11/22, RCC 1.1109, RCE 0.9157. The full tables are at `plots/data_analysis/evaluation/punisher_timeout_feature/before_after.{csv,md}`.
 
-2. **The graph punisher barely moved and the linear one did.** CV log loss -0.0024 (t = -0.46 paired over folds) against -0.0175 for the linear family, on the same feature and the same data. Before concluding the feature is worthless for the GNN, run the teacher-forced mechanism table (section 5, command 2) and look at the OLS slope on the current contribution: the linear punisher closed 41% of its gap to the human -0.242 on that slope, and the question is whether the GNN's slope was already closer because the RNN and edge model reconstruct "gave no input" from context. If it was, that is a finding about what the graph architecture already encodes, and it is worth a paragraph whichever way the gates land.
+## 6. The verdict: [FAIL] on the gates, and a real but one-sided correctness gain
 
-3. **Two experiments are now pending on this branch that nobody should re-derive.** Job **30323407** on Raven is the identical GNN training resubmitted from the committed tree; fetch it before any sync (section 5, command 0) and use it as a determinism check on the committed artifact. And the accounting identity of step 0 is settled -- 0 is the game's real value on all 4,512 group-rounds, the imputed 9 fails on all 516 timeout group-rounds -- so the premise never needs re-testing.
+### The two outcomes, reported separately as they must be
 
-4. **Read every row against the seed floor, and say so out loud.** The table script now emits `seed_sd`, `in_seed_sd`, `legible` and `ungateable` per row. The protected row RCE is in the ungateable ten: its baseline 0.8823 is the only one of six same-config retrains that reaches band `<= 1`, so a "band drop" on RCE here is as likely to be the baseline's luck as the candidate's damage. PR #195's section 6 asks the maintainer for three protocol changes on exactly this point; until they are adopted, the honest move is to report the clause firing *and* its distance from the floor, which this branch's script does.
+**Correctness: a real gain for the linear punisher, nothing (or worse) for the graph punisher.** This asymmetry was already established in training and this session sharpened it. The linear family: cross-validated log loss **1.3446 -> 1.3271**, locked test 1.2234 -> 1.1934, and the contribution weight **-0.125 -> -0.173** against the human **-0.242**, closing 41% of the gap -- and PR #193 had independently attributed -0.046 of that gap to exactly this mask, against a measured -0.0476. The graph family: CV log loss **1.1743 -> 1.1719**, a paired **t = -0.46** over five folds, i.e. nothing; and now, from the mechanism table, its slope moves *away* from the human (-0.144 -> -0.132) and its teacher-forced NLL *worsens* (1.1316 -> 1.1403). **The data-handling premise is right and the fix is correct** -- step 0's accounting identity holds on all 4,512 group-rounds under the recorded 0 and fails on all 516 timeout group-rounds under the imputed 9 -- **but the feature earns its place in the linear punisher only.**
 
-5. **Housekeeping.** The isolated remote dir `~/repros/ai-runs/punisher-timeout` can be deleted when this PR closes. `punishment_baseline.py`'s `GNN_REF` is deliberately left at 1.1756. No copula was recalibrated: the severity copula carries rho 0.4273 unchanged, as the freeze requires, and the refit value 0.4821 in section 3 is recorded for the maintainer, not applied.
+**Gates: [FAIL].** Gate 1 is not cleared. Gate 2 is.
+
+### Gate 1 -- the declared target RCC: **FAIL**
+
+**RCC 1.2969 -> 1.0769**, a move of **-0.2200 = 1.35 seed sd** (sd 0.1631). The band stays **1-2**; the gate required **< 1.0**.
+
+This is the honest shape of it: the target moved substantially, in the predicted direction, by more than the seed floor -- and still did not clear the band. It **misses by 0.0769, which is 0.47 seed sd, i.e. the remaining gap is itself inside the noise floor**. A rerun on another seed could plausibly land either side of 1.0. The declaration's own warning applies in full: the baseline 1.2969 was the six-arm *minimum*, 1.7 sd below the arm mean, so this was a favourable draw to beat and the candidate still did not beat it. **The move clears the seed floor; the gate does not.**
+
+### Gate 2 -- the 22-row mean: **PASS**
+
+**1.0331 -> 0.9824**, against a ceiling of **1.1364**. The move is **-0.0507 = 1.07 seed sd** (sd 0.0473) -- legible, and in the right direction. `rows <= 1` goes **14 -> 15** (+1 = 0.32 sd of 3.16): reported, never concluded.
+
+### RCE -- protected, and the protection holds
+
+**0.8823 -> 0.8719**, Δ **-0.0104 = 0.10 seed sd** (sd 0.1063). Band `<= 1` held; band-sign pattern `++--` held before and after.
+
+| band | human | before | after | Δ in pooled SE |
+|---|---|---|---|---|
+| 0-4 | +0.140 +- 0.018 (n 965) | +0.087 +- 0.014 (n 1918) | **+0.092 +- 0.015 (n 2002)** | 0.27 |
+| 5-9 | +0.104 +- 0.024 (n 929) | +0.038 +- 0.013 (n 2098) | **+0.034 +- 0.014 (n 1919)** | 0.22 |
+| 10-14 | -0.077 +- 0.035 (n 560) | -0.043 +- 0.023 (n 1307) | **-0.048 +- 0.021 (n 1394)** | 0.17 |
+| 15-19 | -0.161 +- 0.079 (n 206) | -0.130 +- 0.067 (n 448) | **-0.097 +- 0.055 (n 436)** | 0.38 |
+
+**The amended magnitude clause does not fire on any band**: no slope changes by as much as one pooled standard error (0.27 / 0.22 / 0.17 / 0.38), and two of the four (0-4 and 10-14) move *toward* the human value anyway. The raw `magnitude_halved` list is also empty, so the parent's stricter reading agrees. **RCE is not damaged.**
+
+The caveat the protocol requires: this row moved by **0.10 seed sd**, which is **not distinguishable from a retrain of an unchanged model**, and RCE is one of the ten rows that cannot be gated on a single run -- its baseline 0.8823 is the only one of six same-config retrains that reaches band `<= 1`. "RCE is fine" here means "no damage is visible above the noise", not "no damage occurred".
+
+### RPA -- the manager's-policy row, reported and not declared
+
+**0.6620 -> 0.6375**, Δ -0.0245 = **1.40 seed sd** (sd 0.0175). It stays in the best band `<= 1`, where it already was, which is why it was deliberately not declared. A legible small improvement, and no part of the verdict.
+
+### Everything else that moved legibly on the frontier stack
+
+| row | before | after | Δ | in seed sd | reading |
+|---|---|---|---|---|---|
+| RCB (watch) | 1.6591 | **1.1797** | -0.4793 | **3.36** | the largest legible gain in the run; band 1-2 held |
+| CG | 1.7588 | **1.2975** | -0.4613 | 1.53 | legible gain; band 1-2 held |
+| **RSA** | 0.9653 | **1.2595** | +0.2942 | **1.89** | **a legible band downgrade, `<= 1` -> `1-2` -- the one real cost** |
+| PB | 0.9558 | 0.8578 | -0.0981 | 4.25 | legible gain |
+| RPB | 0.8380 | 0.7653 | -0.0728 | 2.57 | legible gain |
+| PD | 0.7598 | 0.8854 | +0.1256 | 2.12 | legible loss; band `<= 1` held |
+| PC | 0.9349 | 0.8727 | -0.0621 | 1.73 | legible gain |
+| CE | 1.0579 | 0.9880 | -0.0699 | 1.20 | band upgrade 1-2 -> `<= 1` |
+| SB | 1.0105 | 0.9598 | -0.0507 | 1.11 | band upgrade 1-2 -> `<= 1` |
+| RCD (watch) | 1.2515 | 1.1313 | -0.1202 | 0.45 | **not** distinguishable from a retrain |
+
+**RSA is the cost to declare.** It is the only legible band downgrade on the gated stack, and the punisher is a plausible owner of it (switching after punishment). It should be watched by whoever takes the next punisher declaration.
+
+### The reference stack, reported and not gated -- and it is the loudest result in the run
+
+| stack | mean before -> after | Δ in seed sd | rows <= 1 | RCC before -> after |
+|---|---|---|---|---|
+| `lin_multinomial_self` | 1.6616 -> **1.6355** | 0.55 (**not** legible) | 13 -> 13 | 1.4615 -> 1.5156 (0.33 sd, not legible) |
+| `gnn_self` | 1.6603 -> **1.8229** | **3.44 (a legible, substantial worsening)** | 11 -> **8** | 1.1109 -> 1.1100 (0.01 sd, nothing at all) |
+
+The graph punisher's self-play stack **degrades badly, and specifically in the punishment family**, by margins far outside anything the seed floor can explain:
+
+| row | before | after | Δ | **in seed sd** |
+|---|---|---|---|---|
+| RPB | 1.1513 | 1.9325 | +0.7812 | **27.6** |
+| PA | 1.0599 | 1.9776 | +0.9177 | **22.7** |
+| PB | 0.9919 | 1.4317 | +0.4398 | **19.0** |
+| RPA | 0.8066 | 1.1280 | +0.3214 | **18.4** |
+| PC | 0.9017 | 1.2123 | +0.3106 | **8.65** |
+
+(`gnn_self`'s RCE raw `magnitude_halved` fires on the 15-19 band, but the slope goes +0.017 -> -0.007, i.e. *toward* the human -0.161, so the amended clause correctly does not count it -- and that stack is not gated in any case.)
+
+**This is the third and strongest piece of the same asymmetry.** The feature gains the linear punisher a real, cross-validated, mechanism-confirmed improvement; it gains the graph punisher nothing in CV, moves its mechanism slightly the wrong way, and in closed loop makes its punishment marginals markedly worse. The reasonable inference is that the graph punisher had already encoded the timeout through its RNN and edge state, and that handing it a redundant explicit channel displaces capacity rather than adding information. **A successor should not ship `contribution_valid` in the graph punisher.**
+
+### Verdict tag
+
+**[FAIL]** -- gate 1 (RCC < 1.0) not cleared: RCC 1.2969 -> 1.0769, band 1-2 held, missing by 0.47 seed sd. Gate 2 passes (mean 1.0331 -> 0.9824 <= 1.1364). RCE protected and undamaged. The change is nevertheless a **correct** data-handling fix with a real, independently predicted gain in the linear punisher, and should be kept on that family; it should not be carried into the graph punisher.
+
+## 7. For a successor
+
+1. **The serving-side defect in the other two slots is real, measured, and still there.** This branch intercepts the environment's imputed 9 only on the two punisher paths. `linear_ah._pool_from_env`, which serves the contribution and switch models, still passes `cv=None`, and the GNN contributor reads `self.state` directly. So during simulation a timed-out player is shown to the **switch** model as having contributed 9 that round (it reads the current-round contribution directly, block B1) and to the **contributor** model as having contributed 9 the round before (it is prev-anchored, through `prev_contribution` and the group means). In the human data the `valid_model` fires on **560 / 19,200 = 2.9% of agent-rounds**. This was left unfixed **on purpose**, so that any movement in the 22 rows on this branch is attributable to the punisher alone. It is a separately declarable defect in the contributor and switch slots and a successor should take it: the fix is the same one-line shape already applied on the punisher side, and the natural target rows are the S family and CG.
+
+2. **Do not put `contribution_valid` in the graph punisher.** Three independent measurements now agree: CV log loss -0.0024 at a paired t of -0.46; the teacher-forced slope on the current contribution moving *away* from the human (-0.144 -> -0.132) with the NLL worsening (1.1316 -> 1.1403); and `gnn_self`'s 22-row mean worsening by 3.44 seed sd with the punishment family blowing out by 8-28 seed sd. The graph architecture reconstructs the timeout from context, and the explicit channel costs more than it adds. The linear punisher is the opposite case and should keep it.
+
+3. **RCC is now within one noise floor of its band, and the next change decides it.** 1.0769 against a boundary of 1.0, a gap of 0.47 seed sd. Note 3's decomposition is still the strongest candidate for closing it: the contributor's under-reaction to a heavy punishment at the ceiling, `dc | punished, c_t = 20` at -3.75 against the human -8.66, which this branch did not touch and which lives in the *contributor*, not the punisher. Combining that with the linear punisher's improved slope is the obvious next declaration -- but note that it would move RCC on a stack whose baseline is already a favourable draw, so it should be read against the floor with the same care.
+
+4. **`RSA` is the cost this branch introduced.** 0.9653 -> 1.2595, a legible (1.89 seed sd) band downgrade `<= 1` -> `1-2` on the gated stack, and the only one. It is not covered by any protection clause, and nobody has yet attributed it. Whoever declares on the punisher next should carry it as a watch row.
+
+5. **Two things are settled and must not be re-derived.** The accounting identity of step 0 -- 0 is the game's real value on all 4,512 group-rounds, the imputed 9 fails on all 516 timeout group-rounds. And the artifact provenance: job 30323407 reproduced job 30319268 from the committed tree to a max weight difference of 2.0e-05 and a CV difference of 9.2e-08, so **the committed graph artifact is confirmed and the caveat in earlier revisions of this log is withdrawn.**
+
+6. **A trap in the old handover command, now fixed in this log but not in the script.** `punisher_mechanism_check.py` keys its rows by the name given on the command line and accumulates them into one dict, so passing the same name to `--linear` and `--gnn` makes the GNN row silently overwrite the linear one and yields a short table with no warning. Always use distinct prefixes (`lin_*`, `gnn_*`). Worth a two-line guard in the script if anyone touches it.
+
+7. **Housekeeping.** The isolated remote dir `~/repros/ai-runs/punisher-timeout` and the scratch dir `~/repros/ai-runs/punisher-timeout-provcheck` can both be deleted when this PR closes. `punishment_baseline.py`'s `GNN_REF` is deliberately left at 1.1756. No copula was recalibrated: the severity copula carries rho 0.4273 unchanged, as the freeze requires, and the refit value 0.4821 in section 3 is recorded for the maintainer, not applied.
