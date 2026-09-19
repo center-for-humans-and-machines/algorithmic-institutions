@@ -1,5 +1,7 @@
 import torch as th
 
+from aimanager.generic.data import MISSING_CONTRIBUTION
+
 
 def create_fully_connected(n_nodes):
     return th.tensor(
@@ -313,10 +315,48 @@ class ArtificialHumanEnv:
             th.full_like(own_sum, default),
         )
 
+    def served_state(self):
+        """`self.state` as an artificial human has to see it.
+
+        A player who gave no input contributed nothing: that is what the game
+        charged, what it paid out on and what every other player and the
+        manager saw (accounting identity, step 0 of
+        notes/autoresearch_log/punisher-timeout-feature.md). But
+        `update_contribution` overwrites those cells with
+        `default_values["contribution"]`, so a model handed the raw state
+        reads a contribution the game never used and one that never occurs in
+        its training data, where the value is stored as 0.
+
+        Only the *served* value is wrong. `self.state` is left alone, so the
+        env's dynamics, its common-good and payoff accounting (which zero
+        invalid cells separately) and the recorded simulation output all keep
+        the value they had. Round 0 is excluded from the previous-round
+        substitution: there is no previous round to have timed out, and its
+        `prev_contribution` legitimately carries the dataset default, exactly
+        as `create_torch_data`'s `shift()` puts it there in training."""
+        state = dict(self.state)
+        valid = self.state.get("contribution_valid")
+        if valid is not None:
+            state["contribution"] = th.where(
+                valid,
+                self.state["contribution"],
+                th.full_like(self.state["contribution"], MISSING_CONTRIBUTION),
+            )
+        prev_valid = self.state.get("prev_contribution_valid")
+        if prev_valid is not None:
+            played = prev_valid | self.state["is_first"]
+            state["prev_contribution"] = th.where(
+                played,
+                self.state["prev_contribution"],
+                th.full_like(self.state["prev_contribution"], MISSING_CONTRIBUTION),
+            )
+        return state
+
     def update_contribution(self):
         self.update_own_grp_prev_mean_contr()
+        served = self.served_state()
         contribution = self.artifical_humans.predict(
-            self.state,
+            served,
             reset_rnn=self.round_number[0, 0, 0] == 0,
             edge_index=self.batch_edge_index,
         )[0]
@@ -324,7 +364,7 @@ class ArtificialHumanEnv:
         # artificial humans valid
         if self.artifical_humans_valid is not None:
             contribution_valid = self.artifical_humans_valid.predict(
-                self.state,
+                served,
                 reset_rnn=self.round_number[0, 0, 0] == 0,
                 edge_index=self.batch_edge_index,
             )[0]
@@ -359,7 +399,7 @@ class ArtificialHumanEnv:
     def _run_switch_predictor(self):
         """Forward pass through switch predictor; keeps RNN state warm."""
         does_switch, _ = self.artifical_humans_switch.predict(
-            self.state,
+            self.served_state(),
             reset_rnn=self.round_number[0, 0, 0] == 0,
             edge_index=self.batch_edge_index,
         )

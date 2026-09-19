@@ -1,0 +1,47 @@
+# sim-timeout-imputation, the reported-not-gated reference stack: exactly
+# 23_2g8a_self_gnn_contr_gnn_switch_timeout.yml (PR #194) apart from
+# output_dir and figure_name. A different contributor (the plain 50ep GNN)
+# and a different switch model (the reanchored one) in the two slots this
+# branch's fix serves, so it says whether the serving fix reads the same way
+# outside the frontier stack. Same seed, same 100 episodes, same artifacts;
+# nothing retrained.
+# See notes/autoresearch_log/sim-timeout-imputation.md.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout.joblib
+  gnn:
+    type: human
+    path: artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_timeout/model/architecture_node+edge+rnn__dataset_50ep_doubled.pt
+
+pairings:
+  - name: lin_multinomial_self
+    group_0: lin_multinomial
+    group_1: lin_multinomial
+  - name: gnn_self
+    group_0: gnn
+    group_1: gnn
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_self_gnn_contr_gnn_switch_simtimeout
+figure_name: 2g8a_self_gnn_contr_gnn_switch_simtimeout
+save_per_round: true
+basedir: .
