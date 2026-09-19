@@ -88,6 +88,35 @@ The decomposition says the damage is concentrated in `dc | punished, c_{t-1} = 2
 |---|---|---|---|---|---|
 | 2026-09-19 | (baseline) the parent's frontier stack, `_ceiling` | RCC 1.2969, RCB 1.6591, RCA 1.6526, RCE 0.8823 | 14/22 | 1.0331 | baseline |
 
+### Step 3: the contributor retrained (measured)
+
+`configs/training/artificial_humans/contribution/group_switching_contribution_50ep_vnode_stimulus_skip_ceilind.yml` on Raven, job **30318205**, 10 min 49 s on one A100 for the 5-fold CV plus the full fit (the parent's trunk takes the same; the added bool costs nothing, and the 3x iteration budget is not in play). wandb `ccj4eaft`.
+
+| | best-epoch CV log loss, mean +- sd over 5 folds | globally best epoch | log loss at the shipped epoch 575 |
+|---|---|---|---|
+| baseline `..._stimulus_skip` | 2.0028 +- 0.0646 | 450 | 2.0206 |
+| candidate `..._stimulus_skip_ceilind` | **1.9855 +- 0.0687** | 350 | **2.0227** |
+
+Read this honestly, both ways. At each fold's own best epoch the candidate is better by 0.0173 -- about a quarter of the between-fold standard deviation, so not a result on its own -- and it gets there 100 epochs earlier. At **epoch 575, which is the epoch the shipped artifact is saved at**, the candidate is 0.0021 *worse*. The feature is not bought with fit; the CV is a tie, and a tie is exactly what a 21-class log loss should show for a bool that only changes behaviour on the 12.7% of rows where the previous contribution was 20. As on the punisher side, it is the mechanism table and not the CV that carries the claim. Per-fold best epochs [550, 350, 350, 250, 300] against the baseline's [550, 450, 400, 350, 350]; per-fold best losses [1.9836, 2.0677, 1.9872, 2.0107, 1.8784] against [2.0304, 2.0391, 1.9823, 2.0624, 1.8996] -- the candidate wins 4 folds of 5.
+
+Artifact `artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_ceilind/` (model, metrics, confusion matrix; LFS). Its loaded `x_encoding` is `['prev_contribution', 'prev_contribution_max', 'prev_punishment', 'agent_group']` and no current-round feature, verified by the screen's own alignment check below.
+
+### Step 4: the teacher-forced ceiling screen (measured), before any simulation
+
+`scripts/data_analysis/contributor_ceiling_tf.py` on Raven's login node, 50.8 s, replaying the 50 single-copy human games: each trunk sees the human history and never its own draws, under the human default values, through `rcb_teacher_forced.py`'s own frame and alignment assertion. The population is RCC's -- full contributors (`c_t = 20`) with a valid punishment and a valid next contribution, 1,140 rows, 44 of them punished. Table: `plots/data_analysis/evaluation/contributor_ceiling_indicator/teacher_forced_ceiling.csv`.
+
+| | contrast | dc, punished | n punished | dc, unpunished | n unpunished | OLS slope of dc on p, punished rows |
+|---|---|---|---|---|---|---|
+| observed (C), the same rows | **-7.035** | **-8.659** | 44 | -1.624 | 1096 | -0.697 |
+| baseline trunk | -3.902 | -5.565 | 44 | -1.663 | 1096 | -0.289 |
+| candidate trunk | **-4.172** | **-6.010** | 44 | -1.838 | 1096 | **-0.343** |
+
+The `(C)` row reproduces the canonical human RCC to the last digit (-7.035003317850032, gap 0.0), which is the proof that this is the evaluation suite's own population rebuilt from the same frame.
+
+**The mechanism installs, in the right place, and it is small.** The whole move is on the punished rows: -5.565 -> -6.010, which is 14% of the 3.09 that separated the baseline from the human -8.659. The dose-response slope at the ceiling goes -0.289 -> -0.343 against the human -0.697, from 41% to 49% of the human magnitude. The unpunished rows move by 0.175 in the same direction, which is why the contrast gains only 0.270 of the 3.13 gap, 9%.
+
+**The prediction recorded before spending the simulation.** Teacher-forced, the baseline sits at -3.902 and its own closed loop at -1.978: closed-loop drift keeps about 51% of the teacher-forced contrast. At the same retention the candidate would land near -2.13. RCC's noise ceiling is 3.900 (the baseline's |contrast gap| 5.057 over its score 1.2969), so a band upgrade needs the closed-loop contrast at -3.135 or beyond. A candidate at -2.13 would score about 1.26. **The screen therefore predicts a small improvement and no band upgrade.** The simulation is spent anyway, because the screen measures the conditional and the gate is on the closed loop, and because the one thing the screen cannot see is whether the sharper ceiling detector also changes which states the loop visits.
+
 ## 4. Notes
 
 1. **The decomposition tooling was validated against the parent before anything was built.** Recomputing the parent's ceiling table from `plots/simulation/23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_ceiling/per_round.parquet` and the human file reproduces its published row exactly -- human contrast -7.035 (dc punished -8.659, n 44; unpunished -1.624, n 1096; share 3.86%), frontier after -1.978 (-3.747, n 91; -1.770, n 2178; share 4.01%). Every candidate number below comes out of the same function.
