@@ -51,7 +51,7 @@
 
 | # | step | status |
 |---|---|---|
-| 1 | Establish what the estimator's inputs actually are on the corrected tree: which files it reads, whether any of them moved with the serving fix, and the hashes of the trunk and the human data it was last fitted on. | pending |
+| 1 | Establish what the estimator's inputs actually are on the corrected tree: which files it reads, whether any of them moved with the serving fix, and the hashes of the trunk and the human data it was last fitted on. | **done** -- section 3, step 1 |
 | 2 | Refit `rho` with the existing estimator (`contribution_copula_rho.py`, same flags, same seed) against the corrected tree; report the estimate, its bootstrap CI and SE, and whether the move from 0.0395 is inside the estimator's ordinary spread. | pending |
 | 3 | Stamp the refitted value onto a copy of the contributor artifact and verify the copy is weight-identical to its base outside the three copula fields (dict-level bit comparison plus the teacher-forced probability check the stamping script already runs). | pending |
 | 4 | Simulate the frontier stack with the recalibrated contributor and evaluate all 22 rows against the parent's, every movement quoted beside its PR #195 seed sd. | pending |
@@ -61,8 +61,28 @@
 
 ## 3. Results
 
-*(filled in as runs complete)*
+*(the results table is filled in when the simulation lands)*
+
+### Step 1: what the estimator actually reads, and a prediction made before running it (measured on the tree)
+
+Before spending a job on the refit I established what `contribution_copula_rho.py` consumes, because the hypothesis is a claim about the calibration having seen something, and a calibration can only absorb what it is shown.
+
+**The estimator's whole input surface.** It imports `punishment_copula_rho` (the #146 estimator machinery), `aimanager.generic.data.create_torch_data` and `aimanager.generic.graph.GraphNetwork`, and reads three files: the bare trunk artifact, `experiments/2group_8agent_50ep.csv`, and the two baseline split files. It **never imports `aimanager.manager.environment` or `aimanager.simulation.linear_ah`** -- the only two source files the parent's serving fix changed (`git show --stat 26386bc`; the single occurrence of "environment.py" under `src/aimanager/generic/` is a comment). Its marginals come from a **teacher-forced forward pass over the human histories** (`teacher_forced_rows` -> `predict_independent(..., sample=False)`), never from a simulation.
+
+**Every one of those inputs is bit-identical to what the shipped calibration saw.**
+
+| input | shipped calibration (2026-09-16) | this branch |
+|---|---|---|
+| estimator script | `contribution_copula_rho.py` | unchanged since `2731b93` (2026-08-27), i.e. before the calibration |
+| imported machinery | `punishment_copula_rho.py` | changed once since (`5cc0950`), inside `main()` only -- the `--stamp-rho` flag, which this script never calls |
+| base trunk | sha256 `9de0d772...` (recorded in the params JSON) | sha256 `9de0d772...` (measured) |
+| human data | `experiments/` | `git log -- experiments/` is empty since 2026-09-01 |
+| `generic/data.py` | -- | two additive changes since (`MAX_CONTRIBUTION` / `contribution_max`, and the `MISSING_CONTRIBUTION` constant); neither touches `contribution`, `prev_contribution`, `agent_group` or `prev_punishment`, which are the keys this contributor's encoder reads (the parent's probe) |
+
+**And the training data never contained the defect.** `parse_agent_rounds` stores a timed-out contribution as the recorded 0 (`fillna(0)`), and `prev_contribution` is `shift(contribution, default)` -- so the cell after a timeout carries **0** in training, and only round 0 carries the dataset default of 9. The imputed 9 the parent removed lived **only** on the simulation serving path (`environment.update_contribution`), which this estimator does not touch.
+
+**The prediction, recorded before job 30325836 ran:** the refit reproduces the shipped `rho = 0.03949863621805423` exactly, because every byte it reads is the same and the estimator is deterministic under its fixed seed 38381. If that holds, the hypothesis is refuted at the only point where it is testable -- the calibration cannot have absorbed a defect it was never shown.
 
 ## 4. Notes
 
-*(appended as the experiment goes)*
+1. **Step 1 was done before the refit, and it turns the experiment into a sharp test rather than a fishing trip.** The hypothesis in the parent's successor note is that the frontier's copula "was calibrated in the presence of the defect". Reading the estimator's input surface says it was not: `rho` is fitted teacher-forced against human histories, where a timed-out player's contribution and its lag are the recorded 0, and the imputed 9 exists only inside `environment.update_contribution` at simulation time. The refit is therefore a prediction with two possible outcomes, both informative: an unchanged `rho` refutes the absorption story, and a changed one would mean something about the estimator's inputs moved that step 1 missed.
