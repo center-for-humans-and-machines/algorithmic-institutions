@@ -1,0 +1,50 @@
+# contribution-copula-recalibrated, the NOISE-OFF arm for the state-spread
+# diagnostic. The gated frontier stack with the contributor's shared-noise
+# machinery disabled: the bare, unstamped stimulus-skip trunk (copula rho = 0,
+# independent draws; weights identical to every stamped copy of it) in place
+# of the herding-copula artifact.
+#
+# The copula is OFF here, so this arm cannot see a recalibration of rho at
+# all -- it loads a file no stamping ever touches. It is run on this branch
+# so the log carries its own measurement of the variety of situations the
+# stack reaches, comparable with the parent's arm C (Var(E[c | history])
+# 21.360 against the human 27.933) and with PR #186 / #188.
+#
+# Everything else is byte-identical to
+# 23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_copularecal.yml
+# (seed 42, 100 episodes, 24 rounds, same switch model, same punisher). This
+# run is a diagnostic; it is NOT scored and NOT gated.
+# See notes/autoresearch_log/contribution-copula-recalibrated.md.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_copula_recal_rho0
+figure_name: 2g8a_copula_recal_rho0
+save_per_round: true
+basedir: .
