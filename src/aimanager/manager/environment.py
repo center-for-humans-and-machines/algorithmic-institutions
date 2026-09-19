@@ -1,5 +1,7 @@
 import torch as th
 
+from aimanager.generic.data import MAX_CONTRIBUTION
+
 
 def create_fully_connected(n_nodes):
     return th.tensor(
@@ -168,6 +170,16 @@ class ArtificialHumanEnv:
             if k in self.default_values
         }
         self.state = {**prev_state, **state}
+        # "gave the whole endowment": kept in the state so step()'s prev_
+        # shift produces `prev_contribution_max` exactly as
+        # create_torch_data_new's shift does at training time. Round 0's
+        # prev_ value comes from the contribution default, which is the
+        # median valid contribution and never 20 -- the same False the
+        # training tensor carries there.
+        self.state["contribution_max"] = self.state["contribution"] == MAX_CONTRIBUTION
+        self.state["prev_contribution_max"] = (
+            self.state["prev_contribution"] == MAX_CONTRIBUTION
+        )
 
     def __getattr__(self, name):
         if "state" in self.__dict__:
@@ -337,6 +349,7 @@ class ArtificialHumanEnv:
 
         self.contribution = contribution
         self.contribution_valid = contribution_valid
+        self.state["contribution_max"] = contribution == MAX_CONTRIBUTION
 
     def reset(self):
         self.round_number = th.zeros_like(self.round_number)

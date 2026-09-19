@@ -206,6 +206,13 @@ def create_torch_data_new(df, default_values=None):
     # cells (default contribution) read False; api_manager.create_data
     # derives it the same way at simulation time.
     data["contribution_max"] = data["contribution"] == MAX_CONTRIBUTION
+    # The lagged counterpart, for the CONTRIBUTION target: "I gave the whole
+    # endowment last round". Derived from the already-shifted
+    # `prev_contribution`, so round-0 and absent cells (default contribution)
+    # read False and no unshifted value can leak into a lagged feature.
+    # ArtificialHumanEnv.reset_state / step derive it the same way in the
+    # simulation.
+    data["prev_contribution_max"] = data["prev_contribution"] == MAX_CONTRIBUTION
 
     # Per-episode pair_id (group_key for fold-aware CV). Falls back to
     # the tensor-row index when the column is absent (legacy datasets).
