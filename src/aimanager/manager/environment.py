@@ -319,9 +319,11 @@ class ArtificialHumanEnv:
             punishment costs in the round it is given and pays back later
             through raised contributions.
           * `sum` / `avg` -- the sum / mean of the group's contributor
-            payoffs. Kept because earlier runs were produced under them;
-            worked through, `sum` equals 20 * n_valid + 0.6 * sum(c)
-            - 2 * sum(p), which prices a punishment point at 3.33
+            payoffs. Kept because earlier runs were produced under them.
+            Worked through, `sum` is 20 * n + 0.6 * sum(c) - 2 * sum(p)
+            plus each timed-out member's 20 + pool/n_valid; before the
+            payoff fix it was the same expression over the valid players
+            alone. Either way it prices a punishment point at 3.33
             contribution points against the pool's 0.62 and spends 63% of
             its variance on headcount (measured on the human data,
             notes/autoresearch_log/manager-common-pool-reward.md).
