@@ -3,96 +3,144 @@
 ## Declaration
 
 **Not a slot experiment.** This branch does not change an artificial-human
-model and is not judged by the §2 gates of `notes/autoresearch.md`. It is the
-first reinforcement-learning manager training since the long run of
-correctness fixes, run as a two-arm comparison, and its question is
-behavioural: **does the trained manager punish at all, and does that differ
-between the old and the corrected simulated players?**
+model and is not judged by the §2 gates of `notes/autoresearch.md`.
 
-**Base branch.** `origin/auto/sim-timeout-imputation` (head `3fe1f44`).
-`origin/auto/rl-manager-timeout-view` was requested as the base but did not
-exist on the remote when this branch was created (only a local sibling
-worktree at the same `3fe1f44`), so the documented fallback was taken. The
-serving fix that branch carries is therefore reproduced here directly (note
-3) rather than inherited.
+**Scope, as revised (note 12).** It began as a two-arm old-vs-new comparison.
+The maintainer dropped arm OLD as too hard to replicate faithfully, so what
+remains is one world and one question: **train a manager against the current
+corrected clones and answer whether it punishes at all, what its policy looks
+like, and whether it beats the artificial punisher — this project's clone of
+a human manager.** Three seeds, no self-play.
 
-**Arms.** Identical in every key except the four artificial-human artifact
-paths and the seed; the configs are generated from one template by
-`scripts/rl_two_worlds/make_configs.py` so that claim is mechanical rather
-than asserted. Hyperparameters are copied verbatim from
-`configs/training/rl_manager/03_2g8a_sum.yml`; nothing is tuned.
+**Base branch.** `origin/auto/rl-manager-timeout-view` (PR #205), which serves
+the manager, its replay buffer and the opponent the recorded 0 for a
+timed-out player, verified on 113 timed-out cells. This branch was first
+built on `origin/auto/sim-timeout-imputation` because #205 was not yet on the
+remote, and was rebased once it was; #205's version of that fix supersedes
+and replaced this branch's own (note 13).
 
-| slot | arm OLD | arm NEW |
-|---|---|---|
-| contribution | `group_switching_contribution_50ep/.../epochs_1000.pt` | `group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/.../epochs_575.pt` |
-| valid | `raven_script_22/.../rnn_False__dataset_full.pt` | same |
-| switch | `switch_pred_opt_50ep/.../epochs_375.pt` **(open — note 7)** | `switch_joint_exodus/.../dataset_50ep_doubled.pt` |
-| opponent punisher | `punishment_autoregressive_50ep/.../epochs_7500.pt` | `baselines/punishment_multinomial_ceiling_severity_copula.joblib` |
+**The one world.**
 
-Three seeds per arm (42 / 43 / 44). The seed spread is a first-class result,
-not a footnote: this project has measured that retraining a *supervised*
-model moves a typical evaluation row by more than most experiments move it,
-and RL is noisier.
+| slot | artifact |
+|---|---|
+| contribution | `group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/.../epochs_575.pt` |
+| valid | `raven_script_22/.../rnn_False__dataset_full.pt` |
+| switch | `switch_joint_exodus/.../dataset_50ep_doubled.pt` |
+| punisher | `baselines/punishment_multinomial_ceiling_severity_copula.joblib` |
 
-**What is measured**, in priority order: (1) does it punish — share of
-agent-rounds with punishment > 0, mean punishment, mean given punishment > 0,
-against the human managers in `experiments/2group_8agent_50ep.csv` through
-the evaluation suite's canonical frame; (2) the policy shape, punishment by
-the contribution it responds to, on the suite's RPA bins, learned vs human vs
-artificial punisher; (3) a rule-based control that decides whether a manager
-which declines to punish is badly trained or correct about this world;
-(4) the common good achieved, always named with the world it was measured in.
+The punisher is both the opponent the manager trains against **and** a
+baseline scored on the same axes as the learned policies — the comparison the
+maintainer's success criterion turns on.
+
+Three seeds (42 / 43 / 44), differing in nothing else. The seed spread is a
+first-class result, not a footnote: this project has measured that retraining
+a *supervised* model moves a typical evaluation row by more than most
+experiments move it, and RL is noisier.
+
+**Reward: the common pool.** Training on `group_payoff_sum` priced punishment
+about five times too high and was ~63% headcount by variance (review S1). The
+common-pool mode is being added on `auto/manager-common-pool-reward`, which
+also fixes the discarded payoff for timed-out players (review D2). The
+generator carries `REWARD_MODE` as a single named constant so the switch is
+one line.
+
+## Measurement plan
+
+Six outputs, in priority order. Every one is computed per seed and reported
+with its spread across seeds, never pooled into a single number.
+
+1. **Does it punish.** Share of agent-rounds with punishment > 0, mean
+   punishment, and mean given punishment > 0 — for each of the three learned
+   managers, for the artificial punisher, for the rule-based comparison points
+   and for the zero-punishment floor. Against the human managers in
+   `experiments/2group_8agent_50ep.csv` read through
+   `evaluation_suite.convert.load_human` (which drops the flip duplicates and
+   marks a manager timeout as a NaN punishment, so "punished 0" and "gave no
+   input" stay distinct). Human reference, measured: mean punishment 1.79,
+   P(p = 0) 0.694 over 18,386 rows with a valid manager input.
+2. **Mean punishment conditioned on `contribution_valid`, per seed and across
+   training.** Required output, not a diagnostic afterthought: while the
+   free-punishment defect is unfixed, punishment on timed-out cells is free
+   while punishment everywhere else is costly under a common-pool reward, so a
+   free lever strictly dominates a paid one. If the learned policy concentrates
+   there, the headline number is an artefact and must be reported as one.
+3. **The policy shape.** Punishment by the contribution it responds to, on the
+   evaluation suite's own RPA bins (`ResponseMetrics.rpa`, edges
+   `[-1, 0, 5, 10, 15, 19, 20]`, so 0 and 20 are isolated), mean per bin.
+   Learned vs human vs artificial punisher on the same axes. Human reference,
+   measured: 4.76 / 2.97 / 1.67 / 0.98 / 0.69 / 0.27 over bins {0}, 1-5, 6-10,
+   11-15, 16-19, {20}.
+4. **The comparison points.** The artificial punisher scored as a baseline,
+   the zero-punishment floor, and the best rules from the sibling sweep
+   (`notes/autoresearch_log/rule-based-manager-sweep.md` when it lands). If a
+   rule earns more common good than the learned manager, that is a training
+   failure; if it earns less, the world is saying punishment does not pay.
+5. **The common good achieved**, reported alongside the training reward so the
+   two are never confused.
+6. **Convergence**, not only final numbers: reward, loss and the punish rate
+   over update steps, per seed.
+
+Cross-evaluation is one world, so it collapses to three learned managers plus
+the baselines in a single simulation config, one pairing per manager against
+the artificial punisher.
 
 ## Plan
 
-1. **Recover the deleted arm-OLD artifacts.** Done — note 1.
-2. **Serve both managers the recorded 0 for a timeout** in
-   `rl_manager.run_batch`. Done — note 3.
-3. **Batched linear punisher opponent** so arm NEW's frontier punisher can
+1. **Batched linear punisher opponent** so the frontier multinomial can
    occupy the opponent slot. Done — note 2.
-4. **Price one run** with a short arm-NEW pilot before committing to six.
-   Config written (`two_worlds_pilot_new.yml`), **not submitted** — note 11.
-5. Six training runs, three seeds per arm. **Blocked** — notes 4-7.
-6. Cross-evaluate all six managers in both worlds, plus the rule-based
-   control, the zero-punishment floor and each world's own artificial
-   punisher scored on the same axes as the learned managers, so the clone of
-   a human manager is a baseline and not only an opponent.
+2. **Rebase onto PR #205** for the served-state fix. Done — note 13.
+3. **Drop arm OLD; regenerate for one arm.** Done — note 12.
+4. **Price one run** with a 40-step pilot before committing three A100-days.
+   Done — notes 14-15.
+5. Three training runs, seeds 42/43/44. **Not started** — see Status.
+6. One cross-evaluation simulation: the three learned managers, the
+   artificial punisher as a baseline on the same axes, the zero floor and the
+   sibling sweep's best rules.
 7. Tables under `plots/data_analysis/evaluation/rl_manager_two_worlds/`.
+
+## Status: setup done and priced; the three runs are NOT started
+
+Only the cost pilot has run. The three real configs carry a
+`NOT YET RUN -- BLOCKED` banner and are held on two things:
+
+1. **The free-punishment defect (review D1) is unfixed.** Under a common-pool
+   reward this stops being a curiosity: punishment costs the manager
+   everywhere *except* on a timed-out cell, so a free lever strictly dominates
+   a paid one and a value-maximising learner has every reason to find it. That
+   is the exact failure mode that would invalidate the headline question. Fix
+   it first, or start with the diagnostic — measurement-plan item 2 is a
+   required output either way.
+2. **The common-pool reward mode is not on this branch yet.**
+   `auto/manager-common-pool-reward` was not on the remote at the time of
+   writing. `REWARD_MODE` in the generator is one line.
 
 ## Successor
 
-Whoever picks this up inherits a branch where the setup is done and nothing
-has been run. In order:
-
-1. **Decide S1** (note 9) — is the manager trained on `group_payoff_sum` or on
-   the common good? This changes what a punish rate means and should be
-   settled before, not after.
-2. **Take D1 and D2 from wherever they land** (a sibling is extending the
-   serving fix to D1's call sites and the replay buffer). This branch's own
-   `run_batch` change covers D5's three call sites only; reconcile rather
-   than duplicate.
-3. **Decide arm OLD's switch slot** (note 7). Recommendation:
-   `OLD_SWITCH_REANCHORED`, already named in the generator.
-4. **Price it** — submit `two_worlds_pilot_new.yml` (40 update steps) and
-   read the wall clock before committing six A100-days. Six jobs fit one
-   wave, nine do not (note 11).
-5. Then, and only then, the six runs.
-
-Self-play (note 10) is a separate change and should not land in the same run
-as the first RL training.
-
-## Status: BLOCKED, nothing has been run
-
-No training job has been submitted and no compute has been spent. The setup
-below is committed so the work is not lost and so the blockers can be judged
-against something concrete, not because it is ready to run. Every generated
-config carries a `NOT YET RUN -- BLOCKED` banner.
+1. Take the common-pool mode from `auto/manager-common-pool-reward`, flip
+   `REWARD_MODE`, regenerate.
+2. Resolve D1 — fixed, or explicitly accepted with the validity-conditioned
+   diagnostic as a first-class output.
+3. Submit the three runs. They fit one wave, but the association's 8 job
+   slots are shared with sibling experiments (note 16).
+4. Read `notes/autoresearch_log/rule-based-manager-sweep.md` for the
+   comparison points before writing the results table.
 
 ## Results
 
-| date | run | world | punish rate | mean p | mean p given p>0 | common good | verdict |
-|---|---|---|---|---|---|---|---|
-| — | nothing run yet | — | — | — | — | — | blocked (notes 4-8) |
+No training run has been made. The only job submitted is the cost pilot.
+
+| date | run | steps | wall clock | outcome |
+|---|---|---|---|---|
+| 2026-09-21 | `rl_new_clones_pilot` (job 30400864) | 40 | 4:37 total, 3:46 in loop | `COMPLETED`; 5.65 s/step, 5.20 s/step late-stage; projects to ~5.8-6.3 h for 4000 steps (note 15) |
+
+The pilot is a timing measurement. Its policy is not read and its reward mode
+is the one being replaced, so nothing behavioural is recorded from it.
+
+The behavioural table below is the one the experiment exists to fill, per seed:
+
+| seed | punish rate | mean p | mean p given p>0 | mean p at `contribution_valid=False` | common good | verdict |
+|---|---|---|---|---|---|---|
+| — | not run | | | | | |
 
 ## Notes
 
@@ -237,3 +285,79 @@ config carries a `NOT YET RUN -- BLOCKED` banner.
     been measured. The pilot that would have measured it
     (`two_worlds_pilot_new.yml`, 40 update steps) is written and committed but
     was not submitted.
+
+12. **Scope revision: arm OLD dropped, no self-play, three seeds against the
+    corrected clones.** The maintainer judged arm OLD too hard to replicate
+    faithfully, and note 7 is part of why: its switch artifact carries the
+    pre-#123 anchoring, so the only faithful version of that arm contains a
+    one-round lag that would sit in one arm and not the other. Dropping it
+    also removes the two recovered artifacts of note 1 from the branch — the
+    recipe that found them stays in note 1, so they are recoverable if the
+    comparison is ever revived. Self-play (note 10) was declined and is not
+    built. The cross-evaluation collapses accordingly: three learned managers
+    plus the artificial punisher, the zero floor and the sibling sweep's best
+    rules, all in one world.
+
+13. **Rebased onto `auto/rl-manager-timeout-view` (PR #205); its fix replaced
+    this branch's.** Both branches independently fixed D5, and the rebase
+    merged them *textually* rather than flagging a conflict, leaving two
+    served-state layers in `run_batch` — a live example of why a duplicated
+    fix is worse than a missing one. #205's version is the better of the two
+    and is what survives: it binds `state` to the served view once after
+    `reset()` and `step()`, so the manager, the replay copy and the opponent
+    are covered at one point, and it keeps the raw state under the name
+    `recorded` for the metrics, which are the run's record of what the game
+    charged. This branch's own served-state change is gone; only the opponent
+    dispatch remains in `rl_manager.py`.
+
+14. **Cost pilot (job 30400864).** Submitted from
+    `AI_REMOTE_DIR=~/repros/ai-runs/rl-two-worlds` as
+    `configs/training/rl_manager/rl_new_clones_pilot.yml`: 40 update steps,
+    eval every 10, otherwise byte-identical to the real configs. It confirmed
+    the parts that had never been exercised together — the frontier
+    contribution, valid and joint-exodus switch models load, and the batched
+    linear punisher loads and serves as the opponent inside the real rollout,
+    which is the first time `linear_opponent.py` has run against the actual
+    env rather than the parity test.
+
+15. **Cost, measured (job 30400864, A100, `COMPLETED`).** 40 update steps ran
+    in **3 min 46 s** of training loop — **5.65 s/step** averaged, **5.20
+    s/step** at the late-stage rate once the first few warm-up steps are past.
+    Total job elapsed **4 min 37 s**, so fixed overhead (venv, `module load
+    cuda`, wandb init, loading four models, the final save/load round-trip and
+    the parquet write) is **~51 s**. `MaxRSS` 5.9 GB against the template's
+    16 GB request. The saved policy is **6.7 MB**, so all three fit in git-lfs
+    without a second thought.
+
+    **Projection for one real run (4000 steps): ~5.8-6.3 h.** 4000 x 5.20 s =
+    5 h 47 m at the late rate, 4000 x 5.65 s = 6 h 17 m if the warm-up rate is
+    charged throughout; the real configs use `eval_period: 20` against the
+    pilot's 10, so they run half as many on-policy eval rollouts per step and
+    the true figure sits at or below the lower end.
+
+    Three runs in parallel: **~6 h wall clock, ~18 A100-hours total.** Well
+    inside the `gpu` partition's 24 h limit and the association's 8 job slots.
+
+    Two things follow. **Three seeds is comfortably affordable and so is
+    more** — at ~6 A100-hours each, five seeds would cost 30 A100-hours and
+    still fit one wave. Given that the seed spread is meant to be a
+    first-class result and three points make a poor spread estimate, five is
+    worth considering. And **the original six-run two-arm design was never
+    implausible** either; the `--time=20:00:00` in
+    `scripts/manager/run_training.sh` is roughly 3x pessimistic, which costs
+    queue priority on a backfill scheduler. Lowering it to ~10 h would start
+    these jobs sooner. Not changed here: it is a shared template and other
+    experiments' manager runs may not be this size.
+
+16. **Queue contention is the real constraint, not GPU-hours.** The
+    association `mpib_gpu` allows 8 concurrent jobs and at submission time 6
+    were already queued by sibling experiments, with one unrelated job
+    running. Three runs fit, but not instantly and not alongside an arbitrary
+    number of siblings. Worth coordinating rather than assuming.
+
+17. **Manager artifacts survive a re-sync.** `train_cluster.sh` adds
+    `--exclude='artifacts/manager/'` when `AI_REMOTE_DIR` points at an
+    isolated dir, so `rsync --delete` does not remove trained checkpoints.
+    A `--sync-only` to ship a code change is therefore safe with runs' output
+    sitting on the cluster — the hazard the `--no-sync` rule guards against
+    does not apply to this directory.
