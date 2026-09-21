@@ -58,9 +58,9 @@ Everything below stays on its source branch at the path the logs give.
 | dropped | where | why |
 |---|---|---|
 | Bulk simulation output: `per_round.parquet`, `aggregates.csv`, per-run figures and the whole `evaluation/visuals/` trees of the arms | #186, #188, #191, #195 | regenerable from the committed configs and artifacts; the one exception, the seed-ensemble run's `evaluation/scores.csv`, is cited by a report and is here |
-| Intermediate teacher-forced frames: `tf_*.parquet` (#186, #191), `*_per_row.parquet` and the residual table (#187, #188) | #186, #187, #188, #191 | inputs to the committed summary tables, reproduced by the scripts that are here |
+| Intermediate teacher-forced frames: the `tf_*.parquet` arms (#186, #191), the residual table (#187) and the two `*_per_row.parquet` frames (#188) | #186, #187, #188, #191 | inputs to the committed summary tables, reproduced by the scripts that are here |
 | PR #183's ten held-out fold artifacts | `rcb-holdout-teacher-forced` | see below |
-| PR #188's five per-member metrics and confusion parquets | `auto/copula-seed-ensemble` | training evidence for a closed question; the cross-validated log losses they carry are quoted in both #188's and #195's logs |
+| PR #188's per-member metrics and confusion parquets (ten files) | `auto/copula-seed-ensemble` | training evidence for a closed question; the cross-validated log losses they carry are quoted in both #188's and #195's logs |
 | Derived artifacts: the phi = 0 copula stamp (#186), the two rho-zero Gaussian bundles (#191), the five copula-carried seed stamps (#195) | #186, #191, #195 | each is a one-transform copy of a parent, and the script that makes it is here (`stamp_copula_phi0.py`, `stamp_contribution_copula_rho0.py`, `carry_contribution_copula_params.py`) |
 | PR #183's three secondary summary CSVs (the local-CPU cross-check and the stimulus-skip trunk) | `rcb-holdout-teacher-forced` | their tables are printed in full in the log |
 | Per-run figures and the markdown twins of committed CSVs (`per_row.md`, `tables.md`, `scores_22.md`, `*.jpg`) | all six | the numbers are in the CSVs and in the logs |
