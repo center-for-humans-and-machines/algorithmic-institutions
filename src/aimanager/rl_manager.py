@@ -72,17 +72,10 @@ def run_batch(
     state = env.served_state()
     metric_list = []
     for round_number in count():
-        # What a manager is allowed to see. A player who gave no input
-        # contributed nothing and was charged nothing: that is the value the
-        # game used and the only one the punishers ever saw in training. The
-        # env keeps the dataset default in its own state, so both managers are
-        # handed environment.served_state() instead, and the replay copy comes
-        # from the same view the policy acted on.
-        served = env.served_state()
-        statecopy = {k: v.clone() for k, v in served.items() if k in replay_keys}
+        statecopy = {k: v.clone() for k, v in state.items() if k in replay_keys}
 
         action, q_values = manager.get_action(
-            served, first=round_number == 0, greedy=on_policy
+            state, first=round_number == 0, greedy=on_policy
         )
 
         # Two-manager mode: RL produces (B, 8, 1) over all agents; opponent
@@ -94,7 +87,7 @@ def run_batch(
             # variant). The autoreg punishment AH ignores it. We pass it
             # uniformly so the same call site supports both opponents.
             opp_action, _ = opponent_manager.predict(
-                served,
+                state,
                 reset_rnn=round_number == 0,
                 edge_index=env.batch_edge_index,
             )

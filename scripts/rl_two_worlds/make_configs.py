@@ -1,16 +1,18 @@
-"""Emit the six RL-manager training configs of the two-worlds comparison.
+"""Emit the RL-manager training configs for the new-clones experiment.
 
-The claim the experiment makes is that the two arms differ in nothing but
-which artificial humans they are trained against, so the configs are generated
-from one template rather than written by hand: the only per-arm input is
-ARMS[arm], the only per-run input is the seed.
+Originally a two-arm comparison; arm OLD was dropped by the maintainer as too
+hard to replicate faithfully (its switch artifact carries the pre-#123
+anchoring, see notes/autoresearch_log/rl-manager-two-worlds.md note 7). What
+remains is one world -- the current corrected clones -- and one question: does
+a manager trained against them punish at all, what does its policy look like,
+and does it beat the artificial punisher.
 
-    python scripts/rl_two_worlds/make_configs.py [--pilot]
+The three runs differ only in `seed`, so the configs are generated rather than
+hand-written and that claim is mechanical.
 
-`--pilot` additionally writes the short arm-NEW run used to price the design.
+    python scripts/rl_two_worlds/make_configs.py
 """
 
-import argparse
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -19,98 +21,67 @@ OUT_DIR = os.path.join(ROOT, "configs/training/rl_manager")
 
 SEEDS = (42, 43, 44)
 
-# Shared in both arms: the validity model is plumbing, not a slot.
-VALID_MODEL = "artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt"  # noqa: E501
-
-# Arm OLD's switch slot is an open design decision, not a free choice, so both
-# candidates are named here rather than one being quietly picked. `03_2g8a_sum`
-# names `switch_pred_opt_50ep`, which was trained under the pre-#123 anchoring
-# while `environment.step()` now runs the re-anchored convention -- feeding it
-# round s-1 values where it expects round s. That lag would sit in arm OLD and
-# not in arm NEW, so any difference between the arms would be partly the
-# convention rather than the clones. The alternative keeps the same switch
-# trunk at the earliest artifact that is anchoring-correct.
-OLD_SWITCH_FAITHFUL = (
-    "artifacts/artificial_humans/switch_pred_opt_50ep/"
-    "model/architecture_mlp+rnn+edge__dataset_50ep__epochs_375.pt"
+# The current frontier stack: the contribution trunk with the per-group virtual
+# node, the direct stimulus skip and the stamped herding copula; the
+# joint-exodus switch model; the multinomial punisher with the ceiling
+# indicator and its severity copula, conditioned on round t's contribution.
+# Paths read off the sim configs, not guessed.
+CONTRIBUTION_MODEL = (
+    "artifacts/artificial_humans/"
+    "group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/"
+    "model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt"
 )
-OLD_SWITCH_REANCHORED = (
-    "artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/"
+SWITCH_MODEL = (
+    "artifacts/artificial_humans/switch_joint_exodus/"
     "model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt"
 )
+# Also the baseline the learned policies are scored against, not only the
+# opponent: it is this project's clone of a human manager.
+OPPONENT_PUNISHER = (
+    "artifacts/baselines/punishment_multinomial_ceiling_severity_copula.joblib"
+)
+# Plumbing, not a slot.
+VALID_MODEL = "artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt"  # noqa: E501
 
-# The four artificial-human slots. Everything else in the template is shared.
-ARMS = {
-    # The 2g8a stack 03_2g8a_sum.yml was written against. Its contribution
-    # checkpoint (epochs_1000) and its autoregressive punisher were both
-    # deleted from main; see the log file for where each was recovered.
-    "old": {
-        "label": "the 2022 stack 03_2g8a_sum.yml names",
-        "artificial_humans": (
-            "artifacts/artificial_humans/group_switching_contribution_50ep/"
-            "model/architecture_node+edge+rnn__dataset_50ep__epochs_1000.pt"
-        ),
-        "switch_model": OLD_SWITCH_FAITHFUL,
-        "opponent_manager": (
-            "artifacts/artificial_humans/punishment_autoregressive_50ep/"
-            "model/architecture_node+edge+autoregressive__dataset_50ep"
-            "__epochs_7500.pt"
-        ),
-    },
-    # The current frontier: the contribution trunk with the per-group virtual
-    # node, the direct stimulus skip and the stamped herding copula; the
-    # joint-exodus switch model; the multinomial punisher with the ceiling
-    # indicator and its severity copula, conditioned on round t's
-    # contribution. Paths taken from the sim configs on the base branch.
-    "new": {
-        "label": "the current frontier stack",
-        "artificial_humans": (
-            "artifacts/artificial_humans/"
-            "group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/"
-            "model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt"
-        ),
-        "switch_model": (
-            "artifacts/artificial_humans/switch_joint_exodus/"
-            "model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt"
-        ),
-        "opponent_manager": (
-            "artifacts/baselines/punishment_multinomial_ceiling_severity_copula"
-            ".joblib"
-        ),
-    },
-}
+# The real runs must train on the common pool -- what a real manager was
+# actually paid -- rather than on `sum` (the sum of contributor payoffs, which
+# prices punishment ~5x too high and is ~63% headcount by variance; review
+# S1). The mode is being added on auto/manager-common-pool-reward and is not on
+# this branch yet, so `sum` stands here only so the cost pilot can run: wall
+# clock does not depend on the reward. Flip this one constant when that branch
+# lands, and regenerate.
+REWARD_MODE = "sum"
 
 BLOCKED_BANNER = """\
 # !! NOT YET RUN -- BLOCKED. Do not submit this config.
-# The pre-run code review (notes/reviews/rl-manager-review.md, on branch
-# review/rl-manager) names defects that would invalidate a training run:
-#   D1  a punishment aimed at a timed-out player costs the manager nothing,
-#       yet every artificial human is still shown it -- a free lever the
-#       learner can identify from `contribution_valid`, which sits in its own
-#       x_encoding. Both arms.
-#   D2  the reward discards a timed-out player's payoff, which the real game
-#       paid: an unlearnable shock worth ~31% of the reward on the group-rounds
-#       that contain a timeout. Both arms.
-#   D4  arm OLD only -- see OLD_SWITCH_FAITHFUL above.
-# D1/D2 are being fixed elsewhere; the arm-OLD switch slot is a maintainer
-# decision. See notes/autoresearch_log/rl-manager-two-worlds.md."""
+#   * the free-punishment defect is unfixed: a punishment aimed at a timed-out
+#     player costs the manager nothing, yet every artificial human is still
+#     shown it (review D1). Under a common-pool reward punishment is costly
+#     everywhere EXCEPT on those cells, so a free lever strictly dominates a
+#     paid one and a learner will find it.
+#   * REWARD_MODE is still `sum`; the real runs train on the common pool.
+# See notes/autoresearch_log/rl-manager-two-worlds.md."""
+
+PILOT_BANNER = """\
+# COST PILOT -- a wall-clock measurement, not a result. 40 update steps, run
+# only to price a full 4000-step run before committing three A100-days. Its
+# reward mode and the unfixed free-punishment defect do not affect timing, and
+# nothing it produces is science. Do not read its policy."""
 
 TEMPLATE = """\
 # AUTOGENERATED by scripts/rl_two_worlds/make_configs.py -- do not hand-edit.
 #
-{blocked}
+{banner}
 #
-# Two-worlds RL manager comparison ({job_id}).
-# Arm {arm_upper}: {label}.
-# Every key below except the four artifact paths and `seed` is byte-identical
-# across all six runs of the experiment, and identical to the hyperparameters
-# of configs/training/rl_manager/03_2g8a_sum.yml -- nothing is tuned.
-# See notes/autoresearch_log/rl-manager-two-worlds.md.
+# RL manager vs the current corrected clones ({job_id}).
+# Every key below except `seed`, `job_id` and `output_dir` is byte-identical
+# across the three runs, and the hyperparameters are those of
+# configs/training/rl_manager/03_2g8a_sum.yml -- nothing is tuned.
 
-artificial_humans: {artificial_humans}
+artificial_humans: {contribution_model}
 artificial_humans_valid: {valid_model}
 switch_model: {switch_model}
-opponent_manager: {opponent_manager}
+opponent_manager: {opponent_punisher}
 artificial_humans_model: "graph"
 job_id: {job_id}
 seed: {seed}
@@ -159,7 +130,7 @@ env_args:
   n_punishments: 31
   n_rounds: 24
   batch_size: 1000
-  reward_mode: sum
+  reward_mode: {reward_mode}
 
 device: "cuda"
 output_dir: "artifacts/manager/{job_id}"
@@ -167,20 +138,18 @@ basedir: "."
 """
 
 
-def write(job_id, arm, seed, n_update_steps, eval_period):
-    spec = ARMS[arm]
+def write(job_id, seed, n_update_steps, eval_period, banner):
     text = TEMPLATE.format(
-        blocked=BLOCKED_BANNER,
+        banner=banner,
         job_id=job_id,
-        arm_upper=arm.upper(),
-        label=spec["label"],
-        artificial_humans=spec["artificial_humans"],
-        switch_model=spec["switch_model"],
-        opponent_manager=spec["opponent_manager"],
+        contribution_model=CONTRIBUTION_MODEL,
+        switch_model=SWITCH_MODEL,
+        opponent_punisher=OPPONENT_PUNISHER,
         valid_model=VALID_MODEL,
         seed=seed,
         n_update_steps=n_update_steps,
         eval_period=eval_period,
+        reward_mode=REWARD_MODE,
     )
     path = os.path.join(OUT_DIR, f"{job_id}.yml")
     with open(path, "w") as f:
@@ -189,16 +158,9 @@ def write(job_id, arm, seed, n_update_steps, eval_period):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--pilot", action="store_true")
-    args = ap.parse_args()
-
-    for arm in ARMS:
-        for seed in SEEDS:
-            write(f"two_worlds_{arm}_s{seed}", arm, seed, 4000, 20)
-    if args.pilot:
-        write("two_worlds_pilot_new", "new", 42, 40, 10)
-        write("two_worlds_pilot_old", "old", 42, 40, 10)
+    for seed in SEEDS:
+        write(f"rl_new_clones_s{seed}", seed, 4000, 20, BLOCKED_BANNER)
+    write("rl_new_clones_pilot", 42, 40, 10, PILOT_BANNER)
 
 
 if __name__ == "__main__":
