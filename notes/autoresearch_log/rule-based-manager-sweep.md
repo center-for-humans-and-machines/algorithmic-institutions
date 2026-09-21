@@ -152,13 +152,13 @@ This matters directly for the expensive question this control was run for: `rewa
 
 ### 3.6 Finding D1 in practice: the rules punish every timed-out player, every time
 
-With the timeout serving fix in place a player who gave no input is served contribution 0, so **every contribution-keyed rule punishes 100.0% of timed-out agent-rounds at its maximum severity** -- `thr4_p2` as much as `prop10`. The artificial punisher punishes 0.3% of them (it carries a timeout feature); real human managers punished **0 of 280**.
+With the timeout serving fix in place a player who gave no input is served contribution 0, so **every contribution-keyed rule punishes 100.0% of timed-out agent-rounds at its maximum severity** -- `thr4_p2` as much as `prop10`. The artificial punisher punishes under 1% of them (it carries a timeout feature); real human managers punished **0 of 280**.
 
 | | share of timeout cells punished | share of the manager's total punishment spent there |
 |---|---|---|
 | every threshold / proportional / `human_mean` rule | 1.000 | 2.3% - 10.9% (`thr4_p10` highest) |
-| `human_severity` | 0.448 | 4.5% |
-| `ah_punisher` | 0.003 | 0.03% |
+| `human_severity` | 0.448 (sweep) / 0.498 (head-to-head) | 4.5% / 5.2% |
+| `ah_punisher` | 0.003 (sweep) / 0.008 (head-to-head) | 0.03% / 0.1% |
 | human managers (real) | 0.000 | 0% |
 
 Timeouts are 1.9% of simulated agent-rounds (2.9% in the human data), which is why the *accounting* effect is small (section 3.4). The *behavioural* effect is bigger, because the artificial humans are shown that punishment and react to it: the `skip_invalid` twins lose 2.41 (`prop10`: 136.04 -> 133.63) and 6.92 (`thr9_p5`: 121.59 -> 114.67) common-good points. **This changes one conclusion and not the others.** `thr9_p5`'s win over the clone falls from +10.68 [+1.9, +19.3] to +3.73 [-5.1, +12.6] and stops being distinguishable from zero; `prop10`'s survives intact at +22.67 [+12.5, +32.8]. `thr9_p10` was not run with `skip_invalid` -- it spends 6.5% of its punishment on timeout cells, so the same correction would be expected to cost it a few points of its +12.8.
