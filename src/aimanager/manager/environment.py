@@ -9,6 +9,14 @@ def create_fully_connected(n_nodes):
     ).T
 
 
+#: What the manager is rewarded for.
+#:   common_pool -- the group's common pool, 1.6 * sum(c) - sum(p). What the
+#:                  real manager was paid on (reports/basics.md).
+#:   sum / avg   -- the sum / mean of the group's contributor payoffs. Kept
+#:                  for comparison with the runs produced under them.
+REWARD_MODES = ("avg", "sum", "common_pool")
+
+
 class ArtificialHumanEnv:
     """
     Environment that runs the virtual humans and
@@ -81,8 +89,10 @@ class ArtificialHumanEnv:
         self.artifical_humans_switch = artifical_humans_switch
         self.switch_every = switch_every
         self.n_agents = n_agents
-        if reward_mode not in ("avg", "sum"):
-            raise ValueError(f"reward_mode must be 'avg' or 'sum', got {reward_mode!r}")
+        if reward_mode not in REWARD_MODES:
+            raise ValueError(
+                f"reward_mode must be one of {REWARD_MODES}, got {reward_mode!r}"
+            )
         self.reward_mode = reward_mode
         self.batch = th.tensor(
             [i for i in range(self.batch_size) for a in range(self.n_agents)],
@@ -189,11 +199,31 @@ class ArtificialHumanEnv:
         else:
             object.__setattr__(self, name, value)
 
-    def compute_common_good_per_group(
+    def count_valid_per_group(self, contribution_valid):
+        """Number of players who gave an input, per group -> (B, G, 1)."""
+        return (contribution_valid.unsqueeze(-2) * self.agent_group_mask).sum(dim=1)
+
+    def count_members_per_group(self):
+        """Number of players assigned to each group -> (B, G, 1)."""
+        return self.agent_group_mask.sum(dim=1)
+
+    def compute_common_pool_per_group(
         self, contribution, punishment, contribution_valid
     ):
-        # Method is used with punishment and prev_punishment
-        # in update_common_good and update_reward
+        """The group's common pool: 1.6 * sum(contributions) - sum(punishments).
+
+        This is what the human manager was paid in proportion to
+        (reports/basics.md: "The manager is receiving a payout proportionally
+        to the common pool") and it is the `common_good` column of
+        experiments/2group_8agent_50ep.csv: the identity reproduces that
+        column to a maximum residual of 2.8e-14 over all 4,512 human
+        group-rounds.
+
+        A player who gave no input contributed nothing and was punished
+        nothing -- all 560 timed-out human rows carry contribution == 0 and
+        punishment == 0 -- so both are zeroed before the sums, which is what
+        makes the identity hold.
+        """
         # Set the contribution and punishment to 0 if they are not valid
         contribution = th.where(
             contribution_valid, contribution, th.zeros_like(contribution)
@@ -203,50 +233,115 @@ class ArtificialHumanEnv:
         # Add a dimension for the groups
         contribution = contribution.unsqueeze(-2) * self.agent_group_mask
         punishment = punishment.unsqueeze(-2) * self.agent_group_mask
-        contribution_valid = contribution_valid.unsqueeze(-2) * self.agent_group_mask
 
         # Sum over the agents for each group
         sum_contribution = contribution.sum(dim=1)
         sum_punishment = punishment.sum(dim=1)
-        sum_contribution_valid = contribution_valid.sum(dim=1)
 
-        # Calculate the common good per group
-        common_good_per_group = (
-            sum_contribution * 1.6 - sum_punishment
-        ) / sum_contribution_valid
-        # Set common good to 0 if no valid contributions
-        common_good_per_group = th.where(
+        return sum_contribution * 1.6 - sum_punishment
+
+    def share_pool_per_group(self, common_pool, contribution_valid):
+        """Split each group's pool equally between the players who gave input.
+
+        `payoff = 20 - c - p + pool/n_valid` reproduces the human `payoff`
+        column exactly on every row with n_valid > 0 (max residual 7.1e-15,
+        n = 19,166), which is what fixes the divisor. A group where nobody
+        gave input has no share to hand out.
+        """
+        sum_contribution_valid = self.count_valid_per_group(contribution_valid)
+        return th.where(
             sum_contribution_valid > 0,
-            common_good_per_group,
-            th.zeros_like(common_good_per_group),
+            common_pool / sum_contribution_valid.clamp(min=1),
+            th.zeros_like(common_pool),
         )
-        return common_good_per_group
+
+    def compute_common_good_per_group(
+        self, contribution, punishment, contribution_valid
+    ):
+        """Each valid player's equal share of the group's common pool."""
+        return self.share_pool_per_group(
+            self.compute_common_pool_per_group(
+                contribution, punishment, contribution_valid
+            ),
+            contribution_valid,
+        )
 
     def compute_payoff_per_group(
         self, contribution, punishment, contribution_valid, common_good
     ):
-        # Used both with punishment and prev_punishment
-        # in update_payoff and update_reward
+        """Per-agent payoff plus its per-group mean and sum.
+
+        A player who gave no input was still paid: the game charged them
+        nothing, punished them nothing and still handed them the endowment
+        and their share of the pool. `payoff = 20 - 0 - 0 + pool/n_valid`
+        holds exactly on all 526 human timed-out rows with n_valid > 0 (max
+        residual 7.1e-15, mean payoff 33.94, never 0), and the 34 group-rounds
+        where everyone timed out pay exactly 20.0. So the invalid player's
+        *inputs* are zeroed, not their payoff, and they count towards both the
+        group's sum and its mean -- the mean therefore divides by the group's
+        membership, since every member now has a payoff.
+        """
+        # A timed-out player paid in nothing and was fined nothing
+        contribution = th.where(
+            contribution_valid, contribution, th.zeros_like(contribution)
+        )
+        punishment = th.where(contribution_valid, punishment, th.zeros_like(punishment))
+
         # Compute the payoff for the contributors
         contributor_payoff = 20 - contribution - punishment + common_good
 
-        # Set the payoff to 0 if the contribution is not valid
-        contributor_payoff = th.where(
-            contribution_valid, contributor_payoff, th.zeros_like(contributor_payoff)
-        )
-
-        # Per-group sum of valid contributor payoffs
+        # Per-group sum and mean over the group's members
         payoff_per_group = contributor_payoff.unsqueeze(-2) * self.agent_group_mask
-        contribution_valid = contribution_valid.unsqueeze(-2) * self.agent_group_mask
         sum_payoff_per_group = payoff_per_group.sum(dim=1)
-        valid_per_group = contribution_valid.sum(dim=1)
+        members_per_group = self.count_members_per_group()
 
         average_payoff_per_group = th.where(
-            valid_per_group > 0,
-            sum_payoff_per_group / valid_per_group.clamp(min=1),
+            members_per_group > 0,
+            sum_payoff_per_group / members_per_group.clamp(min=1),
             th.zeros_like(sum_payoff_per_group),
         )
         return contributor_payoff, average_payoff_per_group, sum_payoff_per_group
+
+    def compute_reward_per_group(self, contribution, punishment, contribution_valid):
+        """The manager's reward for one round, from that round's own values.
+
+        A pure function of its three arguments: it recomputes the pool, the
+        common good and the payoffs instead of reading the `common_good` /
+        `group_payoff*` state fields, so the reward cannot silently pick up
+        another round's outcome if the order of the updates in `step()` ever
+        changes. It is called from `punish()`, the moment the manager's
+        action resolves.
+
+        Modes:
+          * `common_pool` -- the group's common pool, 1.6 * sum(c) - sum(p).
+            What the real manager was paid on (reports/basics.md). No
+            shaping: the reward for acting at round s is round s's pool, so
+            punishment costs in the round it is given and pays back later
+            through raised contributions.
+          * `sum` / `avg` -- the sum / mean of the group's contributor
+            payoffs. Kept because earlier runs were produced under them;
+            worked through, `sum` equals 20 * n_valid + 0.6 * sum(c)
+            - 2 * sum(p), which prices a punishment point at 3.33
+            contribution points against the pool's 0.62 and spends 63% of
+            its variance on headcount (measured on the human data,
+            notes/autoresearch_log/manager-common-pool-reward.md).
+        """
+        common_pool = self.compute_common_pool_per_group(
+            contribution, punishment, contribution_valid
+        )
+        if self.reward_mode == "common_pool":
+            return common_pool
+
+        common_good_per_group = self.share_pool_per_group(
+            common_pool, contribution_valid
+        )
+        common_good = common_good_per_group.gather(1, self.agent_groups)
+        _, group_payoff, group_payoff_sum = self.compute_payoff_per_group(
+            contribution, punishment, contribution_valid, common_good
+        )
+        if self.reward_mode == "sum":
+            return group_payoff_sum
+        return group_payoff
 
     def compute_average_per_group(self, metric, valid=None):
         if valid is None:
@@ -283,12 +378,6 @@ class ArtificialHumanEnv:
                 self.common_good,
             )
         )
-
-    def update_reward(self):
-        if self.reward_mode == "sum":
-            self.reward = self.group_payoff_sum
-        else:
-            self.reward = self.group_payoff
 
     def update_own_grp_prev_mean_contr(self):
         """Provide the own_grp_prev_mean_contr node feature for the contribution
@@ -387,6 +476,15 @@ class ArtificialHumanEnv:
         return self.state
 
     def punish(self, punishment):
+        """Apply the managers' punishment and settle the round.
+
+        This is the moment the manager's action resolves, so this is where
+        the reward for that action is computed, from this round's own
+        contributions, punishments and validity flags. `step()` must not
+        compute it: by the time `step()` runs it has already advanced the
+        round number and drawn the next round's contributions, so a reward
+        derived there would be round-correct only by accident.
+        """
         assert self.state is not None
         assert punishment.max() < self.n_punishments
         assert punishment.dtype == th.int64
@@ -394,6 +492,9 @@ class ArtificialHumanEnv:
         self.punishment_valid = th.ones_like(self.punishment_valid)
         self.update_common_good()
         self.update_payoff()
+        self.reward = self.compute_reward_per_group(
+            self.contribution, self.punishment, self.contribution_valid
+        )
         return self.state
 
     def _run_switch_predictor(self):
@@ -413,6 +514,12 @@ class ArtificialHumanEnv:
         self.state["agent_group"] = self.agent_groups.clone()
 
     def step(self):
+        """Close round s and open round s+1.
+
+        The reward returned is round s's, computed in `punish()` when the
+        manager's action resolved; nothing here recomputes it, so advancing
+        the round and drawing round s+1's contributions cannot shift it.
+        """
         assert self.state is not None
         if self.done:
             raise ValueError("Environment is done already.")
@@ -445,5 +552,4 @@ class ArtificialHumanEnv:
             if pending_switch is not None:
                 self.apply_switch(pending_switch)
             self.update_contribution()
-        self.update_reward()
         return self.state, self.reward, self.done
