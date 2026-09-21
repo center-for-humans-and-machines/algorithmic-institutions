@@ -295,12 +295,17 @@ def within_world(pe):
     return pd.DataFrame(rows)
 
 
-def vs_control(pe):
-    """Focal seat against the SAME seat of the symmetric control.
+def vs_control(pe, seat="focal"):
+    """One seat against the SAME seat of the symmetric control.
 
-    `prop10_vs_ah_punisher`'s group 0 against `ah_punisher_vs_ah_punisher`'s
-    group 0: same seat, same rival, only the rule differs. This is the
-    paired setting's analogue of the sweep's margin over the clone."""
+    `seat="focal"`: `prop10_vs_ah_punisher`'s group 0 against
+    `ah_punisher_vs_ah_punisher`'s group 0 -- same seat, same rival, only the
+    rule differs. This is the paired setting's analogue of the sweep's margin
+    over the clone.
+
+    `seat="rival"`: the same contrast on the OTHER seat, which is what the
+    rival gains or loses merely from having this rule across the fence,
+    without changing its own policy."""
     controls = {CLONE: f"{CLONE}_vs_{CLONE}", NEVER: f"{NEVER}_vs_{NEVER}"}
     idx = pe.set_index(["pairing", "seat", "episode"])
     rows = []
@@ -309,14 +314,58 @@ def vs_control(pe):
         ctrl = controls[rival]
         if pairing == ctrl:
             continue
-        f = sub[sub["seat"] == "focal"].set_index("episode").sort_index()
-        c = idx.xs((ctrl, "focal"), level=("pairing", "seat")).sort_index()
-        row = {"pairing": pairing, "focal": focal, "rival": rival, "control": ctrl}
+        f = sub[sub["seat"] == seat].set_index("episode").sort_index()
+        c = idx.xs((ctrl, seat), level=("pairing", "seat")).sort_index()
+        row = {
+            "pairing": pairing,
+            "focal": focal,
+            "rival": rival,
+            "seat": seat,
+            "control": ctrl,
+        }
         for m in METRICS:
             d, lo, hi = unpaired_ci(f[m], c[m])
             row[f"d_{m}"], row[f"d_{m}_lo"], row[f"d_{m}_hi"] = d, lo, hi
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+def who_leaves(df):
+    """Which members a seat loses, measured at the round the move is decided.
+
+    Switching is decided at round s and applied at s+1, and `switch_every` is
+    4, so the decision rounds are s with (s + 1) % 4 == 0. For each seat this
+    compares the contribution and the punishment of the members who leave
+    with those of the members who stay -- the selection the group size result
+    is made of."""
+    d = df.copy()
+    d["agent"] = d["participant_code"].str.split("_").str[0].astype(int)
+    d = d.sort_values(["pairing", "episode", "agent", "round_number"])
+    d["next_group"] = d.groupby(["pairing", "episode", "agent"])["group_id"].shift(-1)
+    d["leaves"] = (d["next_group"] != d["group_id"]) & d["next_group"].notna()
+    pre = d[((d["round_number"] + 1) % 4 == 0) & d["contribution_valid"].astype(bool)]
+
+    rows = []
+    for (pairing, gid), s in pre.groupby(["pairing", "group_id"]):
+        seat = "focal" if gid == 0 else "rival"
+        lv, st = s[s["leaves"]], s[~s["leaves"]]
+        rows.append(
+            {
+                "pairing": pairing,
+                "seat": seat,
+                "manager": seat_manager(pairing, seat),
+                "leave_rate": float(s["leaves"].mean()),
+                "c_leavers": float(lv["contribution"].mean()) if len(lv) else np.nan,
+                "c_stayers": float(st["contribution"].mean()) if len(st) else np.nan,
+                "p_leavers": float(lv["punishment"].mean()) if len(lv) else np.nan,
+                "p_stayers": float(st["punishment"].mean()) if len(st) else np.nan,
+                "n_decisions": int(len(s)),
+            }
+        )
+    out = pd.DataFrame(rows)
+    out["c_gap"] = out["c_leavers"] - out["c_stayers"]
+    out["p_gap"] = out["p_leavers"] - out["p_stayers"]
+    return out
 
 
 def round_series(g):
@@ -680,8 +729,16 @@ def main():
     ww = within_world(pe)
     ww.to_csv(os.path.join(args.out_dir, f"within_world_{args.tag}.csv"), index=False)
 
-    wc = vs_control(pe)
+    wc = vs_control(pe, "focal")
     wc.to_csv(os.path.join(args.out_dir, f"vs_control_{args.tag}.csv"), index=False)
+
+    wr = vs_control(pe, "rival")
+    wr.to_csv(
+        os.path.join(args.out_dir, f"vs_control_rival_{args.tag}.csv"), index=False
+    )
+
+    wl = who_leaves(df)
+    wl.to_csv(os.path.join(args.out_dir, f"who_leaves_{args.tag}.csv"), index=False)
 
     series = round_series(g)
     series.to_csv(
@@ -727,6 +784,23 @@ def main():
             f"pool {r['d_pool_corr']:+7.2f} "
             f"[{r['d_pool_corr_lo']:+7.2f}, {r['d_pool_corr_hi']:+7.2f}]"
         )
+
+    print(f"\n=== what the RIVAL seat gains from facing this rule ({args.tag}) ===")
+    for _, r in wr.iterrows():
+        print(
+            f"  {r['rival']:>12s} facing {r['focal']:<15s} "
+            f"size {r['d_group_size']:+6.2f} "
+            f"[{r['d_group_size_lo']:+6.2f}, {r['d_group_size_hi']:+6.2f}]   "
+            f"pool {r['d_pool_corr']:+7.2f} "
+            f"[{r['d_pool_corr_lo']:+7.2f}, {r['d_pool_corr_hi']:+7.2f}]"
+        )
+
+    print(f"\n=== who leaves a seat, at the rounds a move is decided ({args.tag}) ===")
+    print(
+        wl.sort_values(["seat", "leave_rate"], ascending=[True, False]).to_string(
+            index=False, float_format=lambda v: f"{v:.2f}"
+        )
+    )
 
     sweep_side_by_side(summary, wc, args.out_dir)
 
