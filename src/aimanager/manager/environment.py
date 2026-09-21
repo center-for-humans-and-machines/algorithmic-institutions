@@ -387,10 +387,27 @@ class ArtificialHumanEnv:
         return self.state
 
     def punish(self, punishment):
+        """Realise the manager's action, as the game realised it.
+
+        A punishment aimed at a player who gave no input was never charged
+        and never shown: all 560 `player_no_input` rows in the human data
+        carry `punishment == 0.0` exactly, and the group identity
+        `common_good = 1.6*sum(c) - sum(p)` holds with that zero in place.
+        The accounting here already agrees -- `compute_common_good_per_group`
+        and `compute_payoff_per_group` zero the invalid cell themselves -- so
+        the action was free to the manager while `step()` still copied the raw
+        value into `prev_punishment`, the contribution model's only channel
+        from the manager. Zeroing it where the action is realised makes what
+        every model is served, and what the run records, the value the game
+        used. Unlike the contribution substitution this one is applied to
+        `self.state`: the recorded output must carry it, because the human
+        data does (`convert.load_human` keeps those rows, at 0)."""
         assert self.state is not None
         assert punishment.max() < self.n_punishments
         assert punishment.dtype == th.int64
-        self.punishment = punishment
+        self.punishment = th.where(
+            self.contribution_valid, punishment, th.zeros_like(punishment)
+        )
         self.punishment_valid = th.ones_like(self.punishment_valid)
         self.update_common_good()
         self.update_payoff()
