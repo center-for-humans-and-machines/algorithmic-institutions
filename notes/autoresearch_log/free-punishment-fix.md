@@ -149,7 +149,7 @@ Raven jobs **30400961** (frontier) and **30400962** (reference), both COMPLETED,
 | **22-row mean** | **1.0393** | **1.0375** | **-0.0018** | **0.04** | **no** | | |
 | rows <= 1 | 14 | 14 | 0 | 0.00 | no | | |
 
-**Not one of the 22 rows moves as much as a quarter of its own seed sd.** The largest movement in the table is the protected row RCE at -0.0215, which is 0.20 of its floor of 0.106; fourteen rows move by less than 0.001; no row changes band. Sixteen of the 22 move in the improving direction and six against, which is the pattern of one cell's worth of divergence rather than of a mechanism. Under the symmetry rule none of it counts either way.
+**Not one of the 22 rows moves as much as a quarter of its own seed sd.** The largest movement in the table is the protected row RCE at -0.0215, which is 0.20 of its floor of 0.106; sixteen rows move by less than 0.001 and four not at all; no row changes band. Thirteen move in the improving direction and five against, which is the pattern of one cell's worth of divergence rather than of a mechanism. Under the symmetry rule none of it counts either way.
 
 **Reference stack** `23_2g8a_self_gnn_contr_gnn_switch`, reported and not gated. Two pairings, and they are the interesting part of this experiment:
 
