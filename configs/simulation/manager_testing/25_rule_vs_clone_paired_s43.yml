@@ -1,0 +1,158 @@
+# auto/rule-vs-clone-paired, seed 43.
+#
+# The sweep ran every manager in SELF-PLAY: MultiManager separates managers
+# along the batch dimension, so each manager governed its own parallel
+# population and none of them ever faced another. This arm puts a rule and a
+# RIVAL in the SAME world, one group each, so a manager can win or lose
+# members to the other seat -- the game the RL manager is actually trained in.
+#
+# Two rival families, because they are different games. Against the clone
+# (`ah_punisher`, our clone of a human manager) both seats punish and members
+# choose between two disciplined groups. Against `never` one seat is a refuge
+# with no punishment at all, so a punishing rule asks its members to accept a
+# cost they could avoid by moving -- the harder test of whether punishing
+# survives when leaving is easy.
+#
+# `{focal}_vs_{rival}`: group_0 carries the focal manager, group_1 the
+# rival. `ah_punisher_vs_ah_punisher` and `never_vs_never` are the symmetric
+# controls that say whether an asymmetry is the rule or the seat;
+# `never_vs_ah_punisher` and `ah_punisher_vs_never` are seat swaps of each
+# other and connect the two families.
+#
+# Same stack, same artifacts, same 2x8 / 24-round / 100-episode protocol and
+# the same `reseed_per_run` seed discipline as the sweep's head-to-head arm,
+# and ONE manager set for all pairings so every run draws from the same
+# manager population (sweep log, note 4).
+seed: 43
+reseed_per_run: true
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  never:
+    type: rule_based
+    rule: never
+  ah_punisher:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  prop10:
+    type: rule_based
+    rule: proportional
+    rate: 1.0
+  thr9_p10:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 10
+  thr9_p5:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 5
+  human_severity:
+    type: rule_based
+    rule: severity_table
+    table:
+    - 10.0
+    - 8.0
+    - 6.0
+    - 6.0
+    - 7.0
+    - 6.0
+    - 5.0
+    - 4.0
+    - 5.0
+    - 4.0
+    - 5.0
+    - 3.0
+    - 5.0
+    - 4.0
+    - 4.0
+    - 4.0
+    - 4.0
+    - 3.0
+    - 4.0
+    - 3.0
+    - 7.0
+    prob_table:
+    - 0.4685
+    - 0.5428
+    - 0.5266
+    - 0.3715
+    - 0.4187
+    - 0.4553
+    - 0.3827
+    - 0.4068
+    - 0.4496
+    - 0.4417
+    - 0.2594
+    - 0.2597
+    - 0.2703
+    - 0.3192
+    - 0.2174
+    - 0.1876
+    - 0.2436
+    - 0.1656
+    - 0.1885
+    - 0.2464
+    - 0.0381
+pairings:
+- name: ah_punisher_vs_ah_punisher
+  group_0: ah_punisher
+  group_1: ah_punisher
+- name: never_vs_never
+  group_0: never
+  group_1: never
+- name: prop10_vs_ah_punisher
+  group_0: prop10
+  group_1: ah_punisher
+- name: thr9_p10_vs_ah_punisher
+  group_0: thr9_p10
+  group_1: ah_punisher
+- name: thr9_p5_vs_ah_punisher
+  group_0: thr9_p5
+  group_1: ah_punisher
+- name: human_severity_vs_ah_punisher
+  group_0: human_severity
+  group_1: ah_punisher
+- name: never_vs_ah_punisher
+  group_0: never
+  group_1: ah_punisher
+- name: prop10_vs_never
+  group_0: prop10
+  group_1: never
+- name: thr9_p10_vs_never
+  group_0: thr9_p10
+  group_1: never
+- name: thr9_p5_vs_never
+  group_0: thr9_p5
+  group_1: never
+- name: human_severity_vs_never
+  group_0: human_severity
+  group_1: never
+- name: ah_punisher_vs_never
+  group_0: ah_punisher
+  group_1: never
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups:
+- 0
+- 0
+- 0
+- 0
+- 1
+- 1
+- 1
+- 1
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+output_dir: plots/simulation/25_rule_vs_clone_paired_s43
+figure_name: rule_vs_clone_paired_s43
+save_per_round: true
+basedir: .
