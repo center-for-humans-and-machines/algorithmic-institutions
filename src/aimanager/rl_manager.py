@@ -15,6 +15,7 @@ from aimanager.manager.memory import Memory
 from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.artificial_humans import AH_MODELS
 from aimanager.manager.manager import ArtificalManager
+from aimanager.manager.linear_opponent import load_opponent
 from aimanager.utils.utils import make_dir
 from aimanager.utils.array_to_df import add_labels
 
@@ -71,10 +72,17 @@ def run_batch(
     state = env.served_state()
     metric_list = []
     for round_number in count():
-        statecopy = {k: v.clone() for k, v in state.items() if k in replay_keys}
+        # What a manager is allowed to see. A player who gave no input
+        # contributed nothing and was charged nothing: that is the value the
+        # game used and the only one the punishers ever saw in training. The
+        # env keeps the dataset default in its own state, so both managers are
+        # handed environment.served_state() instead, and the replay copy comes
+        # from the same view the policy acted on.
+        served = env.served_state()
+        statecopy = {k: v.clone() for k, v in served.items() if k in replay_keys}
 
         action, q_values = manager.get_action(
-            state, first=round_number == 0, greedy=on_policy
+            served, first=round_number == 0, greedy=on_policy
         )
 
         # Two-manager mode: RL produces (B, 8, 1) over all agents; opponent
@@ -86,7 +94,7 @@ def run_batch(
             # variant). The autoreg punishment AH ignores it. We pass it
             # uniformly so the same call site supports both opponents.
             opp_action, _ = opponent_manager.predict(
-                state,
+                served,
                 reset_rnn=round_number == 0,
                 edge_index=env.batch_edge_index,
             )
@@ -235,11 +243,14 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     if "opponent_manager" in config:
         opponent_manager_path = os.path.join(basedir, config["opponent_manager"])
         print(f"Loading opponent manager from {opponent_manager_path}")
-        opponent_manager = (
-            AH_MODELS[config["artificial_humans_model"]]
-            .load(opponent_manager_path, device=device)
-            .to(device)
-        )
+        # `.joblib` -> the batched linear punisher, anything else -> a GNN
+        # punisher: the same extension dispatch the simulation configs use, so
+        # this slot can name a linear baseline where a GNN artifact used to sit.
+        opponent_manager = load_opponent(
+            opponent_manager_path,
+            n_groups=config["env_args"].get("n_groups", 1),
+            device=device,
+        ).to(device)
 
     # Switch predictor — required for group-switching dynamics. Optional
     # for backwards compatibility with legacy single-group configs. Key name
