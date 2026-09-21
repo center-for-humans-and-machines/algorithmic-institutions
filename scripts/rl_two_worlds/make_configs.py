@@ -50,16 +50,16 @@ VALID_MODEL = "artifacts/artificial_humans/raven_script_22/model/rnn_False__data
 # this branch yet, so `sum` stands here only so the cost pilot can run: wall
 # clock does not depend on the reward. Flip this one constant when that branch
 # lands, and regenerate.
-REWARD_MODE = "sum"
+REWARD_MODE = "common_pool"
 
 BLOCKED_BANNER = """\
-# !! NOT YET RUN -- BLOCKED. Do not submit this config.
-#   * the free-punishment defect is unfixed: a punishment aimed at a timed-out
-#     player costs the manager nothing, yet every artificial human is still
-#     shown it (review D1). Under a common-pool reward punishment is costly
-#     everywhere EXCEPT on those cells, so a free lever strictly dominates a
-#     paid one and a learner will find it.
-#   * REWARD_MODE is still `sum`; the real runs train on the common pool.
+# !! NOT YET RUN -- BLOCKED on the free-punishment defect (review D1): a
+# punishment aimed at a timed-out player costs the manager nothing, yet every
+# artificial human is still shown it. Under this config's common-pool reward
+# punishment is costly everywhere EXCEPT on those cells, so a free lever
+# strictly dominates a paid one and a learner has every reason to find it.
+# Clear it with auto/free-punishment-fix and re-run
+# scripts/rl_two_worlds/launch_guards.py before submitting.
 # See notes/autoresearch_log/rl-manager-two-worlds.md."""
 
 PILOT_BANNER = """\

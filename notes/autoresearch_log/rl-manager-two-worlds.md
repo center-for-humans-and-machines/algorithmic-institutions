@@ -361,3 +361,44 @@ The behavioural table below is the one the experiment exists to fill, per seed:
     A `--sync-only` to ship a code change is therefore safe with runs' output
     sitting on the cluster — the hazard the `--no-sync` rule guards against
     does not apply to this directory.
+
+18. **Guard 1 passes exactly: the reward is the common pool.** Merged
+    `auto/manager-common-pool-reward` (clean, no conflicts) and flipped
+    `REWARD_MODE`. `scripts/rl_two_worlds/launch_guards.py` drives the real
+    env from the real config and checks `env.reward` three ways over 24 rounds
+    x 64 episodes x 2 groups, with the manager forced to punish the maximum on
+    every cell so the reward sits far from 0 and the check is not satisfied
+    trivially:
+
+    | check | max abs residual |
+    |---|---|
+    | vs `1.6*sum(c) - sum(p)` recomputed from the env's state | **0.0** (exact) |
+    | vs `common_good * n_valid`, a different code path | 1.5e-05 (float32) |
+    | vs the same rollout under `reward_mode='sum'` | 240.0 — the modes genuinely differ |
+
+    The third row is what makes the first meaningful: flipping a named
+    constant is exactly the kind of change that can silently not happen, and a
+    `sum` rollout deviating from the pool by up to 240 shows the flip is live.
+    The `common_good` cross-check matters for the same reason — it is produced
+    by `update_common_good`, not by the reward path, so the agreement is a
+    confirmation rather than a restatement.
+
+19. **Guard 2 fails before the fix — which is what makes it a guard.** The
+    same run, on the unfixed tree, found the lever wide open: of 1,659
+    timed-out cells observed being served to the contribution, validity and
+    switch models, **only 1,207 carried punishment 0**. The rest carried real
+    punishment, 194 of them the maximum 30, and `prev_punishment` shows the
+    same population one round later — the channel the contribution model
+    actually reads. Recorded as
+    `plots/data_analysis/evaluation/rl_manager_two_worlds/guards_before_fix.json`.
+
+    A fourth number in the same file reads the defect from the accounting side
+    rather than the serving side: the pool computed *without* zeroing invalid
+    cells differs from the env's reward by up to 31.2, i.e. the env does zero
+    them. That is precisely the asymmetry D1 describes — the punishment is not
+    charged to the manager and is still delivered to the players. Under a
+    common-pool reward, where every other punishment point costs 1 directly,
+    that makes the timed-out cells the only free action in the space.
+
+    The guard is therefore known to be capable of failing, and the post-fix
+    run is a real test rather than a formality.
