@@ -106,14 +106,30 @@ def bootstrap_ci(per_episode, n_boot=2000, seed=0):
     return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
 
 
-def summarise_sim(df, label):
+def per_episode_frame(df):
     er = episode_rounds(
         group_rounds(df, ["episode", "round_number", "group_id"]),
         ["episode", "round_number"],
     )
-    per_ep = er.groupby("episode")[
+    return er.groupby("episode")[
         ["pool_env", "pool_corr", "payoff_env", "payoff_corr"]
     ].mean()
+
+
+def diff_ci(a, b, n_boot=4000, seed=1):
+    """95% interval of mean(a) - mean(b), resampling each side's episodes."""
+    rng = np.random.default_rng(seed)
+    a = np.asarray(a, dtype=float)
+    b = np.asarray(b, dtype=float)
+    da = a[rng.integers(0, len(a), size=(n_boot, len(a)))].mean(axis=1)
+    db = b[rng.integers(0, len(b), size=(n_boot, len(b)))].mean(axis=1)
+    d = da - db
+    return float(d.mean()), float(np.percentile(d, 2.5)), float(np.percentile(d, 97.5))
+
+
+def summarise_sim(df, label, per_ep=None):
+    if per_ep is None:
+        per_ep = per_episode_frame(df)
     valid = df["contribution_valid"].astype(bool)
     # the policy statistics are about what a manager DOES, so they are taken
     # where the manager acted: simulated managers always act, human ones gave
@@ -223,23 +239,39 @@ def main():
         return
 
     frames = []
-    for d in args.sim_dirs:
+    for i, d in enumerate(args.sim_dirs):
         p = os.path.join(d, "per_round.parquet")
         df = pd.read_parquet(p)
         df["manager"] = df["run"].map(manager_name)
+        # episodes are numbered 0..99 inside every run, so pooling the same
+        # manager's runs across seeds needs them made distinct first
+        df["episode"] = f"{i}_" + df["episode"].astype(str)
         frames.append(df)
     sim = pd.concat(frames, ignore_index=True)
 
-    rows, shapes = [], []
+    rows, shapes, per_ep = [], [], {}
     for label, sub in sim.groupby("manager"):
-        rows.append(summarise_sim(sub, label))
+        per_ep[label] = per_episode_frame(sub)
+        rows.append(summarise_sim(sub, label, per_ep[label]))
         shapes.append(policy_shape(sub, label))
 
     human = load_human()
-    rows.append(summarise_sim(human, "human managers (real)"))
-    shapes.append(policy_shape(human, "human managers (real)"))
+    per_ep[HUMAN_LABEL] = per_episode_frame(human)
+    rows.append(summarise_sim(human, HUMAN_LABEL, per_ep[HUMAN_LABEL]))
+    shapes.append(policy_shape(human, HUMAN_LABEL))
 
     table = pd.DataFrame(rows).sort_values("cg_env", ascending=False)
+    # what one point of punishment buys, against the never-punish arm. The
+    # pool pays 1.6 per contribution unit and charges 1 per punishment point,
+    # so punishment pays for the COMMON GOOD above 1/1.6 = 0.625; the group
+    # payoff sum pays 0.6 and charges 2, so it pays there only above 3.33
+    # (review S1). The same number therefore decides the two objectives
+    # differently.
+    base = table.loc[table["manager"] == "never", "mean_contribution"]
+    if len(base):
+        table["contr_bought_per_punishment"] = (
+            table["mean_contribution"] - float(base.iloc[0])
+        ) / table["mean_punishment"].replace(0.0, np.nan)
     table["rank_env"] = table["cg_env"].rank(ascending=False).astype(int)
     table["rank_corr"] = table["cg_corr"].rank(ascending=False).astype(int)
     table["rank_payoff_env"] = table["payoff_env"].rank(ascending=False).astype(int)
@@ -265,6 +297,7 @@ def main():
         "share_punished",
         "mean_punishment",
         "mean_punishment_pos",
+        "contr_bought_per_punishment",
         "timeout_rate",
         "timeout_share_punished",
         "timeout_punishment_share",
@@ -285,7 +318,45 @@ def main():
     for a, b in pairs:
         print(f"  {a:11s} vs {b:11s}: {table[a].corr(table[b], method='spearman'):.3f}")
 
+    contrasts(per_ep, table, args.out_dir, args.tag)
     make_figures(table, shape, args.out_dir, args.tag)
+
+
+def contrasts(per_ep, table, out_dir, tag):
+    """Margin against the two reference managers, with its own bootstrap."""
+    refs = [r for r in ("ah_punisher", "never") if r in per_ep]
+    if not refs:
+        return
+    rows = []
+    for m in table["manager"]:
+        if m not in per_ep:
+            continue
+        row = {"manager": m}
+        for ref in refs:
+            for metric, col in [("pool_env", "cg"), ("payoff_env", "payoff")]:
+                d, lo, hi = diff_ci(per_ep[m][metric], per_ep[ref][metric])
+                row[f"{col}_vs_{ref}"] = d
+                row[f"{col}_vs_{ref}_lo"] = lo
+                row[f"{col}_vs_{ref}_hi"] = hi
+        rows.append(row)
+    out = pd.DataFrame(rows)
+    path = os.path.join(out_dir, f"contrasts_{tag}.csv")
+    out.to_csv(path, index=False)
+    print(f"\nwrote {path}")
+    print("margin in common good / in group payoff sum, 95% episode bootstrap")
+    for ref in refs:
+        print(f"\n  vs {ref}:")
+        for _, r in out.iterrows():
+            if r["manager"] == ref:
+                continue
+            print(
+                f"    {r['manager']:22s} "
+                f"CG {r[f'cg_vs_{ref}']:+7.2f} "
+                f"[{r[f'cg_vs_{ref}_lo']:+7.2f}, {r[f'cg_vs_{ref}_hi']:+7.2f}]   "
+                f"payoff {r[f'payoff_vs_{ref}']:+7.2f} "
+                f"[{r[f'payoff_vs_{ref}_lo']:+7.2f}, "
+                f"{r[f'payoff_vs_{ref}_hi']:+7.2f}]"
+            )
 
 
 def make_figures(table, shape, out_dir, tag):
