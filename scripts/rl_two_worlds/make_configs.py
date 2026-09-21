@@ -53,13 +53,17 @@ VALID_MODEL = "artifacts/artificial_humans/raven_script_22/model/rnn_False__data
 REWARD_MODE = "common_pool"
 
 BLOCKED_BANNER = """\
-# !! NOT YET RUN -- BLOCKED on the free-punishment defect (review D1): a
-# punishment aimed at a timed-out player costs the manager nothing, yet every
-# artificial human is still shown it. Under this config's common-pool reward
-# punishment is costly everywhere EXCEPT on those cells, so a free lever
-# strictly dominates a paid one and a learner has every reason to find it.
-# Clear it with auto/free-punishment-fix and re-run
-# scripts/rl_two_worlds/launch_guards.py before submitting.
+# Cleared to run. Both pre-launch guards pass on the merged tree
+# (scripts/rl_two_worlds/launch_guards.py; evidence in
+# plots/data_analysis/evaluation/rl_manager_two_worlds/guards_after_fix.json):
+#   * the reward is the common pool -- env.reward equals 1.6*sum(c) - sum(p)
+#     to 0.0, agrees with common_good * n_valid through a different code path,
+#     and differs from reward_mode='sum' by up to 240, which is what shows the
+#     mode really changed rather than the constant merely being renamed;
+#   * the free punishment lever is closed -- with the manager forced to punish
+#     the maximum on every cell, all 1,659 timed-out cells are served
+#     punishment 0 and all 627 previously-timed-out cells prev_punishment 0.
+#     Before auto/free-punishment-fix the same run served 194 of them a 30.
 # See notes/autoresearch_log/rl-manager-two-worlds.md."""
 
 PILOT_BANNER = """\

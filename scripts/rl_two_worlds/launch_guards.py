@@ -134,19 +134,31 @@ def run_rollout(env, opponent, n_rounds, watch_punishment=False, seed=0):
             inner = model.predict
 
             def probed(state, _inner=inner, **kw):
-                valid = state["contribution_valid"].cpu().reshape(-1).numpy()
-                ok = valid.astype(bool)
+                ok = state["contribution_valid"].cpu().reshape(-1).numpy()
+                ok = ok.astype(bool)
                 watched["calls"] += 1
                 watched["agent_cells"] += len(ok)
                 watched["timeout_cells"] += int((~ok).sum())
-                for key, sink in (
-                    ("punishment", served_at_timeout),
-                    ("prev_punishment", served_prev_at_timeout),
+                # Each channel is read against the validity of the round whose
+                # punishment it carries. `punishment` is this round's, so it
+                # takes this round's mask. `prev_punishment` is round t-1's,
+                # so it takes round t-1's: a player who gave input at t-1 was
+                # punishable then, that punishment was charged, and it is
+                # right for it to still be visible at t even though they have
+                # since timed out. Masking it with round t's validity would
+                # flag correct behaviour as a defect.
+                prev_ok = state.get("prev_contribution_valid")
+                if prev_ok is not None:
+                    prev_ok = prev_ok.cpu().reshape(-1).numpy().astype(bool)
+                    prev_ok = prev_ok | state["is_first"].cpu().reshape(-1).numpy()
+                for key, sink, mask in (
+                    ("punishment", served_at_timeout, ok),
+                    ("prev_punishment", served_prev_at_timeout, prev_ok),
                 ):
-                    if key not in state:
+                    if key not in state or mask is None:
                         continue
                     v = state[key].detach().cpu().reshape(-1).numpy()
-                    for x in v[~ok]:
+                    for x in v[~mask]:
                         sink[float(x)] += 1
                 return _inner(state, **kw)
 
@@ -218,7 +230,8 @@ def main():
         "punishment_values_served_at_timeout": {
             str(k): v for k, v in sorted(served.items())
         },
-        "prev_punishment_values_served_at_timeout": {
+        # keyed on round t-1's validity: see the mask note in `probed`
+        "prev_punishment_values_served_at_prev_timeout": {
             str(k): v for k, v in sorted(served_prev.items())
         },
         "timeout_cells_observed": watched["timeout_cells"],

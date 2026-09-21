@@ -98,21 +98,13 @@ the artificial punisher.
    sibling sweep's best rules.
 7. Tables under `plots/data_analysis/evaluation/rl_manager_two_worlds/`.
 
-## Status: setup done and priced; the three runs are NOT started
+## Status: both guards pass, three seeds running
 
-Only the cost pilot has run. The three real configs carry a
-`NOT YET RUN -- BLOCKED` banner and are held on two things:
-
-1. **The free-punishment defect (review D1) is unfixed.** Under a common-pool
-   reward this stops being a curiosity: punishment costs the manager
-   everywhere *except* on a timed-out cell, so a free lever strictly dominates
-   a paid one and a value-maximising learner has every reason to find it. That
-   is the exact failure mode that would invalidate the headline question. Fix
-   it first, or start with the diagnostic — measurement-plan item 2 is a
-   required output either way.
-2. **The common-pool reward mode is not on this branch yet.**
-   `auto/manager-common-pool-reward` was not on the remote at the time of
-   writing. `REWARD_MODE` in the generator is one line.
+Both blockers are cleared. `auto/manager-common-pool-reward` merged cleanly;
+`auto/free-punishment-fix` merged with the single predicted docstring conflict
+and its own test file passes on the merged tree. Both pre-launch guards pass
+(notes 22-24). Jobs **30401560** (s42), **30401561** (s43), **30401562**
+(s44), ~6 h wall clock.
 
 ## Successor
 
@@ -428,3 +420,80 @@ The behavioural table below is the one the experiment exists to fill, per seed:
     separate run of the same machinery with the checkpoint's greedy action in
     place of the forced one. Written once the checkpoints exist, rather than
     guessed at now.
+
+22. **Both fixes merged; the free-punishment merge conflicted exactly where
+    its own log predicted.** `auto/free-punishment-fix` at `799e96a`: one
+    conflicted file, `environment.py`, one conflicted hunk, the two docstrings
+    at the top of `punish()`. Resolved by keeping both halves and changing no
+    code, and the merged body was then read back against the block that
+    branch's section 4 predicted — the zeroing first, then the accounting,
+    then `compute_reward_per_group` on the already-charged state. The order
+    matters and is idempotent either way: `th.where(valid, p, 0)` applied
+    twice is itself, so the reward cannot double-count the correction.
+
+    That branch warned that an earlier `merge-tree` check had reported *no*
+    conflict and silently dropped its change. The cheap check against that is
+    its own test file, so it was run: `test_free_punishment.py` plus
+    `test_manager_reward.py`, `test_rl_manager_timeout_view.py` and
+    `test_linear_opponent.py` — **34 passed** on Raven against the merged
+    tree. Four of those fail loudly if the zeroing is lost.
+
+23. **Guard 2 failed once more before it passed, and the fault was the
+    guard's.** On the merged tree the current-round channel came back clean
+    immediately — all 1,659 timed-out cells served `punishment` 0 — but
+    `prev_punishment` still showed 55 cells at 30. That is not the lever: the
+    guard was masking `prev_punishment` with round *t*'s validity when that
+    channel carries round *t-1*'s punishment. A player who gave input at t-1
+    was punishable then, the punishment was charged, and it is correct for it
+    to remain visible at t even though they have since timed out. Masking a
+    lagged channel with a current mask flags correct behaviour as a defect.
+    Corrected to `prev_contribution_valid` (with round 0's default excluded,
+    as `served_state` does), and the same run then reads **627 of 627
+    previously-timed-out cells at 0**.
+
+    Worth stating because the failure mode is symmetrical with the defect
+    itself: the whole D1 family came from applying a value at the wrong
+    round, and the first attempt to police it made the same class of mistake
+    in the opposite direction.
+
+24. **Both guards pass; the three seeds are launched.** Evidence:
+    `plots/data_analysis/evaluation/rl_manager_two_worlds/guards_{before,after}_fix.json`.
+
+    | guard | before the fix | after |
+    |---|---|---|
+    | reward == `1.6*sum(c) - sum(p)`, max residual | 0.0 | **0.0** |
+    | vs `common_good * n_valid` (different code path) | 1.5e-05 | **1.5e-05** |
+    | vs `reward_mode='sum'` (must differ) | 240.0 | **240.0** |
+    | timed-out cells served `punishment` 0 | 1,207 / 1,659 | **1,659 / 1,659** |
+    | of which served the maximum 30 | 194 | **0** |
+    | previously-timed-out cells served `prev_punishment` 0 | — | **627 / 627** |
+
+    The guard forces the maximum punishment on every group-0 cell, so it tests
+    the mechanism rather than a policy; the before/after contrast on the
+    identical rollout is what shows the path is genuinely exercised and that
+    the zeros are not the trivial kind. Jobs **30401560** (s42), **30401561**
+    (s43), **30401562** (s44).
+
+25. **The rule sweep answers the control question before my runs land, and it
+    changes what a quiet policy would mean.** `auto/rule-based-manager-sweep`
+    (PR #207), pooling three seeds: `never` earns 99.63 common good, the
+    artificial punisher 111.06, `thr9_p10` ("punish 10 whenever a player
+    contributed 9 or less") 123.79, `prop10` 136.04. Fifteen of eighteen
+    punishing rules beat `never` with intervals excluding zero, and the
+    arithmetic says why — the pool pays 1.6 per contribution unit and charges
+    1 per punishment point, so punishment pays above 0.625 units bought per
+    point and the rules buy 0.83 to 1.47.
+
+    So the branch of my control that said "the world is telling us punishment
+    does not pay" is now **closed in this world**: it does pay, decisively.
+    If the learned managers converge on a near-zero policy, the remaining
+    reading is training failure, not a correct read of the environment —
+    roughly 25 common good left on the table against `prop10`, against a
+    seed-to-seed standard deviation of 0.86 to 10.9. I will not soften that.
+
+    One caveat on comparability, from the sweep's own section 3.0: its common
+    good sums both groups with the same manager on both sides, whereas my
+    cross-evaluation puts the learned manager in group 0 against the clone in
+    group 1. The like-for-like baseline is the sibling's competing arm (rules
+    against the clone and against a never-punish rival, one group each), and
+    my runs should be read against that rather than against the table above.
