@@ -752,13 +752,15 @@ def run_analyse(args):
             tf[name]["e_model"] = tf[name]["e_next"]
 
     main = [a for a in ["human", *ARMS] if a in pans]
-    dump(pd.DataFrame(sum((coef_rows(a, pans[a]) for a in main), [])), "coefficients")
+    coef = dump(
+        pd.DataFrame(sum((coef_rows(a, pans[a]) for a in main), [])), "coefficients"
+    )
     if tf:
         rows = []
         for name, t in tf.items():
             rows += coef_rows(f"tf_{name}", t, "e_model")
         rows += coef_rows("tf_frame_human_y", tf["trunk"], "y")
-        dump(pd.DataFrame(rows), "coefficients_tf")
+        coef = pd.concat([coef, dump(pd.DataFrame(rows), "coefficients_tf")])
 
     alt = [a for a in ("human", "sim_noise_off", "sim_noise_on") if a in pans]
     alt_rows = sum((spec_rows(a, pans[a]) for a in alt), [])
@@ -839,7 +841,7 @@ def run_analyse(args):
         if p.exists():
             print(f"--- {name} ---")
             print(pd.read_csv(p).to_string(index=False))
-    figure(pans, tf, qdf, floor_arms)
+    figure(pans, tf, qdf, floor_arms, coef)
     print(qdf.to_string())
 
 
@@ -851,7 +853,7 @@ COLORS = {
 }
 
 
-def figure(pans, tf, qdf, floor_arms):
+def figure(pans, tf, qdf, floor_arms, coef):
     import matplotlib
 
     matplotlib.use("Agg")
@@ -863,6 +865,7 @@ def figure(pans, tf, qdf, floor_arms):
     if "trunk" in tf:
         series.append(("tf_trunk", "model, teacher-forced"))
     series += [(a, a) for a in ("sim_noise_off", "sim_noise_on") if a in pans]
+    bars = {"human", "tf_trunk"}
     for i_ax, sample in [(0, "all"), (1, "stable")]:
         keys = [f"b_{sample}_{b}" for b in BLOCK_NAMES]
         if floor_arms:
@@ -874,23 +877,36 @@ def figure(pans, tf, qdf, floor_arms):
         for i, (a, lab) in enumerate(series):
             if a not in qdf.columns:
                 continue
-            vals = [qdf[a].get(k, np.nan) for k in keys]
-            ax[i_ax].plot(x + (i - 1) * 0.08, vals, "o-", color=COLORS.get(a, "0.4"),
-                          label=lab)  # fmt: skip
+            vals = np.array([qdf[a].get(k, np.nan) for k in keys], float)
+            pos = x + (i - 1) * 0.08
+            err = None
+            if a in bars:
+                c = coef[(coef["arm"] == a) & (coef["sample"] == sample)]
+                c = c.set_index("block").reindex(BLOCK_NAMES)
+                err = [
+                    (vals - c["peer_mean_lo"]).to_numpy(),
+                    (c["peer_mean_hi"] - vals).to_numpy(),
+                ]
+            ax[i_ax].errorbar(pos, vals, yerr=err, fmt="o-", capsize=3, lw=1.2,
+                              color=COLORS.get(a, "0.4"), label=lab)  # fmt: skip
         ax[i_ax].set_xticks(x)
         ax[i_ax].set_xticklabels(BLOCK_NAMES)
         ax[i_ax].set_ylabel("coefficient on the LOO group mean")
-        ax[i_ax].set_title(f"Shared-signal weight ({sample})")
+        ax[i_ax].set_title(f"Shared-signal weight ({sample} transitions)")
         ax[i_ax].legend(fontsize=7)
     p = OUT / "probe.csv"
     if p.exists():
         pr = pd.read_csv(p)
         pr = pr[(pr["set"] == "all") & (pr["model"] == "trunk")]
-        ax[2].plot(pr["delta"], pr["gain_peers"], "o-", label="peers (shared)")
-        ax[2].plot(pr["delta"], pr["gain_own"], "s-", label="own history")
+        for col, mark, lab in [
+            ("gain_own", "s-", "own history"),
+            ("gain_peers", "o-", "same-group peers (shared)"),
+            ("gain_other", "^-", "the other group"),
+        ]:
+            ax[2].plot(pr["delta"], pr[col], mark, label=lab)
         ax[2].axhline(0, color="0.6", lw=0.8)
-        ax[2].set_xlabel("shift applied to the recent level")
-        ax[2].set_ylabel("gain of E[c]")
+        ax[2].set_xlabel("shift applied to that channel's recent level")
+        ax[2].set_ylabel("gain of E[c] per unit realised shift")
         ax[2].set_title("Interventional probe (trunk)")
         ax[2].legend(fontsize=7)
     fig.tight_layout()
