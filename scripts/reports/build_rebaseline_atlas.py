@@ -1850,6 +1850,428 @@ def stories():
     return "\n\n".join(out)
 
 
+# ------------------------------- 9. round by round: the rule-manager head-to-head (#207)
+# Branch auto/rule-based-manager-sweep ran 19 one-line rules and the artificial punisher
+# against the corrected simulated players. Every series below is recomputed from that
+# branch's committed per_round.parquet files rather than read out of a column, because the
+# columns do not mean the same thing on the two sides of this tab: `common_good` in the
+# parquet is the environment's per-capita SHARE (pool / valid headcount) while the column
+# of the same name in experiments/2group_8agent_50ep.csv is the undivided pool
+# (notes/autoresearch_log/manager-common-pool-reward.md, step 1), and the parquet's
+# `payoff` still carries review finding D2 -- it pays a timed-out player
+# 20 - 9 - p + share, on an imputed contribution of 9 that the manager never saw.
+B_RM = "auto/rule-based-manager-sweep"
+P_RM = "plots/data_analysis/evaluation/rule_based_managers/"
+L_RM = "notes/autoresearch_log/rule-based-manager-sweep.md"
+RM_PR = 207
+RM_SEEDS = (42, 43, 44)
+RM_HUMAN_CSV = "experiments/2group_8agent_50ep.csv"
+RM_ROUNDS, ENDOW, MPCR = 24, 20.0, 1.6
+
+rm_sum = dkey(B_RM, P_RM + "summary_h2h_pooled.csv", "manager")
+RM_BEAT = md_table(B_RM, L_RM, "| verdict |")                 # margin over the clone, both arms
+RM_SPEAR = md_table(B_RM, L_RM, "head-to-head (pooled)")      # the two objectives' rank agreement
+_rm_log = gitfile(B_RM, L_RM).read_text()
+# review S2, quoted in the log's note 5: how little of the contributor model's training
+# data lies above the punishments the top-scoring rule hands out
+RM_EXTRAP = [F(v) for v in re.search(
+    r"only \*\*([\d.]+)%\*\* of the contribution model's training rows follow a punishment "
+    r"above 10 and \*\*([\d.]+)%\*\* follow one above 20", _rm_log).groups()]
+RM_TIMEOUT = [F(v) for v in re.search(
+    r"Timeouts are ([\d.]+)% of simulated agent-rounds \(([\d.]+)% in the human data\)",
+    _rm_log).groups()]
+RM_SIMPLEST = re.search(r"\*\*(punish 10 whenever a player contributed 9 or less[^*]*)\*\*",
+                        _rm_log).group(1)
+RM_SI = dict(zip(("prop10", "thr9_p5"), [F(v) for v in re.search(
+    r"twins lose ([\d.]+) \(`prop10`:[^)]*\) and ([\d.]+) \(`thr9_p5`", _rm_log).groups()]))
+RM_SI_MARGIN = re.search(
+    r"falls from [-+][\d.]+ \[[^\]]*\] to ([-+][\d.]+ \[[^\]]*\]) and stops being "
+    r"distinguishable from zero", _rm_log).group(1)
+# what one point of punishment buys, and who spends it on a player who said nothing (§3.2, §3.6)
+RM_BOUGHT = [F(v) for v in re.search(
+    r"every rule in the sweep buys between \*\*([\d.]+) and ([\d.]+)\*\*", _rm_log).groups()]
+RM_TO_T = md_table(B_RM, L_RM, "share of the manager's total punishment")
+RM_TO_RULE = F(RM_TO_T["every threshold / proportional / `human_mean` rule"][1])
+RM_TO_CLONE = F(RM_TO_T["`ah_punisher`"][1].split("/")[1].split("(")[0])
+RM_TO_HUM = re.search(r"real human managers punished \*\*(\d+) of (\d+)\*\*", _rm_log).groups()
+RM_PUB = lambda k: rm_sum["human managers (real)" if k == "human" else k]
+
+# The six series of the head-to-head arm -- the arm whose comparisons hold in both arms.
+# No new accent colour: the human reference takes the page's ink, the clone takes the
+# punisher slot's green because that is the slot it occupies, the floor takes the gnn
+# spine's grey, and the three rules run up the existing blue -> violet -> alert ramp in
+# order of severity. Alert red on prop10 is this page's caution colour, and that is the
+# line a reader has to be careful with -- see the extrapolation marks on panels 1 and 2.
+RM_SERIES = [
+    ("prop10", "prop10", ALERT, 2.0, "punish 20 &minus; c: the whole shortfall from the maximum"),
+    ("thr9_p10", "thr9_p10", "#4a3aa7", 2.0, "punish 10 if this round's contribution is 9 or less"),
+    ("thr9_p5", "thr9_p5", SLOT["contribution"], 2.0, "punish 5 if this round's contribution is 9 or less"),
+    ("ah_punisher", "the artificial punisher", SLOT["punisher"], 2.0,
+     "our clone of a human manager: the frontier stack's punisher bundle"),
+    ("human", "real human games", INK, 3.0,
+     "the 50 real games &mdash; real contributors, not clones; a reference, not a contestant"),
+    ("never", "never", SPINE["gnn"], 2.0, "never punish: the floor"),
+]
+RM_KEYS = [s[0] for s in RM_SERIES]
+RM_COL = {s[0]: s[2] for s in RM_SERIES}
+RM_WID = {s[0]: s[3] for s in RM_SERIES}
+RM_LBL = {s[0]: s[1] for s in RM_SERIES}
+RM_SHORT = {"human": "human", "ah_punisher": "clone", "prop10": "prop10",
+            "thr9_p10": "thr9_p10", "thr9_p5": "thr9_p5", "never": "never"}
+
+
+def _rm_round_frame():
+    """Per (manager, episode, round): the five panel quantities, recomputed from scratch."""
+    fr = []
+    for i, s in enumerate(RM_SEEDS):
+        d = pd.read_parquet(gitfile(B_RM, f"plots/simulation/24_rule_managers_h2h_s{s}/per_round.parquet"))
+        d["mgr"] = (d["run"].str.replace("ah group_switching managed by ", "", regex=False)
+                    .str.replace("_self", "", regex=False))
+        # episodes are numbered 0..99 inside every seed, so pooling needs them made distinct
+        d["episode"] = f"{i}_" + d["episode"].astype(str)
+        d["manager_valid"] = True
+        fr.append(d)
+    h = pd.read_csv(gitfile(B_RM, RM_HUMAN_CSV))
+    h = h[h["episode_id"] == h.groupby("pair_id")["episode_id"].transform("min")].copy()
+    h["contribution_valid"] = h["player_no_input"] == 0
+    h["manager_valid"] = h["manager_no_input"] == 0
+    h["punishment"] = h["punishment"].fillna(0.0)
+    h["contribution"] = h["contribution"].fillna(0.0)
+    h = h.drop(columns=["episode"]).rename(columns={"episode_id": "episode"})
+    h["mgr"] = "human"
+    h["episode"] = "h_" + h["episode"].astype(str)
+    df = pd.concat(fr + [h], ignore_index=True)
+
+    ok = df["contribution_valid"].astype(bool)
+    df["c_eff"] = df["contribution"].where(ok, 0.0).astype(float)   # a timed-out player gave nothing
+    df["p_env"] = df["punishment"].where(ok, 0.0).astype(float)     # ... and the env does not charge it
+    df["n_ok"] = ok.astype(float)
+    g = df.groupby(["mgr", "episode", "round_number", "group_id"], as_index=False).agg(
+        n=("c_eff", "size"), n_valid=("n_ok", "sum"), sum_c=("c_eff", "sum"),
+        sum_p_env=("p_env", "sum"), sum_p_all=("punishment", "sum"))
+    nv = g["n_valid"].clip(lower=1)
+    g["pool_env"] = MPCR * g["sum_c"] - g["sum_p_env"]
+    g["pool_corr"] = MPCR * g["sum_c"] - g["sum_p_all"]
+    g.loc[g["n_valid"] == 0, ["pool_env", "pool_corr"]] = 0.0
+    # D2 corrected: everybody in the group is paid, the timed-out player at 20 - 0 - 0 + share
+    g["pay_corr"] = ENDOW * g["n"] - g["sum_c"] - g["sum_p_all"] + g["n"] * g["pool_corr"] / nv
+    g.loc[g["n_valid"] == 0, "pay_corr"] = 0.0
+    rd = g.groupby(["mgr", "episode", "round_number"], as_index=False).agg(
+        pool=("pool_env", "sum"), pool_grp=("pool_env", "mean"), paysum=("pay_corr", "sum"),
+        ntot=("n", "sum"), big=("n", "max"), ngrp=("n", "size"))
+    rd["pay"] = rd["paysum"] / rd["ntot"]
+    acted = df[ok & df["manager_valid"].astype(bool)]
+    return rd.merge(acted.groupby(["mgr", "episode", "round_number"], as_index=False)
+                    .agg(contr=("contribution", "mean"), pun=("punishment", "mean")),
+                    on=["mgr", "episode", "round_number"], how="left")
+
+
+RM_Q = ("contr", "pun", "pool", "pay", "big", "pool_grp")
+_rm_rd = _rm_round_frame()
+_rm_st = (_rm_rd[_rm_rd["mgr"].isin(RM_KEYS)].groupby(["mgr", "round_number"])[list(RM_Q)]
+          .agg(["mean", "std"]))
+# RM[quantity][manager] = ([24 round means], [24 episode sds])
+RM = {q: {k: ([F(_rm_st.loc[(k, r), (q, "mean")]) for r in range(RM_ROUNDS)],
+              [F(_rm_st.loc[(k, r), (q, "std")]) for r in range(RM_ROUNDS)])
+          for k in RM_KEYS} for q in RM_Q}
+RM_NEP = {k: int(_rm_rd[_rm_rd["mgr"] == k]["episode"].nunique()) for k in RM_KEYS}
+RM_NGRP = {k: F(_rm_rd[_rm_rd["mgr"] == k]["ngrp"].mean()) for k in RM_KEYS}
+# the recomputation has to land on the accounting the branch itself published
+for _k in RM_KEYS:
+    assert abs(sum(RM["pool"][_k][0]) / RM_ROUNDS - F(RM_PUB(_k)["cg_env"])) < 0.02, _k
+    assert abs(sum(RM["contr"][_k][0]) / RM_ROUNDS - F(RM_PUB(_k)["mean_contribution"])) < 0.06, _k
+    assert abs(sum(RM["pay"][_k][0]) * 8 / RM_ROUNDS - F(RM_PUB(_k)["payoff_corr"])) < 0.02, _k
+RM_HMAX = max(RM["contr"]["human"][0])      # the best round mean any real game produced
+RM_CROSS = next(r for r in range(RM_ROUNDS) if RM["pool"]["prop10"][0][r] > RM["pool"]["never"][0][r])
+RM_CROSSH = next(r for r in range(RM_ROUNDS) if RM["pool"]["prop10"][0][r] > RM["pool"]["human"][0][r])
+RM_PAYFLOOR = sum(1 for r in range(RM_ROUNDS)
+                  if max(RM_KEYS, key=lambda k: RM["pay"][k][0][r]) == "never")
+# the round total is invariant to how the eight players are split; the per-group-round mean
+# is not, and the split changes at every reshuffle -- measured on the never arm, which is
+# the one whose own behaviour changes least across the first of them
+RM_STEP_TOT = (RM["pool"]["never"][0][4] / RM["pool"]["never"][0][3] - 1) * 100
+RM_STEP_GRP = (RM["pool_grp"]["never"][0][4] / RM["pool_grp"]["never"][0][3] - 1) * 100
+
+# panel key, title, what one point is (html, then plain for the tooltips), y range, ticks, decimals
+RM_PANELS = [
+    ("contr", "1 &middot; Contributions", "mean contribution per valid player-round",
+     "mean contribution per valid player-round", 0, 20, (0, 5, 10, 15, 20), 2),
+    ("pun", "2 &middot; Punishments", "mean punishment per valid player-round",
+     "mean punishment per valid player-round", 0, 14, (0, 5, 10), 2),
+    ("pool", "3 &middot; The common pool",
+     "1.6 &times; contributions &minus; punishments, both groups, per round",
+     "1.6 x contributions - punishments, both groups, per round", 0, 280, (0, 70, 140, 210, 280), 1),
+    ("pay", "4 &middot; Contributor payoff", "per group member per round, a timed-out player paid",
+     "per group member per round, a timed-out player paid", -5, 35, (0, 10, 20, 30), 2),
+    ("big", "5 &middot; Group size", "the larger of the two groups &mdash; the suite's own SC, and a step",
+     "the larger of the two groups (row SC)", 4, 8, (4, 5, 6, 7, 8), 2),
+]
+
+
+def _rm_mark(px0, px1, ytop, y, label, tip):
+    """Where the model runs out of evidence: the zone above the rule is tinted and the
+    label sits at the top of that zone rather than on top of the lines."""
+    return (f'<g data-tip="{esc(tip)}">'
+            f'<rect x="{px0:.1f}" y="{ytop:.1f}" width="{px1 - px0:.1f}" height="{y - ytop:.1f}" '
+            f'fill="{ALERT}" fill-opacity="0.05"/>'
+            f'<line x1="{px0:.1f}" y1="{y:.1f}" x2="{px1:.1f}" y2="{y:.1f}" '
+            f'stroke="{ALERT}" stroke-width="1" stroke-dasharray="5 3" stroke-opacity="0.85"/>'
+            f'<text x="{px1 - 3:.1f}" y="{ytop + 9:.1f}" text-anchor="end" font-size="7.5" '
+            f'fill="{ALERT}">{label}</text></g>')
+
+
+def rounds_key(x0, y0):
+    """Cell six: the six series, the rule in one line, and the pool each one produced."""
+    o = [f'<text x="{x0 + 2:.1f}" y="{y0 + 14:.1f}" font-size="12.5" font-weight="600" fill="{INK}">'
+         f'6 &middot; The six managers</text>',
+         f'<text x="{x0 + 2:.1f}" y="{y0 + 27:.1f}" font-size="8.5" fill="{MUTED}">'
+         f'head-to-head arm, seeds {"/".join(str(s) for s in RM_SEEDS)}; right-hand figure = the '
+         f'common pool per round</text>']
+    y = y0 + 48
+    for k, lbl, col, w, rule in RM_SERIES:
+        p = RM_PUB(k)
+        tip = (f"{RM_LBL[k]}: {html.unescape(rule).replace(chr(8212), '--').replace(chr(8722), '-')}"
+               f" | common pool per round {F(p['cg_env']):.2f} "
+               f"[{F(p['cg_env_lo']):.1f}, {F(p['cg_env_hi']):.1f}] over {RM_NEP[k]} "
+               f"{'real games' if k == 'human' else 'episodes'} | mean contribution "
+               f"{F(p['mean_contribution']):.2f} | mean punishment {F(p['mean_punishment']):.2f} on "
+               f"{F(p['share_punished']):.1%} of player-rounds | group payoff sum {F(p['payoff_corr']):.1f}")
+        o.append(f'<g data-tip="{esc(tip)}">'
+                 f'<rect x="{x0 + 4:.1f}" y="{y - 9:.1f}" width="24" height="12" fill="{col}" fill-opacity="0.10"/>'
+                 f'<line x1="{x0 + 4:.1f}" y1="{y - 3:.1f}" x2="{x0 + 28:.1f}" y2="{y - 3:.1f}" '
+                 f'stroke="{col}" stroke-width="{w}"/>'
+                 f'<text x="{x0 + 34:.1f}" y="{y:.1f}" font-size="10" font-weight="600" fill="{col}">{lbl}</text>'
+                 f'<text x="{x0 + 352:.1f}" y="{y:.1f}" text-anchor="end" font-size="10" '
+                 f'font-weight="600" fill="{INK}">{F(p["cg_env"]):.1f}</text>'
+                 f'<text x="{x0 + 34:.1f}" y="{y + 11:.1f}" font-size="7.5" fill="{MUTED}">{rule}</text></g>')
+        y += 27
+    o.append(f'<text x="{x0 + 4:.1f}" y="{y + 2:.1f}" font-size="7.5" fill="{NOISE}">'
+             f'shaded = &plusmn;1 sd over episodes, clipped to each quantity\'s own range</text>'
+             f'<text x="{x0 + 4:.1f}" y="{y + 13:.1f}" font-size="7.5" fill="{MUTED}">'
+             f'dotted verticals = the reshuffle rounds; membership is redrawn every fourth round</text>')
+    return "".join(o)
+
+
+def rounds_svg():
+    cols, rows = [10.0, 400.0, 790.0], [6.0, 256.0]
+    o = ['<svg viewBox="0 0 1160 512" font-family="system-ui, sans-serif">']
+    for ix, (q, title, sub, plain, lo, hi, ticks, dp) in enumerate(RM_PANELS):
+        x0, y0 = cols[ix % 3], rows[ix // 3]
+        px0, px1, py0, py1 = x0 + 46, x0 + 356, y0 + 38, y0 + 208
+        X = lambda r: px0 + r * (px1 - px0) / (RM_ROUNDS - 1)
+        Y = lambda v: py1 - (min(max(v, lo), hi) - lo) * (py1 - py0) / (hi - lo)
+        col = {"contr": SLOT["contribution"], "pun": SLOT["punisher"],
+               "big": SLOT["switch"]}.get(q, INK)
+        sdtyp = statistics.median([RM[q][k][1][r] for k in RM_KEYS for r in range(RM_ROUNDS)])
+        o.append(f'<text x="{x0 + 2:.1f}" y="{y0 + 14:.1f}" font-size="12.5" font-weight="600" '
+                 f'fill="{col}">{title}</text>'
+                 f'<text x="{x0 + 2:.1f}" y="{y0 + 27:.1f}" font-size="8.5" fill="{MUTED}">{sub}</text>'
+                 f'<text x="{px1:.1f}" y="{y0 + 14:.1f}" text-anchor="end" font-size="8" fill="{NOISE}">'
+                 f'typical episode sd {sdtyp:.2f}</text>')
+        for t in ticks:
+            o.append(f'<line x1="{px0:.1f}" y1="{Y(t):.1f}" x2="{px1:.1f}" y2="{Y(t):.1f}" stroke="{GRID}"/>'
+                     f'<text x="{px0 - 5:.1f}" y="{Y(t) + 3:.1f}" text-anchor="end" font-size="8" '
+                     f'fill="{MUTED}">{t}</text>')
+        for r in (4, 8, 12, 16, 20):     # the reshuffle rounds: membership is redrawn on each
+            o.append(f'<line x1="{X(r):.1f}" y1="{py0:.1f}" x2="{X(r):.1f}" y2="{py1:.1f}" '
+                     f'stroke="{GREY}" stroke-opacity="0.6" stroke-dasharray="2 4"/>')
+        for r in (0, 4, 8, 12, 16, 20, 23):
+            o.append(f'<text x="{X(r):.1f}" y="{py1 + 12:.1f}" text-anchor="middle" font-size="8" '
+                     f'fill="{MUTED}">{r}</text>')
+        o.append(f'<text x="{(px0 + px1) / 2:.1f}" y="{py1 + 24:.1f}" text-anchor="middle" '
+                 f'font-size="8" fill="{MUTED}">round</text>')
+        # bands first, so every mean line sits on top of every band
+        for k in reversed(RM_KEYS):
+            mu, sd = RM[q][k]
+            up = " ".join(f"{X(r):.1f},{Y(mu[r] + sd[r]):.1f}" for r in range(RM_ROUNDS))
+            dn = " ".join(f"{X(r):.1f},{Y(mu[r] - sd[r]):.1f}" for r in reversed(range(RM_ROUNDS)))
+            o.append(f'<polygon points="{up} {dn}" fill="{RM_COL[k]}" fill-opacity="0.10" stroke="none"/>')
+        if q == "contr":   # the two extrapolation marks, on the panels where that line shows
+            o.append(_rm_mark(px0, px1, Y(hi), Y(RM_HMAX),
+                              f"above the best round mean of any real game, {RM_HMAX:.1f}",
+                              f"No real game ever averaged more than {RM_HMAX:.2f} in a round. Inside "
+                              f"the tint the red line is a claim about the contributor model, not "
+                              f"about people."))
+        if q == "pun":
+            o.append(_rm_mark(px0, px1, Y(hi), Y(10),
+                              f"above 10: {RM_EXTRAP[0]:.2f}% of the training rows",
+                              f"Only {RM_EXTRAP[0]:.2f}% of the contribution model's training rows "
+                              f"follow a punishment above 10, and {RM_EXTRAP[1]:.2f}% one above 20 "
+                              f"(review S2). Inside the tint the model is extrapolating."))
+        for k in RM_KEYS:
+            mu, sd = RM[q][k]
+            pts = " ".join(f"{X(r):.1f},{Y(mu[r]):.1f}" for r in range(RM_ROUNDS))
+            tip = (f"{RM_LBL[k]} -- {plain}: round 0 {mu[0]:.{dp}f}, round 23 {mu[23]:.{dp}f}, "
+                   f"episode mean {sum(mu) / RM_ROUNDS:.{dp}f} | episode sd {min(sd):.2f}-{max(sd):.2f} "
+                   f"over {RM_NEP[k]} {'real games' if k == 'human' else 'episodes'}")
+            o.append(f'<polyline points="{pts}" fill="none" class="bline" stroke="{RM_COL[k]}" '
+                     f'stroke-width="{RM_WID[k]}" data-tip="{esc(tip)}"/>')
+        # one hit strip per round: hovering a round gives every manager's value at it
+        half = (px1 - px0) / (RM_ROUNDS - 1) / 2
+        for r in range(RM_ROUNDS):
+            a, b = max(px0, X(r) - half), min(px1, X(r) + half)
+            vals = " | ".join(f"{RM_SHORT[k]} {RM[q][k][0][r]:.{dp}f}+-{RM[q][k][1][r]:.{dp}f}"
+                              for k in RM_KEYS)
+            tip = f"round {r} -- {plain}, mean +- 1 sd over episodes: {vals}"
+            o.append(f'<rect x="{a:.1f}" y="{py0:.1f}" width="{b - a:.1f}" height="{py1 - py0:.1f}" '
+                     f'fill="{PAPER}" fill-opacity="0" pointer-events="all" data-tip="{esc(tip)}"/>')
+        o.append(f'<rect x="{px0:.1f}" y="{py0:.1f}" width="{px1 - px0:.1f}" '
+                 f'height="{py1 - py0:.1f}" fill="none" stroke="{GRID}"/>')
+    o.append(rounds_key(cols[2], rows[1]))
+    o.append("</svg>")
+    return "".join(o)
+
+
+def rounds_cards():
+    """The three things this tab has to say before a reader looks at the lines."""
+    def card(colour, chip, title, body):
+        return (f'<div class="scard">\n<h3 style="color:{colour}">{title}</h3>\n'
+                f'<div class="srow"><span class="schip" style="background:{colour}">{chip}</span>'
+                f'<span>{body}</span></div>\n</div>')
+    p10, cl, hum = RM_PUB("prop10"), RM_PUB("ah_punisher"), RM_PUB("human")
+    ratio = F(p10["mean_contribution"]) / F(hum["mean_contribution"]) - 1
+    harder = F(p10["mean_punishment"]) / F(hum["mean_punishment"])
+    return ('<div class="stacks">\n' + card(
+        INK, "not like for like", "The ink line is not a competitor",
+        f"The {RM_NEP['human']} real games had <b>real contributors</b>; every coloured line is the "
+        f"same artificial contributors under a different manager. A gap between the ink line and a "
+        f"coloured one is therefore partly the manager and partly how faithfully the contributor "
+        f"model copies people, and the two cannot be separated here. Only the coloured lines are "
+        f"comparable to one another &mdash; they share a stack, a protocol and, inside this arm, an "
+        f"RNG stream. The clone reaches {F(cl['cg_env']):.1f} against the real games' "
+        f"{F(hum['cg_env']):.1f}: a difference of populations at least as much as of managers.") + card(
+        ALERT, "extrapolation", "The top line is outside the evidence",
+        f"<code>prop10</code> punishes {harder:.1f}&times; harder than any human manager "
+        f"({F(p10['mean_punishment']):.2f} against {F(hum['mean_punishment']):.2f} points per "
+        f"player-round) and drives contributions {ratio:.0%} above anything the real games produced "
+        f"({F(p10['mean_contribution']):.2f} against {F(hum['mean_contribution']):.2f}); its round "
+        f"means end at {RM['contr']['prop10'][0][-1]:.1f}, past the {RM_HMAX:.1f} of the best round "
+        f"any real game averaged. Only <b>{RM_EXTRAP[0]:.2f}%</b> of the contributor model's training "
+        f"rows follow a punishment above 10, and {RM_EXTRAP[1]:.2f}% one above 20. <b>Panels 1 and 2 "
+        f"carry that limit as a dashed red rule with the zone above it tinted</b>: inside the tint "
+        f"the red line is a claim about the model, not about people. <code>{RM_SIMPLEST}</code> sits at the edge of the evidence; "
+        f"<code>thr9_p5</code>, at human punishment scale, is inside it.") + card(
+        SLOT["switch"], "objective", "On the other objective the order reverses",
+        f"Panels 3 and 4 are the same games scored two ways. On the <b>common pool</b> &mdash; what "
+        f"the real manager was paid on &mdash; punishing pays, because a punishment point costs 1 and "
+        f"a contribution point returns 1.6, so it breaks even above {1 / MPCR:.3f} contribution "
+        f"points bought and every rule in the sweep buys {RM_BOUGHT[0]:.2f} to {RM_BOUGHT[1]:.2f}. "
+        f"On the <b>contributor payoff</b> &mdash; the objective every RL manager has so far been "
+        f"trained against, <code>reward_mode: sum</code> &mdash; it does not: a punishment point "
+        f"costs 2 and returns 0.6, so it needs {2 / 0.6:.2f} back, and nothing in the family buys "
+        f"that. "
+        f"<code>never</code> is last on the pool and <b>first on the payoff in every one of the "
+        f"{RM_PAYFLOOR} rounds</b>; the two objectives rank the arm's managers at Spearman "
+        f"{RM_SPEAR['common good vs group payoff sum, env'][2]} "
+        f"(PR {pr_link(RM_PR)}, &sect;3.4). <b>The ranking drawn here is the pool's.</b>") + '</div>')
+
+
+ROUNDS_LAYER = '''<section class="layer" id="rounds">
+<p class="legend"><b>How a game actually unfolds, round by round.</b> PR #{pr} ran nineteen one-line
+manager rules and our clone of a human manager against the corrected simulated players, and ranked
+them on whole-episode totals. These five panels are the same runs put back on the round axis: the
+<b>head-to-head arm</b> &mdash; the one whose comparisons hold in both arms, because its managers
+share one config and therefore one RNG stream &mdash; with its three seeds pooled, {nep} episodes a
+manager, against the {nhum} real games as a reference level. <b>Contributions come first</b> because
+they are the mechanism: nothing in panels 3, 4 or 5 moves except through them.</p>
+
+{cards}
+
+<p class="legend"><b>The unit is the round total over all eight players, not the per-group-round
+mean, and that is a measured choice.</b> The eight sit in two groups that are redrawn every fourth
+round, and the round total 1.6 &times; contributions &minus; punishments is invariant to how they are
+split while the per-group-round mean is not: across the first reshuffle the per-group-round pool of
+the <code>never</code> arm rises {pgs:.0f}% while its round total moves {tot:.0f}%, purely because
+eight players who were two groups of four become {ngrp:.2f} groups on average. On a round axis that
+would draw merging as if it were a manager effect. Panel 4 divides by the group's membership for the
+same reason &mdash; a per-contributor payoff is partition-invariant too; multiplying it by eight
+recovers the <em>group payoff sum</em> of PR #{pr}'s tables.
+<b>Every number here is recomputed from contributions, punishments and the validity flag rather than
+read out of a column</b>, because the columns do not mean the same thing on the two sides:
+<code>common_good</code> in the simulation's <code>per_round.parquet</code> is the environment's
+per-capita <em>share</em> (the pool divided by the valid headcount) while the column of the same name
+in the human <code>experiments/2group_8agent_50ep.csv</code> is the <em>undivided pool</em>, so
+reading either one straight would draw the simulated lines a factor of the group size below the human
+one with nothing looking broken (<code>notes/autoresearch_log/manager-common-pool-reward.md</code>,
+step 1). The parquet's <code>payoff</code> column has the same class of defect one layer on: on the
+{to:.1f}% of agent-rounds where a player timed out it pays 20 &minus; 9 &minus; p + share, on an
+imputed contribution of 9 <a href="#story-simtimeout">the manager never saw</a>. Panel 4 therefore
+pays a timed-out player 20 &minus; 0 &minus; 0 + share, as the real game paid them
+(<a href="#story-timeout">review finding D2</a>). Panel 3 is the environment's own accounting, which
+is what PR #{pr}'s ranking table uses; charging the punishment aimed at a timed-out player as well
+moves it by at most {corrmax:.1f} points and reorders nothing.
+<b>The shading is &plusmn;1 standard deviation over episodes</b>, not an interval on the mean: it is
+how much one whole game varies, which is what several of these gaps are small against. It is clipped
+to each quantity's own range, because &plusmn;1 sd of a bounded quantity runs past the bound; each
+panel's top right gives its typical episode sd. <b>Hover a round</b> for every manager's value at it,
+a line for that manager's whole series, a row of panel 6 for its published totals.</p>
+
+<div id="roundsbox">
+{svg}
+</div>
+
+<p class="legend"><b>Panel 5 needs saying plainly.</b> In these runs one manager governs
+<em>both</em> groups of its own simulation, so there is no group it holds against a rival: whatever
+it does it does to both sides, and the panel can only show a symmetric dynamic. It plots the larger
+of the two groups, which is this page's own segregation row <b>SC</b> (4 = balanced, 8 = everyone
+merged), because that is the measure the evaluation suite already scores. It is a step and not a
+curve: membership is redrawn only every fourth round, so the series is flat inside each block of
+four, and rounds 0&ndash;3 are the fixed 4/4 start every episode begins from &mdash; which is why SC
+is scored from round 4 on. <b>Read it as a placeholder.</b> The size of the group a manager actually
+governs becomes a manager measurement only when two managers face each other, and no such run exists
+yet; until one does, this panel cannot separate what a manager did from what the switch model does
+anyway. What it does show is not about the managers at all: the real games drift back toward balance
+({bh4:.2f} &rarr; {bh23:.2f} over the episode) while every simulated arm holds near {bs:.1f}, which
+belongs with the first card above rather than with the ranking.</p>
+
+<p class="legend"><b>What the round axis adds to the ranking.</b> Every manager starts from the same
+place &mdash; round 0's contributions are drawn before any manager has acted, and the six round-0
+means span {c0span:.2f} contribution points &mdash; and they separate monotonically from there. The
+most useful thing the whole-episode totals hide is in panel 3: <code>prop10</code> produces the
+<b>lowest</b> pool of all six in round 0 ({p10r0:.1f} against <code>never</code>'s {nvr0:.1f}) and
+does not overtake <code>never</code> until round {cross}, or the real games until round {crossh}.
+Punishment is negative-sum in the round it is spent and pays back only later, through contributions,
+at 1.6 a point; the round axis is where that trade is visible. Panel 2 carries the other one:
+<code>prop10</code> opens at {p10p0:.2f} punishment points a player and falls to {p10p23:.2f} as the
+players it is punishing stop giving it reason to, while the clone tracks the real managers' own decay
+almost exactly ({clp0:.2f} &rarr; {clp23:.2f} against {hup0:.2f} &rarr; {hup23:.2f}) &mdash; a good
+check on the clone, and also the point of it: a faithful copy of a policy that is not the best policy
+here. <b>Two of the three margins are claims and one is not.</b> Against the clone,
+<code>prop10</code> is {m_prop10} and <code>thr9_p10</code> {m_thr9_p10}, in this arm and in the
+twenty-rule sweep both. <code>thr9_p5</code> clears it here, {m_p5h}, and not in the sweep,
+{m_p5s} &mdash; so it is not one. Nor is it robust to one more thing: a player who gave no input is
+served a contribution of 0, so <b>every contribution-keyed rule here punishes {torule:.0%} of
+timed-out player-rounds at full severity</b>, where the clone, which carries a timeout feature,
+punishes {toclone:.1%} of them and real managers punished {tohum0} of {tohum1}. Switching that off
+costs <code>prop10</code>
+{si10:.2f} pool points and <code>thr9_p5</code> {si5:.2f} &mdash; enough to take
+<code>thr9_p5</code>'s margin over the clone to {m_p5si} and stop it being distinguishable from zero.
+The two robust rules survive it. Full accounting, both arms, all nineteen rules: PR {prl}.</p>
+</section>
+'''
+
+
+def rounds_layer():
+    mar = {k: RM_BEAT[f"`{k}`"] for k in ("prop10", "thr9_p10", "thr9_p5")}
+    return ROUNDS_LAYER.format(
+        pr=RM_PR, prl=pr_link(RM_PR), nep=RM_NEP["prop10"], nhum=RM_NEP["human"],
+        cards=rounds_cards(), svg=rounds_svg(), to=RM_TIMEOUT[0],
+        pgs=RM_STEP_GRP, tot=RM_STEP_TOT, ngrp=RM_NGRP["never"],
+        corrmax=max(abs(F(RM_PUB(k)["cg_env"]) - F(RM_PUB(k)["cg_corr"])) for k in RM_KEYS),
+        bh4=RM["big"]["human"][0][4], bh23=RM["big"]["human"][0][23],
+        bs=sum(RM["big"][k][0][23] for k in RM_KEYS if k != "human") / 5,
+        c0span=max(RM["contr"][k][0][0] for k in RM_KEYS) - min(RM["contr"][k][0][0] for k in RM_KEYS),
+        p10r0=RM["pool"]["prop10"][0][0], nvr0=RM["pool"]["never"][0][0],
+        cross=RM_CROSS, crossh=RM_CROSSH,
+        p10p0=RM["pun"]["prop10"][0][0], p10p23=RM["pun"]["prop10"][0][23],
+        clp0=RM["pun"]["ah_punisher"][0][0], clp23=RM["pun"]["ah_punisher"][0][23],
+        hup0=RM["pun"]["human"][0][0], hup23=RM["pun"]["human"][0][23],
+        si10=RM_SI["prop10"], si5=RM_SI["thr9_p5"], m_p5si=RM_SI_MARGIN,
+        torule=RM_TO_RULE, toclone=RM_TO_CLONE, tohum0=RM_TO_HUM[0], tohum1=RM_TO_HUM[1],
+        m_prop10=mar["prop10"][1].replace("**", ""), m_thr9_p10=mar["thr9_p10"][1].replace("**", ""),
+        m_p5h=mar["thr9_p5"][1], m_p5s=mar["thr9_p5"][2])
+
+
 # ---------------------------------------------------------------- page
 def page():
     mnav, cards = ba_cards()
@@ -1894,8 +2316,10 @@ changed what the page can claim. One of them measured how far the whole scoreboa
 nothing changes but a training seed -- a typical row by sd {SD_ROW:.3f}, the count of rows at the
 human ceiling between {int(F(ss_agg['rows_le1']['min']))} and {int(F(ss_agg['rows_le1']['max']))} --
 so every score here now carries its own measurement noise, and several
-earlier results turn out to sit inside it. Hover any node for its numbers and how far it moved in
-units of that noise; click it for the plain-language story.</p>
+earlier results turn out to sit inside it. A last tab leaves the scoreboard behind and asks
+what these players actually do with a manager over them: how a game unfolds round by round
+under six managers, against the fifty real games (PR #207). Hover any node for its numbers
+and how far it moved in units of that noise; click it for the plain-language story.</p>
 <nav>
   <button class="on" data-layer="tree">Progress tree</button>
   <button data-layer="scores">All 22 scores</button>
@@ -1903,6 +2327,7 @@ units of that noise; click it for the plain-language story.</p>
   <button data-layer="beforeafter">Before / after</button>
   <button data-layer="machinery">Machinery</button>
   <button data-layer="lb">Leaderboard</button>
+  <button data-layer="rounds">Round by round</button>
   <button data-layer="stories">Stories</button>
 </nav>
 <section class="layer on" id="tree">
@@ -2052,6 +2477,7 @@ caveat of their own: PR #198's every delta is exactly 0.0000 because its artifac
 baseline's, so its floor really is zero rather than merely small; and the six reruns' own baselines are the
 pre-fix scores of a different punisher, which this floor does not cover at all.</p>
 </section>
+{rounds_layer()}
 <section class="layer" id="stories">
 <p class="legend">The plain-language story of the re-baseline and of the eleven pull requests that
 followed it, in fifteen cards &mdash; also reachable by clicking tree nodes, score markers and
