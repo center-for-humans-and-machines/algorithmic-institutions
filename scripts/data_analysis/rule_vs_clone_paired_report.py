@@ -195,6 +195,40 @@ def seat_manager(pairing, seat):
     return focal if seat == "focal" else rival
 
 
+def check_dispatch(df):
+    """Prove the pairing really put a different manager in each seat.
+
+    Each rule has a signature the data must carry on the seat that holds it
+    and must NOT carry on the seat that does not: `never` punishes 0 always,
+    the thresholds punish only 0 or their amount, `prop10` punishes exactly
+    `20 - c` on cells where the player gave an input. If dispatch were
+    static (one manager on all agents) or keyed on the wrong seat, these
+    fail."""
+    sig = {
+        NEVER: lambda d: set(d["punishment"].unique()) <= {0},
+        "thr9_p10": lambda d: set(d["punishment"].unique()) <= {0, 10},
+        "thr9_p5": lambda d: set(d["punishment"].unique()) <= {0, 5},
+        "prop10": lambda d: bool(
+            (
+                d.loc[d["contribution_valid"].astype(bool), "punishment"]
+                == 20 - d.loc[d["contribution_valid"].astype(bool), "contribution"]
+            ).all()
+        ),
+    }
+    out = []
+    for (pairing, gid), sub in df.groupby(["pairing", "group_id"]):
+        seat = "focal" if gid == 0 else "rival"
+        m = seat_manager(pairing, seat)
+        if m not in sig or not len(sub):
+            continue
+        holds = sig[m](sub)
+        out.append({"pairing": pairing, "seat": seat, "manager": m, "holds": holds})
+        assert holds, f"{m} signature violated on the {seat} seat of {pairing}"
+    n = len(out)
+    print(f"dispatch check: {n}/{n} seats carry their manager's signature")
+    return pd.DataFrame(out)
+
+
 def timeout_stats(df):
     """How much of each seat's punishment lands on players who gave no input.
 
@@ -285,10 +319,13 @@ def vs_control(pe):
     return pd.DataFrame(rows)
 
 
-def size_series(g):
-    """Mean group size per (pairing, seat, round) -- the step series."""
+def round_series(g):
+    """Mean of every metric per (pairing, seat, round).
+
+    Group size is a step series -- switching happens only every
+    `switch_every` rounds -- so it is read off this, not smoothed."""
     return g.groupby(["pairing", "seat", "round_number"], as_index=False)[
-        "group_size"
+        METRICS
     ].mean()
 
 
@@ -446,6 +483,81 @@ def fig_size_vs_pool(summary, out_dir, tag):
     print(f"wrote {p}")
 
 
+TRAJ = [
+    ("group_size", "members held"),
+    ("pool_corr", "common pool, undivided"),
+    ("mean_c", "mean contribution"),
+    ("mean_p", "mean punishment"),
+    ("payoff_corr_pc", "contributor payoff per member"),
+    ("share_corr", "pool per member"),
+]
+
+
+def fig_trajectories(series, out_dir, tag, rival):
+    """Both seats of every pairing against this rival, round by round."""
+    sub = series[series["pairing"].str.endswith(f"_vs_{rival}")].copy()
+    sub["focal"] = sub["pairing"].map(lambda p: split_pairing(p)[0])
+    order = [
+        n
+        for n in ["prop10", "thr9_p10", "thr9_p5", "human_severity", NEVER, CLONE]
+        if n in set(sub["focal"])
+    ]
+    slot = {"prop10": 0, "thr9_p10": 1, "thr9_p5": 2, "human_severity": 3}
+
+    fig, axes = plt.subplots(2, 3, figsize=(13.5, 6.6))
+    for ax, (metric, label) in zip(axes.ravel(), TRAJ):
+        for name in order:
+            s = sub[(sub["focal"] == name) & (sub["seat"] == "focal")]
+            s = s.sort_values("round_number")
+            color = MUTED if name == rival else SERIES[slot.get(name, 4)]
+            ax.plot(
+                s["round_number"],
+                s[metric],
+                color=color,
+                lw=1.7,
+                ls="--" if name == rival else "-",
+            )
+        # the rival seat of the symmetric control: what the seat does with
+        # no rule in it at all
+        ctrl = series[
+            (series["pairing"] == f"{rival}_vs_{rival}") & (series["seat"] == "rival")
+        ].sort_values("round_number")
+        ax.plot(ctrl["round_number"], ctrl[metric], color=INK, lw=1.0, ls=":")
+        ax.set_title(label, fontsize=9, color=INK)
+        ax.set_xlabel("round", fontsize=8)
+        ax.tick_params(labelsize=8)
+    handles = [
+        plt.Line2D(
+            [],
+            [],
+            color=MUTED if n == rival else SERIES[slot.get(n, 4)],
+            ls="--" if n == rival else "-",
+            lw=1.7,
+            label=n,
+        )
+        for n in order
+    ]
+    handles.append(
+        plt.Line2D(
+            [], [], color=INK, ls=":", lw=1.0, label=f"{rival} seat of the control"
+        )
+    )
+    fig.legend(
+        handles=handles,
+        loc="lower center",
+        ncol=len(handles),
+        frameon=False,
+        fontsize=8,
+        bbox_to_anchor=(0.5, -0.04),
+    )
+    fig.suptitle(f"Focal seat against {rival}, per round ({tag})", fontsize=11, y=1.01)
+    fig.tight_layout()
+    p = os.path.join(out_dir, f"trajectories_vs_{rival}_{tag}.jpg")
+    fig.savefig(p, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {p}")
+
+
 # ---------------------------------------------------------------------- #
 
 
@@ -465,20 +577,29 @@ def sweep_side_by_side(summary, wc, out_dir):
     """The sweep's margin over the clone, and this setting's, side by side.
 
     The sweep's number is a whole-population total in self-play: both seats
-    carried the manager. The paired analogue is the focal seat's pool against
-    the SAME seat of the symmetric control, which is why it is roughly half
-    the size -- one group, not two. The comparison that carries is the SIGN
-    and the size relative to each setting's own noise."""
+    carried the manager, so it counts TWO groups. The paired margin changes
+    only one seat, so the like-for-like sweep figure is halved -- that is the
+    `_per_seat` column, and it is a first-order normalisation, not an
+    identity (in self-play the rival group's behaviour changed too). What
+    carries the claim is the sign and the size against each setting's own
+    seed spread."""
     rows = []
     base = SWEEP_H2H_CG[CLONE]
+    focal_level = summary[
+        (summary["seat"] == "focal") & (summary["rival"] == CLONE)
+    ].set_index("manager")["pool_corr"]
     for _, r in wc[wc["rival"] == CLONE].iterrows():
         if r["focal"] not in SWEEP_H2H_CG:
             continue
+        margin = SWEEP_H2H_CG[r["focal"]] - base
         rows.append(
             {
                 "manager": r["focal"],
                 "sweep_cg_self_play": SWEEP_H2H_CG[r["focal"]],
-                "sweep_margin_vs_clone": SWEEP_H2H_CG[r["focal"]] - base,
+                "sweep_cg_per_seat": SWEEP_H2H_CG[r["focal"]] / 2,
+                "paired_focal_pool": float(focal_level.get(r["focal"], np.nan)),
+                "sweep_margin_vs_clone": margin,
+                "sweep_margin_per_seat": margin / 2,
                 "paired_margin_vs_clone_seat": r["d_pool_corr"],
                 "paired_lo": r["d_pool_corr_lo"],
                 "paired_hi": r["d_pool_corr_hi"],
@@ -548,6 +669,7 @@ def main():
         return
 
     df = load(args.sim_dirs)
+    check_dispatch(df)
     g = group_rounds(df)
     pe = per_episode(g)
     pe_late = per_episode(g, late=True)
@@ -561,9 +683,9 @@ def main():
     wc = vs_control(pe)
     wc.to_csv(os.path.join(args.out_dir, f"vs_control_{args.tag}.csv"), index=False)
 
-    series = size_series(g)
+    series = round_series(g)
     series.to_csv(
-        os.path.join(args.out_dir, f"size_series_{args.tag}.csv"), index=False
+        os.path.join(args.out_dir, f"round_series_{args.tag}.csv"), index=False
     )
 
     cols = [
@@ -611,6 +733,8 @@ def main():
     fig_group_size(series, args.out_dir, args.tag)
     fig_margins(wc, args.out_dir, args.tag)
     fig_size_vs_pool(summary, args.out_dir, args.tag)
+    for rival in RIVALS:
+        fig_trajectories(series, args.out_dir, args.tag, rival)
 
 
 if __name__ == "__main__":
