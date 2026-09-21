@@ -1,0 +1,73 @@
+description: >-
+  contributor-gated-skip: the frontier contributor
+  (group_switching_contribution_50ep_vnode_stimulus_skip -- per-group virtual
+  node plus the immediate-stimulus skip) with the skip GATED rather than
+  concatenated (model_args.stimulus_gate: True). op2 no longer reads the
+  post-op1 and post-RNN embeddings side by side at one fixed ratio; a
+  per-agent, per-round scalar gate learned from the post-op1 embedding mixes
+  them, x = g * x_skip + (1 - g) * x_rnn, so the immediate stimulus can
+  dominate on the rounds where something happened to the player and the
+  carried memory on the quiet ones. One gate, nothing else: group_vnode and
+  stimulus_skip stay True and op2 returns to the un-skipped width.
+  Everything else is byte-identical to the parent config: node+edge+rnn
+  architecture, hidden=20, lr=3e-4, 575 epochs, batch 4, 5-fold CV, seed
+  38381, same x_encoding (prev_contribution and prev_punishment stay numeric)
+  and shuffle_features, same data file, mask, and experiment names.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 575
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_gated_skip
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    group_vnode: True
+    stimulus_skip: True
+    stimulus_gate: True
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: False

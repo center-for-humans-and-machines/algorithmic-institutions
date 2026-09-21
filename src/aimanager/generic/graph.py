@@ -158,6 +158,8 @@ class GraphNetwork(th.nn.Module):
         group_vnode_module=None,
         group_vnode_hidden=None,
         stimulus_skip=False,
+        stimulus_gate=False,
+        stimulus_gate_module=None,
         **_,
     ):
         super().__init__()
@@ -286,6 +288,34 @@ class GraphNetwork(th.nn.Module):
         ), f"stimulus_skip must be a bool, got {stimulus_skip!r}"
         self.stimulus_skip = stimulus_skip
 
+        # Gated skip: instead of handing op2 BOTH embeddings side by side --
+        # which lets it weight stimulus against memory, but at one ratio for
+        # every round of every episode -- mix them with a per-agent,
+        # per-round scalar gate,
+        #     x = g * x_skip + (1 - g) * x_rnn,   g = sigmoid(w . x_skip + b),
+        # so the immediate stimulus can dominate on the rounds where
+        # something happened to the player and the carried memory can
+        # dominate on the quiet ones. The gate conditions on `x_skip`, the
+        # post-`op1` embedding -- exactly the features the skip already sees,
+        # i.e. this round's own contribution and punishment plus the
+        # message-passed peer state -- and on nothing else: "did something
+        # happen to me this round" is a property of the stimulus, not of the
+        # memory it would displace. See
+        # notes/autoresearch_log/contributor-gated-skip.md, and note 17 of
+        # contribution-punishment-response.md, which proposed it after the
+        # plain concatenation bought RCB's response by selling the
+        # persistence rows CG and RCD.
+        # Off by default, and built last (below) so that with the flag off no
+        # RNG is drawn and every existing artifact loads bit-identical.
+        assert isinstance(
+            stimulus_gate, bool
+        ), f"stimulus_gate must be a bool, got {stimulus_gate!r}"
+        assert not stimulus_gate or stimulus_skip, (
+            "stimulus_gate requires stimulus_skip: the gate mixes the "
+            "post-op1 embedding the skip carries against the post-RNN one"
+        )
+        self.stimulus_gate = stimulus_gate
+
         if op1 is None:
             if add_edge_model:
                 edge_model = EdgeModel(
@@ -369,6 +399,10 @@ class GraphNetwork(th.nn.Module):
             # today and lets each later addition extend the tail; `forward`
             # concatenates in exactly this order. Plain concatenation, no
             # gate -- ties go to the simpler model.
+            # With `stimulus_gate` on, the two embeddings are MIXED rather
+            # than concatenated, so op2's input goes back to the un-skipped
+            # width: the gate replaces the extra slice, it does not add to
+            # it.
             vnode_hidden = group_vnode_hidden or hidden_size
             self.op2 = MetaLayer(
                 None,
@@ -376,7 +410,11 @@ class GraphNetwork(th.nn.Module):
                     x_features=(
                         x_features
                         + (vnode_hidden if group_vnode else 0)
-                        + (skip_features if stimulus_skip else 0)
+                        + (
+                            skip_features
+                            if (stimulus_skip and not stimulus_gate)
+                            else 0
+                        )
                     ),
                     edge_features=0,
                     u_features=u_features,
@@ -425,6 +463,22 @@ class GraphNetwork(th.nn.Module):
                 self.group_vnode_module = None
             self.vnode_h0 = None
 
+            # Built after the virtual node, i.e. LAST of all, for the same
+            # reason: with `stimulus_gate` off nothing is constructed, no RNG
+            # is drawn, and every parameter above is initialised from exactly
+            # the RNG state it saw before this gate existed -- so the
+            # ungated skip model under this seed is bit-identical to today's.
+            # It reads `skip_features`, the post-`op1` width, and emits one
+            # scalar per agent per round.
+            if stimulus_gate_module is not None:
+                self.stimulus_gate_module = stimulus_gate_module
+            elif stimulus_gate:
+                self.stimulus_gate_module = Lin(
+                    in_features=skip_features, out_features=1
+                )
+            else:
+                self.stimulus_gate_module = None
+
         else:
             self.op1 = op1
             self.op2 = op2
@@ -435,6 +489,7 @@ class GraphNetwork(th.nn.Module):
             self.rnn_g_h0 = None
             self.joint_exodus_head = joint_exodus_head
             self.group_vnode_module = group_vnode_module
+            self.stimulus_gate_module = stimulus_gate_module
             # Carried across rounds exactly like `rnn_n_h0` above, and so
             # initialised in BOTH build branches -- `load` comes through this
             # one.
@@ -447,6 +502,10 @@ class GraphNetwork(th.nn.Module):
         assert (self.group_vnode_module is not None) == self.group_vnode, (
             "group_vnode and group_vnode_module disagree: "
             f"{self.group_vnode} vs {type(self.group_vnode_module).__name__}"
+        )
+        assert (self.stimulus_gate_module is not None) == self.stimulus_gate, (
+            "stimulus_gate and stimulus_gate_module disagree: "
+            f"{self.stimulus_gate} vs {type(self.stimulus_gate_module).__name__}"
         )
 
     def forward(self, data, reset_rnn=True, return_joint=False, decider_mask=None):
@@ -525,10 +584,20 @@ class GraphNetwork(th.nn.Module):
         # readout, and only AFTER the joint head above has read `x` at the
         # per-agent width it was built for. op2's NodeModel is the one module
         # widened to receive it (see the constructor).
+        # The gated skip MIXES the two embeddings in place, before the group
+        # state joins, so op2 keeps the un-skipped layout `[mixed embedding |
+        # group state]`. The gate is a per-agent, per-round scalar read off
+        # the stimulus itself, broadcast over the embedding's channels: one
+        # number deciding how much of this round's decision is the stimulus
+        # and how much is the memory, not a per-channel selection.
+        if x_skip is not None and self.stimulus_gate_module is not None:
+            gate = th.sigmoid(self.stimulus_gate_module(x_skip))
+            x = gate * x_skip + (1.0 - gate) * x
+            x_skip = None
         if g_node is not None:
             x = th.cat([x, g_node], dim=-1)
-        # The skip is appended AFTER the group state, the layout op2 was
-        # built for: `[post-RNN embedding | group state | post-op1
+        # Ungated, the skip is appended AFTER the group state, the layout op2
+        # was built for: `[post-RNN embedding | group state | post-op1
         # embedding]`. Both flags can be on at once, and each term is present
         # exactly when its flag is.
         if x_skip is not None:
@@ -886,6 +955,8 @@ class GraphNetwork(th.nn.Module):
             "group_vnode_module",
             "group_vnode_hidden",
             "stimulus_skip",
+            "stimulus_gate",
+            "stimulus_gate_module",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
