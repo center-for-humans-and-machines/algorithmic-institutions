@@ -42,7 +42,7 @@ with `m[-i, g, t]` the **leave-one-out mean of the valid contributions of the ot
 
 **Noise floor, both routes.** PR #195's five reseed replicas of the same contributor plus the shipped sixth draw. Their six simulations give the run-to-run spread of the *realised* coefficient; their six bare artifacts, teacher-forced over the same human games, give the spread of the *teacher-forced* coefficient. The second floor is small by construction — it holds the states fixed and varies only the weights — so it is reported beside, never instead of, the human arm's own 50-game interval.
 
-**Tooling.** `scripts/data_analysis/shared_signal_gain.py`: `analyse` locally on CPU, `tf` and `probe` on Raven because the trunk is a `torch_geometric` graph network and a forward pass cannot run on macOS. Tables and the figure: `plots/data_analysis/evaluation/shared_signal_gain/`.
+**Tooling.** `scripts/data_analysis/shared_signal_gain.py`: `analyse` locally on CPU, `tf` and `probe` on Raven because the trunk is a `torch_geometric` graph network and a forward pass cannot run on macOS. Tables and the figure: `plots/data_analysis/evaluation/shared_signal_gain/`. Remote isolation dir `~/repros/ai-runs/shared-signal-gain` (jobs 30399690 and 30399691, 58 s and 54 s on one node each, exit `0:0`); delete it when this PR closes.
 
 ## 3. Results (measured)
 
