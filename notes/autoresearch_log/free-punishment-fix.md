@@ -216,7 +216,21 @@ That branch also edits `punish()`: it moves the reward computation into it, as a
 
 All three channels -- what the artificial humans are served, what the run records, and what enters the reward -- read 0 on those cells under all three modes, and the arms are identical in every field. **Nothing double-counts**: the reward computed from the already-charged state equals, bit for bit, the reward recomputed from a manually zeroed copy of the action (`th.equal` True), because `th.where(valid, p, 0)` applied twice is `th.where(valid, p, 0)`. The two changes are complementary -- PR #206 makes the reward a pure function of the round's values, this branch makes those values the ones the game used -- and after both land the accounting side and the shown/recorded side finally agree.
 
-**What the merge will look like.** Both branches insert a docstring at the top of `punish()` and both touch its body, so a textual conflict there is likely; it is the trivial kind, and the resolution is to keep both docstrings' content and both code changes, with `self.punishment = th.where(...)` above `self.update_common_good()` and `self.reward = self.compute_reward_per_group(...)` below `self.update_payoff()`, exactly as the scratch tree above has it. **A caution for whoever merges: a silent auto-merge here is not self-evidently correct.** A `git merge-tree` of the *uncommitted* state of this work against PR #206 reported no conflict and produced a `punish()` containing PR #206's changes and none of this branch's -- correct behaviour for the inputs it was given, and a good illustration of how quietly this particular hunk can disappear. Whoever merges should read the merged `punish()` and re-run `test_free_punishment.py`, which fails loudly if the zeroing is lost.
+**What the merge will look like, measured rather than guessed.** `git merge-tree --write-tree` of this branch's head against `origin/auto/manager-common-pool-reward` reports **one conflicted file, `src/aimanager/manager/environment.py`, and one conflicted hunk inside it: the two docstrings at the top of `punish()`**, which both branches insert. Everything else merges cleanly, and the merged body already contains both changes in the right order:
+
+```python
+        self.punishment = th.where(
+            self.contribution_valid, punishment, th.zeros_like(punishment)
+        )
+        self.punishment_valid = th.ones_like(self.punishment_valid)
+        self.update_common_good()
+        self.update_payoff()
+        self.reward = self.compute_reward_per_group(
+            self.contribution, self.punishment, self.contribution_valid
+        )
+```
+
+So the resolution is to keep both docstrings' content and change no code. `src/aimanager/simulation/simulate.py`, the tests, the configs and everything under `plots/` and `notes/` merge without conflict. Whoever merges should still read the merged `punish()` and run `test_free_punishment.py` afterwards -- four of its eight tests fail loudly if the zeroing is lost, which is the cheapest possible check that a conflict resolution kept both halves.
 
 One trap from PR #206's log, repeated here because it cost this branch a double-take: the env's `common_good` field is the **per-capita share**, while the column of the same name in the human CSV is the **undivided pool**. In the interaction table above the `common_pool` reward is 21.8 and the state's `common_good` is 7.267 = 21.8 / 3 valid players in the group.
 
