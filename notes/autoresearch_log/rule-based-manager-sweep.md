@@ -4,7 +4,7 @@
 
 **Slot:** none. This is not a model experiment -- nothing is trained, nothing is recalibrated, no artifact changes. It is the cheap control for the expensive RL question: before spending training runs on a manager, find out with rules whether punishment buys anything at all in this world, and what a trained manager would have to beat.
 
-**Parent:** `auto/sim-timeout-imputation` at `3fe1f44` -- the most corrected simulation. Branch `auto/rule-based-manager-sweep`, PR opens with `--base auto/sim-timeout-imputation`. Isolated remote dir `~/repros/ai-runs/rule-managers` (delete when the PR closes).
+**Parent:** `auto/sim-timeout-imputation` at `3fe1f44` -- the most corrected simulation. Branch `auto/rule-based-manager-sweep`, PR [#207](https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/207) against `auto/sim-timeout-imputation`. Isolated remote dir `~/repros/ai-runs/rule-managers` (delete when the PR closes).
 
 **Prior work reused.** Branch `origin/99-rule-based-manager-strategy-testing` (PR #99) already ran a `RuleBasedManager` with two rules (`prev_c_threshold`, `tactical_early`) against the pre-correction stack. Its shape -- a manager class dispatched through `MANAGER_CLASS`, one pairing per rule, self-play against the artificial humans -- is what this branch builds on; its rules are subsumed by the threshold family below (its `prev_c_threshold` keyed on the *previous* round, which the punisher-timing work since then has shown is the wrong round to key on).
 
