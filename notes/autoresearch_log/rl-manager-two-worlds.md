@@ -402,3 +402,29 @@ The behavioural table below is the one the experiment exists to fill, per seed:
 
     The guard is therefore known to be capable of failing, and the post-fix
     run is a real test rather than a formality.
+
+20. **Cross-evaluation and measurement written ahead of the runs.**
+    `configs/simulation/manager_testing/24_rl_new_clones_cross_eval.yml` scores
+    everything in the training world slot for slot, so a difference between two
+    rows is a difference between managers and not between worlds. The
+    artificial punisher appears twice over — as the opponent in group 1 of
+    every pairing, and through `lin_punisher_self` as a group-0 manager scored
+    exactly as the learned ones are, because the success criterion is whether a
+    learned policy beats that clone and a baseline that only ever appears as an
+    opponent cannot be beaten on the same axes.
+    `scripts/rl_two_worlds/measure.py` turns its `per_round.parquet` into the
+    tables, reading the human reference through the suite's canonical frame so
+    a manager timeout stays a NaN rather than collapsing into "punished 0" —
+    pooling those would deflate every human punishment statistic by the 4.2% of
+    rows with no manager input.
+
+21. **One measurement does not come from the simulation, and needs its own
+    probe.** Item 2 of the plan — punishment conditioned on
+    `contribution_valid` — cannot be read off `per_round.parquet`: that file
+    carries `punishment`, `common_good`, `contribution`, `agent_group` and
+    nothing about validity. It has to come from the env, as the guard already
+    does. The guard forces maximum punishment, which is right for testing the
+    lever but wrong for measuring a policy, so the trained-policy version is a
+    separate run of the same machinery with the checkpoint's greedy action in
+    place of the forced one. Written once the checkpoints exist, rather than
+    guessed at now.
