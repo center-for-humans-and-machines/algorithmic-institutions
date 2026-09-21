@@ -33,6 +33,26 @@ MPCR = 1.6
 
 RUN_RE = re.compile(r"^ah .* managed by (?P<manager>.+)_self$")
 
+HUMAN_LABEL = "human managers (real)"
+# validated categorical slots (dataviz reference palette, light mode):
+# 5 adjacent slots pass; the first 3 also pass all-pairs, which is what the
+# scatter uses. Every coloured series carries a direct label (contrast relief).
+SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]
+MUTED = "#b8b7b1"
+INK = "#0b0b0b"
+GRID = "#d8d7d2"
+HIGHLIGHT = [HUMAN_LABEL, "ah_punisher", "human_severity", "prop10", "thr9_p5"]
+LABEL_IN_SCATTER = [
+    HUMAN_LABEL,
+    "ah_punisher",
+    "never",
+    "prop10",
+    "thr9_p10",
+    "thr9_p5",
+    "human_severity",
+    "thr19_p10",
+]
+
 
 def manager_name(run):
     m = RUN_RE.match(run)
@@ -159,12 +179,48 @@ def load_human():
     return df.drop(columns=["episode"]).rename(columns={"episode_id": "episode"})
 
 
+def aggregate(tags, out_dir, name):
+    """Cross-seed table: one row per manager, one column per seed."""
+    frames = []
+    for t in tags:
+        d = pd.read_csv(os.path.join(out_dir, f"summary_{t}.csv"))
+        d["tag"] = t
+        frames.append(d)
+    allseeds = pd.concat(frames, ignore_index=True)
+    sim = allseeds[allseeds["manager"] != "human managers (real)"]
+    out = []
+    for metric in ["cg_env", "cg_corr", "payoff_env", "payoff_corr"]:
+        piv = sim.pivot_table(index="manager", columns="tag", values=metric)
+        piv["mean"] = piv.mean(axis=1)
+        piv["spread"] = piv[list(tags)].max(axis=1) - piv[list(tags)].min(axis=1)
+        piv["sd"] = piv[list(tags)].std(axis=1)
+        piv["metric"] = metric
+        out.append(piv.reset_index())
+    combined = pd.concat(out, ignore_index=True)
+    path = os.path.join(out_dir, f"seed_spread_{name}.csv")
+    combined.to_csv(path, index=False)
+    print(f"wrote {path}\n")
+    for metric in ["cg_env", "cg_corr", "payoff_env", "payoff_corr"]:
+        sub = combined[combined["metric"] == metric].drop(columns="metric")
+        sub = sub.sort_values("mean", ascending=False)
+        print(f"--- {metric} ---")
+        print(sub.to_string(index=False, float_format=lambda v: f"{v:.2f}"))
+        print()
+    return combined
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("sim_dirs", nargs="+")
+    ap.add_argument("sim_dirs", nargs="*")
     ap.add_argument("--tag", default="s42")
     ap.add_argument("--out-dir", default=OUT_DIR)
+    ap.add_argument("--aggregate", nargs="+", help="tags of summaries to combine")
+    ap.add_argument("--name", default="sweep")
     args = ap.parse_args()
+
+    if args.aggregate:
+        aggregate(args.aggregate, args.out_dir, args.name)
+        return
 
     frames = []
     for d in args.sim_dirs:
@@ -209,19 +265,38 @@ def main():
         "share_punished",
         "mean_punishment",
         "mean_punishment_pos",
+        "timeout_rate",
         "timeout_share_punished",
         "timeout_punishment_share",
         "rank_env",
         "rank_corr",
+        "rank_payoff_env",
+        "rank_payoff_corr",
     ]
     print(table[cols].to_string(index=False, float_format=lambda v: f"{v:.3f}"))
+
+    print("\nrank agreement (Spearman over managers):")
+    pairs = [
+        ("cg_env", "cg_corr"),
+        ("payoff_env", "payoff_corr"),
+        ("cg_env", "payoff_env"),
+        ("cg_corr", "payoff_corr"),
+    ]
+    for a, b in pairs:
+        print(f"  {a:11s} vs {b:11s}: {table[a].corr(table[b], method='spearman'):.3f}")
 
     make_figures(table, shape, args.out_dir, args.tag)
 
 
 def make_figures(table, shape, out_dir, tag):
-    sns.set_theme(style="whitegrid")
+    sns.set_theme(style="whitegrid", rc={"grid.linewidth": 0.5, "axes.edgecolor": GRID})
 
+    _ranking_figure(table, out_dir, tag)
+    _policy_shape_figure(shape, table, out_dir, tag)
+    _objectives_figure(table, out_dir, tag)
+
+
+def _ranking_figure(table, out_dir, tag):
     order = table.sort_values("cg_env")["manager"].tolist()
     long = table.melt(
         id_vars="manager",
@@ -232,67 +307,139 @@ def make_figures(table, shape, out_dir, tag):
     long["accounting"] = long["accounting"].map(
         {"cg_env": "environment", "cg_corr": "corrected"}
     )
-    plt.figure(figsize=(8, 0.34 * len(order) + 2.2))
+    plt.figure(figsize=(8.5, 0.36 * len(order) + 2.4))
     ax = sns.barplot(
-        data=long, y="manager", x="common_good", hue="accounting", order=order
+        data=long,
+        y="manager",
+        x="common_good",
+        hue="accounting",
+        order=order,
+        palette=[SERIES[0], SERIES[1]],
+        linewidth=0,
+        width=0.76,
     )
     err = table.set_index("manager")
     for m in order:
         y = order.index(m)
         ax.plot(
             [err.loc[m, "cg_env_lo"], err.loc[m, "cg_env_hi"]],
-            [y - 0.2, y - 0.2],
-            color="black",
-            lw=1.1,
+            [y - 0.19, y - 0.19],
+            color=INK,
+            lw=1.2,
+            solid_capstyle="butt",
         )
-    ax.set_xlabel("common good per round, both groups (mean over episodes)")
+    ax.set_xlabel("common good per round, both groups (mean over 100 episodes)")
     ax.set_ylabel("")
-    ax.set_title(f"Common good by manager ({tag}); bars = 95% episode bootstrap")
-    plt.tight_layout()
-    p = os.path.join(out_dir, f"common_good_ranking_{tag}.jpg")
-    plt.savefig(p, dpi=140)
-    plt.close()
-    print(f"wrote {p}")
-
-    keep = shape[shape["n"] >= 20]
-    plt.figure(figsize=(9, 5.5))
-    ax = sns.lineplot(
-        data=keep,
-        x="contribution",
-        y="punishment",
-        hue="manager",
-        marker="o",
-        markersize=4,
+    ax.set_title(
+        f"Common good by manager ({tag})\n"
+        "black rule = 95% bootstrap over episodes, environment accounting",
+        loc="left",
+        fontsize=11,
     )
+    ax.legend(title="", frameon=False, loc="lower right")
+    ax.xaxis.grid(True)
+    ax.yaxis.grid(False)
+    _save(out_dir, f"common_good_ranking_{tag}.jpg")
+
+
+def _policy_shape_figure(shape, table, out_dir, tag):
+    keep = shape[shape["n"] >= 20].copy()
+    plt.figure(figsize=(9, 5.6))
+    ax = plt.gca()
+    others = sorted(set(keep["manager"]) - set(HIGHLIGHT))
+    for m in others:
+        s = keep[keep["manager"] == m].sort_values("contribution")
+        ax.plot(s["contribution"], s["punishment"], color=MUTED, lw=1.1, zorder=1)
+    for i, m in enumerate(HIGHLIGHT):
+        s = keep[keep["manager"] == m].sort_values("contribution")
+        if not len(s):
+            continue
+        ax.plot(
+            s["contribution"],
+            s["punishment"],
+            color=SERIES[i],
+            lw=2.0,
+            marker="o",
+            markersize=4,
+            label=m,
+            zorder=3,
+        )
+    n_other = len(others)
+    ax.plot([], [], color=MUTED, lw=1.1, label=f"the other {n_other} rules")
     ax.set_xlabel("contribution the manager is responding to")
     ax.set_ylabel("mean punishment")
-    ax.set_title(f"Policy shape ({tag}); valid player-rounds, bins with n >= 20")
-    ax.set_xticks(range(0, 21, 2))
-    sns.move_legend(ax, "upper left", bbox_to_anchor=(1.01, 1.0), fontsize=7)
-    plt.tight_layout()
-    p = os.path.join(out_dir, f"policy_shape_{tag}.jpg")
-    plt.savefig(p, dpi=140)
-    plt.close()
-    print(f"wrote {p}")
-
-    plt.figure(figsize=(7, 5))
-    ax = sns.scatterplot(
-        data=table, x="mean_punishment", y="cg_env", hue="manager", s=60, legend=False
+    ax.set_title(
+        f"Policy shape ({tag}); valid player-rounds, contribution bins with n >= 20."
+        f"\nHighlighted series are tabulated in policy_shape_{tag}.csv.",
+        loc="left",
+        fontsize=11,
     )
-    for _, r in table.iterrows():
-        ax.annotate(
-            r["manager"],
-            (r["mean_punishment"], r["cg_env"]),
-            fontsize=6,
-            xytext=(3, 3),
-            textcoords="offset points",
-        )
-    ax.set_xlabel("mean punishment per valid agent-round")
-    ax.set_ylabel("common good per round (environment accounting)")
-    ax.set_title(f"Does punishing pay? ({tag})")
+    ax.set_xticks(range(0, 21, 2))
+    ax.set_xlim(-0.6, 20.6)
+    ax.legend(frameon=False, fontsize=8, loc="upper right")
+    _save(out_dir, f"policy_shape_{tag}.jpg")
+
+
+def _family(name):
+    if name == "never":
+        return "never punish"
+    if name in ("ah_punisher", "human_mean", "human_severity", HUMAN_LABEL):
+        return "human-derived"
+    return "rule"
+
+
+def _objectives_figure(table, out_dir, tag):
+    t = table.copy()
+    t["family"] = t["manager"].map(_family)
+    fams = ["rule", "human-derived", "never punish"]
+    colors = dict(zip(fams, SERIES[:3]))
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 5), sharex=True)
+    panels = [
+        ("cg_env", "common good per round  (1.6*sum c - sum p)"),
+        ("payoff_env", "group payoff sum per round  (the RL reward)"),
+    ]
+    for ax, (col, ylab) in zip(axes, panels):
+        for fam in fams:
+            s = t[t["family"] == fam]
+            ax.scatter(
+                s["mean_punishment"],
+                s[col],
+                s=58,
+                color=colors[fam],
+                edgecolor="white",
+                linewidth=1.2,
+                label=fam,
+                zorder=3,
+            )
+        for _, r in t.iterrows():
+            if r["manager"] in LABEL_IN_SCATTER:
+                ax.annotate(
+                    r["manager"],
+                    (r["mean_punishment"], r[col]),
+                    xytext=(5, 4),
+                    textcoords="offset points",
+                    fontsize=7.5,
+                    color=INK,
+                )
+        ax.set_xlabel("mean punishment per valid agent-round")
+        ax.set_ylabel(ylab)
+    axes[0].legend(frameon=False, fontsize=8, loc="lower right")
+    fig.suptitle(
+        f"The two objectives disagree ({tag}): the same managers, ranked "
+        "by the pool and by the payoff sum",
+        x=0.01,
+        ha="left",
+        fontsize=11,
+    )
     plt.tight_layout()
-    p = os.path.join(out_dir, f"punishment_vs_common_good_{tag}.jpg")
-    plt.savefig(p, dpi=140)
+    _save(out_dir, f"objectives_vs_punishment_{tag}.jpg", tight=False)
+
+
+def _save(out_dir, name, tight=True):
+    if tight:
+        plt.tight_layout()
+    p = os.path.join(out_dir, name)
+    plt.savefig(p, dpi=150)
     plt.close()
     print(f"wrote {p}")
 

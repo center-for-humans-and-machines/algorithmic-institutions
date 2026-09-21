@@ -111,14 +111,40 @@ HEADER = """\
 # 23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_simtimeout,
 # and the same 2x8 agents / 24 rounds / 100 episodes protocol.
 #
-# `reseed_per_run: true` restarts every run from `seed`, so the difference
-# between two managers here is the manager and not the position of its run
-# in the file. `ah_punisher` is the baseline to beat and reproduces the
-# frontier run above exactly.
+# `reseed_per_run: true` restarts every run from `seed`, so every manager in
+# this file starts its episode 0 from the same state. The streams diverge
+# after that -- a manager that punishes differently moves the simulated
+# players differently, and MultiManager evaluates every manager in the file
+# each round, so the RNG a run consumes depends on the file's manager SET.
+# Two managers are therefore strictly stream-comparable only inside one
+# config; across configs the difference is an ordinary redraw, which the
+# head-to-head config and the extra seeds are there to bound.
 """
 
+HEAD_TO_HEAD_HEADER = """\
+# auto/rule-based-manager-sweep, head-to-head arm, seed {seed}.
+#
+# The decisive comparisons in ONE config so that every manager here consumes
+# exactly the same RNG per round and their difference is as close to the rule
+# alone as this simulation allows: never-punish, the artificial punisher
+# (the baseline to beat), the sweep's three best threshold/proportional
+# rules, the human-shaped rule, and skip_invalid twins of two of them that
+# never punish a player who gave no input (review finding D1). Same stack,
+# same protocol, same seed discipline as the sweep shards.
+"""
 
-def write_config(path, shard, n_shards, seed, managers, out_dir_suffix):
+HEAD_TO_HEAD = [
+    "never",
+    "ah_punisher",
+    "prop10",
+    "thr9_p10",
+    "thr9_p5",
+    "human_severity",
+]
+SKIP_INVALID_TWINS = ["prop10", "thr9_p5"]
+
+
+def write_config(path, shard, n_shards, seed, managers, out_dir_suffix, header=None):
     pairings = [
         {"name": f"{k}_self", "group_0": k, "group_1": k} for k in managers.keys()
     ]
@@ -143,17 +169,43 @@ def write_config(path, shard, n_shards, seed, managers, out_dir_suffix):
         "basedir": ".",
     }
     with open(path, "w") as f:
-        f.write(HEADER.format(shard=shard, n_shards=n_shards, seed=seed))
+        if header is None:
+            header = HEADER.format(shard=shard, n_shards=n_shards, seed=seed)
+        f.write(header)
         yaml.safe_dump(config, f, sort_keys=False, default_flow_style=False)
     print(f"wrote {path}  ({len(managers)} managers)")
+
+
+def head_to_head_managers(basedir="."):
+    all_m = rule_managers(basedir)
+    managers = {k: all_m[k] for k in HEAD_TO_HEAD}
+    for k in SKIP_INVALID_TWINS:
+        managers[f"{k}_si"] = {**all_m[k], "skip_invalid": True}
+    return managers
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, nargs="+", default=[42])
     ap.add_argument("--per-shard", type=int, default=7)
+    ap.add_argument("--head-to-head", action="store_true")
     ap.add_argument("--basedir", default=".")
     args = ap.parse_args()
+
+    if args.head_to_head:
+        managers = head_to_head_managers(args.basedir)
+        for seed in args.seeds:
+            suffix = f"h2h_s{seed}"
+            write_config(
+                os.path.join(args.basedir, CONFIG_DIR, f"{SLUG}_{suffix}.yml"),
+                shard=1,
+                n_shards=1,
+                seed=seed,
+                managers=managers,
+                out_dir_suffix=suffix,
+                header=HEAD_TO_HEAD_HEADER.format(seed=seed),
+            )
+        return
 
     managers = rule_managers(args.basedir)
     names = list(managers)
