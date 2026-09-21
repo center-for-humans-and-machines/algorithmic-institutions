@@ -3,12 +3,6 @@ import torch as th
 from aimanager.generic.data import MISSING_CONTRIBUTION
 
 
-def create_fully_connected(n_nodes):
-    return th.tensor(
-        [[i, j] for i in range(n_nodes) for j in range(n_nodes) if i != j]
-    ).T
-
-
 #: What the manager is rewarded for.
 #:   common_pool -- the group's common pool, 1.6 * sum(c) - sum(p). What the
 #:                  real manager was paid on (reports/basics.md).
