@@ -1,0 +1,24 @@
+{
+  "config": "configs/training/rl_manager/rl_pnoise_s42.yml",
+  "short_run": {
+    "n_update_steps": 6,
+    "eval_period": 2,
+    "env_step_calls": 216,
+    "env_reset_calls": 10,
+    "rollouts_from_steps": 9.0,
+    "rollouts_from_resets": 10,
+    "note": "resets overstate by one: the env constructor resets without playing an episode"
+  },
+  "full_run": {
+    "n_update_steps": 4000,
+    "eval_period": 20,
+    "env_batch_size": 1000,
+    "n_rounds": 24,
+    "behaviour_rollouts": 4000,
+    "evaluation_rollouts": 200,
+    "behaviour_episodes": 4000000,
+    "evaluation_episodes": 200000,
+    "total_episodes": 4200000,
+    "total_agent_rounds": 100800000
+  }
+}
