@@ -13,15 +13,19 @@
 # is whether a learned policy beats it, so it has to be a row and not only a
 # column.
 #
-# The rule rows are the control: punishment costs the common pool in the round
-# it is given and its benefit is delayed, so a manager that declines to punish
-# may be right about this world rather than badly trained. `rule_based` is
-# punish = clamp(floor((20 - contribution - round_number) / k), 0, 30), which
-# front-loads punishment on the shortfall from a full contribution -- the best
-# case for punishment paying off, and therefore the fairest control. k = 1 / 4
-# / 8 spans the severity range. `zero` is the floor. When the sibling sweep in
-# notes/autoresearch_log/rule-based-manager-sweep.md lands, its best rules
-# replace these three.
+# The rule rows are the control, and they are PR #207's winners rather than
+# rules invented here: `thr9_p10` (punish 10 when the player contributed 9 or
+# less) and `prop10` (punish the shortfall from 20) are the two that beat the
+# clone in both of that sweep's arms, and `never` is the floor. They are
+# re-run inside this config rather than quoted from it, because that PR's own
+# section 3.0 warns MultiManager's RNG draw depends on the config's manager
+# set, so two managers are only stream-comparable within one file.
+#
+# What the control decides: punishment costs the common pool in the round it
+# is given and its benefit is delayed. If a rule earns more than the learned
+# manager, a quiet learned policy is a training failure; if it earns less, the
+# world is saying punishment does not pay. PR #207 already answered the second
+# half in this world -- it does pay -- so these rows are here to size the gap.
 #
 # See notes/autoresearch_log/rl-manager-two-worlds.md.
 
@@ -46,21 +50,23 @@ managers:
   lin_punisher:
     type: linear
     path: artifacts/baselines/punishment_multinomial_ceiling_severity_copula.joblib
-  zero:
-    type: dummy
-    constant_punishment: 0
-  rule_k1:
+  # The control rows. `never` is the floor; `thr9_p10` and `prop10` are the
+  # two rules PR #207 found beat the clone in both of its arms. They are
+  # re-run here rather than quoted, because that PR's own section 3.0 warns
+  # MultiManager's RNG draw depends on the config's manager set, so two
+  # managers are only stream-comparable inside one config.
+  never:
     type: rule_based
-    k: 1
-    n_punishments: 31
-  rule_k4:
+    rule: never
+  thr9_p10:
     type: rule_based
-    k: 4
-    n_punishments: 31
-  rule_k8:
+    rule: threshold
+    threshold: 9
+    amount: 10
+  prop10:
     type: rule_based
-    k: 8
-    n_punishments: 31
+    rule: proportional
+    rate: 1.0
 
 pairings:
   # the three learned managers, each against the punisher they trained against
@@ -77,17 +83,14 @@ pairings:
   - name: lin_punisher_self
     group_0: lin_punisher
     group_1: lin_punisher
-  - name: zero_vs_punisher
-    group_0: zero
+  - name: never_vs_punisher
+    group_0: never
     group_1: lin_punisher
-  - name: rule_k1_vs_punisher
-    group_0: rule_k1
+  - name: thr9_p10_vs_punisher
+    group_0: thr9_p10
     group_1: lin_punisher
-  - name: rule_k4_vs_punisher
-    group_0: rule_k4
-    group_1: lin_punisher
-  - name: rule_k8_vs_punisher
-    group_0: rule_k8
+  - name: prop10_vs_punisher
+    group_0: prop10
     group_1: lin_punisher
 
 switch_every: 4

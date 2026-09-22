@@ -497,3 +497,62 @@ The behavioural table below is the one the experiment exists to fill, per seed:
     group 1. The like-for-like baseline is the sibling's competing arm (rules
     against the clone and against a never-punish rival, one group each), and
     my runs should be read against that rather than against the table above.
+
+26. **All three runs completed; the cost projection held.** Jobs 30401560 /
+    30401561 / 30401562, elapsed **06:04:57 / 05:59:06 / 06:02:44**, against
+    the 5 h 47 m – 6 h 17 m projected from the 40-step pilot. Three 6.7 MB
+    checkpoints.
+
+27. **The value function had not converged at 4000 steps.** Greedy-eval
+    `q_mean` is still climbing inside the last quarter of training in every
+    seed — +0.56 (s42), +2.70 (s43), +2.80 (s44) between the first and second
+    halves of the final 1,000 update steps. The behavioural quantities are
+    steadier over that window (mean punishment 1.81 / 1.08 / 1.80, mean
+    contribution 7.48 / 8.24 / 8.45), so the policies are not wandering, but
+    nothing here should be called a converged optimum. Reported because the
+    step count was inherited from `03_2g8a_sum.yml` and never revisited, and
+    because a longer run is the cheapest experiment available at ~6 h.
+
+28. **Punishment conditioned on validity — the required output.** From
+    `scripts/rl_two_worlds/validity_conditioned.py`, greedy policy, 128
+    episodes, in the training configuration;
+    `validity_s4{2,3,4}.json`. Two quantities, because the fix changed what
+    they mean: *realised* is what the game charged and every model saw;
+    *intended* is the argmax the policy actually picked, before the env
+    zeroed it.
+
+    | seed | intended, gave input | intended, timed out | realised, timed out |
+    |---|---|---|---|
+    | 42 | mean 1.756, 38.7% > 0 | mean 0.551, 11.0% > 0 | **0.000, max 0** |
+    | 43 | mean 0.987, 9.8% > 0 | mean 4.788, 30.6% > 0 | **0.000, max 0** |
+    | 44 | mean 0.914, 45.0% > 0 | mean 0.618, 17.3% > 0 | **0.000, max 0** |
+
+    The regression check passes on all three: nothing reaches an artificial
+    human at a timed-out cell. The *intended* column is the behavioural
+    reading and it is not uniform — s42 and s44 aim **less** at timed-out
+    cells than at ordinary ones, while s43 aims four times **more** there
+    (4.79 against 0.99). With the env zeroing those cells they are a
+    don't-care region, so a policy can park anything there at no cost and
+    s43's number is most likely an unconstrained artefact rather than a
+    learned preference. It is exactly the signature D1 predicted, though, and
+    it is the reason this measurement stays a standing output: had the lever
+    still been open, s43 would have been exploiting it.
+
+29. **The opponent clone punishes timed-out players about half the time —
+    because the ceiling punisher has no validity feature.** Measured on the
+    same rollouts: the artificial punisher's intended punishment at timed-out
+    cells is mean 3.72 / 3.83 / 3.96 with 47–60% above zero, against 1.55–1.69
+    and 27–30% at cells where the player gave input. That is not a defect in
+    the run — the env zeroes it — but it is worth recording, and it has a
+    clean cause. `punishment_multinomial_ceiling_severity_copula`, the
+    artifact this experiment was told to use, selects
+    `contribution`, `contribution_max`, `prev_contribution`,
+    `prev_punishment`, `round_number`, `is_first` and **not**
+    `contribution_valid`. A timed-out player is served contribution 0, so the
+    ceiling punisher cannot tell them from a genuine zero contributor and
+    punishes them like one. The frontier's
+    `punishment_multinomial_timeout_severity_copula` does carry that feature
+    and, per PR #208's step 1, aims at one such cell in 19,200. So the
+    baseline in this experiment behaves differently at those cells from the
+    baseline in the rule sweep, which used the timeout punisher — a
+    comparability caveat for anyone reading the two side by side.
