@@ -1,0 +1,101 @@
+# auto/rule-sigmoid-family, seed 43.
+#
+# The cross-check for the batched sweep. The fitted optima of the sigmoid
+# family, the incumbent `thr9_p10` and the two controls, run through the
+# path every earlier rule arm used -- `simulate.py`, one episode at a time,
+# 100 episodes, `reseed_per_run`. `thr9_p10`, `never` and the clone appear in
+# both this file and the sweep, so the two harnesses can be compared on rules
+# they both run; the fitted rules appear so the headline is not resting on
+# new code alone.
+#
+# Same stack, same artifacts, same 2x8 / 24-round / 100-episode protocol as
+# `26_rule_inverted_targeting_s43.yml`.
+seed: 43
+reseed_per_run: true
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  never:
+    type: rule_based
+    rule: never
+  ah_punisher:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  thr9_p10:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 10
+  opt_pool:
+    type: rule_based
+    rule: sigmoid
+    p_max: 30.0
+    c0: 7.13780183612438
+    tau: 0.4249189420822854
+    gamma_ep: 3.0
+    gamma_sw: 1.418622533255372
+    phase: 0.0
+  opt_contribution:
+    type: rule_based
+    rule: sigmoid
+    p_max: 30.0
+    c0: 8.974039576360111
+    tau: 0.2057424340962612
+    gamma_ep: 0.0
+    gamma_sw: 1.3456344082468614
+    phase: 0.0
+pairings:
+- name: ah_punisher_vs_ah_punisher
+  group_0: ah_punisher
+  group_1: ah_punisher
+- name: never_vs_never
+  group_0: never
+  group_1: never
+- name: opt_pool_vs_ah_punisher
+  group_0: opt_pool
+  group_1: ah_punisher
+- name: opt_contribution_vs_ah_punisher
+  group_0: opt_contribution
+  group_1: ah_punisher
+- name: thr9_p10_vs_ah_punisher
+  group_0: thr9_p10
+  group_1: ah_punisher
+- name: never_vs_ah_punisher
+  group_0: never
+  group_1: ah_punisher
+- name: opt_pool_vs_never
+  group_0: opt_pool
+  group_1: never
+- name: opt_contribution_vs_never
+  group_0: opt_contribution
+  group_1: never
+- name: thr9_p10_vs_never
+  group_0: thr9_p10
+  group_1: never
+- name: ah_punisher_vs_never
+  group_0: ah_punisher
+  group_1: never
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups:
+- 0
+- 0
+- 0
+- 0
+- 1
+- 1
+- 1
+- 1
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+output_dir: plots/simulation/27_rule_sigmoid_paired_s43
+figure_name: rule_sigmoid_paired_s43
+save_per_round: true
+basedir: .
