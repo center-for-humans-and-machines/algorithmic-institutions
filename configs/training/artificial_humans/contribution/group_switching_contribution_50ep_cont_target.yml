@@ -1,0 +1,70 @@
+description: >-
+  Continuous-target variant of the reference contribution predictor. Same
+  50-episode group-switching data, same architecture (node+edge+rnn,
+  hidden=20, lr=3e-4), same features (numeric prev_contribution and
+  prev_punishment, onehot agent_group) and the same 575-epoch budget as
+  the reference config group_switching_contribution_50ep.yml. The only
+  change is the readout:
+  the 21-logit categorical head is replaced by a single continuous
+  output trained with MSE on the value/20 target, and predictions are
+  rounded back to the 0..20 contribution grid — i.e. deterministic, no
+  sampling from a categorical. Targets the CG/RCA/RCD rows of the
+  cont-target autoresearch experiment, where sampling noise from the
+  categorical head is the suspected source of the contribution-level
+  discrepancy.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn+cont
+    dataset: 50ep
+    epochs: 575
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_cont_target
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    y_encoding: numeric
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: False
