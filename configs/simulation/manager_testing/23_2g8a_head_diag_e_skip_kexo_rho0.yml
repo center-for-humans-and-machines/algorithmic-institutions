@@ -1,0 +1,48 @@
+# head-state-spread diagnostic, the switch-matched CATEGORICAL copula-off arm.
+#
+# PR #186's arm B (bare stimulus-skip trunk, copula off) ran with
+# switch_joint_exodus, while the two Gaussian arms of this diagnostic run with
+# switch_exodus_k_onehot. That left the switch model as the one cross-lineage
+# difference in the headline table. This config is arm B with ONLY the switch
+# model swapped to switch_exodus_k_onehot, so the categorical copula-off row
+# becomes like-for-like with c_infl_rho0 and d_kexo_rho0.
+#
+# Its copula-ON counterpart already exists as PR #190's
+# 23_2g8a_switch_kexo_port_self_gnncopar1_contr_stimulus_skip_contr_gnn_kexo_switch_curpun
+# (same contributor with the herding copula, same switch head, same punisher).
+#
+# The contributor is the BARE trunk (copula_rho == 0); nothing is retrained and
+# no copula is recalibrated.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_exodus_k_onehot/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_current_contr_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_head_diag_e_skip_kexo_rho0
+figure_name: 2g8a_head_diag_e_skip_kexo_rho0
+save_per_round: true
+basedir: .
