@@ -29,7 +29,8 @@ from aggregate import (  # noqa: E402
     OBJECTIVES,
     load_shape,
     load_sweep,
-    paired_bootstrap,
+    boot_means,
+    bootstrap_ci,
     per_point,
     shape_curve,
     shape_stats,
@@ -132,16 +133,34 @@ def validation_table(episodes, design, seeds):
     return t[cols].sort_values("focal_pool", ascending=False).reset_index(drop=True)
 
 
-def contrasts(episodes, design, seeds):
+def contrasts(episodes, design, seeds, n_boot=10000):
+    """Every rule against every reference, on both objectives.
+
+    Each rule's bootstrap means are drawn ONCE per objective and reused for
+    all three references, which is the difference between a minute and an
+    afternoon at 52 rules x 3 references x 6,144 episodes.
+    """
     df = episodes[episodes["seed"].isin(seeds)]
     names = [n for n in design["name"] if n in set(df["name"])]
+    boot, obs = {}, {}
+    for name in names:
+        x = df[df["name"] == name]
+        for obj in OBJECTIVES:
+            v = x[obj].to_numpy()
+            obs[(name, obj)] = float(v.mean())
+            boot[(name, obj)] = boot_means(v, n=n_boot)
     rows = []
     for name in names:
         for ref in REFERENCES:
-            if name == ref or ref not in set(df["name"]):
+            if name == ref or ref not in names:
                 continue
             for obj in OBJECTIVES:
-                d, lo, hi = paired_bootstrap(df, name, ref, obj)
+                d, lo, hi = bootstrap_ci(
+                    boot[(name, obj)],
+                    boot[(ref, obj)],
+                    obs[(name, obj)],
+                    obs[(ref, obj)],
+                )
                 rows.append(
                     {
                         "name": name,

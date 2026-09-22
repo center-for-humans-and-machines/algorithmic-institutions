@@ -285,22 +285,34 @@ def shape_curve(shape, name, seeds=None):
     return (num / tot).reindex(range(21))
 
 
-def paired_bootstrap(df, name_a, name_b, column, n=10000, seed=42):
-    """Difference of two design points' means, resampling episodes.
+def boot_means(x, n=10000, seed=42, chunk=1000):
+    """`n` bootstrap means of `x`, drawn in chunks.
 
-    The episodes of two points in the same rollout are not paired -- a
+    Chunked because the naive `(n, len(x))` draw is 6144 x 10000 doubles per
+    call here -- half a gigabyte -- and every rule is compared against three
+    references on two objectives, so the naive version allocates that a few
+    hundred times over.
+    """
+    rng = np.random.default_rng(seed)
+    x = np.asarray(x, dtype=float)
+    out = []
+    for i in range(0, n, chunk):
+        k = min(chunk, n - i)
+        out.append(rng.choice(x, size=(k, len(x)), replace=True).mean(1))
+    return np.concatenate(out)
+
+
+def bootstrap_ci(means_a, means_b, mean_a, mean_b):
+    """Interval for a difference, from two precomputed bootstrap samples.
+
+    The episodes of two design points in the same rollout are not paired -- a
     manager that punishes differently makes the players act differently and
     consumes a different number of draws -- so this is an unpaired bootstrap
     of the difference, which is the conservative reading.
     """
-    rng = np.random.default_rng(seed)
-    a = df.loc[df["name"] == name_a, column].to_numpy()
-    b = df.loc[df["name"] == name_b, column].to_numpy()
-    da = rng.choice(a, size=(n, len(a)), replace=True).mean(1)
-    db = rng.choice(b, size=(n, len(b)), replace=True).mean(1)
-    d = da - db
+    d = means_a - means_b
     return (
-        float(a.mean() - b.mean()),
+        float(mean_a - mean_b),
         float(np.quantile(d, 0.025)),
         float(np.quantile(d, 0.975)),
     )
