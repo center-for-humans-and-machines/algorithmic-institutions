@@ -360,7 +360,14 @@ def cmd_shape(args):
     cfg = load_cfg(args.config)
     device = th.device(args.device)
     env, opponent, rl_group_id = build_env(cfg, device, args.batch_size)
+    # `ArtificalManager.load` assigns the unpickled model straight through
+    # without moving it, and `save` puts it on the CPU first, so a load onto
+    # cuda comes back with CPU weights and a cuda `self.device`. Its only
+    # other caller (api_manager.RLManager) loads on the CPU and never hits
+    # this. Moved here rather than in the manager: that is a fix for its own
+    # branch, not for an exploration arm.
     manager = ArtificalManager.load(args.manager, device=device)
+    manager.policy_model = manager.policy_model.to(device)
     manager.policy_model.eval()
 
     margs = cfg["manager_args"]
