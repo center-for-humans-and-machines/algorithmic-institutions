@@ -33,8 +33,11 @@ frame wholesale.
 
 LEVEL VERSUS SHAPE. A manager that punishes half as hard has half the
 `shape_delta` without having changed who it aims at, so `shape_delta_norm`
-divides the shape by the manager's own mean punishment. Both are reported;
-a claim about targeting has to survive the normalised column.
+divides the shape by the manager's own mean punishment, and `targeting_rho`
+-- the Spearman correlation between contribution and punishment -- drops the
+level entirely, being invariant to any increasing rescaling. All three are
+reported; a claim about targeting has to survive `targeting_rho`, which is the
+one a level difference cannot fake.
 
 THE NOISE FLOOR. With two parquets (the sim-seed 42 run and its 142 twin,
 identical in every other key) every statistic is computed twice and the
@@ -54,6 +57,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+import scipy.stats as st
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 
@@ -117,6 +121,27 @@ def shape_counts(d):
     return bin_contribution(v["contribution"]).value_counts().reindex(RPA_LABELS)
 
 
+def targeting_rho(contribution, punishment):
+    """Spearman rho between contribution and punishment. Level cannot touch it.
+
+    `shape_delta` is a difference of two punishment means, so a manager that
+    punishes half as hard has half the shape_delta without having re-aimed at
+    anybody. Dividing by the level fixes that only as long as the level is not
+    near zero, and one of these managers punishes on 7% of rounds. A rank
+    correlation is invariant to ANY increasing rescaling of punishment, so it
+    separates who is aimed at from how hard, and it uses every row rather than
+    the two extreme bins.
+
+    Human sign convention: negative means punishment falls as contribution
+    rises -- punish the free-rider, spare the full contributor. Positive is the
+    inversion.
+    """
+    ok = contribution.notna() & punishment.notna()
+    if ok.sum() < 2 or punishment[ok].nunique() < 2:
+        return np.nan
+    return float(st.spearmanr(contribution[ok], punishment[ok]).statistic)
+
+
 def human_shape():
     """The human reference. `load_human` already NaNs both invalid columns."""
     h = load_human(os.path.join(ROOT, HUMAN_DATA_FILE))
@@ -140,8 +165,8 @@ def leaver_gap(d, valid_col="contribution_valid"):
         d = d[d[valid_col].astype(bool)]
     d = d.dropna(subset=["contribution"])
     lv = d[d["does_switch"].astype(bool)]["contribution"]
-    st = d[~d["does_switch"].astype(bool)]["contribution"]
-    pooled = float(lv.mean() - st.mean()) if len(lv) and len(st) else np.nan
+    stay = d[~d["does_switch"].astype(bool)]["contribution"]
+    pooled = float(lv.mean() - stay.mean()) if len(lv) and len(stay) else np.nan
 
     by_side = (
         d.groupby(["episode_id", "round_number", d["does_switch"].astype(bool)])[
@@ -165,7 +190,7 @@ def leaver_gap(d, valid_col="contribution_valid"):
         "leaver_gap_within": within,
         "leaver_gap_within_ci95": within_ci,
         "n_leavers": int(len(lv)),
-        "n_stayers": int(len(st)),
+        "n_stayers": int(len(stay)),
         "n_contrast_rounds": int(len(per_round)),
     }
 
@@ -283,6 +308,7 @@ def measure(path):
             "shape_delta": delta,
             "mean_punishment": level,
             "shape_delta_norm": delta / level if level else np.nan,
+            "targeting_rho": targeting_rho(v["contribution"], v["punishment"]),
             "punish_rate": float((v["punishment"] > 0).mean()),
             "mean_given_positive": float(v[v["punishment"] > 0]["punishment"].mean()),
             "n_agent_rounds": int(len(v)),
@@ -297,6 +323,7 @@ def measure(path):
         "shape_delta": hdelta,
         "mean_punishment": hlevel,
         "shape_delta_norm": hdelta / hlevel,
+        "targeting_rho": targeting_rho(human["contribution"], human["punishment"]),
         "punish_rate": float((human["punishment"] > 0).mean()),
         "mean_given_positive": float(
             human[human["punishment"] > 0]["punishment"].mean()
@@ -334,6 +361,7 @@ def measure(path):
 PAIRED_COLS = [
     "shape_delta",
     "shape_delta_norm",
+    "targeting_rho",
     "leaver_gap",
     "leaver_gap_within",
     "mean_punishment",
@@ -365,6 +393,50 @@ def paired(stats):
     if not rows:
         return pd.DataFrame(index=pd.Index([], name="seed"))
     return pd.DataFrame(rows).set_index("seed")
+
+
+def power(pair, stats, floor=None):
+    """Is a null here tight, or merely underpowered? They are not the same.
+
+    Per statistic:
+      * `mean_d`, `sd_d`, and the paired-t 95% interval on three pairs
+        (t = 4.303 with 2 df, so the interval is wide by construction);
+      * `mde80`, the smallest paired difference three seeds could have
+        detected at 80% power given the spread the three pairs actually
+        showed -- this is what makes a null readable. A null whose interval
+        excludes the effect that would have mattered is tight; a null whose
+        `mde80` is larger than that effect is an absence of evidence.
+      * `seed_spread_pool` / `seed_spread_pc`, the range across the three
+        seeds inside each arm. When the arm difference is small against the
+        within-arm spread, the pairing is carrying the whole design.
+      * `noise_floor`, the mean absolute movement of the six learned rows
+        between the two sim seeds. A paired difference under this is not a
+        difference at all.
+    """
+    t_crit = float(st.t.ppf(0.975, len(pair) - 1))
+    t_pow = float(st.t.ppf(0.80, len(pair) - 1))
+    rows = []
+    for c in PAIRED_COLS:
+        d = pair[f"d_{c}"].astype(float)
+        sd = float(d.std(ddof=1))
+        se = sd / np.sqrt(len(d))
+        pool_v = [float(stats.loc[m, c]) for m in POOL if m in stats.index]
+        pc_v = [float(stats.loc[m, c]) for m in PERCAPITA if m in stats.index]
+        rec = {
+            "statistic": c,
+            "mean_d": float(d.mean()),
+            "sd_d": sd,
+            "ci95_lo": float(d.mean()) - t_crit * se,
+            "ci95_hi": float(d.mean()) + t_crit * se,
+            "mde80": sd * (t_crit + t_pow) / np.sqrt(len(d)),
+            "seed_spread_pool": max(pool_v) - min(pool_v) if pool_v else np.nan,
+            "seed_spread_pc": max(pc_v) - min(pc_v) if pc_v else np.nan,
+        }
+        if floor is not None and c in floor.columns:
+            learned = [m for m in POOL + PERCAPITA if m in floor.index]
+            rec["noise_floor"] = float(floor.loc[learned, c].mean())
+        rows.append(rec)
+    return pd.DataFrame(rows).set_index("statistic")
 
 
 def noise_floor(stats_a, stats_b):
@@ -403,6 +475,7 @@ def main():
     cols = [
         "shape_delta",
         "shape_delta_norm",
+        "targeting_rho",
         "mean_punishment",
         "punish_rate",
         "leaver_gap",
@@ -425,6 +498,7 @@ def main():
     print("--- the premise, re-measured: each manager minus `never` ---")
     print(contr.round(3).to_string(), "\n")
 
+    nf = None
     if args.replicate:
         stats_b, shape_b, cnt_b, residual_b, contr_b = measure(args.replicate)
         contr_b.to_csv(os.path.join(args.out, "incentive_contrasts_s142.csv"))
@@ -439,6 +513,17 @@ def main():
         print(nf.round(3).to_string(), "\n")
         print("--- paired differences, replicate ---")
         print(pair_b[[f"d_{c}" for c in PAIRED_COLS]].round(3).to_string(), "\n")
+
+    if len(pair) > 1:
+        pw = power(pair, stats, nf)
+        pw.to_csv(os.path.join(args.out, "power.csv"))
+        print("--- tight null or absence of evidence? ---")
+        print(pw.round(3).to_string(), "\n")
+        if args.replicate:
+            pw_b = power(pair_b, stats_b, nf)
+            pw_b.to_csv(os.path.join(args.out, "power_s142.csv"))
+            print("--- the same, on the replicate ---")
+            print(pw_b.round(3).to_string(), "\n")
 
 
 if __name__ == "__main__":
