@@ -75,15 +75,15 @@ def per_point(df, seeds=None, by=("name",)):
     for obj in OBJECTIVES:
         sd = df.groupby(by, sort=False)[obj].std(ddof=1)
         out[f"se_{obj}"] = sd / np.sqrt(out["n_episodes"])
-    ratios = df.groupby(by, sort=False).apply(
-        lambda g: pd.Series({k: _ratio(g, *v) for k, v in RATIOS.items()})
-    )
-    out = out.join(ratios)
+    # sum the numerators and denominators once, then divide: averaging
+    # per-episode ratios would weight episodes by nothing in particular
+    parts = sorted({c for pair in RATIOS.values() for c in pair})
+    tot = df.groupby(by, sort=False)[parts].sum().reindex(out.index)
+    for k, (num, den) in RATIOS.items():
+        out[k] = np.where(tot[den] > 0, tot[num] / tot[den].replace(0, np.nan), np.nan)
     out["c_gap"] = out["c_leavers"] - out["c_stayers"]
     out["p_gap"] = out["p_leavers"] - out["p_stayers"]
-    out["leave_rate"] = df.groupby(by, sort=False).apply(
-        lambda g: g["lv_n"].sum() / max(g["lv_n"].sum() + g["st_n"].sum(), 1)
-    )
+    out["leave_rate"] = tot["lv_n"] / (tot["lv_n"] + tot["st_n"]).replace(0, np.nan)
     return out.reset_index()
 
 
