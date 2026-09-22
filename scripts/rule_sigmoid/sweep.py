@@ -33,6 +33,7 @@ from aimanager.manager.paired_rollout import (
     contingency,
     make_env,
     rollout,
+    round_totals,
     summarise,
 )
 from aimanager.manager.sigmoid_rule import (
@@ -141,6 +142,28 @@ def shape_rows(tables, names):
     return pd.concat(out, ignore_index=True)
 
 
+def round_rows(rounds, names):
+    """`{seed: {metric: (P, T) totals}}` -> a long frame, one row per round."""
+    out = []
+    for seed, tot in rounds.items():
+        n_params, n_rounds = tot["members"].shape
+        out.append(
+            pd.DataFrame(
+                {
+                    "name": np.repeat(names, n_rounds),
+                    "seed": np.int32(seed),
+                    "round_number": np.tile(np.arange(n_rounds), n_params),
+                    "n_episodes": np.repeat(tot["n_episodes"].numpy(), n_rounds),
+                    **{
+                        k: tot[k].numpy().reshape(-1)
+                        for k in ("members", "n_valid", "sum_c", "sum_p")
+                    },
+                }
+            )
+        )
+    return pd.concat(out, ignore_index=True)
+
+
 def run(args):
     device = th.device(args.device)
     stack = dict(DEFAULT_STACK)
@@ -185,7 +208,7 @@ def run(args):
         rival = build_rival(args.rival, models, device)
         name = np.repeat(shard["name"].to_numpy(), args.chunk)
         param_idx = th.arange(len(shard)).repeat_interleave(args.chunk)
-        frames, tables = [], {}
+        frames, tables, rounds = [], {}, {}
         for seed in seeds:
             for rep in range(n_reps):
                 th.manual_seed(seed * 1_000_003 + si * 1009 + rep)
@@ -201,6 +224,12 @@ def run(args):
                 frames.append(frame)
                 cnt = contingency(rec, param_idx, len(shard))
                 tables[seed] = cnt if seed not in tables else tables[seed] + cnt
+                rt = round_totals(rec, param_idx, len(shard))
+                if seed not in rounds:
+                    rounds[seed] = rt
+                else:
+                    for k, v in rt.items():
+                        rounds[seed][k] = rounds[seed][k] + v
         out = os.path.join(
             args.out, f"episodes_p{args.part:02d}_shard{local_si:03d}.parquet"
         )

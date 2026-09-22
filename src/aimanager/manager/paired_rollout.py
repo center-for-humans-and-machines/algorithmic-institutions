@@ -246,6 +246,38 @@ def contingency(rec, param_idx, n_params, seat_group=0, n_c=21, n_p=31):
     return counts.reshape(n_params, n_c, n_p)
 
 
+def round_totals(rec, param_idx, n_params, seat_group=0):
+    """Per-design-point, per-round seat totals, summed over episodes.
+
+    The episode-level summary says what a rule produced; this says *when*.
+    That is the whole question for the horizon multipliers, which redistribute
+    the same spend across the episode rather than changing its size, so two
+    rules with the same realised mean punishment can be doing completely
+    different things and only a round-resolved series shows it.
+
+    Returns counts and sums rather than means, so the caller divides once
+    after pooling seeds.
+    """
+    c, p, v, g = (rec[k] for k in ("contribution", "punishment", "valid", "group"))
+    seat = g == seat_group
+    c_eff = th.where(v, c, th.zeros_like(c)).to(th.float)
+    p_eff = th.where(v, p, th.zeros_like(p)).to(th.float)
+    per_ep = {
+        "members": seat.sum(dim=1).to(th.float),
+        "n_valid": (seat & v).sum(dim=1).to(th.float),
+        "sum_c": (c_eff * seat).sum(dim=1),
+        "sum_p": (p_eff * seat).sum(dim=1),
+    }
+    out = {}
+    for k, x in per_ep.items():
+        acc = th.zeros(n_params, x.shape[-1], dtype=th.float)
+        out[k] = acc.index_add_(0, param_idx, x)
+    out["n_episodes"] = th.zeros(n_params).index_add_(
+        0, param_idx, th.ones(len(param_idx))
+    )
+    return out
+
+
 def summarise(rec, focal_group=0, rival_group=1, switch_every=4):
     """Every per-episode quantity this arm reports, as `(B,)` float tensors.
 

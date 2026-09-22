@@ -15,6 +15,7 @@ from aimanager.manager.paired_rollout import (
     contingency,
     make_env,
     rollout,
+    round_totals,
     summarise,
 )
 from aimanager.manager.sigmoid_rule import ConstantManager
@@ -201,6 +202,25 @@ def test_policy_shape_drops_timed_out_cells():
     s = summarise(rec)
     assert s["rpa_n_6-10"].item() == 1.0
     assert s["rpa_p_6-10"].item() == 4.0
+
+
+def test_round_totals_says_when_a_rule_spends():
+    """Two episodes on one design point: totals accumulate over episodes and
+    stay resolved by round, which is the whole point of them."""
+    rec = _rec(
+        contribution=[[[10, 4], [0, 9]], [[20, 20], [5, 5]]],
+        punishment=[[[2, 0], [0, 0]], [[1, 1], [0, 0]]],
+        valid=[[[True, True], [True, False]], [[True, True], [True, True]]],
+        group=[[[0, 0], [0, 0]], [[0, 0], [1, 1]]],
+    )
+    out = round_totals(rec, th.tensor([0, 0]), 1)
+    assert out["n_episodes"].tolist() == [2.0]
+    # episode 0 has both agents in the seat, episode 1 only agent 0
+    assert out["members"][0].tolist() == [3.0, 3.0]
+    # the timed-out cell (episode 0, agent 1, round 1) is excluded
+    assert out["n_valid"][0].tolist() == [3.0, 2.0]
+    assert out["sum_c"][0].tolist() == [10 + 0 + 20, 4 + 0 + 20]
+    assert out["sum_p"][0].tolist() == [2 + 0 + 1, 0 + 0 + 1]
 
 
 def test_leaver_gap_is_negative_when_the_low_contributors_leave():

@@ -183,6 +183,44 @@ def matched_spend(design_table, n_bins=12):
     return pd.DataFrame(rows)
 
 
+#: The contribution model's own evidence runs out above here: only 4.49% of
+#: its training rows follow a punishment above 10 and 1.50% follow one above
+#: 20 (manager review S2). A rule that never punishes harder than the
+#: incumbent's 10 is making a claim about people; one that lives above 20 is
+#: making a claim about the model.
+EVIDENCE_SEVERITY = 10.0
+
+
+def inside_the_evidence(design_table, severity=EVIDENCE_SEVERITY, top=10):
+    """The best design points that never punish harder than the incumbent.
+
+    The unconstrained optimum sits at `P_max = 30`, the top of the action
+    space, which is far outside what the contribution model was trained to
+    respond to. This table asks the same question with that extrapolation
+    ruled out: among rules whose severity-when-they-fire is no worse than
+    `thr9_p10`'s 10, what is attainable?
+    """
+    t = design_table.dropna(subset=["mean_p_given_positive"])
+    t = t[t["mean_p_given_positive"] <= severity]
+    cols = [
+        "name",
+        "p_max",
+        "c0",
+        "tau",
+        "gamma_ep",
+        "gamma_sw",
+        "mean_p",
+        "mean_p_given_positive",
+        "punish_rate",
+        *OBJECTIVES,
+        "focal_members",
+    ]
+    out = {}
+    for obj in OBJECTIVES:
+        out[obj] = t.nlargest(top, obj)[cols].assign(ranked_on=obj)
+    return pd.concat(out.values(), ignore_index=True)
+
+
 def fig_disagreement(table, out):
     """The two objectives against each other over the whole design."""
     fig, ax = plt.subplots(figsize=(6.5, 5.5))
@@ -328,8 +366,12 @@ def run(args):
         how="left",
     ).merge(targeting_triple(design_ep, seeds=fit_seeds), on="name", how="left")
     design_tab.to_csv(os.path.join(args.out, "design_summary.csv"), index=False)
-    matched_spend(design_tab[design_tab["kind"] == "sobol"]).to_csv(
+    sobol = design_tab[design_tab["kind"] == "sobol"]
+    matched_spend(sobol).to_csv(
         os.path.join(args.out, "matched_spend.csv"), index=False
+    )
+    inside_the_evidence(sobol).to_csv(
+        os.path.join(args.out, "inside_the_evidence.csv"), index=False
     )
 
     valid_design = pd.read_csv(args.valid_design)
