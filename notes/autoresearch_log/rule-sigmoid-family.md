@@ -88,11 +88,13 @@ The rule holds group 0 against the behavioural clone in group 1, members free to
 |---|---|---|
 | 1 | Implement the family; pin the `thr9_p10` reproduction and both multipliers in tests. | **done** |
 | 2 | Build a batched paired rollout so a thousand-point design is affordable, and pin its seat accounting, its dispatch and its leaver diagnostic in tests. | **done** |
-| 3 | Calibrate the new harness against the established simulation path on the rules both can run. | |
-| 4 | Sobol design, fit seeds; GP with a noise term; optimum, length scales, Hessian, flat region, per objective. | |
-| 5 | Validate the chosen parameters, the incumbents and ridge/boundary probes on held-out seeds. | |
-| 6 | Report realised spend, policy shape on the evaluation suite's bins beside the human and the clone, an intensity-invariant targeting statistic, and the leaver diagnostic as a ranking. | |
-| 7 | Log, PR. | |
+| 3 | Calibrate the new harness against the established simulation path on the rules both can run. | **done** -- sections 3.1 and 3.5 |
+| 4 | Sobol design, fit seeds; GP with a noise term; optimum, length scales, Hessian, flat region, per objective. | **done** -- sections 3.3, 3.4 |
+| 5 | Validate the chosen parameters, the incumbents and ridge/boundary probes on held-out seeds. | **done** -- sections 3.6, 3.7, 3.8 |
+| 6 | Report realised spend, policy shape on the evaluation suite's bins beside the human and the clone, an intensity-invariant targeting statistic, and the leaver diagnostic as a ranking. | **done** -- section 3.9 |
+| 7 | Log, PR. | **done** |
+
+One step was added while the arm ran and is not a repair of the plan but a consequence of the fit: the design's own best points and two severity-capped champions were added to the validation design once the surrogate's argmax turned out to sit at `P_max = 30`, a corner of the box where the contribution model has almost no evidence. Assuming the fitted point was the one to validate would have left the headline resting on an extrapolation.
 
 ## 3. Results
 
