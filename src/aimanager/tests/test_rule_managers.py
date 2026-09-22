@@ -111,3 +111,16 @@ def test_inv_threshold_never_hits_a_timed_out_cell():
     served = [0, 0]  # two timed-out players, as the env presents them
     assert punish(inv, served, valid=[False, False]) == [0, 0]
     assert punish(fwd, served, valid=[False, False]) == [10, 10]
+
+
+def test_band16_fires_only_on_the_near_ceiling_band():
+    # The near-ceiling rules test a different hypothesis from the broad
+    # mirrors: that punishing nearly-full contributors is worthwhile because
+    # they are cheap to push to the ceiling. That only holds if the rule
+    # leaves the whole withdrawal zone below it untouched, which is what is
+    # pinned here -- c = 15 is spared and c = 16 is not.
+    mild = RuleBasedManager(rule="inv_threshold", threshold=16, amount=10)
+    matched = RuleBasedManager(rule="inv_threshold", threshold=16, amount=20)
+    assert punish(mild, [0, 9, 12, 15, 16, 20]) == [0, 0, 0, 0, 10, 10]
+    assert punish(matched, [15, 16, 20]) == [0, 20, 20]
+    assert sum(p > 0 for p in punish(mild, list(range(21)))) == 5

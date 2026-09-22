@@ -181,6 +181,28 @@ PAIRED_FOCALS = ["prop10", "thr9_p10", "thr9_p5", "human_severity"]
 #
 # Running both brackets the mirror choice: if the two agree, the reading
 # does not depend on which sense of "mirror" is used.
+#
+# TWO MORE rules test a separate hypothesis the broad mirrors cannot: that
+# punishing NEARLY-FULL contributors is a valid strategy, because they are
+# close to the ceiling and so cheap to push the rest of the way up.
+# `inv_thr11_p10` does not test it -- firing from 11 upward spans the whole
+# withdrawal zone, mixing the idea with ordinary indiscriminate
+# over-punishment. `band16_*` fires ONLY on the near-ceiling band, c >= 16,
+# and leaves everyone below untouched.
+#
+# A narrow band in this distribution cannot both fire gently and spend as
+# much as a broad rule -- only 0.186 of cells sit at c >= 16 -- so the band
+# is run at two intensities and the reader is given both realised means:
+#
+# * `band16_p10` -- untreated spend 1.86, matched to the CLONE's realised
+#   1.9-2.0. The modest-intensity near-ceiling rule.
+# * `band16_p20` -- untreated spend 3.72, matched to `thr9_p10`'s REALISED
+#   3.71 in the parent's paired arm and to `inv_thr11_p10`'s 3.42. It buys
+#   the spend match by punishing each hit twice as hard.
+#
+# Together they separate the BAND from the INTENSITY inside the
+# near-ceiling family, which is what decides whether amount dominates
+# direction.
 INVERTED_RULES = {
     "inv_thr11_p10": {
         "type": "rule_based",
@@ -194,9 +216,27 @@ INVERTED_RULES = {
         "threshold": 7,
         "amount": 10,
     },
+    "band16_p10": {
+        "type": "rule_based",
+        "rule": "inv_threshold",
+        "threshold": 16,
+        "amount": 10,
+    },
+    "band16_p20": {
+        "type": "rule_based",
+        "rule": "inv_threshold",
+        "threshold": 16,
+        "amount": 20,
+    },
 }
 INVERTED_BORROWED = ["never", "ah_punisher", "thr9_p10"]
-INVERTED_FOCALS = ["inv_thr11_p10", "inv_thr7_p10", "thr9_p10"]
+INVERTED_FOCALS = [
+    "inv_thr11_p10",
+    "inv_thr7_p10",
+    "band16_p10",
+    "band16_p20",
+    "thr9_p10",
+]
 
 INVERTED_HEADER = """\
 # auto/rule-inverted-targeting, seed {seed}.
@@ -213,15 +253,23 @@ INVERTED_HEADER = """\
 # established that self-play rankings do not survive competition (`prop10`
 # went from +12.5 per seat in self-play to -15.6 against a live rival).
 #
-# Three focal rules against the same two rivals the paired arm used:
-#   inv_thr11_p10  punish 10 on c >= 11   (level-matched mirror)
-#   inv_thr7_p10   punish 10 on c >= 7    (spend-matched mirror)
+# Five focal rules against the same two rivals the paired arm used:
 #   thr9_p10       punish 10 on c <= 9    (the correctly-targeted rule)
+#   inv_thr11_p10  punish 10 on c >= 11   (inverted, level-matched mirror)
+#   inv_thr7_p10   punish 10 on c >= 7    (inverted, spend-matched mirror)
+#   band16_p10     punish 10 on c >= 16   (near-ceiling band, clone intensity)
+#   band16_p20     punish 20 on c >= 16   (near-ceiling band, matched spend)
+#
+# The band rules test a hypothesis the broad mirrors cannot: that punishing
+# nearly-full contributors is a valid strategy because they are cheap to
+# push the rest of the way to the ceiling. Firing from 11 upward spans the
+# whole withdrawal zone and mixes that idea with indiscriminate
+# over-punishment; firing only from 16 upward does not.
 #
 # `thr9_p10` and `never` are re-run HERE rather than quoted from the parent,
 # because MultiManager evaluates every manager in a file each round, so the
 # RNG a run consumes depends on the file's manager SET (parent log, note 4).
-# One file, one manager set, so all three focals are stream-comparable.
+# One file, one manager set, so all five focals are stream-comparable.
 #
 # Same stack, same artifacts, same 2x8 / 24-round / 100-episode protocol and
 # the same `reseed_per_run` seed discipline as the parent's paired arm.

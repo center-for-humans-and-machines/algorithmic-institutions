@@ -12,15 +12,23 @@
 # established that self-play rankings do not survive competition (`prop10`
 # went from +12.5 per seat in self-play to -15.6 against a live rival).
 #
-# Three focal rules against the same two rivals the paired arm used:
-#   inv_thr11_p10  punish 10 on c >= 11   (level-matched mirror)
-#   inv_thr7_p10   punish 10 on c >= 7    (spend-matched mirror)
+# Five focal rules against the same two rivals the paired arm used:
 #   thr9_p10       punish 10 on c <= 9    (the correctly-targeted rule)
+#   inv_thr11_p10  punish 10 on c >= 11   (inverted, level-matched mirror)
+#   inv_thr7_p10   punish 10 on c >= 7    (inverted, spend-matched mirror)
+#   band16_p10     punish 10 on c >= 16   (near-ceiling band, clone intensity)
+#   band16_p20     punish 20 on c >= 16   (near-ceiling band, matched spend)
+#
+# The band rules test a hypothesis the broad mirrors cannot: that punishing
+# nearly-full contributors is a valid strategy because they are cheap to
+# push the rest of the way to the ceiling. Firing from 11 upward spans the
+# whole withdrawal zone and mixes that idea with indiscriminate
+# over-punishment; firing only from 16 upward does not.
 #
 # `thr9_p10` and `never` are re-run HERE rather than quoted from the parent,
 # because MultiManager evaluates every manager in a file each round, so the
 # RNG a run consumes depends on the file's manager SET (parent log, note 4).
-# One file, one manager set, so all three focals are stream-comparable.
+# One file, one manager set, so all five focals are stream-comparable.
 #
 # Same stack, same artifacts, same 2x8 / 24-round / 100-episode protocol and
 # the same `reseed_per_run` seed discipline as the parent's paired arm.
@@ -53,6 +61,16 @@ managers:
     rule: inv_threshold
     threshold: 7
     amount: 10
+  band16_p10:
+    type: rule_based
+    rule: inv_threshold
+    threshold: 16
+    amount: 10
+  band16_p20:
+    type: rule_based
+    rule: inv_threshold
+    threshold: 16
+    amount: 20
 pairings:
 - name: ah_punisher_vs_ah_punisher
   group_0: ah_punisher
@@ -66,6 +84,12 @@ pairings:
 - name: inv_thr7_p10_vs_ah_punisher
   group_0: inv_thr7_p10
   group_1: ah_punisher
+- name: band16_p10_vs_ah_punisher
+  group_0: band16_p10
+  group_1: ah_punisher
+- name: band16_p20_vs_ah_punisher
+  group_0: band16_p20
+  group_1: ah_punisher
 - name: thr9_p10_vs_ah_punisher
   group_0: thr9_p10
   group_1: ah_punisher
@@ -77,6 +101,12 @@ pairings:
   group_1: never
 - name: inv_thr7_p10_vs_never
   group_0: inv_thr7_p10
+  group_1: never
+- name: band16_p10_vs_never
+  group_0: band16_p10
+  group_1: never
+- name: band16_p20_vs_never
+  group_0: band16_p20
   group_1: never
 - name: thr9_p10_vs_never
   group_0: thr9_p10

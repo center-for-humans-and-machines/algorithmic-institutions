@@ -52,23 +52,43 @@ GRID = paired.GRID
 
 INV_LEVEL = "inv_thr11_p10"  # exact reflection of thr9_p10 under c -> 20 - c
 INV_SPEND = "inv_thr7_p10"  # matched instead on realised punishment spend
+BAND_MILD = "band16_p10"  # near-ceiling band only, clone-intensity
+BAND_MATCHED = "band16_p20"  # near-ceiling band only, spend-matched
 CORRECT = "thr9_p10"
-FOCALS = [INV_LEVEL, INV_SPEND, CORRECT, NEVER]
+INVERTED = [INV_LEVEL, INV_SPEND, BAND_MILD, BAND_MATCHED]
+FOCALS = [CORRECT] + INVERTED + [NEVER]
 
-# colour follows the ENTITY, fixed order, never cycled
-COLOR = {
-    INV_LEVEL: SERIES[1],
-    INV_SPEND: SERIES[3],
-    CORRECT: SERIES[0],
-    NEVER: SERIES[2],
-    CLONE: MUTED,
+# Three FAMILIES, one hue each, because seven entities exceed the four
+# validated categorical slots. Within a family the members are separated by
+# line style and marker fill, and every mark in every figure is directly
+# labelled, so identity is never carried by colour alone.
+FAMILY = {
+    CORRECT: "correct",
+    INV_LEVEL: "broad_inverted",
+    INV_SPEND: "broad_inverted",
+    BAND_MILD: "near_ceiling",
+    BAND_MATCHED: "near_ceiling",
+    NEVER: "never",
+    CLONE: "clone",
 }
+FAMILY_COLOR = {
+    "correct": SERIES[0],
+    "broad_inverted": SERIES[1],
+    "near_ceiling": SERIES[3],
+    "never": SERIES[2],
+    "clone": MUTED,
+}
+COLOR = {m: FAMILY_COLOR[f] for m, f in FAMILY.items()}
+# secondary encoding inside a family
+DASHED = {INV_SPEND, BAND_MATCHED}
 LABEL = {
-    INV_LEVEL: "inv_thr11_p10 (inverted, level-matched)",
-    INV_SPEND: "inv_thr7_p10 (inverted, spend-matched)",
-    CORRECT: "thr9_p10 (correctly targeted)",
-    NEVER: "never (no punishment)",
-    CLONE: "ah_punisher (the clone)",
+    CORRECT: "thr9_p10 -- punish 10 on c <= 9 (correctly targeted)",
+    INV_LEVEL: "inv_thr11_p10 -- punish 10 on c >= 11 (inverted, level-matched)",
+    INV_SPEND: "inv_thr7_p10 -- punish 10 on c >= 7 (inverted, spend-matched)",
+    BAND_MILD: "band16_p10 -- punish 10 on c >= 16 (near-ceiling, mild)",
+    BAND_MATCHED: "band16_p20 -- punish 20 on c >= 16 (near-ceiling, spend-matched)",
+    NEVER: "never -- no punishment",
+    CLONE: "ah_punisher -- the clone",
 }
 
 # which contribution levels each rule fires on, from its definition
@@ -76,6 +96,8 @@ FIRES_ON = {
     CORRECT: lambda c: c <= 9,
     INV_LEVEL: lambda c: c >= 11,
     INV_SPEND: lambda c: c >= 7,
+    BAND_MILD: lambda c: c >= 16,
+    BAND_MATCHED: lambda c: c >= 16,
     NEVER: lambda c: np.zeros_like(c, dtype=bool),
 }
 
@@ -110,6 +132,8 @@ def check_dispatch(df):
         ),
         INV_LEVEL: inv_sig(11, 10),
         INV_SPEND: inv_sig(7, 10),
+        BAND_MILD: inv_sig(16, 10),
+        BAND_MATCHED: inv_sig(16, 20),
     }
     out = []
     for (pairing, gid), sub in df.groupby(["pairing", "group_id"]):
@@ -207,14 +231,10 @@ def decision(pe, out_dir, tag):
     people, and it is the one to read for direction."""
     frames = []
     for rival in RIVALS:
-        vs_never = [
-            (f"{f}_vs_{rival}", f"{NEVER}_vs_{rival}") for f in (INV_LEVEL, INV_SPEND)
-        ]
+        vs_never = [(f"{f}_vs_{rival}", f"{NEVER}_vs_{rival}") for f in INVERTED]
         vs_never.append((f"{CORRECT}_vs_{rival}", f"{NEVER}_vs_{rival}"))
         d1 = focal_contrast(pe, vs_never, "minus_never")
-        vs_correct = [
-            (f"{f}_vs_{rival}", f"{CORRECT}_vs_{rival}") for f in (INV_LEVEL, INV_SPEND)
-        ]
+        vs_correct = [(f"{f}_vs_{rival}", f"{CORRECT}_vs_{rival}") for f in INVERTED]
         d2 = focal_contrast(pe, vs_correct, "minus_correct")
         for d in (d1, d2):
             d["rival"] = rival
@@ -296,9 +316,9 @@ def fig_decision(lv, out_dir, tag):
         ("share_corr", "common good per member per round"),
     ]
     fig, axes = plt.subplots(
-        len(RIVALS), 3, figsize=(13.5, 6.2), sharey=True, constrained_layout=True
+        len(RIVALS), 3, figsize=(14.5, 7.6), sharey=True, constrained_layout=True
     )
-    order = [CORRECT, INV_SPEND, INV_LEVEL, NEVER]
+    order = [CORRECT, BAND_MILD, BAND_MATCHED, INV_LEVEL, INV_SPEND, NEVER]
     ypos = {m: i for i, m in enumerate(order[::-1])}
     for r_i, rival in enumerate(RIVALS):
         sub = lv[lv["rival"] == rival].set_index("manager")
@@ -323,7 +343,8 @@ def fig_decision(lv, out_dir, tag):
                     "o",
                     color=COLOR[m],
                     markersize=9,
-                    markeredgecolor="white",
+                    markerfacecolor="white" if m in DASHED else COLOR[m],
+                    markeredgecolor=COLOR[m] if m in DASHED else "white",
                     markeredgewidth=2,
                     zorder=3,
                 )
@@ -384,7 +405,8 @@ def fig_spend_vs_pool(lv, out_dir, tag):
                 "o",
                 color=COLOR[m],
                 markersize=11,
-                markeredgecolor="white",
+                markerfacecolor="white" if m in DASHED else COLOR[m],
+                markeredgecolor=COLOR[m] if m in DASHED else "white",
                 markeredgewidth=2,
                 zorder=3,
             )
@@ -433,7 +455,7 @@ def fig_group_size(series, out_dir, tag):
         1, 2, figsize=(11, 4.2), sharey=True, constrained_layout=True
     )
     for ax, rival in zip(axes, RIVALS):
-        for m in [CORRECT, INV_SPEND, INV_LEVEL, NEVER]:
+        for m in FOCALS:
             pairing = f"{m}_vs_{rival}"
             sub = series[(series["pairing"] == pairing) & (series["seat"] == "focal")]
             if not len(sub):
@@ -445,6 +467,7 @@ def fig_group_size(series, out_dir, tag):
                 color=COLOR[m],
                 linewidth=2,
                 label=LABEL[m],
+                linestyle=(0, (5, 2)) if m in DASHED else "-",
                 solid_capstyle="round",
             )
             last = sub.iloc[-1]
@@ -464,10 +487,10 @@ def fig_group_size(series, out_dir, tag):
         ax.set_xlabel("round", fontsize=9.5, color=INK)
         ax.set_xlim(0, 27)
     axes[0].set_ylabel("members held (of 8)", fontsize=9.5, color=INK)
-    axes[0].legend(frameon=False, fontsize=8.5, loc="lower left")
+    axes[0].legend(frameon=False, fontsize=7.5, loc="lower left")
     fig.suptitle(
-        "Every punisher bleeds members; direction barely changes the rate\n"
-        "focal seat, dashed line = the 4-of-8 start, 3 seeds pooled",
+        "Members held, round by round -- the quantity self-play could not see\n"
+        "focal seat, grey line = the 4-of-8 start, 3 seeds pooled",
         fontsize=11.5,
         color=INK,
     )
