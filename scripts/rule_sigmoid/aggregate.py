@@ -258,11 +258,20 @@ def targeting_triple_from_arrays(num, den, min_bin_n=20):
     rng = float(m[hi] - m[lo])
     se_rng = float(np.sqrt(se[hi] ** 2 + se[lo] ** 2))
     mean_m = float(np.nanmean(m))
+    if se_rng > 0:
+        gate = rng / se_rng
+    elif rng > 0:
+        # a deterministic rule -- a hard threshold's extreme bins are the same
+        # number in every episode -- has no sampling error in them at all, so
+        # the gate is unbounded rather than undefined
+        gate = np.inf
+    else:
+        gate = np.nan
     return {
         "n_bins": int(ok.sum()),
         "bin_mean_range": rng,
         "magnitude": rng / mean_m if mean_m else np.nan,
-        "noise_gate": rng / se_rng if se_rng > 0 else np.nan,
+        "noise_gate": gate,
     }
 
 

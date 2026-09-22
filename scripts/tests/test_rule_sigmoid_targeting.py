@@ -130,3 +130,19 @@ def test_a_bin_below_the_count_floor_is_dropped():
     num[:, 2] = 0.0
     out = targeting_triple_from_arrays(num, den, min_bin_n=20)
     assert out["n_bins"] == 2
+
+
+def test_a_deterministic_rule_has_an_unbounded_gate_not_a_missing_one():
+    """A hard threshold's extreme bins are the same number in every episode,
+    so their sampling error is exactly zero. That is maximal evidence, not
+    absent evidence."""
+    num, den = _blocks([10.0, 10.0, 0.0], per_bin=40, blocks=20)
+    out = targeting_triple_from_arrays(num, den)
+    assert np.isinf(out["noise_gate"])
+    assert out["magnitude"] > 1
+
+
+def test_a_rule_with_no_spread_at_all_has_no_gate():
+    out = targeting_triple_from_arrays(*_blocks([3.0, 3.0, 3.0]))
+    assert np.isnan(out["noise_gate"])
+    assert out["magnitude"] == 0.0
