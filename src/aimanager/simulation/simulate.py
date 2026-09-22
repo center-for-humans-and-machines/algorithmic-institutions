@@ -323,13 +323,19 @@ def run_simulation(config: dict, output_dir: str) -> list:
                     contribution_valid=state["contribution_valid"].reshape(-1).tolist(),
                 )
                 punishments = mm.get_punishments(rounds + [round_dict])[0]
-                round_dict = add_punishments(round_dict, punishments)
-                rounds.append(round_dict)
-
                 punishments_tensor = th.tensor(
                     punishments, dtype=th.int64, device=device
                 )
                 state = env.punish(punishments_tensor.unsqueeze(-1).unsqueeze(0))
+
+                # The manager's own record is what the game charged, not the
+                # raw action: `punish` zeroes a punishment aimed at a player
+                # who gave no input, and this record is where the punisher's
+                # `prev_punishment` feature comes from next round.
+                round_dict = add_punishments(
+                    round_dict, state["punishment"].reshape(-1).tolist()
+                )
+                rounds.append(round_dict)
 
                 recorder.add(
                     **{
