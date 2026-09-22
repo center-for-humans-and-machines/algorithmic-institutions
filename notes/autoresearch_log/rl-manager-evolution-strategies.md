@@ -2,7 +2,124 @@
 
 One of four arms. The siblings are annealed local epsilon-greedy, bootstrapped DQN and parameter-space noise. Method: evolution strategies in the sense of Salimans, Ho, Chen, Sidor and Sutskever (2017) — mirrored sampling of parameter perturbations, centered-rank fitness shaping, Adam on the fitness-weighted average. There is no action noise anywhere: every policy that is run or scored is a fixed deterministic policy evaluated over complete episodes.
 
-**Status: LAUNCHED.** Five seeds submitted, none finished. Job ids 30413786 (s42), 30413787 (s43), 30413789 (s44), 30413790 (s45), 30413791 (s46), in `~/repros/ai-runs/rl-es`. Everything under "Measured" is a number this branch produced before launch. Everything under "Predicted" is not, and is written down in advance so it can be scored.
+**Status: RESULT.** All five seeds finished cleanly (job ids 30413786 s42, 30413787 s43, 30413789 s44, 30413790 s45, 30413791 s46, in `~/repros/ai-runs/rl-es`). "Result" below is what they produced; "Measured" is the pre-launch evidence, kept unedited; "Predicted" is the pre-registration, also unedited, and "R4" scores it. One of the five predictions was wrong and it is the one worth reading.
+
+---
+
+# Result
+
+**All five seeds converged to a policy with no contingency on contribution at all.** Not a wrong-signed contingency — no contingency. Three seeds ended punishing nothing; two ended levying a **flat tax**, punishing every player exactly 2.0 (s44) or exactly 1.0 (s46) whatever they contributed. The evaluated contribution-punishment slopes are 0.0000, 0.0000, +0.0038, 0.0000, +0.0019, against the human managers' −0.857 and this project's human clone's −0.659.
+
+**The number that decides it:** at generation 0 the 40 population members' slopes had a standard deviation of 0.93 to 1.33 and spanned −1.57 to +3.10, bracketing every shape the DQN seeds ever produced. By generation **220 to 320** — all five seeds inside a 100-generation window — that spread had fallen below a tenth of its starting value, and it never came back. Selection did not choose a direction for the contingency. It **removed the contingency**, in the first 8% of the budget, and spent the other 92% on a level.
+
+So the arm does not recover the human shape, and the reason is not the one I registered in advance.
+
+## R1. The collapse detector, first, as the successor section demands
+
+Two detectors, and **the one I shipped before launch was the wrong one.**
+
+`members_punishing_nothing` counts members whose mean punishment is exactly 0. On that criterion:
+
+| seed | punishment collapse | generations of random walk after it | dead members at the end | s/n over last 100 |
+|---|---|---|---|---|
+| 42 | generation **3287** | 713 (17.8% of budget) | 40/40 | 1.01 |
+| 43 | generation **3987** | 13 | 38/40 | 1.07 |
+| 44 | **never** | 0 | 0/40 | 1.03 |
+| 45 | generation **3991** | 9 | 38/40 | 1.03 |
+| 46 | **never** | 0 | 0/40 | 1.02 |
+
+Read alone this says two seeds stayed healthy to the end. **That reading is wrong**, and the disagreement between the two columns is what gives it away: signal-to-noise is ≈ 1.0 in *all five* seeds, including the two with a fully live population. A live population whose fitness ranking carries nothing is not a working optimiser.
+
+The right detector is the spread of the per-member contribution-punishment **slope** — the shape variance the population still carries. A flat tax is exactly as degenerate as a zero policy for the question this arm exists to answer, and the zero-punishment criterion cannot see it:
+
+| seed | slope sd at gen 0 | slope sd at the end | shrinkage | **shape variance dies at** | s/n falls below 1.3 at |
+|---|---|---|---|---|---|
+| 42 | 0.928 | 0.0000 | 9×10⁸ | **gen 220** | gen 192 |
+| 43 | 1.293 | 0.0158 | 82× | **gen 280** | gen 193 |
+| 44 | 1.335 | 0.0038 | 349× | **gen 300** | gen 187 |
+| 45 | 1.281 | 0.0000 | 1×10⁹ | **gen 300** | gen 248 |
+| 46 | 0.999 | 0.0323 | 31× | **gen 320** | gen 320 |
+
+The member-slope spread over training, the series behind that column:
+
+| generation | s42 | s43 | s44 | s45 | s46 |
+|---|---|---|---|---|---|
+| 0 | 0.928 | 1.293 | 1.335 | 1.281 | 0.999 |
+| 100 | 0.385 | 0.450 | 0.761 | 0.183 | 0.456 |
+| 200 | 0.157 | 0.126 | 1.016 | 0.515 | 0.636 |
+| **400** | **0.046** | **0.051** | **0.001** | **0.023** | **0.038** |
+| 800 | 0.000 | 0.000 | 0.001 | 0.003 | 0.094 |
+| 3980 | 0.000 | 0.016 | 0.004 | 0.000 | 0.032 |
+
+The two events coincide: the population stops disagreeing about shape at the same moment the fitness ranking stops carrying signal. After generation ~320, every seed is a random walk on the level, and **everything downstream of that generation must be read as such** — including the late punishment collapses at 3287/3987/3991, which are random-walk events rather than optimisation.
+
+`collapse.csv`, `collapse_trajectory.csv`, `shape_degeneracy.csv`, `shape_degeneracy_trajectory.csv`.
+
+## R2. Policy shape, the primary outcome
+
+Mean punishment by contribution bin, the evaluation suite's own `RPA_EDGES`, evaluated (mean-parameter) policy, from each run's own final evaluation rollouts.
+
+| bin | human managers | lin_punisher (clone) | es_s42 | es_s43 | es_s44 | es_s45 | es_s46 |
+|---|---|---|---|---|---|---|---|
+| {0} | 4.755 | 3.721 | 0.000 | 0.000 | 2.000 | 0.000 | 1.000 |
+| 1-5 | 2.973 | 2.930 | 0.000 | 0.000 | 2.000 | 0.000 | 1.000 |
+| 6-10 | 1.672 | 1.808 | 0.000 | 0.000 | 1.867 | 0.000 | 0.934 |
+| 11-15 | 0.978 | 1.300 | 0.000 | 0.000 | 2.000 | 0.000 | 1.000 |
+| 16-19 | 0.692 | 1.066 | 0.000 | 0.000 | 2.000 | 0.000 | 1.000 |
+| {20} | 0.267 | 0.327 | 0.000 | 0.000 | 2.000 | 0.000 | 1.000 |
+| **slope** | **−0.857** | **−0.659** | **0.000** | **0.000** | **+0.004** | **0.000** | **+0.002** |
+
+Agent-rounds behind each ES mean: 4,560 to 35,126 per bin (`policy_shape_n.csv`). These counts are an order of magnitude larger than the two-worlds table's 555–3,287 because they come from 1000-episode training evaluation rollouts rather than a 100-episode simulation; R3's table is the like-for-like one.
+
+For orientation, the DQN seeds on the same bins: rl_s42 **+1.218** (inverted), rl_s43 −1.596, rl_s44 **+0.422** (inverted).
+
+**Per member, at the end**, for the two seeds a zero-punishment detector would have called healthy: seed 44 has 40/40 members with a positive slope and seed 46 has 39/40 — but the slopes are 0.002 to 0.027 and −0.202 to +0.003 respectively. The sign is arithmetically defined and substantively meaningless; these are flat policies with rounding. Against generation 0's 24/40 human-sign and a spread of 4.7 slope units, the population has not picked a side, it has stopped having sides.
+
+## R3. Who leaves — the targeting direction, read off behaviour
+
+See the inserted table.
+
+## R4. The five pre-registered predictions, scored
+
+`prediction_scorecard.csv`. One wrong, four right, and **the wrong one is the informative one.**
+
+**P1 — WRONG.** I predicted all five seeds converge to punishment 0.000 between generations 100 and 300. Only 3 of 5 reach ~0 at all (final levels 0.00, 0.00, 1.80, 0.00, 0.92), and the three that do reach it at generations 3287, 3987 and 3991 — none inside the window. What actually happens in generations 187–320 is that the *shape variance* and the *fitness signal* die, while the *level* freezes wherever it happens to be. I predicted the right window and the wrong quantity.
+
+**P2 — RIGHT.** The shape is identically flat and the human sign is not recovered: slopes 0.0000, 0.0000, +0.0038, 0.0000, +0.0019. Right for a reason only half anticipated — I expected flat *at zero*, and two seeds are flat at a non-zero level.
+
+**P3 — RIGHT.** Seed spread in final return is smaller than the DQN arm's: ES reward sd **3.13** (range 7.49, n=5) against DQN **9.02** (range 17.61, n=3). With the asterisk I wrote in advance, and it is now a heavier asterisk: five copies of "no contingency" agreeing with each other is not evidence that consistent behaviour reduces seed spread in general.
+
+**P4 — RIGHT, and trivial, as registered.** Late per-bin behaviour shift 0.008 to 0.071 (mean 0.02), `slope_vs_uniform_pull` 0.0005 to 0.0014 — against the control arm's 0.886 / 0.891 and the annealed arm's 0.067. A factor of ~1000 below the control on the discriminator. Under the corrected framing this describes what was sampled, and it is near zero partly *because* the evaluated policy is flat.
+
+**P5 — RIGHT, and must not be read as a win.** ES mean evaluated reward **57.69** (60.0, 59.3, 52.5, 59.6, 57.1) against DQN **50.06** (40.1, 57.8, 52.3). This is the three-rung ladder: indiscriminate punishment < no punishment < targeted punishment. ES climbed from the bottom rung to the middle one and stopped. It did not reach the rung the humans are on.
+
+Final evaluated metrics, mean of the last 10 evaluation rollouts (`final_evaluated_metrics.csv`):
+
+| run | contribution | next_reward | punishment |
+|---|---|---|---|
+| es_s42 | 7.875 | 59.96 | 0.000 |
+| es_s43 | 7.799 | 59.32 | 0.000 |
+| es_s44 | 8.707 | 52.47 | 1.800 |
+| es_s45 | 7.860 | 59.62 | 0.000 |
+| es_s46 | 8.416 | 57.08 | 0.916 |
+| dqn_s42 | 7.327 | 40.14 | 1.615 |
+| dqn_s43 | 8.348 | 57.75 | 1.127 |
+| dqn_s44 | 8.429 | 52.28 | 1.588 |
+
+Worth reading across those rows: the flat tax **does** raise contributions — seed 44 punishes 1.80 flat and gets contribution 8.71 against the zero-punishment seeds' 7.86, a gain of 0.85. It still loses on the pool, because 1.6 × 0.85 = 1.36 of gain does not cover 1.80 of punishment. An untargeted tax buys contribution at a price the common pool cannot pay. That is the local landscape this arm climbed, measured from inside it.
+
+## R5. What the plateau finding does and does not now support
+
+The maintainer's simulation of deliberately inverted and near-ceiling rules has since measured the landscape I inferred from two probes: a level-matched inverted rule loses 32.75 pool points to never-punishing, while a correctly-targeted rule is indistinguishable from it. **Inside the wrong-direction family, the best attainable policy really is to punish nothing at all.**
+
+That supports my reading in one direction and undercuts a stronger reading I should not make:
+
+- **Supported.** Never-punishing is a genuine local rung, not an artefact of my sigma or learning rate. An optimiser that has no contingency available to it *should* climb to zero punishment, and three of five seeds did exactly that. The arm's behaviour is consistent with the landscape rather than with a defect in the method.
+- **Not supported.** I cannot claim the method *failed* to find targeting. The measured landscape says a correctly-targeted rule is only *indistinguishable from* never-punishing on the pool, not better than it. If the return difference between correct targeting and no punishment is within noise, then **there is no fitness gradient toward the human shape for a return-maximising method to follow**, and no amount of exploration or population would supply one. On that reading the flat outcome is the right answer to the objective as posed, and the shape's absence is a property of the objective, not of evolution strategies.
+
+Those two possibilities — the noise floor swallowed a real signal, versus there is no signal — are **not separated by these runs**, and R1's signal-to-noise of ≈ 1.0 is exactly what both look like. Separating them needs the return difference between a targeted and an untargeted policy measured against the per-member noise, which is a simulation question rather than a training one.
+
+It also remains true, and is now the third live possibility, that the artificial humans respond to punishment without regard to desert, in which case the contingency is arbitrary for reasons unrelated to exploration or to the objective. This arm does not touch that.
 
 ---
 
@@ -263,19 +380,30 @@ Not results. Written before any seed finished.
 
 If any seed escapes the plateau and produces a non-flat shape, predictions 1–3 are wrong and that seed is the most interesting object in the whole comparison.
 
-# The honest risk, restated
+# The honest risk, as it actually turned out
 
-Evolution strategies ignores within-episode credit assignment, so on an equal episode budget it may underperform for reasons unrelated to the hypothesis. On the evidence above the specific failure is sharper than that and is *not* a credit-assignment failure: it is that the method optimises the punishment **level** to its local optimum before it can explore **targeting**, and the discrete argmax then saturates. **If that is what the runs show, that is the result, and it is a result about this method on this readout — not evidence against consistency mattering.** The rival explanation in "What this arm cannot rule out" remains live and this arm does not touch it.
+I wrote before launch that evolution strategies ignores within-episode credit assignment and might underperform for reasons unrelated to the hypothesis, and that the specific failure I expected was the punishment **level** reaching its local optimum before **targeting** could be explored, with the discrete argmax saturating behind it.
 
-A note on pilots, from the annealed arm and worth repeating: at 300 steps both the control and the annealed pilots are monotone decreasing with the human sign and both punish far harder than any human. **The inversion is a late-training phenomenon.** Nothing in M6, M7 or M9 should be read as evidence about whether this arm fixes it, and the fall in punishment level in M7 is not an improvement.
+**Half of that is what happened, and the half I got wrong matters.** The level did freeze early. But the binding constraint is not argmax saturation: two seeds (44 and 46) ended with every member still punishing and still varying, and they are *just as flat*. What actually died, in all five seeds within a 100-generation window, is the population's **shape variance**, simultaneously with the fitness ranking's signal-to-noise falling to 1. The method did not saturate against a readout it could not move. It ran out of anything to select on.
+
+That reframes the result. It is not "ES underperforms because it ignores credit assignment", and it is not "ES is defeated by a discrete readout". It is: **with 25 episodes per member, the return difference between a contingent policy and a flat one is below the sampling noise, so rank-based selection has nothing to rank and the contingency decays.** Whether that is because the signal is small or because there is no signal — R5 — is the open question, and these runs do not settle it.
+
+The pilot caution from the annealed arm held up and is worth repeating: **the inversion is a late-training phenomenon**, and nothing in M6, M7 or M9 was evidence about whether this arm fixes it. The final answer (R2) is that this arm neither fixes nor reproduces the inversion, because it produces no contingency of either sign.
 
 ---
 
 # Successor
 
-1. **Read `members_punishing_nothing` and `signal_to_noise` in `<job>_generations.parquet` first.** They say at which generation each seed hit the plateau, and everything after that generation is a random walk that should not be interpreted.
-2. **Shape:** `python scripts/rl_es/policy_shape.py --seeds 42,43,44,45,46 --reference plots/data_analysis/evaluation/rl_manager_two_worlds/policy_shape.csv`. Report the per-member table as well as theta's; members disagreeing about the sign at the *end* against M6's reading at the start is the cleanest measure of what selection did.
-3. **Make the shape numbers comparable across arms before quoting them together.** The in-training shape comes from each run's own evaluation rollouts; the two-worlds numbers come from the cross-evaluation *simulation* (`configs/simulation/manager_testing/24_rl_new_clones_cross_eval.yml`). Pairing and episode counts differ. Add the five ES models to that config and re-run `measure.py` first.
-4. **The gap and the spread:** `scripts/rl_es/behaviour_shift.py` and `scripts/rl_es/trajectory_coverage.py`, the latter against the DQN parquets for the cross-arm number. Both mark measured against not measured; keep those marks.
-5. **The experiment that would break the tie this arm cannot break.** Hold a group's total punishment fixed and vary only *which* member receives it, then read the contribution response. If it is flat, the contingency has no gradient to correct it, no exploration method will supply one, and all four arms are answering an unsupported question. A probe is already running (`contrib_iv`, `contrib_ro`).
-6. **If the plateau is confirmed, the follow-up that is indicated is not another exploration arm.** It is a readout that does not saturate — the saturation in M7 is a property of argmax over 31 ordinal levels, and a policy parameterised so that small parameter changes make small *action* changes (an ordinal regression head, or a scalar intensity through a monotone map) would let a perturbation method keep a live population at any policy. That is a change to the manager architecture, not to the exploration rule, and it is outside this comparison's one-variable contract — which is exactly why it should be a separate experiment rather than smuggled into this one.
+Ordered by what the finished data now says, not by what I expected before it.
+
+1. **Read R1's two detectors together, and use the shape one.** `shape_degeneracy.csv` is the detector that works; `collapse.csv` alone would have told you two seeds were healthy when their policy is a flat tax. Everything after generation ~320 in any seed is a random walk on the level and must be read as such — including the late punishment collapses at 3287/3987/3991, which are not optimisation.
+
+2. **Settle R5, because it decides what this whole comparison means.** The measured landscape says a correctly-targeted rule is *indistinguishable from* never-punishing on the pool. If that is literally true, there is no return gradient toward the human shape and **no exploration method can find it** — in which case all four arms of this comparison have been measuring the wrong thing, and the finding is about the objective, not about exploration. The test is a simulation, not a training run: take a correctly-targeted rule and a level-matched flat rule, run enough episodes to put a tight interval on the pool difference, and compare that difference to the per-member sampling noise at 25 episodes (within-member se ≈ 190–210 on the episode return, from `collapse_trajectory.csv`). If the true difference is inside that noise, the noise floor is the whole story.
+
+3. **If there IS a signal, the lever is episodes per member, not sigma and not the population.** This is arithmetic: signal-to-noise scales as √(episodes per member). These runs sat at s/n ≈ 1.0 with 25. Reaching s/n ≈ 2 needs 100 episodes per member, which at a fixed 4,000,000-episode budget is 10 members × 100 episodes over 4000 generations, or 40 members × 100 episodes over 1000 generations (four rollouts per generation). Both are one config change; `es_manager.PopulationRollout` already partitions the batch by member and nothing else has to move. **That is the experiment I would run next**, and it is a better use of a GPU day than a fifth exploration rule.
+
+4. **The non-saturating readout is still worth doing, but it is now second, not first.** My pre-launch recommendation was an ordinal head or a monotone scalar intensity so that small parameter changes make small action changes. Seeds 44 and 46 show saturation was not the binding constraint, so this buys less than I claimed — but it would still remove one confound from (3), and it is a manager-architecture change outside this comparison's one-variable contract, so it belongs in its own experiment either way.
+
+5. **The rival explanation this arm still cannot rule out.** If the artificial humans respond to punishment regardless of desert, the contingency is arbitrary for reasons unrelated to both exploration and the objective. Hold a group's total punishment fixed, vary only *which* member receives it, read the contribution response. A probe is running (`contrib_iv`, `contrib_ro`). Its result is a precondition for interpreting (2).
+
+6. **Reproducing this analysis.** `scripts/rl_es/collapse.py`, `shape_degeneracy.py`, `policy_shape.py`, `leaver_selection.py`, `behaviour_shift.py`, `trajectory_coverage.py`, `score_predictions.py`. The cross-evaluation simulation is `configs/simulation/manager_testing/25_rl_es_cross_eval.yml`, which re-runs the clone and the rule rows inside its own file rather than quoting them, because MultiManager's RNG draw depends on the config's manager set and two managers are only stream-comparable within one config.

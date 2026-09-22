@@ -1,0 +1,107 @@
+# Cross-evaluation for the five evolution-strategies managers.
+#
+# Deliberately a copy of 24_rl_new_clones_cross_eval.yml with the group-0 seat
+# refilled: the same world slot for slot (contribution, validity and switch
+# artifacts the managers trained against), the same opponent in group 1, the
+# same rule rows, the same episode count. A difference between a row here and
+# a row there is a difference between managers, not between worlds.
+#
+# The reference rows are RE-RUN here rather than quoted from that config, and
+# that is not redundancy: PR #207's section 3.0 warns MultiManager's RNG draw
+# depends on the config's manager set, so two managers are only
+# stream-comparable inside one file. `lin_punisher` (this project's clone of a
+# human manager), `never` (the floor), `thr9_p10` and `prop10` (the two rules
+# that beat the clone) therefore have to be rows in THIS file for the ES rows
+# to be read against them.
+#
+# What this config is for, beyond the shape table: the leaver-versus-stayer
+# contribution differential reads straight off `per_round.parquet` with no
+# counterfactual, and it flips sign with a manager's targeting direction. The
+# in-training policy shape cannot supply it, because training logs per-round
+# metric means rather than per-agent rows.
+#
+# See notes/autoresearch_log/rl-manager-evolution-strategies.md.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  es_s42:
+    type: rl
+    path: artifacts/manager/rl_es_s42/model/rl_es_s42_manager.pt
+  es_s43:
+    type: rl
+    path: artifacts/manager/rl_es_s43/model/rl_es_s43_manager.pt
+  es_s44:
+    type: rl
+    path: artifacts/manager/rl_es_s44/model/rl_es_s44_manager.pt
+  es_s45:
+    type: rl
+    path: artifacts/manager/rl_es_s45/model/rl_es_s45_manager.pt
+  es_s46:
+    type: rl
+    path: artifacts/manager/rl_es_s46/model/rl_es_s46_manager.pt
+  lin_punisher:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_ceiling_severity_copula.joblib
+  never:
+    type: rule_based
+    rule: never
+  thr9_p10:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 10
+  prop10:
+    type: rule_based
+    rule: proportional
+    rate: 1.0
+
+pairings:
+  - name: es_s42_vs_punisher
+    group_0: es_s42
+    group_1: lin_punisher
+  - name: es_s43_vs_punisher
+    group_0: es_s43
+    group_1: lin_punisher
+  - name: es_s44_vs_punisher
+    group_0: es_s44
+    group_1: lin_punisher
+  - name: es_s45_vs_punisher
+    group_0: es_s45
+    group_1: lin_punisher
+  - name: es_s46_vs_punisher
+    group_0: es_s46
+    group_1: lin_punisher
+  - name: lin_punisher_self
+    group_0: lin_punisher
+    group_1: lin_punisher
+  - name: never_vs_punisher
+    group_0: never
+    group_1: lin_punisher
+  - name: thr9_p10_vs_punisher
+    group_0: thr9_p10
+    group_1: lin_punisher
+  - name: prop10_vs_punisher
+    group_0: prop10
+    group_1: lin_punisher
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/25_rl_es_cross_eval
+figure_name: rl_es_cross_eval
+save_per_round: true
+basedir: .
