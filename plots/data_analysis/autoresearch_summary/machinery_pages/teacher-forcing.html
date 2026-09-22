@@ -1,0 +1,55 @@
+<title>Why the dial cannot be learned</title>
+<style>
+body { background: #fcfcfb; color: #1a1a19; font-family: system-ui,
+  sans-serif; margin: 2.5rem auto; max-width: 680px; padding: 0 20px;
+  line-height: 1.55; }
+h1 { font-size: 1.35rem; margin: 0.4rem 0 0.6rem; }
+h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #898781; margin: 1.6rem 0 0.3rem; }
+p { margin: 0.3rem 0; }
+.back a { color: #52514e; text-decoration: none; font-size: 0.9rem; }
+.back a:hover { text-decoration: underline; }
+.meta { color: #52514e; font-size: 0.9rem; }
+.meta a { color: #2a78d6; text-decoration: none; font-weight: 600; }
+.meta a:hover { text-decoration: underline; }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; color: #fff; margin-right: 6px; }
+ul.code { list-style: none; padding: 0; margin: 0.3rem 0; }
+ul.code li { margin: 0.35rem 0; font-size: 0.9rem; color: #52514e; }
+ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
+ol.maths li { margin: 0.55rem 0; }
+code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
+  font-size: 0.82rem; color: #1a1a19; }
+.flag { border: 1.5px solid #d03b3b; border-left-width: 5px;
+  border-radius: 8px; background: #fdf3f2; padding: 0.9rem 1.1rem;
+  margin: 1.4rem 0; }
+.flag h3 { margin: 0 0 0.4rem; font-size: 0.95rem; color: #a62b2b;
+  letter-spacing: 0.01em; }
+.flag h3::before { content: "B2"; margin-right: 0.45rem;
+  font-size: 0.8rem; }
+.flag p { margin: 0.45rem 0; font-size: 0.93rem; }
+.flag .intro, .flag .footer { color: #7d4a46; font-size: 0.86rem; }
+.flag a { color: #a62b2b; }
+</style>
+<p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
+<h1>Why the dial cannot be learned</h1>
+<p class="meta">The persistence setting flagged on three of the copula pages is not just unmeasured — it is unmeasurable from the data these models train on. Here is why.</p>
+<h2>During training</h2>
+<p>The model is asked: “here is round 9&#x27;s real data — predict what agent 1 does in round 10.” What it gets handed includes agent 1&#x27;s own round-9 contribution (say 17) and their three group-mates&#x27; round-9 contributions (16, 18, 17).</p>
+<p>Those four numbers already tell it this is a high-contributing group. It does not need to infer a hidden “this group has a generous culture” — the evidence is sitting in the inputs, for free, every single round.</p>
+<p>So the only thing a shared group mood can earn its keep on is whatever co-movement is left after you already know all that. And that leftover is genuinely small — measured at about 0.04 of the variance. The training is not being stupid when it assigns a tiny dose. Given the real history, group-mates&#x27; surprises really are only slightly correlated. That is a true fact about the data.</p>
+<h2>During simulation</h2>
+<p>Nothing is handed over. Round 0, the model invents 8 contributions. Round 1, it feeds its own round-0 outputs back in as “last round&#x27;s contribution.” Repeat 24 times.</p>
+<p>Now the model has to create the difference between a generous group and a stingy one, from nothing, and then hold onto it for 24 rounds. With independent sampling it cannot. On round 0, both groups are drawn from nearly the same distribution — any gap between them is just the luck of four draws versus four draws. Next round, every agent drifts back toward the typical response the model was trained to produce. Random gaps get averaged away instead of building up.</p>
+<p>The two groups end up hugging each other, while real human groups visibly split — one settles high, the other collapses. That gap is the CG row.</p>
+<h2>Two different questions</h2>
+<p>Training asks: given that I can already see this group is high, how much extra correlation is left? — very little.</p>
+<p>Simulation asks: with nothing to see, how much shared push do I need to invent a group difference and sustain it for 24 rounds? — a lot more.</p>
+<p>The estimator answers the first. The simulator needs the second. They are different numbers, and the first is systematically smaller.</p>
+<p>Real history is fed in fresh every round during training, which wipes out any accumulated drift before it can be observed. So the one thing you most need to know — how badly does this thing drift when left alone — is exactly the thing the training data cannot show you.</p>
+<h2>Why persistence in particular</h2>
+<p>If the shared push is re-rolled every round, it is just noise: group A gets nudged up, then down, then up, and over 24 rounds it nets out to nothing. If the push is fixed for the whole episode, group A gets nudged the same direction every single round — and it compounds, because each nudged contribution becomes next round&#x27;s input, which lifts the group-mates&#x27; inputs too, which lifts them further.</p>
+<p>A small constant push becomes a large gap. A shuffling push becomes nothing. That is why a setting of 1 is worth a full grade and the measured 0.618 is not.</p>
+<h2>What this means for the flag</h2>
+<p>Hand-setting the dial to 1 is compensating for a real structural problem, not merely grabbing the winning number. But it does not make 1 correct — it means the correct value is genuinely unknown and cannot be recovered from teacher-forced data at all.</p>
+<p>Which is a better reason to go and get it properly than any of the ones on offer.</p>

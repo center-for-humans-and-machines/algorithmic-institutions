@@ -245,10 +245,46 @@ ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
 ol.maths li { margin: 0.55rem 0; }
 code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
   font-size: 0.82rem; color: #1a1a19; }
+.flag { border: 1.5px solid #d03b3b; border-left-width: 5px;
+  border-radius: 8px; background: #fdf3f2; padding: 0.9rem 1.1rem;
+  margin: 1.4rem 0; }
+.flag h3 { margin: 0 0 0.4rem; font-size: 0.95rem; color: #a62b2b;
+  letter-spacing: 0.01em; }
+.flag h3::before { content: "\25B2"; margin-right: 0.45rem;
+  font-size: 0.8rem; }
+.flag p { margin: 0.45rem 0; font-size: 0.93rem; }
+.flag .intro, .flag .footer { color: #7d4a46; font-size: 0.86rem; }
+.flag a { color: #a62b2b; }
 </style>"""
 
 
-def render_page(note):
+def flag_html(slug, review):
+    """The red spoon-feeding callout, for the methods review flagged."""
+    paras = review.get("flags", {}).get(slug)
+    if not paras:
+        return ""
+    body = "".join(f"<p>{esc(p)}</p>\n" for p in paras)
+    link = ('<a href="teacher-forcing.html">Read it &rarr;</a>'
+            if "teacher-forcing" in review.get("notes", {}) else "")
+    return (f'<div class="flag"><h3>{esc(review["flag_label"])}</h3>\n'
+            f'<p class="intro">{esc(review["flag_intro"])}</p>\n{body}'
+            f'<p class="footer">{esc(review["flag_footer"])} {link}</p>'
+            f'</div>\n')
+
+
+def render_note(note):
+    """A standalone background note (no PR, no maths, no code)."""
+    secs = "".join(
+        f"<h2>{esc(s['heading'])}</h2>\n"
+        + "".join(f"<p>{esc(p)}</p>\n" for p in s["paras"])
+        for s in note["sections"])
+    return (f"<title>{esc(note['title'])}</title>\n{PAGE_STYLE}\n"
+            f'<p class="back"><a href="../machinery.html">&larr; back to the '
+            f"machinery</a></p>\n<h1>{esc(note['title'])}</h1>\n"
+            f'<p class="meta">{esc(note["kicker"])}</p>\n{secs}')
+
+
+def render_page(note, flag=""):
     pr_links = " + ".join(
         f'<a href="https://github.com/{REPO}/pull/{pr}">#{pr}</a>'
         for pr in note["prs"]
@@ -268,6 +304,7 @@ def render_page(note):
         f"machinery</a></p>\n<h1>{esc(note['title'])}</h1>\n"
         f'<p class="meta">{chip} installed by PR {pr_links} &middot; '
         f"{esc(note['where'])}</p>\n"
+        f"{flag}"
         f"<h2>The problem</h2>\n<p>{esc(note['problem'])}</p>\n"
         f"<h2>The change</h2>\n<p>{esc(note['change'])}</p>\n"
         f"<h2>The maths, in plain English</h2>\n{maths}"
@@ -281,6 +318,7 @@ def render_page(note):
 def main():
     machines = json.loads((DATA / "stack_parts.json").read_text())["machines"]
     notes = json.loads((DATA / "machinery_notes.json").read_text())
+    review = json.loads((DATA / "review_notes.json").read_text())
     for slug, note in notes.items():
         for pr in note["prs"]:
             PR_SLUG[f"#{pr}"] = slug
@@ -301,8 +339,13 @@ def main():
     )
     PAGES.mkdir(parents=True, exist_ok=True)
     for slug, note in notes.items():
-        (PAGES / f"{slug}.html").write_text(render_page(note))
-    print(f"wrote {OUT} and {len(notes)} pages in {PAGES}/")
+        (PAGES / f"{slug}.html").write_text(
+            render_page(note, flag_html(slug, review)))
+    for slug, note in review["notes"].items():
+        (PAGES / f"{slug}.html").write_text(render_note(note))
+    n = len(notes) + len(review["notes"])
+    print(f"wrote {OUT} and {n} pages in {PAGES}/ "
+          f"({len(review['flags'])} flagged)")
 
 
 if __name__ == "__main__":

@@ -20,10 +20,25 @@ ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
 ol.maths li { margin: 0.55rem 0; }
 code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
   font-size: 0.82rem; color: #1a1a19; }
+.flag { border: 1.5px solid #d03b3b; border-left-width: 5px;
+  border-radius: 8px; background: #fdf3f2; padding: 0.9rem 1.1rem;
+  margin: 1.4rem 0; }
+.flag h3 { margin: 0 0 0.4rem; font-size: 0.95rem; color: #a62b2b;
+  letter-spacing: 0.01em; }
+.flag h3::before { content: "B2"; margin-right: 0.45rem;
+  font-size: 0.8rem; }
+.flag p { margin: 0.45rem 0; font-size: 0.93rem; }
+.flag .intro, .flag .footer { color: #7d4a46; font-size: 0.86rem; }
+.flag a { color: #a62b2b; }
 </style>
 <p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
 <h1>The herding copula: groups that drift together</h1>
 <p class="meta"><span class="chip" style="background:#2a78d6">correlated-sampling</span> installed by PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/165">#165</a> &middot; contribution bay of the gnn machine</p>
+<div class="flag"><h3>Spoon-feeding detected</h3>
+<p class="intro">A setting inside this method was chosen by the analyst rather than measured from the data, and the value chosen is the one that makes the result look best. Nothing here broke a rule and no result is wrong — every choice below is written down openly in the experiment&#x27;s own log. It is flagged because the same choice was made three times across both stacks, always in the same direction.</p>
+<p>The copula needs one number: how long a group&#x27;s mood lasts. The scale runs from 0 (a brand-new mood every round) to 1 (one mood for the entire game). The estimate came back at 1.16 — off the end of the scale, which is not a possible answer.</p>
+<p>The experiment rounded it down to 1, the most persistent setting the scale allows. On its own that is a fair call: when an estimate lands outside the legal range, the nearest legal value is the honest fallback. It only becomes a pattern once you see what happened the next two times the same number came up.</p>
+<p class="footer">Why the number is so hard to measure at all is a separate story: see “Why the dial cannot be learned”. <a href="teacher-forcing.html">Read it &rarr;</a></p></div>
 <h2>The problem</h2>
 <p>Real groups talk themselves into generosity or into collapse: over an episode, the two groups&#x27; average contributions drift apart. With every member sampled independently, simulated groups stayed glued to the grand average. The group-spread row (CG) was the stack&#x27;s worst score at 9.81 -- almost ten times the human-vs-human noise ceiling.</p>
 <h2>The change</h2>

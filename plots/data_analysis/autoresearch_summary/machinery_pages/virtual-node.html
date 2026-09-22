@@ -20,10 +20,25 @@ ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
 ol.maths li { margin: 0.55rem 0; }
 code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
   font-size: 0.82rem; color: #1a1a19; }
+.flag { border: 1.5px solid #d03b3b; border-left-width: 5px;
+  border-radius: 8px; background: #fdf3f2; padding: 0.9rem 1.1rem;
+  margin: 1.4rem 0; }
+.flag h3 { margin: 0 0 0.4rem; font-size: 0.95rem; color: #a62b2b;
+  letter-spacing: 0.01em; }
+.flag h3::before { content: "B2"; margin-right: 0.45rem;
+  font-size: 0.8rem; }
+.flag p { margin: 0.45rem 0; font-size: 0.93rem; }
+.flag .intro, .flag .footer { color: #7d4a46; font-size: 0.86rem; }
+.flag a { color: #a62b2b; }
 </style>
 <p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
 <h1>The per-group virtual node: the group becomes a member</h1>
 <p class="meta"><span class="chip" style="background:#e87ba4">architecture</span> installed by PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/179">#179</a> &middot; contribution bay of the gnn machine</p>
+<div class="flag"><h3>Spoon-feeding detected</h3>
+<p class="intro">A setting inside this method was chosen by the analyst rather than measured from the data, and the value chosen is the one that makes the result look best. Nothing here broke a rule and no result is wrong — every choice below is written down openly in the experiment&#x27;s own log. It is flagged because the same choice was made three times across both stacks, always in the same direction.</p>
+<p>The third time this number came up, the estimate was 0.618 — a perfectly usable value, meaning a group&#x27;s mood fades noticeably from one round to the next. It was set to 1.0 anyway, under a rule written back when the estimate had been off the scale. The log is candid about it: “a rule written for a saturating estimate is now being applied to one that is not.”</p>
+<p>The campaign later ran both settings and published the comparison. At 1.0 the target row scores 0.90; at the measured 0.618 it scores 1.22 — a whole grade worse. So the setting that was kept is the setting that wins, and the reason given for keeping it is that an earlier experiment had scored better with it — not that anyone measured real groups behaving that way.</p>
+<p class="footer">Why the number is so hard to measure at all is a separate story: see “Why the dial cannot be learned”. <a href="teacher-forcing.html">Read it &rarr;</a></p></div>
 <h2>The problem</h2>
 <p>Even with the herding copula bolted on at the sampling step, the network itself had nowhere to store &#x27;how this group is doing&#x27;: information between members passed through a single averaging step per round, and slowly-building group identity had no carrier. The group-spread row (CG) still read 4.27 and the switching-pull row (RCD) 2.76.</p>
 <h2>The change</h2>

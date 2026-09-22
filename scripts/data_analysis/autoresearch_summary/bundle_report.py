@@ -48,7 +48,35 @@ def machinery_layer(pr_slug):
                         '"><title>the story behind')
 
 
-def stories_layer(notes):
+def flag_card(slug, review):
+    paras = review.get("flags", {}).get(slug)
+    if not paras:
+        return ""
+    body = "".join(f"<p>{br.esc(p)}</p>" for p in paras)
+    return (f'<div class="flag"><h3>{br.esc(review["flag_label"])}</h3>'
+            f'<p class="intro">{br.esc(review["flag_intro"])}</p>{body}'
+            f'<p class="footer">{br.esc(review["flag_footer"])} '
+            f'<a href="#note-teacher-forcing">Read it &rarr;</a></p></div>')
+
+
+def notes_layer(review):
+    """Background notes: their own layer, not campaign methods."""
+    out = []
+    for slug, note in review["notes"].items():
+        secs = "".join(
+            f"<h4>{br.esc(s['heading'])}</h4>"
+            + "".join(f"<p>{br.esc(p)}</p>" for p in s["paras"])
+            for s in note["sections"])
+        out.append(f"""
+<article class="story note" id="note-{slug}">
+<h3>{br.esc(note['title'])}</h3>
+<p class="kicker">{br.esc(note['kicker'])}</p>
+{secs}
+</article>""")
+    return "\n".join(out)
+
+
+def stories_layer(notes, review):
     cards = []
     for slug, note in notes.items():
         prs = " + ".join(
@@ -66,6 +94,7 @@ def stories_layer(notes):
 <h3>{br.esc(note['title'])}</h3>
 <p class="meta">{chip} installed by PR {prs} &middot;
 {br.esc(note['where'])}</p>
+{flag_card(slug, review)}
 <h4>The problem</h4><p>{br.esc(note['problem'])}</p>
 <h4>The change</h4><p>{br.esc(note['change'])}</p>
 <h4>The maths, in plain English</h4><ol class="maths">{maths}</ol>
@@ -98,6 +127,16 @@ EXTRA_STYLE = """<style>
 .story .meta a { color: #2a78d6; text-decoration: none; }
 .chip { display: inline-block; padding: 2px 9px; border-radius: 999px;
   font-size: 11px; font-weight: 600; color: #fff; margin-right: 6px; }
+.flag { border: 1.5px solid #d03b3b; border-left-width: 5px;
+  border-radius: 8px; background: #fdf3f2; padding: 12px 15px;
+  margin: 14px 0 4px; }
+.flag h3 { margin: 0 0 4px; font-size: 13.5px; color: #a62b2b; }
+.flag h3::before { content: "\\25B2"; margin-right: 7px; font-size: 11px; }
+.flag p { margin: 6px 0; font-size: 13px; line-height: 1.5; }
+.flag .intro, .flag .footer { color: #7d4a46; font-size: 12px; }
+.flag a { color: #a62b2b; font-weight: 600; text-decoration: none; }
+.story.note { border-left: 3px solid #898781; }
+.story .kicker { color: #52514e; font-size: 13.5px; margin: 6px 0 2px; }
 ol.maths { padding-left: 1.3rem; margin: 4px 0; }
 ol.maths li { margin: 7px 0; line-height: 1.5; font-size: 13.5px; }
 ul.code { list-style: none; padding: 0; margin: 4px 0; }
@@ -215,12 +254,14 @@ function showLayer(id) {
     l.classList.toggle("on", l.id === id));
 }
 document.addEventListener("click", e => {
-  const a = e.target.closest('a[href^="#story-"]');
+  const a = e.target.closest('a[href^="#story-"], a[href^="#note-"]');
   if (!a) return;
   e.preventDefault();
-  showLayer("stories");
   const el = document.getElementById(a.getAttribute("href").slice(1));
-  if (el) el.scrollIntoView({behavior: "smooth", block: "start"});
+  if (!el) return;
+  const layer = el.closest(".layer");   // works for any layer, not just stories
+  if (layer) showLayer(layer.id);
+  el.scrollIntoView({behavior: "smooth", block: "start"});
 });
 </script>"""
 
@@ -230,6 +271,7 @@ def main():
     categories = {c["pr"]: c["category"] for c in
                   json.loads((DATA / "categories.json").read_text())}
     notes = json.loads((DATA / "machinery_notes.json").read_text())
+    review = json.loads((DATA / "review_notes.json").read_text())
     pr_slug = {pr: slug for slug, note in notes.items()
                for pr in note["prs"]}
 
@@ -262,6 +304,7 @@ for its PR; click it for the plain-language story.</p>
   <button data-layer="machinery">Machinery</button>
   <button data-layer="lb">Leaderboard</button>
   <button data-layer="stories">Stories</button>
+  <button data-layer="dial">Why the dial cannot be learned</button>
 </nav>
 <section class="layer on" id="tree">
 {br.STACK_INTRO}
@@ -339,9 +382,15 @@ better). Hover a band-upgrade count for the rows. Duplicates folded:
 method &mdash; also reachable by clicking tree nodes and machinery
 pills.</p>
 <div class="storywrap">
-<div>{stories_layer(notes)}</div>
+<div>{stories_layer(notes, review)}</div>
 <aside class="storyrail">{br.metric_legend(rail=True)}</aside>
 </div>
+</section>
+<section class="layer" id="dial">
+<p class="legend">Background to the spoon-feeding flags on the copula
+stories &mdash; not a campaign method, and nothing here was run as an
+experiment.</p>
+{notes_layer(review)}
 </section>
 </div>
 <div id="tip"></div>

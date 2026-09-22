@@ -20,10 +20,25 @@ ol.maths { padding-left: 1.3rem; margin: 0.3rem 0; }
 ol.maths li { margin: 0.55rem 0; }
 code { background: #f0efec; border-radius: 4px; padding: 1px 5px;
   font-size: 0.82rem; color: #1a1a19; }
+.flag { border: 1.5px solid #d03b3b; border-left-width: 5px;
+  border-radius: 8px; background: #fdf3f2; padding: 0.9rem 1.1rem;
+  margin: 1.4rem 0; }
+.flag h3 { margin: 0 0 0.4rem; font-size: 0.95rem; color: #a62b2b;
+  letter-spacing: 0.01em; }
+.flag h3::before { content: "B2"; margin-right: 0.45rem;
+  font-size: 0.8rem; }
+.flag p { margin: 0.45rem 0; font-size: 0.93rem; }
+.flag .intro, .flag .footer { color: #7d4a46; font-size: 0.86rem; }
+.flag a { color: #a62b2b; }
 </style>
 <p class="back"><a href="../machinery.html">&larr; back to the machinery</a></p>
 <h1>The group copula: herding for the Gaussian sampler</h1>
 <p class="meta"><span class="chip" style="background:#2a78d6">correlated-sampling</span> installed by PR <a href="https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/170">#170</a> &middot; contribution bay of the gaussian-MLP machine</p>
+<div class="flag"><h3>Spoon-feeding detected</h3>
+<p class="intro">A setting inside this method was chosen by the analyst rather than measured from the data, and the value chosen is the one that makes the result look best. Nothing here broke a rule and no result is wrong — every choice below is written down openly in the experiment&#x27;s own log. It is flagged because the same choice was made three times across both stacks, always in the same direction.</p>
+<p>Same question, a different model. The data can say how much of a group&#x27;s behaviour is shared, but not whether the shared part lasts the whole episode or is re-rolled each round. The measurement that separates those two came back at 0.006 with an error range straddling zero — which means: cannot tell.</p>
+<p>The experiment&#x27;s own advance prediction was that the two answers land on opposite sides of the pass line — mood-lasts-all-game would pass, mood-resets-each-round would fail. Mood-lasts-all-game was chosen, and the experiment passed. To its credit the run was set up beforehand as a test of exactly that choice, and the result came back on the predicted number, which is genuine evidence. But the other option was never actually simulated, so nobody has seen it fail.</p>
+<p class="footer">Why the number is so hard to measure at all is a separate story: see “Why the dial cannot be learned”. <a href="teacher-forcing.html">Read it &rarr;</a></p></div>
 <h2>The problem</h2>
 <p>The same herding gap as on the gnn machine: independent per-member draws kept the group averages huddled together, and on this stack the group-spread row (CG) also sat in the worst band, above 5.</p>
 <h2>The change</h2>
