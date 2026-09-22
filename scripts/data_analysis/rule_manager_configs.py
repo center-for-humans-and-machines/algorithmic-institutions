@@ -27,6 +27,7 @@ CONFIG_DIR = "configs/simulation/manager_testing"
 OUTPUT_ROOT = "plots/simulation"
 SLUG = "24_rule_managers"
 PAIRED_SLUG = "25_rule_vs_clone_paired"
+INVERTED_SLUG = "26_rule_inverted_targeting"
 
 STACK = {
     "contribution_model": (
@@ -157,6 +158,92 @@ PAIRED_MANAGERS = [
 ]
 PAIRED_FOCALS = ["prop10", "thr9_p10", "thr9_p5", "human_severity"]
 
+# ---------------------------------------------------------------------- #
+# inverted-targeting arm: punishing the WRONG people, in the paired world
+# ---------------------------------------------------------------------- #
+# Kept in its own dict rather than folded into `rule_managers()` so the
+# sweep's shard layout and the paired arm's manager set cannot drift.
+#
+# `thr9_p10` punishes 10 on c <= 9: ten of the twenty-one levels. Two
+# mirrors are run, because the two natural senses of "mirror" disagree here
+# and the disagreement is itself a measurement (see the log, section 3.1):
+#
+# * `inv_thr11_p10` -- the exact reflection of `thr9_p10` under c -> 20 - c.
+#   Matched on LEVELS: ten levels each, the same amount, both sparing the
+#   midpoint c = 10. On the untreated contribution distribution
+#   (`never_vs_never`, three seeds) it fires on 0.342 of cells against
+#   `thr9_p10`'s 0.565, because contributions in this world are massed low
+#   -- so it UNDER-spends, and a loss under it is a conservative reading.
+# * `inv_thr7_p10` -- matched on SPEND instead: P(c >= 7) = 0.567 against
+#   P(c <= 9) = 0.565, a gap of 0.15 percentage points, and the same match
+#   holds on valid-only cells (0.558 against 0.557). It costs the level
+#   match (fourteen levels, not ten) to buy the intensity match.
+#
+# Running both brackets the mirror choice: if the two agree, the reading
+# does not depend on which sense of "mirror" is used.
+INVERTED_RULES = {
+    "inv_thr11_p10": {
+        "type": "rule_based",
+        "rule": "inv_threshold",
+        "threshold": 11,
+        "amount": 10,
+    },
+    "inv_thr7_p10": {
+        "type": "rule_based",
+        "rule": "inv_threshold",
+        "threshold": 7,
+        "amount": 10,
+    },
+}
+INVERTED_BORROWED = ["never", "ah_punisher", "thr9_p10"]
+INVERTED_FOCALS = ["inv_thr11_p10", "inv_thr7_p10", "thr9_p10"]
+
+INVERTED_HEADER = """\
+# auto/rule-inverted-targeting, seed {seed}.
+#
+# The learned RL managers came out INVERTED: they punish full contributors
+# hardest and leave free-riders alone. An intervention probe established
+# that the contributor model's targeting signal is real but weak, and that
+# at the ceiling -- where two of three learned seeds aim -- the response is
+# close to inert. That is a hypothesis about CONSEQUENCES: it says punishing
+# the wrong people may be nearly free. This arm tests it by simulating an
+# inverted manager rather than arguing from the probe.
+#
+# Run in the COMPETING setting, not self-play, because the parent branch
+# established that self-play rankings do not survive competition (`prop10`
+# went from +12.5 per seat in self-play to -15.6 against a live rival).
+#
+# Three focal rules against the same two rivals the paired arm used:
+#   inv_thr11_p10  punish 10 on c >= 11   (level-matched mirror)
+#   inv_thr7_p10   punish 10 on c >= 7    (spend-matched mirror)
+#   thr9_p10       punish 10 on c <= 9    (the correctly-targeted rule)
+#
+# `thr9_p10` and `never` are re-run HERE rather than quoted from the parent,
+# because MultiManager evaluates every manager in a file each round, so the
+# RNG a run consumes depends on the file's manager SET (parent log, note 4).
+# One file, one manager set, so all three focals are stream-comparable.
+#
+# Same stack, same artifacts, same 2x8 / 24-round / 100-episode protocol and
+# the same `reseed_per_run` seed discipline as the parent's paired arm.
+"""
+
+
+def inverted_managers(basedir="."):
+    """The inverted arm's manager set: two mirrors plus the three borrowed."""
+    all_m = rule_managers(basedir)
+    managers = {k: all_m[k] for k in INVERTED_BORROWED}
+    managers.update(INVERTED_RULES)
+    return managers
+
+
+def inverted_pairings():
+    """(focal, rival) seats, controls first, in report order."""
+    pairs = [("ah_punisher", "ah_punisher"), ("never", "never")]
+    pairs += [(f, "ah_punisher") for f in INVERTED_FOCALS] + [("never", "ah_punisher")]
+    pairs += [(f, "never") for f in INVERTED_FOCALS] + [("ah_punisher", "never")]
+    return [{"name": f"{f}_vs_{r}", "group_0": f, "group_1": r} for f, r in pairs]
+
+
 PAIRED_HEADER = """\
 # auto/rule-vs-clone-paired, seed {seed}.
 #
@@ -194,13 +281,22 @@ def paired_pairings():
     return [{"name": f"{f}_vs_{r}", "group_0": f, "group_1": r} for f, r in pairs]
 
 
-def write_paired_config(path, seed, managers, out_dir_suffix):
+def write_paired_config(
+    path,
+    seed,
+    managers,
+    out_dir_suffix,
+    pairings=None,
+    header=None,
+    slug=PAIRED_SLUG,
+    figure_stem="rule_vs_clone_paired",
+):
     config = {
         "seed": seed,
         "reseed_per_run": True,
         "artificial_humans": {"group_switching": dict(STACK)},
         "managers": managers,
-        "pairings": paired_pairings(),
+        "pairings": paired_pairings() if pairings is None else pairings,
         "switch_every": 4,
         "n_episode_steps": 24,
         "n_episodes": 100,
@@ -210,13 +306,13 @@ def write_paired_config(path, seed, managers, out_dir_suffix):
         "n_contributions": 21,
         "n_punishments": 31,
         "n_rounds": 24,
-        "output_dir": f"{OUTPUT_ROOT}/{PAIRED_SLUG}_{out_dir_suffix}",
-        "figure_name": f"rule_vs_clone_paired_{out_dir_suffix}",
+        "output_dir": f"{OUTPUT_ROOT}/{slug}_{out_dir_suffix}",
+        "figure_name": f"{figure_stem}_{out_dir_suffix}",
         "save_per_round": True,
         "basedir": ".",
     }
     with open(path, "w") as f:
-        f.write(PAIRED_HEADER.format(seed=seed))
+        f.write(PAIRED_HEADER.format(seed=seed) if header is None else header)
         yaml.safe_dump(config, f, sort_keys=False, default_flow_style=False)
     print(f"wrote {path}  ({len(config['pairings'])} pairings)")
 
@@ -267,8 +363,26 @@ def main():
     ap.add_argument("--per-shard", type=int, default=7)
     ap.add_argument("--head-to-head", action="store_true")
     ap.add_argument("--paired", action="store_true")
+    ap.add_argument("--inverted", action="store_true")
     ap.add_argument("--basedir", default=".")
     args = ap.parse_args()
+
+    if args.inverted:
+        managers = inverted_managers(args.basedir)
+        pairings = inverted_pairings()
+        for seed in args.seeds:
+            suffix = f"s{seed}"
+            write_paired_config(
+                os.path.join(args.basedir, CONFIG_DIR, f"{INVERTED_SLUG}_{suffix}.yml"),
+                seed=seed,
+                managers=managers,
+                out_dir_suffix=suffix,
+                pairings=pairings,
+                header=INVERTED_HEADER.format(seed=seed),
+                slug=INVERTED_SLUG,
+                figure_stem="rule_inverted_targeting",
+            )
+        return
 
     if args.paired:
         all_m = rule_managers(args.basedir)
