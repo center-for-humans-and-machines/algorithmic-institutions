@@ -788,3 +788,54 @@ def test_a_parse_failure_reaches_the_battery_as_a_rate():
     assert int(punishment.sum()) == 0
     assert telemetry["n_parse_failures"] == 4.0
     assert telemetry["n_decisions_requested"] == 4.0
+
+
+# ---------------------------------------------------------------------------
+# AN EMPTY GROUP IS NOT A DECISION POINT
+#
+# When all eight players have gone to the other group this seat holds nobody.
+# There is no roster to constrain the decode over, so the call would go out
+# unconstrained and the answer could not be right whatever it said. Measured
+# on an 8-episode smoke run: the model answers with numbers anyway and the
+# parser rejects them as `wrong_count`, which lands in the one telemetry
+# number that is meant to be zero by construction.
+# ---------------------------------------------------------------------------
+
+
+def test_an_empty_group_is_never_asked_and_is_not_a_parse_failure():
+    empty = th.ones((2, N_AGENTS, 1), dtype=th.int64)  # every agent in group 1
+    with _StubServer() as stub:
+        manager = make_manager(stub.api_base, group_id=0)
+        punishment, _ = manager.predict(make_state(2, 0, groups=empty))
+    assert len(stub.bodies) == 0, "the model was asked to punish nobody"
+    assert int(punishment.sum()) == 0
+    assert manager.parse_failures == 0
+    assert manager.parse_failure_rate == 0.0
+    assert manager.empty_rounds == 2
+
+
+def test_an_empty_round_still_reaches_the_trace_of_later_rounds():
+    """Skipping the QUESTION must not skip the round's bookkeeping."""
+    empty = th.ones((1, N_AGENTS, 1), dtype=th.int64)
+    with _StubServer() as stub:
+        manager = make_manager(stub.api_base, group_id=0)
+        manager.predict(make_state(1, 0))  # round 0: the seat holds 1-4
+        manager.predict(make_state(1, 1, groups=empty))  # round 1: nobody
+        manager.predict(make_state(1, 2))  # round 2: back again
+    assert len(stub.bodies) == 2, "one call for round 0, one for round 2"
+    # the round the seat sat out is still numbered in the trace it is shown
+    assert "Round 2" in stub.prompts()[-1]
+    assert manager.empty_rounds == 1
+    assert manager.parse_failures == 0
+
+
+def test_a_partly_empty_batch_files_answers_against_the_right_episodes():
+    """Skipping row 0 must not shift row 1's answer onto it."""
+    groups = th.tensor(AGENT_GROUPS, dtype=th.int64).reshape(1, N_AGENTS, 1)
+    mixed = th.cat([th.ones_like(groups), groups], dim=0)  # row 0 empty
+    with _StubServer(lambda b: answer_for(b, 5)) as stub:
+        manager = make_manager(stub.api_base, group_id=0)
+        punishment, _ = manager.predict(make_state(2, 0, groups=mixed))
+    assert len(stub.bodies) == 1
+    assert int(punishment[0].sum()) == 0
+    assert punishment[1, :4, 0].tolist() == [5] * 4

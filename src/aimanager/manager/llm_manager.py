@@ -268,6 +268,11 @@ class LLMManager:
         self._traces: Dict[int, _EpisodeTrace] = {}
         self.call_errors = 0
         self.wasted_answers = 0
+        # Episode-rounds where this seat held nobody, so no question was
+        # asked. Counted rather than dropped: it is a property of the world
+        # the rival makes, and a run where it is large is a run where this
+        # manager was rarely consulted.
+        self.empty_rounds = 0
         self._counts = self._empty_counts()
 
     # -- accounting ----------------------------------------------------
@@ -332,6 +337,7 @@ class LLMManager:
             "parse_failure_rate": round(self.parse_failure_rate, 5),
             "call_errors": self.call_errors,
             "wasted_answers": self.wasted_answers,
+            "empty_rounds": self.empty_rounds,
             **self.summary(),
         }
 
@@ -383,6 +389,7 @@ class LLMManager:
         stats.truncated = 0
         self.call_errors = 0
         self.wasted_answers = 0
+        self.empty_rounds = 0
         self._counts = self._empty_counts()
         self.reset()
 
@@ -447,6 +454,24 @@ class LLMManager:
             )
             trace.open_round = round_number
             trace.open_agents = tuple(members)
+            # AN EMPTY GROUP IS NOT A DECISION POINT. When all eight players
+            # have gone to the other group this seat has nobody to punish, so
+            # there is nothing to ask and no answer that could be right: the
+            # roster is empty, `_constraint_for` cannot build a constraint
+            # over no labels and returns None, and the model is then asked --
+            # unconstrained -- to punish nobody. Measured on the 8-episode
+            # smoke run, 2026-09-22: it answers with numbers anyway, the
+            # parser rejects them as `wrong_count` ("4 numbers for 0
+            # players"), and the fallback to zero is counted as a parse
+            # failure. The punishment row is all-zero either way, because the
+            # loop that fills it runs over `members` -- so this costs a call
+            # and corrupts the one telemetry number that is supposed to be
+            # zero by construction, while changing no result. The round still
+            # goes into the trace, marked as it always was; only the question
+            # is not asked.
+            if not members:
+                self.empty_rounds += 1
+                continue
             jobs.append((b, members, list(trace.records) + [target]))
 
         decisions = self._decide(jobs)
