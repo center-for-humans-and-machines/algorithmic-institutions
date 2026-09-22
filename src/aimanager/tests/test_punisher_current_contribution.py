@@ -191,6 +191,104 @@ def test_linear_punisher_reads_ceiling_indicator():
         )
 
 
+# A timed-out player: the env has already overwritten their contribution with
+# the imputed default (9) by the time the round dict is built, and the flag is
+# the only thing that says so. Agent 0 timed out, agent 1 genuinely gave zero.
+CV_TIMEOUT = [False] + [True] * 7
+C1_TIMEOUT = [DEFAULTS["contribution"]] + C1[1:]  # [9, 0, 5, 15, 12, 1, 9, 6]
+
+
+def _round_with_timeout(t, contributions, punishments):
+    r = _round(t, contributions, punishments)
+    r["contribution_valid"] = list(CV_TIMEOUT)
+    return r
+
+
+def test_linear_punisher_sees_zero_and_the_flag_for_a_timeout():
+    """A timed-out player reaches the punisher as 0 with the flag set; a
+    genuine zero reaches it as 0 with the flag clear."""
+    feats = ["contribution", "contribution_valid", "contribution_max"]
+    ah = _adapter(feats)
+    ah.get_punishments(
+        [_round(0, C0, P0), _round_with_timeout(1, C1_TIMEOUT, [None] * 8)]
+    )
+    X = ah.estimator.seen[-1]
+    assert X[0, 0] == 0.0 and X[0, 1] == 0.0  # timeout: value 0, flag says so
+    assert X[1, 0] == 0.0 and X[1, 1] == 1.0  # genuine zero: value 0, flag set
+    # nobody else is disturbed, and a timeout is never the ceiling
+    np.testing.assert_array_equal(X[2:, 0], C1_TIMEOUT[2:])
+    np.testing.assert_array_equal(X[2:, 1], [1.0] * 6)
+    np.testing.assert_array_equal(X[:, 2], [float(c == 20) for c in [0] + C1[1:]])
+
+
+def test_linear_punisher_timeout_lag_is_zero_too():
+    """The round after a timeout, the punisher's lag reads the recorded 0."""
+    ah = _adapter(["prev_contribution"])
+    ah.get_punishments(
+        [_round_with_timeout(0, C1_TIMEOUT, P0), _round(1, C0, [None] * 8)]
+    )
+    X = ah.estimator.seen[-1]
+    np.testing.assert_array_equal(X[:, 0], [0.0] + [float(c) for c in C1[1:]])
+
+
+def test_contribution_valid_legality():
+    import aimanager.simulation.linear_ah  # noqa: F401
+    from handcrafted_grid import validate_feature_legality
+
+    validate_feature_legality(
+        {
+            "data": {"target": "punishment"},
+            "blocks": {"b": {"sets": [["contribution", "contribution_valid"]]}},
+        }
+    )
+    with pytest.raises(ValueError, match="contribution target"):
+        validate_feature_legality(
+            {
+                "data": {"target": "contribution"},
+                "blocks": {"b": {"sets": [["contribution_valid"]]}},
+            }
+        )
+
+
+def test_gnn_punisher_sees_zero_and_the_flag_for_a_timeout():
+    import torch as th
+
+    from aimanager.generic.encoder import Encoder
+    from aimanager.manager.api_manager import create_data
+
+    rounds = [_round(0, C0, P0), _round_with_timeout(1, C1_TIMEOUT, [None] * 8)]
+    data = create_data(rounds, ["a", "b"], DEFAULTS)
+    assert data["contribution_valid"].dtype == th.bool
+    # batch 0 is manager "a": agent 0 timed out, agent 1 gave a genuine zero
+    assert data["contribution"][0, 0, -1].item() == 0
+    assert data["contribution_valid"][0, 0, -1].item() is False
+    assert data["contribution"][0, 1, -1].item() == 0
+    assert data["contribution_valid"][0, 1, -1].item() is True
+    assert data["contribution"][0, 2:4, -1].tolist() == C1[2:4]
+    assert not data["contribution_max"][0, 0, -1].item()
+    # other-group cells are masked out and keep the model's own default fill
+    assert data["contribution"][0, 4:, -1].tolist() == [DEFAULTS["contribution"]] * 4
+    enc = Encoder(
+        [{"etype": "bool", "name": "contribution_valid"}], refrence="punishment"
+    )
+    x = enc(**data)
+    np.testing.assert_array_equal(x[0, :4, -1, 0].numpy(), [0.0, 1.0, 1.0, 1.0])
+
+
+def test_simulation_round_carries_the_env_validity_flag():
+    import torch as th
+
+    from aimanager.simulation.simulate import make_round
+
+    valid = th.tensor(CV_TIMEOUT).reshape(1, 8, 1)
+    r = make_round(
+        C1_TIMEOUT, 1, ["a"] * 4 + ["b"] * 4, 0, contribution_valid=valid.reshape(-1)
+    )
+    assert r["contribution_valid"] == CV_TIMEOUT
+    # without the flag the old behaviour stands: everything realised is valid
+    assert make_round(C1_TIMEOUT, 1, ["a"] * 8, 0)["contribution_valid"] == [True] * 8
+
+
 def test_gnn_punisher_data_has_ceiling_indicator():
     import torch as th
 

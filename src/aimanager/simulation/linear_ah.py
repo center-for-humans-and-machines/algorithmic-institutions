@@ -37,6 +37,8 @@ from pathlib import Path
 import numpy as np
 import torch as th
 
+from aimanager.generic.data import MISSING_CONTRIBUTION
+
 # build_feature_pool (scripts/baselines) is the single source of truth for the
 # feature engineering (spec: notes/baseline_feature_defs.md; parity test:
 # tests/baselines). Import it so sim features can never drift from training.
@@ -158,13 +160,19 @@ class LinearAHAdapter:
     # ------------------------------------------------------------------ #
     # feature-pool reconstruction (shared)
     # ------------------------------------------------------------------ #
-    def _pool_from_arrays(self, c, p, cg, ag, T):
+    def _pool_from_arrays(self, c, p, cg, ag, T, cv=None):
         """[A, T] measure/membership arrays -> the [1, A, T] create_torch_data
-        tensors -> build_feature_pool's feature dict."""
+        tensors -> build_feature_pool's feature dict.
+
+        `cv` is the per-agent contribution-validity mask; the env-driven paths
+        (contribution / switch targets) have no timeouts to represent and pass
+        None, which reads as all-valid."""
         A = c.shape[0]
         dv = self.default_values
         rec = np.ones((A, T), dtype=float)  # every agent is present in the sim
         rounds = np.tile(np.arange(T, dtype=float), (A, 1))
+        if cv is None:
+            cv = np.ones((A, T), dtype=bool)
 
         # -> contiguous [1, A, T] torch tensor (build_feature_pool .numpy()s it)
         def b(x):
@@ -184,6 +192,7 @@ class LinearAHAdapter:
             "agent_group": b(ag.astype(int)),
             "recorded": b(rec.astype(bool)),
             "round_number": b(rounds),
+            "contribution_valid": b(cv.astype(bool)),
         }
         return build_feature_pool(d, self.switch_every)
 
@@ -242,7 +251,12 @@ class LinearAHAdapter:
                 nv = int(cv[sel, t].sum())
                 if nv:
                     cg[sel, t] = (1.6 * cz[sel, t].sum() - pz[sel, t].sum()) / nv
-        return self._pool_from_arrays(c, p, cg, ag, T)
+        # A timed-out player contributed nothing -- that is what the game
+        # charged and what the manager saw (MISSING_CONTRIBUTION). The env
+        # hands us the imputed default in its place, so put the recorded
+        # value back before the punisher's features are built.
+        c = np.where(cv, c, float(MISSING_CONTRIBUTION))
+        return self._pool_from_arrays(c, p, cg, ag, T, cv=cv)
 
     # ------------------------------------------------------------------ #
     # level sampling (shared by contribution and punishment)
