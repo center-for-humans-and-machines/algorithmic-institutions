@@ -1,0 +1,45 @@
+{
+  "config": "configs/training/rl_manager/rl_new_clones_s42.yml",
+  "guard1": {
+    "expected": "1.6*sum(c) - sum(p), undivided",
+    "mean_reward": 25.729751586914062,
+    "vs_common_good_times_n_valid": {
+      "max": 1.52587890625e-05,
+      "mean": 3.31356801552829e-07
+    },
+    "vs_raw_pool_no_zeroing": {
+      "max": 43.20000457763672,
+      "mean": 1.0171875953674316
+    },
+    "vs_recomputed_pool": {
+      "max": 0.0,
+      "mean": 0.0
+    }
+  },
+  "guard1c_sum_contrast": {
+    "mean_reward": 24.383913040161133,
+    "vs_recomputed_pool": {
+      "max": 240.0,
+      "mean": 42.83356857299805
+    }
+  },
+  "guard2": {
+    "agent_cells_observed": 36864,
+    "prev_punishment_values_served_at_prev_timeout": {
+      "0.0": 627
+    },
+    "punishment_values_served_at_timeout": {
+      "0.0": 1659
+    },
+    "timeout_cells_observed": 1659,
+    "timeout_rate": 0.045003255208333336
+  },
+  "reward_mode": "common_pool",
+  "verdict": {
+    "ALL_PASS": true,
+    "guard1_reward_is_common_pool": true,
+    "guard1c_sum_differs": true,
+    "guard2_no_punishment_at_timeout": true,
+    "guard2_saw_timeouts": true
+  }
+}
