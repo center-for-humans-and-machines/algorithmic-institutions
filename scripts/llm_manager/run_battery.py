@@ -208,26 +208,46 @@ MEASURED = {
 }
 
 
-def validation_table(battery, published, source):
+def validation_table(battery, published, source, n_reference):
+    """This harness beside a published table, with BOTH errors counted.
+
+    The published number carries its own sampling error and at #217's 300
+    episodes that error dominates: a members column measured here to 0.021
+    sits against a reference measured to about 0.10, so scoring the gap
+    against this harness's error alone would report a five-fold
+    disagreement where there is one standard error of one. `se_reference`
+    is this run's own per-episode spread over the square root of the
+    reference's episode count, which is an estimate and is labelled as one.
+    """
     b = battery.set_index("arm")
     rows = []
     for arm, ref in published.items():
         if arm not in b.index:
             continue
         for key, want in ref.items():
-            got = float(b.loc[arm, MEASURED[key]])
-            se = b.loc[arm].get(MEASURED[key] + "_se", np.nan)
+            col = MEASURED[key]
+            got = float(b.loc[arm, col])
+            se = b.loc[arm].get(col + "_se", np.nan)
+            sd = b.loc[arm].get(col + "_sd", np.nan)
+            se_ref = sd / np.sqrt(n_reference) if sd == sd else np.nan
+            comb = (
+                np.sqrt(se**2 + se_ref**2) if se == se and se_ref == se_ref else np.nan
+            )
             rows.append(
                 {
                     "source": source,
+                    "n_reference": n_reference,
                     "arm": arm,
                     "quantity": key,
                     "published": want,
                     "measured": got,
                     "delta": got - want,
                     "se_measured": float(se) if se == se else np.nan,
+                    "se_reference": float(se_ref) if se_ref == se_ref else np.nan,
                     "sd_away": (
-                        abs(got - want) / float(se) if se == se and se else np.nan
+                        abs(got - want) / float(comb)
+                        if comb == comb and comb
+                        else np.nan
                     ),
                 }
             )
@@ -363,9 +383,13 @@ def main():
 
     val = pd.concat(
         [
-            validation_table(battery, PUBLISHED_217, "PR #217"),
-            validation_table(battery, PUBLISHED_219_CROSSCHECK, "PR #219 cross-check"),
-            validation_table(battery, PUBLISHED_219_VALIDATION, "PR #219 validation"),
+            validation_table(battery, PUBLISHED_217, "PR #217", 300),
+            validation_table(
+                battery, PUBLISHED_219_CROSSCHECK, "PR #219 cross-check", 1024
+            ),
+            validation_table(
+                battery, PUBLISHED_219_VALIDATION, "PR #219 validation", 6144
+            ),
         ],
         ignore_index=True,
     )
