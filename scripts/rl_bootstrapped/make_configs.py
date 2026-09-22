@@ -118,8 +118,9 @@ RUN_BANNER = """\
 # equal update steps. The mechanism changes which action is selected, not how
 # many episodes are run, so 4000 update steps x 1000 parallel episodes +
 # 200 evaluation rollouts x 1000 is the same 4,200,000 episodes the reference
-# consumes; measured, not assumed, by
-# scripts/rl_bootstrapped/guard.py --count-episodes.
+# consumes. Counted, not argued: `rl_manager.EPISODE_BUDGET` increments on
+# every rollout and the totals are printed at the end of each run on the
+# `[budget]` line of its SLURM log.
 # See notes/autoresearch_log/rl-manager-bootstrapped-dqn.md."""
 
 PILOT_BANNER = """\
