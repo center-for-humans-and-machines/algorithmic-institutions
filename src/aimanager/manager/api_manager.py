@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
-from aimanager.generic.data import shift
+from aimanager.generic.data import MAX_CONTRIBUTION, shift
 from aimanager.simulation.linear_ah import LinearAHAdapter
 
 
@@ -117,6 +117,9 @@ def create_data(rounds, groups, default_values):
         "agent_group": agent_group.permute(0, 2, 1),
         "is_first": round_number.permute(0, 2, 1) == 0,
         "in_group": in_group.permute(0, 2, 1),
+        # as create_torch_data_new: derived from the filled tensor, so
+        # invalid / other-group cells (default contribution) read False
+        "contribution_max": contribution.permute(0, 2, 1) == MAX_CONTRIBUTION,
     }
 
     calc_prev = ["punishment", "contribution", "punishment_valid", "contribution_valid"]
