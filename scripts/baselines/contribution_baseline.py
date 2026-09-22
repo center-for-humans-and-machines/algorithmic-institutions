@@ -25,7 +25,6 @@ GNN reference (final-epoch test log loss, this artifact): 1.9897 (mean of 5).
 Usage:
     .venv/bin/python scripts/baselines/contribution_baseline.py
 """
-
 import os
 import random
 from pathlib import Path
@@ -55,8 +54,8 @@ GNN_REF = 1.9897  # final-epoch test log loss, mean over folds (this artifact)
 def group_prev_means(d):
     """Previous-round group mean contribution per (episode, agent, round):
     own group (leave-one-out) and the other group, from the same tensors."""
-    pc = d["prev_contribution"].numpy().astype(float)  # self's prev contribution
-    gp = d["prev_agent_group"].numpy().astype(int)  # prev group membership
+    pc = d["prev_contribution"].numpy().astype(float)   # self's prev contribution
+    gp = d["prev_agent_group"].numpy().astype(int)      # prev group membership
     G, A, T = pc.shape
     own = np.zeros_like(pc)
     oth = np.zeros_like(pc)
@@ -108,11 +107,8 @@ def run_cv(folds, enriched, label):
         Xte, yte = flatten(te, build(te, enriched))
         sc = StandardScaler().fit(Xtr)
         m = LogisticRegression(max_iter=3000).fit(sc.transform(Xtr), ytr)
-        ll = log_loss(
-            yte,
-            full_proba(m, sc.transform(Xte), N_LEVELS),
-            labels=list(range(N_LEVELS)),
-        )
+        ll = log_loss(yte, full_proba(m, sc.transform(Xte), N_LEVELS),
+                      labels=list(range(N_LEVELS)))
         lls.append(ll)
         print(f"    fold {i}: test log_loss={ll:.4f}  (n_test={len(yte)})")
     print(f"    --> mean TEST log_loss = {np.mean(lls):.4f} (std {np.std(lls):.4f})")
@@ -126,32 +122,25 @@ def constant_floor(folds):
         _, yte = flatten(te, build(te, False))
         counts = np.bincount(ytr, minlength=N_LEVELS) + 1.0
         marg = counts / counts.sum()
-        lls.append(
-            log_loss(yte, np.tile(marg, (len(yte), 1)), labels=list(range(N_LEVELS)))
-        )
+        lls.append(log_loss(yte, np.tile(marg, (len(yte), 1)),
+                            labels=list(range(N_LEVELS))))
     print(f"\n=== constant floor (train marginal) ===")
     print(f"    --> mean TEST log_loss = {np.mean(lls):.4f}")
     return np.mean(lls)
 
 
 def main():
-    th.random.manual_seed(SEED)
-    np.random.seed(SEED)
-    random.seed(SEED)
+    th.random.manual_seed(SEED); np.random.seed(SEED); random.seed(SEED)
     df = pd.read_csv(DATA)
     df = df[df["experiment_name"].isin(EXPERIMENTS)]
     data, _, pair_id = create_torch_data(df)
-    print(
-        f"episodes={data['contribution'].shape[0]} (doubled), "
-        f"pairs={len(set(pair_id.tolist()))}, folds={N_CV}, seed={SEED}"
-    )
+    print(f"episodes={data['contribution'].shape[0]} (doubled), "
+          f"pairs={len(set(pair_id.tolist()))}, folds={N_CV}, seed={SEED}")
     print(f"target={TARGET} ({N_LEVELS} levels), mask={MASK}")
 
-    folds = [
-        (i, tr, te)
-        for i, tr, te in get_cross_validations(data, N_CV, 1.0, group_key=pair_id)
-        if i is not None
-    ]
+    folds = [(i, tr, te) for i, tr, te in
+             get_cross_validations(data, N_CV, 1.0, group_key=pair_id)
+             if i is not None]
 
     floor = constant_floor(folds)
     a = run_cv(folds, False, "A) LR, GNN-matched features")

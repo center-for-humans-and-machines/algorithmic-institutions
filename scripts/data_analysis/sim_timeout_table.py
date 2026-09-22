@@ -71,23 +71,14 @@ def main():
     human_fit = human_rce_fit()
     wide, md, verdict = {}, [], None
     for case, label, src, run, gated in CASES:
-        before = read_scores(
-            os.path.join(SIM, src + BEFORE, "evaluation/scores.csv"), run
-        )
-        after = read_scores(
-            os.path.join(SIM, src + AFTER, "evaluation/scores.csv"), run
-        )
+        before = read_scores(os.path.join(SIM, src + BEFORE, "evaluation/scores.csv"), run)
+        after = read_scores(os.path.join(SIM, src + AFTER, "evaluation/scores.csv"), run)
         if before is None or after is None:
-            print(
-                f"{case}: missing scores (before={before is not None}, after={after is not None})"
-            )
+            print(f"{case}: missing scores (before={before is not None}, after={after is not None})")
             continue
         t = pd.DataFrame({"before": before, "after": after})
         t["delta"] = t["after"] - t["before"]
-        t["band"] = [
-            f"{band(b)} -> {band(a)}" if band(b) != band(a) else band(b)
-            for b, a in zip(t.before, t.after)
-        ]
+        t["band"] = [f"{band(b)} -> {band(a)}" if band(b) != band(a) else band(b) for b, a in zip(t.before, t.after)]
         t["seed_sd"] = [SEED_SD.get(r, np.nan) for r in t.index]
         t["in_seed_sd"] = (t["delta"].abs() / t["seed_sd"]).round(2)
         t["legible"] = t["in_seed_sd"] >= 1.0
@@ -97,28 +88,13 @@ def main():
         wide[f"{case}_before"], wide[f"{case}_after"] = before, after
         d_mean = sa["mean"] - sb["mean"]
         d_rows = sa["rows <= 1"] - sb["rows <= 1"]
-        t.loc["mean"] = [
-            sb["mean"],
-            sa["mean"],
-            d_mean,
-            "",
-            MEAN_SEED_SD,
-            round(abs(d_mean) / MEAN_SEED_SD, 2),
-            abs(d_mean) >= MEAN_SEED_SD,
-            False,
-            False,
-        ]
-        t.loc["rows <= 1"] = [
-            sb["rows <= 1"],
-            sa["rows <= 1"],
-            d_rows,
-            "",
-            ROWS_LE1_SEED_SD,
-            round(abs(d_rows) / ROWS_LE1_SEED_SD, 2),
-            abs(d_rows) >= ROWS_LE1_SEED_SD,
-            True,
-            False,
-        ]
+        t.loc["mean"] = [sb["mean"], sa["mean"], d_mean, "", MEAN_SEED_SD,
+                         round(abs(d_mean) / MEAN_SEED_SD, 2),
+                         abs(d_mean) >= MEAN_SEED_SD, False, False]
+        t.loc["rows <= 1"] = [sb["rows <= 1"], sa["rows <= 1"], d_rows, "",
+                              ROWS_LE1_SEED_SD,
+                              round(abs(d_rows) / ROWS_LE1_SEED_SD, 2),
+                              abs(d_rows) >= ROWS_LE1_SEED_SD, True, False]
         t.index.name = "row"
         rce_rows, checks = rce_check(
             human_fit, src + BEFORE, src + AFTER, run, before["RCE"], after["RCE"]
@@ -130,15 +106,10 @@ def main():
         if gated:
             mean_ok = sa["mean"] <= 1.10 * sb["mean"]
             upgrades = [
-                r
-                for r in TARGETS
+                r for r in TARGETS
                 if band(after[r]) != band(before[r]) and after[r] < before[r]
             ]
-            rce_ok = not (
-                checks["band_downgrade"]
-                or checks["sign_lost"]
-                or checks["magnitude_eroded"]
-            )
+            rce_ok = not (checks["band_downgrade"] or checks["sign_lost"] or checks["magnitude_eroded"])
             verdict = dict(
                 targets=TARGETS,
                 target_before={r: round(before[r], 4) for r in TARGETS},
@@ -148,19 +119,15 @@ def main():
                 },
                 gate1_band_upgrades=upgrades,
                 gate1_ok=bool(upgrades),
-                mean_before=sb["mean"],
-                mean_after=sa["mean"],
-                gate2_ceiling=1.10 * sb["mean"],
-                gate2_mean_ok=mean_ok,
+                mean_before=sb["mean"], mean_after=sa["mean"],
+                gate2_ceiling=1.10 * sb["mean"], gate2_mean_ok=mean_ok,
                 mean_move_in_seed_sd=round(abs(d_mean) / MEAN_SEED_SD, 2),
                 rce_protected_ok=rce_ok,
                 rce_ungateable_on_one_run=True,
                 verdict="SUCCESS" if (upgrades and mean_ok and rce_ok) else "FAIL",
             )
             md += ["verdict: " + ", ".join(f"{k}={v}" for k, v in verdict.items()), ""]
-    pd.DataFrame(wide).reindex(METRIC_ORDER).to_csv(
-        os.path.join(OUT_DIR, "before_after.csv")
-    )
+    pd.DataFrame(wide).reindex(METRIC_ORDER).to_csv(os.path.join(OUT_DIR, "before_after.csv"))
     with open(os.path.join(OUT_DIR, "before_after.md"), "w") as fh:
         fh.write("\n".join(md))
     print("\n".join(md))

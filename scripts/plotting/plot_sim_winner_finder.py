@@ -10,7 +10,6 @@ Usage:
 Example:
     python scripts/plotting/plot_sim_winner_finder.py plots/simulation/19_2g8a_rule_based_vs_zero
 """
-
 import argparse
 import os
 import sys

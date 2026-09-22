@@ -32,10 +32,14 @@ PERTURB_COLS = [
 def load_metrics(path):
     df = pd.read_parquet(path)
     available = {
-        col: col in df.columns and df[col].notna().any() for col in PERTURB_COLS
+        col: col in df.columns and df[col].notna().any()
+        for col in PERTURB_COLS
     }
     if not any(available.values()):
-        raise ValueError("No feature importance data found in " f"{path}")
+        raise ValueError(
+            "No feature importance data found in "
+            f"{path}"
+        )
     return df, available
 
 
@@ -54,7 +58,9 @@ def compute_total_improvement(df, metric, strategy):
 
     sub = df[filt]
     epoch0 = sub[sub["epoch"] == 0].groupby("cv_split")["value"].mean()
-    final = sub[sub["epoch"] == final_epoch].groupby("cv_split")["value"].mean()
+    final = sub[sub["epoch"] == final_epoch].groupby("cv_split")[
+        "value"
+    ].mean()
     improvement = epoch0 - final
     return improvement.mean(), improvement.std(), epoch0.mean(), final.mean()
 
@@ -69,7 +75,11 @@ def compute_importance(df, method_col, metric, strategy):
     final_epoch = int(df["epoch"].max())
 
     # Filter to test set, final epoch, chosen metric/strategy
-    filt = (df["set"] == "test") & (df["epoch"] == final_epoch) & (df["name"] == metric)
+    filt = (
+        (df["set"] == "test")
+        & (df["epoch"] == final_epoch)
+        & (df["name"] == metric)
+    )
     if strategy is not None:
         filt = filt & (df["strategy"] == strategy)
     sub = df[filt].copy()
@@ -95,7 +105,11 @@ def compute_importance(df, method_col, metric, strategy):
         )
 
     # Average baseline per CV split
-    base_avg = baseline.groupby("cv_split")["value"].mean().rename("baseline")
+    base_avg = (
+        baseline.groupby("cv_split")["value"]
+        .mean()
+        .rename("baseline")
+    )
 
     # Average perturbed per (cv_split, feature)
     pert_avg = (
@@ -155,7 +169,9 @@ def plot_importance(rows, metric, save_path, total_improvement=None):
     """
     n_rows = len(rows)
     n_cols = max(len(row) for row in rows)
-    n_feats = max(len(s) for row in rows for _, s in row)
+    n_feats = max(
+        len(s) for row in rows for _, s in row
+    )
     fig, axes = plt.subplots(
         n_rows,
         n_cols,
@@ -202,7 +218,8 @@ def plot_importance(rows, metric, save_path, total_improvement=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Model-level feature importance from " "shuffle/ablation metrics"
+        description="Model-level feature importance from "
+        "shuffle/ablation metrics"
     )
     parser.add_argument(
         "metrics",
@@ -217,12 +234,14 @@ def main():
         "--method",
         choices=["shuffle", "ablate", "both"],
         default="both",
-        help="Which perturbation method to report " "(default: both)",
+        help="Which perturbation method to report "
+        "(default: both)",
     )
     parser.add_argument(
         "--strategy",
         default=None,
-        help="Prediction strategy filter " "(default: None = use log_loss rows)",
+        help="Prediction strategy filter "
+        "(default: None = use log_loss rows)",
     )
     parser.add_argument(
         "--save-fig",
@@ -269,13 +288,21 @@ def main():
     }
 
     rows = []
-    methods = ["shuffle", "ablate"] if args.method == "both" else [args.method]
+    methods = (
+        ["shuffle", "ablate"]
+        if args.method == "both"
+        else [args.method]
+    )
     for method in methods:
         row = []
         for col, label in method_map[method]:
             if available.get(col):
-                imp = compute_importance(df, col, args.metric, args.strategy)
-                summary = print_importance(imp, label, args.metric)
+                imp = compute_importance(
+                    df, col, args.metric, args.strategy
+                )
+                summary = print_importance(
+                    imp, label, args.metric
+                )
                 row.append((label, summary))
         if row:
             rows.append(row)

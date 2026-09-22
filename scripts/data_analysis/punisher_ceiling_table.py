@@ -78,9 +78,7 @@ def rce_check(human_fit, before_dir, after_dir, run, before_score, after_score):
     checks = {
         "band_downgrade": band(after_score) != band(before_score)
         and after_score > before_score,
-        "sign_lost": [
-            k for k in a.index if np.sign(a[k]) != hs[k] and np.sign(b[k]) == hs[k]
-        ],
+        "sign_lost": [k for k in a.index if np.sign(a[k]) != hs[k] and np.sign(b[k]) == hs[k]],
         "magnitude_halved": [k for k in a.index if abs(a[k]) <= 0.5 * abs(b[k])],
         "signs_before": "".join("+" if v > 0 else "-" for v in b),
         "signs_after": "".join("+" if v > 0 else "-" for v in a),
@@ -98,40 +96,21 @@ def main():
     human_fit = human_rce_fit()
     wide, md, verdict = {}, [], None
     for case, label, src, run, gated in CASES:
-        before = read_scores(
-            os.path.join(SIM, src + "_curpun", "evaluation/scores.csv"), run
-        )
-        after = read_scores(
-            os.path.join(SIM, src + "_ceiling", "evaluation/scores.csv"), run
-        )
+        before = read_scores(os.path.join(SIM, src + "_curpun", "evaluation/scores.csv"), run)
+        after = read_scores(os.path.join(SIM, src + "_ceiling", "evaluation/scores.csv"), run)
         if before is None or after is None:
-            print(
-                f"{case}: missing scores (before={before is not None}, after={after is not None})"
-            )
+            print(f"{case}: missing scores (before={before is not None}, after={after is not None})")
             continue
         t = pd.DataFrame({"before": before, "after": after})
         t["delta"] = t["after"] - t["before"]
-        t["band"] = [
-            f"{band(b)} -> {band(a)}" if band(b) != band(a) else band(b)
-            for b, a in zip(t.before, t.after)
-        ]
+        t["band"] = [f"{band(b)} -> {band(a)}" if band(b) != band(a) else band(b) for b, a in zip(t.before, t.after)]
         sb, sa = summarise(before), summarise(after)
         wide[f"{case}_before"], wide[f"{case}_after"] = before, after
         t.loc["mean"] = [sb["mean"], sa["mean"], sa["mean"] - sb["mean"], ""]
-        t.loc["rows <= 1"] = [
-            sb["rows <= 1"],
-            sa["rows <= 1"],
-            sa["rows <= 1"] - sb["rows <= 1"],
-            "",
-        ]
+        t.loc["rows <= 1"] = [sb["rows <= 1"], sa["rows <= 1"], sa["rows <= 1"] - sb["rows <= 1"], ""]
         t.index.name = "row"
         rce_rows, checks = rce_check(
-            human_fit,
-            src + "_curpun",
-            src + "_ceiling",
-            run,
-            before["RCE"],
-            after["RCE"],
+            human_fit, src + "_curpun", src + "_ceiling", run, before["RCE"], after["RCE"]
         )
         md += [f"### {case}: {label}", "", md_table(t, "{:.4f}"), ""]
         rce = pd.DataFrame(rce_rows).set_index("stage")
@@ -139,30 +118,16 @@ def main():
         md += [md_table(rce, "{:+.3f}"), "", f"protected-row checks: {checks}", ""]
         if gated:
             mean_ok = sa["mean"] <= 1.10 * sb["mean"]
-            rcc_up = (
-                band(after["RCC"]) != band(before["RCC"])
-                and after["RCC"] < before["RCC"]
-            )
-            rce_ok = not (
-                checks["band_downgrade"]
-                or checks["sign_lost"]
-                or checks["magnitude_halved"]
-            )
+            rcc_up = band(after["RCC"]) != band(before["RCC"]) and after["RCC"] < before["RCC"]
+            rce_ok = not (checks["band_downgrade"] or checks["sign_lost"] or checks["magnitude_halved"])
             verdict = dict(
-                rcc_before=before["RCC"],
-                rcc_after=after["RCC"],
-                gate1_rcc_band_upgrade=rcc_up,
-                mean_before=sb["mean"],
-                mean_after=sa["mean"],
-                gate2_ceiling=1.10 * sb["mean"],
-                gate2_mean_ok=mean_ok,
-                rce_protected_ok=rce_ok,
+                rcc_before=before["RCC"], rcc_after=after["RCC"], gate1_rcc_band_upgrade=rcc_up,
+                mean_before=sb["mean"], mean_after=sa["mean"], gate2_ceiling=1.10 * sb["mean"],
+                gate2_mean_ok=mean_ok, rce_protected_ok=rce_ok,
                 verdict="SUCCESS" if (rcc_up and mean_ok and rce_ok) else "FAIL",
             )
             md += ["verdict: " + ", ".join(f"{k}={v}" for k, v in verdict.items()), ""]
-    pd.DataFrame(wide).reindex(METRIC_ORDER).to_csv(
-        os.path.join(OUT_DIR, "before_after.csv")
-    )
+    pd.DataFrame(wide).reindex(METRIC_ORDER).to_csv(os.path.join(OUT_DIR, "before_after.csv"))
     with open(os.path.join(OUT_DIR, "before_after.md"), "w") as fh:
         fh.write("\n".join(md))
     print("\n".join(md))

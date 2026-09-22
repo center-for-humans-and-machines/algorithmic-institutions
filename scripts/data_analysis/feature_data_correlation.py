@@ -33,26 +33,40 @@ from scipy.stats import spearmanr
 
 def derive_features(df):
     """Add prev_* columns matching the training pipeline."""
-    df = df.sort_values(["episode_id", "player_id", "round_number"]).copy()
+    df = df.sort_values(
+        ["episode_id", "player_id", "round_number"]
+    ).copy()
 
     grp = df.groupby(["episode_id", "player_id"])
 
     df["prev_contribution"] = grp["contribution"].shift(1)
     df["prev_punishment"] = grp["punishment"].shift(1)
-    df["prev_contribution_valid"] = grp["player_no_input"].shift(1).map({0: 1, 1: 0})
+    df["prev_contribution_valid"] = (
+        grp["player_no_input"].shift(1).map({0: 1, 1: 0})
+    )
 
     if "group_id" in df.columns:
         df["agent_group"] = df["group_id"].astype(int)
         df["prev_agent_group"] = grp["group_id"].shift(1)
 
     # Fill first-round NaNs with defaults
-    c_med = df.loc[df["player_no_input"] == 0, "contribution"].median()
-    p_med = df.loc[df["player_no_input"] == 0, "punishment"].median()
-    df["prev_contribution"] = df["prev_contribution"].fillna(c_med)
+    c_med = df.loc[
+        df["player_no_input"] == 0, "contribution"
+    ].median()
+    p_med = df.loc[
+        df["player_no_input"] == 0, "punishment"
+    ].median()
+    df["prev_contribution"] = df["prev_contribution"].fillna(
+        c_med
+    )
     df["prev_punishment"] = df["prev_punishment"].fillna(p_med)
-    df["prev_contribution_valid"] = df["prev_contribution_valid"].fillna(0).astype(int)
+    df["prev_contribution_valid"] = (
+        df["prev_contribution_valid"].fillna(0).astype(int)
+    )
     if "prev_agent_group" in df.columns:
-        df["prev_agent_group"] = df["prev_agent_group"].fillna(0).astype(int)
+        df["prev_agent_group"] = (
+            df["prev_agent_group"].fillna(0).astype(int)
+        )
 
     return df
 
@@ -68,14 +82,19 @@ def run_analysis(df, features, target):
     print()
 
     # 1. Mutual information
-    mi = mutual_info_classif(X, y, discrete_features="auto", random_state=42)
-    mi_df = pd.DataFrame({"feature": features, "mutual_info": mi}).sort_values(
-        "mutual_info", ascending=False
+    mi = mutual_info_classif(
+        X, y, discrete_features="auto", random_state=42
     )
+    mi_df = pd.DataFrame(
+        {"feature": features, "mutual_info": mi}
+    ).sort_values("mutual_info", ascending=False)
     print("=== Mutual Information ===")
     for _, row in mi_df.iterrows():
         bar = "#" * int(row["mutual_info"] * 40)
-        print(f"  {row['feature']:<30s} " f"{row['mutual_info']:.4f}  {bar}")
+        print(
+            f"  {row['feature']:<30s} "
+            f"{row['mutual_info']:.4f}  {bar}"
+        )
     print()
 
     # 2. Random forest importance
@@ -87,13 +106,16 @@ def run_analysis(df, features, target):
     )
     rf.fit(X, y)
     rf_imp = rf.feature_importances_
-    rf_df = pd.DataFrame({"feature": features, "rf_importance": rf_imp}).sort_values(
-        "rf_importance", ascending=False
-    )
+    rf_df = pd.DataFrame(
+        {"feature": features, "rf_importance": rf_imp}
+    ).sort_values("rf_importance", ascending=False)
     print("=== Random Forest Importance ===")
     for _, row in rf_df.iterrows():
         bar = "#" * int(row["rf_importance"] * 80)
-        print(f"  {row['feature']:<30s} " f"{row['rf_importance']:.4f}  {bar}")
+        print(
+            f"  {row['feature']:<30s} "
+            f"{row['rf_importance']:.4f}  {bar}"
+        )
     print(f"  OOB-like train accuracy: {rf.score(X, y):.4f}")
     print()
 
@@ -102,16 +124,16 @@ def run_analysis(df, features, target):
     sp_rows = []
     for i, feat in enumerate(features):
         rho, pval = spearmanr(X[:, i], y)
-        sp_rows.append({"feature": feat, "rho": rho, "p_value": pval})
-    sp_df = pd.DataFrame(sp_rows).sort_values("rho", ascending=False, key=abs)
+        sp_rows.append(
+            {"feature": feat, "rho": rho, "p_value": pval}
+        )
+    sp_df = pd.DataFrame(sp_rows).sort_values(
+        "rho", ascending=False, key=abs
+    )
     for _, row in sp_df.iterrows():
-        sig = (
-            "***"
-            if row["p_value"] < 0.001
-            else (
-                "**"
-                if row["p_value"] < 0.01
-                else ("*" if row["p_value"] < 0.05 else "")
+        sig = "***" if row["p_value"] < 0.001 else (
+            "**" if row["p_value"] < 0.01 else (
+                "*" if row["p_value"] < 0.05 else ""
             )
         )
         print(
@@ -123,10 +145,25 @@ def run_analysis(df, features, target):
 
     # 4. Summary table
     summary = mi_df.merge(rf_df).merge(sp_df)
-    summary["rank_mi"] = summary["mutual_info"].rank(ascending=False).astype(int)
-    summary["rank_rf"] = summary["rf_importance"].rank(ascending=False).astype(int)
-    summary["rank_sp"] = summary["rho"].abs().rank(ascending=False).astype(int)
-    summary["avg_rank"] = summary[["rank_mi", "rank_rf", "rank_sp"]].mean(axis=1)
+    summary["rank_mi"] = (
+        summary["mutual_info"]
+        .rank(ascending=False)
+        .astype(int)
+    )
+    summary["rank_rf"] = (
+        summary["rf_importance"]
+        .rank(ascending=False)
+        .astype(int)
+    )
+    summary["rank_sp"] = (
+        summary["rho"]
+        .abs()
+        .rank(ascending=False)
+        .astype(int)
+    )
+    summary["avg_rank"] = (
+        summary[["rank_mi", "rank_rf", "rank_sp"]].mean(axis=1)
+    )
     summary = summary.sort_values("avg_rank")
     print("=== Overall Ranking ===")
     print(
@@ -165,7 +202,9 @@ def parse_config(config_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Feature importance analysis")
+    parser = argparse.ArgumentParser(
+        description="Feature importance analysis"
+    )
     parser.add_argument(
         "config",
         help="Path to training config YAML",

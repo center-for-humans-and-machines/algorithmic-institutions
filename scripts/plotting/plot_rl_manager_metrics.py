@@ -84,9 +84,10 @@ def aggregate(df: pd.DataFrame, sampling: str) -> pd.DataFrame:
     last_rows = df[
         df["metric"].isin(LAST_ROUND_METRICS) & (df["round_number"] == last_round)
     ]
-    agg_mean = mean_rows.groupby(["run", "update_step", "metric"], as_index=False)[
-        "value"
-    ].mean()
+    agg_mean = (
+        mean_rows.groupby(["run", "update_step", "metric"], as_index=False)["value"]
+        .mean()
+    )
     agg_last = last_rows[["run", "update_step", "metric", "value"]]
     return pd.concat([agg_mean, agg_last], ignore_index=True)
 
@@ -99,7 +100,9 @@ def plot_grid(
 ) -> None:
     # `loss` appears in greedy rows as NaN (it's only computed on the
     # off-policy update). Drop any metric whose values are entirely null.
-    non_null = agg.groupby("metric")["value"].apply(lambda s: s.notna().any()).to_dict()
+    non_null = (
+        agg.groupby("metric")["value"].apply(lambda s: s.notna().any()).to_dict()
+    )
     available = [m for m in metrics if non_null.get(m, False)]
     skipped = [m for m in metrics if not non_null.get(m, False)]
     if skipped:
@@ -110,9 +113,7 @@ def plot_grid(
     n = len(available)
     cols = 3
     rows = math.ceil(n / cols)
-    fig, axes = plt.subplots(
-        rows, cols, figsize=(5.5 * cols, 3.5 * rows), squeeze=False
-    )
+    fig, axes = plt.subplots(rows, cols, figsize=(5.5 * cols, 3.5 * rows), squeeze=False)
 
     for i, metric in enumerate(available):
         ax = axes[i // cols][i % cols]

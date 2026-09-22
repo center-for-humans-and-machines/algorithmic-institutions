@@ -25,7 +25,6 @@ GNN reference (final-epoch test log loss, this artifact): 0.5163 (mean of 5).
 Usage:
     .venv/bin/python switch_logit_baseline.py
 """
-
 import os
 import random
 
@@ -55,21 +54,14 @@ def build_features(d):
 
     All arrays share shape [G, A, T] and are pulled straight from the tensors
     create_torch_data produced (same values the GNN saw)."""
-    f = {
-        k: d[k].numpy()
-        for k in [
-            "prev_common_good",
-            "prev_punishment",
-            "prev_agent_group",
-            "round_number",
-            "prev_contribution",
-        ]
-    }
+    f = {k: d[k].numpy() for k in
+         ["prev_common_good", "prev_punishment", "prev_agent_group",
+          "round_number", "prev_contribution"]}
     # other-group previous common good (the signal the GNN must extract via the
     # graph): within each episode/round the two sub-groups each have one cg
     # value; pick the one NOT equal to the agent's previous group.
-    grp_prev = d["prev_agent_group"].numpy()  # [G,A,T] in {0,1}
-    cg_prev = d["prev_common_good"].numpy()  # own group's cg @ t-1
+    grp_prev = d["prev_agent_group"].numpy()          # [G,A,T] in {0,1}
+    cg_prev = d["prev_common_good"].numpy()           # own group's cg @ t-1
     G, A, T = cg_prev.shape
     oth = np.zeros_like(cg_prev)
     for g in range(G):
@@ -107,16 +99,11 @@ def run_cv(folds, feats, label):
         pte = m.predict_proba(sc.transform(Xte))
         ll_tr = log_loss(ytr, ptr, labels=[0, 1])
         ll_te = log_loss(yte, pte, labels=[0, 1])
-        train_lls.append(ll_tr)
-        test_lls.append(ll_te)
-        print(
-            f"    fold {i}: test log_loss={ll_te:.4f}  (train {ll_tr:.4f}, "
-            f"n_test={len(yte)}, switch_rate={yte.mean():.3f})"
-        )
-    print(
-        f"    --> mean TEST log_loss = {np.mean(test_lls):.4f} "
-        f"(std {np.std(test_lls):.4f})  | train {np.mean(train_lls):.4f}"
-    )
+        train_lls.append(ll_tr); test_lls.append(ll_te)
+        print(f"    fold {i}: test log_loss={ll_te:.4f}  (train {ll_tr:.4f}, "
+              f"n_test={len(yte)}, switch_rate={yte.mean():.3f})")
+    print(f"    --> mean TEST log_loss = {np.mean(test_lls):.4f} "
+          f"(std {np.std(test_lls):.4f})  | train {np.mean(train_lls):.4f}")
     return np.mean(test_lls)
 
 
@@ -137,44 +124,27 @@ def constant_baseline(folds):
 
 
 def main():
-    th.random.manual_seed(SEED)
-    np.random.seed(SEED)
-    random.seed(SEED)
+    th.random.manual_seed(SEED); np.random.seed(SEED); random.seed(SEED)
     df = pd.read_csv(DATA)
     df = df[df["experiment_name"].isin(EXPERIMENTS)]
     data, _, pair_id = create_torch_data(df, switch_every=SWITCH_EVERY)
     n_ep = data["contribution"].shape[0]
-    print(
-        f"episodes={n_ep} (doubled), pairs={len(set(pair_id.tolist()))}, "
-        f"folds={N_CV}, seed={SEED}"
-    )
+    print(f"episodes={n_ep} (doubled), pairs={len(set(pair_id.tolist()))}, "
+          f"folds={N_CV}, seed={SEED}")
 
-    folds = [
-        (i, tr, te)
-        for i, tr, te in get_cross_validations(
-            data, N_CV, FRACTION_TRAINING, holdout_fold=None, group_key=pair_id
-        )
-        if i is not None
-    ]
+    folds = [(i, tr, te) for i, tr, te in
+             get_cross_validations(data, N_CV, FRACTION_TRAINING,
+                                   holdout_fold=None, group_key=pair_id)
+             if i is not None]
 
     floor = constant_baseline(folds)
-    a = run_cv(
-        folds,
-        ["prev_common_good", "prev_punishment", "prev_agent_group", "round_number"],
-        "A) LR, GNN-matched features (apples-to-apples)",
-    )
-    b = run_cv(
-        folds,
-        [
-            "prev_common_good",
-            "oth_common_good_prev",
-            "gap_common_good_prev",
-            "prev_punishment",
-            "prev_contribution",
-            "round_number",
-        ],
-        "B) LR, enriched (adds other-group / gap / self contribution)",
-    )
+    a = run_cv(folds, ["prev_common_good", "prev_punishment",
+                       "prev_agent_group", "round_number"],
+               "A) LR, GNN-matched features (apples-to-apples)")
+    b = run_cv(folds, ["prev_common_good", "oth_common_good_prev",
+                       "gap_common_good_prev", "prev_punishment",
+                       "prev_contribution", "round_number"],
+               "B) LR, enriched (adds other-group / gap / self contribution)")
 
     print("\n" + "=" * 60)
     print(f"{'constant floor':<42} {floor:.4f}")

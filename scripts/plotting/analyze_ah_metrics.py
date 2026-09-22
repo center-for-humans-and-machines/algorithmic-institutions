@@ -123,7 +123,11 @@ def test_loss_summary(
     join_cols = config_cols + ["cv_split", "epoch"]
 
     def _collect(name: str, strategy: Optional[str]) -> pd.Series:
-        cond = (df["set"] == "test") & (df["name"] == name) & (df["mask"] == mask)
+        cond = (
+            (df["set"] == "test")
+            & (df["name"] == name)
+            & (df["mask"] == mask)
+        )
         if "shuffle_feature" in df.columns:
             cond &= df["shuffle_feature"].isna()
         if "ablate_feature" in df.columns:
@@ -179,7 +183,9 @@ def feature_importance(
 
     # Baseline test log-loss per (config, fold, epoch)
     base_cond = (
-        (df["set"] == "test") & (df["name"] == "log_loss") & (df["mask"] == mask)
+        (df["set"] == "test")
+        & (df["name"] == "log_loss")
+        & (df["mask"] == mask)
     )
     if "shuffle_feature" in df.columns:
         base_cond &= df["shuffle_feature"].isna()
@@ -216,7 +222,9 @@ def feature_importance(
         )
 
     long_df = pd.concat(long_rows, ignore_index=True)
-    group_cols = (config_cols if config_cols else ["_dummy"]) + ["feature", "method"]
+    group_cols = (
+        (config_cols if config_cols else ["_dummy"]) + ["feature", "method"]
+    )
     if not config_cols:
         long_df["_dummy"] = "all"
     summary = (
@@ -227,10 +235,9 @@ def feature_importance(
             n_folds=("delta", "count"),
         )
         .reset_index()
-        .sort_values(
-            group_cols[:-2] + ["delta_mean"],
-            ascending=[True] * len(group_cols[:-2]) + [False],
-        )
+        .sort_values(group_cols[:-2] + ["delta_mean"], ascending=[True] * len(
+            group_cols[:-2]
+        ) + [False])
     )
     if "_dummy" in summary.columns:
         summary = summary.drop(columns="_dummy")
@@ -262,12 +269,15 @@ def pivot_feature_importance(
         sub["config"] = "all"
         config_order = ["all"]
 
-    wide = sub.pivot_table(
-        index="config",
-        columns="feature",
-        values="delta_mean",
-        aggfunc="mean",
-    ).reindex(config_order)
+    wide = (
+        sub.pivot_table(
+            index="config",
+            columns="feature",
+            values="delta_mean",
+            aggfunc="mean",
+        )
+        .reindex(config_order)
+    )
     # Put stronger (mean |delta|) features first for readability.
     feature_order = wide.abs().mean(axis=0).sort_values(ascending=False).index
     wide = wide[feature_order]
@@ -326,7 +336,9 @@ def print_feature_importance(fi: pd.DataFrame, config_cols: List[str]) -> None:
     if fi.empty:
         print("\n(no shuffle/ablate feature importance rows)")
         return
-    print("\n=== Feature importance (delta = perturbed - baseline test log-loss) ===")
+    print(
+        "\n=== Feature importance (delta = perturbed - baseline test log-loss) ==="
+    )
     print("     Higher delta = feature matters more\n")
 
     if not config_cols:
@@ -353,7 +365,9 @@ def print_feature_importance(fi: pd.DataFrame, config_cols: List[str]) -> None:
         for config_vals, g in sub.groupby(config_cols, dropna=False):
             if not isinstance(config_vals, tuple):
                 config_vals = (config_vals,)
-            label = " ".join(f"{c}={v}" for c, v in zip(config_cols, config_vals))
+            label = " ".join(
+                f"{c}={v}" for c, v in zip(config_cols, config_vals)
+            )
             ranked = g.sort_values("delta_mean", ascending=False)[
                 ["feature", "delta_mean", "delta_std"]
             ]
@@ -412,7 +426,9 @@ def main() -> None:
 
     # Baseline test log-loss drives epoch selection.
     baseline_ll = df[
-        (df["set"] == "test") & (df["name"] == "log_loss") & (df["mask"] == args.mask)
+        (df["set"] == "test")
+        & (df["name"] == "log_loss")
+        & (df["mask"] == args.mask)
     ]
     if "shuffle_feature" in baseline_ll.columns:
         baseline_ll = baseline_ll[baseline_ll["shuffle_feature"].isna()]

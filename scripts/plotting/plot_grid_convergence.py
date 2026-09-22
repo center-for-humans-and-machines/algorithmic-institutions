@@ -61,14 +61,12 @@ def main() -> None:
         "artifact_dir",
         help="Run artifact dir, its metrics/ dir, or a single parquet",
     )
-    parser.add_argument(
-        "--title", default="AH grid", help="Figure title prefix, e.g. 'Contribution'"
-    )
+    parser.add_argument("--title", default="AH grid",
+                        help="Figure title prefix, e.g. 'Contribution'")
     parser.add_argument("--zoom-x", type=float, nargs=2, default=[300, 2000])
     parser.add_argument("--zoom-y", type=float, nargs=2, default=[1.95, 2.15])
     parser.add_argument(
-        "--out",
-        default="plots/group_selection/grid_convergence.jpg",
+        "--out", default="plots/group_selection/grid_convergence.jpg",
         help="Output figure path",
     )
     args = parser.parse_args()
@@ -101,9 +99,8 @@ def main() -> None:
         best = c.idxmin()
         for a in (ax, axz):
             a.plot(c.index, c.values, color=color, ls=style, lw=1.8, label=label)
-            a.scatter(
-                [best], [c.loc[best]], color=color, s=35, edgecolor="white", zorder=5
-            )
+            a.scatter([best], [c.loc[best]], color=color, s=35,
+                      edgecolor="white", zorder=5)
 
     ax.set_xlabel("epoch")
     ax.set_ylabel(f"test log-loss (mean across {n_folds} folds)")
@@ -118,7 +115,8 @@ def main() -> None:
     axz.grid(alpha=0.3)
 
     fig.suptitle(
-        f"{args.title} — test log-loss convergence " "(dashed = agent_group variants)",
+        f"{args.title} — test log-loss convergence "
+        "(dashed = agent_group variants)",
         fontsize=12,
         y=1.02,
     )

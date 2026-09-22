@@ -32,7 +32,9 @@ def load_predictions(artifact_dir, job_id=None):
         print(f"No parquet files in {cm_dir}", file=sys.stderr)
         sys.exit(1)
 
-    df = pd.concat([pd.read_parquet(os.path.join(cm_dir, f)) for f in files])
+    df = pd.concat(
+        [pd.read_parquet(os.path.join(cm_dir, f)) for f in files]
+    )
 
     # Keep only valid (decision-round) predictions
     valid = df[df["valid"] == True].copy()  # noqa: E712
@@ -52,14 +54,19 @@ def load_predictions(artifact_dir, job_id=None):
     # Each sample has n_levels rows (one per class probability).
     # Pick the class with highest probability as the prediction.
     group_cols = ["idx", "round_number"]
-    if "cv_split" in valid.columns and valid["cv_split"].notna().any():
+    if (
+        "cv_split" in valid.columns
+        and valid["cv_split"].notna().any()
+    ):
         group_cols.append("cv_split")
 
     def _agg(g):
         return pd.Series(
             {
                 "true": int(g[true_col].iloc[0]),
-                "pred": int(g.loc[g["proba"].idxmax(), pred_col]),
+                "pred": int(
+                    g.loc[g["proba"].idxmax(), pred_col]
+                ),
             }
         )
 
@@ -149,7 +156,9 @@ def main():
     else:
         base_name = os.path.basename(args.artifact_dir.rstrip("/"))
         model_name = f"{base_name}__{args.job_id}" if args.job_id else base_name
-        output_path = os.path.join("plots", "group_selection", f"{model_name}.png")
+        output_path = os.path.join(
+            "plots", "group_selection", f"{model_name}.png"
+        )
 
     plot(pred, target_name, output_path)
 

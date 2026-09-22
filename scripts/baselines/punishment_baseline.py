@@ -24,7 +24,6 @@ artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_current_contr
 Usage:
     .venv/bin/python scripts/baselines/punishment_baseline.py
 """
-
 import os
 import random
 from pathlib import Path
@@ -76,23 +75,17 @@ def full_proba(m, X, n_levels):
 
 
 def main():
-    th.random.manual_seed(SEED)
-    np.random.seed(SEED)
-    random.seed(SEED)
+    th.random.manual_seed(SEED); np.random.seed(SEED); random.seed(SEED)
     df = pd.read_csv(DATA)
     df = df[df["experiment_name"].isin(EXPERIMENTS)]
     data, _, pair_id = create_torch_data(df, switch_every=SWITCH_EVERY)
-    print(
-        f"episodes={data['contribution'].shape[0]} (doubled), "
-        f"pairs={len(set(pair_id.tolist()))}, folds={N_CV}, seed={SEED}"
-    )
+    print(f"episodes={data['contribution'].shape[0]} (doubled), "
+          f"pairs={len(set(pair_id.tolist()))}, folds={N_CV}, seed={SEED}")
     print(f"target={TARGET} ({N_LEVELS} levels), mask={MASK}, features={FEATS}\n")
 
-    folds = [
-        (i, tr, te)
-        for i, tr, te in get_cross_validations(data, N_CV, 1.0, group_key=pair_id)
-        if i is not None
-    ]
+    folds = [(i, tr, te) for i, tr, te in
+             get_cross_validations(data, N_CV, 1.0, group_key=pair_id)
+             if i is not None]
 
     floor_lls, lr_lls = [], []
     for i, tr, te in folds:
@@ -100,18 +93,12 @@ def main():
         Xte, yte = flatten(te, FEATS)
         counts = np.bincount(ytr, minlength=N_LEVELS) + 1.0
         marg = counts / counts.sum()
-        floor = log_loss(
-            yte, np.tile(marg, (len(yte), 1)), labels=list(range(N_LEVELS))
-        )
+        floor = log_loss(yte, np.tile(marg, (len(yte), 1)), labels=list(range(N_LEVELS)))
         sc = StandardScaler().fit(Xtr)
         m = LogisticRegression(max_iter=2000).fit(sc.transform(Xtr), ytr)
-        ll = log_loss(
-            yte,
-            full_proba(m, sc.transform(Xte), N_LEVELS),
-            labels=list(range(N_LEVELS)),
-        )
-        floor_lls.append(floor)
-        lr_lls.append(ll)
+        ll = log_loss(yte, full_proba(m, sc.transform(Xte), N_LEVELS),
+                      labels=list(range(N_LEVELS)))
+        floor_lls.append(floor); lr_lls.append(ll)
         print(f"  fold {i}: floor={floor:.4f}  LR={ll:.4f}  (n_test={len(yte)})")
 
     floor, lr = np.mean(floor_lls), np.mean(lr_lls)
