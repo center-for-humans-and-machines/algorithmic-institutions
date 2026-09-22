@@ -160,9 +160,16 @@ def run_batch(
         agent_group_now = state["agent_group"]
         # `head` is passed only when there is one, so a manager without the
         # bootstrap mechanism is called with exactly the signature it has
-        # always been called with.
+        # always been called with. `update_step` only reaches the behaviour
+        # policy: the evaluation rollout is `greedy=True` and every
+        # exploration mechanism is off there, which is what makes the two
+        # rollouts comparable.
         action, q_values = manager.get_action(
-            state, first=round_number == 0, greedy=on_policy, **head_kwargs
+            state,
+            first=round_number == 0,
+            greedy=on_policy,
+            update_step=update_step,
+            **head_kwargs,
         )
 
         # Two-manager mode: RL produces (B, 8, 1) over all agents; opponent

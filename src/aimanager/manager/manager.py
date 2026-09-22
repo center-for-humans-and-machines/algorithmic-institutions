@@ -1,6 +1,7 @@
 import torch as th
 from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.param_noise import ParameterNoise
+from aimanager.manager.exploration import Exploration
 
 # Exploration modes. `eps_greedy` is the agent this project has always run:
 # one value head, an action resampled uniformly over all 31 punishment levels
@@ -42,6 +43,9 @@ class ArtificalManager:
         exploration=EPS_GREEDY,
         head_assignment=PER_EPISODE,
         param_noise=None,
+        eps_final=None,
+        eps_anneal_steps=None,
+        explore_sigma=None,
         device,
     ):
         self.device = device
@@ -107,6 +111,27 @@ class ArtificalManager:
         self.n_punishments = n_punishments
         self.default_values = default_values
         self.eps = eps
+        # Off by default: with eps_final and explore_sigma unset this is the
+        # original constant-eps, uniform-proposal epsilon-greedy.
+        #
+        # NAME. PR #212 called this attribute `self.exploration`; PR #213 uses
+        # that name for its mode STRING ('eps_greedy' / 'bootstrap'), which is
+        # a config key and is read by `rl_manager.run_batch`. Both cannot have
+        # it, so the object -- which has no config key of its own, being built
+        # from eps_final / eps_anneal_steps / explore_sigma -- is the one
+        # renamed. See doc/dev-branch.md.
+        self.explorer = (
+            Exploration(
+                eps=eps,
+                n_actions=n_punishments,
+                device=device,
+                eps_final=eps_final,
+                eps_anneal_steps=eps_anneal_steps,
+                sigma=explore_sigma,
+            )
+            if eps is not None
+            else None
+        )
 
         # Weight-space exploration. Absent (or `enabled: false`) the class is
         # never constructed and `get_action` takes exactly the epsilon-greedy
@@ -164,7 +189,15 @@ class ArtificalManager:
     def encode(self, state, edge_index, **_):
         return self.policy_model.encode(state, edge_index=edge_index)
 
-    def get_action(self, state, first=False, edge_index=None, greedy=False, head=None):
+    def get_action(
+        self,
+        state,
+        first=False,
+        edge_index=None,
+        greedy=False,
+        head=None,
+        update_step=None,
+    ):
         """Select punishments.
 
         `greedy=True` is the evaluation policy and is the same in every arm of
@@ -183,6 +216,11 @@ class ArtificalManager:
         per-action dither. Under `bootstrap` it is head `head[b]`'s own greedy
         action, with no dithering -- the coherent alternative policy this arm
         exists to test.
+
+        `update_step` drives the epsilon schedule of the `Exploration` object
+        (PR #212). It only ever reaches the behaviour policy: the evaluation
+        rollout is `greedy=True` and every exploration mechanism is off there,
+        which is what makes the two rollouts comparable.
         """
         n_batch, n_agents, n_rounds = list(state.values())[0].shape
         exp_state = self.expand_obs_for_groups(state, self.n_groups)
@@ -230,13 +268,12 @@ class ArtificalManager:
                 return picked_action, q_values
             if greedy or self.exploration == BOOTSTRAP:
                 return greedy_action, q_values
-            random_actions = th.randint(
-                0, n_actions, size=greedy_action.shape, device=self.device
-            )
-            random_numbers = th.rand(size=greedy_action.shape, device=self.device)
-            select_random = random_numbers < self.eps
-            picked_action = th.where(select_random, random_actions, greedy_action)
-            return picked_action, q_values
+            # The per-action dither, which PR #212 moved wholesale into the
+            # `Exploration` object: with eps_final / eps_anneal_steps /
+            # explore_sigma unset it is the constant-eps uniform resample this
+            # block used to do inline, so the inline copy is gone rather than
+            # duplicated.
+            return self.explorer(greedy_action, update_step), q_values
 
     def expand_obs_for_groups(self, obs, n_groups):
         exclude_keys = ["group_payoff"]

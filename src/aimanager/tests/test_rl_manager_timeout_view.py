@@ -92,7 +92,7 @@ class _RecordingManager:
     def __init__(self):
         self.seen = []
 
-    def get_action(self, state, first=False, greedy=False):
+    def get_action(self, state, first=False, greedy=False, update_step=None):
         self.seen.append({k: v.clone() for k, v in state.items() if th.is_tensor(v)})
         return (
             th.full((1, 8, 1), RL_PUNISHMENT, dtype=th.int64),

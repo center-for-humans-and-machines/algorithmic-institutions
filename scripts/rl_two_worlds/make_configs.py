@@ -29,7 +29,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 OUT_DIR = os.path.join(ROOT, "configs/training/rl_manager")
 
-SEEDS = (42, 43, 44)
+# 42-44 are the three finished runs. 45 and 46 were added by the exploration
+# comparison (notes/autoresearch_log/rl-manager-annealed-local.md) so that the
+# unmodified behaviour policy has a five-seed control that pairs seed for seed
+# with every arm. Regenerating leaves 42-44 byte-identical.
+SEEDS = (42, 43, 44, 45, 46)
 
 # The current frontier stack: the contribution trunk with the per-group virtual
 # node, the direct stimulus skip and the stamped herding copula; the
