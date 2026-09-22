@@ -15,6 +15,7 @@ from aimanager.manager.memory import Memory
 from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.artificial_humans import AH_MODELS
 from aimanager.manager.manager import ArtificalManager
+from aimanager.manager.linear_opponent import load_opponent
 from aimanager.utils.utils import make_dir
 from aimanager.utils.array_to_df import add_labels
 
@@ -235,11 +236,14 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     if "opponent_manager" in config:
         opponent_manager_path = os.path.join(basedir, config["opponent_manager"])
         print(f"Loading opponent manager from {opponent_manager_path}")
-        opponent_manager = (
-            AH_MODELS[config["artificial_humans_model"]]
-            .load(opponent_manager_path, device=device)
-            .to(device)
-        )
+        # `.joblib` -> the batched linear punisher, anything else -> a GNN
+        # punisher: the same extension dispatch the simulation configs use, so
+        # this slot can name a linear baseline where a GNN artifact used to sit.
+        opponent_manager = load_opponent(
+            opponent_manager_path,
+            n_groups=config["env_args"].get("n_groups", 1),
+            device=device,
+        ).to(device)
 
     # Switch predictor — required for group-switching dynamics. Optional
     # for backwards compatibility with legacy single-group configs. Key name

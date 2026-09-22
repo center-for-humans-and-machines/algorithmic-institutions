@@ -1,0 +1,54 @@
+{
+  "artificial_punisher_intended": {
+    "invalid": {
+      "label": "timed out",
+      "max": 30.0,
+      "mean": 3.957547169811321,
+      "n": 212,
+      "share_above_zero": 0.4716981132075472
+    },
+    "valid": {
+      "label": "gave input",
+      "max": 30.0,
+      "mean": 1.6893256401009737,
+      "n": 11092,
+      "share_above_zero": 0.2994049765596827
+    }
+  },
+  "checkpoint": "artifacts/manager/rl_new_clones_s44/model/rl_new_clones_s44_manager.pt",
+  "config": "configs/training/rl_manager/rl_new_clones_s44.yml",
+  "learned_intended": {
+    "invalid": {
+      "label": "timed out",
+      "max": 28.0,
+      "mean": 0.6181818181818182,
+      "n": 220,
+      "share_above_zero": 0.17272727272727273
+    },
+    "valid": {
+      "label": "gave input",
+      "max": 3.0,
+      "mean": 0.9136530799877414,
+      "n": 13052,
+      "share_above_zero": 0.44966288691388295
+    }
+  },
+  "learned_realised": {
+    "invalid": {
+      "label": "timed out",
+      "max": 0.0,
+      "mean": 0.0,
+      "n": 220,
+      "share_above_zero": 0.0
+    },
+    "valid": {
+      "label": "gave input",
+      "max": 3.0,
+      "mean": 0.9136530799877414,
+      "n": 13052,
+      "share_above_zero": 0.44966288691388295
+    }
+  },
+  "regression_check_realised_zero_at_timeout": true,
+  "seed": 44
+}

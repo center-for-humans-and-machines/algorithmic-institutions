@@ -472,14 +472,8 @@ class ArtificialHumanEnv:
         return self.state
 
     def punish(self, punishment):
-        """Realise the manager's action, as the game realised it.
-
-        This is the moment the manager's action resolves, so this is where
-        the reward for that action is computed, from this round's own
-        contributions, punishments and validity flags. `step()` must not
-        compute it: by the time `step()` runs it has already advanced the
-        round number and drawn the next round's contributions, so a reward
-        derived there would be round-correct only by accident.
+        """Realise the manager's action, as the game realised it, and settle
+        the round.
 
         A punishment aimed at a player who gave no input was never charged
         and never shown: all 560 `player_no_input` rows in the human data
@@ -493,7 +487,16 @@ class ArtificialHumanEnv:
         every model is served, and what the run records, the value the game
         used. Unlike the contribution substitution this one is applied to
         `self.state`: the recorded output must carry it, because the human
-        data does (`convert.load_human` keeps those rows, at 0)."""
+        data does (`convert.load_human` keeps those rows, at 0).
+
+        This is also the moment the manager's action resolves, so this is
+        where the reward for that action is computed, from this round's own
+        contributions, punishments and validity flags -- the charged ones,
+        now that the zeroing above happens first. `step()` must not compute
+        it: by the time `step()` runs it has already advanced the round
+        number and drawn the next round's contributions, so a reward derived
+        there would be round-correct only by accident.
+        """
         assert self.state is not None
         assert punishment.max() < self.n_punishments
         assert punishment.dtype == th.int64
