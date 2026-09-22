@@ -1,0 +1,73 @@
+description: >-
+  Conformity-mixture arm (autoresearch contribution-conformity-mixture):
+  the M0 contribution predictor (group_switching_contribution_50ep.yml)
+  with the readout restructured as a gated two-component mixture. Component
+  A is the unchanged categorical head; component B is a discretized
+  distribution over the 21 levels centered on own_grp_prev_mean_contr
+  (the #116 leave-one-out own-group previous-round mean) with a learned
+  width; a learned gate on the post-RNN node state mixes them. Behavioral
+  claim: a share of contribution decisions are norm-matching (conditional
+  cooperation) — the structural channel restores the peer response that
+  NLL training under teacher forcing shortcuts through own history (human
+  peer slope 0.227 vs sim 0.038; see
+  notes/autoresearch_log/contribution-conformity-mixture.md). Identical
+  data / CV / seed / epochs to M0; the ONLY change is
+  model_args.conform_mixture. Separate output_dir so the M0 baseline
+  artifact is preserved.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 575
+    conform_mixture: true
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_conformity_mixture
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    conform_mixture: True
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: False
