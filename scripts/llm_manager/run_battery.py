@@ -5,6 +5,13 @@ written and validated against a stub that returns fixed punishments, so the
 harness was finished and checked before the model existed -- which is the
 only way the first language-model number can mean anything.
 
+**The objective is the group's undivided common pool**, so every table
+leads with it and the power calculation is sized on it. Total contribution
+and pool per member stay as diagnostics beside it and are never averaged
+with it: two managers can reach the same pool by opposite routes, one by
+raising contributions and paying for them and one by doing nothing, and
+only the contribution column tells them apart.
+
 Three things it does in one invocation, because none of them is safe to
 quote from elsewhere:
 
@@ -13,9 +20,8 @@ quote from elsewhere:
     on the same stack from the same seeds;
   * the symmetric controls, both seats holding the same manager, which is
     the noise floor every effect has to be read against;
-  * the minimum detectable difference at 50, 200 and 500 episodes, which is
-    what says whether a language-model result at the budget it can afford
-    means anything at all.
+  * the minimum detectable difference across 50 to 3,000 episodes, and the
+    episode count at which each already-measured effect becomes detectable.
 
 `--validate-217` adds PR #217's four inverted rules and prints this
 harness's numbers beside that arm's published ones. If they disagree, the
@@ -54,7 +60,13 @@ def base_arms(with_stub=True):
         "never": ("never", "clone"),
         "thr9_p10": ("thr9_p10", "clone"),
         "capped_sigmoid": ("capped_sigmoid", "clone"),
+        # three symmetric controls, not one: the noise floor is a property
+        # of the world a manager makes, and a silent world is a quieter one
+        # (#217 measured -0.33 members for `never_vs_never` against +0.08
+        # for the clone's own control). `clone` above is the third, and is
+        # both the clone baseline and its own symmetric control.
         "never_vs_never": ("never", "never"),
+        "thr9_vs_thr9": ("thr9_p10", "thr9_p10"),
     }
     if with_stub:
         arms["stub_zero"] = (StubManager(punishment=0), "clone")
@@ -128,20 +140,70 @@ PUBLISHED_217 = {
     "clone": {"c_gap": -2.35},
 }
 
-#: The same quantities as #219 re-measured them with `paired_rollout` at 300
-#: episodes -- the harness this one is built on, so agreement here should be
-#: tight where agreement with #217 need only be close.
-PUBLISHED_219 = {
-    "never": {"members": 4.54},
-    "thr9_p10": {"members": 3.87},
-    "clone": {"members": 4.02},
+#: PR #219's own cross-check of `paired_rollout` against #217: one rollout,
+#: 1024 episodes, seed 42 (log section 3.1). This is the tightest target
+#: available, because it is the same rollout code on the same four
+#: artifacts; only the RNG stream differs, since #219 ran every anchor
+#: inside one batched rollout and this harness gives each arm its own.
+#: `mean_p` here is per member-round, which is what that table's column is.
+PUBLISHED_219_CROSSCHECK = {
+    "never": {
+        "members": 4.62,
+        "pool": 62.64,
+        "mean_p_member": 0.0,
+        "mean_c": 8.64,
+        "c_gap": -1.45,
+    },
+    "thr9_p10": {
+        "members": 3.91,
+        "pool": 60.69,
+        "mean_p_member": 2.90,
+        "mean_c": 11.74,
+        "c_gap": -3.64,
+    },
+    "clone": {
+        "members": 3.99,
+        "mean_p_member": 1.85,
+        "mean_c": 10.03,
+        "c_gap": -2.26,
+    },
+}
+
+#: PR #219's held-out validation table, seeds 45/46/47 at 2,048 episodes
+#: each (6,144 per rule), focal seat against the clone. Run this harness at
+#: those seeds to compare like with like. `capped_sigmoid` is that table's
+#: `best_cap10_pool`, which is the P_max-capped rule, not the
+#: severity-constrained one.
+PUBLISHED_219_VALIDATION = {
+    "never": {"contribution": 37.30, "pool": 59.68, "members": 4.58},
+    "thr9_p10": {
+        "contribution": 44.64,
+        "pool": 60.19,
+        "members": 3.87,
+        "mean_p_member": 2.90,
+    },
+    "clone": {
+        "contribution": 40.09,
+        "pool": 56.85,
+        "members": 4.04,
+        "mean_p_member": 1.80,
+    },
+    "capped_sigmoid": {
+        "contribution": 43.35,
+        "pool": 65.19,
+        "members": 4.41,
+        "mean_p_member": 0.94,
+    },
 }
 
 MEASURED = {
     "members": "focal_members",
     "pool": "focal_pool",
+    "contribution": "focal_contribution",
     "share": "focal_share_roundmean",
     "mean_p": "focal_mean_punishment_valid",
+    "mean_p_member": "focal_mean_punishment",
+    "mean_c": "focal_mean_contribution",
     "c_gap": "c_gap",
 }
 
@@ -301,7 +363,8 @@ def main():
     val = pd.concat(
         [
             validation_table(battery, PUBLISHED_217, "PR #217"),
-            validation_table(battery, PUBLISHED_219, "PR #219"),
+            validation_table(battery, PUBLISHED_219_CROSSCHECK, "PR #219 cross-check"),
+            validation_table(battery, PUBLISHED_219_VALIDATION, "PR #219 validation"),
         ],
         ignore_index=True,
     )
@@ -309,22 +372,30 @@ def main():
     stub_id = stub_identity_table(battery)
     stub_id.to_csv(os.path.join(args.out, "stub_identity.csv"), index=False)
 
-    fmt = dict(index=False, float_format=lambda v: f"{v:.3f}")
-    print("\n=== the battery ===")
-    print(
-        battery[
-            [
-                "arm",
-                "rival",
-                "n_episodes",
-                "focal_contribution",
-                "focal_pool",
-                "focal_pool_per_member",
-                "focal_mean_punishment",
-                "focal_members",
-            ]
-        ].to_string(**fmt)
+    # each arm against the two bars, pool first: never-punishing (which
+    # `thr9_p10` is indistinguishable from on the pool) and the incumbent
+    # rule (which the capped one beats by +5.00). The contribution column
+    # beside the pool is what says by which route an arm got there.
+    con = pd.concat(
+        [
+            bat.contrasts(episodes, ref)
+            for ref in ("never", "thr9_p10")
+            if ref in set(episodes["arm"])
+        ],
+        ignore_index=True,
     )
+    con.to_csv(os.path.join(args.out, "contrasts.csv"), index=False)
+
+    fmt = dict(index=False, float_format=lambda v: f"{v:.3f}")
+    battery_cols = ["arm", "rival", "n_episodes"] + [f"focal_{q}" for q in bat.HEADLINE]
+    print("\n=== the battery, pool first (the objective) ===")
+    print(
+        battery[battery_cols]
+        .sort_values("focal_pool", ascending=False)
+        .to_string(**fmt)
+    )
+    print("\n=== against the bars: pool first, contribution beside it ===")
+    print(con[con["quantity"].isin(("pool", "contribution"))].to_string(**fmt))
     print("\n=== policy shape, evaluation-suite bins, valid cells ===")
     print(
         shape.pivot(index="arm", columns="bin", values="mean_punishment").to_string(
@@ -337,8 +408,10 @@ def main():
     print(bat.leaver_ordering(battery).to_string(**fmt))
     print("\n=== noise floor: both seats the same manager ===")
     print(floors.to_string(**fmt))
-    print("\n=== minimum detectable difference ===")
-    print(mdd.to_string(**fmt))
+    print("\n=== minimum detectable difference, on the objective first ===")
+    print(mdd[mdd["quantity"] == bat.PRIMARY_OBJECTIVE].to_string(**fmt))
+    print("\n--- the rest ---")
+    print(mdd[mdd["quantity"] != bat.PRIMARY_OBJECTIVE].to_string(**fmt))
     print("\n=== episodes needed for an effect this project has measured ===")
     print(detect.to_string(**fmt))
     if len(val):

@@ -190,6 +190,33 @@ def test_the_battery_keeps_the_pool_and_the_contribution_apart():
     assert row.loc["seven", "focal_pool"] < row.loc["never", "focal_pool"]
 
 
+def test_the_reported_ratio_is_pooled_not_an_average_of_ratios():
+    """Episodes differ in how many member-rounds they contain.
+
+    The level a paired arm in this project reports is the pooled ratio; the
+    average of the per-episode ratios is a different number (11% apart on
+    the clone's spend at 6,144 episodes), and both are emitted so nobody has
+    to guess which one a table carries.
+    """
+    ep, counts, _, _ = run_arm(
+        "seven",
+        StubManager(punishment=7),
+        "never",
+        _noisy_models(valid_fn=_timeout_agent_three),
+        episodes=16,
+        seeds=42,
+    )
+    row = bat.battery_row("seven", ep, counts)
+    for q, (num, den) in bat.POOLED_RATIOS.items():
+        pooled = ep[f"focal_{num}"].sum() / ep[f"focal_{den}"].sum()
+        assert row[f"focal_{q}"] == pytest.approx(pooled)
+        assert row[f"focal_{q}_episodemean"] == pytest.approx(ep[f"focal_{q}"].mean())
+    # the spread is still taken over episodes, which is the independent unit
+    assert row["focal_pool_per_member_sd"] == pytest.approx(
+        ep["focal_pool_per_member"].std(ddof=1)
+    )
+
+
 # --------------------------------------------------------------------- #
 # episodes, chunking and seeds
 # --------------------------------------------------------------------- #

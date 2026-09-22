@@ -256,6 +256,43 @@ def test_a_bigger_effect_needs_fewer_episodes():
     assert big < small
 
 
+def test_the_pool_leads_every_table_and_nothing_is_averaged_with_it():
+    assert bat.PRIMARY_OBJECTIVE == "pool"
+    assert bat.HEADLINE[0] == "pool"
+    assert bat.HEADLINE[1] == "contribution"
+    # the power table is sized on the objective first
+    assert bat.REFERENCE_EFFECTS[0]["quantity"] == "pool"
+    f = bat.noise_floor(_symmetric_episodes())
+    assert list(f["quantity"]) == list(bat.HEADLINE)
+    assert list(bat.mdd_table(f, (50,))["quantity"]) == list(bat.HEADLINE)
+
+
+def test_contrasts_show_the_route_not_just_the_objective():
+    """Two arms level on the pool, arrived at by opposite routes.
+
+    `a` raises contributions and pays for them; `b` does nothing. The pool
+    interval crosses zero for both and the contribution interval does not,
+    which is the distinction the objective alone cannot make.
+    """
+    rng = np.random.default_rng(0)
+    n = 600
+    rows = []
+    for arm, contr in (("never", 40.0), ("a", 52.0), ("b", 40.0)):
+        d = {"arm": arm}
+        d["focal_pool"] = 60.0 + rng.normal(0, 4, n)
+        d["focal_contribution"] = contr + rng.normal(0, 4, n)
+        for q in bat.HEADLINE[2:]:
+            d[f"focal_{q}"] = rng.normal(0, 1, n)
+        rows.append(pd.DataFrame(d))
+    ep = pd.concat(rows, ignore_index=True)
+    c = bat.contrasts(ep, "never").set_index(["arm", "quantity"])
+    assert list(c.reset_index()["quantity"].unique()) == list(bat.HEADLINE)
+    assert bool(c.loc[("a", "pool"), "crosses_zero"])
+    assert bool(c.loc[("b", "pool"), "crosses_zero"])
+    assert not bool(c.loc[("a", "contribution"), "crosses_zero"])
+    assert bool(c.loc[("b", "contribution"), "crosses_zero"])
+
+
 def test_the_published_budgets_span_the_existing_baselines():
     # #217 ran at 300 episodes and #219's validation at 6,144; a table that
     # stopped at 500 would not reach the range the baselines actually use

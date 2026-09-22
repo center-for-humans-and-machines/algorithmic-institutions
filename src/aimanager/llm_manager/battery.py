@@ -43,14 +43,29 @@ from scipy.stats import norm
 
 from aimanager.manager.paired_rollout import RPA_LABELS, summarise
 
-#: The five quantities reported for every arm, per episode, on each seat.
-#: `contribution` and `pool` are seat TOTALS per round -- the competing
-#: setting prices a manager on what its whole group produced, so a policy
-#: that raises contributions per head while shedding the heads has not
-#: gained anything.
+#: The group's undivided common pool, `1.6 * sum(c) - sum(p)`. The
+#: maintainer has settled this as the objective: a manager that increases
+#: collaboration and maintains the pool. Every table in this module leads
+#: with it and the power calculation is sized on it first.
+PRIMARY_OBJECTIVE = "pool"
+
+#: The five quantities reported for every arm, per episode, on each seat,
+#: in the order tables carry them. `pool` and `contribution` are seat TOTALS
+#: per round -- the competing setting prices a manager on what its whole
+#: group produced, so a policy that raises contributions per head while
+#: shedding the heads has not gained anything.
+#:
+#: `contribution` sits second and is a diagnostic, not a co-equal headline,
+#: and it is in the battery for one specific reason: it separates a manager
+#: that raised collaboration from one that merely refrained from spending.
+#: Two managers can reach the same pool by opposite routes -- raising
+#: contributions and paying for them, or doing nothing -- and the objective
+#: cannot tell them apart on its own. A pool-equal comparison whose
+#: contribution columns differ is a finding; `contrasts` exists so it is
+#: visible rather than collapsed.
 HEADLINE = (
-    "contribution",
     "pool",
+    "contribution",
     "pool_per_member",
     "mean_punishment",
     "members",
@@ -357,6 +372,23 @@ def _mean_se(x):
     return float(x.mean()), sd, (sd / np.sqrt(len(x)) if len(x) > 1 else np.nan)
 
 
+#: The two headline quantities that are ratios, and what they are a ratio
+#: OF. Their reported LEVEL is the pooled ratio, sum of numerators over sum
+#: of denominators, which is the convention every paired arm in this
+#: project uses (`rule_sigmoid.aggregate.RATIOS`, `_ratio`). Averaging the
+#: per-episode ratios instead is a different number -- measured here at 2.06
+#: against 1.85 for the clone's spend, an 11% gap and 35 standard errors at
+#: 6,144 episodes -- because episodes differ in how many member-rounds they
+#: contain and the small ones carry the larger ratios. The per-episode
+#: version is kept as `_episodemean` and is what the spread, the noise floor
+#: and the minimum detectable difference are taken over, since those need an
+#: independent value per episode.
+POOLED_RATIOS = {
+    "pool_per_member": ("pool", "members"),
+    "mean_punishment": ("p_num", "p_den"),
+}
+
+
 def battery_row(name, episodes, counts, telemetry=None, wall_clock_s=np.nan):
     """One arm's whole battery as a flat row.
 
@@ -370,6 +402,13 @@ def battery_row(name, episodes, counts, telemetry=None, wall_clock_s=np.nan):
             row[f"{seat}_{q}"] = mean
             row[f"{seat}_{q}_sd"] = sd
             row[f"{seat}_{q}_se"] = se
+        for q, (num, den) in POOLED_RATIOS.items():
+            row[f"{seat}_{q}_episodemean"] = row[f"{seat}_{q}"]
+            row[f"{seat}_{q}"] = float(
+                _safe_div(
+                    episodes[f"{seat}_{num}"].sum(), episodes[f"{seat}_{den}"].sum()
+                )
+            )
     row["focal_share_roundmean"] = float(episodes["focal_share_roundmean"].mean())
     row["rival_share_roundmean"] = float(episodes["rival_share_roundmean"].mean())
     row["focal_mean_contribution"] = float(
@@ -419,6 +458,64 @@ def _telemetry_row(telemetry, n_episodes):
     out["total_tokens"] = tok
     out["tokens_per_episode"] = tok / n_episodes if n_episodes else np.nan
     return out
+
+
+def _unpaired_ci(a, b, n_boot=4000, seed=1):
+    """Interval for mean(a) - mean(b), resampling each arm's episodes.
+
+    Two arms are two different worlds -- a manager that punishes differently
+    makes the players act differently and consumes a different number of
+    draws -- so the difference is unpaired, which is the conservative
+    reading and the construction #217 and #219 both used.
+    """
+    rng = np.random.default_rng(seed)
+    a = np.asarray(a, float)[~np.isnan(np.asarray(a, float))]
+    b = np.asarray(b, float)[~np.isnan(np.asarray(b, float))]
+    if len(a) < 2 or len(b) < 2:
+        return np.nan, np.nan, np.nan
+    da = a[rng.integers(0, len(a), size=(n_boot, len(a)))].mean(1)
+    db = b[rng.integers(0, len(b), size=(n_boot, len(b)))].mean(1)
+    d = da - db
+    return (
+        float(a.mean() - b.mean()),
+        float(np.percentile(d, 2.5)),
+        float(np.percentile(d, 97.5)),
+    )
+
+
+def contrasts(episodes, reference, seat="focal", quantities=HEADLINE, seed=1):
+    """Every arm minus a reference arm, pool first, on all five quantities.
+
+    This table is what makes the route visible. The objective discriminates
+    between managers but does not reward punishment for its own sake: a
+    correctly-targeted threshold rule is indistinguishable from never
+    punishing on the pool (#207: +1.07 [-5.79, 7.93]; #219's held-out
+    seeds: +0.51) while the capped fitted rule beats that threshold rule by
+    +5.00. So a manager sitting at never-punishing on the pool has not
+    necessarily failed, and one above the capped rule has done something
+    new -- and neither reading can be made without the contribution column
+    beside the pool.
+    """
+    out = []
+    ref = episodes[episodes["arm"] == reference]
+    assert len(ref), f"no reference arm {reference!r} in this run"
+    for arm, g in episodes.groupby("arm", sort=False):
+        if arm == reference:
+            continue
+        for q in quantities:
+            d, lo, hi = _unpaired_ci(g[f"{seat}_{q}"], ref[f"{seat}_{q}"], seed=seed)
+            out.append(
+                {
+                    "arm": arm,
+                    "reference": reference,
+                    "quantity": q,
+                    "delta": d,
+                    "lo": lo,
+                    "hi": hi,
+                    "crosses_zero": bool(lo <= 0 <= hi) if lo == lo else None,
+                }
+            )
+    return pd.DataFrame(out)
 
 
 def leaver_ordering(battery, noise_floor=C_GAP_NOISE_FLOOR):
@@ -507,8 +604,16 @@ EPISODE_BUDGETS = (50, 200, 500, 1000, 3000)
 
 #: Differences this project has already measured, so "an effect worth
 #: caring about" is anchored on the world rather than on a convention.
-#: They span the range from needing real precision to being unmissable.
+#: Pool first, because that is the objective a result will be judged on;
+#: they span the range from a difference nobody should expect to resolve to
+#: one that is unmissable.
 REFERENCE_EFFECTS = (
+    {
+        "effect": "thr9_p10 over never",
+        "quantity": "pool",
+        "size": 0.51,
+        "source": "PR #219, 60.19 - 59.68 on the held-out seeds",
+    },
     {
         "effect": "capped_sigmoid over thr9_p10",
         "quantity": "pool",
@@ -516,16 +621,16 @@ REFERENCE_EFFECTS = (
         "source": "PR #219, held-out seeds",
     },
     {
-        "effect": "thr9_p10 over never",
-        "quantity": "contribution",
-        "size": 7.34,
-        "source": "PR #219, held-out seeds",
-    },
-    {
         "effect": "inverted rule against never",
         "quantity": "pool",
         "size": 32.75,
         "source": "PR #217, inv_thr11_p10",
+    },
+    {
+        "effect": "thr9_p10 over never",
+        "quantity": "contribution",
+        "size": 7.34,
+        "source": "PR #219, 44.64 - 37.30 on the held-out seeds",
     },
 )
 
