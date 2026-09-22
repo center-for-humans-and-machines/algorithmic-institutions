@@ -3,12 +3,13 @@
 Reads one or more training metric parquets
 (`artifacts/manager/<job>/metrics/<job>.parquet`) and writes, per job:
 
-  gap.csv           the quantity this arm exists to shrink -- mean punishment
-                    under the behaviour policy against mean punishment under
-                    the evaluated policy, per evaluation point, with their
-                    ratio. Under epsilon-greedy at eps=0.1 over 31 levels the
-                    behaviour policy injects ~1.5 punishment points per
-                    member-round that the evaluated policy never sees.
+  gap.csv           mean punishment under the behaviour policy against mean
+                    punishment under the evaluated policy, per evaluation
+                    point, with their ratio. A DESCRIPTION OF WHAT WAS
+                    SAMPLED, not a defect: DQN is off-policy and a behaviour
+                    policy that differs from the target is what the algorithm
+                    is for. A large ratio is not a fault and a small one is
+                    not an improvement.
   policy_shape.csv  mean punishment per contribution bin for the evaluated
                     policy, on the evaluation suite's own RPA bins, beside the
                     human and clone columns measured on
@@ -129,10 +130,16 @@ def distortion_table(wide, last_n=5):
     the shape being evaluated, against the parameter-free epsilon-greedy
     prediction.
 
-    This is the sharper discriminator. The aggregate gap measures a level
-    offset; this measures whether the exploration mechanism *flattens the
-    contingency between punishment and contribution*, which is the thing the
-    inverted-shape result makes us care about.
+    A finer description of the sampled distribution than the aggregate gap,
+    which only sees a level offset. It says whether the exploration mechanism
+    flattens the punishment-contribution contingency *in the data it
+    collects*.
+
+    It does NOT say what was learned. Off-policy, a flattened sampling profile
+    is not by itself a fault -- Q-learning evaluates the greedy policy
+    whatever collected the data. The claim this arm actually rests on is
+    trajectory coverage, which lives at the episode level and is not measured
+    here; see notes/autoresearch_log/rl-manager-bootstrapped-dqn.md.
     """
     tag = behaviour_tag(wide)
     evaluated = shape_table(wide, EVAL_TAG, last_n)

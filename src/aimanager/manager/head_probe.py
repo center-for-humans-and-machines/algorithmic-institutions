@@ -13,7 +13,12 @@ training loop on the forward pass the acting policy already made:
 
 2. **Diversity.** Whether the K heads are actually different policies. The
    headline is `head_slope_sign_spread`: whether the heads disagree about the
-   *sign* of the contribution-punishment relationship.
+   *sign* of the contribution-punishment relationship. Each head held one
+   policy for a whole episode, so a sign disagreement is evidence that
+   coherent contingent trajectories were generated and that the value
+   function has not resolved their returns -- which is the trajectory-coverage
+   claim this arm rests on, not the action-distribution one. See
+   notes/autoresearch_log/rl-manager-bootstrapped-dqn.md.
 
 Everything here is a pure function of tensors the rollout already has.
 """
