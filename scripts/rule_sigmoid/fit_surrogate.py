@@ -242,7 +242,9 @@ def run(args):
         )
 
         tag = obj.replace("focal_", "")
-        joblib.dump(gp, os.path.join(args.out, f"gp_{tag}.joblib"))
+        # compressed: the bulk is the 1024 x 1024 Cholesky factor, and the
+        # fitted surrogate is a committed deliverable rather than a scratch file
+        joblib.dump(gp, os.path.join(args.out, f"gp_{tag}.joblib"), compress=3)
         profiles(gp, u_star).to_csv(
             os.path.join(args.out, f"profiles_{tag}.csv"), index=False
         )

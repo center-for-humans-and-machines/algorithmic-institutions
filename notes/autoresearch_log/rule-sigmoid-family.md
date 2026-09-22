@@ -110,7 +110,69 @@ One rollout, 1024 episodes, seed 42, against the published `26_rule_inverted_tar
 
 Membership agrees to 0.05 of a member, realised spend to 0.1, mean contribution to 0.26 and the leaver gap to 0.14 -- the last well inside its own 0.577 noise floor. The common pool agrees less tightly (`thr9_p10` 60.69 here against 62.32 published, `never` 62.64 against 62.22) but within about one standard error of this run's own 1.5, and the two runs are different RNG streams with the free-punishment fix in place here and not there.
 
-**Throughput, which is what made the design affordable.** A rollout costs about the same whatever its batch size, because the cost is per-round Python and model-call overhead rather than arithmetic -- the contribution GNN is 35 KB. Measured: 8 rollouts of 768 episodes in 42 seconds on an A100, and 3 seconds for a 192-episode rollout on four CPU threads. `simulate.py` needs about 77 seconds for 100 episodes of one pairing. So the sweep runs on CPU nodes, and a thousand design points at 512 episodes each is an hour of ordinary batch time rather than a GPU campaign.
+**Throughput, which is what made the design affordable.** A rollout costs about the same whatever its batch size, because the cost is per-round Python and model-call overhead rather than arithmetic -- the contribution GNN is 35 KB. Measured: 8 rollouts of 768 episodes in 42 seconds on an A100, and 3 seconds for a 192-episode rollout on four CPU threads. `simulate.py` needs about 77 seconds for 100 episodes of one pairing. So the sweep runs on CPU nodes, and a thousand design points at 512 episodes each is an hour of ordinary batch time rather than a GPU campaign: **1,030 points x 512 episodes x 2 seeds = 1.05M episodes in 8 array tasks of about 3.5 minutes each.**
+
+### 3.2 What was run (measured)
+
+| arm | design | seeds | episodes / point | jobs |
+|---|---|---|---|---|
+| design sweep | 1,024 Sobol + 6 anchors | 42, 43 (**fit**) | 512 | 30422080_[0-6], 30422657_7 |
+| surrogate check | the same 1,030 | 44 (**never fitted on**) | 256 | 30422482_[0-3] |
+| validation | 46 rows: optima, incumbents, ridge and boundary probes | 45, 46, 47 (**held out**) | 2,048 | 30423322, 30423323 |
+| cross-check | `simulate.py`, 10 pairings | 42, 43, 44 | 100 | 30423324-6 |
+
+The design is scrambled Sobol over `P_max` in [0, 30], `c0` in [0, 20], `log10 tau` in [-2, 1], and both exponents in [0, 3]. `tau` is sampled logarithmically because it spans its interesting range multiplicatively: at 0.01 the logistic is a hard threshold on every integer contribution, at 10 it is nearly flat across the whole scale.
+
+**Two of the three box edges are not arbitrary and one is.** `P_max = 30` is the action space's own ceiling (`n_punishments = 31`) and `c0` in [0, 20] is the contribution scale. Nothing fixes `gamma <= 3`, so the validation design carries probes at `gamma = 4` and `6` as well as at `-0.5` and `-1`, which is where the "punishment is an investment" premise gets tested rather than assumed.
+
+**The anchors reproduce the contrast this arm was given.** `thr9_p10` minus `never`, measured here at 1,024 episodes each:
+
+| quantity | here | quoted in the brief |
+|---|---|---|
+| total contribution | **+7.86** | +8.12 [4.01, 12.22] |
+| common pool | **+1.73** | +1.07 [-5.79, 7.93] |
+
+So the harness is measuring the same thing the objectives were defined on, and the break-even arithmetic carries over: punishment buys 7.86 contribution, worth 12.6 of pool, and costs 10.8 in spend.
+
+### 3.3 The surrogate predicts a seed it never saw, to within that seed's own noise (measured)
+
+The whole 1,030-point design was re-run on seed 44 at 256 episodes, and the already-fitted GPs -- loaded from disk, not refitted -- were asked to predict it.
+
+| objective | held-out RMSE | that seed's own measurement noise | R2 against noise | R2 against variance | Spearman | bias |
+|---|---|---|---|---|---|---|
+| total contribution | 1.810 | 1.765 | **-0.05** | 0.762 | 0.861 | +0.05 |
+| common pool | 2.973 | 2.871 | **-0.07** | 0.872 | 0.833 | +0.07 |
+
+**The residual is the measurement noise and essentially nothing else.** An R2-against-noise of about zero is the target, not a failure: it says the surrogate's error on unseen data is the same size as the error of simply measuring that point again, so there is no structure left for it to have learned and none it has invented. A surrogate that had fitted noise would score well in sample and badly here.
+
+That matters because the noise term was the thing most likely to be got wrong. `sklearn`'s `normalize_y` divides the target by its own standard deviation and does **not** scale `alpha` or the `WhiteKernel` with it -- checked empirically rather than assumed, because supplying the measured standard errors in the wrong units would have handed the fit a noise level about 60x too small and produced exactly the sharp false optimum the noise term exists to prevent. With it right, the fitted unexplained noise is **0.36** (contribution) and **0.59** (pool) against measured standard errors of 0.87 and 1.41: the per-point sampling error already accounts for most of the scatter.
+
+### 3.4 The two optima agree on whom to punish and disagree on when (measured)
+
+Maximising each posterior mean over the box:
+
+| objective | `P_max` | `c0` | `tau` | `gamma_ep` | `gamma_sw` | surrogate value | its sd | at a box edge |
+|---|---|---|---|---|---|---|---|---|
+| total contribution | **30.0** | 8.97 | 0.206 | **0.00** | 1.35 | 50.12 | 0.66 | `P_max`, `gamma_ep` |
+| common pool | **30.0** | 7.14 | 0.425 | **3.00** | 1.42 | 71.50 | 1.22 | `P_max`, `gamma_ep` |
+
+They agree on four of the five parameters and disagree completely on the fifth, and the fifth is the episode horizon. Both want the action space's ceiling, both aim just below the untreated mean contribution, both use a fairly sharp threshold, and both discount towards the reshuffle at `gamma_sw` around 1.4. **The contribution optimum wants no episode discount at all -- punish as hard in round 23 as in round 0 -- and the pool optimum wants the most the box allows.**
+
+That is not a difference of degree dressed up. The set of parameter vectors the surrogate cannot distinguish from its own optimum, within one measurement standard error:
+
+| parameter | contribution | common pool | overlap |
+|---|---|---|---|
+| `P_max` | 24.8 - 29.8 | 25.8 - 29.8 | yes |
+| `c0` | 7.8 - 9.9 | 6.0 - 8.5 | yes |
+| `tau` | 0.05 - 0.69 | 0.10 - 1.13 | yes |
+| **`gamma_ep`** | **0.03 - 0.78** | **1.70 - 2.92** | **none** |
+| `gamma_sw` | 0.33 - 1.93 | 0.91 - 2.14 | yes |
+
+(5th to 95th percentile of a 65,536-point Sobol sweep of the box kept within `delta` of the optimum; `delta` is 0.94 for contribution and 1.53 for pool, each the standard error of a single well-measured design point.)
+
+**Only `gamma_ep` fails to overlap, and it is the flattest direction in both surrogates.** The ARD length scales say so directly -- on the unit box, contribution 1.17 / 0.89 / 1.09 / **4.44** / 2.61 and pool 2.00 / 1.30 / 1.57 / **4.14** / 3.76, in the order of the table -- and so does the Hessian: the curvature at the contribution optimum runs from **-215** along `c0` to **+0.66** along `gamma_ep`, a ratio of 325, and at the pool optimum from **-269** to **-0.93** along a direction that is 87% `gamma_ep`, a ratio of 290.
+
+So the landscape is a long flat ridge in the episode exponent, and the two objectives sit at opposite ends of that same ridge. A point estimate of either would have hidden both facts.
 
 ## 4. Notes
 
