@@ -44,7 +44,21 @@ Both are **seat totals per round**: the focal manager's group's summed contribut
 
 ### How targeting is measured, and how it is not
 
-**Aim is reported as a rank correlation, not as a difference of bin means.** Every rollout accumulates the full 21 x 31 contribution-by-punishment table on the focal seat's valid cells, and the targeting statistic is the tie-corrected Spearman rho taken from it. The reason is a measured trap rather than a preference: a sibling arm's largest apparent shape difference, **-11.1** on a difference of bin means, turned out to be entirely a level artefact -- the manager's mean punishment fell to a third while its punish rate tripled, and its actual contribution-to-punishment relationship was unchanged to the third decimal. Same aim, less force, more often. Spearman rho is invariant to any strictly monotone rescaling of the punishment, so it cannot make that mistake; `scripts/tests/test_rule_sigmoid_targeting.py` pins the invariance. The level (`mean_p_valid`) and the rate (`punish_rate`, `mean_p_given_positive`) are reported **beside** it, never instead of it.
+**Three numbers together, never the rank alone.** Every rollout accumulates the full 21 x 31 contribution-by-punishment table on the focal seat's valid cells -- the agent-round joint distribution, not six bin means -- and targeting is reported as a triple:
+
+| statistic | what it is | what it catches |
+|---|---|---|
+| `rho` | tie-corrected Spearman rho from that table | aim, invariant to force |
+| `magnitude` | range of the bin means over their mean | whether the aim has any size |
+| `noise_gate` | that range over its own standard error across episodes | whether the size is real |
+
+Both halves of that are measured traps, not preferences.
+
+*Rank is needed because a difference of bin means measures force.* A sibling arm's largest apparent shape difference, **-11.1**, was entirely a level artefact: mean punishment down to a third, punish rate up threefold, the contribution-to-punishment relationship unchanged to the third decimal. And the human managers and the clone differ by **1.088** on a difference of bin means while being identical on rank -- both strictly monotone decreasing across all six bins -- with rescaling recovering most of the gap, so **42%** of that apparent difference in aim was force.
+
+*Magnitude and the gate are needed because rank is blind to flatness.* Rank discards size entirely, so a profile falling 5.00 to 4.99 scores like one falling 4.76 to 0.27; a sibling's exploration buffer scored **-0.540** on a relationship whose spread relative to its own mean was **0.002** -- a flat policy plus sampling noise, ranked. That risk is larger here than in any hand-picked arm, because a search over a thousand candidates will produce rules that punish almost nothing, and rank would call them beautifully targeted. **The objective is untouched by this: it was never the rank.** A rule is called targeting only when it is strong in rank *and* non-negligible in magnitude *and* above the gate. `scripts/tests/test_rule_sigmoid_targeting.py` pins all three properties.
+
+The level (`mean_p_valid`) and the rate (`punish_rate`, `mean_p_given_positive`) are reported beside them, so a reader can always separate aim from force.
 
 **The leaver diagnostic is reported as a ranking, not as a sign test.** It is here because it reads straight off the recorded rounds with no counterfactual, and it does reproduce the ordering of managers -- it correlates with policy shape at r = -0.95 over ten of them. But its zero point does not separate the classes: across four inverted managers only one crossed zero (+0.291) and the other three sat between -0.02 and -1.21. Its noise floor is about 0.577, the size of the differences a fine contrast would ask it to resolve. So no rule is called correctly or incorrectly targeted on the sign of its `c_gap`, and no paired contrast rests on it.
 
