@@ -1,0 +1,95 @@
+description: >-
+  Phase A of the group-latent contributor (autoresearch
+  auto/contribution-group-latent, plan step 7). Identical to the reference
+  group_switching_contribution_50ep.yml except for the latent: a shared
+  per-(group, episode) scalar z ~ N(0,1) entering the emission logits as
+  `logits += z * v`, v a learned 21-vector, trained by exact marginal
+  likelihood (20-node Gauss-Hermite log-sum-exp per (episode, group)
+  trajectory). The base network is frozen at the reference artifact, so only
+  v (21 parameters) learns and phase A doubles as the persistence
+  measurement: if the data carry no episode-persistent shared group factor,
+  the MLE leaves ||v|| at its initialisation scale and the held-out marginal
+  likelihood fails to beat the frozen base's plain likelihood.
+  Deviations from the reference, all confined to the loading-only phase:
+  (1) epochs 200 with lr 5e-3 -- v is a 21-parameter linear offset on a
+  smooth low-dimensional surface, so ~5k Adam steps per fold reach
+  convergence, and the reference lr of 3e-4 would merely spend hours
+  crawling there; the loading_norm trajectory is logged every 10 epochs so
+  convergence is verifiable rather than assumed.
+  (2) weight_decay 0 -- ||v|| materially non-zero *is* the gate, and an L2
+  prior on exactly that quantity would bias the test toward failure. The
+  base weights, which weight decay was tuned for, are frozen anyway.
+  (3) shuffle_features dropped -- the perturbation diagnostics are 6 of the
+  8 full-dataset forward passes per eval and are irrelevant to the gate;
+  dropping them buys the dense eval_period 10 logging.
+  (4) loading_init 0.1 rather than 0.0 -- v == 0 is an exact stationary
+  point of the marginal likelihood (the quadrature nodes are symmetric, so
+  sum_k w_k z_k == 0 and the gradient vanishes identically), and a constant
+  v is invisible to the softmax; the init is therefore a level ramp of
+  magnitude 0.1, i.e. z starts as a pure location shift of the contribution
+  distribution. The MLE is free to move it anywhere, including back to zero.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn+group_latent
+    dataset: 50ep
+    phase: A
+    epochs: 200
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  basedir: .
+  output_dir: >-
+    artifacts/artificial_humans/group_switching_contribution_50ep_group_latent_phaseA
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+    group_latent:
+      dim: 1
+      n_quadrature: 20
+      pathway: logit_skip
+      loading_init: 0.1
+      n_groups: 2
+  optimizer_args:
+    lr: 5.e-3
+    weight_decay: 0
+  train_args:
+    epochs: 200
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 10
+    l1_entropy: 0
+    freeze_base: True
+    init_artifact: >-
+      artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+  device: cuda
+  autoregression: False
