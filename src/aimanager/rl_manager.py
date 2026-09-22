@@ -74,8 +74,14 @@ def run_batch(
     for round_number in count():
         statecopy = {k: v.clone() for k, v in state.items() if k in replay_keys}
 
+        # `update_step` only reaches the behaviour policy: the evaluation
+        # rollout is `greedy=True` and every exploration mechanism is off
+        # there, which is what makes the two rollouts comparable.
         action, q_values = manager.get_action(
-            state, first=round_number == 0, greedy=on_policy
+            state,
+            first=round_number == 0,
+            greedy=on_policy,
+            update_step=update_step,
         )
 
         # Two-manager mode: RL produces (B, 8, 1) over all agents; opponent
