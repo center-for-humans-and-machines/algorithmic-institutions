@@ -12,6 +12,8 @@ One of four arms. The siblings are annealed local epsilon-greedy, bootstrapped D
 
 **The number that decides it:** at generation 0 the 40 population members' slopes had a standard deviation of 0.93 to 1.33 and spanned −1.57 to +3.10, bracketing every shape the DQN seeds ever produced. By generation **220 to 320** — all five seeds inside a 100-generation window — that spread had fallen below a tenth of its starting value, and it never came back. Selection did not choose a direction for the contingency. It **removed the contingency**, in the first 8% of the budget, and spent the other 92% on a level.
 
+Behaviour agrees with the policy table. The two seeds that ended on a flat tax are **indistinguishable from `DummyManager(2)` and `DummyManager(1)`** on who leaves their group (1.37 and 0.71 standard deviations of that statistic's own measured noise), while a genuinely targeted rule sits 3.92 standard deviations away from all of them. No ES seed is inverted — unlike two of the three DQN seeds, none of them **selects for** free-riders. They simply do not select.
+
 So the arm does not recover the human shape, and the reason is not the one I registered in advance.
 
 ## R1. The collapse detector, first, as the successor section demands
@@ -135,43 +137,65 @@ simulation.
 
 ## R3b. Who leaves — the targeting direction, read off behaviour
 
-**Measurement queued, not yet returned.** The corrected cross-evaluation
-(`configs/simulation/manager_testing/25_rl_es_cross_eval.yml`) is in the Raven
-queue. When it lands, run:
+`leaver_selection.csv`, from the corrected cross-evaluation. Reference rows
+passed their contract (`never` punishes 0 everywhere, `flat1` only ever 0 or
+1, `flat2` only 0 or 2), so the table can be read.
 
-```
-python scripts/rl_es/leaver_selection.py \
-    plots/simulation/25_rl_es_cross_eval/per_round.parquet
-```
+| manager | mean punishment | **differential** | 95% CI | leavers | stayers |
+|---|---|---|---|---|---|
+| shortfall_k1 (targeted) | 2.636 | **−2.644** | [−3.51, −1.75] | 9.88 | 12.53 |
+| shortfall_k4 (targeted) | 0.633 | **−1.911** | [−2.80, −1.08] | 8.01 | 9.92 |
+| es_s46 | 0.980 | −1.789 | [−2.65, −0.86] | 7.98 | 9.77 |
+| es_s44 | 1.963 | −1.655 | [−2.50, −0.79] | 8.04 | 9.69 |
+| *never* | 0.000 | *−1.643* | [−2.53, −0.84] | 7.31 | 8.96 |
+| *flat1* | 0.980 | *−1.572* | [−2.30, −0.85] | 7.56 | 9.13 |
+| lin_punisher (clone) | 1.640 | −1.556 | [−2.31, −0.83] | 8.64 | 10.20 |
+| es_s42 | 0.000 | −1.530 | [−2.29, −0.79] | 7.17 | 8.70 |
+| *flat2* | 1.960 | *−1.239* | [−2.13, −0.35] | 9.03 | 10.27 |
+| es_s43 | 0.000 | −1.174 | [−2.03, −0.36] | 7.77 | 8.94 |
+| es_s45 | 0.000 | −0.990 | [−1.75, −0.26] | 7.00 | 7.99 |
 
-It will refuse to print if the reference rows fail their contract (R3), so a
-table that appears is a table that can be read.
+**The table calibrates itself, which is why it was built this way.** `never`,
+`es_s42`, `es_s43` and `es_s45` all punish exactly 0 — **four copies of the
+same policy**, run as four separate managers. They come out at −1.643,
+−1.530, −1.174 and −0.990: mean −1.334, **sd 0.305**, range 0.654. That is
+this statistic's own noise at 100 episodes, measured rather than assumed, and
+nothing below about 0.3 in this column means anything.
 
-What the table decides, stated in advance so the reading is not chosen after
-seeing it:
+Against that floor, the three questions registered in advance:
 
-* the three zero-punishment seeds (42, 43, 45) must land on `never`. They are
-  never-punish managers by construction, so any gap is a bug, not a finding;
-* **es_s44 must land on `flat2` and es_s46 on `flat1`.** If they do, those two
-  seeds are doing nothing beyond a flat tax and R1's "never collapsed" reading
-  is dead on its own terms. If they differ, the flat tax is doing something a
-  constant cannot, which would be the one genuinely surprising outcome left in
-  this arm;
-* all five should sit well short of `shortfall_k1`/`shortfall_k4`, the
-  targeted end of the ladder, and none should be positive. A positive value
-  would mean the manager sheds contributors rather than free-riders, which is
-  the inversion the DQN arm showed and which a flat policy cannot produce.
+1. **The zero-punishment seeds land on `never`.** They must, and they do — all
+   four within 0.65 of each other. A check on the pipeline, not a finding.
+2. **es_s44 is its flat tax, and es_s46 is its flat tax.** es_s44 (punishment
+   1.963) sits 1.37 sd from `flat2` (1.960); es_s46 (0.980) sits 0.71 sd from
+   `flat1` (0.980). Both **indistinguishable from a constant**. This was the
+   pre-registered test of R1's "never collapsed" reading, and it kills it:
+   the two seeds a zero-punishment detector called healthy are doing nothing
+   that `DummyManager(2)` and `DummyManager(1)` do not.
+3. **No ES seed captured any of the targeting effect, and none is inverted.**
+   Targeting moves this statistic a long way — `shortfall_k1` sits **3.92 sd**
+   below the flat/zero cluster mean and `shortfall_k4` 1.52 sd — so the effect
+   exists and is large. Every ES seed lies inside the flat/zero cluster
+   [−1.79, −0.99]. All five are negative, so unlike two of the three DQN
+   seeds **none of them selects for free-riders**; they simply do not select
+   at all.
 
-An earlier run of this measurement, on the config whose reference rows were
-silently broken (R3), gave the ES rows −1.530 (s42), −1.174 (s43), −1.655
-(s44), −0.990 (s45), −1.789 (s46) and lin_punisher −1.556. Those ES and
-linear rows were unaffected by the defect — the ES punishment levels in that
-simulation matched the training evaluation exactly, 0/0/1.963/0/0.980 — so
-they are recorded here as an indication. They are **not** the result: the
-manager set changed between the two configs and MultiManager's RNG draw
-depends on it, so the corrected run supersedes them. Worth noting even so:
-the three zero-punishment seeds averaged −1.23 there, against the −1.20
-quoted independently for never-punishing on this world.
+Two honest discrepancies against the values quoted from elsewhere on this
+world (targeted −3.51, clone −2.35, never −1.20):
+
+* my whole table sits shifted, `never` at −1.64 against −1.20 and the targeted
+  end at −2.64 against −3.51. Compare **within** this table: MultiManager's
+  RNG draw depends on the config's manager set, so rows are only strictly
+  stream-comparable inside one config, and the shift is of the same order as
+  the 0.305 noise floor plus that effect.
+* the clone's row is **not pairing-matched to the others**. Every learned and
+  rule row here is `X_vs_punisher` — the test manager in group 0, the clone in
+  group 1 — so players can move between two differently-managed groups.
+  `lin_punisher_self` has the clone in *both* groups, so there is no
+  management differential to flee, and its −1.556 (0.35 sd from the flat
+  cluster) probably understates it for that reason. That is a hypothesis about
+  the pairing, not a measurement, and it is the reason the clone is not used
+  as this table's targeted reference; `shortfall_k1` is.
 
 ## R4. The five pre-registered predictions, scored
 
