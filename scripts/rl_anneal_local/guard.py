@@ -59,6 +59,7 @@ subcommands that need them rather than taken at module level.
     python scripts/rl_anneal_local/guard.py budget CONFIG --out OUT.json
     python scripts/rl_anneal_local/guard.py gap PARQUET [PARQUET ...] --out OUT.md
     python scripts/rl_anneal_local/guard.py state PARQUET [...] --out OUT.csv
+    python scripts/rl_anneal_local/guard.py summary PARQUET [...] --spread
     python scripts/rl_anneal_local/guard.py shape CONFIG MANAGER.pt --out OUT.csv
 """
 
@@ -307,6 +308,66 @@ def cmd_state(args):
 
 
 # --------------------------------------------------------------------------- #
+# summary
+# --------------------------------------------------------------------------- #
+FINAL_METRICS = [
+    "punishment",
+    "rl_end_group_size",
+    "contribution",
+    "common_good",
+    "next_reward",
+]
+
+
+def cmd_summary(args):
+    """Final-window means of the *evaluated* policy, per run.
+
+    The window is the last `--window` evaluation points (default 10, i.e. the
+    final 200 update steps at eval_period 20), averaged over rounds and over
+    those points, so a single unlucky evaluation does not set the number.
+    Only `sampling == greedy` rows are used: this is the policy that would be
+    deployed, not the one that filled the buffer.
+    """
+    rows = []
+    for path in args.parquet:
+        name = os.path.basename(path).replace(".parquet", "")
+        df = pd.read_parquet(path)
+        ev = df[df["sampling"] == EVALUATED]
+        steps = sorted(ev["update_step"].unique())[-args.window :]
+        sub = ev[ev["update_step"].isin(steps) & ev["metric"].isin(FINAL_METRICS)]
+        row = {"run": name, "n_eval_points": len(steps), "first_step": steps[0]}
+        # end-of-episode group size is a final-round quantity, so it is taken
+        # at the last round rather than averaged across rounds.
+        last_round = sub["round_number"].max()
+        for m in FINAL_METRICS:
+            d = sub[sub["metric"] == m]
+            if m.endswith("end_group_size"):
+                d = d[d["round_number"] == last_round]
+            row[m] = float(d["value"].mean()) if len(d) else float("nan")
+        rows.append(row)
+    out = pd.DataFrame(rows).set_index("run")
+    print(out.to_string())
+
+    if args.spread:
+        # Spread across the seeds of each arm; the arm is read off the job id
+        # prefix, which is how the two families are named.
+        out = out.copy()
+        out["arm"] = [
+            "arm" if i.startswith("rl_anneal_local_s") else "control" for i in out.index
+        ]
+        agg = out.groupby("arm")[FINAL_METRICS].agg(["mean", "std", "min", "max"])
+        print()
+        print(agg.to_string())
+        if args.out:
+            agg.to_csv(args.out.replace(".csv", "_spread.csv"))
+
+    if args.out:
+        os.makedirs(os.path.dirname(args.out), exist_ok=True)
+        out.to_csv(args.out)
+    return 0
+
+
+# --------------------------------------------------------------------------- #
 # shape
 # --------------------------------------------------------------------------- #
 def build_env(cfg, device, batch_size=None):
@@ -363,7 +424,10 @@ def rollout_cells(env, manager, opponent, rl_group_id, greedy, update_step, seed
 
     env.reset()
     state = env.served_state()
-    out = {"rl": ([], []), "clone": ([], [])}
+    out = {
+        "rl": {"contribution": [], "punishment": [], "sw_c": [], "sw_left": []},
+        "clone": {"contribution": [], "punishment": [], "sw_c": [], "sw_left": []},
+    }
     for rnd in range(env.n_rounds):
         action, _ = manager.get_action(
             state, first=rnd == 0, greedy=greedy, update_step=update_step
@@ -381,23 +445,90 @@ def rollout_cells(env, manager, opponent, rl_group_id, greedy, update_step, seed
 
         # Pre-step groups: who actually received this round's punishment.
         valid = state["contribution_valid"].squeeze(-1)
-        for who, mask in (
-            ("rl", rl_mask.squeeze(-1) & valid),
-            ("clone", ~rl_mask.squeeze(-1) & valid),
-        ):
-            out[who][0].append(state["contribution"].squeeze(-1)[mask].cpu())
-            out[who][1].append(final.squeeze(-1)[mask].cpu())
+        contrib = state["contribution"].squeeze(-1)
+        groups_before = env.agent_groups.squeeze(-1).clone()
+        masks = {
+            "rl": rl_mask.squeeze(-1) & valid,
+            "clone": ~rl_mask.squeeze(-1) & valid,
+        }
+        for who, mask in masks.items():
+            out[who]["contribution"].append(contrib[mask].cpu())
+            out[who]["punishment"].append(final.squeeze(-1)[mask].cpu())
 
         _, _, done = env.step()
+        groups_after = env.agent_groups.squeeze(-1)
+
+        # The leaver/stayer split, taken from the realised membership change
+        # rather than by re-running the switch predictor -- a second forward
+        # pass would disturb its RNN state and change the rollout. A round
+        # counts only if some agent actually moved, which is exactly the
+        # arrival rounds and needs no hardcoded switch_every.
+        moved = groups_before != groups_after
+        if bool(moved.any()):
+            for who, gid in (("rl", rl_group_id), ("clone", 1 - rl_group_id)):
+                here = (groups_before == gid) & valid
+                out[who]["sw_c"].append(contrib[here].cpu())
+                out[who]["sw_left"].append(moved[here].cpu())
+
         state = env.served_state()
         if done:
             break
+
+    def pack(d):
+        return {
+            k: th.cat(v).to(th.float).numpy() if v else th.zeros(0).numpy()
+            for k, v in d.items()
+        }
+
+    return {who: pack(d) for who, d in out.items()}
+
+
+def targeting_row(cells, label):
+    """Leavers minus stayers, in contribution, at the rounds where membership
+    actually changed.
+
+    A correctly targeted manager drives out the free-riders, so its leavers
+    contributed *less* than its stayers and the difference is negative. An
+    inverted manager drives out the contributors it punishes and the sign
+    flips. It reads off a rollout with no counterfactual, which is what makes
+    it worth running on every seed.
+    """
+    c, left = cells["sw_c"], cells["sw_left"].astype(bool)
+    if c.size == 0:
+        return {"manager": label}
+    leavers, stayers = c[left], c[~left]
     return {
-        who: (
-            th.cat(c).to(th.float).numpy(),
-            th.cat(p).to(th.float).numpy(),
-        )
-        for who, (c, p) in out.items()
+        "manager": label,
+        "n_decisions": int(c.size),
+        "n_leavers": int(left.sum()),
+        "leave_rate": float(left.mean()),
+        "leaver_contribution": float(leavers.mean()) if leavers.size else float("nan"),
+        "stayer_contribution": float(stayers.mean()) if stayers.size else float("nan"),
+        "leaver_minus_stayer": (
+            float(leavers.mean() - stayers.mean())
+            if leavers.size and stayers.size
+            else float("nan")
+        ),
+    }
+
+
+def human_targeting_row():
+    """The same statistic on the human managers, through the evaluation
+    suite's own frame so a decision round is the suite's decision round."""
+    from aimanager.evaluation_suite.convert import HUMAN_DATA_FILE, load_human
+
+    df = load_human(os.path.join(ROOT, HUMAN_DATA_FILE))
+    d = df[df["switch_valid"]].dropna(subset=["contribution"])
+    leavers = d[d["does_switch"]]["contribution"]
+    stayers = d[~d["does_switch"]]["contribution"]
+    return {
+        "manager": "human managers",
+        "n_decisions": int(len(d)),
+        "n_leavers": int(len(leavers)),
+        "leave_rate": float(d["does_switch"].mean()),
+        "leaver_contribution": float(leavers.mean()),
+        "stayer_contribution": float(stayers.mean()),
+        "leaver_minus_stayer": float(leavers.mean() - stayers.mean()),
     }
 
 
@@ -461,15 +592,23 @@ def cmd_shape(args):
     end_step = cfg["n_update_steps"] - 1
 
     frames = [human_shape()]
+    targeting = []
     for label, greedy in (("evaluated", True), ("behaviour", False)):
         cells = rollout_cells(
             env, manager, opponent, rl_group_id, greedy, end_step, args.seed
         )
-        frames.append(bin_shape(*cells["rl"], label))
-        if label == "evaluated" and opponent is not None:
-            # The clone under the identical rollout, so the reference column
-            # is not carried over from a different run.
-            frames.append(bin_shape(*cells["clone"], "clone"))
+        rl = cells["rl"]
+        frames.append(bin_shape(rl["contribution"], rl["punishment"], label))
+        if label == "evaluated":
+            targeting.append(targeting_row(rl, f"{cfg['job_id']} ({label})"))
+            if opponent is not None:
+                # The clone under the identical rollout, so the reference
+                # column is not carried over from a different run.
+                clone = cells["clone"]
+                frames.append(
+                    bin_shape(clone["contribution"], clone["punishment"], "clone")
+                )
+                targeting.append(targeting_row(cells["clone"], "clone (same rollout)"))
     shape = pd.concat(frames, axis=1)
     shape.insert(0, "job_id", cfg["job_id"])
     shape.insert(1, "behaviour_eps", manager.exploration.epsilon(end_step))
@@ -479,6 +618,13 @@ def cmd_shape(args):
     if args.out:
         os.makedirs(os.path.dirname(args.out), exist_ok=True)
         shape.to_csv(args.out)
+
+    if args.targeting_out:
+        tgt = pd.DataFrame(targeting + [human_targeting_row()]).set_index("manager")
+        print()
+        print(tgt.to_string())
+        os.makedirs(os.path.dirname(args.targeting_out), exist_ok=True)
+        tgt.to_csv(args.targeting_out)
     return 0
 
 
@@ -514,6 +660,13 @@ def main():
     st.add_argument("--out", default=None)
     st.set_defaults(func=cmd_state)
 
+    sm = sub.add_parser("summary")
+    sm.add_argument("parquet", nargs="+")
+    sm.add_argument("--window", type=int, default=10)
+    sm.add_argument("--spread", action="store_true")
+    sm.add_argument("--out", default=None)
+    sm.set_defaults(func=cmd_summary)
+
     s = sub.add_parser("shape")
     s.add_argument("config")
     s.add_argument("manager")
@@ -521,6 +674,7 @@ def main():
     s.add_argument("--device", default="cpu")
     s.add_argument("--seed", type=int, default=42)
     s.add_argument("--out", default=None)
+    s.add_argument("--targeting-out", default=None)
     s.set_defaults(func=cmd_shape)
 
     args = ap.parse_args()
