@@ -424,10 +424,8 @@ def rollout_cells(env, manager, opponent, rl_group_id, greedy, update_step, seed
 
     env.reset()
     state = env.served_state()
-    out = {
-        "rl": {"contribution": [], "punishment": [], "sw_c": [], "sw_left": []},
-        "clone": {"contribution": [], "punishment": [], "sw_c": [], "sw_left": []},
-    }
+    keys = ("contribution", "punishment", "episode", "sw_c", "sw_left")
+    out = {"rl": {k: [] for k in keys}, "clone": {k: [] for k in keys}}
     for rnd in range(env.n_rounds):
         action, _ = manager.get_action(
             state, first=rnd == 0, greedy=greedy, update_step=update_step
@@ -451,9 +449,19 @@ def rollout_cells(env, manager, opponent, rl_group_id, greedy, update_step, seed
             "rl": rl_mask.squeeze(-1) & valid,
             "clone": ~rl_mask.squeeze(-1) & valid,
         }
+        # Which episode each cell came from. Cells within one episode are not
+        # independent -- the contributors are recurrent and the group is
+        # shared -- so the episode is the unit any standard error has to be
+        # taken over.
+        ep_idx = (
+            th.arange(contrib.shape[0], device=contrib.device)
+            .unsqueeze(1)
+            .expand_as(contrib)
+        )
         for who, mask in masks.items():
             out[who]["contribution"].append(contrib[mask].cpu())
             out[who]["punishment"].append(final.squeeze(-1)[mask].cpu())
+            out[who]["episode"].append(ep_idx[mask].cpu())
 
         _, _, done = env.step()
         groups_after = env.agent_groups.squeeze(-1)
@@ -510,6 +518,93 @@ def targeting_row(cells, label):
             else float("nan")
         ),
     }
+
+
+def profile_stats(contribution, punishment, episode, label, n_folds=10):
+    """Is this manager aiming, or just applying force?
+
+    Three statistics together, because each alone has a known failure mode:
+
+      rank      Spearman correlation of the six bin means against the bin
+                index. Human managers punish free-riders hardest, so the
+                human profile scores -1. A difference of endpoints alone
+                cannot see the middle of the profile: a single spike at bin
+                {0} with everything else flat has a large endpoint contrast
+                and no rank structure at all.
+      range     max minus min of the bin means, and `relative`, that range
+                over the mean of the bin means. Rank alone has the opposite
+                failure -- it scores a profile that is flat to within noise
+                as perfectly targeted, because the ordering of six nearly
+                equal numbers is still an ordering.
+      gate      the range over its standard error, resampled across episodes.
+                A profile has to be distinguishable from flat before its
+                shape means anything.
+
+    A manager is targeting only if it is strong in rank, non-negligible in
+    size, and over the gate.
+    """
+    import numpy as np
+
+    from aimanager.evaluation_suite.metrics import RPA_EDGES, RPA_LABELS
+
+    df = pd.DataFrame(
+        {
+            "contribution": contribution,
+            "punishment": punishment,
+            "episode": episode.astype(int),
+        }
+    )
+    df["bin"] = pd.cut(df["contribution"], RPA_EDGES, labels=RPA_LABELS).astype(str)
+    means = df.groupby("bin")["punishment"].mean().reindex(RPA_LABELS)
+
+    idx = pd.Series(range(len(RPA_LABELS)), index=RPA_LABELS, dtype=float)
+    rank = float(means.corr(idx, method="spearman"))
+    rng = float(means.max() - means.min())
+    rel = rng / float(means.mean()) if float(means.mean()) else float("nan")
+
+    # The episode is the resampling unit, not the agent-round.
+    fold = df["episode"] % n_folds
+    per_fold = (
+        df.groupby([fold.rename("fold"), "bin"])["punishment"]
+        .mean()
+        .unstack("bin")
+        .reindex(columns=RPA_LABELS)
+    )
+    fold_ranges = (per_fold.max(axis=1) - per_fold.min(axis=1)).dropna()
+    se = float(fold_ranges.std(ddof=1) / np.sqrt(len(fold_ranges)))
+
+    # Spearman is dragged toward zero by ties, and a saturated profile has
+    # several bins at exactly 0. Kendall tau-b handles ties explicitly and the
+    # monotonicity flags allow them outright, so the three together show
+    # whether a middling rank is real ambiguity or a tie artefact.
+    diffs = means.diff().dropna()
+    return {
+        "manager": label,
+        "rank": rank,
+        "kendall_tau_b": float(means.corr(idx, method="kendall")),
+        "n_tied_bins": int(len(means) - means.nunique()),
+        "monotone_decreasing": bool((diffs <= 0).all()),
+        "monotone_increasing": bool((diffs >= 0).all()),
+        "range": rng,
+        "relative_range": rel,
+        "range_se": se,
+        "gate": rng / se if se else float("inf"),
+        "n_folds": int(len(fold_ranges)),
+        **{f"bin_{b}": float(means[b]) for b in RPA_LABELS},
+    }
+
+
+def human_profile_stats():
+    from aimanager.evaluation_suite.convert import HUMAN_DATA_FILE, load_human
+
+    df = load_human(os.path.join(ROOT, HUMAN_DATA_FILE))
+    v = df.dropna(subset=["punishment", "contribution"])
+    return profile_stats(
+        v["contribution"].to_numpy(),
+        v["punishment"].to_numpy(),
+        v["episode_id"].to_numpy(),
+        "human managers",
+    )
 
 
 def human_targeting_row():
@@ -593,6 +688,7 @@ def cmd_shape(args):
 
     frames = [human_shape()]
     targeting = []
+    profiles = []
     for label, greedy in (("evaluated", True), ("behaviour", False)):
         cells = rollout_cells(
             env, manager, opponent, rl_group_id, greedy, end_step, args.seed
@@ -601,6 +697,14 @@ def cmd_shape(args):
         frames.append(bin_shape(rl["contribution"], rl["punishment"], label))
         if label == "evaluated":
             targeting.append(targeting_row(rl, f"{cfg['job_id']} ({label})"))
+            profiles.append(
+                profile_stats(
+                    rl["contribution"],
+                    rl["punishment"],
+                    rl["episode"],
+                    cfg["job_id"],
+                )
+            )
             if opponent is not None:
                 # The clone under the identical rollout, so the reference
                 # column is not carried over from a different run.
@@ -609,6 +713,14 @@ def cmd_shape(args):
                     bin_shape(clone["contribution"], clone["punishment"], "clone")
                 )
                 targeting.append(targeting_row(cells["clone"], "clone (same rollout)"))
+                profiles.append(
+                    profile_stats(
+                        clone["contribution"],
+                        clone["punishment"],
+                        clone["episode"],
+                        "clone (same rollout)",
+                    )
+                )
     shape = pd.concat(frames, axis=1)
     shape.insert(0, "job_id", cfg["job_id"])
     shape.insert(1, "behaviour_eps", manager.exploration.epsilon(end_step))
@@ -618,6 +730,13 @@ def cmd_shape(args):
     if args.out:
         os.makedirs(os.path.dirname(args.out), exist_ok=True)
         shape.to_csv(args.out)
+
+    if args.profile_out:
+        prof = pd.DataFrame(profiles + [human_profile_stats()]).set_index("manager")
+        print()
+        print(prof.to_string())
+        os.makedirs(os.path.dirname(args.profile_out), exist_ok=True)
+        prof.to_csv(args.profile_out)
 
     if args.targeting_out:
         tgt = pd.DataFrame(targeting + [human_targeting_row()]).set_index("manager")
@@ -675,6 +794,7 @@ def main():
     s.add_argument("--seed", type=int, default=42)
     s.add_argument("--out", default=None)
     s.add_argument("--targeting-out", default=None)
+    s.add_argument("--profile-out", default=None)
     s.set_defaults(func=cmd_shape)
 
     args = ap.parse_args()

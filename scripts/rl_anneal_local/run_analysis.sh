@@ -41,5 +41,6 @@ for job in \
         "artifacts/manager/${job}/model/${job}_manager.pt" \
         --device cuda \
         --out "${OUT}/shape_${job}.csv" \
-        --targeting-out "${OUT}/targeting_${job}.csv"
+        --targeting-out "${OUT}/targeting_${job}.csv" \
+        --profile-out "${OUT}/profile_${job}.csv"
 done

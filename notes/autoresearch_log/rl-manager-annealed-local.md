@@ -1,6 +1,6 @@
 # rl-manager-annealed-local
 
-**Result, in one line: the arm closed the behaviour-versus-evaluated gap by a factor of four on every seed and did not recover the human policy shape. Three of its five seeds remain inverted. See Result.**
+**Result, in one line: the arm closed the behaviour-versus-evaluated gap by a factor of four on every seed and did not recover the human policy shape. 1 seed of five targets free-riders, the same as the control and the same seed. See Result, and the Correction within it.**
 
 ## Declaration
 
@@ -205,7 +205,7 @@ Re-run of the four files that touch this change — `test_exploration.py`, `test
 
 ## Result
 
-**The arm does not recover the human policy shape.** Three of its five seeds are still inverted, punishing full contributors harder than free-riders. The mechanism it was built to change did change, cleanly and on every seed, and the shape did not follow.
+**The arm does not recover the human policy shape.** One of its five seeds targets free-riders — the same seed that already did so in the control. Two still target contributors outright and two target nothing cleanly. The mechanism it was built to change did change, cleanly and on every seed, and the shape did not follow.
 
 The number that decides it is the contrast between the two end bins, mean punishment at contribution 0 minus mean punishment at contribution 20. Human managers run **+4.49**; the clone **+3.0**; an inverted manager is negative.
 
@@ -217,11 +217,44 @@ The number that decides it is the contrast between the two end bins, mean punish
 | 45 | **−3.56** | **−5.99** | +2.43 |
 | 46 | **−4.85** | **−9.17** | +4.32 |
 
-Correctly signed: **arm 2 of 5, control 1 of 5**. Seed 43 was already correct in the control, so the arm's only genuine flip is seed 44. One seed of five is not a recovery, and I am not going to present it as one.
+On the endpoint contrast alone this reads as arm 2 of 5 against control 1 of 5. **That was too generous and is corrected below**: on the three-statistic check seed 44 fails on rank, and the honest count is **arm 1 of 5, control 1 of 5** — seed 43 in both. The arm does not increase the number of seeds that target free-riders.
 
 The directional signal is real but small: the statistic moves toward the human sign on four of the five seeds, median +2.43. Against a distance to the human curve of 9 to 14 points on the inverted seeds, that is a few percent of the way. On seed 42 the arm delivered +0.57 of the +9.46 that would have been needed.
 
 Nor is the shape right where the sign is right. Only one run of ten — arm seed 43 — is monotone decreasing across all six bins (rank correlation with the human curve +0.94), and it punishes **11.49** at contribution 0 against the human **4.76**. Arm seed 44 has the right end-to-end contrast but is not monotone (12.84, 1.86, 1.01, 2.00, 2.00, 2.00; rank correlation −0.06): it punishes free-riders hardest and then everyone else flat.
+
+### Correction: the endpoint contrast was not enough, and seed 44 does not survive
+
+A sibling arm withdrew one of its own headline seeds after finding that a difference of endpoint bin means confuses **force** with **aim**, and asked me to run the same check on mine. It was right to, and **one of my two correctly-signed seeds does not survive it.**
+
+Three statistics together, because each alone fails in a known way. A rank correlation scores a profile that is flat to within noise as perfectly targeted, since six nearly equal numbers still have an ordering. An endpoint contrast scores a single spike at bin {0} with everything else flat as perfectly targeted, since it never looks at the middle. A magnitude with no noise gate scores a rounding error as a policy. So: **rank** (Spearman of the six bin means against the bin index; human −1.000), **relative range** (max minus min over the mean), and **gate** (range over its standard error, resampled over episodes, threshold 1.65).
+
+My implementation reproduces the sibling's reference exactly on the human managers — rank −1.000, range 4.488, relative 2.375 — so the two arms are scored the same way.
+
+| profile | rank | tau-b | mono | range | rel. range | gate | verdict |
+|---|---|---|---|---|---|---|---|
+| human | -1.000 | -1.000 | dec | 4.49 | 2.38 | pending | targets free-riders |
+| clone | -1.000 | -1.000 | dec | 3.00 | 1.85 | pending | targets free-riders |
+| arm 42 | +0.928 | +0.828 | — | 4.97 | 1.69 | pending | targets contributors |
+| arm 43 | -0.941 | -0.894 | dec | 11.49 | 4.38 | pending | targets free-riders |
+| arm 44 | +0.058 | +0.138 | — | 11.83 | 3.27 | pending | no targeting |
+| arm 45 | +0.928 | +0.828 | — | 5.90 | 1.51 | pending | targets contributors |
+| arm 46 | +0.600 | +0.467 | — | 7.96 | 2.68 | pending | no targeting |
+| control 42 | +1.000 | +1.000 | inc | 4.97 | 1.90 | pending | targets contributors |
+| control 43 | -0.845 | -0.775 | dec | 12.38 | 5.70 | pending | targets free-riders |
+| control 44 | +0.941 | +0.894 | inc | 1.91 | 1.52 | pending | targets contributors |
+| control 45 | +0.943 | +0.867 | — | 5.99 | 2.06 | pending | targets contributors |
+| control 46 | +0.943 | +0.867 | — | 9.18 | 3.46 | pending | targets contributors |
+
+Thresholds: |rank| >= 0.8, relative range >= 1.0, gate >= 1.65. Kendall tau-b and the monotonicity flag are carried because Spearman is dragged toward zero by ties and two profiles saturate at exactly 0 in several bins: control seed 43 is monotone decreasing across all six bins and still scores only −0.845 on three tied bins, which is why the rank threshold is 0.8 rather than the 0.9 I first tried. **No verdict in the table turns on that choice.** The gate column is still pending on a congested cluster; rank and relative range are functions of the six committed bin means alone, and a noise gate can only ever turn a verdict into "no targeting", never rescue one, so nothing below depends on it.
+
+**What changes.** My headline said "correctly signed: arm 2 of 5, control 1 of 5". On this check it is **arm 1 of 5 and control 1 of 5** — seed 43 in both. Seed 44 was the entirety of the arm's apparent advantage and it fails on rank at **+0.058**: its profile is 12.84 at contribution 0 and then 1.86, 1.01, 2.00, 2.00, 2.00, a spike with no gradation above it. That is precisely the shape that passes a contrast test and fails a rank test. **I withdraw the claim.**
+
+Seed 46 also fails, at rank +0.600, and I had it wrong in the other direction: its profile is U-shaped (3.11, 0.06, 0.00, 0.52, 6.16, 7.96), punishing both extremes. I counted it as cleanly inverted. It is not cleanly anything.
+
+**What survives is a smaller claim than the one I made.** The arm does not increase the number of seeds that target free-riders: 1 in five, the same as the control, and the same seed. What it does is **weaken the inversion without replacing it** — 2 arm seeds target contributors against 4 control seeds, and the 2 that moved (44 and 46) went from graded inversion to no clean targeting rather than to correct targeting. That is a real effect on the wrong-direction seeds and it stops short of the thing the arm was built to produce.
+
+**One honest tension, which I am not going to resolve by picking a favourite.** The leaver/stayer diagnostic disagrees about seed 44: it reads −2.05, correctly signed and close to the human's −1.92, where the profile check says "no targeting". Both are right about different things. Seed 44 punishes the true free-riders at contribution 0 very hard, which does drive them out and is real aim at that one bin; it makes no distinction at all among contributions 1 to 20, which is what the rank statistic refuses to call a policy shape. The human contingency is graded across all six bins and seed 44's is not. The 9-of-10 agreement I reported between the two diagnostics becomes 8 of 10 under the stricter criterion, and the disagreements are informative rather than noise.
 
 ### Policy shape, every seed
 
@@ -254,7 +287,7 @@ Reference on this rollout: **human managers −1.92**, **clone −3.11**.
 
 Six of the ten runs are **positive**: they do not merely fail to discipline free-riders, they select for them, driving out the contributors they punish. That is three arm seeds and three control seeds — the same seeds the shape statistic calls inverted.
 
-**The two diagnostics agree on 9 of 10 runs, with a correlation of −0.976** between the end-bin contrast and the leaver/stayer difference. They are independent measurements: one reads punishment against contribution, the other reads who left. The single disagreement is control seed 44, whose shape is mildly inverted (−1.91) while its targeting is weakly correct (−0.74) — and −0.74 is worse than never-punishing on the sibling's scale, so it is a borderline case rather than a contradiction.
+On the endpoint contrast the two diagnostics agree on 9 of 10 runs, with a correlation of −0.976. Under the stricter three-statistic check in the Correction that becomes 8 of 10, the extra disagreement being arm seed 44. They are independent measurements — one reads punishment against contribution, the other reads who left — and where they part, they are each right about something different; see the Correction.
 
 This diagnostic is worth keeping. It is one number per run, needs no counterfactual, and it would have flagged the inversion from the managers' own output.
 
@@ -331,8 +364,8 @@ The runs are finished and analysed; this is what I would do next, in order.
 
 1. **Do not run a second exploration arm on the strength of this one.** The gap closed fourfold on every seed and the shape did not follow. Whatever makes three seeds in five punish the wrong people, it is not the consistency of the behaviour policy at the action level. The sibling arms are worth reading for whether any of them moved the shape, but the prior on "more exploration engineering" should now be low.
 2. **Read the deservedness probe.** My Result section gives indirect evidence against its strongest form — correctly-targeted runs earn 12.11 common good per member against 9.74 for the rest, so a return difference exists — but that is a cross-run correlation with confounds and the probe measures the response directly.
-3. **Keep the leaver/stayer diagnostic and run it on everything.** One number per run, no counterfactual, agrees with the shape verdict on 9 of 10 runs at r = −0.976, and it is already wired into `guard.py shape --targeting-out`. It would have flagged the inversion from the managers' own output without anyone having to bin punishment against contribution.
-4. **The interesting question is now seed 43 and 44, not the arm.** Four of the ten runs found correct targeting and six did not, across both arms, and the split is not explained by the behaviour policy. Whatever separates them is where the next experiment is. Seed 43 is correctly signed in *both* arms, which suggests initialisation rather than exploration is carrying it.
+3. **Keep the leaver/stayer diagnostic and run it on everything, alongside the profile check rather than instead of it.** One number per run, no counterfactual, agreeing with the endpoint contrast on 9 of 10 runs at r = −0.976 and with the stricter profile check on 8 of 10; it is wired into `guard.py shape --targeting-out` and `scripts/rl_anneal_local/profile_check.py`. The two disagree exactly where a manager aims at one bin and nowhere else, which is worth knowing rather than averaging away. It would have flagged the inversion from the managers' own output without anyone having to bin punishment against contribution.
+4. **The interesting question is seed 43, not the arm.** Seed 43 is the only run of ten that targets free-riders on the three-statistic check, and it does so in *both* arms. That points at initialisation rather than exploration, and it is where the next experiment is. Do not chase seed 44: on the endpoint contrast it looked like the arm's one success and on the rank test it is a spike with no gradation.
 5. **The state- and trajectory-coverage claims remain unmeasured** beyond Measured 8's four marginal means. The upgrades are still worth doing if anyone wants to make the coverage argument properly: compare per-round distributions rather than means (free, on the parquets committed here); dump joint occupancy from `guard.py shape` (about a GPU-minute per manager); score whole episodes for whether a coherent contingent policy's returns are represented at all (not cheap, and the one that matters).
 6. **sigma and the floor were chosen, not tuned**, and given the null result there is no reason to sweep them.
 
