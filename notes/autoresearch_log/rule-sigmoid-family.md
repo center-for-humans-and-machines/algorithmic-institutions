@@ -174,6 +174,44 @@ That is not a difference of degree dressed up. The set of parameter vectors the 
 
 So the landscape is a long flat ridge in the episode exponent, and the two objectives sit at opposite ends of that same ridge. A point estimate of either would have hidden both facts.
 
+**But the ridge being flat is exactly why the disagreement is cheap.** Measured, on the fit seeds: the best design point for the pool (`sobol0279`) scores 72.92 pool / 49.05 contribution, and the best for contribution (`sobol0176`) scores 69.44 / 50.31. Taking the wrong objective's rule costs about **3.5 pool points or 1.3 contribution points** -- two to three standard errors, not a change of regime. The two optima are separated in the one parameter whose separation matters least. That is the honest way to put "do they differ in kind": their *parameter settings* do and do not overlap, and their *consequences* barely do.
+
+### 3.5 The second harness agrees on every contrast, and on levels only to a common offset (measured)
+
+`simulate.py`, 10 pairings, three seeds of 100 episodes, the established path (jobs 30423324-6). Focal seat against the clone, compared with the sweep on the same fit seeds:
+
+| quantity | agreement |
+|---|---|
+| realised mean punishment | to **0.002 - 0.016** |
+| mean contribution per valid cell | to **0.02 - 0.30** |
+| leaver gap `c_gap` | to **0.02 - 0.44**, inside its own 0.577 noise floor |
+| seat total contribution | sim **4.0 - 5.1 higher**, against a sim seed sd of 3.3 - 5.0 |
+| seat common pool | sim **5.9 - 6.7 higher**, against a sim seed sd of 5.2 - 8.7 |
+| seat membership | sim **0.31 - 0.48 higher**, against a sim seed sd of 0.10 - 0.27 |
+
+**Every contrast agrees; only the level is offset**, and the level is offset because the sim run holds about 0.45 more members in its focal seat across all of its pairings at once:
+
+| contrast (focal seat, against the clone) | `simulate.py` | sweep | difference |
+|---|---|---|---|
+| `thr9_p10` - `never`, contribution | +8.91 | +7.86 | -1.05 |
+| `thr9_p10` - `never`, pool | +2.02 | +1.73 | -0.29 |
+| `thr9_p10` - `never`, members | -0.51 | -0.67 | -0.16 |
+| clone - `never`, contribution | +3.32 | +3.19 | -0.13 |
+| clone - `never`, pool | -2.67 | -2.13 | +0.55 |
+| clone - `never`, members | -0.40 | -0.52 | -0.13 |
+
+Every claim in this arm is a contrast between two rules measured in the same harness, so a common seat-size offset cancels out of all of them.
+
+**On the level, it is the fresh simulation that is the outlier, not the sweep.** Against the published parent-arm figures (`rule-inverted-targeting` section 3.3 and `rule-vs-clone-paired` section 3.7, both `simulate.py` at 300 episodes), focal membership against the clone:
+
+| manager | published | sweep | this cross-check run |
+|---|---|---|---|
+| `never` | 4.57 | **4.54** | 4.86 |
+| `thr9_p10` | 3.92 | **3.87** | 4.35 |
+| clone (symmetric control) | 4.00 | **4.02** | 4.46 |
+
+The sweep lands within 0.05 of the published numbers on all three; this cross-check run sits about 0.4 above both. Its own symmetric control is asymmetric (4.46 focal against 3.54 rival where the published control was 4.00 / 4.00), which is where the offset comes from. **This is reported rather than explained.** The cross-check config carries a different manager set from the parent's, and `MultiManager` evaluates every manager in a file on every round, so the RNG stream differs -- the parent arms' note 4 on exactly this point. That accounts for a redraw; whether it accounts for a redraw this large is not established here, and it is left open.
+
 ## 4. Notes
 
 *(to be filled)*
