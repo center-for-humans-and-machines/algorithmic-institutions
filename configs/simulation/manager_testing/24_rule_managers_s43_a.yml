@@ -1,0 +1,99 @@
+# auto/rule-based-manager-sweep, shard 1 of 3, seed 43.
+#
+# Does punishing pay at all against the corrected simulated players, and can
+# any simple rule beat the artificial punisher? Each manager below plays
+# SELF-PLAY (both sides of the pairing), against the frontier stack
+# (contribution trunk with per-group virtual node + direct stimulus skip +
+# stamped herding copula; joint-exodus switch model; validity model
+# unchanged) -- byte-identical artifacts to
+# 23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_simtimeout,
+# and the same 2x8 agents / 24 rounds / 100 episodes protocol.
+#
+# `reseed_per_run: true` restarts every run from `seed`, so the difference
+# between two managers here is the manager and not the position of its run
+# in the file. `ah_punisher` is the baseline to beat and reproduces the
+# frontier run above exactly.
+seed: 43
+reseed_per_run: true
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  never:
+    type: rule_based
+    rule: never
+  thr4_p2:
+    type: rule_based
+    rule: threshold
+    threshold: 4
+    amount: 2
+  thr4_p5:
+    type: rule_based
+    rule: threshold
+    threshold: 4
+    amount: 5
+  thr4_p10:
+    type: rule_based
+    rule: threshold
+    threshold: 4
+    amount: 10
+  thr9_p2:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 2
+  thr9_p5:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 5
+  thr9_p10:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 10
+pairings:
+- name: never_self
+  group_0: never
+  group_1: never
+- name: thr4_p2_self
+  group_0: thr4_p2
+  group_1: thr4_p2
+- name: thr4_p5_self
+  group_0: thr4_p5
+  group_1: thr4_p5
+- name: thr4_p10_self
+  group_0: thr4_p10
+  group_1: thr4_p10
+- name: thr9_p2_self
+  group_0: thr9_p2
+  group_1: thr9_p2
+- name: thr9_p5_self
+  group_0: thr9_p5
+  group_1: thr9_p5
+- name: thr9_p10_self
+  group_0: thr9_p10
+  group_1: thr9_p10
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups:
+- 0
+- 0
+- 0
+- 0
+- 1
+- 1
+- 1
+- 1
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+output_dir: plots/simulation/24_rule_managers_s43_a
+figure_name: rule_managers_s43_a
+save_per_round: true
+basedir: .

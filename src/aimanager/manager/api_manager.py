@@ -184,9 +184,56 @@ class DummyManager:
 
 
 class RuleBasedManager:
-    # punish = clamp((20 - contribution - round_number) / k, 0, n_punishments - 1)
-    def __init__(self, k=1, n_punishments=31, **_):
+    """A small family of hand-written, interpretable punishment rules.
+
+    Every rule reads the CURRENT round's contribution `c` -- the same
+    quantity the human manager saw when deciding (see the timing note in
+    `create_data`) -- and returns a punishment clamped to
+    [0, n_punishments - 1]:
+
+    - `never`: p = 0 for every agent in every round.
+    - `threshold`: p = `amount` where c <= `threshold`, else 0.
+    - `proportional`: p = round(`rate` * (MAX_CONTRIBUTION - c)).
+    - `table`: p = `table[c]`, a 21-entry lookup indexed by contribution.
+    - `severity_table`: with probability `prob_table[c]` punish `table[c]`,
+      else 0 -- a shape that separates how often from how hard.
+    - `decay`: p = (20 - c - round_number) // `k`, the original #99-era
+      rule, kept so configs written against it keep their meaning.
+
+    `skip_invalid` (default False) zeroes the action wherever the env has
+    marked the player as having given no input. It is off by default
+    because a contribution-keyed rule hits those cells by construction
+    (they are served contribution 0) and how often it does is one of the
+    things the sweep measures; turning it on isolates what that costs.
+    """
+
+    RULES = ("never", "threshold", "proportional", "table", "severity_table", "decay")
+
+    def __init__(
+        self,
+        rule,
+        threshold=None,
+        amount=None,
+        rate=None,
+        table=None,
+        prob_table=None,
+        k=1,
+        skip_invalid=False,
+        n_punishments=31,
+        **_,
+    ):
+        if rule not in self.RULES:
+            raise ValueError(f"Unknown rule {rule!r}; expected one of {self.RULES}")
+        self.rule = rule
+        self.threshold = None if threshold is None else int(threshold)
+        self.amount = None if amount is None else int(amount)
+        self.rate = None if rate is None else float(rate)
+        self.table = None if table is None else th.tensor(table, dtype=th.float)
+        self.prob_table = (
+            None if prob_table is None else th.tensor(prob_table, dtype=th.float)
+        )
         self.k = int(k)
+        self.skip_invalid = bool(skip_invalid)
         self.n_punishments = int(n_punishments)
         self.model = None
         self.default_values = {
@@ -197,11 +244,47 @@ class RuleBasedManager:
             "in_group": False,
         }
 
-    def get_punishments(self, data):
+    def _lookup(self, table, contribution):
+        idx = contribution.clamp(0, table.shape[0] - 1)
+        return table.to(contribution.device)[idx]
+
+    def _raw(self, data):
         contribution = data["contribution"]
-        round_number = data["round_number"]
-        raw = (20 - contribution - round_number).div(self.k, rounding_mode="floor")
-        return raw.clamp(0, self.n_punishments - 1).to(data["punishment"].dtype)
+        if self.rule == "never":
+            return th.zeros_like(contribution, dtype=th.float)
+        if self.rule == "threshold":
+            assert self.threshold is not None and self.amount is not None
+            return th.where(
+                contribution <= self.threshold,
+                th.full_like(contribution, self.amount, dtype=th.float),
+                th.zeros_like(contribution, dtype=th.float),
+            )
+        if self.rule == "proportional":
+            assert self.rate is not None
+            shortfall = (MAX_CONTRIBUTION - contribution).clamp(min=0)
+            return (self.rate * shortfall).round()
+        if self.rule == "table":
+            assert self.table is not None
+            return self._lookup(self.table, contribution).round()
+        if self.rule == "severity_table":
+            assert self.table is not None and self.prob_table is not None
+            severity = self._lookup(self.table, contribution).round()
+            prob = self._lookup(self.prob_table, contribution)
+            fires = th.rand(prob.shape, device=prob.device) < prob
+            return th.where(fires, severity, th.zeros_like(severity))
+        # decay
+        return (
+            (20 - contribution - data["round_number"])
+            .div(self.k, rounding_mode="floor")
+            .to(th.float)
+        )
+
+    def get_punishments(self, data):
+        raw = self._raw(data).clamp(0, self.n_punishments - 1)
+        out = raw.to(data["punishment"].dtype)
+        if self.skip_invalid:
+            out = th.where(data["contribution_valid"], out, th.zeros_like(out))
+        return out
 
 
 class LinearManager:
