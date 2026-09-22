@@ -15,11 +15,16 @@ metrics parquets the training loop writes. Two outputs:
 
   guard_shape.csv  THE OUTCOME. Mean punishment per contribution bin, on the
                    evaluation suite's own RPA bins, for each run and each
-                   sampling, with the row count per bin. Beside them: the
-                   artificial punisher (the clone of a human manager),
-                   measured on the opponent's group in the very same
-                   rollouts, and the human managers from
-                   experiments/2group_8agent_50ep.csv.
+                   sampling, with the row count per bin, and beside them the
+                   TARGETING statistics from targeting.py -- a rank
+                   correlation that no amount of punishing harder or softer
+                   can move, because a difference of bin means can be moved
+                   by exactly that and this arm is judged on targeting.
+                   Reference columns: the artificial punisher (the clone of a
+                   human manager), measured on the opponent's group in the
+                   very same rollouts, and the human managers from
+                   experiments/2group_8agent_50ep.csv. Both load from
+                   artifacts, not through the rule dispatcher.
 
   guard_noise.csv  This arm's own diagnostics: the adapted noise scale and
                    the divergence it held, per update step, under all three
@@ -50,7 +55,65 @@ from aimanager.evaluation_suite.metrics import (  # noqa: E402
     ResponseMetrics,
 )
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) + "/..")
+
+from rl_param_noise.targeting import targeting  # noqa: E402
+
 EVAL_TAG = "greedy"
+
+TARGETING_COLS = [
+    "rho_contribution_punishment",
+    "contrast",
+    "contrast_over_mean",
+    "mean_punishment",
+    "profile_snr",
+]
+
+# Named rules -- `never`, `thr9_p10`, `prop10` -- and what each MUST do if the
+# label is real. At the commit this arm branched from, `RuleBasedManager` is a
+# single fixed formula with signature `(self, k=1, n_punishments=31, **_)`, so
+# a config line naming a rule is swallowed by `**_` and silently ignored: the
+# run completes clean and the default formula wears the label you asked for. A
+# sibling arm published a `never` row punishing 2.57 before redundancy caught
+# it. This arm's reference columns are the artifact-loaded clone and the human
+# CSV, neither of which goes through that dispatcher, so it is unaffected --
+# but the assertion is here so that stays true if a rule column is ever added.
+RULE_INVARIANTS = {"never": lambda profile: all(v == 0.0 for v in profile)}
+
+
+def assert_rule_labels_are_real(shape):
+    """Verify realised behaviour against the label, never the label alone."""
+    for name, row in shape.iterrows():
+        for rule, holds in RULE_INVARIANTS.items():
+            if rule in str(name).lower():
+                profile = [row[k] for k in RPA_LABELS if row[k] == row[k]]
+                assert holds(profile), (
+                    f"row {name!r} is labelled {rule!r} but does not behave "
+                    f"like it: per-bin means {profile}. At this commit "
+                    "RuleBasedManager ignores the rule name."
+                )
+
+
+def profile_snr(df, name):
+    """Range of the six bin means over their mean standard error.
+
+    `rho` ranks six numbers; if they differ by less than their own sampling
+    noise it ranks noise and returns +-1 regardless. The standard error is
+    taken across evaluation points, which is the only replication the
+    recorded metrics carry.
+    """
+    if " [" not in str(name):
+        return float("nan")
+    job, tag = str(name).rsplit(" [", 1)
+    sub = df[(df["job_id"] == job) & (df["sampling"] == tag.rstrip("]"))]
+    if sub.empty:
+        return float("nan")
+    per_step = sub.groupby("update_step")[[f"rpa_mean_{k}" for k in RPA_LABELS]].mean()
+    if len(per_step) < 2:
+        return float("nan")
+    se = (per_step.std() / len(per_step) ** 0.5).mean()
+    means = per_step.mean()
+    return float((means.max() - means.min()) / se) if se else float("inf")
 
 
 def md(df, fmt="{:.3f}"):
@@ -239,19 +302,45 @@ def main():
     shape = pd.DataFrame(rows).T
     shape.index.name = "manager"
     shape = shape[list(RPA_LABELS) + [f"n[{k}]" for k in RPA_LABELS]]
-    shape["contrast_0_minus_20"] = shape["{0}"] - shape["{20}"]
+    assert_rule_labels_are_real(shape)
+
+    # Targeting, on a statistic that force cannot move -- see targeting.py.
+    # `contrast` is kept but must never be compared across managers punishing
+    # with different intensity.
+    stats = pd.DataFrame(
+        {
+            name: targeting(
+                [row[k] for k in RPA_LABELS], [row[f"n[{k}]"] for k in RPA_LABELS]
+            )
+            for name, row in shape.iterrows()
+        }
+    ).T
+    shape = shape.join(stats)
+    shape["profile_snr"] = [profile_snr(df, name) for name in shape.index]
     shape.to_csv(os.path.join(args.out, "guard_shape.csv"))
 
     lines += [
         "",
-        "## Policy shape",
+        "## Policy shape and targeting",
         "",
         "Mean punishment per contribution bin, evaluation-suite RPA bins.",
-        "Human managers fall from 4.76 at contribution 0 to 0.27 at 20; two",
-        "of the three finished learned seeds rose instead. `contrast` is",
-        "{0} minus {20}: positive is the human sign.",
         "",
-        md(shape),
+        "`rho` is the count-weighted rank correlation between the contribution",
+        "bin and the punishment served. It is invariant to ANY monotone",
+        "rescaling of punishment, so no amount of punishing harder or softer",
+        "can move it -- which `contrast`, a difference of bin means, cannot",
+        "say. Negative is the human sign: punish the free-rider, leave the",
+        "full contributor alone. Human managers sit at -1.0, a manager with",
+        "the inversion at +1.0. `rho` carries no magnitude, so read it with",
+        "`contrast_over_mean`, and read neither when `profile_snr` is small --",
+        "below about 2 the six bin means are within their own sampling noise",
+        "and `rho` is ranking noise. NaN means a flat profile: nothing to rank.",
+        "",
+        md(shape[list(RPA_LABELS) + TARGETING_COLS]),
+        "",
+        "Row counts per bin:",
+        "",
+        md(shape[[f"n[{k}]" for k in RPA_LABELS]], "{:.0f}"),
     ]
 
     # -- the uniform-drag discriminator -------------------------------
