@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import random
@@ -14,7 +15,8 @@ import wandb
 from aimanager.manager.memory import Memory
 from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.artificial_humans import AH_MODELS
-from aimanager.manager.manager import ArtificalManager
+from aimanager.manager import head_probe
+from aimanager.manager.manager import BOOTSTRAP, ArtificalManager
 from aimanager.manager.linear_opponent import load_opponent
 from aimanager.utils.utils import make_dir
 from aimanager.utils.array_to_df import add_labels
@@ -41,6 +43,18 @@ rec_keys = [
 
 # Will be set in train_manager based on the encoding config
 replay_keys = []
+
+# The comparison's budget is equal ENVIRONMENT EPISODES, not equal update
+# steps, so the consumption is counted rather than argued. Every `run_batch`
+# call is one `env.reset()` and therefore `env.batch_size` complete episodes;
+# the totals are printed at the end of training on a single greppable line.
+EPISODE_BUDGET = {
+    "rollouts": 0,
+    "episodes": 0,
+    "episode_rounds": 0,
+    "behaviour_episodes": 0,
+    "eval_episodes": 0,
+}
 
 
 def load_config(path: str = None) -> dict:
@@ -70,12 +84,32 @@ def run_batch(
     # the manager must not be trained on (ArtificialHumanEnv.served_state).
     env.reset()
     state = env.served_state()
+
+    # Bootstrapped behaviour: one head per parallel episode, drawn here and
+    # held for all 24 rounds -- the coherent alternative policy that replaces
+    # per-action dithering. The bootstrap mask is drawn with it, once per
+    # episode, and travels into the replay buffer with the episode's
+    # transitions so it stays a fixed property of the data. Evaluation
+    # rollouts (`on_policy=True`) draw neither: they are the ensemble
+    # consensus with every exploration mechanism off.
+    bootstrap = (not on_policy) and getattr(manager, "exploration", None) == BOOTSTRAP
+    head_kwargs = {}
+    head_mask = None
+    if bootstrap:
+        n_batch = state["agent_group"].shape[0]
+        head_kwargs["head"] = manager.draw_heads(n_batch)
+        head_mask = manager.draw_masks(n_batch)
+
     metric_list = []
     for round_number in count():
         statecopy = {k: v.clone() for k, v in state.items() if k in replay_keys}
 
+        agent_group_now = state["agent_group"]
+        # `head` is passed only when there is one, so a manager without the
+        # bootstrap mechanism is called with exactly the signature it has
+        # always been called with.
         action, q_values = manager.get_action(
-            state, first=round_number == 0, greedy=on_policy
+            state, first=round_number == 0, greedy=on_policy, **head_kwargs
         )
 
         # Two-manager mode: RL produces (B, 8, 1) over all agents; opponent
@@ -134,11 +168,13 @@ def run_batch(
         _, reward, done = env.step()
         state = env.served_state()
         if replay_mem is not None:
+            extra = {} if head_mask is None else {"head_mask": head_mask}
             replay_mem.add(
                 episode_step=round_number,
                 episode=update_step,
                 action=action,
                 reward=reward,
+                **extra,
                 **statecopy,
             )
 
@@ -166,13 +202,50 @@ def run_batch(
             metrics["rl_avg_group_size"] = rl_size
             metrics["opp_end_group_size"] = opp_size
             metrics["opp_avg_group_size"] = opp_size
+        # The policy's shape -- mean punishment binned by the contribution it
+        # was aimed at, on the evaluation suite's own RPA bins -- and, when
+        # there is an ensemble, what each head would have done on the same
+        # cells. Restricted to the RL manager's own group: the opponent's
+        # punishments are not this policy.
+        rl_cells = (
+            (agent_group_now == rl_group_id)
+            if opponent_manager is not None
+            else th.ones_like(agent_group_now, dtype=th.bool)
+        )
+        metrics.update(
+            head_probe.shape_metrics(
+                recorded["punishment"], recorded["contribution"], rl_cells
+            )
+        )
+        if getattr(manager, "n_heads", 1) > 1:
+            head_acts = head_probe.gather_to_own_group(
+                q_values.argmax(-1), agent_group_now
+            )
+            metrics.update(
+                head_probe.head_metrics(
+                    q_values,
+                    head_acts,
+                    recorded["contribution"],
+                    rl_cells,
+                    agent_group_now,
+                )
+            )
+
         metrics["round_number"] = round_number
-        metrics["sampling"] = "greedy" if on_policy else "eps-greedy"
+        metrics["sampling"] = (
+            "greedy" if on_policy else ("bootstrap-head" if bootstrap else "eps-greedy")
+        )
         metrics["update_step"] = update_step
         metric_list.append(metrics)
 
         if done:
             break
+
+    EPISODE_BUDGET["rollouts"] += 1
+    EPISODE_BUDGET["episodes"] += env.batch_size
+    EPISODE_BUDGET["episode_rounds"] += env.batch_size * len(metric_list)
+    key = "eval_episodes" if on_policy else "behaviour_episodes"
+    EPISODE_BUDGET[key] += env.batch_size
     return metric_list
 
 
@@ -182,6 +255,9 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
 
     if labels is None:
         labels = {}
+
+    for k in EPISODE_BUDGET:
+        EPISODE_BUDGET[k] = 0
 
     device = th.device(config["device"])
     cpu = th.device("cpu")
@@ -401,6 +477,8 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                         ) / len(on_policy_metrics)
                 wandb.log(log)
 
+    print(f"[budget] {json.dumps(EPISODE_BUDGET, sort_keys=True)}")
+
     model_file = os.path.join(model_dir, f"{config['job_id']}_manager.pt")
     print(f"Saving manager to {model_file}")
 
@@ -433,6 +511,14 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
             for k in metrics_list[0]
             if k.startswith("rl_") or k.startswith("opp_")
         )
+    # Shape and ensemble diagnostics, melted under their own names so the
+    # metric names the comparison shares (above) keep their exact meaning.
+    seen = set(value_vars)
+    for row in metrics_list:
+        for k in row:
+            if k.startswith(("rpa_", "head_", "consensus_")) and k not in seen:
+                seen.add(k)
+                value_vars.append(k)
 
     metrics_path = os.path.join(metrics_dir, f"{config['job_id']}.parquet")
     print(f"Saving metrics dataframe to {metrics_path}")
