@@ -43,7 +43,7 @@ from scipy.stats import qmc
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import ConstantKernel, Matern, WhiteKernel
 
-from aggregate import OBJECTIVES, load_sweep, per_point
+from aggregate import OBJECTIVES, load_shape, load_sweep, per_point, shape_stats
 
 #: The design box, in the coordinates the GP is fitted in. Every parameter is
 #: mapped to [0, 1]; `tau` enters as log10 because that is how it was sampled.
@@ -207,6 +207,12 @@ def run(args):
 
     summary = per_point(episodes, seeds=fit_seeds)
     table = design.merge(summary, on="name", how="inner")
+    # aim, level, rate and how far outside the contribution model's evidence
+    # each point sits -- carried here so the validation design can pick its
+    # champions without re-reading the whole sweep
+    table = table.merge(
+        shape_stats(load_shape(args.run), seeds=fit_seeds), on="name", how="left"
+    )
     table.to_csv(os.path.join(args.out, "design_summary_fit.csv"), index=False)
 
     sob = table[table["kind"] == "sobol"].reset_index(drop=True)

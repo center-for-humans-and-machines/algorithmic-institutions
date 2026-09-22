@@ -70,9 +70,61 @@ def ridge_rows(tag, u_star, hess_csv):
     return rows
 
 
+#: Ceilings at which the contribution model's evidence thins out: only 4.49%
+#: of its training rows follow a punishment above 10 and 1.50% follow one
+#: above 20 (manager review S2). Constraining `P_max` rather than the
+#: realised severity is what actually binds -- it caps the largest punishment
+#: the rule can ever issue, so nothing it does is an extrapolation, whereas a
+#: constraint on the average severity leaves the heavy early rounds in.
+EVIDENCE_CEILINGS = (20.0, 10.0)
+
+
+def champions(summary_csv):
+    """The design's own best points, re-run on the held-out seeds.
+
+    The surrogate's argmax and the best thing actually measured are not the
+    same object and need not agree -- the argmax can sit in a corner of the
+    box where the design is thin. Carrying both means the validation can say
+    which is better instead of assuming the fitted one is.
+
+    The capped rows are the best rules that can never issue a punishment
+    above 20 or above 10. The unconstrained optimum sits at `P_max = 30`, the
+    top of the action space and far outside what the contribution model was
+    trained to respond to, so it is a claim about the model. A capped rule is
+    a claim about people, and any headline that has to survive scrutiny rests
+    on one of those instead.
+    """
+    if not summary_csv:
+        return []
+    t = pd.read_csv(summary_csv)
+    t = t[t["kind"] == "sobol"]
+    out = []
+    for obj, tag in (
+        ("focal_pool", "best_design_pool"),
+        ("focal_contribution", "best_design_contribution"),
+    ):
+        r = t.loc[t[obj].idxmax()]
+        out.append(_row(tag, "champion", natural(pd.DataFrame([r]))[0]))
+    for cap in EVIDENCE_CEILINGS:
+        capped = t[t["p_max"] <= cap]
+        for obj, short in (("focal_pool", "pool"), ("focal_contribution", "contr")):
+            if not len(capped):
+                continue
+            r = capped.loc[capped[obj].idxmax()]
+            out.append(
+                _row(
+                    f"best_cap{int(cap)}_{short}",
+                    "capped",
+                    natural(pd.DataFrame([r]))[0],
+                )
+            )
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--fit-dir", required=True)
+    ap.add_argument("--design-summary", default=None)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
 
@@ -99,6 +151,8 @@ def main():
             to_unit(nat.reshape(1, -1))[0],
             f"{args.fit_dir}/hessian_{o['objective'].replace('focal_', '')}.csv",
         )
+
+    rows += champions(args.design_summary)
 
     anchors = [
         {
