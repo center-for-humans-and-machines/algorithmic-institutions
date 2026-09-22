@@ -1,0 +1,54 @@
+# Stage-1 candidate run for the switch-contrib-features experiment,
+# arm B, reference stack (gnn contribution, candidate
+# switch, four punishers in self-play).
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_contrib_features_b_contrib/model/architecture_mlp+rnn+edge__dataset_50ep_doubled__features_b_contrib.pt
+
+managers:
+  lin_multinomial:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_best_with_contr.joblib
+  lin_ridge:
+    type: linear
+    path: artifacts/baselines/punishment_ridge_best.joblib
+  lin_gaussian:
+    type: linear
+    path: artifacts/baselines/punishment_gaussian_best_with_contr.joblib
+  gnn:
+    type: human
+    path: artifacts/artificial_humans/punishment_rnn_edge_50ep_doubled/model/architecture_node+edge+rnn__dataset_50ep_doubled.pt
+
+pairings:
+  - name: lin_multinomial_self
+    group_0: lin_multinomial
+    group_1: lin_multinomial
+  - name: lin_ridge_self
+    group_0: lin_ridge
+    group_1: lin_ridge
+  - name: lin_gaussian_self
+    group_0: lin_gaussian
+    group_1: lin_gaussian
+  - name: gnn_self
+    group_0: gnn
+    group_1: gnn
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/switch_contrib_features_b_2g8a_self_gnn_contr_gnnscf_switch
+figure_name: switch_contrib_features_b_2g8a_self_gnn_contr_gnnscf_switch
+save_per_round: true
+basedir: .
