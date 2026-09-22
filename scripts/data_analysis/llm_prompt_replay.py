@@ -99,7 +99,8 @@ def bin_profile(frame, value="charged_punishment"):
     valid = frame[frame["contribution_valid"]].dropna(subset=[value])
     bins = pd.cut(valid["contribution"], RPA_EDGES, labels=RPA_LABELS)
     grouped = valid.groupby(bins, observed=False)[value]
-    return grouped.mean().reindex(RPA_LABELS), grouped.size().reindex(RPA_LABELS)
+    counts = grouped.size().reindex(RPA_LABELS).fillna(0).astype(int)
+    return grouped.mean().reindex(RPA_LABELS), counts
 
 
 def profile_snr(frame, value="charged_punishment"):
@@ -414,13 +415,21 @@ def main():
             )
 
     reference = human_frame(points)
-    shape = pd.DataFrame(
-        [
-            human_reference_profile(),
-            shape_row(reference, "human managers (same decision points)"),
-        ]
-        + [shape_row(f, v) for v, f in frames.items()]
-    )
+    rows = [
+        human_reference_profile(),
+        shape_row(reference, "human managers (same decision points)"),
+    ]
+    for label, f in frames.items():
+        rows.append(shape_row(f, label))
+        # The same shape over the answers that PARSED, which is the one that
+        # separates what the model chose from what the fallback chose for it.
+        # Zero punishment is the fallback and also a policy, so a variant with
+        # a high failure rate is pushed toward "never punish" by the fallback
+        # alone; the two rows have to be read together.
+        ok = f[f["parse_ok"]]
+        if len(ok) and len(ok) < len(f):
+            rows.append(shape_row(ok, f"{label} (parsed answers only)"))
+    shape = pd.DataFrame(rows)
     parse = pd.DataFrame([parse_row(f, v) for v, f in frames.items()])
     agreement = pd.DataFrame([agreement_row(f, v) for v, f in frames.items()])
 
