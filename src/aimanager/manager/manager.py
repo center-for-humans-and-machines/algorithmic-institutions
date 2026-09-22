@@ -217,8 +217,15 @@ class ArtificalManager:
                     exp_state, edge_index=edge_index
                 )
                 p_q = self.param_noise.perturbed(p_encoded, reset_rnn=first)
-                p_q = p_q.reshape(n_batch, self.n_groups, n_agents, n_rounds, -1)
-                self.param_noise.observe(q_values, p_q)
+                # The head axis is #213's; collapse it the same way `q_sel`
+                # collapses the reference above, so the two sides of
+                # `observe` have the same rank and the arm is compared
+                # against the policy it would have acted on. With this arm's
+                # K=1 both means are the identity.
+                p_q = p_q.reshape(
+                    n_batch, self.n_groups, n_agents, n_rounds, self.n_heads, -1
+                ).mean(-2)
+                self.param_noise.observe(q_sel, p_q)
                 picked_action = p_q.argmax(-1).gather(1, agent_group).squeeze(1)
                 return picked_action, q_values
             if greedy or self.exploration == BOOTSTRAP:

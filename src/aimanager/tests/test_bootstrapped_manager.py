@@ -386,6 +386,12 @@ class _StubEnv:
         return {
             "contribution": th.zeros(self.n_batch, self.n_agents, 1, dtype=th.long),
             "punishment": th.zeros(self.n_batch, self.n_agents, 1, dtype=th.long),
+            # `ArtificialHumanEnv.reset_state` carries this, and the shape
+            # rows added by PR #216 read it to drop timed-out players. Ones,
+            # i.e. everybody answered, so the bins are actually exercised.
+            "contribution_valid": th.ones(
+                self.n_batch, self.n_agents, 1, dtype=th.bool
+            ),
             "common_good": th.zeros(self.n_batch, self.n_agents, 1),
             "contributor_payoff": th.zeros(self.n_batch, self.n_agents, 1),
             "group_payoff": th.zeros(self.n_batch, 2, 1),
@@ -431,6 +437,20 @@ class _StubManager:
     def draw_masks(self, n_batch, device=None):
         self.n_mask_draws += 1
         return th.ones(n_batch, 1, 1, self.n_heads, dtype=th.bool)
+
+    # The behaviour-episode hooks belong to the parameter-noise arm (PR
+    # #216), which `run_batch` calls unconditionally. This arm has nothing to
+    # draw or adapt, so they are the same no-ops the real manager runs with
+    # `param_noise=None`.
+    def begin_behaviour_episode(self):
+        pass
+
+    def end_behaviour_episode(self):
+        return {}
+
+    @property
+    def behaviour_label(self):
+        return "eps-greedy"
 
     def get_action(self, state, first=False, greedy=False, head=None, **_):
         self.heads_seen.append(head)
