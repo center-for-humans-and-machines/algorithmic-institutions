@@ -230,4 +230,12 @@ The sweep lands within 0.05 of the published numbers on all three; this cross-ch
 
 ### Successor
 
-*(to be filled)*
+1. **The cheap evaluation is the reusable thing here, more than the rule.** `paired_rollout` turns a competing-setting evaluation from 77 seconds per 100 episodes into a batched rollout whose cost barely depends on how many episodes or how many policies it carries, on CPU nodes rather than the GPU queue every other arm is waiting in. Any arm that wants to *compare* managers rather than train one can use it, and a trained manager can sit in either seat as long as it exposes `predict(state) -> (punishment, None)`.
+
+2. **Re-point the RL manager's baseline again, and at a capped rule.** The parent arms concluded that the honest bar in the competing setting is the clone's seat and `never`'s seat. That is now too low: a five-parameter rule whose severity never exceeds the incumbent's clears both comfortably. The bar for a trained manager should be the capped champion in section 3.7, reported at matched spend, with group size beside the pool.
+
+3. **Put the horizon multipliers in the manager's observation, not only in a rule.** The one thing the family found that the earlier arms could not express is *when* to punish, and it is worth more than anything the threshold shape buys. A learned manager that cannot see the round number or the rounds-to-reshuffle cannot represent the policy that wins here. Both are already in the env state.
+
+4. **The `gamma_ep` box edge is the open question this arm leaves.** Both optima sit on it, in opposite directions, and section 3.6's probes bound it only at the four values they test. A successor that wants the actual optimum should re-run the design with `gamma_ep` in [-1, 6] rather than widen it by hand.
+
+5. **Nothing here needs a retrain and nothing here was one.** Eight CPU array tasks of about 3.5 minutes reproduce the design; two more reproduce the validation; three 12-minute GPU jobs reproduce the cross-check.
