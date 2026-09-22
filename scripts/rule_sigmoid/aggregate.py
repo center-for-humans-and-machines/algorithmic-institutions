@@ -156,7 +156,8 @@ def shape_stats(shape, seeds=None):
         )
         n = tab.sum()
         n_pos = tab[:, 1:].sum()
-        total_p = (tab * np.arange(31)[None, :]).sum()
+        levels = np.arange(31)[None, :]
+        total_p = (tab * levels).sum()
         rows.append(
             {
                 "name": name,
@@ -165,6 +166,16 @@ def shape_stats(shape, seeds=None):
                 "mean_p_valid": total_p / n if n else np.nan,
                 "punish_rate": n_pos / n if n else np.nan,
                 "mean_p_given_positive": total_p / n_pos if n_pos else np.nan,
+                # How far outside the contribution model's own evidence the
+                # rule is asking it to extrapolate. Only 4.49% of that model's
+                # training rows follow a punishment above 10 and 1.50% follow
+                # one above 20 (manager review S2), so a rule whose spend
+                # lives up there is a claim about the model, not about people.
+                "spend_share_gt10": (tab[:, 11:] * levels[:, 11:]).sum()
+                / (total_p or np.nan),
+                "spend_share_gt20": (tab[:, 21:] * levels[:, 21:]).sum()
+                / (total_p or np.nan),
+                "decision_share_gt10": tab[:, 11:].sum() / n if n else np.nan,
             }
         )
     return pd.DataFrame(rows)
