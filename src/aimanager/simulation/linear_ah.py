@@ -1,5 +1,5 @@
 """Run the hand-crafted linear baselines (issues #119/#127, saved as joblib
-bundles: ridge / gaussian / multinomial) as drop-in artificial humans AND as
+bundles: ridge / gaussian[_mlp] / multinomial) as drop-in artificial humans AND as
 punishment managers in the simulation pipeline (#121).
 
 The env drives artificial humans through a single interface:
@@ -73,7 +73,7 @@ class LinearAHAdapter:
         switch_sample=True,
         sample=True,
     ):
-        self.model_type = bundle["model"]  # 'ridge' | 'gaussian' | 'multinomial'
+        self.model_type = bundle["model"]  # 'ridge' | 'gaussian[_mlp]' | 'multinomial'
         self.estimator = bundle["estimator"]
         self.scaler = bundle["scaler"]
         self.features = list(bundle["features"])
@@ -81,7 +81,7 @@ class LinearAHAdapter:
         self.is_switch = self.target == "does_switch"
         self.is_punishment = self.target == "punishment"
         self.n_levels = int(bundle.get("n_levels", 0))
-        # level sampling: ridge N(mu, sigma), gaussian N(mu, sigma(x)),
+        # level sampling: ridge N(mu, sigma), gaussian/_mlp N(mu, sigma(x)),
         # multinomial = predict_proba tempered by `temperature` (T=1 as-is).
         self.sigma = float(bundle.get("sigma") or 0.0)
         self.temperature = float(bundle.get("temperature", 1.0))
@@ -242,7 +242,7 @@ class LinearAHAdapter:
             return P.argmax(1).astype(np.int64)
 
         mu = self.estimator.predict(Xs)
-        if self.model_type == "gaussian" and self.sample:
+        if self.model_type in ("gaussian", "gaussian_mlp") and self.sample:
             sd = self.estimator.predict_std(Xs)  # heteroscedastic sigma(x) head
             yhat = mu + th.randn(len(mu)).numpy() * sd
         elif self.sample and self.sigma > 0:  # ridge: homoscedastic scalar sigma
