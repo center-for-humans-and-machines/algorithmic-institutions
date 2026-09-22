@@ -158,6 +158,7 @@ class GraphNetwork(th.nn.Module):
         group_vnode_module=None,
         group_vnode_hidden=None,
         stimulus_skip=False,
+        n_heads=1,
         **_,
     ):
         super().__init__()
@@ -286,6 +287,24 @@ class GraphNetwork(th.nn.Module):
         ), f"stimulus_skip must be a bool, got {stimulus_skip!r}"
         self.stimulus_skip = stimulus_skip
 
+        # Bootstrapped value heads (Osband, Blundell, Pritzel and Van Roy,
+        # 2016): K readouts on one shared torso. The head IS the `op2`
+        # readout -- everything below it (encoders, op1, the RNNs) is shared,
+        # everything in the final linear map is private to a head. K=1 is the
+        # default and is not merely equivalent to today's model but
+        # bit-identical to it: `out_features` below is `y_levels * 1`, the
+        # same integer, drawn from the same RNG state, so a seeded build with
+        # this argument absent and one with `n_heads=1` produce the same
+        # parameters. See notes/autoresearch_log/rl-manager-bootstrapped-dqn.md.
+        assert (
+            isinstance(n_heads, int) and not isinstance(n_heads, bool) and n_heads >= 1
+        ), f"n_heads must be a positive int, got {n_heads!r}"
+        assert n_heads == 1 or y_name == "punishment", (
+            "bootstrapped heads are defined for the manager's punishment "
+            f"head only, got y_name={y_name!r}"
+        )
+        self.n_heads = n_heads
+
         if op1 is None:
             if add_edge_model:
                 edge_model = EdgeModel(
@@ -380,7 +399,7 @@ class GraphNetwork(th.nn.Module):
                     ),
                     edge_features=0,
                     u_features=u_features,
-                    out_features=y_features,
+                    out_features=y_features * n_heads,
                 ),
                 None,
             )
