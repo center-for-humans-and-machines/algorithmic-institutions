@@ -241,6 +241,18 @@ The sweep lands within 0.05 of the published numbers on all three; this cross-ch
 
 **This is not a tie and it is not close.** Both fitted rules beat the incumbent on both objectives at once, and the pool margin is more than ten times its own standard error.
 
+**The ranking does not depend on the rival.** The same 52 rules were run again with never-punishing in the other seat (`validation_table_never.csv`), the harder of the two settings because the rival is a refuge. Every level drops -- `never`'s own seat falls from 4.58 members to 3.94 -- and every margin survives:
+
+| rule | pool, rival = clone | pool, rival = never | vs `thr9_p10` there |
+|---|---|---|---|
+| `opt_pool` | 69.71 | 58.42 | **+9.62** |
+| `best_cap20_pool` | 67.53 | 56.04 | **+7.24** |
+| `best_cap10_pool` | 65.19 | 54.29 | **+5.49** |
+| `never` | 59.68 | 49.51 | +0.71 |
+| `thr9_p10` | 60.19 | 48.80 | -- |
+
+Against the refuge, `thr9_p10` falls **below** never-punishing (48.80 against 49.51), which is the parent arms' conclusion that punishing barely pays for itself, reproduced here. The fitted rules do not: they clear never-punishing by 4.8 to 8.9 in the same setting.
+
 ### 3.7 The margin survives a hard severity cap, and the capped rule wins on spend as well (measured)
 
 The unconstrained optima sit at `P_max = 30`, the top of the action space, where the contribution model has almost no evidence. The capped champions are the best design points whose `P_max` never exceeds 20 or 10, so nothing they can ever issue is an extrapolation.
