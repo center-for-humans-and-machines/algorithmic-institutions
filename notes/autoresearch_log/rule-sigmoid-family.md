@@ -4,7 +4,7 @@
 
 **Slot:** none. Nothing is trained, nothing is recalibrated, no artifact changes. Like all three of its ancestors this is a measurement branch: it replaces a handful of named rules with a five-parameter family, searches the family, and reports the shape of what it finds.
 
-**Parent:** `origin/base/rule-sigmoid` at `b6501ae` -- `auto/rule-inverted-targeting` (PR [#217](https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/217)) with `auto/free-punishment-fix` merged in. Branch `auto/rule-sigmoid-family`. Isolated remote dir `~/repros/ai-runs/rule-sigmoid` (delete when the PR closes). Byte-identical artifacts to the paired arms: the four sha256s are printed in every job log.
+**Parent:** `origin/base/rule-sigmoid` at `b6501ae` -- `auto/rule-inverted-targeting` (PR [#217](https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/217)) with `auto/free-punishment-fix` merged in. Branch `auto/rule-sigmoid-family`, PR [#219](https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/219) against `base/rule-sigmoid`. Isolated remote dir `~/repros/ai-runs/rule-sigmoid` (delete when the PR closes). Byte-identical artifacts to the paired arms: the four sha256s are printed in every job log.
 
 **The free-punishment fix matters for this arm specifically.** Every earlier contribution-keyed rule punished 100% of timed-out cells, which is wasted spend, and under the old env accounting it was also free. On this base `punish()` zeroes the action wherever the player gave no input, so the env and the corrected accountings coincide and no rule in the family can buy anything there. A family searched on the old base would have had a parameter direction whose payoff was an accounting artefact.
 
