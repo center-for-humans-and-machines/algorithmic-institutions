@@ -214,7 +214,19 @@ The sweep lands within 0.05 of the published numbers on all three; this cross-ch
 
 ## 4. Notes
 
-*(to be filled)*
+1. **Measured against inferred.** Sections 3.1 to 3.7 are measurements. The *readings* are inferences and are marked as such where they appear: that `gamma_ep` trades contribution for spend, that `gamma_sw` works by moving punishment away from the switch-decision round, and that the fitted optimum's advantage over the incumbent is a redistribution of spend rather than more of it. The first and third are supported by the round-resolved series and by the matched-spend table; the second is supported by the phase probe, which is a direct measurement of that specific mechanism and not an argument about it.
+
+2. **The design box is not the family, and one of its edges is arbitrary.** `P_max <= 30` is the action space's own ceiling and `c0` in [0, 20] is the contribution scale, but nothing fixes `gamma <= 3`. Both fitted optima sit on a `gamma_ep` edge -- the contribution optimum at 0, the pool optimum at 3 -- so the box is binding for both, in opposite directions. Section 3.6 reports what the probes outside it found instead of leaving the reader to wonder.
+
+3. **The unconstrained optimum is a claim about the model, not about people.** Both fitted optima sit at `P_max = 30`, and the contribution model has evidence for almost nothing up there: 4.49% of its training rows follow a punishment above 10 and 1.50% follow one above 20 (manager review S2). This is the same warning the first rule sweep attached to `prop10`, and it applies here with more force because a search will find whatever the model rewards, including in regions where the model is guessing. The capped champions exist so the headline does not have to rest on an extrapolation.
+
+4. **The objective is not the targeting statistic.** `rho`, `magnitude` and `noise_gate` are descriptive: they are computed after the fact and never entered the search. A search that optimised a rank correlation would have selected rules that punish almost nothing, which is precisely the failure the noise gate is there to detect; that failure cannot occur here because the two objectives are seat totals.
+
+5. **The leaver gap is a ranking here and nothing more.** It is reported for every validated rule because it reads straight off the recorded rounds with no counterfactual, and it reproduces the ordering; but its zero point does not separate correctly- from incorrectly-targeted managers and its noise floor of 0.577 is the size of a fine contrast. No claim in this log rests on its sign.
+
+6. **A live defect in shared code is named and not fixed.** `evaluation_suite.convert.load_sim` does not mask a timed-out player's imputed contribution the way `load_human` masks it, so every simulated policy-shape table built through the shared loader carries those rows in its `6-10` bin. This arm builds its own tables with the mask applied at source (`paired_rollout.contingency`). The shared directory is frozen surface and the fix is the maintainer's call.
+
+7. **Nothing here was trained and nothing was recalibrated.** The four artifacts are byte-identical to the parent arms' and their sha256s are printed in every job log. The whole arm is about 1.6M simulated episodes, which is roughly an hour of ordinary CPU batch time across a handful of array tasks -- reproducing it needs no GPU at all.
 
 ### Successor
 
