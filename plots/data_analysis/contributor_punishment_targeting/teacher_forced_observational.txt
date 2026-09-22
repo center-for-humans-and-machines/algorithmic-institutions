@@ -1,0 +1,177 @@
+/u/levinb/algorithmic-institutions/.venv/lib/python3.9/site-packages/torch_geometric/typing.py:110: UserWarning: An issue occurred while importing 'torch-sparse'. Disabling its usage. Stacktrace: libcusparse.so.11: cannot open shared object file: No such file or directory
+  warnings.warn(f"An issue occurred while importing 'torch-sparse'. "
+/raven/u/levinb/autoresearch/contributor-punishment-targeting/src/aimanager/generic/data.py:93: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  df.groupby(["episode_id", "player_id"])["contribution_valid"]
+model     artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+  y_name=contribution y_levels=21
+  x_encoding=['prev_contribution', 'prev_punishment', 'agent_group']
+  copula_rho=0.03949863621805423 copula_phi=1.0
+data      experiments/2group_8agent_50ep.csv (episodes=100)
+  train 40 ep, test 10 ep, union 50 ep
+  contribution default=9.0
+train split (40 ep): episodes=40 agents=8 rounds=24 teacher-forced rows=7457 stimulus rows=7037
+held-out split (10 ep): episodes=10 agents=8 rounds=24 teacher-forced rows=1863 stimulus rows=1759
+train+test, single copy (50 ep): episodes=50 agents=8 rounds=24 teacher-forced rows=9320 stimulus rows=8796
+
+--- alignment check (train+test, single copy (50 ep)) ---
+  prev_contribution / prev_punishment are the t-1 tensors        OK
+  x_encoding carries no current-round feature (['prev_contribution', 'prev_punishment', 'agent_group'])  OK
+  corr(E[c_t], c_{t+k}) by lag k:
+    k=-2  0.8675551447712114
+    k=-1  0.9331696707492029  <- conditioning input
+    k=+0  0.854900110644313  <- target
+    k=+1  0.8195373685976876
+    k=+2  0.7927942636520164
+  mean -log P[.., t][c_{t+k}] by lag k (context, not a test):
+    k=-1  1.2605701327896532
+    k=+0  1.6716389760824308
+    k=+1  1.819371594907954
+  OLS slope E[c_t+1] ~ c_t (RCB pop)   0.7646216541768688  <- aligned
+  OLS slope E[c_t]   ~ c_t (RCB pop)   0.6318075803553883  <- off by one
+  OLS slope c_t+1    ~ c_t (RCB pop)   0.7685801751922807  <- human
+  corr(c_t, E[c_t+1])                  0.8628738500060182
+
+================ train split (40 ep) (RCB population n=2144) ============
+
+--- (A/B) MODEL, teacher-forced E[c_t+1] - c_t ---
+(A) within-contribution-band slope of dc on punishment:
+ band   n         slope       mean_dc        mean_p   human_slope  ratio_to_human
+  0-4 836  0.1307903154  2.2427373602  7.6578947368  0.1397000000    0.9362227298
+  5-9 707  0.0831151370  1.0886644940  5.1852899576  0.1038000000    0.8007238628
+10-14 430 -0.0280911632  0.2703509193  4.2930232558 -0.0767000000    0.3662472390
+15-19 171 -0.2441896646 -1.0438108570  3.8187134503 -0.1615000000    1.5120103073
+(B) RCB bin means:
+  rate_bin                n       mean_dc    human_mean      abs_disc  human_weight
+  (0,0.25]  1002.0000000000  0.8416828517  0.8917610000  0.0500781483  0.4654135338
+(0.25,0.5]   541.0000000000  1.3977090065  1.3407740000  0.0569350065  0.2526315789
+   (0.5,1]   392.0000000000  1.5756134708  1.6786470000  0.1030335292  0.1778195489
+        >1   209.0000000000  1.7473980798  2.0144400000  0.2670419202  0.1041353383
+    human-weighted mean abs discrepancy = 0.08382050494491415
+
+--- (C) HUMAN, observed c_t+1 - c_t ---
+(A) within-contribution-band slope of dc on punishment:
+ band   n         slope       mean_dc        mean_p   human_slope  ratio_to_human
+  0-4 836  0.1180605796  2.0562200957  7.6578947368  0.1397000000    0.8451007844
+  5-9 707  0.0572013993  1.2022630835  5.1852899576  0.1038000000    0.5510732114
+10-14 430 -0.1008646035  0.4279069767  4.2930232558 -0.0767000000    1.3150535005
+15-19 171 -0.1792691307 -1.5672514620  3.8187134503 -0.1615000000    1.1100255774
+(B) RCB bin means:
+  rate_bin                n       mean_dc    human_mean      abs_disc  human_weight
+  (0,0.25]  1002.0000000000  0.9411177645  0.8917610000  0.0493567645  0.4654135338
+(0.25,0.5]   541.0000000000  1.2698706100  1.3407740000  0.0709033900  0.2526315789
+   (0.5,1]   392.0000000000  1.4183673469  1.6786470000  0.2602796531  0.1778195489
+        >1   209.0000000000  1.4306220096  2.0144400000  0.5838179904  0.1041353383
+    human-weighted mean abs discrepancy = 0.14796263599805734
+
+--- [diagnostic] MISALIGNED E[c_t] - c_t ---
+(A) within-contribution-band slope of dc on punishment:
+ band   n         slope       mean_dc        mean_p   human_slope  ratio_to_human
+  0-4 836  0.1130995090  3.1460251564  7.6578947368  0.1397000000    0.8095884682
+  5-9 707  0.0506408245  1.3374632474  5.1852899576  0.1038000000    0.4878692146
+10-14 430 -0.0101535948 -0.1503902817  4.2930232558 -0.0767000000    0.1323806366
+15-19 171 -0.2440502402 -1.8997121425  3.8187134503 -0.1615000000    1.5111469981
+(B) RCB bin means:
+  rate_bin                n       mean_dc    human_mean      abs_disc  human_weight
+  (0,0.25]  1002.0000000000  1.1923872669  0.8917610000  0.3006262669  0.4654135338
+(0.25,0.5]   541.0000000000  1.9059092796  1.3407740000  0.5651352796  0.2526315789
+   (0.5,1]   392.0000000000  1.5888400307  1.6786470000  0.0898069693  0.1778195489
+        >1   209.0000000000  1.6145966290  2.0144400000  0.3998433710  0.1041353383
+    human-weighted mean abs discrepancy = 0.3402938107481531
+
+================ held-out split (10 ep) (RCB population n=516) ============
+
+--- (A/B) MODEL, teacher-forced E[c_t+1] - c_t ---
+(A) within-contribution-band slope of dc on punishment:
+ band   n         slope       mean_dc         mean_p   human_slope  ratio_to_human
+  0-4 129  0.2049006064  3.8192326723  10.3488372093  0.1397000000    1.4667187285
+  5-9 222  0.2075839410  0.9451687611   4.1441441441  0.1038000000    1.9998452890
+10-14 130  0.1768634685  0.3385289238   4.2538461538 -0.0767000000   -2.3059122363
+15-19  35  0.1296014235 -0.6005866502   3.6857142857 -0.1615000000   -0.8024855943
+(B) RCB bin means:
+  rate_bin               n       mean_dc    human_mean      abs_disc  human_weight
+  (0,0.25]  236.0000000000  0.4572481697  0.8917610000  0.4345128303  0.4654135338
+(0.25,0.5]  131.0000000000  1.5935065524  1.3407740000  0.2527325524  0.2526315789
+   (0.5,1]   81.0000000000  1.9630314236  1.6786470000  0.2843844236  0.1778195489
+        >1   68.0000000000  3.6739887547  2.0144400000  1.6595487547  0.1041353383
+    human-weighted mean abs discrepancy = 0.48946315661040485
+
+--- (C) HUMAN, observed c_t+1 - c_t ---
+(A) within-contribution-band slope of dc on punishment:
+ band   n         slope       mean_dc         mean_p   human_slope  ratio_to_human
+  0-4 129  0.1957507175  4.3100775194  10.3488372093  0.1397000000    1.4012220297
+  5-9 222  0.3522617509  1.3198198198   4.1441441441  0.1038000000    3.3936584862
+10-14 130  0.0086846272  0.2846153846   4.2538461538 -0.0767000000   -0.1132285169
+15-19  35  0.1037951058 -0.4000000000   3.6857142857 -0.1615000000   -0.6426941533
+(B) RCB bin means:
+  rate_bin               n       mean_dc    human_mean      abs_disc  human_weight
+  (0,0.25]  236.0000000000  0.6822033898  0.8917610000  0.2095576102  0.4654135338
+(0.25,0.5]  131.0000000000  1.6335877863  1.3407740000  0.2928137863  0.2526315789
+   (0.5,1]   81.0000000000  2.9382716049  1.6786470000  1.2596246049  0.1778195489
+        >1   68.0000000000  3.8088235294  2.0144400000  1.7943835294  0.1041353383
+    human-weighted mean abs discrepancy = 0.582349572007182
+
+--- [diagnostic] MISALIGNED E[c_t] - c_t ---
+(A) within-contribution-band slope of dc on punishment:
+ band   n         slope       mean_dc         mean_p   human_slope  ratio_to_human
+  0-4 129  0.1860969539  5.0664048160  10.3488372093  0.1397000000    1.3321184958
+  5-9 222  0.1521099248  1.0632752393   4.1441441441  0.1038000000    1.4654135336
+10-14 130  0.0835750474 -0.2669038480   4.2538461538 -0.0767000000   -1.0896355591
+15-19  35  0.1448255641 -1.4324912231   3.6857142857 -0.1615000000   -0.8967527188
+(B) RCB bin means:
+  rate_bin               n       mean_dc    human_mean      abs_disc  human_weight
+  (0,0.25]  236.0000000000  0.7164326076  0.8917610000  0.1753283924  0.4654135338
+(0.25,0.5]  131.0000000000  1.7702303130  1.3407740000  0.4294563130  0.2526315789
+   (0.5,1]   81.0000000000  2.0925141377  1.6786470000  0.4138671377  0.1778195489
+        >1   68.0000000000  3.4456870559  2.0144400000  1.4312470559  0.1041353383
+    human-weighted mean abs discrepancy = 0.41273149726883335
+
+================ train+test, single copy (50 ep) (RCB population n=2660) ============
+
+--- (A/B) MODEL, teacher-forced E[c_t+1] - c_t ---
+(A) within-contribution-band slope of dc on punishment:
+ band   n         slope       mean_dc        mean_p   human_slope  ratio_to_human
+  0-4 965  0.1482011000  2.4534812931  8.0176165803  0.1397000000    1.0608525414
+  5-9 929  0.1037969880  1.0543738021  4.9364908504  0.1038000000    0.9999709826
+10-14 560  0.0170972099  0.2861779561  4.2839285714 -0.0767000000   -0.2229101684
+15-19 206 -0.2196915727 -0.9685057733  3.7961165049 -0.1615000000    1.3603193359
+(B) RCB bin means:
+  rate_bin                n       mean_dc    human_mean      abs_disc  human_weight
+  (0,0.25]  1238.0000000000  0.7683980496  0.8917610000  0.1233629504  0.4654135338
+(0.25,0.5]   672.0000000000  1.4358778733  1.3407740000  0.0951038733  0.2526315789
+   (0.5,1]   473.0000000000  1.6419577714  1.6786470000  0.0366892286  0.1778195489
+        >1   277.0000000000  2.2203517473  2.0144400000  0.2059117473  0.1041353383
+    human-weighted mean abs discrepancy = 0.1094077799130865
+
+--- (C) HUMAN, observed c_t+1 - c_t ---
+(A) within-contribution-band slope of dc on punishment:
+ band   n         slope       mean_dc        mean_p   human_slope  ratio_to_human
+  0-4 965  0.1397411035  2.3575129534  8.0176165803  0.1397000000    1.0002942269
+  5-9 929  0.1038467911  1.2303552207  4.9364908504  0.1038000000    1.0004507817
+10-14 560 -0.0766576378  0.3946428571  4.2839285714 -0.0767000000    0.9994476899
+15-19 206 -0.1614942232 -1.3689320388  3.7961165049 -0.1615000000    0.9999642305
+(B) RCB bin means:
+  rate_bin                n       mean_dc    human_mean      abs_disc  human_weight
+  (0,0.25]  1238.0000000000  0.8917609047  0.8917610000  0.0000000953  0.4654135338
+(0.25,0.5]   672.0000000000  1.3407738095  1.3407740000  0.0000001905  0.2526315789
+   (0.5,1]   473.0000000000  1.6786469345  1.6786470000  0.0000000655  0.1778195489
+        >1   277.0000000000  2.0144404332  2.0144400000  0.0000004332  0.1041353383
+    human-weighted mean abs discrepancy = 1.4924812029924208e-07
+
+--- [diagnostic] MISALIGNED E[c_t] - c_t ---
+(A) within-contribution-band slope of dc on punishment:
+ band   n         slope       mean_dc        mean_p   human_slope  ratio_to_human
+  0-4 965  0.1324027647  3.4027391213  8.0176165803  0.1397000000    0.9477649586
+  5-9 929  0.0688367554  1.2719414629  4.9364908504  0.1038000000    0.6631671999
+10-14 560  0.0105548612 -0.1774380739  4.2839285714 -0.0767000000   -0.1376122707
+15-19 206 -0.2185704474 -1.8203299474  3.7961165049 -0.1615000000    1.3533773832
+(B) RCB bin means:
+  rate_bin                n       mean_dc    human_mean      abs_disc  human_weight
+  (0,0.25]  1238.0000000000  1.1016560072  0.8917610000  0.2098950072  0.4654135338
+(0.25,0.5]   672.0000000000  1.8794599572  1.3407740000  0.5386859572  0.2526315789
+   (0.5,1]   473.0000000000  1.6750928905  1.6786470000  0.0035541095  0.1778195489
+        >1   277.0000000000  2.0641061923  2.0144400000  0.0496661923  0.1041353383
+    human-weighted mean abs discrepancy = 0.23958105684477124
+
+SELF-CHECK train+test, single copy (50 ep): PASS
+
+wall 22.2s

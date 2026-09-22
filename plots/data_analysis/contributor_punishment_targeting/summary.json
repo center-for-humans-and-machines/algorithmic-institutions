@@ -1,0 +1,82 @@
+{
+  "model": "artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "copula_rho": 0.03949863621805423,
+  "copula_phi": 1.0,
+  "shared_noise": "off (sample=False: the marginal is read, nothing drawn)",
+  "n_contexts": 1885,
+  "rounds": [
+    5,
+    9,
+    13,
+    17,
+    21
+  ],
+  "grid": [
+    21,
+    31
+  ],
+  "human_selfcheck": true,
+  "noop_check_max_abs_error": 0.003123270580545068,
+  "noop_check_n": 1868,
+  "human_slopes": {
+    "0-4": 0.1397,
+    "5-9": 0.1038,
+    "10-14": -0.0767,
+    "15-19": -0.1615
+  },
+  "model_forced_slopes": {
+    "0-4": 0.07173238478409183,
+    "5-9": 0.062468470285646116,
+    "10-14": 0.010475202046057633,
+    "15-19": 0.00568650573910466
+  },
+  "model_uniform_slopes": {
+    "0-4": 0.04823744368632723,
+    "5-9": 0.02301693953316787,
+    "10-14": -0.016112534346284804,
+    "15-19": -0.03248460344265778
+  },
+  "model_near_support_slopes": {
+    "0-4": 0.060381312440706644,
+    "5-9": 0.05563018384787422,
+    "10-14": 0.014056649008248455,
+    "15-19": 0.03458760642635563
+  },
+  "model_within_level_slopes": {
+    "0-4": 0.034351468715481545,
+    "5-9": 0.03961651307397232,
+    "10-14": 0.001787930504208746,
+    "15-19": -0.02452228099846268
+  },
+  "human_within_level_slopes": {
+    "0-4": 0.12165740996813967,
+    "5-9": 0.10379684154533286,
+    "10-14": -0.07518761818662938,
+    "15-19": -0.14794559804391283
+  },
+  "within_level_gradient_model": 0.058873749713944226,
+  "within_level_gradient_human": 0.2696030080120525,
+  "ceiling": {
+    "human_n_full": 1140,
+    "human_n_full_punished": 44,
+    "human_rcc_contrast": -7.035003317850032,
+    "model_rcc_contrast": -0.2463008923964063,
+    "model_slope_at_20_human_weighted": -0.04894251053384025,
+    "human_slope_at_20": -0.6972382218283857,
+    "mean_punishment_on_full_contributors": 6.9772727272727275
+  },
+  "human_targeting_gradient": 0.30123532671395425,
+  "model_targeting_gradient": 0.06604587904498717,
+  "gradient_boot_ci": [
+    0.06395205161531681,
+    0.06833975679417965
+  ],
+  "gradient_boot_sd": 0.001140732120415147,
+  "gradient_seed_sd": 0.05926381695436095,
+  "share_of_human_gradient": 0.21925011174968442,
+  "model_mean_slope": 0.03759064071372505,
+  "rce_noise_ceiling": 0.086,
+  "weighted_abs_gap_to_human": 0.07039258387820826,
+  "copula_max_abs_z": 0.8853265194605193,
+  "wall_seconds": 27.835418462753296
+}
