@@ -221,6 +221,13 @@ class ShapeAccumulator:
             acc_sum.view(-1).index_add_(0, cell[mask], punishment[mask])
             acc_n.view(-1).index_add_(0, cell[mask], th.ones_like(punishment[mask]))
 
+    def member_mean_punishment(self):
+        """Mean realised punishment per member, over the RL group's cells."""
+        total = self.n.sum(dim=1)
+        return th.where(
+            total > 0, self.sum.sum(dim=1) / total.clamp(min=1), th.zeros_like(total)
+        )
+
     def rows(self, sampling, update_step, per_member):
         """Long-format rows; `member` is -1 for the pooled read."""
         out = []
@@ -358,7 +365,17 @@ class PopulationRollout:
         return th.cat(actions, dim=0)
 
     def run(self, members, update_step, sampling, collect_shape=False):
-        """Returns (metric rows, per-episode return, shape accumulator)."""
+        """Returns (metric rows, per-episode return, shape accumulator).
+
+        The accumulator is built on EVERY rollout, not only the ones whose
+        rows are written out: two `index_add_`s per round is nothing, and it
+        is what lets the run report how many population members are still off
+        the zero-punishment plateau at every generation. That number is the
+        arm's own failure detector -- a population where nobody punishes has
+        nothing to rank, so the update degenerates into a random walk, and a
+        pilot cannot tell you when in a 4000-generation run that happens.
+        `collect_shape` still decides whether the per-bin rows are emitted.
+        """
         env = self.env
         n_members = len(members)
         assert env.batch_size % n_members == 0, (
@@ -369,7 +386,7 @@ class PopulationRollout:
         member_of_episode = th.div(
             th.arange(env.batch_size, device=self.device), chunk, rounding_mode="floor"
         )
-        shape = ShapeAccumulator(n_members, self.device) if collect_shape else None
+        shape = ShapeAccumulator(n_members, self.device)
 
         env.reset()
         state = env.served_state()
@@ -384,8 +401,7 @@ class PopulationRollout:
             recorded = env.punish(th.where(rl_mask, action, opp_action))
 
             metrics = round_metrics(env, recorded, env.reward, self.rl_group_id)
-            if shape is not None:
-                shape.add(env, self.rl_group_id, member_of_episode)
+            shape.add(env, self.rl_group_id, member_of_episode)
 
             _, reward, done = env.step()
             state = env.served_state()
@@ -600,6 +616,19 @@ def train_manager_es(config, labels=None, data_dir=None):
             ),
             "wall_clock_s": wall,
         }
+        # The plateau detector, every generation. Once the argmax over the 31
+        # ordinal levels saturates at 0, a perturbation of this sigma no
+        # longer moves any member off it, every fitness is the same policy
+        # scored on different episodes, and the ranking is noise. Measured at
+        # two checkpoints before launch (noise_plateau.csv,
+        # noise_plateau2.csv); logged here so the generation it happens at is
+        # in the run's own record rather than inferred.
+        member_punishment = shape.member_mean_punishment()
+        gen_row["members_punishing_nothing"] = int((member_punishment == 0).sum())
+        gen_row["member_punishment_sd"] = float(member_punishment.std())
+        gen_row["signal_to_noise"] = (
+            float(fitness.std() / within_se) if float(within_se) > 0 else float("nan")
+        )
 
         if collect:
             with th.no_grad():
@@ -636,6 +665,8 @@ def train_manager_es(config, labels=None, data_dir=None):
                 f" eval reward {eval_reward:.3f} |"
                 f" punishment behaviour {gen_row['behaviour_punishment']:.3f}"
                 f" vs eval {eval_punishment:.3f} |"
+                f" dead members {gen_row['members_punishing_nothing']}/{n_members} |"
+                f" s/n {gen_row['signal_to_noise']:.2f} |"
                 f" {wall:.1f}s"
             )
             if wandb_enabled:
@@ -647,7 +678,17 @@ def train_manager_es(config, labels=None, data_dir=None):
     model_file = os.path.join(model_dir, f"{config['job_id']}_manager.pt")
     print(f"Saving manager to {model_file}")
     base.save(model_file)
-    base.load(model_file, device=device)
+    # Reload check, as the DQN path does it. `ArtificalManager.load` IGNORES
+    # the device it is handed -- `save` moves the model to the CPU and `load`
+    # assigns it straight through, so the returned manager holds CPU weights
+    # with a cuda `self.device` and dies on its first forward. Fixed at the
+    # call site with an explicit `.to`, not in the manager, because the other
+    # arms of this comparison share that file.
+    reloaded = ArtificalManager.load(model_file, device=device)
+    reloaded.policy_model = reloaded.policy_model.to(device)
+    assert th.equal(
+        flat_params(reloaded.policy_model), flat_params(base.policy_model.to(device))
+    ), "the saved manager does not reload to the parameters it was saved with"
 
     job_id = config["job_id"]
     metrics_path = os.path.join(metrics_dir, f"{job_id}.parquet")

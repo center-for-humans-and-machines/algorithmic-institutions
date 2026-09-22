@@ -115,31 +115,60 @@ def write(cfg, ref, banner):
     print(path)
 
 
+#: Every number here is read off a measurement; the decision record is in
+#: notes/autoresearch_log/rl-manager-evolution-strategies.md.
+#:
+#: population_size 40 -- 1000/40 = 25 episodes per member, and the batch
+#:   partition is exact. Between-member fitness spread over within-member
+#:   standard error is 2.4 at the initialisation, comfortably above 1.
+#:
+#: sigma 0.05 -- NOT the paper's 0.02, and the reason is measured rather than
+#:   preferred. This policy reads a discrete argmax over 31 ordinal actions.
+#:   At the policy the run actually reaches after a few generations (mean
+#:   punishment driven to exactly 0), sigma 0.02 leaves all 40 members
+#:   implementing the identical zero policy -- signal to noise 0.86, below 1,
+#:   nothing to rank. At 0.05, 18 of 40 members are off the zero plateau and
+#:   the ratio is 2.0. At 0.1 the perturbation itself destroys the policy
+#:   (population mean fitness 530 against 1423). See noise_plateau.csv.
+#:
+#: lr 0.001 -- NOT the paper's 0.01, for a reason that is arithmetic. Adam
+#:   normalises per coordinate, so a step is |dtheta| ~ lr * sqrt(78532) = 2.8
+#:   at lr 0.01, against |theta| ~ 18 at the initialisation: a 15% relative
+#:   change per generation, driven by a rank vector that is at best half
+#:   signal. Over 4000 generations the random-walk component alone inflates
+#:   |theta| about tenfold, which shrinks sigma RELATIVE to the weights and
+#:   re-creates the degenerate population that sigma was raised to avoid. The
+#:   40-generation pilot at lr 0.01 collapsed to zero punishment by generation
+#:   7 and spent the remaining 33 generations random-walking with |theta|
+#:   climbing 0.21 per generation. At lr 0.001 the same first move takes ~70
+#:   generations and leaves the rest of the budget for the question this arm
+#:   exists to ask.
+#:
+#: l2 0.005 is the paper's and is kept, with the caveat recorded in the log
+#:   that at this gradient scale it is negligible; lr is what bounds the walk.
+ES_ARGS = {
+    "population_size": 40,
+    "sigma": 0.05,
+    "lr": 0.001,
+    "l2_coeff": 0.005,
+    "mirrored": True,
+    "fitness_shaping": "centered_rank",
+}
+
+
 def main():
     ref = load_reference()
-    # Population and noise scale: see the decision record in
-    # notes/autoresearch_log/rl-manager-evolution-strategies.md. 40 members
-    # over a 1000-episode batch is 25 episodes each; sigma, learning rate and
-    # L2 are the paper's own defaults.
-    es_args = {
-        "population_size": 40,
-        "sigma": 0.02,
-        "lr": 0.01,
-        "l2_coeff": 0.005,
-        "mirrored": True,
-        "fitness_shaping": "centered_rank",
-    }
     for seed in SEEDS:
         write(
-            build(ref, f"rl_es_s{seed}", seed, 4000, 20, es_args),
+            build(ref, f"rl_es_s{seed}", seed, 4000, 20, ES_ARGS),
             ref,
             BLOCKED_BANNER,
         )
-    write(
-        build(ref, "rl_es_pilot", 42, 40, 10, es_args),
-        ref,
-        PILOT_BANNER,
-    )
+    # The cost/guard pilot, and the shakeout that checks the two settings
+    # above actually hold the population off the zero plateau for longer than
+    # the first pilot managed.
+    write(build(ref, "rl_es_pilot", 42, 40, 10, ES_ARGS), ref, PILOT_BANNER)
+    write(build(ref, "rl_es_shakeout", 42, 200, 20, ES_ARGS), ref, PILOT_BANNER)
 
 
 if __name__ == "__main__":

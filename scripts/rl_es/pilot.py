@@ -42,6 +42,7 @@ import json
 import os
 import random
 import sys
+import tempfile
 import time
 
 import numpy as np
@@ -130,6 +131,23 @@ def build_world_dqn(config, device, env_overrides=None):
         **config["manager_args"],
     )
     return env, opponent, manager, rl_group_id
+
+
+def load_theta(base, path, device):
+    """Overwrite the untrained parameters with a saved manager's.
+
+    The interesting sigma is not the one at the initialisation but the one at
+    the policy the run actually reaches. Evolution strategies here reads a
+    DISCRETE argmax over 31 ordinal actions, so once the Q-gap between action
+    0 and action 1 grows past what a perturbation can bridge, the whole
+    population implements the same policy and the ranking is pure episode
+    noise. That failure cannot be seen from the initialisation; it can be seen
+    from a checkpoint.
+    """
+    saved = ArtificalManager.load(path, device=device)
+    theta = flat_params(saved.policy_model.to(device))
+    set_flat_params_(base.policy_model, theta)
+    return theta.clone()
 
 
 # -- guards ----------------------------------------------------------
@@ -281,10 +299,91 @@ def _sync(device):
         th.cuda.synchronize()
 
 
+def measure_budget(config, device, n_generations):
+    """Count the environment episodes a real training call actually consumes.
+
+    Counted by instrumenting `ArtificialHumanEnv.step` and dividing by
+    `n_rounds`, NOT by counting `reset`: the env's constructor calls `reset`
+    once without playing an episode, so a reset count overstates the budget by
+    one rollout per run.
+
+    The point of the measurement for THIS arm is the claim that a generation
+    costs `batch_size` behaviour episodes whatever the population size --
+    because the population is scored inside one rollout rather than one
+    rollout each. If that is wrong, the arm would have to trade generations
+    against population size to hit the same budget, and the comparison with
+    the other three arms would be unfair in a way nobody would see.
+    """
+    import aimanager.es_manager as es_manager
+
+    counts = {"behaviour": 0, "evaluation": 0, "current": None}
+    original_step = ArtificialHumanEnv.step
+    original_run = es_manager.PopulationRollout.run
+
+    def counted_step(self):
+        counts[counts["current"]] += 1
+        return original_step(self)
+
+    def tagged_run(self, members, update_step, sampling, collect_shape=False):
+        counts["current"] = (
+            "evaluation" if sampling == es_manager.SAMPLING_EVAL else "behaviour"
+        )
+        try:
+            return original_run(self, members, update_step, sampling, collect_shape)
+        finally:
+            counts["current"] = None
+
+    ArtificialHumanEnv.step = counted_step
+    es_manager.PopulationRollout.run = tagged_run
+    try:
+        short = dict(config)
+        short["n_generations"] = n_generations
+        short["eval_period"] = max(1, n_generations // 2)
+        short["job_id"] = "rl_es_budget_probe"
+        with tempfile.TemporaryDirectory() as tmp:
+            es_manager.train_manager_es(short, data_dir=tmp)
+    finally:
+        ArtificialHumanEnv.step = original_step
+        es_manager.PopulationRollout.run = original_run
+
+    batch = config["env_args"]["batch_size"]
+    rounds = config["env_args"]["n_rounds"]
+    population = config["es_args"]["population_size"]
+    n_evals = -(-n_generations // short["eval_period"])
+    behaviour = counts["behaviour"] // rounds * batch
+    evaluation = counts["evaluation"] // rounds * batch
+    full_evals = -(-config["n_generations"] // config["eval_period"])
+    return {
+        "generations_run": n_generations,
+        "population_size": population,
+        "step_calls_behaviour": counts["behaviour"],
+        "step_calls_evaluation": counts["evaluation"],
+        "behaviour_rollouts": counts["behaviour"] // rounds,
+        "evaluation_rollouts": counts["evaluation"] // rounds,
+        "behaviour_episodes": behaviour,
+        "evaluation_episodes": evaluation,
+        "behaviour_episodes_per_generation": behaviour // n_generations,
+        # The claim under test: one rollout per generation, not one per member.
+        "rollouts_per_generation": counts["behaviour"] / rounds / n_generations,
+        "independent_of_population_size": (
+            counts["behaviour"] // rounds == n_generations
+        ),
+        "evaluation_rollouts_expected": n_evals,
+        "evaluation_rollouts_correct": counts["evaluation"] // rounds == n_evals,
+        "projected_behaviour_episodes_full_run": (
+            behaviour // n_generations * config["n_generations"]
+        ),
+        "projected_evaluation_episodes_full_run": full_evals * batch,
+        "projected_total_episodes_full_run": (
+            behaviour // n_generations * config["n_generations"] + full_evals * batch
+        ),
+    }
+
+
 # -- noise -----------------------------------------------------------
 
 
-def measure_noise(config, device, seed, n_members, sigmas, repeats):
+def measure_noise(config, device, seed, n_members, sigmas, repeats, theta_from=None):
     """Between-member fitness spread against within-member standard error.
 
     The ratio is what decides whether the ranking carries signal. A member's
@@ -296,7 +395,11 @@ def measure_noise(config, device, seed, n_members, sigmas, repeats):
     rows = []
     seed_all(seed)
     env, opponent, base, rl_group_id = build_world(config, device)
-    theta = flat_params(base.policy_model).clone()
+    theta = (
+        load_theta(base, theta_from, device)
+        if theta_from
+        else flat_params(base.policy_model).clone()
+    )
     members = build_members(
         base.policy_model, member_kwargs_for(env, base), n_members, device
     )
@@ -334,6 +437,11 @@ def measure_noise(config, device, seed, n_members, sigmas, repeats):
                     "identical_member_policies": bool(
                         np.allclose(member_punishment, member_punishment[0])
                     ),
+                    # The plateau detector. A population where nobody punishes
+                    # has nothing to rank, so the update is a random walk.
+                    "members_punishing_nothing": int(
+                        np.sum(np.asarray(member_punishment) == 0.0)
+                    ),
                     "rank_spearman_vs_punishment": _spearman(
                         centered_ranks(per_member.mean(dim=1)).cpu().numpy(),
                         np.asarray(member_punishment),
@@ -358,7 +466,7 @@ def _spearman(a, b):
 # -- shape -----------------------------------------------------------
 
 
-def measure_shape(config, device, seed, n_members, sigma):
+def measure_shape(config, device, seed, n_members, sigma, theta_from=None):
     """Generation 0: what policy shape does each member already implement?
 
     The DQN arm's finished seeds disagree about the SIGN of the
@@ -369,7 +477,11 @@ def measure_shape(config, device, seed, n_members, sigma):
     """
     seed_all(seed)
     env, opponent, base, rl_group_id = build_world(config, device)
-    theta = flat_params(base.policy_model).clone()
+    theta = (
+        load_theta(base, theta_from, device)
+        if theta_from
+        else flat_params(base.policy_model).clone()
+    )
     members = build_members(
         base.policy_model, member_kwargs_for(env, base), n_members, device
     )
@@ -385,6 +497,8 @@ def measure_shape(config, device, seed, n_members, sigma):
 
     # The mean parameter vector, deterministic, over the whole batch -- this
     # arm's evaluation rollout.
+    with th.no_grad():
+        set_flat_params_(base.policy_model, theta)
     seed_all(seed + 1)
     _, _, mean_shape = rollout.run([base], 0, "greedy", collect_shape=True)
     rows += [_label(r) for r in mean_shape.rows("greedy", 0, per_member=False)]
@@ -439,10 +553,20 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--guard-batch-size", type=int, default=100)
     ap.add_argument("--cost-generations", type=int, default=3)
+    ap.add_argument("--budget-generations", type=int, default=4)
     ap.add_argument("--population-sizes", default="10,20,40,100")
     ap.add_argument("--sigmas", default="0.005,0.01,0.02,0.05")
     ap.add_argument("--noise-population", type=int, default=40)
     ap.add_argument("--noise-repeats", type=int, default=2)
+    ap.add_argument(
+        "--theta-from",
+        default=None,
+        help="a saved <job>_manager.pt whose parameters replace the "
+        "initialisation for the noise and shape measurements",
+    )
+    # Names the output files, so a second measurement at a checkpoint sits
+    # beside the initialisation one instead of overwriting it.
+    ap.add_argument("--suffix", default="_generation0")
     args = ap.parse_args()
 
     with open(args.config) as f:
@@ -450,7 +574,7 @@ def main():
     device = th.device(config["device"] if th.cuda.is_available() else "cpu")
     os.makedirs(args.out, exist_ok=True)
     modes = (
-        {"guards", "cost", "noise", "shape"}
+        {"guards", "budget", "cost", "noise", "shape"}
         if args.mode == "all"
         else set(args.mode.split(","))
     )
@@ -472,6 +596,15 @@ def main():
         print(json.dumps(guards, indent=2))
         print(f"wrote {path}")
 
+    if "budget" in modes:
+        seed_all(args.seed)
+        budget = measure_budget(config, device, args.budget_generations)
+        path = os.path.join(args.out, "budget.json")
+        with open(path, "w") as f:
+            json.dump(budget, f, indent=2)
+        print(json.dumps(budget, indent=2))
+        print(f"wrote {path}")
+
     if "cost" in modes:
         rows = measure_cost(
             config,
@@ -490,6 +623,7 @@ def main():
         print(f"wrote {path}")
 
     if "noise" in modes:
+        suffix = "" if args.suffix == "_generation0" else args.suffix
         rows = measure_noise(
             config,
             device,
@@ -497,8 +631,9 @@ def main():
             args.noise_population,
             [float(s) for s in args.sigmas.split(",")],
             args.noise_repeats,
+            theta_from=args.theta_from,
         )
-        path = os.path.join(args.out, "noise.csv")
+        path = os.path.join(args.out, f"noise{suffix}.csv")
         pd.DataFrame(rows).to_csv(path, index=False)
         print(pd.DataFrame(rows).to_string(index=False))
         print(f"wrote {path}")
@@ -506,14 +641,19 @@ def main():
     if "shape" in modes:
         sigma = float(config["es_args"]["sigma"])
         rows = measure_shape(
-            config, device, args.seed, config["es_args"]["population_size"], sigma
+            config,
+            device,
+            args.seed,
+            config["es_args"]["population_size"],
+            sigma,
+            theta_from=args.theta_from,
         )
         pd.DataFrame(rows).to_csv(
-            os.path.join(args.out, "shape_generation0_rows.csv"), index=False
+            os.path.join(args.out, f"shape{args.suffix}_rows.csv"), index=False
         )
         for subset in ("all", "valid"):
             table = shape_table(rows, subset)
-            table.to_csv(os.path.join(args.out, f"shape_generation0_{subset}.csv"))
+            table.to_csv(os.path.join(args.out, f"shape{args.suffix}_{subset}.csv"))
             slopes = sign_of_contingency(table)
             members = {k: v for k, v in slopes.items() if k.startswith("member")}
             summary = {
@@ -535,10 +675,10 @@ def main():
                 "slope_max": float(np.nanmax(list(members.values()))),
             }
             with open(
-                os.path.join(args.out, f"shape_generation0_{subset}.json"), "w"
+                os.path.join(args.out, f"shape{args.suffix}_{subset}.json"), "w"
             ) as f:
                 json.dump(summary, f, indent=2)
-            print(f"\n--- generation 0 policy shape ({subset}) ---")
+            print(f"\n--- policy shape{args.suffix} ({subset}) ---")
             print(table.to_string())
             print(json.dumps(summary, indent=2))
 
