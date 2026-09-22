@@ -6,9 +6,20 @@ from aimanager.generic.data import MISSING_CONTRIBUTION
 #: What the manager is rewarded for.
 #:   common_pool -- the group's common pool, 1.6 * sum(c) - sum(p). What the
 #:                  real manager was paid on (reports/basics.md).
+#:   common_pool_per_capita -- that same pool divided by the number of
+#:                  players who gave an input in the group, i.e. the share a
+#:                  single member is actually handed. It goes through
+#:                  `share_pool_per_group`, the one divisor in this file.
 #:   sum / avg   -- the sum / mean of the group's contributor payoffs. Kept
 #:                  for comparison with the runs produced under them.
-REWARD_MODES = ("avg", "sum", "common_pool")
+#:
+#: NAMING TRAP. `common_good` already carries two different meanings in this
+#: project: the env's `common_good` *state field* is the per-capita share,
+#: while the `common_good` *column* of experiments/2group_8agent_50ep.csv is
+#: the undivided pool. The per-capita mode therefore carries no `common_good`
+#: in its name -- it says per-capita on its face, so that the word is not
+#: handed a third sense.
+REWARD_MODES = ("avg", "sum", "common_pool", "common_pool_per_capita")
 
 
 class ArtificialHumanEnv:
@@ -312,6 +323,27 @@ class ArtificialHumanEnv:
             shaping: the reward for acting at round s is round s's pool, so
             punishment costs in the round it is given and pays back later
             through raised contributions.
+          * `common_pool_per_capita` -- that same pool divided by the
+            number of players who gave an input, through the very
+            `share_pool_per_group` the `common_good` state field is built
+            from. It is the share one member of the group receives.
+            Headcount-neutral to first order: a member who contributes at
+            the group average adds about as much to the numerator as to the
+            divisor, so the manager is not paid merely for holding people --
+            which is exactly what `common_pool` does pay for, a bigger group
+            being a bigger pool.
+
+            The divisor is the *valid* headcount (`count_valid_per_group`),
+            not the group's membership, and the two differ whenever a member
+            times out. That is the game's own rule: `payoff = 20 - c - p +
+            pool/n_valid` reproduces the human payoff column exactly (max
+            residual 7.1e-15, n = 19,166). A timed-out member contributed 0,
+            was punished 0 and took no share, so they move neither the
+            numerator nor the divisor and the reward simply does not see
+            them. Dividing by the membership instead would invent a
+            headcount penalty the game never charged and would break the
+            identity with the `common_good` state field that the launch
+            guard cross-checks through.
           * `sum` / `avg` -- the sum / mean of the group's contributor
             payoffs. Kept because earlier runs were produced under them.
             Worked through, `sum` is 20 * n + 0.6 * sum(c) - 2 * sum(p)
@@ -331,6 +363,9 @@ class ArtificialHumanEnv:
         common_good_per_group = self.share_pool_per_group(
             common_pool, contribution_valid
         )
+        if self.reward_mode == "common_pool_per_capita":
+            return common_good_per_group
+
         common_good = common_good_per_group.gather(1, self.agent_groups)
         _, group_payoff, group_payoff_sum = self.compute_payoff_per_group(
             contribution, punishment, contribution_valid, common_good
