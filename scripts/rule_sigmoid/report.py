@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import glob
 import os
 
 import joblib
@@ -334,6 +335,52 @@ def fig_landscape(fit_dir, out, n=60):
     plt.close(fig)
 
 
+def load_rounds(run_dir, seeds=None):
+    """Per-design-point, per-round seat totals, pooled over episodes."""
+    parts = sorted(glob.glob(os.path.join(run_dir, "rounds_*.parquet")))
+    if not parts:
+        return None
+    df = pd.concat([pd.read_parquet(p) for p in parts], ignore_index=True)
+    if seeds is not None:
+        df = df[df["seed"].isin(list(seeds))]
+    tot = df.groupby(["name", "round_number"], as_index=False)[
+        ["n_episodes", "members", "n_valid", "sum_c", "sum_p"]
+    ].sum()
+    tot["members_per_round"] = tot["members"] / tot["n_episodes"]
+    tot["p_per_member"] = tot["sum_p"] / tot["members"]
+    tot["c_per_valid"] = tot["sum_c"] / tot["n_valid"]
+    tot["pool"] = (1.6 * tot["sum_c"] - tot["sum_p"]) / tot["n_episodes"]
+    return tot
+
+
+def fig_trajectory(rounds, out, names=SHAPE_ROWS):
+    """When each rule spends, and what its group does about it.
+
+    The horizon exponents redistribute a rule's punishment across the episode
+    rather than changing how much of it there is, so this is the only view in
+    which two rules at the same realised spend look different.
+    """
+    panels = [
+        ("p_per_member", "punishment per member"),
+        ("c_per_valid", "contribution per valid member"),
+        ("members_per_round", "members held (of 8)"),
+        ("pool", "common pool"),
+    ]
+    fig, axes = plt.subplots(1, len(panels), figsize=(5 * len(panels), 4))
+    for ax, (col, label) in zip(axes, panels):
+        for name in names:
+            g = rounds[rounds["name"] == name]
+            if len(g):
+                ax.plot(g["round_number"], g[col], marker=".", label=name)
+        ax.set_xlabel("round")
+        ax.set_ylabel(label)
+    axes[0].legend(fontsize=7)
+    fig.suptitle("When each rule spends, and what its group does about it")
+    fig.tight_layout()
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
 def fig_policy_shape(shape, out):
     fig, ax = plt.subplots(figsize=(7.5, 5))
     for name in shape.columns:
@@ -423,6 +470,12 @@ def run(args):
     fig_profiles(args.fit_dir, os.path.join(args.out, "surrogate_profiles.jpg"))
     fig_landscape(args.fit_dir, os.path.join(args.out, "surrogate_landscape.jpg"))
     fig_policy_shape(shape, os.path.join(args.out, "policy_shape.jpg"))
+    rounds = load_rounds(args.valid_run, seeds=holdout)
+    if rounds is not None:
+        rounds[rounds["name"].isin(SHAPE_ROWS)].to_csv(
+            os.path.join(args.out, "trajectories.csv"), index=False
+        )
+        fig_trajectory(rounds, os.path.join(args.out, "trajectories.jpg"))
     print(vt.to_string(index=False))
     print(stats.to_string(index=False))
 
