@@ -9,8 +9,15 @@ maximum residual of 2.8e-14 over all 4,512 human group-rounds.
 
 These tests pin, in plain torch (no PyG, so they run locally):
 
-  * `reward_mode: common_pool` -- the new mode, equal to the group's pool on
-    hand-built rounds with a timed-out player, an empty group and a reshuffle;
+  * `reward_mode: common_pool` -- equal to the group's pool on hand-built
+    rounds with a timed-out player, an empty group and a reshuffle;
+  * `reward_mode: common_pool_per_capita` -- that pool divided by the
+    players who gave an input, which is the share the game hands one member.
+    The divisor is the *valid* headcount, not the membership, so the tests
+    pin both the plain case (where they coincide) and the timed-out case
+    (where they do not), and they pin the ratio to `common_pool` on the same
+    round: it must be exactly that headcount, which is what separates a real
+    division from a renamed constant;
   * the reward's *round*: the reward for acting at round s is round s's
     outcome, not round s+1's. It is computed in `punish()`, where the action
     resolves, so a later reordering of `step()` cannot shift it silently;
@@ -286,6 +293,113 @@ def test_all_players_timed_out_pays_the_endowment():
     env_pool = _env(reward_mode="common_pool", valid=[False] * 8)
     env_pool.punish(_punish(0))
     assert _reward(env_pool, 0) == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# the per-capita mode divides that pool the way the game divides it
+# --------------------------------------------------------------------------- #
+def test_per_capita_reward_is_the_pool_over_the_valid_headcount():
+    """`reports/basics.md`: "the common pool is splitted equally between the
+    contributors". With all four members valid the divisor is 4."""
+    env = _env(reward_mode="common_pool_per_capita")
+    env.punish(_punish(0))
+    assert _reward(env, 0) == pytest.approx(_pool(0, range(4)) / 4)
+    assert _reward(env, 1) == pytest.approx(_pool(0, range(4, 8)) / 4)
+    # emphatically not the undivided pool
+    assert _reward(env, 0) != pytest.approx(_pool(0, range(4)))
+
+
+def test_per_capita_reward_divides_by_the_valid_players_not_the_members():
+    """The divisor is `count_valid_per_group`, and it parts company with the
+    group's membership the moment somebody times out. Group 0 still holds
+    four members but only three of them gave an input, so the share is over
+    3 -- the game's own rule, `payoff = 20 - c - p + pool/n_valid`."""
+    env = _env(reward_mode="common_pool_per_capita", valid=ONE_TIMEOUT)
+    env.punish(_punish(0))
+
+    pool = _pool(0, range(4), valid=ONE_TIMEOUT)
+    assert _reward(env, 0) == pytest.approx(pool / 3)
+    # dividing by the four members instead would be a different number
+    assert _reward(env, 0) != pytest.approx(pool / 4)
+    # the untouched group still divides by its four valid players
+    assert _reward(env, 1) == pytest.approx(_pool(0, range(4, 8)) / 4)
+
+
+def test_per_capita_reward_is_the_common_good_state_field():
+    """The reward is produced by the same `share_pool_per_group` that fills
+    the `common_good` state field, so the two must agree on the nose. This is
+    the cross-path check the launch guard makes at scale, pinned here on a
+    hand-built round.
+
+    Note which `common_good` this is: the env's state field, the per-capita
+    share. The column of the same name in the human CSV is the *undivided*
+    pool, which is why the mode is not named after it.
+    """
+    env = _env(reward_mode="common_pool_per_capita", valid=ONE_TIMEOUT)
+    env.punish(_punish(0))
+    for group, members in ((0, range(4)), (1, range(4, 8))):
+        agent = next(a for a in members)
+        assert _reward(env, group) == pytest.approx(
+            env.state["common_good"][0, agent, 0].item()
+        )
+
+
+def test_per_capita_is_the_pool_divided_not_the_pool_renamed():
+    """Same rounds, both modes: the ratio is exactly the valid headcount and
+    never 1. A mode that merely relabelled `common_pool` would give 1."""
+    env_pool = _env()
+    env_share = _env(reward_mode="common_pool_per_capita")
+    for r in range(4):
+        env_pool.punish(_punish(r))
+        env_share.punish(_punish(r))
+        for group in (0, 1):
+            pool, share = _reward(env_pool, group), _reward(env_share, group)
+            assert share == pytest.approx(pool / 4)
+            assert pool / share == pytest.approx(4.0)
+            assert abs(pool - share) > 1.0
+        env_pool.step()
+        env_share.step()
+
+
+def test_per_capita_reward_of_an_empty_group_is_zero():
+    """No members, no valid players, nothing to share. Same 288 empty human
+    group-rounds as the pool mode's test."""
+    env = _env(reward_mode="common_pool_per_capita", agent_groups=[0] * 8)
+    env.punish(_punish(0))
+    assert _reward(env, 0) == pytest.approx(_pool(0, range(8)) / 8)
+    assert _reward(env, 1) == 0.0
+
+
+def test_per_capita_reward_is_zero_when_everyone_timed_out():
+    """The pool is 0 and there is nobody to divide it between; the env must
+    not divide by zero. Matches the 34 such human group-rounds."""
+    env = _env(reward_mode="common_pool_per_capita", valid=[False] * 8)
+    env.punish(_punish(0))
+    assert _reward(env, 0) == 0.0
+    assert _reward(env, 1) == 0.0
+
+
+def test_per_capita_reward_follows_a_reshuffle_and_divides_by_the_new_size():
+    """The point of the mode, on the one round where it bites. Agent 4 moves
+    into group 0 entering round 4, so group 0's pool grows -- and under
+    `common_pool` that alone would raise the manager's reward. Here the
+    divisor grows with it, from 4 to 5, so gaining a member is close to
+    neutral rather than a payout.
+    """
+    stay = [False] * 8
+    flip = [False] * 4 + [True] + [False] * 3
+    env = _env(reward_mode="common_pool_per_capita", switch=[stay] * 3 + [flip, stay])
+
+    for r in range(4):
+        env.punish(_punish(r))
+        env.step()
+    assert env.state["agent_group"].reshape(-1).tolist() == [0, 0, 0, 0, 0, 1, 1, 1]
+
+    env.punish(_punish(4))
+    assert _reward(env, 0) == pytest.approx(_pool(4, range(5)) / 5)
+    assert _reward(env, 1) == pytest.approx(_pool(4, range(5, 8)) / 3)
+    # dividing by the pre-reshuffle headcount would be a different number
+    assert _reward(env, 0) != pytest.approx(_pool(4, range(5)) / 4)
 
 
 def test_unknown_reward_mode_is_rejected():
