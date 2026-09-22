@@ -113,19 +113,39 @@ def agent_label(agent: int) -> str:
     return f"Player {agent + 1}"
 
 
+def _literal(text: str) -> str:
+    """Escape for a regex, but leave a space as a plain space.
+
+    `re.escape` renders a space as `\\ `. Python's engine accepts that; the
+    grammar backends behind vLLM's structured output are less forgiving, and
+    a space is not special anyway.
+    """
+    return re.escape(text).replace("\\ ", " ")
+
+
 def label_answer_regex(labels: Sequence[str], max_punishment=MAX_PUNISHMENT) -> str:
     """A regex admitting exactly the answer line the prompt asks for.
 
     Built from the labels of the roster PRESENT at this decision point, so an
     answer for a different roster -- the failure a positional reader would
     have filed against the wrong players -- cannot be emitted at all.
+
+    NO UNBOUNDED WHITESPACE. An earlier version wrote the separators as
+    `\\s*`, which is the natural thing and is wrong: whitespace is then always
+    a legal next token, so a model with nothing better to say can emit it
+    forever. Measured on Qwen3-8B, 2026-09-22: asked to punish with no context
+    to go on, it produced `PUNISHMENT:` followed by 128 tab tokens and stopped
+    only at `finish_reason: length`, having answered nothing. The separators
+    are therefore exactly the single spaces the prompt's template shows, which
+    makes the shortest legal continuation an actual answer. vLLM offers
+    `disable_any_whitespace` for the JSON backends for the same reason.
     """
     labels = list(labels)
     if not labels:
         raise ValueError("cannot constrain an answer for an empty roster")
     number = "(?:" + "|".join(str(v) for v in range(max_punishment, -1, -1)) + ")"
-    pairs = [rf"{re.escape(label)}\s*=\s*{number}" for label in labels]
-    return r"PUNISHMENT:\s*" + r",\s*".join(pairs)
+    pairs = [f"{_literal(label)} = {number}" for label in labels]
+    return "PUNISHMENT: " + ", ".join(pairs)
 
 
 @dataclass

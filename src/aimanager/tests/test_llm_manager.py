@@ -275,6 +275,18 @@ def test_label_answer_regex_admits_only_the_stated_roster():
         label_answer_regex([])
 
 
+def test_the_constraint_contains_no_unbounded_whitespace():
+    """Whitespace that is always legal is whitespace a model can emit for
+    ever. Measured on Qwen3-8B: `\\s*` separators produced `PUNISHMENT:`
+    followed by 128 tabs and `finish_reason: length`, answering nothing."""
+    regex = label_answer_regex(["Player 1", "Player 2"], MAX_PUNISHMENT)
+    for runaway in (r"\s*", r"\s+", r"\s{", " *", " +"):
+        assert runaway not in regex, runaway
+    # And a space is a plain space, not re.escape's `\ `.
+    assert "\\ " not in regex
+    assert regex.startswith("PUNISHMENT: Player 1 = ")
+
+
 def test_the_constrained_answer_is_what_the_parser_accepts():
     """The constraint and the guard must agree, or one of them is wrong."""
     labels = ["Player 2", "Player 3", "Player 7"]

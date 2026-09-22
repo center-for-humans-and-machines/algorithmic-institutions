@@ -45,6 +45,14 @@
 #   LLM_EXTRA_ARGS     appended to `vllm serve`    (empty)
 #   LLM_STARTUP_TRIES  health polls, 3 s apart     (600)
 #
+# The defaults below ask for a whole four-GPU node. Raven refuses a job that
+# takes fewer GPUs than its share of the node's memory ("requested only 1 of
+# four gpus but more than 1/4 of memory"), so a smaller job must scale both
+# down with it -- roughly 18 cores and 120 GB per card:
+#
+#   sbatch --gres=gpu:a100:1 --cpus-per-task=18 --mem=120000 \
+#     scripts/llm_manager/serve_vllm.slurm.sh <command...>
+#
 #SBATCH --job-name=llm-manager
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
