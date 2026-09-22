@@ -162,7 +162,53 @@ Specifically not measured, and each of these would have to be added:
 
 The one coverage-adjacent quantity I do have is §3's head spread, and it speaks to whether *distinct* policies are being run at all, not to where they take the system.
 
-### 8. Launched
+### 8. THE RUNS FINISHED. First read.
+
+All five COMPLETED, exit 0:0, 6:05 to 7:33 elapsed. Each printed `rollouts 4200, episodes 4200000, episode_rounds 100800000` — the budget claim, now measured on the real runs rather than extrapolated from pilots.
+
+**The inversion reproduces. Four of five seeds are inverted.** Count-weighted over the last five evaluation points (`policy_shape_all.csv`):
+
+| bin | human | clone | s42 | s43 | s44 | s45 | s46 |
+|---|---|---|---|---|---|---|---|
+| {0} | 4.755 | 3.721 | 0.144 | 0.112 | 0.163 | 0.105 | 0.220 |
+| 1-5 | 2.973 | 2.930 | 0.138 | 0.112 | 0.150 | 0.104 | 0.026 |
+| 6-10 | 1.672 | 1.808 | 0.528 | 0.606 | 0.659 | 0.562 | 0.007 |
+| 11-15 | 0.978 | 1.300 | 2.106 | 1.633 | 2.253 | 1.610 | 0.002 |
+| 16-19 | 0.692 | 1.066 | 2.653 | 1.813 | 2.680 | 1.815 | 0.003 |
+| {20} | 0.267 | 0.327 | 2.788 | 1.886 | 2.803 | 1.888 | 0.002 |
+
+Monotone increasing across all six bins on 21,000-166,000 agent-rounds per bin. s46 has the human sign but punishes essentially nothing (0.22 falling to 0.002) — the same "right sign, near-zero level" outcome as the third epsilon-greedy seed.
+
+**Removing action-level dithering entirely did not fix the shape.** That is the headline and it is a negative result for the hypothesis this comparison was built on.
+
+**The heads disagree about the sign — the number this arm existed to produce.** `final_per_head_slope.csv`, per-head RPA slope (bin {20} minus bin {0}, negative = human sign), mean over the last ten evaluation points:
+
+| seed | heads with human sign | heads inverted | min | max | sign spread |
+|---|---|---|---|---|---|
+| s42 | 5 | 15 | −4.02 | +2.57 | 0.249 |
+| s43 | 9 | 11 | −5.22 | +1.60 | 0.278 |
+| s44 | 2 | 18 | −2.27 | +2.59 | 0.150 |
+| s45 | 5 | 15 | −6.67 | +1.75 | 0.234 |
+| s46 | **20** | **0** | −8.12 | −0.89 | 0.012 |
+
+Within a single run, twenty heads that each held one coherent policy for a whole episode, each trained on its own bootstrap of the same replay, **do not agree on whether to punish free-riders or full contributors.** Four seeds split 2-9 against 11-18; head slopes span 9.4 to 11.6 units. And the consensus follows its majority: the four seeds with mostly-inverted heads have inverted consensus, and the one seed whose heads are unanimous (s46, 20/20 human sign) is the one whose consensus carries the human sign.
+
+**The inversion is late and it replaces a correctly-signed policy.** `final_slope_trajectory.csv`, consensus slope over training:
+
+| step | 0 | 200 | 500 | 980 | 2000 | 3980 |
+|---|---|---|---|---|---|---|
+| s42 | 0.05 | 0.08 | **−12.41** | +2.55 | +2.56 | +2.57 |
+| s44 | 0.03 | 0.08 | **−7.33** | +2.57 | +2.53 | +2.59 |
+| s45 | −0.12 | 0.05 | **−6.15** | +1.70 | +1.71 | +1.73 |
+| s46 | −0.53 | 0.09 | 0.00 | −1.62 | −0.01 | −1.02 |
+
+Three seeds pass through a **strongly human-signed** policy around step 500 — steeper than the human −4.49 — and then flip to inverted by step 980 and stay there for the remaining 3000 steps. Fraction of all 200 evaluation points carrying the human sign: s42 0.040, s43 0.050, s44 0.050, s45 0.050, s46 0.845. This also retrospectively vindicates the caution about pilots: at 200 steps every seed reads ~0.05, i.e. nothing, and the pilot could not have predicted any of this.
+
+**Two secondary measurements I was asked to make rather than assume.** The consensus rule barely matters on the visited states: mean-of-Q and plurality vote agree on 98.0-100.0% of cells, so the choice of mean-of-Q did not drive the result. And the ensemble is alive but narrow at the end — `head_disagree_frac` 0.112-0.133, action spread 2.3-2.7 levels — so the heads agree on the action in ~87% of cells, and the ~13% where they differ is enough to flip the sign of the whole shape.
+
+The behaviour-versus-evaluated ratio (a description of sampling, per §5) is 1.12-1.35 for four seeds and 6.57 for s46, against the epsilon-greedy runs' 1.7-6.6.
+
+### 9. Launched
 
 Five seeds, 42-46, K=20, `per_episode`, `bootstrap_p` 0.5, `reward_mode: common_pool`, 4000 update steps. SLURM 30413435, 30413438, 30413439, 30413441, 30413443. `AI_REMOTE_DIR=~/repros/ai-runs/rl-bootstrapped-dqn`.
 
@@ -180,7 +226,11 @@ Kept separate on purpose. None of this is measured.
 
 5. **Why the collapse matters under the trajectory framing, if it persists.** A constant-punishment head is coherent across the episode but not *contingent* on contribution. If the surviving heads at 4000 steps are still constants, then the ensemble is generating consistent trajectories that nonetheless never realise the contingent policy whose returns the value function has never seen — which would mean the mechanism ran but did not deliver the thing it was chosen for. That would be a result about this implementation of the mechanism (a single linear readout on a fully shared torso), not about deep exploration as such. Unmeasured; §7 lists what would have to be logged to say it.
 
-6. **The rival explanation, restated at the top of the list.** If the artificial humans respond to punishment regardless of desert, the returns of a coherent contingent trajectory equal the returns of an incoherent one, there is nothing for deep exploration to find, and the contingency is arbitrary for reasons unrelated to exploration. Under the reframing this is the strongest rival to anything my arm might show. Nothing above distinguishes it from "coherent trajectories were never generated or never valued". The separate probe settles it; I do not.
+6. **The rival explanation, restated at the top of the list — and the finished runs make it stronger, not weaker.** If the artificial humans respond to punishment regardless of desert, the returns of a coherent contingent trajectory equal the returns of an incoherent one, there is nothing for deep exploration to find, and the contingency is arbitrary for reasons unrelated to exploration. Under the reframing this was already the strongest rival. §8 is what that explanation predicts: twenty heads, each a valid bootstrap estimate of the same value function trained on 4,000,000 episodes, **fail to agree on the sign** — which is what you would see if the return signal does not separate the two policies. It is also what you would see if the signal exists but 4000 steps cannot resolve it, and **nothing I measured distinguishes those.** The separate probe settles it; I do not.
+
+7. **What §8 does and does not license about the comparison's hypothesis.** Measured: removing action-level dithering entirely did not prevent the inversion, 4 of 5 seeds. That is a real negative for "dithering causes the inversion", and it is the strongest thing this arm produced. Not measured, and therefore not claimed: whether coherent contingent *trajectories* were actually generated. §7 still stands — I logged no trajectory-level quantity, and the per-head action spread of 2.3-2.7 levels at the end is consistent both with "coherent alternative policies were run" and with "the ensemble narrowed to near-identical policies that differ only at the margin". A reader who wants the trajectory claim has to measure it.
+
+8. **The transient at step 500 is the most interesting unexplained thing here.** Three seeds pass through a strongly human-signed policy and abandon it. I have no measurement of why. It is before the first target-network sync at step 1000, so the obvious attribution to the sync is wrong. Worth a successor's attention because a policy that the value function briefly preferred and then rejected is a much more specific object than "training failed".
 
 ## Successor
 
