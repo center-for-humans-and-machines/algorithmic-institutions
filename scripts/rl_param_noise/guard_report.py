@@ -4,12 +4,14 @@ Two 200-step training runs, identical but for the exploration mechanism
 (`rl_epsgreedy_guard` and `rl_pnoise_guard`, both seed 42), read from the
 metrics parquets the training loop writes. Two outputs:
 
-  guard_gap.md     THE MECHANISM. Mean punishment in the behaviour rollouts
-                   against mean punishment in the evaluation rollout at the
-                   same update steps, and their ratio. On the finished runs
-                   the behaviour policy punished 1.7 to 6.6 times as hard as
-                   the policy being evaluated; the claim of this arm is that
-                   weight noise shrinks that.
+  guard_gap.md     WHAT WAS SAMPLED. Mean punishment in the behaviour
+                   rollouts against mean punishment in the evaluation rollout
+                   at the same update steps, and their ratio. This is a
+                   DESCRIPTION, not a defect: DQN is off-policy and a
+                   behaviour policy that differs from the evaluated one is
+                   what the algorithm is for. On the finished runs the ratio
+                   was 1.7 to 6.6; reporting it here says what the buffer
+                   contains, not that the buffer is wrong.
 
   guard_shape.csv  THE OUTCOME. Mean punishment per contribution bin, on the
                    evaluation suite's own RPA bins, for each run and each
@@ -51,6 +53,26 @@ from aimanager.evaluation_suite.metrics import (  # noqa: E402
 EVAL_TAG = "greedy"
 
 
+def md(df, fmt="{:.3f}"):
+    """A markdown table without pulling in `tabulate`."""
+
+    def cell(v):
+        if isinstance(v, float):
+            return "" if v != v else fmt.format(v)
+        return str(v)
+
+    names = list(df.index.names)
+    head = [" / ".join(str(n or "") for n in names)] + [str(c) for c in df.columns]
+    rows = [
+        "| " + " | ".join(head) + " |",
+        "|" + "---|" * len(head),
+    ]
+    for idx, row in df.iterrows():
+        key = " / ".join(str(k) for k in idx) if isinstance(idx, tuple) else str(idx)
+        rows.append("| " + " | ".join([key] + [cell(v) for v in row]) + " |")
+    return "\n".join(rows)
+
+
 def wide(paths):
     frames = []
     for p in paths:
@@ -81,9 +103,68 @@ def weighted_profile(df, prefix):
     return out
 
 
+def drag_table(df, job, tag, eps, n_actions=31):
+    """Does the behaviour buffer's SHAPE differ from the evaluated policy's,
+    and in the particular way uniform action noise would make it differ?
+
+    Epsilon-greedy replaces a fraction `eps` of actions with a uniform draw,
+    whose mean is (n_actions - 1) / 2 = 15, *independently of the contribution
+    the action was aimed at*. So within every contribution bin the behaviour
+    mean should sit at
+
+        evaluated + eps * (15 - evaluated)
+
+    A prediction with no free parameters. Regressing the observed per-bin
+    shift on that prediction through the origin gives a slope near 1 if the
+    distortion is exactly the uniform drag.
+
+    Weight noise has no uniform action mean to drag anything toward, so the
+    slope should collapse even where the per-bin shifts themselves are large:
+    a perturbed network still maps contribution to punishment coherently, it
+    just maps it differently. `shift_spread` separates those two cases -- the
+    standard deviation ACROSS episodes of each bin's behaviour mean is small
+    when every episode is flattened the same way and large when every episode
+    carries its own contingency.
+    """
+    uniform_mean = (n_actions - 1) / 2.0
+    ev = df[(df["job_id"] == job) & (df["sampling"] == EVAL_TAG)]
+    bh = df[(df["job_id"] == job) & (df["sampling"] == tag)]
+    if ev.empty or bh.empty:
+        return None
+    e = weighted_profile(ev, "rpa")
+    b = weighted_profile(bh, "rpa")
+    rows = []
+    for label in RPA_LABELS:
+        spread = bh.groupby("update_step")[f"rpa_mean_{label}"].mean().std()
+        rows.append(
+            {
+                "job_id": job,
+                "sampling": tag,
+                "bin": label,
+                "evaluated": e[label],
+                "behaviour": b[label],
+                "observed_shift": b[label] - e[label],
+                "predicted_uniform_drag": eps * (uniform_mean - e[label]),
+                "shift_spread": float(spread),
+                "n": b[f"n[{label}]"],
+            }
+        )
+    t = pd.DataFrame(rows)
+    x, y = t["predicted_uniform_drag"], t["observed_shift"]
+    ok = x.notna() & y.notna()
+    t["drag_slope"] = float((x[ok] * y[ok]).sum() / (x[ok] ** 2).sum())
+    t["mean_abs_shift"] = float(y[ok].abs().mean())
+    ce, cb = e["{0}"] - e["{20}"], b["{0}"] - b["{20}"]
+    t["contrast_evaluated"] = ce
+    t["contrast_behaviour"] = cb
+    t["contrast_flattening"] = (cb - ce) / ce if ce else float("nan")
+    return t
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("parquets", nargs="+")
+    ap.add_argument("--eps", type=float, default=0.1)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
@@ -98,8 +179,10 @@ def main():
         "Mean punishment served by the RL manager to its own group. The",
         "behaviour rows are the rollouts that fill the replay buffer; the",
         "evaluated rows are the fully deterministic rollout at the same",
-        "update steps, every exploration mechanism off. The ratio is the",
-        "quantity the exploration comparison is about.",
+        "update steps, every exploration mechanism off. A ratio away from 1",
+        "describes what the buffer holds; it is not a defect, because DQN is",
+        "off-policy and is meant to evaluate the greedy policy whatever",
+        "collected the data.",
         "",
         "| run | sampling | behaviour | evaluated | ratio | update steps |",
         "|---|---|---|---|---|---|",
@@ -168,8 +251,55 @@ def main():
         "of the three finished learned seeds rose instead. `contrast` is",
         "{0} minus {20}: positive is the human sign.",
         "",
-        shape.to_markdown(floatfmt=".3f"),
+        md(shape),
     ]
+
+    # -- the uniform-drag discriminator -------------------------------
+    drags = [
+        t
+        for job in sorted(df["job_id"].unique())
+        for tag in behaviour_tags
+        if (t := drag_table(df, job, tag, args.eps)) is not None
+    ]
+    if drags:
+        drag = pd.concat(drags, ignore_index=True)
+        drag.to_csv(os.path.join(args.out, "guard_drag.csv"), index=False)
+        summary = (
+            drag.groupby(["job_id", "sampling"])[
+                [
+                    "drag_slope",
+                    "mean_abs_shift",
+                    "contrast_evaluated",
+                    "contrast_behaviour",
+                    "contrast_flattening",
+                ]
+            ]
+            .first()
+            .join(
+                drag.groupby(["job_id", "sampling"])["shift_spread"]
+                .mean()
+                .rename("mean_shift_spread")
+            )
+        )
+        lines += [
+            "",
+            "## Does the buffer's shape differ the way uniform noise would",
+            "",
+            "A description of what was SAMPLED, not of what was learned.",
+            "",
+            "Within each contribution bin, epsilon-greedy should drag the",
+            "behaviour mean toward the uniform mean of 15 by exactly",
+            "`eps * (15 - evaluated)` -- no free parameters. `drag_slope`",
+            "regresses the observed per-bin shift on that prediction through",
+            "the origin. Weight noise has no uniform action mean to drag",
+            "toward, so its slope should collapse even where the shifts",
+            "themselves are large; `mean_shift_spread` is the standard",
+            "deviation across episodes of each bin's behaviour mean, small",
+            "when every episode is flattened the same way and large when each",
+            "episode carries its own contingency.",
+            "",
+            md(summary, "{:.4f}"),
+        ]
 
     # -- this arm's diagnostics ---------------------------------------
     noise_cols = [c for c in df.columns if c.startswith("param_noise_")]

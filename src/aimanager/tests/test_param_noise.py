@@ -292,6 +292,45 @@ def test_scale_grows_below_target_and_shrinks_above():
     assert pn.scale < 0.1 * 1.01
 
 
+def test_dead_zone_climbs_faster_than_the_paper_step():
+    """`mad` reads exactly zero while the perturbation is too small to flip
+    any argmax, so the paper's 1% step is climbing a signal that carries no
+    information. Measured on the 200-step pilot: 200 episodes at 1% never
+    engaged the mechanism."""
+    from aimanager.manager.param_noise import ParameterNoise
+
+    m = _manager(None)
+    same, _ = _q_shifted(0)
+    fast = ParameterNoise(
+        m.policy_model, scale=0.1, target=1.5, adapt_coef=1.01, dead_zone_steps=5
+    )
+    paper = ParameterNoise(
+        m.policy_model, scale=0.1, target=1.5, adapt_coef=1.01, dead_zone_steps=0
+    )
+    for pn in (fast, paper):
+        pn.observe(same, same)  # identical Q -> mad exactly 0
+        assert pn.finish()["param_noise_divergence"] == 0.0
+    assert paper.scale == pytest.approx(0.1 * 1.01)
+    assert fast.scale == pytest.approx(0.1 * 1.01**6)
+
+    # Outside the dead zone both take exactly the paper's step.
+    _, near = _q_shifted(1)
+    fast.scale = 0.1
+    fast.observe(same, near)
+    fast.finish()
+    assert fast.scale == pytest.approx(0.1 * 1.01)
+
+
+def test_scale_is_capped_high_enough_to_leave_the_dead_zone():
+    """Measured on the 200-step pilot: the scale reached 3.02 and was still
+    climbing. A cap of 1.0 would have bound, and a bound cap looks exactly
+    like a working mechanism in the logs."""
+    from aimanager.manager.param_noise import ParameterNoise
+
+    m = _manager(None)
+    assert ParameterNoise(m.policy_model, scale=0.1, target=1.5).max_scale >= 100.0
+
+
 def test_zero_scale_never_adapts_off_zero():
     from aimanager.manager.param_noise import ParameterNoise
 

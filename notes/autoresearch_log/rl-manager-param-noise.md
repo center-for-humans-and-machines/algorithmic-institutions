@@ -14,9 +14,24 @@ The manager trains with epsilon-greedy fixed at 0.1 over 31 ordinal punishment l
 
 Worse for the outcome that actually matters: a uniform draw over 31 levels is **independent of the contribution it is aimed at**. It writes punishment-contribution pairs into the replay buffer whose contingency is noise. Two of the three finished seeds came out with that contingency *inverted* — punishing the full contributor harder than the free-rider — which is a plausible consequence.
 
-Weight-space noise perturbs the *function* rather than the output. A perturbed policy still maps contribution to punishment in some coherent way, and a whole episode is collected under one such mapping. **Shape is the primary outcome; the behaviour-versus-evaluated gap is the mechanism.**
+Weight-space noise perturbs the *function* rather than the output. A perturbed policy still maps contribution to punishment in some coherent way, and a whole episode is collected under one such mapping. **Shape is the primary outcome; the behaviour-versus-evaluated gap is a description of what was sampled.**
 
-**A competing explanation this arm cannot rule out.** If the artificial humans respond to punishment without regard to whether it was deserved, there is no gradient toward correct targeting and no exploration method will produce one. This arm cannot distinguish that from an exploration failure. If the shape does not move, that is the first thing to test, and it is a different experiment.
+### The off-policy objection, stated and answered
+
+The objection is correct and has to be met head on, not left for a reader to raise.
+
+**DQN is off-policy. A behaviour policy that differs from the one being evaluated is what the algorithm is for.** Q-learning bootstraps toward the max over actions and evaluates the greedy policy whatever collected the data. So the *existence* of a behaviour-versus-evaluated gap is not a defect, and broad, decorrelated action coverage is exploration doing its job. The framing this arm started from — "each run's own policy is poorly evaluated, and that is a candidate explanation for the seed spread" — overstated the case. **The behaviour-versus-evaluated punishment ratio is reported here as a description of what was sampled, never as a fault.**
+
+**What survives is a narrower claim, about states rather than actions.** Off-policy correction buys correctness of the action choice *given a state*. It does not supply states the behaviour policy never visits. Here the state distribution is endogenous to the manager's own behaviour in two ways that are structural, not incidental:
+
+- the contributors are recurrent, so a punishment early in an episode shifts their hidden state for the remaining rounds;
+- group composition changes because members switch in response to punishment, so who the manager is even managing at round 12 depends on what it did at rounds 0 to 11.
+
+The sharpest form of the claim is therefore **trajectory coverage**: a manager that is consistently contingent across all 24 rounds produces trajectories that per-action dithering does not generate cleanly, because dithering's 24 independent perturbations rarely line up into a coherent 24-round policy. Whether those trajectories matter for what is learned is **not measured** — by this arm or, so far, by anything else. It is stated as the hypothesis, not as a finding.
+
+**And the cost, which belongs here in the same breath.** Weight noise held to the same mean action displacement explores *less of the action space* than uniform dithering does. Uniform dithering reaches every one of the 31 levels from every state with probability eps/31; weight noise reaches only the levels some perturbed network prefers, which is a far smaller and structured set. Under the off-policy view that is a straightforward loss. This arm trades action coverage for trajectory coherence. **Reduced action coverage is not presented here as an improvement.** If the arm loses, that trade is the first place to look.
+
+**The rival explanation this arm cannot rule out, and which is now the stronger one.** If the artificial humans respond to punishment regardless of whether it was deserved, then no targeting choice changes the return, the contingency is unidentified by the reward, and it is arbitrary for reasons that have nothing to do with exploration. No exploration method fixes that. A probe of it is running separately. This arm cannot distinguish the two, and a negative result here is evidence for that explanation only in the weak sense of failing to be evidence against it.
 
 ## The variant, and why
 
@@ -49,7 +64,9 @@ Decided **measured, not assumed**. All three candidates are computed every round
 
 `w1` shares `mad`'s ordinal sensitivity but is a distance between *distributions*, and these policies are near-deterministic, so it mostly reports the argmax gap through a softmax. `mad` reports it directly.
 
-**What `mad` still cannot do, stated plainly.** It is sensitive to the *size* of a perturbation but not to its *kind*: a large coherent shift and an inversion can both be large. No scalar adaptation target would separate them. That is why the shape itself is recorded as a first-class metric rather than inferred from the divergence — see below.
+**How the corrected framing sharpened this.** Under the off-policy correction above, the question the target is supposed to answer is *not* "is the perturbed policy's action distribution a given distance from the unperturbed one" — off-policy learning is indifferent to that. It is "does the perturbation produce a coherent alternative *contingency* that gets played out for 24 rounds and valued". A target that assigns a uniform one-level shift and an inverted contingency the same number is therefore not merely imprecise for this experiment; it is measuring a different quantity from the one the arm is about. That is what settled the choice, and the measurement below is what settled the size of the effect.
+
+**What `mad` still cannot do, stated plainly.** It is sensitive to the *size* of a perturbation but not to its *kind*: a large coherent shift and an inversion can both be large. No scalar adaptation target would separate them, so `mad` is a magnitude control, not a shape control. That is why the shape itself is recorded as a first-class metric rather than inferred from the divergence.
 
 ## What the run records
 
@@ -69,7 +86,9 @@ All of this is `plots/data_analysis/evaluation/rl_manager_param_noise/probe.json
 
 ### The episode budget matched
 
-Counted from the config, not asserted: `n_update_steps` behaviour rollouts plus one evaluation rollout every `eval_period`, each of `batch_size` parallel episodes.
+Counted, not asserted. `scripts/rl_param_noise/budget.py` monkeypatches `ArtificialHumanEnv.step` over a real, shortened `train_manager` call and divides by `n_rounds` (`budget.json`). On a 6-step run with eval period 2 it measured **216 step calls / 24 rounds = 9 rollouts**, exactly the 6 behaviour + 3 evaluation the loop should run. Counting `reset` instead gives 10, because the env constructor resets once without playing an episode — an off-by-one rollout per run, which is why steps and not resets are the unit.
+
+Extrapolation to the full config is exact, because the loop runs one behaviour rollout per update step and one evaluation rollout every `eval_period`.
 
 | | reference (`rl_new_clones_s42`) | this arm (`rl_pnoise_s4x`) |
 |---|---|---|
@@ -81,6 +100,8 @@ Counted from the config, not asserted: `n_update_steps` behaviour rollouts plus 
 | **total environment episodes** | **4,200,000** | **4,200,000** |
 
 24 rounds each, so 100,800,000 agent-rounds per run. The arm changes no term in that product: it keeps 4000 update steps, eval period 20 and batch 1000, and each behaviour rollout still runs exactly once per update step. Equal episodes and equal update steps happen to coincide here, which they will not in every arm.
+
+**Compute is not matched, and is not meant to be.** The arm forwards the unperturbed policy as well as the perturbed one every behaviour round, to measure the divergence against, and computes three divergence measures. Measured on the matched guard pair: 5.3 s/update step for epsilon-greedy against 9.1 for parameter noise, so ~5.9 h against ~10.1 h for a full run. Both are inside the 20 h SLURM limit. The contract's budget is episodes.
 
 ### The ordinal divergence question
 
@@ -119,6 +140,65 @@ So the target is the sentinel `eps_matched`: every episode, the exact expected d
 
 **Starting scale 0.05**, the smallest on the sweep whose displacement already reaches the target (0.975 against 0.832).
 
+### The guard pilots
+
+Two 200-step training runs, seed 42, identical but for the exploration mechanism: `rl_epsgreedy_guard` (jobs 30413251) and `rl_pnoise_guard` (30413252, then 30414124 after the adaptation fix below). Evidence in `guard_gap.md`, `guard_shape.csv`, `guard_drag.csv`, `guard_noise.csv`.
+
+**Read them as pilots.** 200 steps is 5% of a run. At this point *both* evaluated policies have collapsed to the constant action 5 in every contribution bin — contrast exactly 0.000 — and both punish far harder than any human manager. The inversion the finished runs showed is a late-training phenomenon and neither pilot has it. **Nothing below is evidence that this arm fixes the inversion, and the lower or higher punishment level in a pilot is not an improvement either way.** What the pilots establish is that the mechanism engages and what it does to the buffer.
+
+#### The behaviour-versus-evaluated ratio
+
+| run | behaviour | evaluated | ratio |
+|---|---|---|---|
+| `rl_epsgreedy_guard` (eps-greedy) | 4.931 | 4.191 | 1.176 |
+| `rl_pnoise_guard` (param noise) | 4.974 | 4.194 | 1.186 |
+
+Matched, to 1%, which is what the epsilon-matched target is for. A ratio away from 1 is a description of what the buffer holds, not a defect.
+
+#### What the buffer's shape looks like
+
+Mean punishment per contribution bin, evaluation-suite RPA bins, over 1.1–1.5 million agent-rounds per bin.
+
+| | {0} | 1-5 | 6-10 | 11-15 | 16-19 | {20} | contrast |
+|---|---|---|---|---|---|---|---|
+| evaluated policy (both runs) | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 | **0.000** |
+| eps-greedy buffer | 6.014 | 6.004 | 6.011 | 5.997 | 6.027 | 6.001 | **0.014** |
+| param-noise buffer | 6.555 | 6.089 | 5.752 | 5.532 | 5.546 | 5.716 | **0.839** |
+| artificial punisher (clone) | 3.722 | 2.658 | 1.720 | 1.094 | 0.844 | 0.322 | 3.400 |
+| human managers | 4.755 | 2.973 | 1.672 | 0.978 | 0.692 | 0.267 | 4.488 |
+
+Row counts, param-noise buffer: 167,001 / 247,804 / 331,710 / 242,879 / 90,534 / 313,865. Clone: 442,067 / 876,416 / 1,209,967 / 890,903 / 279,313 / 947,541. Human: 809 / 1,955 / 2,614 / 1,794 / 510 / 1,232.
+
+**Epsilon-greedy adds a constant; weight noise adds a contingency.** Every eps-greedy bin rises by 1.00 ± 0.02, which is exactly `eps × (15 − 5)`, the uniform drag, and the buffer's contrast stays at 0.014 — the policy had no contingency and the exploration did not give it one. The param-noise buffer's contrast is 0.839, with the human sign, from an evaluated contrast of exactly zero.
+
+That is **what was sampled, not what was learned**, and the human sign of that 0.839 is an accident of this particular seed's perturbations, not a result.
+
+#### The uniform-drag discriminator
+
+| run | drag slope | mean abs per-bin shift | buffer contrast | mean shift spread across episodes |
+|---|---|---|---|---|
+| eps-greedy | 1.0089 | 1.0089 | 0.014 | **0.0515** |
+| param noise | 0.8651 | 0.8651 | 0.839 | **1.5848** |
+
+**The drag slope is uninformative on this pilot and must not be read as if it were.** The prediction `eps × (15 − evaluated)` varies across bins only when the evaluated policy varies across bins, and here it is constant at 5, so the predictor is the constant 1.0 and the regression degenerates to "mean shift ÷ 1". The 1.0089 for eps-greedy does confirm the no-free-parameter prediction on its level; the 0.8651 for param noise says only that its mean shift happened to be 0.865, not that its shift is uniform drag. On a run whose evaluated policy has shape, the slope separates the two; on this one it cannot.
+
+**The informative column is the last one.** `mean_shift_spread` is the standard deviation, *across episodes*, of each bin's behaviour mean: 0.0515 for epsilon-greedy against 1.5848 for weight noise, a factor of 31. Every epsilon-greedy rollout is flattened in the same way, because a batch of 1000 episodes averages its own dithering away. Every weight-noise rollout carries its own contingency. That is the designed property, measured.
+
+#### The adaptation, and a defect the pilot found
+
+The first `rl_pnoise_guard` **failed to explore at all**, and this is the most useful thing the pilot produced. `mad` counts argmax flips, so while the perturbation is too small to flip any argmax it reads *exactly* zero, not small — a dead zone in which Plappert's fixed 1% step is climbing a signal that carries no information about how far it has to go. Measured: the scale walked from 0.05 to 0.331 over 200 episodes, `mad` stayed at 0.000 throughout (while `l2` read 0.00003, so the function *was* being perturbed), and the behaviour buffer was bit-identical in shape to the evaluated policy — ratio 1.004, per-bin shift 0.0000, shift spread 0.0000. Under the old cap of 1.0 the search would have saturated and the logs would have looked like a working mechanism.
+
+Two corrections, both from that measurement:
+
+- inside the dead zone the geometric search runs at `adapt_coef ** 6` instead of `adapt_coef`; outside it, exactly Plappert's step. `dead_zone_steps: 0` restores the paper.
+- `max_scale` from 1.0 to 100. A cap that binds is indistinguishable in the logs from a mechanism that works.
+
+The re-run then behaves as designed. The scale climbs 0.05 → 1.71 through the dead zone over 60 episodes, escapes at episode 70 (`mad` 1.72 against a target of 1.097), and regulates around 2.8–3.0 for the rest of the run. The target sits at 1.0968 throughout, which is `0.1 × E|u − 5|` for the collapsed constant policy — the epsilon-matched target doing its job.
+
+The per-episode divergence is very noisy (0.002 to 6.47 at an essentially constant scale) because on a near-degenerate policy an argmax flip is a threshold event: a perturbation either flips many cells or none. That is a property of the ordinal measure on this policy, not a controller fault, and it is why the scale is the thing to watch rather than any single episode's divergence.
+
+**A scale near 3 is not a local perturbation.** With per-tensor relative scaling it means noise about three times each tensor's own RMS, so the acting network is mostly noise. If that persists once the policy has real structure, the honest reading is that weight noise cannot match epsilon-greedy's displacement on this task *while staying local*, and the logged `param_noise_scale` is where to see it.
+
 ### The invariants
 
 Policy network, target network and opponent all bit-identical before and after a full behaviour episode with the noise active and adapting (`invariants` in probe.json, all `true`; the probe asserts it rather than only reporting it). Structurally, `ParameterNoise.refresh` writes only into a private deep copy, and `test_the_acting_copy_shares_no_storage_with_anything_else` pins the aliasing.
@@ -130,8 +210,28 @@ Kept separate on purpose. None of the following is measured here.
 1. **That the shape result is an exploration failure at all.** If the artificial humans respond to punishment without regard to whether it was deserved, there is no gradient toward correct targeting, the replay buffer's contingency is irrelevant, and no exploration method will help. This arm cannot distinguish that from the exploration story. If the shape does not move, that is the next experiment, and it is a different one.
 2. **That coherent contingency-exploration helps rather than hurts.** The sweep shows weight noise reaching inverted contingencies as readily as human-signed ones. Collecting an episode under an inverted policy is a *better* experiment than collecting one under a policy with no contingency at all, but only if the reward can tell them apart.
 3. **That a shared perturbation across the 1000 parallel episodes is enough.** One rollout is one replay-memory episode, so "once per episode" is once per rollout, and all 1000 parallel episodes share the draw. That gives 4000 distinct policy samples over a run and 1000 environment samples of each, rather than 4,000,000 independently dithered trajectories. Whether that trade is right is not measured.
-4. **That the untrained-network geometry carries over to the trained regime.** The shape table is measured at initialisation.
+4. **That the untrained-network geometry carries over.** It demonstrably does not, in one respect already measured: at initialisation a scale of 0.05 gave 0.975 levels of displacement, and 200 update steps later the same scale gave 0.000 and the adaptation had to climb to ~2.9 to hold 1.1. The sigma sweep is a statement about the *geometry of the two mechanisms*, which is what it is used for; the numbers on its axis do not transfer, and the adaptation exists precisely so that they need not.
 
-## Status
+5. **That state-distribution or trajectory coverage differs between the arms.** Not measured, by anything, anywhere. The shape and spread numbers above are about *actions given states*. Whether weight noise visits different states, or different 24-round trajectories, is the hypothesis and not a finding.
+
+## Status: launched, five seeds
+
+| seed | config | SLURM job | output |
+|---|---|---|---|
+| 42 | `rl_pnoise_s42.yml` | 30414853 | `artifacts/manager/rl_pnoise_s42/metrics/rl_pnoise_s42.parquet` |
+| 43 | `rl_pnoise_s43.yml` | 30414854 | `artifacts/manager/rl_pnoise_s43/…` |
+| 44 | `rl_pnoise_s44.yml` | 30414855 | `artifacts/manager/rl_pnoise_s44/…` |
+| 45 | `rl_pnoise_s45.yml` | 30414856 | `artifacts/manager/rl_pnoise_s45/…` |
+| 46 | `rl_pnoise_s46.yml` | 30414857 | `artifacts/manager/rl_pnoise_s46/…` |
+
+Remote dir `~/repros/ai-runs/rl-param-noise`, isolated from every sibling arm. ~10 h each at the measured 9.1 s/update step. Earlier jobs on this branch: probe 30413190, guard pair 30413251 / 30413252, re-guard after the dead-zone fix.
+
+**No results yet, and none are claimed.** The PR is tagged `[LAUNCHED]`.
 
 ## Successor
+
+1. **Read the shape first, from the parquet, no simulation needed.** `rpa_mean_{bin}` / `rpa_n_{bin}` at `sampling == "greedy"` is the evaluated policy's contingency at every evaluation point of every seed; `rpa_opp_mean_{bin}` is the artificial punisher on the same rollouts. Human reference: 4.755 / 2.973 / 1.672 / 0.978 / 0.692 / 0.267, contrast +4.488. The question is the contrast's **sign and spread across the five seeds**, not its mean.
+2. **Then read `param_noise_scale` over update steps.** If it sits at or near `max_scale` for a long stretch, weight noise could not match epsilon-greedy's displacement and the arm under-explored; that is a finding about the method, not a bug, and it changes how the shape result should be read.
+3. **Then the paired comparison.** Same five seeds in all four arms, so pair by seed rather than comparing means of five.
+4. **Do not stop at the shape.** If no arm moves it, the rival explanation — artificial humans that respond to punishment regardless of desert — is the live one, and the probe of that is the experiment to read next. This arm cannot distinguish the two and does not claim to.
+5. **Unfinished business in this arm.** (a) One perturbation is shared across the 1000 parallel episodes of a rollout; a chunked rollout would give K perturbations per update step at the same episode cost and is the obvious next variant. (b) The per-episode divergence is extremely noisy on a near-degenerate policy; a controller on a percentile rather than the mean would regulate better. (c) Neither state coverage nor trajectory coverage is measured anywhere, and that is the claim the corrected framing leaves standing.

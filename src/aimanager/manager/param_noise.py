@@ -150,7 +150,8 @@ class ParameterNoise:
         adapt=True,
         temperature=1.0,
         min_scale=1e-6,
-        max_scale=1.0,
+        max_scale=100.0,
+        dead_zone_steps=5,
     ):
         assert measure in MEASURES, f"measure must be one of {MEASURES}, got {measure}"
         assert scale >= 0.0, f"scale must be non-negative, got {scale}"
@@ -176,7 +177,28 @@ class ParameterNoise:
         self.adapt = bool(adapt)
         self.temperature = float(temperature)
         self.min_scale = float(min_scale)
+        # Deliberately loose. A cap that binds is indistinguishable, in the
+        # logs, from a mechanism that is working -- which is exactly the
+        # failure the 200-step pilot found at a cap of 1.0. Measured there:
+        # the scale reached 3.02 and was still climbing, holding only 0.365
+        # punishment levels against a target of 1.10, because the policy had
+        # collapsed to a constant action and its argmax barely moves. Letting
+        # the search run means that if weight noise CANNOT match
+        # epsilon-greedy's displacement while staying a local perturbation,
+        # the logged scale says so instead of hiding it.
         self.max_scale = float(max_scale)
+        # The ordinal measure has a dead zone. `mad` counts argmax flips, so
+        # while the perturbation is too small to flip any argmax it reads
+        # EXACTLY zero -- not small, zero -- and the paper's fixed 1% step is
+        # climbing a signal that carries no information about how far it has
+        # to go. Measured on the 200-step pilot: the policy had collapsed to a
+        # constant action, `mad` was 0.000 while `l2` was 0.00003, and the
+        # scale had walked from 0.05 to 0.331 in 200 episodes without the
+        # mechanism ever engaging. Inside the dead zone the search is
+        # therefore geometric at a coarser rate; outside it, it is exactly
+        # Plappert's. `dead_zone_steps=0` restores the paper's behaviour.
+        assert dead_zone_steps >= 0
+        self.dead_zone_steps = int(dead_zone_steps)
 
         # The acting network. A deep copy so that nothing the optimiser owns
         # is aliased: `refresh` writes into these tensors, never into the
@@ -185,6 +207,14 @@ class ParameterNoise:
         self.perturbed = copy.deepcopy(model)
         for p in self.perturbed.parameters():
             p.requires_grad_(False)
+        # A deep-copied GRU loses cuDNN's flat weight buffer, and without this
+        # every forward pass recompacts it and says so. Relayout only; the
+        # parameter objects the perturbation writes into are unchanged.
+        self._rnns = [
+            m for m in self.perturbed.modules() if isinstance(m, th.nn.RNNBase)
+        ]
+        for rnn in self._rnns:
+            rnn.flatten_parameters()
 
         self._acc = {m: [] for m in MEASURES}
         self._targets = []
@@ -210,6 +240,8 @@ class ParameterNoise:
                     dst.add_(th.randn_like(dst) * s)
             for src, dst in zip(self.model.buffers(), self.perturbed.buffers()):
                 dst.copy_(src)
+        for rnn in self._rnns:
+            rnn.flatten_parameters()
         self._acc = {m: [] for m in MEASURES}
         self._targets = []
 
@@ -237,8 +269,9 @@ class ParameterNoise:
             self.target = sum(self._targets) / len(self._targets)
         d = self.last[self.measure]
         if self.adapt and self.scale > 0.0 and d == d and self.target == self.target:
+            step = self.adapt_coef ** (1 + self.dead_zone_steps if d == 0.0 else 1)
             if d < self.target:
-                self.scale = min(self.scale * self.adapt_coef, self.max_scale)
+                self.scale = min(self.scale * step, self.max_scale)
             else:
                 self.scale = max(self.scale / self.adapt_coef, self.min_scale)
         self._acc = {m: [] for m in MEASURES}
