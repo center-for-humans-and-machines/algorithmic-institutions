@@ -188,6 +188,14 @@ Under the stated criterion these are the same kind of thing as #211 and #215, wh
 
 `auto/rl-manager-bootstrapped-dqn` (#213) and `auto/rl-manager-param-noise` (#216) are the two arms still training, and both pushed new commits while `dev` was being built — #213's runs finished ("the inversion reproduces, and the heads disagree on the sign"). `dev` was re-fetched at the end and both were merged again at their then-current tips, so the branch carries their current state rather than a stale snapshot. Anything they push after this merge is not on `dev`. No remote run directory was touched: all testing used `~/repros/ai-runs/devint-a9837`.
 
-## 6. Known lint debt, not introduced here
+## 6. PR #218 arrived after the cut and is deliberately not on `dev`
+
+`auto/rl-manager-reward-targeting` (#218) was opened while this integration was running — it is the third live thing the brief named, the simulation in `~/repros/ai-runs/rl-reward-targeting`. It brings the open count to 75; the table above covers the 74 that existed at the cut.
+
+Assessed but not merged. It is based on `auto/rl-manager-two-worlds` and contains #210, both of which are on `dev`, so it would merge as its own log, two analysis scripts, two configs and its plots. Its verdict — "the reward is a real defect and not the explanation: paying per capita moves targeting -0.25/-0.00/-0.22 when -1.1 is needed, and the managers stay inverted" — is a RESULT of exactly the kind #211 and #215 are in for, and it concludes the arm #210 launched.
+
+**Recommendation: merge it into `dev` next.** It is not merged here because it landed after the branch was assembled and tested, and merging a branch whose run was still going when the brief was written is precisely the kind of unannounced decision the brief asked me not to make. It should be a clean merge and needs one Raven run to confirm; it does modify `src/aimanager/manager/environment.py` and `test_manager_reward.py`, though those edits appear to be #210's, which `dev` already has.
+
+## 7. Known lint debt, not introduced here
 
 `src/aimanager/rl_manager.py` is not `black==25.11.0` clean. Verified pre-existing: the same three hunks fail on `origin/auto/rl-manager-two-worlds` and `origin/auto/rl-manager-annealed-local` in isolation, and none of them is a line written for this integration. It is left alone rather than reformatted, so the diff stays reviewable — but the pre-commit hook runs `black` on `src/`, so the next commit touching that file will reformat it. `flake8 --max-line-length=88 --extend-ignore=E203,W503` is clean on every file edited here.
