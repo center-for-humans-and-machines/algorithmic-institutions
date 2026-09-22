@@ -1,0 +1,44 @@
+# sim-timeout-imputation, the gated frontier stack. Byte-identical to
+# 23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_timeout.yml
+# (PR #194, the parent) apart from output_dir and figure_name: SAME seed,
+# SAME 100 episodes, SAME 24 rounds, SAME artifacts in all four slots.
+# Nothing is retrained on this branch -- the only difference between this run
+# and the parent's is the serving-path fix in environment.served_state and
+# linear_ah, which changes what the contribution and switch models are shown
+# for a player who timed out (the recorded 0 instead of the imputed default
+# of 9). That is the whole experiment, and it is why the before/after here is
+# cleaner than a retrained candidate's: the models are the same files on disk.
+# See notes/autoresearch_log/sim-timeout-imputation.md.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_simtimeout
+figure_name: 2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_simtimeout
+save_per_round: true
+basedir: .

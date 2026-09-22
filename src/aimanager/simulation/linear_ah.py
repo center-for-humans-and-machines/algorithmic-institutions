@@ -134,6 +134,7 @@ class LinearAHAdapter:
     def _reset_history(self):
         self._measure = {m: {} for m in self._MEASURES}  # round -> (A,) float
         self._group = {}  # round -> (A,) int membership
+        self._valid = {}  # round -> (A,) bool contribution validity
 
     def _record(self, state, t):
         """Fold the current env state into the episode history.
@@ -152,10 +153,14 @@ class LinearAHAdapter:
             for m in self._MEASURES:
                 self._measure[m][t - 1] = col(f"prev_{m}").astype(float)
             self._group[t - 1] = col("prev_agent_group").astype(int)
+            if "prev_contribution_valid" in state:
+                self._valid[t - 1] = col("prev_contribution_valid").astype(bool)
         self._group[t] = col("agent_group").astype(int)
         if self.is_switch:
             for m in self._MEASURES:
                 self._measure[m][t] = col(m).astype(float)
+            if "contribution_valid" in state:
+                self._valid[t] = col("contribution_valid").astype(bool)
 
     # ------------------------------------------------------------------ #
     # feature-pool reconstruction (shared)
@@ -164,9 +169,8 @@ class LinearAHAdapter:
         """[A, T] measure/membership arrays -> the [1, A, T] create_torch_data
         tensors -> build_feature_pool's feature dict.
 
-        `cv` is the per-agent contribution-validity mask; the env-driven paths
-        (contribution / switch targets) have no timeouts to represent and pass
-        None, which reads as all-valid."""
+        `cv` is the per-agent contribution-validity mask; None reads as
+        all-valid."""
         A = c.shape[0]
         dv = self.default_values
         rec = np.ones((A, T), dtype=float)  # every agent is present in the sim
@@ -213,7 +217,15 @@ class LinearAHAdapter:
         p = stack(self._measure["punishment"], dv["punishment"], float)
         cg = stack(self._measure["common_good"], dv["common_good"], float)
         ag = stack(self._group, 0, int)
-        return self._pool_from_arrays(c, p, cg, ag, T)
+        # The env now serves the recorded 0 for a timed-out player
+        # (environment.served_state), so `c` already carries it; the mask
+        # itself is carried through so `contribution_valid` is a real feature
+        # here too, as it is on the rounds-driven punisher path. Cells no
+        # round has realised yet default to True, which is what `cv=None`
+        # meant before and is never read (features are anchored at a
+        # realised round).
+        cv = stack(self._valid, True, bool)
+        return self._pool_from_arrays(c, p, cg, ag, T, cv=cv)
 
     def _pool_from_rounds(self, rounds):
         """Rounds-driven path (punishment manager): rebuild the tensors from
