@@ -1,0 +1,51 @@
+# punisher-current-contribution re-baseline, case d: PR #174's stack
+# (23_2g8a_kexo_self_gaussian_mlp_v2_group_copula_contr_gnn_joint_exodus_k_onehot_switch
+# -- gaussian_mlp_v2 contributor with the group copula, k-one-hot
+# joint-exodus GNN switch) with the punisher slot swapped to the
+# lin_multinomial retrained on the CURRENT round's contribution
+# (severity-copula-stamped copy). Only the punisher path, output_dir and
+# figure_name differ from the source config; protocol byte-identical.
+# Source: origin/auto/switch-exodus-k-onehot (same config on the child
+# branch origin/auto/contribution-inflated-gmlp, from which the artifacts
+# were copied).
+#
+# CODE DEPENDENCY: the contribution joblib unpickles GaussianMLPRegressor
+# from scripts/baselines/gaussian_regressor.py and samples through the
+# group-copula adapter in linear_ah.py -- both exist only on the gmlp
+# lineage, not on the PR 181 lineage. Run this config from a checkout of
+# that lineage that carries the punisher fix
+# (scripts/simulation/run_curpun_reruns.sh, CURPUN_GMLP_DIR). The `_curpun`
+# suffix breaks evaluation_sweep.py's DIR_PATTERN on purpose.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/baselines/contribution_gaussian_mlp_v2_group_copula.joblib
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_exodus_k_onehot/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_current_contr_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_kexo_self_gaussian_mlp_v2_group_copula_contr_gnn_joint_exodus_k_onehot_switch_curpun
+figure_name: 2g8a_kexo_self_gaussian_mlp_v2_group_copula_contr_gnn_joint_exodus_k_onehot_switch_curpun
+save_per_round: true
+basedir: .
