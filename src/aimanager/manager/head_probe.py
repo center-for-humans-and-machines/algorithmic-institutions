@@ -20,6 +20,20 @@ training loop on the forward pass the acting policy already made:
    claim this arm rests on, not the action-distribution one. See
    notes/autoresearch_log/rl-manager-bootstrapped-dqn.md.
 
+**A sign is never reportable on its own.** A difference of bin means confuses
+force with aim; a rank statistic has the opposite failure and discards
+magnitude entirely, so a profile falling 5.00 to 4.99 ranks exactly like one
+falling 4.76 to 0.27. Three things go together or none of them mean anything:
+the rank correlation, a magnitude such as the range of bin means over their
+mean, and a noise gate such as that range over its standard error across
+evaluation points. `head_mean_h<k>_b<i>` logs each head's whole profile so all
+three can be computed per head rather than inferred from its endpoints.
+
+Known limitation: a rank correlation over six bin means tests the monotonicity
+of six numbers, not the agent-round joint distribution. The exact statistic
+needs the joint histogram of contribution against punishment, which is not
+logged here.
+
 Everything here is a pure function of tensors the rollout already has.
 """
 
@@ -133,6 +147,15 @@ def head_metrics(q_values, head_actions, contribution, mask, agent_group):
         slope = (mean[-1] - mean[0]).item()
         slopes.append(slope)
         out[f"head_slope_h{k}"] = slope
+        # The head's whole profile, not just its endpoints. A slope alone
+        # cannot tell a strongly targeting head from a flat one that a rank
+        # statistic would happily order: twenty heads each ranking a nearly
+        # flat profile produce sign disagreement that means nothing. The bin
+        # means are the raw material for all three statistics that have to be
+        # reported together -- rank correlation, relative range, and the
+        # noise gate -- so they are logged rather than a derived summary.
+        for i in range(N_RPA_BINS):
+            out[f"head_mean_h{k}_b{i}"] = mean[i].item()
     finite = [s for s in slopes if s == s]
     if finite:
         out["head_slope_spread"] = max(finite) - min(finite)

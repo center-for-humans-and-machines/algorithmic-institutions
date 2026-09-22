@@ -177,7 +177,7 @@ All five COMPLETED, exit 0:0, 6:05 to 7:33 elapsed. Each printed `rollouts 4200,
 | 16-19 | 0.692 | 1.066 | 2.653 | 1.813 | 2.680 | 1.815 | 0.003 |
 | {20} | 0.267 | 0.327 | 2.788 | 1.886 | 2.803 | 1.888 | 0.002 |
 
-Monotone increasing across all six bins on 21,000-166,000 agent-rounds per bin. s46 has the human sign but punishes essentially nothing (0.22 falling to 0.002) — the same "right sign, near-zero level" outcome as the third epsilon-greedy seed.
+Monotone increasing across all six bins on 21,000-166,000 agent-rounds per bin. s46 punishes essentially nothing (0.22 falling to 0.002). **§9 corrects the first version of this paragraph, which described s46 as having "the human sign": on the three statistics that have to be reported together it has no resolved targeting at all, and the sign was not reportable.**
 
 **Removing action-level dithering entirely did not fix the shape.** That is the headline and it is a negative result for the hypothesis this comparison was built on.
 
@@ -191,7 +191,9 @@ Monotone increasing across all six bins on 21,000-166,000 agent-rounds per bin. 
 | s45 | 5 | 15 | −6.67 | +1.75 | 0.234 |
 | s46 | **20** | **0** | −8.12 | −0.89 | 0.012 |
 
-Within a single run, twenty heads that each held one coherent policy for a whole episode, each trained on its own bootstrap of the same replay, **do not agree on whether to punish free-riders or full contributors.** Four seeds split 2-9 against 11-18; head slopes span 9.4 to 11.6 units. And the consensus follows its majority: the four seeds with mostly-inverted heads have inverted consensus, and the one seed whose heads are unanimous (s46, 20/20 human sign) is the one whose consensus carries the human sign.
+Within a single run, twenty heads that each held one coherent policy for a whole episode, each trained on its own bootstrap of the same replay, **do not agree on whether to punish free-riders or full contributors.** Four seeds split 2-9 against 11-18; head slopes span 9.4 to 11.6 units.
+
+**These raw counts overstate the disagreement and §9 corrects them:** most individual heads' slopes are not resolved above their own noise, and restricted to resolved heads the splits are 1-6, 4-3, 1-7, 2-4 and 14-0. The disagreement survives — s43 and s45 genuinely split — but the headline number to quote is the resolved one. The magnitude check that could have voided the whole comparison does pass: the heads are not flat, median relative slope 1.19 to 1.96.
 
 **The inversion is late and it replaces a correctly-signed policy.** `final_slope_trajectory.csv`, consensus slope over training:
 
@@ -208,7 +210,43 @@ Three seeds pass through a **strongly human-signed** policy around step 500 — 
 
 The behaviour-versus-evaluated ratio (a description of sampling, per §5) is 1.12-1.35 for four seeds and 6.57 for s46, against the epsilon-greedy runs' 1.7-6.6.
 
-### 9. Launched
+### 9. Targeting, checked three ways — and two corrections to §8
+
+A sign is not reportable on its own. A difference of bin means confuses force with aim; a rank correlation has the opposite failure and discards magnitude entirely, so a profile falling 5.00 to 4.99 ranks exactly like one falling 4.76 to 0.27. Rank, relative magnitude and a noise gate go together or none of them mean anything. `targeting_three_stats.csv`, consensus policy, pooled over the last 20 evaluation points; the gate is the range over its standard error across those points:
+
+| policy | rank corr | range | range/mean | gate | mean punishment |
+|---|---|---|---|---|---|
+| human managers | −1.000 | 4.488 | 2.375 | — | 1.890 |
+| lin_punisher (clone) | −1.000 | 3.394 | 1.826 | — | 1.859 |
+| s42 | +0.943 | 2.652 | 1.827 | 579 | 1.452 |
+| s43 | +1.000 | 1.781 | 1.711 | 970 | 1.041 |
+| s44 | +0.943 | 2.653 | 1.805 | 811 | 1.469 |
+| s45 | +0.943 | 1.782 | 1.750 | 1098 | 1.018 |
+| s46 | −0.943 | **0.126** | 5.030 | **1.65** | 0.025 |
+
+**Correction 1 to §8: s46 does not have "the human sign at a near-zero level". It has no resolved targeting at all.** Its range is 0.126 punishment points and its gate is 1.65 — indistinguishable from noise. Its `range/mean` of 5.03 looks large only because the denominator is 0.025, which is exactly why the relative-range statistic cannot be read without the gate. Calling it human-signed was the error I had just been warned about, made on my own result. The corrected statement is: **zero of five seeds target correctly. Four target strongly in the wrong direction; one does not target at all.**
+
+The four inverted seeds pass all three criteria and pass them convincingly: rank +0.94 to +1.00, relative range 1.71 to 1.83 — **comparable to the clone's own 1.826 and not far from the human 2.375** — and gates of 579 to 1098. Their inversion is real targeting, not an intensity artefact.
+
+**The per-head magnitude check, which is what could have made the headline meaningless.** Twenty heads each ranking a flat profile would produce sign disagreement that means nothing. They are not flat: median |slope| is 1.10 to 1.42 punishment points against seed mean punishment of 0.73 to 1.01, so median relative slope 1.19 to 1.96. The magnitude criterion passes.
+
+**Correction 2 to §8: the raw sign counts overstated the disagreement.** Most individual heads' slopes are not resolved above their own across-evaluation-point standard error (median gate 1.42 to 2.65). Restricting to heads with gate > 3 (`head_slope_resolved.csv`):
+
+| seed | resolved heads | human sign | inverted | (raw count was) |
+|---|---|---|---|---|
+| s42 | 7 / 20 | 1 | 6 | 5 vs 15 |
+| s43 | 7 / 20 | 4 | 3 | 9 vs 11 |
+| s44 | 8 / 20 | 1 | 7 | 2 vs 18 |
+| s45 | 6 / 20 | 2 | 4 | 5 vs 15 |
+| s46 | 14 / 20 | **14** | **0** | 20 vs 0 |
+
+The disagreement survives but is weaker than §8 reported. s43 (4 vs 3) and s45 (2 vs 4) show genuine resolved sign disagreement within one run; s42 and s44 are predominantly inverted with a single resolved dissenter. **§8's claim stands in weakened form** — heads within a run do disagree on the sign, and the disagreement is not a flat-profile artefact — but "twenty heads split 5 to 15" was counting unresolved heads and should not be quoted.
+
+**A finding about my own consensus rule, which I would not have seen without this check.** s46's heads are the *most* resolved of any seed (14 of 20) and unanimously human-signed, with slopes from −1.28 to −8.87. Yet s46's consensus serves essentially nothing: mean 0.025, range 0.126, gate 1.65. **Mean-of-Q washed out a contingency that every resolved head agreed on.** Measured, not explained. It is a point against the rule I chose, and it is the one place in this arm where the choice between mean-of-Q and vote-over-argmax might have mattered — though `consensus_vote_agree` is 0.980 for s46, which argues the vote would not have rescued it either.
+
+**Limitation carried forward.** A rank correlation over six bin means tests the monotonicity of six numbers, not the agent-round joint distribution. The exact statistic needs the joint histogram of contribution against punishment, which these runs do not log. `head_probe` now logs each head's full bin profile (`head_mean_h<k>_b<i>`) so the next run can compute all three statistics per head directly instead of inferring them from endpoints; the joint histogram is still missing.
+
+### 10. Launched
 
 Five seeds, 42-46, K=20, `per_episode`, `bootstrap_p` 0.5, `reward_mode: common_pool`, 4000 update steps. SLURM 30413435, 30413438, 30413439, 30413441, 30413443. `AI_REMOTE_DIR=~/repros/ai-runs/rl-bootstrapped-dqn`.
 
