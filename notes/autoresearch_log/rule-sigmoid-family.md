@@ -232,16 +232,20 @@ The sweep lands within 0.05 of the published numbers on all three; this cross-ch
 | `never` | 0 | -- | 37.30 | 59.68 | 4.58 | 0 | -- |
 | `ah_punisher` (clone control) | -- | -- | 40.09 | 56.85 | 4.04 | 1.80 | 5.97 |
 
-**Against `thr9_p10`, plainly:**
+**Against `thr9_p10`, plainly** (`contrasts.csv`, 95% bootstrap over episodes, 10,000 resamples):
 
-| claim | margin | standard error | verdict |
-|---|---|---|---|
-| `opt_pool` on the pool | **+9.52** | 0.86 | beats it, 11 sd |
-| `opt_contribution` on contribution | **+5.28** | 0.53 | beats it, 10 sd |
-| `opt_pool` on contribution | +2.38 | 0.52 | also beats it |
-| `opt_contribution` on the pool | +4.68 | 0.91 | also beats it |
+| rule | total contribution | common pool |
+|---|---|---|
+| `best_design_pool` | +2.80 [+1.78, +3.83] | **+10.02 [+8.29, +11.74]** |
+| `opt_pool` | +2.37 [+1.35, +3.36] | **+9.52 [+7.79, +11.18]** |
+| `best_cap20_pool` | +0.25 [-0.75, +1.26] | **+7.34 [+5.66, +9.04]** |
+| `best_cap10_pool` | -1.30 [-2.28, -0.30] | **+5.01 [+3.35, +6.67]** |
+| `opt_contribution` | **+5.27 [+4.25, +6.32]** | **+4.69 [+2.90, +6.50]** |
+| `never` | -7.34 [-8.32, -6.35] | -0.51 [-2.14, +1.13] |
 
-**This is not a tie and it is not close.** Both fitted rules beat the incumbent on both objectives at once, and the pool margin is more than ten times its own standard error.
+**This is not a tie and it is not close.** Both fitted rules beat the incumbent on both objectives at once, every interval clear of zero by several times its own width.
+
+The `never` row is the control that says the scale is right: against `thr9_p10` it is **-0.51 [-2.14, +1.13]** on the pool -- the parent arms' finding that punishing is close to break-even there, reproduced at 6,144 episodes -- while being 7.34 behind on contribution. That is the disagreement between the two objectives, in one row, and it is exactly what the family was searched to exploit.
 
 **The ranking does not depend on the rival.** The same 52 rules were run again with never-punishing in the other seat (`validation_table_never.csv`), the harder of the two settings because the rival is a refuge. Every level drops -- `never`'s own seat falls from 4.58 members to 3.94 -- and every margin survives:
 
@@ -305,6 +309,19 @@ It wins by holding its members rather than by raising contributions: **4.41 memb
 **Misaligning the cycle costs 2.6 to 5.0 pool points for the pool optimum and 3.4 to 6.3 for the contribution optimum**, against a standard error of about 0.9. `opt_contribution` is the clean case: its `gamma_ep` is exactly 0, so its episode multiplier is off entirely and the phase changes *nothing* except where the trough falls in the reshuffle cycle. The effect is therefore reshuffle alignment and nothing else.
 
 So the honest reading of `gamma_sw` is narrower than the reasoning it was built on: what it buys is **not punishing on the round the switch decision is taken**. Whether that is responding to the incentive or exploiting the switch predictor is not settled here -- both would produce this measurement -- but the "remaining tenure" story alone does not, because it is indifferent to phase.
+
+**The round-resolved series shows all of it at once** (`trajectories.jpg`, `trajectories.csv`). Punishment per member by round, held-out seeds:
+
+| round | 0 | 1 | 2 | 3 | 4 | 8 | 12 | 20 |
+|---|---|---|---|---|---|---|---|---|
+| `opt_contribution` | 14.44 | 6.83 | 3.55 | 1.42 | 9.38 | 7.12 | 5.93 | 4.6 |
+| `opt_pool` | 10.64 | 4.73 | 2.08 | 0.68 | 4.37 | 2.11 | 0.95 | 0.2 |
+| `thr9_p10` | 4.90 | 4.50 | 4.20 | 3.97 | 3.64 | 3.13 | 2.64 | 2.1 |
+| clone | 3.79 | 3.35 | 3.07 | 2.78 | 2.58 | 1.88 | 1.57 | 1.2 |
+
+Both fitted rules sawtooth within the reshuffle cycle -- hard on the arrival round, almost nothing on the decision round -- and `opt_pool` additionally decays across the episode until it is spending nothing at all after round 12. `thr9_p10` is flat by construction and declines only because the contributions it reads are rising. The pool panel of the figure shows the price: `opt_contribution`'s round-0 pool is **negative**, because 14.4 per member costs more than that round's contributions return, and it takes until round 4 to get back above `never`.
+
+The membership panel is where the pool margin comes from. Held at the end of the episode: `never` 4.49, `best_cap10_pool` 4.39, `opt_pool` 4.39, clone 4.00, `opt_contribution` 3.99, `thr9_p10` **3.86**. `thr9_p10` produces the second-highest contribution *per member* in the whole figure and still loses on the pool, because it holds the fewest people.
 
 ### 3.9 Policy shape, aim, and the leaver diagnostic (measured)
 

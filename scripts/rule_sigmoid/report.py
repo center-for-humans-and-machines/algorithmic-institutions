@@ -45,8 +45,17 @@ from fit_surrogate import AXES, HI, LO  # noqa: E402
 #: The rows a reader compares everything against.
 REFERENCES = ("thr9_p10", "never", "ah_punisher")
 
-#: Rules whose policy shape is drawn beside the human and the clone.
-SHAPE_ROWS = ("opt_contribution", "opt_pool", "thr9_p10", "ah_punisher", "never")
+#: Rules whose policy shape and trajectory are drawn beside the human and
+#: the clone. `best_cap10_pool` is here because it is the candidate that
+#: makes a claim about people rather than about the contribution model.
+SHAPE_ROWS = (
+    "opt_contribution",
+    "opt_pool",
+    "best_cap10_pool",
+    "thr9_p10",
+    "ah_punisher",
+    "never",
+)
 
 
 def human_policy_shape(csv_path):
