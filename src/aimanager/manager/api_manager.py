@@ -193,6 +193,11 @@ class RuleBasedManager:
 
     - `never`: p = 0 for every agent in every round.
     - `threshold`: p = `amount` where c <= `threshold`, else 0.
+    - `inv_threshold`: p = `amount` where c >= `threshold`, else 0 -- the
+      inverted-targeting mirror of `threshold`, punishing the HIGH
+      contributors and sparing the low ones. Carried so the cost of
+      punishing the wrong people can be measured against the cost of
+      punishing at all.
     - `proportional`: p = round(`rate` * (MAX_CONTRIBUTION - c)).
     - `table`: p = `table[c]`, a 21-entry lookup indexed by contribution.
     - `severity_table`: with probability `prob_table[c]` punish `table[c]`,
@@ -207,7 +212,15 @@ class RuleBasedManager:
     things the sweep measures; turning it on isolates what that costs.
     """
 
-    RULES = ("never", "threshold", "proportional", "table", "severity_table", "decay")
+    RULES = (
+        "never",
+        "threshold",
+        "inv_threshold",
+        "proportional",
+        "table",
+        "severity_table",
+        "decay",
+    )
 
     def __init__(
         self,
@@ -256,6 +269,13 @@ class RuleBasedManager:
             assert self.threshold is not None and self.amount is not None
             return th.where(
                 contribution <= self.threshold,
+                th.full_like(contribution, self.amount, dtype=th.float),
+                th.zeros_like(contribution, dtype=th.float),
+            )
+        if self.rule == "inv_threshold":
+            assert self.threshold is not None and self.amount is not None
+            return th.where(
+                contribution >= self.threshold,
                 th.full_like(contribution, self.amount, dtype=th.float),
                 th.zeros_like(contribution, dtype=th.float),
             )

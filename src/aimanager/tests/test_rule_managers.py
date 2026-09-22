@@ -79,3 +79,48 @@ def test_decay_keeps_its_original_meaning():
 def test_unknown_rule_is_rejected():
     with pytest.raises(ValueError):
         RuleBasedManager(rule="punish_everyone_always")
+
+
+def test_inv_threshold_is_inclusive_and_flat():
+    m = RuleBasedManager(rule="inv_threshold", threshold=11, amount=10)
+    assert punish(m, [0, 9, 10, 11, 20]) == [0, 0, 0, 10, 10]
+
+
+def test_inv_thr11_is_the_exact_reflection_of_thr9():
+    # the inverted arm's level-matched mirror: inv_thr11_p10 fires on c
+    # exactly where thr9_p10 fires on 20 - c, so the two punish the same
+    # NUMBER of contribution levels (10 of 21) at the same amount, and both
+    # spare the midpoint c = 10.
+    fwd = RuleBasedManager(rule="threshold", threshold=9, amount=10)
+    inv = RuleBasedManager(rule="inv_threshold", threshold=11, amount=10)
+    grid = list(range(21))
+    assert punish(inv, grid) == punish(fwd, [20 - c for c in grid])
+    assert sum(p > 0 for p in punish(inv, grid)) == 10
+    assert punish(inv, [10]) == punish(fwd, [10]) == [0]
+
+
+def test_inv_threshold_never_hits_a_timed_out_cell():
+    # The env SERVES a timed-out player contribution 0 (sweep finding D1), so
+    # at the rule's input a timeout is indistinguishable from a total
+    # free-rider: a low-threshold rule punishes every one of them and an
+    # inverted rule can never reach one. This is the single asymmetry
+    # between the two directions that is not a design choice, and the
+    # inverted arm measures it rather than correcting it.
+    inv = RuleBasedManager(rule="inv_threshold", threshold=7, amount=10)
+    fwd = RuleBasedManager(rule="threshold", threshold=9, amount=10)
+    served = [0, 0]  # two timed-out players, as the env presents them
+    assert punish(inv, served, valid=[False, False]) == [0, 0]
+    assert punish(fwd, served, valid=[False, False]) == [10, 10]
+
+
+def test_band16_fires_only_on_the_near_ceiling_band():
+    # The near-ceiling rules test a different hypothesis from the broad
+    # mirrors: that punishing nearly-full contributors is worthwhile because
+    # they are cheap to push to the ceiling. That only holds if the rule
+    # leaves the whole withdrawal zone below it untouched, which is what is
+    # pinned here -- c = 15 is spared and c = 16 is not.
+    mild = RuleBasedManager(rule="inv_threshold", threshold=16, amount=10)
+    matched = RuleBasedManager(rule="inv_threshold", threshold=16, amount=20)
+    assert punish(mild, [0, 9, 12, 15, 16, 20]) == [0, 0, 0, 0, 10, 10]
+    assert punish(matched, [15, 16, 20]) == [0, 20, 20]
+    assert sum(p > 0 for p in punish(mild, list(range(21)))) == 5
