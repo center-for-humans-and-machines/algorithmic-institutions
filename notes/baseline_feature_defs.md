@@ -63,6 +63,7 @@ Leak rule: any current-family feature that reads round-t contributions/punishmen
 ## Prev -- Self
 
 **prev_contribution:** own contribution from previous round. defaults in the 0th round.
+**prev_contribution_onehot_00..20:** one-hot of prev_contribution (rounded and clipped to the 21 levels 0..20); exactly one of the 21 dummies is 1 per row. Round 0 takes the dataset-default level (train median 9) like every prev feature, so onehot_09 is 1 there.
 **prev_punishment:** own punishment from previous round. defaults in the 0th round.
 **prev_payoff:** own payoff from previous round. defaults in the 0th round.
 
