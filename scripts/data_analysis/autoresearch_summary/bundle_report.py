@@ -266,6 +266,33 @@ document.addEventListener("click", e => {
 </script>"""
 
 
+def publish_hint():
+    """Step 9 of the pipeline: what to publish, and where to.
+
+    Publishing goes through the Artifact tool, which is an agent action
+    rather than a shell command -- so the pipeline ends by printing the
+    exact call. Idempotency lives in data/artifact.json: pass the URL it
+    records and the same artifact is updated in place (its share links
+    keep working); omit the URL and a duplicate is created instead.
+    """
+    cfg_path = DATA / "artifact.json"
+    cfg = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
+    url, icon = cfg.get("url"), cfg.get("favicon", "")
+    lines = ["", "step 9 -- publish (Artifact tool, not a shell command):"]
+    if url:
+        lines += [f'    file_path = "{OUT}"',
+                  f'    url       = "{url}"',
+                  f'    favicon   = "{icon}"',
+                  "  -> updates that artifact in place; the URL and any share",
+                  "     link served from it stay valid."]
+    else:
+        lines += [f'    file_path = "{OUT}"',
+                  f'    favicon   = "{icon}"' if icon else "",
+                  "  -> no url recorded, so this CREATES a new artifact.",
+                  f"     Record the URL it returns in {cfg_path}."]
+    return "\n".join(x for x in lines if x != "")
+
+
 def main():
     experiments, trees, cache, root = br.load_spines()
     categories = {c["pr"]: c["category"] for c in
@@ -400,6 +427,7 @@ experiment.</p>
 
     OUT.write_text(page)
     print(f"wrote {OUT} ({OUT.stat().st_size // 1024} KB)")
+    print(publish_hint())
 
 
 if __name__ == "__main__":

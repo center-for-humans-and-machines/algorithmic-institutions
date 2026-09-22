@@ -7,8 +7,10 @@ what each experiment was judged by at its time, and never re-judges.
 
 **The deliverable** is a single self-contained file,
 `plots/data_analysis/autoresearch_summary/report_bundle.html`, regenerated
-end-to-end by the pipeline in §2 and shared as a file or published as a
-Claude artifact.
+end-to-end by the pipeline in §2 and published as a Claude artifact by
+that pipeline's last step. Re-running the pipeline updates the same
+artifact in place, so its URL — and any share link served from it —
+stays valid.
 
 ---
 
@@ -40,12 +42,24 @@ so the scripts import each other):
 | 6 | machinery | `machinery.py` (drawn from the curated `data/stack_parts.json`; #PR pills link to plain-language story pages from `data/machinery_notes.json`, one page per unique method) | `.../machinery.html`, `.../machinery_pages/*.html` |
 | 7 | build | `build_report.py` (multi-file working copy; `progress_tree.py` holds its tree-layout helpers) | `.../report.html` |
 | 8 | bundle | `bundle_report.py` (THE deliverable: machinery, leaderboard and stories become in-page layers; figures inlined as data URIs) | `.../report_bundle.html` |
+| 9 | publish | the Artifact tool, with the parameters step 8 prints (from `data/artifact.json`) | the artifact, updated in place |
+
+**Step 9 is the one step a shell cannot run.** Publishing goes through
+the Artifact tool, so step 8 ends by printing the exact call to make.
+Everything needed for it is committed in `data/artifact.json`: the
+artifact `url`, the `favicon` (kept stable so readers keep finding the
+tab), the title and the gallery description. Pass that `url` and the
+existing artifact is updated; omit it and a duplicate is created
+instead. To adopt a different artifact, point `url` at it; to start a
+fresh one, set `url` to null and record what comes back. Share links
+carry a secret key and are deliberately not committed.
 
 Steps 1-2 are frozen with the corpus (#146-#181, maintainer ruling) —
 never re-run them to pick up newer PRs. Steps 3-5 are fetch-and-cache:
 their `data/*.json` caches and the fetched figures are committed, so
 re-running steps 3-8 is offline-deterministic and reproduces the
-deliverable byte-for-byte from the repo alone. Editing an output by hand
+deliverable byte-for-byte from the repo alone; step 9 then pushes that
+byte-identical file to the artifact. Editing an output by hand
 is illegal; curated inputs (`stack_parts.json`, `machinery_notes.json`)
 are data files, edited there and only there.
 
