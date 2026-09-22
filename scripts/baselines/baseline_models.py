@@ -5,8 +5,10 @@ inspector (inspect_best_model), for:
   * choosing the estimator from `data.target_type` + `data.model`
     - categorical -> multinomial logistic  (data.model is implicitly 'multinomial')
     - continuous  -> 'ridge' (fast MSE point model, good for shrinking a huge
-      feature grid) or 'gaussian' (heteroscedastic N(mu, sigma) by MLE -- samples
-      in the sim, gives a proper cross-entropy)
+      feature grid), 'gaussian' (heteroscedastic N(mu, sigma) by MLE -- samples
+      in the sim, gives a proper cross-entropy) or 'mlp' (single-hidden-layer
+      tanh point regressor, least squares -- nonlinear mean, scored by MSE like
+      ridge)
   * validating + expanding the `setting:` sweep. EVERY key is griddable (scalar or
     list -> Cartesian product). A key that does not belong to the chosen model is
     an error (fail fast on a misconfigured run).
@@ -16,6 +18,7 @@ Each model's allowed `setting` keys, with (default, caster):
   * multinomial : C
   * ridge       : alpha
   * gaussian    : weight_decay, lr, epochs
+  * mlp         : hidden, weight_decay, lr, epochs
 """
 
 import itertools
@@ -31,8 +34,21 @@ _SPEC = {
         "lr": (0.05, float),
         "epochs": (3000, int),
     },
+    "mlp": {
+        "hidden": (16, int),
+        "weight_decay": (0.0, float),
+        "lr": (0.05, float),
+        "epochs": (3000, int),
+    },
 }
-_METRIC = {"multinomial": "log_loss", "ridge": "mse", "gaussian": "nll"}
+_METRIC = {
+    "multinomial": "log_loss",
+    "ridge": "mse",
+    "gaussian": "nll",
+    "mlp": "mse",
+}
+# models scored by plain mean squared error (point predictions, no likelihood)
+_MSE_MODELS = ("ridge", "mlp")
 MAX_ITER = 1000  # multinomial logistic solver cap
 
 
@@ -53,9 +69,10 @@ def resolve_model(cfg):
         return "multinomial"
     if tt == "continuous":
         model = model or "gaussian"
-        if model not in ("ridge", "gaussian"):
+        if model not in ("ridge", "gaussian", "mlp"):
             raise ValueError(
-                f"continuous target model must be 'ridge' or 'gaussian'; got {model!r}"
+                "continuous target model must be 'ridge', 'gaussian' or 'mlp'; "
+                f"got {model!r}"
             )
         return model
     raise ValueError(f"unknown target_type {tt!r}")
@@ -89,7 +106,8 @@ def metric_name(model):
 
 
 def build_model(model, setting, seed):
-    """Construct (unfitted) estimator for one setting. `seed` used by gaussian."""
+    """Construct (unfitted) estimator for one setting. `seed` used by the torch
+    models (gaussian, mlp)."""
     if model == "multinomial":
         from sklearn.linear_model import LogisticRegression
 
@@ -98,6 +116,16 @@ def build_model(model, setting, seed):
         from sklearn.linear_model import Ridge
 
         return Ridge(alpha=setting["alpha"])
+    if model == "mlp":
+        from mlp_regressor import MLPRegressor
+
+        return MLPRegressor(
+            hidden=setting["hidden"],
+            weight_decay=setting["weight_decay"],
+            lr=setting["lr"],
+            epochs=setting["epochs"],
+            seed=seed,
+        )
     from gaussian_regressor import GaussianRegressor
 
     return GaussianRegressor(
@@ -118,7 +146,7 @@ def predict_scores(model, m, Xte, yte, n_levels, show_ce=False, ce_levels=21):
         p[:, m.classes_] = m.predict_proba(Xte)
         ll = log_loss(yte, p / p.sum(1, keepdims=True), labels=list(range(n_levels)))
         return float(ll), None
-    if model == "ridge":
+    if model in _MSE_MODELS:
         return float(np.mean((m.predict(Xte) - yte) ** 2)), None
     from gaussian_regressor import binned_logloss
 
@@ -140,7 +168,7 @@ def floor_score(model, ytr, yte, n_levels, show_ce=False, ce_levels=21):
             yte, np.tile(c / c.sum(), (len(yte), 1)), labels=list(range(n_levels))
         )
         return float(ll), None
-    if model == "ridge":
+    if model in _MSE_MODELS:
         return float(np.mean((ytr.mean() - yte) ** 2)), None
     mu, sigma = float(ytr.mean()), max(float(ytr.std()), 1e-3)
     var = sigma**2
