@@ -1,0 +1,46 @@
+# sim-timeout-imputation, the NOISE-OFF arm for the state-spread diagnostic.
+# The gated frontier stack with the contributor's shared-noise machinery
+# disabled: the bare, unstamped stimulus-skip trunk (copula rho = 0,
+# independent draws; weights identical to the stamped artifact) in place of
+# the herding-copula copy. This mirrors arm B of
+# auto/copula-closed-loop-variance exactly -- the same substitution, the same
+# protocol -- so the Var(E[c | history]) it yields is comparable with that
+# branch's numbers and with the human 27.9.
+# Everything else is byte-identical to
+# 23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_simtimeout.yml
+# (seed 42, 100 episodes, 24 rounds, same switch model, same punisher). This
+# run is a diagnostic; it is NOT scored and NOT gated.
+# See notes/autoresearch_log/sim-timeout-imputation.md.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_sim_timeout_rho0
+figure_name: 2g8a_sim_timeout_rho0
+save_per_round: true
+basedir: .

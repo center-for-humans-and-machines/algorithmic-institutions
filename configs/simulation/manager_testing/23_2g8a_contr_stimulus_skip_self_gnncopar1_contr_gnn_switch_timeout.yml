@@ -1,0 +1,51 @@
+# punisher-timeout-feature, the gated frontier stack: PR #192's ceiling
+# stack (23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch --
+# vnode GNN contributor with the immediate-stimulus skip and its
+# recalibrated copula, joint-exodus GNN switch) with the punisher slot
+# swapped to the lin_multinomial that also carries `contribution_valid`
+# (severity-copula-stamped copy, rho 0.4273 carried over unchanged). Only
+# the punisher path, output_dir and figure_name differ from the source
+# config; protocol byte-identical (seed 42, 100 episodes, 24 rounds).
+# Source: configs/simulation/manager_testing/
+#   23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_ceiling.yml
+# on auto/punisher-ceiling-fix. The `_timeout` suffix breaks
+# evaluation_sweep.py's DIR_PATTERN on purpose -- these dirs are read by
+# the branch's own table script, not by the sweep.
+# See notes/autoresearch_log/punisher-timeout-feature.md.
+#
+# NOTE: the `valid_model` below is what makes this experiment live -- it is
+# the model that decides whether an agent gives input at all, so
+# contribution_valid is genuinely False on some rounds in this simulation.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_timeout
+figure_name: 2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_timeout
+save_per_round: true
+basedir: .
