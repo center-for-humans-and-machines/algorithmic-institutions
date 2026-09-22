@@ -339,6 +339,53 @@ class LLMManager:
         """Drop every accumulated trace."""
         self._traces = {}
 
+    # -- the evaluation harness's telemetry seat -----------------------
+    #
+    # `llm_manager.stub.collect_telemetry` reads `telemetry()` off any
+    # manager and records NaN for one that has none, so that "this rule has
+    # no tokens" can never be read as "the language model spent none". This
+    # is the one place the two halves have to agree on a name, so the
+    # mapping is spelled out rather than guessed at.
+    #
+    # `n_calls` MEANS DIFFERENT THINGS on the two managers and the
+    # difference is real, not a bug to paper over: the stub answers a whole
+    # batch in one call, while this manager issues one HTTP completion per
+    # episode-round, so here `n_calls` and `n_decisions_requested` coincide.
+    # `n_calls` carries the client's count, which includes calls that
+    # errored, so it is the number of requests actually put on the wire.
+
+    def telemetry(self) -> Dict[str, float]:
+        stats = self.client.stats
+        return {
+            "prompt_tokens": float(stats.prompt_tokens),
+            "completion_tokens": float(stats.completion_tokens),
+            "n_calls": float(stats.n_calls),
+            # one prompt per episode-round; `answers` counts results read
+            # back, which is what a failure rate has to be a share of.
+            "n_decisions_requested": float(self._counts["answers"]),
+            "n_parse_failures": float(self._counts["failures"]),
+            "manager_wall_clock_s": float(stats.wall_s),
+        }
+
+    def reset_telemetry(self) -> None:
+        """Zero the counters, and the traces with them.
+
+        Called once per arm by `harness.run_arm`, before its first rollout.
+        The traces go too: an arm's first round must not inherit a trace
+        from the arm before it.
+        """
+        stats = self.client.stats
+        stats.n_calls = 0
+        stats.n_errors = 0
+        stats.prompt_tokens = 0
+        stats.completion_tokens = 0
+        stats.wall_s = 0.0
+        stats.truncated = 0
+        self.call_errors = 0
+        self.wasted_answers = 0
+        self._counts = self._empty_counts()
+        self.reset()
+
     # -- the rollout seat ----------------------------------------------
 
     def predict(self, state: Dict[str, th.Tensor], **_):

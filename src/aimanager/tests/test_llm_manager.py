@@ -728,3 +728,63 @@ def test_a_failure_is_logged_with_its_reason_and_fallback(tmp_path):
     assert verdict["ok"] is False
     assert verdict["reason"] == "no_marker"
     assert verdict["fallback"] == "zero"
+
+
+# ---------------------------------------------------------------------------
+# The telemetry seat the evaluation harness reads
+#
+# `llm_manager.stub.collect_telemetry` records NaN for a manager that keeps
+# no telemetry, precisely so "this rule has no tokens" cannot be read as "the
+# language model spent none". If these keys ever drift apart, the battery
+# silently reports NaN tokens for the one arm that actually spends them.
+# ---------------------------------------------------------------------------
+
+
+def test_telemetry_carries_every_key_the_battery_publishes():
+    from aimanager.llm_manager.battery import TELEMETRY_KEYS
+    from aimanager.llm_manager.stub import collect_telemetry
+
+    with _StubServer() as stub:
+        manager = make_manager(stub.api_base)
+        manager.predict(make_state(3, 0))
+        telemetry = collect_telemetry(manager)
+    assert telemetry is not None, "the harness would have recorded NaN tokens"
+    assert set(TELEMETRY_KEYS) <= set(telemetry)
+    # one prompt per episode-round, so a batch of three is three decisions
+    assert telemetry["n_decisions_requested"] == 3.0
+    assert telemetry["n_calls"] == 3.0
+    assert telemetry["n_parse_failures"] == 0.0
+    assert telemetry["prompt_tokens"] > 0
+    assert telemetry["completion_tokens"] > 0
+
+
+def test_reset_telemetry_zeroes_the_counters_and_the_traces():
+    from aimanager.llm_manager.stub import collect_telemetry, reset_telemetry
+
+    with _StubServer() as stub:
+        manager = make_manager(stub.api_base)
+        manager.predict(make_state(3, 0))
+        manager.predict(make_state(3, 1))
+        assert collect_telemetry(manager)["n_decisions_requested"] == 6.0
+        reset_telemetry(manager)
+        after = collect_telemetry(manager)
+    assert after["n_decisions_requested"] == 0.0
+    assert after["n_calls"] == 0.0
+    assert after["prompt_tokens"] == 0.0
+    assert after["manager_wall_clock_s"] == 0.0
+    # an arm must not inherit the trace of the arm before it
+    assert manager._traces == {}
+
+
+def test_a_parse_failure_reaches_the_battery_as_a_rate():
+    """The fallback is zero punishment, so the rate must be visible."""
+    from aimanager.llm_manager.battery import TELEMETRY_KEYS  # noqa: F401
+    from aimanager.llm_manager.stub import collect_telemetry
+
+    with _StubServer(lambda b: "I decline to answer.") as stub:
+        manager = make_manager(stub.api_base, constrained_decode=False)
+        punishment, _ = manager.predict(make_state(4, 0))
+        telemetry = collect_telemetry(manager)
+    assert int(punishment.sum()) == 0
+    assert telemetry["n_parse_failures"] == 4.0
+    assert telemetry["n_decisions_requested"] == 4.0

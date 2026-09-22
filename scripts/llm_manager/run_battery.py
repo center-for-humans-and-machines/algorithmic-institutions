@@ -40,6 +40,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+import yaml
 
 from aimanager.llm_manager import battery as bat
 from aimanager.llm_manager.harness import (
@@ -277,6 +278,58 @@ def stub_identity_table(battery):
     return pd.DataFrame(rows)
 
 
+def build_llm_arm(config_path, arm_name=None):
+    """The language-model manager as one more arm, from its serving config.
+
+    The config is `configs/llm_manager/*.yaml`, whose `manager:` block is
+    passed to `LLMManager` unchanged -- so moving from 8B to 32B is a
+    different file on the command line and never an edit to any code.
+
+    The endpoints come from `$HOSTED_VLLM_API_BASE`, which
+    `serve_vllm.slurm.sh` exports as a comma-separated list once its servers
+    answer /health. They are deliberately NOT in the config: the config
+    describes the model, the job describes where it is running.
+
+    The seat handed back is the manager object itself. `harness.build_manager`
+    passes anything exposing `predict` straight through, and `predict` is the
+    path exercised end to end by the serving branch -- `get_punishments`, the
+    `api_manager` seat, has unit tests but has never run inside a real job, so
+    it is not the one a result should be taken through.
+    """
+    from aimanager.llm import prompt as prompt_mod
+    from aimanager.manager.llm_manager import LLMManager
+
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+    spec = dict(cfg.get("manager") or {})
+
+    api_base = os.environ.get("HOSTED_VLLM_API_BASE", "")
+    if not api_base:
+        raise SystemExit(
+            "HOSTED_VLLM_API_BASE is empty: run this under "
+            "scripts/llm_manager/serve_vllm.slurm.sh, which exports it once "
+            "the servers answer /health."
+        )
+
+    manager = LLMManager(**spec)
+    resolved = prompt_mod.resolve(manager.prompt_version)
+    name = arm_name or "llm_" + os.path.splitext(os.path.basename(config_path))[0]
+    # The prompt is a fingerprinted artifact and a result has to be able to
+    # name the version that produced it.
+    provenance = {
+        "arm": name,
+        "config": config_path,
+        "model": spec.get("model"),
+        "prompt_version": manager.prompt_version,
+        "prompt_fingerprint": resolved.fingerprint,
+        "constrained_decode": manager.constrained_decode,
+        "temperature": spec.get("temperature"),
+        "endpoints": api_base.split(","),
+        "seat": "predict",
+    }
+    return name, manager, provenance
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
@@ -286,6 +339,12 @@ def main():
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--validate-217", action="store_true")
     ap.add_argument("--no-stub", action="store_true")
+    ap.add_argument(
+        "--llm",
+        default=None,
+        help="configs/llm_manager/*.yaml; adds the language model as an arm",
+    )
+    ap.add_argument("--llm-arm-name", default=None)
     ap.add_argument(
         "--mdd-episodes",
         default=",".join(str(n) for n in bat.EPISODE_BUDGETS),
@@ -301,10 +360,33 @@ def main():
     if args.validate_217:
         arms.update(ARMS_217)
 
+    llm_name, llm_manager, llm_provenance = None, None, None
+    if args.llm:
+        llm_name, llm_manager, llm_provenance = build_llm_arm(
+            args.llm, args.llm_arm_name
+        )
+        # The language model holds group 0 and the clone holds group 1,
+        # members free to move -- the same seat every baseline is measured in.
+        arms = {llm_name: (llm_manager, "clone"), **arms}
+        print(
+            f"\n[llm] arm {llm_name}: {llm_provenance['model']} "
+            f"prompt {llm_provenance['prompt_version']} "
+            f"({llm_provenance['prompt_fingerprint']}) "
+            f"constrained={llm_provenance['constrained_decode']} "
+            f"endpoints={len(llm_provenance['endpoints'])}"
+        )
+
     models = load_models(device=args.device)
     with open(os.path.join(args.out, "run_args.json"), "w") as f:
         json.dump(
-            {**vars(args), "stack": models["_stack"], "arms": list(arms)}, f, indent=2
+            {
+                **vars(args),
+                "stack": models["_stack"],
+                "arms": list(arms),
+                "llm": llm_provenance,
+            },
+            f,
+            indent=2,
         )
 
     print(
@@ -445,6 +527,47 @@ def main():
     if len(stub_id):
         print("\n=== the stub against the rule it wears ===")
         print(stub_id.to_string(**fmt))
+
+    if llm_manager is not None:
+        report = {**llm_provenance, **llm_manager.report()}
+        with open(os.path.join(args.out, "llm_report.json"), "w") as f:
+            json.dump(report, f, indent=2, default=str)
+        print("\n=== the language model's own telemetry ===")
+        for k in (
+            "model",
+            "prompt_version",
+            "prompt_fingerprint",
+            "constrained_decode",
+            "n_calls",
+            "prompt_tokens",
+            "completion_tokens",
+            "wall_s",
+            "completions_per_s",
+            "truncated",
+            "call_errors",
+            "wasted_answers",
+            "answers",
+            "failures",
+            "parse_failure_rate",
+        ):
+            if k in report:
+                print(f"  {k:22s} {report[k]}")
+        # Under a token-level constraint this is zero by construction. A
+        # non-zero rate is a bug in the constraint or the server, and it is
+        # not neutral: the fallback is zero punishment, which is the policy
+        # the comparison exists to distinguish the model from.
+        rate = report.get("parse_failure_rate", 0.0)
+        if rate:
+            print(
+                f"\n  *** PARSE FAILURE RATE IS {rate}, NOT ZERO. "
+                "The zero fallback pushes this arm toward never-punishing, "
+                "so the arm is not reportable until this is fixed. ***"
+            )
+        else:
+            print(
+                "\n  parse failure rate 0.0 over "
+                f"{report.get('answers')} answers, as the constraint requires"
+            )
     print(f"\nwrote {args.out}")
 
 
