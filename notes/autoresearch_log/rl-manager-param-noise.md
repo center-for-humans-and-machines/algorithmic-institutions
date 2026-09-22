@@ -177,21 +177,50 @@ That is **what was sampled, not what was learned**, and the human sign of that 0
 
 `contrast` is a difference of bin means and therefore scales with how hard a manager punishes. Two managers with *identical* contingency, one punishing half as hard, differ by a factor of two on it. The arm is judged on targeting, so targeting needs a statistic that is invariant to force: `rho`, the count-weighted rank correlation between contribution bin and punishment served, which depends only on the *order* of the bin means and so cannot be moved by any monotone rescaling. `scripts/rl_param_noise/targeting.py`; the trap is a test in `scripts/tests/test_param_noise_targeting.py`.
 
-| | `rho` | contrast | contrast / mean | mean punishment | profile SNR |
-|---|---|---|---|---|---|
-| evaluated policy (both runs) | — (flat) | 0.000 | 0.000 | 5.000 | — |
-| eps-greedy buffer | −0.540 | 0.014 | **0.002** | 6.006 | 2.90 |
-| param-noise buffer | **−0.827** | 0.839 | **0.143** | 5.848 | 3.02 |
-| artificial punisher (clone) | **−1.000** | 3.400 | 2.087 | 1.630 | — |
-| human managers | **−1.000** | 4.488 | 2.430 | 1.847 | — |
+| | verdict | monotonicity | `rho` | `tau_b` | relative range | contrast | contrast / mean | mean punishment |
+|---|---|---|---|---|---|---|---|---|
+| evaluated policy (both runs) | no contingency (all bins tied) | flat | — | — | 0.000 | 0.000 | 0.000 | 5.000 |
+| eps-greedy buffer | no clean targeting (not monotone) | none | −0.540 | −0.373 | 0.005 | 0.014 | 0.002 | 6.006 |
+| param-noise buffer | **no clean targeting (not monotone)** | **none** | −0.827 | −0.679 | 0.175 | 0.839 | 0.143 | 5.848 |
+| artificial punisher (clone) | targets free-riders | decreasing | **−1.000** | **−1.000** | 2.087 | 3.400 | 2.087 | 1.630 |
+| human managers | targets free-riders | decreasing | **−1.000** | **−1.000** | 2.430 | 4.488 | 2.430 | 1.847 |
 
 Negative is the human sign. NaN for the evaluated policies is the honest answer to a perfectly flat profile: there is nothing to rank, which is a different statement from a measured absence of relationship.
+
+**The monotonicity check overturned a claim I had already written here, which is the point of running it before the headline rather than after.** I had described the param-noise buffer as the one row with a contingency "strong in rank and non-negligible in size". It is **not monotone**: 6.555, 6.089, 5.752, 5.532, **5.546, 5.716** — it falls across four bins and then turns back up. That is precisely the shape that got two sibling seeds withdrawn: a sizeable endpoint difference on a profile that wanders, which `contrast` cannot see and `rho` only partly penalises. Both pilot buffers are **no clean targeting**, and the corrected reading of this table is:
+
+- neither buffer exhibits clean targeting, in either direction;
+- the eps-greedy buffer's `rho` of −0.540 sits on a relative range of 0.005, i.e. it is ranking a rounding error;
+- what still separates the two arms here is **not** the shape of the pooled buffer but the *variability across episodes* — 1.585 against 0.052 — which does not depend on monotonicity at all, and the fact that every eps-greedy bin moved by the same constant 1.00 ± 0.02.
+
+That last pair is the mechanism claim and it survives. The shape claim did not, and is withdrawn.
 
 **The trap, demonstrated on this table's own reference columns.** On `contrast` the clone (3.400) and the human managers (4.488) differ by 1.088 punishment points, which reads as a targeting difference. On `rho` they are **identical at −1.000**: both are strictly monotone decreasing over all six bins, so their *aim* is the same and only their force differs. The clone punishes less hard overall — mean 1.630 against 1.847. Rescaling the clone's profile to the human mean puts its contrast at 3.853, so **42% of that apparent 1.088-point targeting gap is intensity, not aim**. Had I compared the arms on `contrast` alone I would have read force as targeting on exactly this axis.
 
 **And the opposite error, which `rho` alone would have caused.** The eps-greedy buffer's `rho` is −0.540, which sounds like a real contingency. Its `contrast_over_mean` is 0.002 — the relationship is genuine in rank and utterly negligible in magnitude, which is what a uniform drag plus sampling noise looks like when you rank six nearly equal numbers. `rho` carries no magnitude and must never be read alone; `profile_snr` of 2.90 is barely above the point where it would be ranking noise outright. Both columns, always.
 
-Read together, the param-noise buffer is the only non-reference row with a contingency that is both strong in rank (−0.827) and non-negligible in size (0.143) — against an evaluated policy that has none at all.
+#### The tie hazard, which is sharper than the threshold question
+
+Quiet policies are common in this campaign — three of five evolution-strategies seeds punish exactly zero in every bin — and **ties attenuate rank statistics**. A sibling's control seed is monotone decreasing across all six bins and scores only −0.845 because three of its bins saturate at zero; a threshold of 0.9 would have discarded a correctly-targeted policy, which is why the campaign threshold is 0.8.
+
+**Measured here, it is worse than a threshold choice.** Take the perfectly monotone profile `[4, 2, 1, 0, 0, 0]` and change nothing but where the agent-rounds sit:
+
+| counts | `rho` | `tau_b` | monotonicity | campaign verdict |
+|---|---|---|---|---|
+| 1000 / 1500 / 2000 / 1500 / 800 / 2000 | −0.947 | −0.904 | decreasing | targets free-riders |
+| 1000 / 1000 / 1000 / 2500 / 2500 / 2500 | −0.813 | −0.759 | decreasing | targets free-riders |
+| 500 / 500 / 500 / 3000 / 3000 / 3000 | −0.631 | −0.588 | decreasing | **no clean targeting** |
+| 200 / 200 / 200 / 5000 / 5000 / 5000 | −0.351 | −0.329 | decreasing | **no clean targeting** |
+
+The policy is identical in all four rows. **No rank threshold survives this**: a quiet manager that punishes free-riders and nobody else is exactly the shape the campaign is looking for and exactly the shape ties destroy. `tau_b` is attenuated less than `rho` but is attenuated too, so it is not a rescue.
+
+The response is not to move the threshold. `verdict` keeps the campaign rule so the four arms stay comparable; `verdict_shape_only` asks the same question from monotonicity and relative range alone; `tie_attenuated` is set where they disagree, and such rows are read by hand rather than counted. `n_distinct_bins` and `n_zero_bins` are reported so the tie structure is visible before any rank number is quoted.
+
+On this pilot no row is tie-attenuated — no bin saturates — but three of the five seeds in a sibling arm did saturate, so the machinery is in place before the seeds land.
+
+#### The SNR gate does not bind
+
+Across ten runs of this campaign at 100 episodes the smallest gate was 54 against a threshold of 1.65, and these rollouts are ten times larger. `profile_snr` is reported and will not discriminate; verdicts turn on **monotonicity, rank and relative range**. The sibling seed that was withdrawn would have been caught by relative range alone, not by the gate.
 
 #### The uniform-drag discriminator
 
@@ -234,6 +263,27 @@ Kept separate on purpose. None of the following is measured here.
 
 5. **That state-distribution or trajectory coverage differs between the arms.** Not measured, by anything, anywhere. The shape and spread numbers above are about *actions given states*. Whether weight noise visits different states, or different 24-round trajectories, is the hypothesis and not a finding.
 
+## The context this result will be read against
+
+The three arms that have reported, corrected as of this writing. Recorded here because a fourth number is only interpretable beside them, not because this arm measured any of it.
+
+| arm | seeds targeting free-riders | note |
+|---|---|---|
+| annealed local epsilon-greedy | 1 of 5 | the same 1 of 5 as its own control, and the *same seed*. Two seeds moved from graded inversion to no clean targeting: the intervention weakened the inversion without replacing it. |
+| bootstrapped DQN | 0 of 5 | four invert strongly, one does not target at all |
+| evolution strategies | 0 of 5 | all five converged to no contingency on contribution |
+| parameter-space noise (this arm) | running | |
+
+Two things follow for how this arm should be written up.
+
+**The base rate is low and the control is not obviously beaten.** One arm matching its own control on the same seed is what "no effect" looks like. If this arm returns 1 of 5, that is not a result; if it returns 0 of 5, it joins two others. Either way the honest headline is about the campaign, not about parameter noise.
+
+**Both reporting arms had to withdraw a seed after applying the three-statistic check**, in each case a seed with a large endpoint difference on a profile that was not monotone. The same check has already overturned one claim in this log about the pilot buffer. **Run it before writing the headline, not after.**
+
+### A tension to keep rather than resolve
+
+The leaver diagnostic and the profile check disagree on exactly one manager, which aims hard at the zero-contribution bin and makes no distinction at all among the rest. Both are right about different things: it does drive out the players it punishes, and its contingency is not graded. Keep both statistics; do not replace one with the other, and do not treat the disagreement as an error to be fixed.
+
 ## Status: launched, five seeds
 
 | seed | config | SLURM job | output |
@@ -251,6 +301,8 @@ Remote dir `~/repros/ai-runs/rl-param-noise`, isolated from every sibling arm. ~
 ## Successor
 
 1. **Read the shape first, from the parquet, no simulation needed.** `rpa_mean_{bin}` / `rpa_n_{bin}` at `sampling == "greedy"` is the evaluated policy's contingency at every evaluation point of every seed; `rpa_opp_mean_{bin}` is the artificial punisher on the same rollouts. Human reference: 4.755 / 2.973 / 1.672 / 0.978 / 0.692 / 0.267.
+
+   **Run the three-statistic check before writing anything.** `targeting.py` returns `verdict` (the campaign rule, comparable across arms), `verdict_shape_only`, and `tie_attenuated` where they disagree. Check `monotonicity`, `n_distinct_bins` and `n_zero_bins` *before* quoting any rank number: a quiet seed with several bins saturated at zero can be perfectly monotone and still score −0.35, and three of five seeds in a sibling arm saturated that way. A row where the two verdicts disagree is read by hand, never counted. A large `contrast` on a non-monotone profile is what got two sibling seeds withdrawn and has already overturned one claim in this log.
 
    **Judge targeting on `rho` from `targeting.py`, never on `contrast`.** Both references sit at `rho` −1.000 while their contrasts differ by 1.088 points, 42% of which is force rather than aim; the arms will differ in how hard they punish, so a contrast comparison across arms would read intensity as targeting. Read `contrast_over_mean` beside it for magnitude and `profile_snr` before either — the eps-greedy pilot buffer scores `rho` −0.540 on a relationship of size 0.002. The question is `rho`'s **sign and spread across the five seeds**, not its mean.
 2. **Then read `param_noise_scale` over update steps.** If it sits at or near `max_scale` for a long stretch, weight noise could not match epsilon-greedy's displacement and the arm under-explored; that is a finding about the method, not a bug, and it changes how the shape result should be read.

@@ -115,3 +115,139 @@ def test_weighted_pearson_is_nan_on_a_constant():
     assert weighted_pearson([1, 2, 3], [5, 5, 5], [1, 1, 1]) != weighted_pearson(
         [1, 2, 3], [5, 5, 5], [1, 1, 1]
     )
+
+
+# ── the tie hazard ───────────────────────────────────────────────────
+
+# A sibling's control seed: monotone decreasing across all six bins, but three
+# of them saturate at exactly zero. Spearman scores it well short of 1 for
+# that reason alone, and a threshold of 0.9 would have discarded a genuinely
+# correctly-targeted policy.
+SATURATED_MEANS = [4.0, 2.0, 1.0, 0.0, 0.0, 0.0]
+SATURATED_COUNTS = [1000, 1500, 2000, 1500, 800, 2000]
+
+
+def test_ties_attenuate_spearman_on_a_perfectly_monotone_profile():
+    out = targeting(SATURATED_MEANS, SATURATED_COUNTS)
+    assert out["monotonicity"] == "decreasing"
+    assert out["n_zero_bins"] == 3
+    assert out["n_distinct_bins"] == 4
+    rho = out["rho_contribution_punishment"]
+    assert -1.0 < rho < -0.8, rho  # short of 1, and 0.9 would have binned it
+    assert out["verdict"] == "targets free-riders"
+
+
+def test_the_rank_threshold_is_0_8_not_0_9():
+    from rl_param_noise.targeting import RANK_THRESHOLD
+
+    assert RANK_THRESHOLD == 0.8
+    # Same perfectly monotone profile, mass shifted into the tied zero bins:
+    # it now sits between the two candidate thresholds, which is the case the
+    # sibling arm hit at -0.845.
+    rho = targeting(SATURATED_MEANS, [1000, 1000, 1000, 2500, 2500, 2500])[
+        "rho_contribution_punishment"
+    ]
+    assert -0.9 < rho <= -RANK_THRESHOLD, rho
+
+
+def test_ties_can_sink_a_perfectly_monotone_profile_below_any_threshold():
+    """Worse than a threshold choice, and the reason `verdict_shape_only`
+    exists. The SAME strictly ordered profile, with the agent-rounds moved
+    into the three tied zero bins, falls to -0.35 -- below anything a rank
+    threshold could sensibly be set to. A quiet policy that punishes
+    free-riders and nobody else is exactly the shape the campaign wants and
+    exactly the shape ties destroy."""
+    out = targeting(SATURATED_MEANS, [200, 200, 200, 5000, 5000, 5000])
+    assert out["monotonicity"] == "decreasing"
+    assert out["rho_contribution_punishment"] > -0.5
+    assert out["verdict"] == "no clean targeting (weak rank)"
+    assert out["verdict_shape_only"] == "targets free-riders"
+    assert out["tie_attenuated"] is True
+
+
+def test_all_bins_tied_carries_no_rank_information():
+    """Three of five evolution-strategies seeds punish exactly zero in every
+    bin. That is all ties: there is nothing to rank, and saying so is not the
+    same as measuring no relationship."""
+    out = targeting([0.0] * 6, [1000] * 6)
+    assert out["n_distinct_bins"] == 1
+    assert out["n_zero_bins"] == 6
+    assert out["rho_contribution_punishment"] != out["rho_contribution_punishment"]
+    assert out["verdict"] == "no contingency (all bins tied)"
+
+
+def test_tau_b_is_carried_and_saturates_on_a_strict_profile():
+    # Same sign convention as rho: negative is the human sign.
+    assert targeting(HUMAN_MEANS, HUMAN_COUNTS)["tau_b"] == pytest.approx(-1.0)
+    assert targeting(INVERTED_MEANS, INVERTED_COUNTS)["tau_b"] == pytest.approx(1.0)
+
+
+def test_tau_b_is_less_attenuated_by_ties_than_spearman():
+    out = targeting(SATURATED_MEANS, SATURATED_COUNTS)
+    assert abs(out["tau_b"]) < abs(out["rho_contribution_punishment"])
+    # ... but it is attenuated too, so it is not a rescue either.
+    assert abs(out["tau_b"]) < 1.0
+
+
+def test_tau_b_sign_convention_matches_rho():
+    """Both negative for the human sign, so the two can be read side by side
+    without a sign flip in the reader's head."""
+    for means, counts in (
+        (HUMAN_MEANS, HUMAN_COUNTS),
+        (SATURATED_MEANS, SATURATED_COUNTS),
+    ):
+        out = targeting(means, counts)
+        assert out["tau_b"] < 0 and out["rho_contribution_punishment"] < 0
+
+
+def test_a_big_endpoint_difference_on_a_non_monotone_profile_is_not_targeting():
+    """The shape that got two sibling seeds withdrawn: `contrast` looks large,
+    the profile wanders, and monotonicity catches it where contrast cannot."""
+    means = [6.0, 0.5, 5.5, 0.6, 5.0, 0.4]
+    out = targeting(means, [1000] * 6)
+    assert out["contrast"] == pytest.approx(5.6)  # looks like strong targeting
+    assert out["monotonicity"] == "none"
+    assert out["verdict"] == "no clean targeting (not monotone)"
+
+
+def test_relative_range_survives_a_non_monotone_profile():
+    """Endpoints can coincide while the profile swings; range cannot hide it."""
+    out = targeting([1.0, 9.0, 1.0, 9.0, 1.0, 1.0], [1000] * 6)
+    assert out["contrast"] == pytest.approx(0.0)
+    assert out["relative_range"] > 1.0
+
+
+def test_negligible_range_is_advisory_and_not_in_the_verdict():
+    """The epsilon-greedy pilot buffer: a real rank on a relationship whose
+    size is a rounding error. The verdict must not silently depend on a
+    threshold this arm invented."""
+    from rl_param_noise.targeting import NEGLIGIBLE_RANGE
+
+    out = targeting([6.014, 6.011, 6.004, 6.001, 6.000, 5.997], [1000] * 6)
+    assert out["relative_range"] < NEGLIGIBLE_RANGE
+    assert out["monotonicity"] == "decreasing"
+    assert out["verdict"] == "targets free-riders"  # rank + monotone only
+    # The advisory threshold shows up only in the shape-only column, and the
+    # disagreement is flagged rather than silently resolved either way.
+    assert out["verdict_shape_only"] == "no clean targeting (negligible range)"
+    assert out["tie_attenuated"] is True
+
+
+def test_verdicts_do_not_turn_on_0_8_versus_0_9():
+    """Run over every profile in this file: report which verdicts would change
+    if the threshold moved. None may, or the threshold is doing the work."""
+    from rl_param_noise.targeting import verdict
+
+    profiles = [
+        (HUMAN_MEANS, HUMAN_COUNTS),
+        (INVERTED_MEANS, INVERTED_COUNTS),
+        ([5.0] * 6, [1000] * 6),
+        ([0.0] * 6, [1000] * 6),
+    ]
+    for means, counts in profiles:
+        stats = targeting(means, counts)
+        strict = dict(stats)
+        rho = strict["rho_contribution_punishment"]
+        if rho == rho and abs(rho) < 0.9:
+            continue
+        assert verdict(strict) == stats["verdict"]

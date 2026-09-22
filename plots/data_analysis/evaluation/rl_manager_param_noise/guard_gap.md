@@ -17,25 +17,31 @@ collected the data.
 
 Mean punishment per contribution bin, evaluation-suite RPA bins.
 
-`rho` is the count-weighted rank correlation between the contribution
-bin and the punishment served. It is invariant to ANY monotone
-rescaling of punishment, so no amount of punishing harder or softer
-can move it -- which `contrast`, a difference of bin means, cannot
-say. Negative is the human sign: punish the free-rider, leave the
-full contributor alone. Human managers sit at -1.0, a manager with
-the inversion at +1.0. `rho` carries no magnitude, so read it with
-`contrast_over_mean`, and read neither when `profile_snr` is small --
-below about 2 the six bin means are within their own sampling noise
-and `rho` is ranking noise. NaN means a flat profile: nothing to rank.
+`rho` and `tau_b` are count-weighted rank correlations between the
+contribution bin and the punishment served. Both are invariant to any
+monotone rescaling of punishment, so no amount of punishing harder or
+softer can move them -- which `contrast`, a difference of bin means,
+cannot say. Negative is the human sign. But both are ATTENUATED BY
+TIES, and badly: on a perfectly monotone profile with three bins
+saturated at zero, `rho` falls to -0.35 purely by where the
+agent-rounds sit. So `monotonicity` is reported beside them (it is
+tie-proof), with `n_distinct_bins` and `n_zero_bins` so the tie
+structure is visible before any rank number is quoted.
 
-| manager | {0} | 1-5 | 6-10 | 11-15 | 16-19 | {20} | rho_contribution_punishment | contrast | contrast_over_mean | mean_punishment | profile_snr |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| rl_epsgreedy_guard [eps-greedy] | 6.014 | 6.004 | 6.011 | 5.997 | 6.027 | 6.001 | -0.540 | 0.014 | 0.002 | 6.006 | 2.903 |
-| rl_epsgreedy_guard [greedy] | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 |  | 0.000 | 0.000 | 5.000 | inf |
-| rl_pnoise_guard [greedy] | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 |  | 0.000 | 0.000 | 5.000 | inf |
-| rl_pnoise_guard [param-noise] | 6.555 | 6.089 | 5.752 | 5.532 | 5.546 | 5.716 | -0.827 | 0.839 | 0.143 | 5.848 | 3.023 |
-| artificial punisher (clone) | 3.722 | 2.658 | 1.720 | 1.094 | 0.844 | 0.322 | -1.000 | 3.400 | 2.087 | 1.630 |  |
-| human managers | 4.755 | 2.973 | 1.672 | 0.978 | 0.692 | 0.267 | -1.000 | 4.488 | 2.430 | 1.847 |  |
+`verdict` is the campaign rule -- monotone, then |rho| >= 0.8 -- kept
+identical across the four arms so the tables are comparable.
+`verdict_shape_only` asks the same question from monotonicity and
+relative range alone. `tie_attenuated` marks where they disagree:
+those rows are read by hand, never counted.
+
+| manager | {0} | 1-5 | 6-10 | 11-15 | 16-19 | {20} | verdict | verdict_shape_only | tie_attenuated | monotonicity | rho_contribution_punishment | tau_b | n_distinct_bins | n_zero_bins | relative_range | contrast | contrast_over_mean | mean_punishment | profile_snr |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| rl_epsgreedy_guard [eps-greedy] | 6.014 | 6.004 | 6.011 | 5.997 | 6.027 | 6.001 | no clean targeting (not monotone) | no clean targeting (not monotone) | False | none | -0.540 | -0.373 | 6 | 0 | 0.005 | 0.014 | 0.002 | 6.006 | 2.903 |
+| rl_epsgreedy_guard [greedy] | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 | no contingency (all bins tied) | no contingency (all bins tied) | False | flat |  |  | 1 | 0 | 0.000 | 0.000 | 0.000 | 5.000 | inf |
+| rl_pnoise_guard [greedy] | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 | 5.000 | no contingency (all bins tied) | no contingency (all bins tied) | False | flat |  |  | 1 | 0 | 0.000 | 0.000 | 0.000 | 5.000 | inf |
+| rl_pnoise_guard [param-noise] | 6.555 | 6.089 | 5.752 | 5.532 | 5.546 | 5.716 | no clean targeting (not monotone) | no clean targeting (not monotone) | False | none | -0.827 | -0.679 | 6 | 0 | 0.175 | 0.839 | 0.143 | 5.848 | 3.023 |
+| artificial punisher (clone) | 3.722 | 2.658 | 1.720 | 1.094 | 0.844 | 0.322 | targets free-riders | targets free-riders | False | decreasing | -1.000 | -1.000 | 6 | 0 | 2.087 | 3.400 | 2.087 | 1.630 |  |
+| human managers | 4.755 | 2.973 | 1.672 | 0.978 | 0.692 | 0.267 | targets free-riders | targets free-riders | False | decreasing | -1.000 | -1.000 | 6 | 0 | 2.430 | 4.488 | 2.430 | 1.847 |  |
 
 Row counts per bin:
 
