@@ -38,7 +38,7 @@ Human managers are monotone **decreasing** in the contributor's own contribution
 
 The mechanism this arm tests is specific: uniform exploration over 31 levels applies punishment **independently of the contribution it is aimed at**, which decorrelates punishment from contribution in the replay buffer and is a plausible route to a policy whose shape is arbitrary and seed-determined. A local proposal keeps the exploratory action attached to the greedy action, which is itself a function of the contribution, so the correlation survives exploration.
 
-**So shape is the outcome and the behaviour-versus-evaluated gap is the mechanism.** Mean punishment per contribution bin is reported for every seed on the evaluation suite's own bins — `{0}`, `1-5`, `6-10`, `11-15`, `16-19`, `{20}` — by importing `RPA_EDGES` and `RPA_LABELS` from `aimanager.evaluation_suite.metrics` rather than re-declaring them, with the row count per bin beside every mean, and with the human and clone columns alongside. `scripts/rl_anneal_local/guard.py shape` does this for a rollout; the finished runs will additionally be read through the same cross-evaluation simulation path as the control, so the columns are comparable.
+**So shape is the outcome and the behaviour-versus-evaluated gap is the mechanism.** Mean punishment per contribution bin is reported for every seed on the evaluation suite's own bins — `{0}`, `1-5`, `6-10`, `11-15`, `16-19`, `{20}` — by importing `RPA_EDGES` and `RPA_LABELS` from `aimanager.evaluation_suite.metrics` rather than re-declaring them, with the row count per bin beside every mean, and with the human and clone columns alongside. `scripts/rl_anneal_local/guard.py shape` does this for a rollout, and Measured 7 shows that reading the clone out of such a rollout reproduces the human curve bin for bin, so the path is sound. The finished runs should still be read through the same cross-evaluation simulation the control used, so that the columns sit in the same table rather than merely on the same bins.
 
 **What this arm cannot distinguish, and I will not claim it does.** A competing explanation for the inverted shape is that the artificial humans respond to punishment without regard to whether it was deserved. If that is so there is no gradient toward correct targeting and *no* exploration method fixes the shape — this arm coming back flat would then be evidence about the clones, not about exploration. Separating the two needs a probe of the contribution model's response to deserved versus undeserved punishment, which is not on this branch. See the successor section.
 
@@ -106,7 +106,43 @@ The gap closes by a factor of roughly 7 at both ends, and what is left is negati
 
 **What the pilot does not show.** 300 steps is 7.5% of a run. Over the full 4000 steps the control's gap *grows*, 0.70 to 1.17 (Measured 5); over 300 steps it shrinks slightly, 0.70 to 0.63. The pilot is too short to reproduce that growth, so it cannot be read as showing the arm beats the control's late-training gap specifically. What it does show is that the arm's gap is near zero from the first step and stays there, which is the property the arm was built for.
 
-### 7. Full test suite
+### 7. Policy shape on the pilots, and the decorrelation mechanism caught in the act
+
+`guard.py shape`, both pilot managers, batch-1000 deterministic rollout, the evaluation suite's own RPA bins. Evidence: `plots/data_analysis/rl_anneal_local/shape_rl_anneal_{local,control}_pilot.csv`.
+
+**First, a validity check on the measurement path.** My clone column, binned out of my own rollout, lands on 5.24 / 3.24 / 1.88 / 1.14 / 0.89 / 0.37 (control pilot) and 4.79 / 3.13 / 1.76 / 1.10 / 0.85 / 0.36 (arm pilot) against the human managers' 4.76 / 2.97 / 1.67 / 0.98 / 0.69 / 0.27. The clone is this project's stand-in for a human manager, and reading it out of a training-env rollout reproduces the human curve bin for bin. So the path is measuring the thing the established analysis measures, not a lookalike.
+
+**The evaluated policies at 300 steps, against the human and the clone:**
+
+| bin | human | clone | control pilot | arm pilot |
+|---|---|---|---|---|
+| {0} | 4.76 | 5.24 | 23.82 | 15.23 |
+| 1-5 | 2.97 | 3.24 | 13.14 | 9.25 |
+| 6-10 | 1.67 | 1.88 | 6.90 | 5.77 |
+| 11-15 | 0.98 | 1.14 | 5.27 | 5.08 |
+| 16-19 | 0.69 | 0.89 | 5.04 | 5.01 |
+| {20} | 0.27 | 0.37 | 5.00 | 5.00 |
+
+Row counts per bin are in the CSVs; the evaluated columns run 4,753 to 17,696 rows. **Both** pilots are monotone decreasing — the human *sign* — and both punish far harder than any human. At 300 steps neither has inverted, so **the pilot says nothing about whether this arm fixes the inversion**; the inversion is a late-training phenomenon and 300 steps cannot reach it. I am not going to read the arm's lower level as an improvement either: it is one seed at 7.5% of a run.
+
+**What the pilot does show, and it is the mechanism itself.** Compare each pilot's *behaviour* shape to its own *evaluated* shape. If uniform exploration decorrelates punishment from contribution, the behaviour policy should be dragged toward the uniform mean of 15 — down where the policy punishes above 15, up where it punishes below — by about `eps * (15 - evaluated)`. That is a quantitative prediction with no free parameters, and the control obeys it:
+
+| bin | control evaluated | control behaviour | observed shift | predicted shift |
+|---|---|---|---|---|
+| {0} | 23.82 | 23.03 | **-0.79** | -0.88 |
+| 1-5 | 13.14 | 13.87 | +0.73 | +0.19 |
+| 6-10 | 6.90 | 7.76 | +0.86 | +0.81 |
+| 11-15 | 5.27 | 6.20 | +0.93 | +0.97 |
+| 16-19 | 5.04 | 6.07 | +1.02 | +1.00 |
+| {20} | 5.00 | 5.99 | +0.99 | +1.00 |
+
+The sign flips exactly where the prediction says it should, at the one bin where the policy punishes above 15. Regressing observed shift on predicted shift gives a slope of **0.891** for the control -- the behaviour policy is, to within a tenth, the evaluated policy plus the uniform pull. The shape's range across bins shrinks by **9.4%** in the buffer relative to what is evaluated.
+
+The arm's shifts are -0.19, -0.16, -0.04, 0.00, 0.00, 0.00. Mean absolute shift **0.067 against the control's 0.886, thirteen times smaller**; regression slope **0.199 against 0.891**; range flattening **1.9% against 9.4%**.
+
+So the replay buffer the control trains on carries a measurably different policy shape from the one being evaluated, in the direction uniform exploration predicts and at the magnitude it predicts, and this arm removes that. Whether removing it changes where training ends up is what the seven runs are for.
+
+### 8. Full test suite
 
 `python -m pytest src/` on Raven: 186 passed, 11 failed, 4 errors on the first run. Six of the failures were mine and are fixed — `_RecordingManager` in `test_rl_manager_timeout_view.py` is a stand-in whose `get_action` did not accept the new `update_step` keyword, so every rollout test in that file raised `TypeError`. Adding the keyword to the stub fixed all six. The other five failures and all four errors are `FileNotFoundError` on `plots/simulation/22_2g8a_linear_self_ridge_contr/per_round.parquet`, which the isolated remote directory does not carry because `train_cluster.sh` excludes `plots/` from the sync; they are a property of the sandbox, not of this branch.
 
@@ -143,7 +179,7 @@ Clearly separated from the above: none of this was run.
 
 For whoever picks this up:
 
-1. **The shape tables for the five seeds are not in this branch.** The runs were launched, not awaited. Read them with `scripts/rl_anneal_local/guard.py shape` against each saved manager, and through the same cross-evaluation simulation the control used, so the columns sit beside `plots/data_analysis/evaluation/rl_manager_two_worlds/policy_shape.csv`.
+1. **The shape tables for the five seeds are not in this branch.** The runs were launched, not awaited. Read them with `scripts/rl_anneal_local/guard.py shape` against each saved manager, and through the same cross-evaluation simulation the control used, so the columns sit beside `plots/data_analysis/evaluation/rl_manager_two_worlds/policy_shape.csv`. The pilot tables (Measured 7) are not a preview of the answer: at 300 steps neither arm has inverted, because the inversion happens late.
 2. **The paired comparison is seed-for-seed.** Five arms times five seeds; compare `rl_anneal_local_s{N}` to `rl_new_clones_s{N}` at the same N, never arm mean to arm mean.
 3. **The confound this arm cannot resolve.** Probe the contribution model directly: hold the contribution fixed and vary whether the punishment was deserved. If its response is the same either way, no exploration scheme can produce a correctly-shaped manager against these clones, and every arm of this comparison is measuring the wrong thing. That probe is cheap and should be run before a fifth arm is designed.
 4. **sigma and the floor were chosen, not tuned.** sigma = 2 and eps_final = 0.01 were picked from the scale of the signal, with no sweep. If the arm half-works, they are the obvious next knobs — but one variable at a time, and not before the confound in item 3 is settled.
