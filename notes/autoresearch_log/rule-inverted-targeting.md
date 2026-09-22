@@ -4,7 +4,7 @@
 
 **Slot:** none. Nothing is trained, nothing is recalibrated, no artifact changes. Like both its ancestors this is a measurement branch: it adds one rule to an existing family and runs it beside the rules already there.
 
-**Parent:** `auto/rule-vs-clone-paired` at `d1ca18c` (PR [#209](https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/209)), itself on `auto/rule-based-manager-sweep` (PR [#207](https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/207)). Branch `auto/rule-inverted-targeting`, PR against `auto/rule-vs-clone-paired`. Isolated remote dir `~/repros/ai-runs/rule-inverted` (delete when the PR closes). Byte-identical artifacts, protocol and seed discipline to the parent's paired arm; the four artifact sha256s are printed in every job log.
+**Parent:** `auto/rule-vs-clone-paired` at `d1ca18c` (PR [#209](https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/209)), itself on `auto/rule-based-manager-sweep` (PR [#207](https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/207)). Branch `auto/rule-inverted-targeting`, PR [#217](https://github.com/center-for-humans-and-machines/algorithmic-institutions/pull/217) against `auto/rule-vs-clone-paired`. Isolated remote dir `~/repros/ai-runs/rule-inverted` (delete when the PR closes). Byte-identical artifacts, protocol and seed discipline to the parent's paired arm; the four artifact sha256s are printed in every job log.
 
 The parent branch is the base rather than the sweep because it is a strict descendant of it (`git merge-base` is the sweep's tip, `4c0ef83`), so it carries both the rule family and the paired harness. Basing on the sweep would have meant re-deriving the harness.
 
