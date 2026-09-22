@@ -26,6 +26,7 @@ HUMAN_DATA = "experiments/2group_8agent_50ep.csv"
 CONFIG_DIR = "configs/simulation/manager_testing"
 OUTPUT_ROOT = "plots/simulation"
 SLUG = "24_rule_managers"
+PAIRED_SLUG = "25_rule_vs_clone_paired"
 
 STACK = {
     "contribution_model": (
@@ -143,6 +144,82 @@ HEAD_TO_HEAD = [
 ]
 SKIP_INVALID_TWINS = ["prop10", "thr9_p5"]
 
+# ---------------------------------------------------------------------- #
+# paired arm: a rule and a RIVAL in the same world, one group each
+# ---------------------------------------------------------------------- #
+PAIRED_MANAGERS = [
+    "never",
+    "ah_punisher",
+    "prop10",
+    "thr9_p10",
+    "thr9_p5",
+    "human_severity",
+]
+PAIRED_FOCALS = ["prop10", "thr9_p10", "thr9_p5", "human_severity"]
+
+PAIRED_HEADER = """\
+# auto/rule-vs-clone-paired, seed {seed}.
+#
+# The sweep ran every manager in SELF-PLAY: MultiManager separates managers
+# along the batch dimension, so each manager governed its own parallel
+# population and none of them ever faced another. This arm puts a rule and a
+# RIVAL in the SAME world, one group each, so a manager can win or lose
+# members to the other seat -- the game the RL manager is actually trained in.
+#
+# Two rival families, because they are different games. Against the clone
+# (`ah_punisher`, our clone of a human manager) both seats punish and members
+# choose between two disciplined groups. Against `never` one seat is a refuge
+# with no punishment at all, so a punishing rule asks its members to accept a
+# cost they could avoid by moving -- the harder test of whether punishing
+# survives when leaving is easy.
+#
+# `{{focal}}_vs_{{rival}}`: group_0 carries the focal manager, group_1 the
+# rival. `ah_punisher_vs_ah_punisher` and `never_vs_never` are the symmetric
+# controls that say whether an asymmetry is the rule or the seat;
+# `never_vs_ah_punisher` and `ah_punisher_vs_never` are seat swaps of each
+# other and connect the two families.
+#
+# Same stack, same artifacts, same 2x8 / 24-round / 100-episode protocol and
+# the same `reseed_per_run` seed discipline as the sweep's head-to-head arm,
+# and ONE manager set for all pairings so every run draws from the same
+# manager population (sweep log, note 4).
+"""
+
+
+def paired_pairings():
+    """(focal, rival) seats, controls first, in report order."""
+    pairs = [("ah_punisher", "ah_punisher"), ("never", "never")]
+    pairs += [(f, "ah_punisher") for f in PAIRED_FOCALS] + [("never", "ah_punisher")]
+    pairs += [(f, "never") for f in PAIRED_FOCALS] + [("ah_punisher", "never")]
+    return [{"name": f"{f}_vs_{r}", "group_0": f, "group_1": r} for f, r in pairs]
+
+
+def write_paired_config(path, seed, managers, out_dir_suffix):
+    config = {
+        "seed": seed,
+        "reseed_per_run": True,
+        "artificial_humans": {"group_switching": dict(STACK)},
+        "managers": managers,
+        "pairings": paired_pairings(),
+        "switch_every": 4,
+        "n_episode_steps": 24,
+        "n_episodes": 100,
+        "n_groups": 2,
+        "n_agents": 8,
+        "agent_groups": [0, 0, 0, 0, 1, 1, 1, 1],
+        "n_contributions": 21,
+        "n_punishments": 31,
+        "n_rounds": 24,
+        "output_dir": f"{OUTPUT_ROOT}/{PAIRED_SLUG}_{out_dir_suffix}",
+        "figure_name": f"rule_vs_clone_paired_{out_dir_suffix}",
+        "save_per_round": True,
+        "basedir": ".",
+    }
+    with open(path, "w") as f:
+        f.write(PAIRED_HEADER.format(seed=seed))
+        yaml.safe_dump(config, f, sort_keys=False, default_flow_style=False)
+    print(f"wrote {path}  ({len(config['pairings'])} pairings)")
+
 
 def write_config(path, shard, n_shards, seed, managers, out_dir_suffix, header=None):
     pairings = [
@@ -189,8 +266,22 @@ def main():
     ap.add_argument("--seeds", type=int, nargs="+", default=[42])
     ap.add_argument("--per-shard", type=int, default=7)
     ap.add_argument("--head-to-head", action="store_true")
+    ap.add_argument("--paired", action="store_true")
     ap.add_argument("--basedir", default=".")
     args = ap.parse_args()
+
+    if args.paired:
+        all_m = rule_managers(args.basedir)
+        managers = {k: all_m[k] for k in PAIRED_MANAGERS}
+        for seed in args.seeds:
+            suffix = f"s{seed}"
+            write_paired_config(
+                os.path.join(args.basedir, CONFIG_DIR, f"{PAIRED_SLUG}_{suffix}.yml"),
+                seed=seed,
+                managers=managers,
+                out_dir_suffix=suffix,
+            )
+        return
 
     if args.head_to_head:
         managers = head_to_head_managers(args.basedir)
