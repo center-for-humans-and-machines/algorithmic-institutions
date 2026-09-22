@@ -372,10 +372,15 @@ class _StubEnv:
         self.n_batch = n_batch
         self.batch_size = n_batch
         self.round_number = 0
+        self.n_resets = 0
+        self.n_steps = 0
         self.agent_groups = th.zeros(n_batch, self.n_agents, 1, dtype=th.long)
         self.batch_edge_index = None
         self.batch = None
         self.batch_agent_group_mask = None
+        # `ArtificialHumanEnv.__init__` does this too: a reset that plays no
+        # episode. Mirrored here so a budget counted off resets would fail.
+        self.reset()
 
     def _state(self):
         return {
@@ -390,6 +395,7 @@ class _StubEnv:
 
     def reset(self):
         self.round_number = 0
+        self.n_resets += 1
         return self._state()
 
     def served_state(self):
@@ -402,6 +408,7 @@ class _StubEnv:
 
     def step(self):
         self.round_number += 1
+        self.n_steps += 1
         done = self.round_number >= self.n_rounds
         return None, th.zeros(self.n_batch, 2, 1), done
 
@@ -434,15 +441,22 @@ class _StubManager:
 
 def test_episode_budget_counts_every_rollout():
     """The comparison's budget is equal environment episodes. One `run_batch`
-    is one `env.reset()` and `env.batch_size` complete episodes, whatever the
-    exploration mechanism -- which is why this arm matches the reference at
-    the same `n_update_steps`."""
+    is `env.batch_size` complete episodes, whatever the exploration mechanism
+    -- which is why this arm matches the reference at the same
+    `n_update_steps`.
+
+    The counter is incremented in `run_batch` AFTER the rollout, never on
+    `env.reset()`, and that matters: `ArtificialHumanEnv.__init__` calls
+    `reset()` once without playing an episode, so a reset-counting budget
+    overstates every run by one rollout. `_StubEnv` resets in its constructor
+    exactly so this test would catch that."""
     from aimanager import rl_manager
 
     for k in rl_manager.EPISODE_BUDGET:
         rl_manager.EPISODE_BUDGET[k] = 0
     rl_manager.replay_keys = ["contribution", "agent_group"]
     env = _StubEnv()
+    assert env.n_resets == 1, "the constructor's own reset must not be counted"
     rl_manager.run_batch(_StubManager(3), env, on_policy=False, update_step=0)
     rl_manager.run_batch(_StubManager(3), _StubEnv(), on_policy=True, update_step=0)
     budget = rl_manager.EPISODE_BUDGET
@@ -451,3 +465,9 @@ def test_episode_budget_counts_every_rollout():
     assert budget["behaviour_episodes"] == env.batch_size
     assert budget["eval_episodes"] == env.batch_size
     assert budget["episode_rounds"] == 2 * env.batch_size * env.n_rounds
+    # The same total read off the round counter, the way the annealed arm
+    # counts it: env rounds divided by the episode length.
+    assert budget["episode_rounds"] / env.n_rounds == budget["episodes"]
+    # And read off the env itself: `step` fires once per round per rollout.
+    assert env.n_steps == env.n_rounds
+    assert budget["episode_rounds"] == 2 * env.batch_size * env.n_steps

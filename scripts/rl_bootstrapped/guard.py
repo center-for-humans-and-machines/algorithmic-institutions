@@ -25,6 +25,7 @@ import argparse
 import os
 import sys
 
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
@@ -40,6 +41,17 @@ REFERENCE = os.path.join(OUT, "reference_policy_shape.csv")
 
 BEHAVIOUR_TAGS = ("bootstrap-head", "eps-greedy")
 EVAL_TAG = "greedy"
+
+# The shape-distortion prediction, shared with the annealed-local arm so the
+# arms are comparable. Under epsilon-greedy a uniform resample over the 31
+# punishment levels 0..30 has mean 15, so WITHIN EACH CONTRIBUTION BIN the
+# behaviour policy is dragged toward 15 by exactly eps * (15 - evaluated).
+# No free parameters. The reference eps is held at the historical 0.1 for
+# every arm, including arms that dither less or not at all: the fitted slope
+# then reads as "how much of the epsilon-greedy distortion this arm still
+# has", 1 being all of it and 0 none.
+UNIFORM_MEAN = 15.0
+REFERENCE_EPS = 0.1
 
 
 def _wide(df):
@@ -104,6 +116,70 @@ def shape_table(wide, sampling=EVAL_TAG, last_n=5):
     return out
 
 
+def behaviour_tag(wide):
+    present = set(wide["sampling"].unique())
+    for tag in BEHAVIOUR_TAGS:
+        if tag in present:
+            return tag
+    return None
+
+
+def distortion_table(wide, last_n=5):
+    """Per-bin shape distortion: how far the replay buffer's shape sits from
+    the shape being evaluated, against the parameter-free epsilon-greedy
+    prediction.
+
+    This is the sharper discriminator. The aggregate gap measures a level
+    offset; this measures whether the exploration mechanism *flattens the
+    contingency between punishment and contribution*, which is the thing the
+    inverted-shape result makes us care about.
+    """
+    tag = behaviour_tag(wide)
+    evaluated = shape_table(wide, EVAL_TAG, last_n)
+    behaviour = shape_table(wide, tag, last_n) if tag else None
+    if evaluated is None or behaviour is None:
+        return None, None
+    d = pd.DataFrame(
+        {
+            "evaluated": evaluated["mean_punishment"],
+            "behaviour": behaviour["mean_punishment"],
+            "n_evaluated": evaluated["n_agent_rounds"],
+            "n_behaviour": behaviour["n_agent_rounds"],
+        }
+    ).reindex(RPA_LABELS)
+    d["observed_shift"] = d["behaviour"] - d["evaluated"]
+    d["predicted_shift"] = REFERENCE_EPS * (UNIFORM_MEAN - d["evaluated"])
+    # The prediction changes sign exactly where the evaluated policy already
+    # punishes above the uniform mean -- a bin where dithering pulls DOWN.
+    d["predicted_sign"] = np.sign(d["predicted_shift"])
+    d["observed_sign"] = np.sign(d["observed_shift"])
+
+    ok = d.dropna(subset=["observed_shift", "predicted_shift"])
+    summary = {"behaviour_sampling": tag, "n_bins": len(ok)}
+    if len(ok) >= 2 and ok["predicted_shift"].std() > 0:
+        slope, intercept = np.polyfit(ok["predicted_shift"], ok["observed_shift"], 1)
+        summary["distortion_slope"] = float(slope)
+        summary["distortion_intercept"] = float(intercept)
+    summary["mean_abs_shift"] = float(ok["observed_shift"].abs().mean())
+    w = ok["n_evaluated"]
+    if w.sum() > 0:
+        summary["mean_abs_shift_weighted"] = float(
+            (ok["observed_shift"].abs() * w).sum() / w.sum()
+        )
+    summary["sign_agreement"] = float(
+        (ok["predicted_sign"] == ok["observed_sign"]).mean()
+    )
+    # Flattening: how much shallower the replay buffer's slope is than the
+    # evaluated policy's. Epsilon-greedy predicts exactly eps.
+    ev_slope = d["evaluated"].iloc[-1] - d["evaluated"].iloc[0]
+    beh_slope = d["behaviour"].iloc[-1] - d["behaviour"].iloc[0]
+    summary["evaluated_slope"] = float(ev_slope)
+    summary["behaviour_slope"] = float(beh_slope)
+    if ev_slope == ev_slope and ev_slope != 0:
+        summary["flattening"] = float(1.0 - beh_slope / ev_slope)
+    return d, summary
+
+
 def head_table(wide, sampling=EVAL_TAG):
     cols = [
         c for c in wide.columns if c.startswith("head_") or c.startswith("consensus_")
@@ -130,7 +206,7 @@ def main():
     if os.path.exists(REFERENCE):
         reference = pd.read_csv(REFERENCE, index_col="contribution_bin")
 
-    shapes, gaps = {}, []
+    shapes, gaps, distortions = {}, [], []
     for path in args.parquets:
         job = job_name(path)
         wide = _wide(pd.read_parquet(path))
@@ -158,9 +234,21 @@ def main():
             shapes[job] = shape["mean_punishment"]
             shapes[f"{job} (n)"] = shape["n_agent_rounds"]
 
+        dist, summary = distortion_table(wide, last_n=args.last_n)
+        if dist is not None:
+            dist.to_csv(os.path.join(job_out, "shape_distortion.csv"))
+            distortions.append({"job": job, **summary})
+
         heads = head_table(wide)
         if heads is not None:
             heads.to_csv(os.path.join(job_out, "head_shape.csv"))
+
+    if distortions:
+        ddf = pd.DataFrame(distortions).set_index("job")
+        ddf.to_csv(os.path.join(args.out, "shape_distortion_summary.csv"))
+        print("\n== shape distortion: behaviour vs evaluated, per bin ==")
+        print("(distortion_slope 1 = full epsilon-greedy distortion, 0 = none)")
+        print(ddf.to_string())
 
     if gaps:
         gdf = pd.DataFrame(gaps).set_index("job")
