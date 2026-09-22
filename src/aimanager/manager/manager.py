@@ -1,5 +1,6 @@
 import torch as th
 from aimanager.generic.graph import GraphNetwork
+from aimanager.manager.exploration import Exploration
 
 
 class ArtificalManager:
@@ -16,6 +17,9 @@ class ArtificalManager:
         gamma=None,
         target_update_freq=None,
         eps=None,
+        eps_final=None,
+        eps_anneal_steps=None,
+        explore_sigma=None,
         device,
     ):
         self.device = device
@@ -58,14 +62,27 @@ class ArtificalManager:
         self.n_punishments = n_punishments
         self.default_values = default_values
         self.eps = eps
+        # Off by default: with eps_final and explore_sigma unset this is the
+        # original constant-eps, uniform-proposal epsilon-greedy.
+        self.exploration = (
+            Exploration(
+                eps=eps,
+                n_actions=n_punishments,
+                device=device,
+                eps_final=eps_final,
+                eps_anneal_steps=eps_anneal_steps,
+                sigma=explore_sigma,
+            )
+            if eps is not None
+            else None
+        )
 
     def encode(self, state, edge_index, **_):
         return self.policy_model.encode(state, edge_index=edge_index)
 
-    def encode_pure(self, state, **_):
-        return self.policy_model.encode_pure(state)
-
-    def get_action(self, state, first=False, edge_index=None, greedy=False):
+    def get_action(
+        self, state, first=False, edge_index=None, greedy=False, update_step=None
+    ):
         n_batch, n_agents, n_rounds = list(state.values())[0].shape
         exp_state = self.expand_obs_for_groups(state, self.n_groups)
         encoded = self.policy_model.encode(exp_state, edge_index=edge_index)
@@ -73,34 +90,17 @@ class ArtificalManager:
             q_values = self.policy_model(encoded, reset_rnn=first)
             q_values = q_values.reshape(n_batch, self.n_groups, n_agents, n_rounds, -1)
 
-            n_actions = q_values.shape[-1]
             greedy_action = q_values.argmax(-1)
             agent_group = state["agent_group"].unsqueeze(1)  # (E, 1, A, T)
             greedy_action = greedy_action.gather(1, agent_group)  # (E, 1, A, T)
             greedy_action = greedy_action.squeeze(1)  # (E, A, T)
             if not greedy:
-                random_actions = th.randint(
-                    0, n_actions, size=greedy_action.shape, device=self.device
-                )
-                random_numbers = th.rand(size=greedy_action.shape, device=self.device)
-                select_random = random_numbers < self.eps
-                picked_action = th.where(select_random, random_actions, greedy_action)
-                return picked_action, q_values
+                # `update_step` drives the epsilon schedule; without it (or
+                # without a schedule configured) epsilon stays at its start
+                # value, which is the original behaviour.
+                return self.exploration(greedy_action, update_step), q_values
             else:
                 return greedy_action, q_values
-
-    def get_punishment(self, **state):
-        n_batch, n_agents, n_rounds = list(state.values())[0].shape
-        first = state["round_number"].max() == 0
-        exp_state = self.expand_obs_for_groups(state, self.n_groups)
-        encoded = self.policy_model.encode_pure(exp_state)
-        q_values = self.policy_model(encoded, reset_rnn=first)
-        q_values = q_values.reshape(n_batch, self.n_groups, n_agents, n_rounds, -1)
-        greedy_actions = q_values.argmax(-1)  # (E, G, A, T)
-        agent_group = state["agent_group"].unsqueeze(1)  # (E, 1, A, T)
-        greedy_actions = greedy_actions.gather(1, agent_group)  # (E, 1, A, T)
-        greedy_actions = greedy_actions.squeeze(1)  # (E, A, T)
-        return greedy_actions
 
     def expand_obs_for_groups(self, obs, n_groups):
         exclude_keys = ["group_payoff"]

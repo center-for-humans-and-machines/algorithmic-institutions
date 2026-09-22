@@ -1,0 +1,47 @@
+# free-punishment-fix, the reported-not-gated reference stack: exactly
+# 23_2g8a_self_gnn_contr_gnn_switch_simtimeout.yml apart from output_dir and
+# figure_name. A different contributor (the plain 50ep GNN), a different
+# switch model (the reanchored one) and two punisher families -- the GNN
+# punisher spends far more of its punishment budget than the multinomial, so
+# this stack says whether the correction reads the same way outside the
+# frontier. Same seed, same 100 episodes, same artifacts; nothing retrained.
+# See notes/autoresearch_log/free-punishment-fix.md.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout.joblib
+  gnn:
+    type: human
+    path: artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_timeout/model/architecture_node+edge+rnn__dataset_50ep_doubled.pt
+
+pairings:
+  - name: lin_multinomial_self
+    group_0: lin_multinomial
+    group_1: lin_multinomial
+  - name: gnn_self
+    group_0: gnn
+    group_1: gnn
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_self_gnn_contr_gnn_switch_freepun
+figure_name: 2g8a_self_gnn_contr_gnn_switch_freepun
+save_per_round: true
+basedir: .

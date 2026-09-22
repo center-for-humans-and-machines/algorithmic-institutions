@@ -1,0 +1,29 @@
+{
+  "base_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "base_artifact_sha256": "714bf40be1b640a2df09395164ef053fce7a60de9c9d4e034b0f2627a6d01013",
+  "copula_phi": 1.0,
+  "copula_rho": 0.0435568043640977,
+  "copula_switch_every": 1,
+  "date": "2026-09-15T20:29:41+00:00",
+  "estimator": "pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only",
+  "git_head": "unavailable: Command '['git', '-C', '/raven/u/certuer/autoresearch/contribution-group-vnode', 'rev-parse', 'HEAD']' returned non-zero exit status 128.",
+  "n_tensors_verified": 14,
+  "note": "dict-level copy of the base artifact plus the three copula fields; every pre-existing key verified bit-identical after reload; teacher-forced (sample=False) probabilities unchanged",
+  "output_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "output_artifact_sha256": "379c2557e21922b12408f359d398fa21075ac31b5eeab425a564306233be8f0e",
+  "params_json": "artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_herding_copula/calibration/copula_params.json",
+  "params_json_sha256": "612460485d04ef8dca03a839f8b9f70af271da051237d9ebd634a03c18763e66",
+  "phi_ci": [
+    0.21163458285772926,
+    1.2637034657775452
+  ],
+  "phi_final_reason": "orchestrator ruling 2026-09-15 (log: notes/autoresearch_log/contribution-group-vnode.md, step 10 / amendment A2, fixed before the numbers were seen): phi_hat 0.6182476558394783 with 200-resample paired cluster-bootstrap CI [0.21163458285772926, 1.2637034657775452] spanning 1, so PR #165's boundary ruling applies and the unit-root boundary phi = 1.0 (static episode latent) is adopted; the estimate stays in the JSON unaltered and rho is untouched",
+  "phi_lag1_diagnostic": 0.6182476558394783,
+  "phi_stamped": 1.0,
+  "rho_ci": [
+    0.024859738353023016,
+    0.05941458216657012
+  ],
+  "script": "scripts/artificial_humans/make_contribution_copula_artifact.py",
+  "teacher_forced_rows_verified": 7457
+}

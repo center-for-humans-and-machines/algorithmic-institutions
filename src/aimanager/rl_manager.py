@@ -15,6 +15,7 @@ from aimanager.manager.memory import Memory
 from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.artificial_humans import AH_MODELS
 from aimanager.manager.manager import ArtificalManager
+from aimanager.manager.linear_opponent import load_opponent
 from aimanager.utils.utils import make_dir
 from aimanager.utils.array_to_df import add_labels
 
@@ -60,13 +61,27 @@ def run_batch(
     rl_group_id=0,
 ):
 
-    state = env.reset()
+    # The manager is served by the env exactly as the contribution, switch and
+    # punisher models are, so it reads the state through `served_state()`: a
+    # player who gave no input contributed nothing, and that is what the game
+    # charged and what everyone saw. `env.reset()` / `env.step()` return
+    # `self.state`, which still carries the default `update_contribution`
+    # writes over a timed-out cell -- the value the recorded output needs and
+    # the manager must not be trained on (ArtificialHumanEnv.served_state).
+    env.reset()
+    state = env.served_state()
     metric_list = []
     for round_number in count():
         statecopy = {k: v.clone() for k, v in state.items() if k in replay_keys}
 
+        # `update_step` only reaches the behaviour policy: the evaluation
+        # rollout is `greedy=True` and every exploration mechanism is off
+        # there, which is what makes the two rollouts comparable.
         action, q_values = manager.get_action(
-            state, first=round_number == 0, greedy=on_policy
+            state,
+            first=round_number == 0,
+            greedy=on_policy,
+            update_step=update_step,
         )
 
         # Two-manager mode: RL produces (B, 8, 1) over all agents; opponent
@@ -87,9 +102,12 @@ def run_batch(
         else:
             final_punishment = action
 
-        state = env.punish(final_punishment)
+        # The env's own state, not the served view: these metrics are the
+        # record of what the game charged and paid out, so they keep the
+        # imputed value exactly as per_round.parquet does.
+        recorded = env.punish(final_punishment)
 
-        metrics = {k: state[k].to(th.float).mean().item() for k in rec_keys}
+        metrics = {k: recorded[k].to(th.float).mean().item() for k in rec_keys}
 
         # Pre-step agent_groups: mask reflects who received this round's
         # punishment. Assumes n_groups == 2.
@@ -106,20 +124,21 @@ def run_batch(
                 "common_good",
                 "contributor_payoff",
             ):
-                x = state[k].squeeze(-1).to(th.float)
+                x = recorded[k].squeeze(-1).to(th.float)
                 metrics[k] = ((x * rl_mask).sum(dim=1) / rl_count).mean().item()
             for k in ("group_payoff", "group_payoff_sum"):
-                metrics[k] = state[k][:, rl_group_id].to(th.float).mean().item()
-            opp_p = state["punishment"].squeeze(-1).to(th.float)
+                metrics[k] = recorded[k][:, rl_group_id].to(th.float).mean().item()
+            opp_p = recorded["punishment"].squeeze(-1).to(th.float)
             metrics["opp_punishment"] = (
                 ((opp_p * opp_mask).sum(dim=1) / opp_count).mean().item()
             )
             metrics["opp_sum_payoff"] = (
-                state["group_payoff_sum"][:, opp_group_id].to(th.float).mean().item()
+                recorded["group_payoff_sum"][:, opp_group_id].to(th.float).mean().item()
             )
 
         # pass actions to environment and advance by one step
-        state, reward, done = env.step()
+        _, reward, done = env.step()
+        state = env.served_state()
         if replay_mem is not None:
             replay_mem.add(
                 episode_step=round_number,
@@ -223,11 +242,14 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     if "opponent_manager" in config:
         opponent_manager_path = os.path.join(basedir, config["opponent_manager"])
         print(f"Loading opponent manager from {opponent_manager_path}")
-        opponent_manager = (
-            AH_MODELS[config["artificial_humans_model"]]
-            .load(opponent_manager_path, device=device)
-            .to(device)
-        )
+        # `.joblib` -> the batched linear punisher, anything else -> a GNN
+        # punisher: the same extension dispatch the simulation configs use, so
+        # this slot can name a linear baseline where a GNN artifact used to sit.
+        opponent_manager = load_opponent(
+            opponent_manager_path,
+            n_groups=config["env_args"].get("n_groups", 1),
+            device=device,
+        ).to(device)
 
     # Switch predictor — required for group-switching dynamics. Optional
     # for backwards compatibility with legacy single-group configs. Key name
