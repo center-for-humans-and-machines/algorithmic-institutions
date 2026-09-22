@@ -42,6 +42,14 @@ Punishment gains 8.12 contribution, worth 13.0 of pool at the 1.6 multiplier, an
 
 Both are **seat totals per round**: the focal manager's group's summed contribution, and `1.6 * sum(c) - sum(p)` over that group. A total, not a per-member average, because the competing setting prices membership -- a rule that raises contributions and loses the members who make them has not gained anything (`rule-vs-clone-paired.md` section 3.6).
 
+### How targeting is measured, and how it is not
+
+**Aim is reported as a rank correlation, not as a difference of bin means.** Every rollout accumulates the full 21 x 31 contribution-by-punishment table on the focal seat's valid cells, and the targeting statistic is the tie-corrected Spearman rho taken from it. The reason is a measured trap rather than a preference: a sibling arm's largest apparent shape difference, **-11.1** on a difference of bin means, turned out to be entirely a level artefact -- the manager's mean punishment fell to a third while its punish rate tripled, and its actual contribution-to-punishment relationship was unchanged to the third decimal. Same aim, less force, more often. Spearman rho is invariant to any strictly monotone rescaling of the punishment, so it cannot make that mistake; `scripts/tests/test_rule_sigmoid_targeting.py` pins the invariance. The level (`mean_p_valid`) and the rate (`punish_rate`, `mean_p_given_positive`) are reported **beside** it, never instead of it.
+
+**The leaver diagnostic is reported as a ranking, not as a sign test.** It is here because it reads straight off the recorded rounds with no counterfactual, and it does reproduce the ordering of managers -- it correlates with policy shape at r = -0.95 over ten of them. But its zero point does not separate the classes: across four inverted managers only one crossed zero (+0.291) and the other three sat between -0.02 and -1.21. Its noise floor is about 0.577, the size of the differences a fine contrast would ask it to resolve. So no rule is called correctly or incorrectly targeted on the sign of its `c_gap`, and no paired contrast rests on it.
+
+**Timed-out cells are excluded from every shape table in this arm.** A player who gave no input is recorded at the imputed contribution 9 with a forced-zero punishment, so the cell is not a decision; counting it drags the `6-10` column down with rows that never happened. `evaluation_suite.convert.load_sim` does **not** apply that mask (`load_human` does), so every simulated policy-shape table built through the shared loader in this project carries those rows. That is a live defect in frozen shared surface: it is named here and left for the maintainer, not fixed on this branch. This arm builds its own tables in `paired_rollout.contingency`, which masks on `contribution_valid` at source.
+
 ### The setting: competing, not self-play
 
 The rule holds group 0 against the behavioural clone in group 1, members free to move every fourth round. Not self-play, because the parent arms established that self-play rankings do not survive competition: `prop10` led by +12.5 pool points per seat in self-play and came out at **-15.6** [-23.1, -8.0] against a live rival.
@@ -69,12 +77,26 @@ The rule holds group 0 against the behavioural clone in group 1, members free to
 | 3 | Calibrate the new harness against the established simulation path on the rules both can run. | |
 | 4 | Sobol design, fit seeds; GP with a noise term; optimum, length scales, Hessian, flat region, per objective. | |
 | 5 | Validate the chosen parameters, the incumbents and ridge/boundary probes on held-out seeds. | |
-| 6 | Report realised spend, policy shape on the evaluation suite's bins beside the human and the clone, and the leaver diagnostic. | |
+| 6 | Report realised spend, policy shape on the evaluation suite's bins beside the human and the clone, an intensity-invariant targeting statistic, and the leaver diagnostic as a ranking. | |
 | 7 | Log, PR. | |
 
 ## 3. Results
 
-*(to be filled)*
+### 3.1 The harness reproduces the established simulation path (measured)
+
+The sweep does not go through `simulate.py`. It runs the same env, the same four artifacts (sha256s printed in every job log) and the same protocol -- 2 x 8 agents, 24 rounds, `switch_every` 4, the rule in group 0 and the clone in group 1 -- but on the batch dimension, with one parameter vector per episode. That is new code between the models and the numbers, so it is checked against numbers the old path produced before it is used for anything.
+
+One rollout, 1024 episodes, seed 42, against the published `26_rule_inverted_targeting` figures (300 episodes, `simulate.py`, the corrected accounting):
+
+| manager | members, here | members, published | mean p, here | mean p, published | mean c, here | mean c, published | `c_gap`, here | `c_gap`, published |
+|---|---|---|---|---|---|---|---|---|
+| `never` | 4.62 | 4.57 | 0 | 0 | 8.64 | 8.48 | -1.45 | -1.20 |
+| `thr9_p10` | 3.91 | 3.92 | 2.90 | 2.80 | 11.74 | 11.48 | -3.64 | -3.51 |
+| `ah_punisher` (control) | 3.99 | 4.00 | 1.85 | ~1.9 | 10.03 | ~10.2 | -2.26 | -2.35 |
+
+Membership agrees to 0.05 of a member, realised spend to 0.1, mean contribution to 0.26 and the leaver gap to 0.14 -- the last well inside its own 0.577 noise floor. The common pool agrees less tightly (`thr9_p10` 60.69 here against 62.32 published, `never` 62.64 against 62.22) but within about one standard error of this run's own 1.5, and the two runs are different RNG streams with the free-punishment fix in place here and not there.
+
+**Throughput, which is what made the design affordable.** A rollout costs about the same whatever its batch size, because the cost is per-round Python and model-call overhead rather than arithmetic -- the contribution GNN is 35 KB. Measured: 8 rollouts of 768 episodes in 42 seconds on an A100, and 3 seconds for a 192-episode rollout on four CPU threads. `simulate.py` needs about 77 seconds for 100 episodes of one pairing. So the sweep runs on CPU nodes, and a thousand design points at 512 episodes each is an hour of ordinary batch time rather than a GPU campaign.
 
 ## 4. Notes
 
