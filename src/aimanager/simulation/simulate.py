@@ -71,8 +71,22 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
         columns=columns,
         value_name="agent_group",
     )
+    # who actually gave an input: without it a timed-out agent is
+    # indistinguishable from one that really contributed the imputed
+    # default, which both the corrected common-good accounting and any
+    # count of punishment aimed at timed-out cells need.
+    contribution_valid = using_multiindex(
+        recorder.memory["contribution_valid"].squeeze(1).numpy(),
+        columns=columns,
+        value_name="contribution_valid",
+    )
 
-    df_sim = punishments.merge(common_good).merge(contributions).merge(agent_group)
+    df_sim = (
+        punishments.merge(common_good)
+        .merge(contributions)
+        .merge(agent_group)
+        .merge(contribution_valid)
+    )
 
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
     df_sim["payoff"] = (
@@ -141,6 +155,8 @@ def run_simulation(config: dict, output_dir: str) -> list:
     n_episode_steps = config["n_episode_steps"]
     n_episodes = config["n_episodes"]
     basedir = config.get("basedir", ".")
+    seed = config.get("seed")
+    reseed_per_run = config.get("reseed_per_run", False) and seed is not None
 
     # Setup device
     device = th.device("cuda" if th.cuda.is_available() else "cpu")
@@ -201,6 +217,17 @@ def run_simulation(config: dict, output_dir: str) -> list:
     dfs = []
     for name, run in runs.items():
         print(f"Start run {name}")
+        # Opt-in (default off, so every existing config keeps its numbers):
+        # restart every run from the config's seed instead of letting run k
+        # inherit whatever RNG state runs 1..k-1 left behind. Needed when the
+        # runs in one config are managers being compared to each other and the
+        # difference has to be the manager, not the draw.
+        if reseed_per_run:
+            random.seed(seed)
+            np.random.seed(seed)
+            th.manual_seed(seed)
+            if th.cuda.is_available():
+                th.cuda.manual_seed_all(seed)
         groups = run["groups"]
         pairing = run["pairing"]
 
@@ -296,13 +323,19 @@ def run_simulation(config: dict, output_dir: str) -> list:
                     contribution_valid=state["contribution_valid"].reshape(-1).tolist(),
                 )
                 punishments = mm.get_punishments(rounds + [round_dict])[0]
-                round_dict = add_punishments(round_dict, punishments)
-                rounds.append(round_dict)
-
                 punishments_tensor = th.tensor(
                     punishments, dtype=th.int64, device=device
                 )
                 state = env.punish(punishments_tensor.unsqueeze(-1).unsqueeze(0))
+
+                # The manager's own record is what the game charged, not the
+                # raw action: `punish` zeroes a punishment aimed at a player
+                # who gave no input, and this record is where the punisher's
+                # `prev_punishment` feature comes from next round.
+                round_dict = add_punishments(
+                    round_dict, state["punishment"].reshape(-1).tolist()
+                )
+                rounds.append(round_dict)
 
                 recorder.add(
                     **{

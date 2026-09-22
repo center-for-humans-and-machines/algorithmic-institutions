@@ -1,0 +1,141 @@
+# auto/rule-based-manager-sweep, head-to-head arm, seed 44.
+#
+# The decisive comparisons in ONE config so that every manager here consumes
+# exactly the same RNG per round and their difference is as close to the rule
+# alone as this simulation allows: never-punish, the artificial punisher
+# (the baseline to beat), the sweep's three best threshold/proportional
+# rules, the human-shaped rule, and skip_invalid twins of two of them that
+# never punish a player who gave no input (review finding D1). Same stack,
+# same protocol, same seed discipline as the sweep shards.
+seed: 44
+reseed_per_run: true
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  never:
+    type: rule_based
+    rule: never
+  ah_punisher:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  prop10:
+    type: rule_based
+    rule: proportional
+    rate: 1.0
+  thr9_p10:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 10
+  thr9_p5:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 5
+  human_severity:
+    type: rule_based
+    rule: severity_table
+    table:
+    - 10.0
+    - 8.0
+    - 6.0
+    - 6.0
+    - 7.0
+    - 6.0
+    - 5.0
+    - 4.0
+    - 5.0
+    - 4.0
+    - 5.0
+    - 3.0
+    - 5.0
+    - 4.0
+    - 4.0
+    - 4.0
+    - 4.0
+    - 3.0
+    - 4.0
+    - 3.0
+    - 7.0
+    prob_table:
+    - 0.4685
+    - 0.5428
+    - 0.5266
+    - 0.3715
+    - 0.4187
+    - 0.4553
+    - 0.3827
+    - 0.4068
+    - 0.4496
+    - 0.4417
+    - 0.2594
+    - 0.2597
+    - 0.2703
+    - 0.3192
+    - 0.2174
+    - 0.1876
+    - 0.2436
+    - 0.1656
+    - 0.1885
+    - 0.2464
+    - 0.0381
+  prop10_si:
+    type: rule_based
+    rule: proportional
+    rate: 1.0
+    skip_invalid: true
+  thr9_p5_si:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 5
+    skip_invalid: true
+pairings:
+- name: never_self
+  group_0: never
+  group_1: never
+- name: ah_punisher_self
+  group_0: ah_punisher
+  group_1: ah_punisher
+- name: prop10_self
+  group_0: prop10
+  group_1: prop10
+- name: thr9_p10_self
+  group_0: thr9_p10
+  group_1: thr9_p10
+- name: thr9_p5_self
+  group_0: thr9_p5
+  group_1: thr9_p5
+- name: human_severity_self
+  group_0: human_severity
+  group_1: human_severity
+- name: prop10_si_self
+  group_0: prop10_si
+  group_1: prop10_si
+- name: thr9_p5_si_self
+  group_0: thr9_p5_si
+  group_1: thr9_p5_si
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups:
+- 0
+- 0
+- 0
+- 0
+- 1
+- 1
+- 1
+- 1
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+output_dir: plots/simulation/24_rule_managers_h2h_s44
+figure_name: rule_managers_h2h_s44
+save_per_round: true
+basedir: .

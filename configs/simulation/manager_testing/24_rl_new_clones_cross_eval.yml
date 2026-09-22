@@ -1,0 +1,109 @@
+# Cross-evaluation for the new-clones RL managers: every manager scored in the
+# one world, on the same axes.
+#
+# The world is the training world, slot for slot -- the same contribution,
+# validity and switch artifacts the managers were trained against, so a
+# difference between two rows here is a difference between the managers and
+# not between the worlds they are being read in.
+#
+# `lin_punisher` appears twice over: as the opponent every learned manager
+# faces in group 1, and, through the `lin_punisher_self` pairing, as a
+# group-0 manager scored exactly as the learned ones are. It is this
+# project's clone of a human manager and the maintainer's success criterion
+# is whether a learned policy beats it, so it has to be a row and not only a
+# column.
+#
+# The rule rows are the control, and they are PR #207's winners rather than
+# rules invented here: `thr9_p10` (punish 10 when the player contributed 9 or
+# less) and `prop10` (punish the shortfall from 20) are the two that beat the
+# clone in both of that sweep's arms, and `never` is the floor. They are
+# re-run inside this config rather than quoted from it, because that PR's own
+# section 3.0 warns MultiManager's RNG draw depends on the config's manager
+# set, so two managers are only stream-comparable within one file.
+#
+# What the control decides: punishment costs the common pool in the round it
+# is given and its benefit is delayed. If a rule earns more than the learned
+# manager, a quiet learned policy is a training failure; if it earns less, the
+# world is saying punishment does not pay. PR #207 already answered the second
+# half in this world -- it does pay -- so these rows are here to size the gap.
+#
+# See notes/autoresearch_log/rl-manager-two-worlds.md.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  rl_s42:
+    type: rl
+    path: artifacts/manager/rl_new_clones_s42/model/rl_new_clones_s42_manager.pt
+  rl_s43:
+    type: rl
+    path: artifacts/manager/rl_new_clones_s43/model/rl_new_clones_s43_manager.pt
+  rl_s44:
+    type: rl
+    path: artifacts/manager/rl_new_clones_s44/model/rl_new_clones_s44_manager.pt
+  lin_punisher:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_ceiling_severity_copula.joblib
+  # The control rows. `never` is the floor; `thr9_p10` and `prop10` are the
+  # two rules PR #207 found beat the clone in both of its arms. They are
+  # re-run here rather than quoted, because that PR's own section 3.0 warns
+  # MultiManager's RNG draw depends on the config's manager set, so two
+  # managers are only stream-comparable inside one config.
+  never:
+    type: rule_based
+    rule: never
+  thr9_p10:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 10
+  prop10:
+    type: rule_based
+    rule: proportional
+    rate: 1.0
+
+pairings:
+  # the three learned managers, each against the punisher they trained against
+  - name: rl_s42_vs_punisher
+    group_0: rl_s42
+    group_1: lin_punisher
+  - name: rl_s43_vs_punisher
+    group_0: rl_s43
+    group_1: lin_punisher
+  - name: rl_s44_vs_punisher
+    group_0: rl_s44
+    group_1: lin_punisher
+  # the baseline and the control rows, in the same group-0 seat
+  - name: lin_punisher_self
+    group_0: lin_punisher
+    group_1: lin_punisher
+  - name: never_vs_punisher
+    group_0: never
+    group_1: lin_punisher
+  - name: thr9_p10_vs_punisher
+    group_0: thr9_p10
+    group_1: lin_punisher
+  - name: prop10_vs_punisher
+    group_0: prop10
+    group_1: lin_punisher
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/24_rl_new_clones_cross_eval
+figure_name: rl_new_clones_cross_eval
+save_per_round: true
+basedir: .
