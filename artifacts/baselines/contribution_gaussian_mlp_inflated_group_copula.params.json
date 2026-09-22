@@ -1,0 +1,333 @@
+{
+  "base_bundle": "artifacts/baselines/contribution_gaussian_mlp_inflated_best.joblib",
+  "base_bundle_model": "gaussian_mlp_inflated",
+  "base_bundle_sha256": "687755b6c9f746f03844dbeec991a3f437036d3cd29f6f0a0505fd7130580b0a",
+  "boot_seed": 38381,
+  "bvn_max_dev": 3.3306690738754696e-16,
+  "cell_key": "episode_round_group",
+  "censored_share": 0.21577041705779804,
+  "data_file": "experiments/baseline/2group_8agent_50ep_bline_train.csv",
+  "estimator": "pairwise_mle_censored_gaussian",
+  "git_sha": "15de34b5221f664b6e2a9c8d4915f51296c3bfdd",
+  "icc_oneway": 0.04442338530575641,
+  "lr_per_pair_human": {
+    "lag1": 0.00039439612742742537,
+    "within_cell": 0.0015272742864223968
+  },
+  "marginal_source": "estimator.predict_proba",
+  "mask": "contribution_valid",
+  "misspecification": {
+    "lag-1": {
+      "both_0": [
+        0.03461725987323257,
+        0.026821996081405213,
+        1.290629517958641
+      ],
+      "both_20": [
+        0.03764714076756983,
+        0.02489260554396363,
+        1.5123824904982328
+      ],
+      "n_interior": 19746,
+      "rho_interior": 0.043688335008716266
+    },
+    "within-cell": {
+      "both_0": [
+        0.03485752153744202,
+        0.027916712433071856,
+        1.2486255901732775
+      ],
+      "both_20": [
+        0.03717693836978131,
+        0.02484564153042997,
+        1.4963162985446945
+      ],
+      "n_interior": 10372,
+      "rho_interior": 0.07744702908540384
+    }
+  },
+  "moment_diagnostics": {
+    "cross-group same-round (episode shock)": {
+      "ci": [
+        -0.028825288999320325,
+        0.018702178049212214
+      ],
+      "n_pairs": 10271,
+      "rho": -0.0036175565116377856,
+      "se": 0.01138502088073684
+    },
+    "cross-member lag-1 (t -> t+1)": {
+      "ci": [
+        0.0016825481458190071,
+        0.027157753822924964
+      ],
+      "n_pairs": 28714,
+      "rho": 0.014157536893293672,
+      "se": 0.006696371446234958
+    },
+    "same-agent cross-round (own persistence)": {
+      "ci": [
+        0.04509068997443268,
+        0.07452448378799094
+      ],
+      "n_pairs": 84031,
+      "rho": 0.059489662818834346,
+      "se": 0.00748584845380882
+    },
+    "within-cell (episode, round, group)": {
+      "ci": [
+        0.016509625046586245,
+        0.04838133980499123
+      ],
+      "n_pairs": 15090,
+      "rho": 0.03361058692570091,
+      "se": 0.007813839635313057
+    }
+  },
+  "moment_residual": "probit mid-PIT of F(c)",
+  "n_boot": 200,
+  "n_episodes": 40,
+  "n_pairs_lag1": 28714,
+  "n_pairs_within": 15090,
+  "n_rows": 7457,
+  "rho_lag1": 0.024927591372935834,
+  "rho_lag1_ci": [
+    0.006301366612174943,
+    0.043892804851301225
+  ],
+  "rho_lag1_se": 0.009984089667484503,
+  "rho_p": 0.048443521435665396,
+  "rho_t": 0.0,
+  "rho_total": 0.048443521435665396,
+  "rho_total_ci": [
+    0.02675017796883691,
+    0.06748487570258777
+  ],
+  "rho_total_lr": 23.046568982113968,
+  "rho_total_se": 0.010272335023860522,
+  "round_thirds": [
+    {
+      "rho_mle": 0.0244228264892305,
+      "rho_moment": 0.023326683098248334,
+      "rounds": [
+        0,
+        7
+      ]
+    },
+    {
+      "rho_mle": 0.03622982565807425,
+      "rho_moment": 0.0186268437364913,
+      "rounds": [
+        8,
+        15
+      ]
+    },
+    {
+      "rho_mle": 0.08988032164549659,
+      "rho_moment": 0.0594149258801217,
+      "rounds": [
+        16,
+        23
+      ]
+    }
+  ],
+  "roundtrip": {
+    "arms": [
+      {
+        "bias_lag1": 0.007274625058280623,
+        "bias_total": 0.002439248552843429,
+        "moment_lag1": 0.09532462517454071,
+        "moment_total": 0.09125495865228143,
+        "n_rep": 6,
+        "panel0_lr_per_pair_lag1": 0.010809898194431605,
+        "panel0_lr_per_pair_total": 0.010314340592152185,
+        "rho_lag1_hat": 0.10727462505828063,
+        "rho_lag1_panels": [
+          0.11599064405154033,
+          0.09869213430997138,
+          0.11045099442602124,
+          0.1039078459948253,
+          0.09144791658959582,
+          0.12315821497772968
+        ],
+        "rho_lag1_sd": 0.011608839630558108,
+        "rho_p": 0.1,
+        "rho_t": 0.0,
+        "rho_total_hat": 0.10243924855284343,
+        "rho_total_panels": [
+          0.11306628256378243,
+          0.07964960204527605,
+          0.09856871859485615,
+          0.1013531333663515,
+          0.08794425013379802,
+          0.1340535046129965
+        ],
+        "rho_total_sd": 0.019277077857230294,
+        "seconds": 8.1,
+        "true_lag1": 0.1,
+        "true_total": 0.1
+      },
+      {
+        "bias_lag1": 0.005260031127805153,
+        "bias_total": 0.00054064597053613,
+        "moment_lag1": -2.713583824987623e-05,
+        "moment_total": 0.0918194856631628,
+        "n_rep": 6,
+        "panel0_lr_per_pair_lag1": 0.00011665066778793774,
+        "panel0_lr_per_pair_total": 0.009641614082160245,
+        "rho_lag1_hat": 0.005260031127805153,
+        "rho_lag1_panels": [
+          0.012186474629258199,
+          0.0006500514708475038,
+          0.004072158491652938,
+          0.014650608268095581,
+          4.4695348834308653e-07,
+          4.4695348834308653e-07
+        ],
+        "rho_lag1_sd": 0.006544432195649926,
+        "rho_p": 0.0,
+        "rho_t": 0.1,
+        "rho_total_hat": 0.10054064597053614,
+        "rho_total_panels": [
+          0.11003733300382465,
+          0.0814584097408299,
+          0.1075005141102231,
+          0.09595628113547491,
+          0.107298376433529,
+          0.10099296139933528
+        ],
+        "rho_total_sd": 0.010673766718969553,
+        "seconds": 9.1,
+        "true_lag1": 0.0,
+        "true_total": 0.1
+      },
+      {
+        "bias_lag1": 0.002492014614790712,
+        "bias_total": 0.003328330705293342,
+        "moment_lag1": 0.04647889983566483,
+        "moment_total": 0.09315572323994148,
+        "n_rep": 6,
+        "panel0_lr_per_pair_lag1": 0.003663762221131051,
+        "panel0_lr_per_pair_total": 0.011642148112751875,
+        "rho_lag1_hat": 0.052492014614790715,
+        "rho_lag1_panels": [
+          0.06804357779720183,
+          0.044116754025809564,
+          0.05477343222197363,
+          0.06572844163642448,
+          0.03467592729875822,
+          0.047613954708576545
+        ],
+        "rho_lag1_sd": 0.012912106022244199,
+        "rho_p": 0.05,
+        "rho_t": 0.05,
+        "rho_total_hat": 0.10332833070529335,
+        "rho_total_panels": [
+          0.12079369897119575,
+          0.07696166603815018,
+          0.10378542489799426,
+          0.10331219514868785,
+          0.10001202699155981,
+          0.11510497218417226
+        ],
+        "rho_total_sd": 0.015166650550692655,
+        "seconds": 8.4,
+        "true_lag1": 0.05,
+        "true_total": 0.1
+      },
+      {
+        "bias_lag1": 0.002623164987160524,
+        "bias_total": -0.0005613510348993316,
+        "moment_lag1": 0.029208197720771083,
+        "moment_total": 0.026606375926120127,
+        "n_rep": 6,
+        "panel0_lr_per_pair_lag1": 0.0013000711979141253,
+        "panel0_lr_per_pair_total": 0.0012955328838603023,
+        "panel0_rho_lag1": 0.040414267287350904,
+        "panel0_rho_lag1_ci": [
+          0.024448498024203038,
+          0.06002743370442962
+        ],
+        "panel0_rho_total": 0.04020639804862413,
+        "panel0_rho_total_ci": [
+          0.01494772229818762,
+          0.06393724526002675
+        ],
+        "rho_lag1_hat": 0.03262316498716052,
+        "rho_lag1_panels": [
+          0.040414267287350904,
+          0.034758034046672076,
+          0.03660439717896972,
+          0.03204516227534329,
+          0.021519127864341743,
+          0.030398001270285423
+        ],
+        "rho_lag1_sd": 0.006476020874658952,
+        "rho_p": 0.03,
+        "rho_t": 0.0,
+        "rho_total_hat": 0.029438648965100667,
+        "rho_total_panels": [
+          0.04020639804862413,
+          0.01318399246586061,
+          0.027700313056341547,
+          0.02891171158248303,
+          0.020399803019212875,
+          0.046229675618081834
+        ],
+        "rho_total_sd": 0.012223723369460754,
+        "seconds": 123.9,
+        "true_lag1": 0.03,
+        "true_total": 0.03
+      }
+    ],
+    "max_abs_bias": 0.007274625058280623,
+    "note": "features held fixed at the human rows: validates the estimator, not the closed-loop dynamics",
+    "power_arm": {
+      "falsifier_estimator_has_power": true,
+      "n_rep": 6,
+      "panel0_rho_lag1": 0.040414267287350904,
+      "panel0_rho_lag1_ci": [
+        0.024448498024203038,
+        0.06002743370442962
+      ],
+      "panel0_rho_total": 0.04020639804862413,
+      "panel0_rho_total_ci": [
+        0.01494772229818762,
+        0.06393724526002675
+      ],
+      "reading": "a purely persistent panel; if the lag-1 fit recovers ~rho_p the falsifier reading is live, if it recovers ~0 Declaration ground 3 is confirmed empirically",
+      "rho_lag1_hat": 0.03262316498716052,
+      "rho_lag1_panels": [
+        0.040414267287350904,
+        0.034758034046672076,
+        0.03660439717896972,
+        0.03204516227534329,
+        0.021519127864341743,
+        0.030398001270285423
+      ],
+      "rho_lag1_sd": 0.006476020874658952,
+      "rho_p": 0.03,
+      "rho_t": 0.0,
+      "rho_total_hat": 0.029438648965100667,
+      "rho_total_sd": 0.012223723369460754
+    },
+    "tolerance": 0.02,
+    "verdict": "PASS"
+  },
+  "structure": "persistent_episode_group",
+  "test_split": {
+    "censored_share": 0.27697262479871176,
+    "data_file": "experiments/baseline/2group_8agent_50ep_bline_test.csv",
+    "n_pairs_lag1": 7657,
+    "n_pairs_within": 4043,
+    "rho_lag1_mle": 0.10143639295834538,
+    "rho_within_mle": 0.13631742779085365,
+    "role": "out-of-sample noise indicator only (log Note 20)"
+  },
+  "timestamp": "2026-09-15T14:51:20.455710+00:00",
+  "two_component_reading": {
+    "rho_p": 0.024927591372935834,
+    "rho_t": 0.023515930062729562,
+    "role": "declared falsifier -- reported, never stamped as the dose"
+  }
+}

@@ -1,0 +1,50 @@
+cwd        /raven/u/certuer/autoresearch/contribution-group-vnode
+aimanager  /raven/u/certuer/autoresearch/contribution-group-vnode/src/aimanager/__init__.py
+/u/certuer/algorithmic-institutions/.venv/lib/python3.9/site-packages/torch_geometric/typing.py:110: UserWarning: An issue occurred while importing 'torch-sparse'. Disabling its usage. Stacktrace: libcusparse.so.11: cannot open shared object file: No such file or directory
+  warnings.warn(f"An issue occurred while importing 'torch-sparse'. "
+/raven/u/certuer/autoresearch/contribution-group-vnode/src/aimanager/generic/data.py:93: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  df.groupby(["episode_id", "player_id"])["contribution_valid"]
+fatal: not a git repository: /Users/ertuerkan/Desktop/algorithmic-institutions/.git/worktrees/contribution-group-vnode
+base      artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+  sha256  714bf40be1b640a2df09395164ef053fce7a60de9c9d4e034b0f2627a6d01013
+  keys    ['autoregressive', 'b_encoding', 'bias', 'copula_phi', 'copula_rho', 'copula_switch_every', 'default_values', 'edge_encoding', 'group_vnode', 'group_vnode_hidden', 'group_vnode_module', 'joint_exodus', 'joint_exodus_head', 'joint_exodus_switch_every', 'op1', 'op2', 'rnn_g', 'rnn_n', 'u_encoding', 'x_encoding', 'y_levels', 'y_name']
+params    artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_herding_copula/calibration/copula_params.json
+  sha256  612460485d04ef8dca03a839f8b9f70af271da051237d9ebd634a03c18763e66
+  rho=0.0435568043640977 phi_lag1=0.6182476558394783
+  stamping copula_phi=1.0 (orchestrator ruling 2026-09-15 (log: notes/autoresearch_log/contribution-group-vnode.md, step 10 / amendment A2, fixed before the numbers were seen): phi_hat 0.6182476558394783 with 200-resample paired cluster-bootstrap CI [0.21163458285772926, 1.2637034657775452] spanning 1, so PR #165's boundary ruling applies and the unit-root boundary phi = 1.0 (static episode latent) is adopted; the estimate stays in the JSON unaltered and rho is untouched)
+wrote     artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+  sha256  379c2557e21922b12408f359d398fa21075ac31b5eeab425a564306233be8f0e
+  stamped {'copula_rho': 0.0435568043640977, 'copula_phi': 1.0, 'copula_switch_every': 1}
+  14 tensors compared bit-identically vs the base artifact
+  modules ['op1', 'op2', 'rnn_n', 'group_vnode_module']
+  loads   {'copula_rho': 0.0435568043640977, 'copula_phi': 1.0, 'copula_switch_every': 1}
+  probs   7457 teacher-forced train-split rows bit-identical to the base model's
+  sidecar artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.copula.json
+artifact verified bit-identical to the base outside the copula fields
+                                  
+================================= 
+Global information about the job: 
+================================= 
+  
+Job owner: certuer(51795)
+Job name:  cg_copula_stamp
+Node list: ravc4073
+Job start: Tue Sep 15 22:29:26 CEST 2026
+Job end:   Tue Sep 15 22:29:43 CEST 2026
+Work dir:  /u/certuer/autoresearch/contribution-group-vnode/.
+Command:   /raven/u/certuer/autoresearch/contribution-group-vnode/scripts/artificial_humans/stamp_copula_group_vnode.slurm
+  
+  
+  
+==========================================================================================
+Information on jobsteps (Note: MaxRSS/AveRSS is the maximum/average over all 
+tasks of the per-task memory high-water marks; cf. "man sacct"): 
+==========================================================================================
+  
+JobID            JobName NNodes NTasks  NCPUS       MaxRSS       AveRSS    Elapsed ExitCode
+------------- ---------- ------ ------ ------ ------------ ------------ ---------- --------
+30257600      cg_copula_      1             2                             00:00:17      0:0
+  
+Maximum memory per node: 0.231645 GB (defined as MaxRSS*Ntasks/NNodes)
+CPU utilization: 64.7 %
+  

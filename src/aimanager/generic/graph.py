@@ -3,7 +3,11 @@ import numpy as np
 import torch as th
 from torch_scatter import scatter_mean
 from torch_geometric.nn import MetaLayer
+from aimanager.generic.conditional_bernoulli import sample_conditional_bernoulli
+from aimanager.generic.copula import sample_correlated_levels
 from aimanager.generic.encoder import Encoder, IntEncoder
+from aimanager.generic.group_vnode import GroupVirtualNode
+from aimanager.generic.joint_exodus import JointExodusHead
 
 
 class EdgeModel(th.nn.Module):
@@ -144,6 +148,16 @@ class GraphNetwork(th.nn.Module):
         add_global_model=True,
         hidden_size=None,
         default_values={},
+        copula_rho=0.0,
+        copula_phi=0.0,
+        copula_switch_every=None,
+        joint_exodus=False,
+        joint_exodus_head=None,
+        joint_exodus_switch_every=None,
+        group_vnode=False,
+        group_vnode_module=None,
+        group_vnode_hidden=None,
+        stimulus_skip=False,
         **_,
     ):
         super().__init__()
@@ -168,6 +182,110 @@ class GraphNetwork(th.nn.Module):
         self.y_name = y_name
         self.autoregressive = autoregressive
 
+        # Herding copula, defined for the switch and contribution heads;
+        # see notes/autoresearch_log/switch-herding-copula.md and
+        # notes/autoresearch_log/contribution-herding-copula-v2.md.
+        # rho 0 keeps the legacy independent draw; phi 1 is the unit-root
+        # boundary, a latent held static for the whole episode.
+        assert 0.0 <= copula_rho < 1.0, f"copula_rho must be in [0, 1), {copula_rho}"
+        assert 0.0 <= copula_phi <= 1.0, f"copula_phi must be in [0, 1], {copula_phi}"
+        assert copula_rho == 0.0 or y_name in (
+            "does_switch",
+            "contribution",
+        ), (
+            "copula_rho > 0 is only defined for does_switch and contribution, "
+            f"got {y_name}"
+        )
+        assert copula_phi == 0.0 or (
+            isinstance(copula_switch_every, int) and copula_switch_every > 0
+        ), "copula_phi > 0 requires a positive int copula_switch_every"
+        self.copula_rho = copula_rho
+        self.copula_phi = copula_phi
+        self.copula_switch_every = copula_switch_every
+        self._copula_z = None
+
+        # Joint exodus head, a round-level joint over the pair of leaver
+        # counts (m_0, m_1); see notes/autoresearch_log/switch-joint-exodus.md
+        # and generic/joint_exodus.py. Off by default: an artifact saved
+        # without these two keys loads with the head absent and behaves
+        # exactly as it does today.
+        assert isinstance(
+            joint_exodus, bool
+        ), f"joint_exodus must be a bool, got {joint_exodus!r}"
+        assert not joint_exodus or y_name == "does_switch", (
+            "joint_exodus is only defined for the does_switch head, " f"got {y_name}"
+        )
+        # Two different switch samplers; enabling both would leave the draw
+        # decided by nothing but the order of the dispatch below.
+        assert not (joint_exodus and copula_rho > 0), (
+            "joint_exodus and the herding copula are alternative switch "
+            "samplers -- enable one or the other, not both"
+        )
+        # Which rounds the joint draw fires on (plan step 4). The predictor is
+        # run EVERY round to keep its GRU warm but its output is only consumed
+        # on decision rounds, so the joint machinery -- and the RNG it eats --
+        # must be confined to those rounds. Same predicate and same role as
+        # `copula_switch_every`: decision rounds are `(r + 1) % every == 0`.
+        # `bool` is excluded explicitly: `True` is an `int` and would silently
+        # mean "every round is a decision round".
+        assert joint_exodus_switch_every is None or (
+            isinstance(joint_exodus_switch_every, int)
+            and not isinstance(joint_exodus_switch_every, bool)
+            and joint_exodus_switch_every > 0
+        ), (
+            "joint_exodus_switch_every must be None or a positive int, got "
+            f"{joint_exodus_switch_every!r}"
+        )
+        assert joint_exodus or joint_exodus_switch_every is None, (
+            "joint_exodus_switch_every is only meaningful with the joint "
+            "exodus head enabled"
+        )
+        self.joint_exodus = joint_exodus
+        self.joint_exodus_switch_every = joint_exodus_switch_every
+
+        # Per-group virtual node: a learned, persistent group state pooled
+        # from the post-`op1` embeddings and handed back to each of the
+        # group's members at the `op2` readout. See
+        # notes/autoresearch_log/contribution-group-vnode.md and
+        # generic/group_vnode.py. Off by default: an artifact saved without
+        # these three keys loads with the node absent and behaves exactly as
+        # it does today.
+        assert isinstance(
+            group_vnode, bool
+        ), f"group_vnode must be a bool, got {group_vnode!r}"
+        # `bool` is excluded explicitly, the `joint_exodus_switch_every`
+        # precedent: `True` is an `int` and would silently mean a group state
+        # one unit wide.
+        assert group_vnode_hidden is None or (
+            isinstance(group_vnode_hidden, int)
+            and not isinstance(group_vnode_hidden, bool)
+            and group_vnode_hidden > 0
+        ), (
+            "group_vnode_hidden must be None or a positive int, got "
+            f"{group_vnode_hidden!r}"
+        )
+        self.group_vnode = group_vnode
+        self.group_vnode_hidden = group_vnode_hidden
+
+        # Immediate-stimulus skip: a second route from THIS round's per-agent
+        # embedding to the `op2` readout, one that does not pass through the
+        # per-agent RNN -- what I just gave and what I just got for it should
+        # reach my next decision directly, not only through what I remember.
+        # See notes/autoresearch_log/contribution-punishment-response.md:
+        # teacher-forced on the human trajectories the trunk's punishment
+        # response is human-like (RCB statistic 0.0930, inside the 0.3479
+        # noise ceiling) and in self-play it collapses to a quarter of the
+        # human slopes (0.7973), with the (contribution, punishment)
+        # composition ruled out as the explanation -- what is left is the
+        # carried recurrent state drifting off the training manifold, and the
+        # per-agent GRU is today the ONLY route from `x_t` to the readout.
+        # Off by default: an artifact saved without this key loads with the
+        # skip absent and behaves exactly as it does today.
+        assert isinstance(
+            stimulus_skip, bool
+        ), f"stimulus_skip must be a bool, got {stimulus_skip!r}"
+        self.stimulus_skip = stimulus_skip
+
         if op1 is None:
             if add_edge_model:
                 edge_model = EdgeModel(
@@ -188,6 +306,18 @@ class GraphNetwork(th.nn.Module):
                 activation=Tanh(),
             )
             x_features = hidden_size
+            # The width the immediate-stimulus skip carries: the post-`op1`
+            # node embedding, the same tensor the group virtual node pools.
+            # Captured here because the RNN below overwrites `x_features`
+            # (both are `hidden_size`, but for different reasons).
+            skip_features = x_features
+            # The skip is defined against the per-agent RNN, so it needs one:
+            # with `add_rnn` off there is no memory to bypass and the readout
+            # would simply receive the same embedding twice.
+            assert not stimulus_skip or add_rnn, (
+                "stimulus_skip requires the per-agent RNN (add_rnn=True); "
+                "with no RNN there is no memory for the skip to bypass"
+            )
 
             if add_global_model:
                 gobal_model = GlobalModel(
@@ -226,10 +356,28 @@ class GraphNetwork(th.nn.Module):
             else:
                 self.rnn_g = None
 
+            # The group state is concatenated to each member's post-RNN
+            # embedding immediately before this readout, so op2 -- and only
+            # op2 -- is wider by the group state's width. `x_features` itself
+            # is deliberately left at the per-agent width: it is what the
+            # joint head below is built for and what `forward` hands to the
+            # concatenation.
+            # The immediate-stimulus skip widens op2 the same way, and it is
+            # APPENDED AFTER the group state: the readout's input is laid out
+            # `[post-RNN embedding | group state | post-op1 embedding]`. That
+            # order leaves the group state on exactly the slice it occupies
+            # today and lets each later addition extend the tail; `forward`
+            # concatenates in exactly this order. Plain concatenation, no
+            # gate -- ties go to the simpler model.
+            vnode_hidden = group_vnode_hidden or hidden_size
             self.op2 = MetaLayer(
                 None,
                 NodeModel(
-                    x_features=x_features,
+                    x_features=(
+                        x_features
+                        + (vnode_hidden if group_vnode else 0)
+                        + (skip_features if stimulus_skip else 0)
+                    ),
                     edge_features=0,
                     u_features=u_features,
                     out_features=y_features,
@@ -245,6 +393,38 @@ class GraphNetwork(th.nn.Module):
             else:
                 self.bias = None
 
+            # Built LAST, so every pre-existing parameter is initialised from
+            # exactly the RNG state it saw before this head existed: a model
+            # with the head off is bit-identical to today, and a model with it
+            # on shares the same trunk weights under the same seed.
+            # `x_features` is the post-RNN node width the head reads.
+            if joint_exodus_head is not None:
+                self.joint_exodus_head = joint_exodus_head
+            elif joint_exodus:
+                self.joint_exodus_head = JointExodusHead(
+                    embed_size=x_features, hidden_size=hidden_size
+                )
+            else:
+                self.joint_exodus_head = None
+
+            # Built LAST of all, after the joint-head slot, for the same
+            # reason that one is built late: with `group_vnode` off nothing is
+            # constructed and no RNG is drawn, so every parameter above is
+            # initialised from exactly the RNG state it saw before this node
+            # existed and the model is bit-identical to today's. The node
+            # pools the post-`op1` embeddings, so `embed_size` is op1's node
+            # width `hidden_size`, not the post-RNN width the joint head
+            # reads (they coincide here, but for different reasons).
+            if group_vnode_module is not None:
+                self.group_vnode_module = group_vnode_module
+            elif group_vnode:
+                self.group_vnode_module = GroupVirtualNode(
+                    embed_size=hidden_size, hidden_size=vnode_hidden
+                )
+            else:
+                self.group_vnode_module = None
+            self.vnode_h0 = None
+
         else:
             self.op1 = op1
             self.op2 = op2
@@ -253,8 +433,23 @@ class GraphNetwork(th.nn.Module):
             self.bias = bias
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
+            self.joint_exodus_head = joint_exodus_head
+            self.group_vnode_module = group_vnode_module
+            # Carried across rounds exactly like `rnn_n_h0` above, and so
+            # initialised in BOTH build branches -- `load` comes through this
+            # one.
+            self.vnode_h0 = None
 
-    def forward(self, data, reset_rnn=True):
+        assert (self.joint_exodus_head is not None) == self.joint_exodus, (
+            "joint_exodus and joint_exodus_head disagree: "
+            f"{self.joint_exodus} vs {type(self.joint_exodus_head).__name__}"
+        )
+        assert (self.group_vnode_module is not None) == self.group_vnode, (
+            "group_vnode and group_vnode_module disagree: "
+            f"{self.group_vnode} vs {type(self.group_vnode_module).__name__}"
+        )
+
+    def forward(self, data, reset_rnn=True, return_joint=False, decider_mask=None):
         x = data["x"]
         edge_index = data["edge_index"]
         if "edge_attr" in data:
@@ -268,10 +463,56 @@ class GraphNetwork(th.nn.Module):
         u = data["u"]
         batch = data["batch"]
         x, _, u = self.op1(x, edge_index, edge_attr, u, batch)
+        # The group virtual node pools the post-`op1` embeddings -- before the
+        # per-agent RNN, so a group reads what message passing produced this
+        # round rather than each member's private history. Its hidden state is
+        # carried exactly like `rnn_n_h0` below: reset when `reset_rnn` is
+        # set, carried when it is not, so the 24 single-round calls the
+        # simulation makes (`n_rounds = 1`, once per round) reproduce
+        # training's one 24-round call.
+        g_node = None
+        if self.group_vnode_module is not None:
+            assert "agent_group" in data, (
+                "the group virtual node requires agent_group in the encoded "
+                "state; `encode` carries it whenever the node is present, so "
+                "a state assembled by hand must supply it too"
+            )
+            g_node, self.vnode_h0 = self.group_vnode_module(
+                x,
+                agent_group=data["agent_group"],
+                batch=batch,
+                h0=None if reset_rnn else self.vnode_h0,
+            )
+        # The immediate-stimulus skip keeps that same post-`op1` embedding --
+        # this round's own stimulus -- and hands it to the readout directly,
+        # so it does not have to survive the update gate of a recurrent state
+        # that, in self-play, has drifted off the manifold it was trained on.
+        # Captured here because `rnn_n` overwrites `x` on the next line; the
+        # recurrent path itself is untouched.
+        x_skip = x if self.stimulus_skip else None
         if self.rnn_n is not None:
             x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
         if self.rnn_g is not None:
             u, self.rnn_g_h0 = self.rnn_g(u, None if reset_rnn else self.rnn_g_h0)
+        # The joint exodus head branches off the post-RNN node embeddings and
+        # feeds nothing back, so the per-agent path below is untouched whether
+        # the head runs or not. It feeds nothing back on the BACKWARD pass
+        # either: the head detaches the pooled embeddings it reads (plan step
+        # 2b, see `joint_exodus.JointExodusHead.forward`), so the joint loss
+        # leaves every parameter above this line -- op1, the RNNs, the
+        # encoders -- with exactly the gradient it would have had with the
+        # head off. `return_joint` defaults to False, so every existing call
+        # site keeps the exact signature and return type it has today.
+        # `_predict_encoded_joint_exodus` is the one caller that asks for it.
+        joint = None
+        if return_joint and self.joint_exodus_head is not None:
+            joint = self.joint_exodus_head(
+                x,
+                agent_group=data["agent_group"],
+                round_number=data["round_number"],
+                batch=batch,
+                decider_mask=data.get("mask") if decider_mask is None else decider_mask,
+            )
         # op2 is a readout with no edge model (edge_features=0), but NodeModel
         # always aggregates edge_attr -- feed it an empty one so a non-empty
         # edge feature consumed by op1 does not leak into the readout's widths.
@@ -280,9 +521,23 @@ class GraphNetwork(th.nn.Module):
             dtype=edge_attr.dtype,
             device=edge_attr.device,
         )
+        # The group state joins the per-agent embedding only here, at the
+        # readout, and only AFTER the joint head above has read `x` at the
+        # per-agent width it was built for. op2's NodeModel is the one module
+        # widened to receive it (see the constructor).
+        if g_node is not None:
+            x = th.cat([x, g_node], dim=-1)
+        # The skip is appended AFTER the group state, the layout op2 was
+        # built for: `[post-RNN embedding | group state | post-op1
+        # embedding]`. Both flags can be on at once, and each term is present
+        # exactly when its flag is.
+        if x_skip is not None:
+            x = th.cat([x, x_skip], dim=-1)
         x, _, _ = self.op2(x, edge_index, op2_edge_attr, u, batch)
         if self.bias:
             x = x + self.bias(data["b"])
+        if return_joint:
+            return x, joint
         return x
 
     def encode(
@@ -332,6 +587,18 @@ class GraphNetwork(th.nn.Module):
         encoded["edge_attr"] = self.edge_encoder(
             edge_index=encoded["edge_index"], n_rounds=n_rounds, **edge_state
         )
+        # The joint exodus head pools by membership and conditions on the
+        # round; the group virtual node pools by membership only. Neither is
+        # anything the per-agent path needs, so a key is carried only when the
+        # module that consumes it is present -- a model with neither encodes
+        # exactly the keys it encodes today.
+        if self.joint_exodus_head is not None or self.group_vnode_module is not None:
+            head = self.joint_exodus_head is not None
+            consumer = "the joint exodus head" if head else "the group virtual node"
+            keys = ("agent_group", "round_number") if head else ("agent_group",)
+            for key in keys:
+                assert key in data, f"{consumer} requires {key} in the state"
+                encoded[key] = data[key].flatten(0, 1).to(device)
         return encoded
 
     def predict_encoded(self, data, sample=True, reset_rnn=True):
@@ -341,6 +608,170 @@ class GraphNetwork(th.nn.Module):
         y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
+    def _predict_encoded_copula(self, data, encoded, shape, reset_rnn=True):
+        """Same forward as `predict_encoded`, but the level is drawn with a
+        shared latent per (batch, agent_group) cell -- the herding sampler of
+        notes/autoresearch_log/switch-herding-copula.md."""
+        n_batch, n_nodes, n_rounds = shape
+        self.eval()
+        y_logit = self(encoded, reset_rnn)
+        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+        if reset_rnn:
+            self._copula_z = None
+        # The sampler draws on the cpu RNG; agent_group is 0/1, so the dense
+        # cell id of the round being sampled is batch_index * 2 + agent_group.
+        agent_group = data["agent_group"].reshape(n_batch, n_nodes, n_rounds).cpu()
+        cells = th.arange(n_batch).reshape(-1, 1, 1) * 2 + agent_group
+        proba = y_pred_proba.detach().cpu()
+        y_pred = th.empty(proba.shape[:-1], dtype=th.int64)
+        keep_z = self.copula_phi > 0
+        rounds = (
+            data["round_number"].reshape(n_batch, n_nodes, n_rounds)[0, 0]
+            if keep_z
+            else None
+        )
+        for r in range(n_rounds):
+            cell_id = cells[:, :, r].reshape(-1)
+            n_cells = int(cell_id.max()) + 1
+            z_prev = None if self._copula_z is None else self._copula_z[:n_cells]
+            levels, z_cell = sample_correlated_levels(
+                proba[:, r],
+                cell_id,
+                self.copula_rho,
+                z_prev=z_prev,
+                phi=self.copula_phi,
+            )
+            y_pred[:, r] = levels
+            # Only a decision round advances the AR(1) latent (ruling D6): the
+            # predictor runs every round, so advancing per call would decay the
+            # realized persistence to phi ** copula_switch_every. The store is
+            # kept at full length because a group can empty out (then n_cells
+            # falls below 2 * n_batch), and the cell index must stay stable.
+            if keep_z and (int(rounds[r]) + 1) % self.copula_switch_every == 0:
+                z_store = (
+                    th.zeros(2 * n_batch, dtype=z_cell.dtype)
+                    if self._copula_z is None
+                    else self._copula_z.clone()
+                )
+                z_store[:n_cells] = z_cell
+                self._copula_z = z_store
+        return y_pred.to(y_pred_proba.device), y_pred_proba
+
+    def _predict_encoded_joint_exodus(self, encoded, shape, reset_rnn=True):
+        """Same forward as `predict_encoded`, but on a DECISION round the
+        independent per-agent draw is replaced by the two-stage joint draw of
+        notes/autoresearch_log/switch-joint-exodus.md (plan step 4):
+
+        1. per-agent switch probabilities from the existing, UNCHANGED
+           per-agent head -- this method never touches those logits;
+        2. a pair `(m_0, m_1)` of leaver counts drawn per batch element from
+           the joint head's masked joint over the padded 9 x 9 grid;
+        3. WHICH members leave, drawn per group by the exact conditional
+           Bernoulli of `generic/conditional_bernoulli.py`, conditioned on the
+           very probabilities from 1.
+
+        RNG. The switch predictor runs every round to keep its GRU hidden
+        state warm, but its output is only consumed on decision rounds
+        (`manager/environment.py: step`). So a NON-decision round must leave
+        the global RNG exactly where the independent path would have: the
+        legacy `y_encoder.decode(..., sample=True)` below is taken verbatim
+        and, off a decision round, is the only draw this method makes. On a
+        decision round that legacy draw is made and then DISCARDED -- one
+        wasted categorical per decision round buys the guarantee that the
+        neutral path is the pre-existing expression itself rather than a
+        re-derivation of it, and the mechanism is meant to differ on exactly
+        those rounds anyway.
+
+        Everything stays on the model's device, like the legacy draw and
+        unlike `_predict_encoded_copula` (whose latent algebra is float64 on
+        the cpu RNG by construction).
+        """
+        n_batch, n_nodes, n_rounds = shape
+        head = self.joint_exodus_head
+        assert head is not None, "no joint exodus head to sample from"
+        assert self.joint_exodus_switch_every is not None, (
+            "the joint exodus head is present but joint_exodus_switch_every "
+            "is not set, so the decision rounds it must fire on are unknown. "
+            "Set it on the model (see configs/training/artificial_humans/"
+            "switch_predictor/joint_exodus.yml) rather than sampling the "
+            "per-agent head and silently reporting a joint-exodus run."
+        )
+        assert self.y_levels == 2, (
+            "the joint exodus draw is a leaver COUNT over a binary label, "
+            f"got y_levels={self.y_levels}"
+        )
+        assert n_nodes <= head.max_group_size, (
+            f"{n_nodes} players do not fit the head's count grid "
+            f"(max_group_size={head.max_group_size})"
+        )
+        self.eval()
+        y_logit, joint = self(encoded, reset_rnn, True)
+        y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
+
+        # (1) The per-agent draw, verbatim. Off a decision round this is the
+        # whole method; see the RNG note above.
+        y_pred = self.y_encoder.decode(y_pred_proba, True)
+
+        log_prob, k = joint
+        agent_group = encoded["agent_group"].reshape(n_batch, n_nodes, n_rounds)
+        round_number = encoded["round_number"].reshape(n_batch, n_nodes, n_rounds)
+        # The gate is read off one node; a round that differed across the
+        # batch would gate some episodes on another's clock.
+        assert bool(
+            (round_number == round_number[0, 0].reshape(1, 1, n_rounds)).all()
+        ), "round_number is not constant within a round across the batch"
+        rounds = round_number[0, 0]
+        grid = log_prob.shape[-1]
+
+        for r in range(n_rounds):
+            if (int(rounds[r]) + 1) % self.joint_exodus_switch_every != 0:
+                continue
+
+            # (2) the pair (m_0, m_1), one draw for the whole batch. The grid
+            # is already masked to m_g <= k_g and renormalised, so the pair is
+            # feasible by construction and (0, 0) is always available -- a
+            # fully merged round (k = 8, k = 0) is an ordinary cell here.
+            pair_proba = log_prob[:, r].exp().flatten(-2, -1)
+            cell = th.multinomial(pair_proba, 1).reshape(-1)  # draw 1/1
+            # Row-major over (m_0, m_1), the same flattening the training loss
+            # gathers with (`train.joint_exodus_loss`: m_0 * grid + m_1).
+            m = th.stack(
+                [th.div(cell, grid, rounding_mode="floor"), cell % grid], dim=-1
+            )  # (n_batch, 2)
+
+            # (3) which members leave. Membership is read at the moment of the
+            # decision, PRE-switch, from the same `agent_group` the head
+            # pooled with -- so the count drawn for group g is spent on group
+            # g's own members. The identity below is the guard against that
+            # ever silently inverting.
+            group_r = agent_group[:, :, r]
+            member = th.stack(
+                [group_r == g for g in range(head.n_groups)], dim=0
+            )  # (n_groups, n_batch, n_nodes)
+            assert th.equal(member.sum(-1).transpose(0, 1), k[:, r]), (
+                "the per-group membership used to place the leavers and the "
+                "head's own valid-decider count disagree"
+            )
+            # One batched conditional-Bernoulli call over both groups, so the
+            # RNG cost is one categorical draw and not one per group. Rows are
+            # group-major: [group 0 of every episode, group 1 of every
+            # episode], and `p` is tiled to match. Every row is n_nodes wide
+            # with the non-members masked out, so a selected slot IS the agent
+            # index and no gather can transpose the two groups.
+            p_switch = y_pred_proba[:, r, -1].reshape(n_batch, n_nodes)
+            selected = sample_conditional_bernoulli(
+                p_switch.repeat(head.n_groups, 1),
+                m.transpose(0, 1).reshape(-1),
+                mask=member.reshape(-1, n_nodes),
+                max_group_size=n_nodes,
+            )
+            # The two masks are disjoint and cover every agent exactly once,
+            # so the union is the round's switch vector.
+            switch = selected.reshape(head.n_groups, n_batch, n_nodes).any(0)
+            y_pred[:, r] = switch.reshape(-1).to(y_pred.dtype)
+
+        return y_pred, y_pred_proba
+
     def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
         n_batch, n_nodes, n_rounds = data[self.y_name].shape
         if edge_index is None:
@@ -348,7 +779,16 @@ class GraphNetwork(th.nn.Module):
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
-        predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
+        if sample and self.joint_exodus_head is not None:
+            predict = self._predict_encoded_joint_exodus(
+                encoded, (n_batch, n_nodes, n_rounds), reset_rnn=reset_rnn
+            )
+        elif sample and self.copula_rho > 0:
+            predict = self._predict_encoded_copula(
+                data, encoded, (n_batch, n_nodes, n_rounds), reset_rnn=reset_rnn
+            )
+        else:
+            predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
 
@@ -436,6 +876,16 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            "copula_rho",
+            "copula_phi",
+            "copula_switch_every",
+            "joint_exodus",
+            "joint_exodus_head",
+            "joint_exodus_switch_every",
+            "group_vnode",
+            "group_vnode_module",
+            "group_vnode_hidden",
+            "stimulus_skip",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
