@@ -64,7 +64,7 @@ def load_models(stack, device):
     from aimanager.artificial_humans import GraphNetwork
 
     models = {
-        k: GraphNetwork.load(stack[k], device=device)
+        k: GraphNetwork.load(stack[k], device=device).to(device)
         for k in ("contribution_model", "valid_model", "switch_model")
     }
     models["clone_bundle"] = joblib.load(stack["clone"])

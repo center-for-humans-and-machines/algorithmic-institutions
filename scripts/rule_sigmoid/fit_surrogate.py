@@ -21,8 +21,9 @@ hundreds of episodes), and a `WhiteKernel` on top absorbs whatever that does
 not explain. The seed spread in this project routinely exceeds the effects
 being chased, and a noiseless fit walks straight into a sharp false optimum.
 
-Fitted on the fit seeds only; the held-out seeds are never seen here and are
-what `validate.py` scores the chosen parameters on.
+Fitted on the fit seeds only. `check_surrogate.py` scores the fitted GP on a
+seed it never saw, and the validation sweep scores the chosen parameters on
+two more.
 
 Usage:
     PYTHONPATH=src python scripts/rule_sigmoid/fit_surrogate.py \
@@ -71,20 +72,31 @@ def to_natural(u):
 
 
 def fit_gp(u, y, se, seed=0):
+    """Matern-5/2 ARD plus two noise terms, in that order of importance.
+
+    `normalize_y` divides the target by its own standard deviation and does
+    NOT scale `alpha` or the `WhiteKernel` with it, so both are supplied and
+    read back in normalised units. `alpha` carries each point's own measured
+    squared standard error -- known here, because every design point is a
+    mean over hundreds of episodes -- and the `WhiteKernel` absorbs whatever
+    that does not explain. Returns the scale so callers can put the fitted
+    noise back into pool / contribution units.
+    """
+    y_std = float(np.std(y))
     kernel = ConstantKernel(1.0, (1e-3, 1e4)) * Matern(
         length_scale=np.ones(u.shape[1]),
         length_scale_bounds=(0.03, 30.0),
         nu=2.5,
-    ) + WhiteKernel(noise_level=1.0, noise_level_bounds=(1e-4, 1e4))
+    ) + WhiteKernel(noise_level=0.1, noise_level_bounds=(1e-6, 1e2))
     gp = GaussianProcessRegressor(
         kernel=kernel,
-        alpha=np.maximum(se, 1e-6) ** 2,
+        alpha=(np.maximum(se, 1e-6) / y_std) ** 2,
         normalize_y=True,
         n_restarts_optimizer=8,
         random_state=seed,
     )
     gp.fit(u, y)
-    return gp
+    return gp, y_std
 
 
 def argmax_mean(gp, seed=0, n_starts=64):
@@ -151,7 +163,7 @@ def flat_region(gp, best_value, delta, seed=0, n=1 << 16):
     does not care about.
     """
     u = qmc.Sobol(d=len(AXES), scramble=True, seed=seed).random(n)
-    mu = gp.predict(u)
+    mu = np.concatenate([gp.predict(u[i : i + 8192]) for i in range(0, len(u), 8192)])
     keep = u[mu >= best_value - delta]
     nat = to_natural(keep)
     rows = []
@@ -194,21 +206,30 @@ def run(args):
     for obj in OBJECTIVES:
         y = sob[obj].to_numpy(dtype=float)
         se = sob[f"se_{obj}"].to_numpy(dtype=float)
-        gp = fit_gp(u, y, se, seed=args.seed)
+        gp, y_std = fit_gp(u, y, se, seed=args.seed)
         models[obj] = gp
         k = gp.kernel_
         ls = np.atleast_1d(k.k1.k2.length_scale)
-        white = float(k.k2.noise_level)
+        # back out of the normalised target into pool / contribution units
+        white_var = float(k.k2.noise_level) * y_std**2
         # leave-one-out by refit is too slow at n ~ 1000; the GP's own
-        # log-marginal-likelihood and the held-out seed check in validate.py
-        # carry that job instead.
+        # log-marginal-likelihood and the held-out seed check carry that job.
         pred = gp.predict(u)
         resid = y - pred
         u_star, f_star = argmax_mean(gp, seed=args.seed)
         H = hessian(gp, u_star)
         evals, evecs = np.linalg.eigh(H)
-        delta = float(np.sqrt(white))
+        # what a single well-measured design point is worth: its own sampling
+        # error plus whatever the surrogate could not explain
+        delta = float(np.sqrt(white_var + np.median(se) ** 2))
         flat, n_keep, n_tot = flat_region(gp, f_star, delta, seed=args.seed)
+        flat1, n_keep1, _ = flat_region(gp, f_star, 1.0, seed=args.seed)
+        flat1.to_csv(
+            os.path.join(
+                args.out, f"flat_region_{obj.replace('focal_', '')}_delta1.csv"
+            ),
+            index=False,
+        )
 
         tag = obj.replace("focal_", "")
         joblib.dump(gp, os.path.join(args.out, f"gp_{tag}.joblib"))
@@ -246,13 +267,15 @@ def run(args):
         )
         report[tag] = {
             "kernel": str(k),
-            "white_noise_sd": delta,
+            "unexplained_noise_sd": float(np.sqrt(white_var)),
             "median_measured_se": float(np.median(se)),
             "fit_rmse": float(np.sqrt(np.mean(resid**2))),
             "y_sd": float(y.std()),
+            "y_range": [float(y.min()), float(y.max())],
             "hessian_eigenvalues": evals.tolist(),
-            "flat_region_share": n_keep / n_tot,
             "flat_region_delta": delta,
+            "flat_region_share": n_keep / n_tot,
+            "flat_region_share_delta1": n_keep1 / n_tot,
         }
 
     pd.DataFrame(optima).to_csv(os.path.join(args.out, "optima.csv"), index=False)
