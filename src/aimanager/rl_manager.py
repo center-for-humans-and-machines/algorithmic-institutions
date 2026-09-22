@@ -12,6 +12,7 @@ import pandas as pd
 import torch as th
 import wandb
 
+from aimanager.evaluation_suite.metrics import RPA_EDGES, RPA_LABELS
 from aimanager.manager.memory import Memory
 from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.artificial_humans import AH_MODELS
@@ -57,6 +58,52 @@ EPISODE_BUDGET = {
 }
 
 
+def rpa_shape(recorded, groups, rl_group_id, prefix="rpa"):
+    """Mean punishment per contribution bin -- the policy SHAPE, recorded live.
+
+    Two of the three finished runs came out with this contingency inverted
+    (mean punishment rising with contribution, the opposite of the human
+    managers' 4.76 -> 0.27), so the shape is the primary outcome of the
+    exploration comparison and not a post-hoc diagnostic. Recording it here,
+    per rollout, makes it readable for every seed at every evaluation point
+    without waiting for a cross-evaluation simulation -- and separately for
+    the behaviour and the evaluation rollout, which is the gap the comparison
+    is about.
+
+    The bins are `RPA_EDGES` / `RPA_LABELS` imported from the evaluation
+    suite, not redefined here, so these numbers sit on exactly the axis
+    `scripts/rl_two_worlds/measure.py` prints. `pd.cut` bins are left-open /
+    right-closed and `th.bucketize(..., right=False)` is the same convention.
+
+    Cells where the contributor gave no input are dropped: the suite marks
+    their contribution NaN (`convert.load_human`), while the env carries an
+    imputed default that would land in the {0} bin.
+
+    Called twice per round with `prefix` "rpa" for the RL manager's own group
+    and "rpa_opp" for the opponent's, so the artificial punisher -- this
+    project's clone of a human manager -- is measured as a shape column on
+    exactly the same rollouts, with no extra run.
+    """
+    c = recorded["contribution"].squeeze(-1).to(th.float)
+    p = recorded["punishment"].squeeze(-1).to(th.float)
+    keep = recorded["contribution_valid"].squeeze(-1).to(th.bool)
+    if rl_group_id is not None:
+        keep = keep & (groups == rl_group_id)
+    edges = th.tensor(RPA_EDGES, device=c.device, dtype=c.dtype)
+    idx = (th.bucketize(c, edges) - 1)[keep]
+    # One bincount pair and two device transfers per call, not one transfer
+    # per bin: this runs inside the 4000-step training loop and a `.item()`
+    # per bin would be 4.6 million synchronisations over a run.
+    n_bins = len(RPA_LABELS)
+    n = th.bincount(idx, minlength=n_bins).tolist()
+    total = th.bincount(idx, weights=p[keep], minlength=n_bins).tolist()
+    out = {}
+    for b, label in enumerate(RPA_LABELS):
+        out[f"{prefix}_n_{label}"] = float(n[b])
+        out[f"{prefix}_mean_{label}"] = total[b] / n[b] if n[b] else float("nan")
+    return out
+
+
 def load_config(path: str = None) -> dict:
     """Load YAML config for the RL manager."""
     print(f"Loading config from {path}")
@@ -83,6 +130,12 @@ def run_batch(
     # writes over a timed-out cell -- the value the recorded output needs and
     # the manager must not be trained on (ArtificialHumanEnv.served_state).
     env.reset()
+    # One perturbation per episode, drawn here and fixed for all 24 rounds.
+    # A rollout is one batch of 1000 parallel episodes and one replay-memory
+    # episode, so "once per episode" is once per rollout: all 1000 share the
+    # draw, which is what makes the behaviour a single coherent policy.
+    if not on_policy:
+        manager.begin_behaviour_episode()
     state = env.served_state()
 
     # Bootstrapped behaviour: one head per parallel episode, drawn here and
@@ -164,6 +217,16 @@ def run_batch(
                 recorded["group_payoff_sum"][:, opp_group_id].to(th.float).mean().item()
             )
 
+        # Must be read BEFORE `env.step()`: `recorded` is `env.state` itself
+        # and `step()` overwrites the contribution in place.
+        if opponent_manager is not None:
+            metrics.update(rpa_shape(recorded, groups, rl_group_id))
+            metrics.update(
+                rpa_shape(recorded, groups, 1 - rl_group_id, prefix="rpa_opp")
+            )
+        else:
+            metrics.update(rpa_shape(recorded, None, None))
+
         # pass actions to environment and advance by one step
         _, reward, done = env.step()
         state = env.served_state()
@@ -232,8 +295,14 @@ def run_batch(
             )
 
         metrics["round_number"] = round_number
+        # Three exploration arms share this column. `behaviour_label` covers
+        # the two that live on the manager (param-noise / eps-greedy);
+        # bootstrap is decided per rollout by the head draw, so it is named
+        # here.
         metrics["sampling"] = (
-            "greedy" if on_policy else ("bootstrap-head" if bootstrap else "eps-greedy")
+            "greedy"
+            if on_policy
+            else ("bootstrap-head" if bootstrap else manager.behaviour_label)
         )
         metrics["update_step"] = update_step
         metric_list.append(metrics)
@@ -246,6 +315,12 @@ def run_batch(
     EPISODE_BUDGET["episode_rounds"] += env.batch_size * len(metric_list)
     key = "eval_episodes" if on_policy else "behaviour_episodes"
     EPISODE_BUDGET[key] += env.batch_size
+    if not on_policy:
+        # Adapts the scale for the NEXT episode and reports the scale this one
+        # was actually collected under, stamped on every round of it.
+        noise_stats = manager.end_behaviour_episode()
+        for m in metric_list:
+            m.update(noise_stats)
     return metric_list
 
 
@@ -511,12 +586,17 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
             for k in metrics_list[0]
             if k.startswith("rl_") or k.startswith("opp_")
         )
-    # Shape and ensemble diagnostics, melted under their own names so the
-    # metric names the comparison shares (above) keep their exact meaning.
+    # The policy-shape rows and each exploration arm's own diagnostics, melted
+    # under their own names so the metric names the comparison shares (above)
+    # keep their exact meaning -- never a rename of a contract metric into
+    # another arm's slot. The union over records, not the first record: only
+    # behaviour rollouts carry the noise keys, only two-manager runs carry the
+    # shape keys, and only the ensemble arm carries the head keys.
     seen = set(value_vars)
     for row in metrics_list:
         for k in row:
-            if k.startswith(("rpa_", "head_", "consensus_")) and k not in seen:
+            prefixes = ("rpa_", "head_", "consensus_", "param_noise_")
+            if k.startswith(prefixes) and k not in seen:
                 seen.add(k)
                 value_vars.append(k)
 

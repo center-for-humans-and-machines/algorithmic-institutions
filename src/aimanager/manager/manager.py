@@ -1,5 +1,6 @@
 import torch as th
 from aimanager.generic.graph import GraphNetwork
+from aimanager.manager.param_noise import ParameterNoise
 
 # Exploration modes. `eps_greedy` is the agent this project has always run:
 # one value head, an action resampled uniformly over all 31 punishment levels
@@ -40,6 +41,7 @@ class ArtificalManager:
         bootstrap_p=1.0,
         exploration=EPS_GREEDY,
         head_assignment=PER_EPISODE,
+        param_noise=None,
         device,
     ):
         self.device = device
@@ -105,6 +107,35 @@ class ArtificalManager:
         self.n_punishments = n_punishments
         self.default_values = default_values
         self.eps = eps
+
+        # Weight-space exploration. Absent (or `enabled: false`) the class is
+        # never constructed and `get_action` takes exactly the epsilon-greedy
+        # path it took before; see manager/param_noise.py.
+        self.param_noise = None
+        if param_noise:
+            args = dict(param_noise)
+            if args.pop("enabled", True):
+                # The epsilon-matched target must use the SAME epsilon the
+                # reference arm explores with, so it is taken from the
+                # manager's own `eps` rather than restated in the block.
+                args.setdefault("eps", eps)
+                self.param_noise = ParameterNoise(self.policy_model, **args)
+
+    @property
+    def behaviour_label(self):
+        """How a behaviour rollout is tagged in the `sampling` column."""
+        return "param-noise" if self.param_noise is not None else "eps-greedy"
+
+    def begin_behaviour_episode(self):
+        """Draw this episode's weight perturbation. No-op without param noise."""
+        if self.param_noise is not None:
+            self.param_noise.refresh()
+
+    def end_behaviour_episode(self):
+        """Close the episode: adapt the scale, return the episode's diagnostics."""
+        if self.param_noise is not None:
+            return self.param_noise.finish()
+        return {}
 
     # ---- bootstrap bookkeeping ---------------------------------------- #
 
@@ -175,6 +206,21 @@ class ArtificalManager:
             agent_group = state["agent_group"].unsqueeze(1)  # (E, 1, A, T)
             greedy_action = greedy_action.gather(1, agent_group)  # (E, 1, A, T)
             greedy_action = greedy_action.squeeze(1)  # (E, A, T)
+            if (not greedy) and self.param_noise is not None:
+                # Weight-space exploration: the network that ACTS is the
+                # perturbed copy, drawn once per episode by `refresh()` and
+                # fixed for every round of it. `q_values` above stays the
+                # unperturbed policy's, so it is still what `q_mean` and the
+                # divergence are measured against -- and so the `q_*` rows
+                # keep the same meaning they have in every other arm.
+                p_encoded = self.param_noise.perturbed.encode(
+                    exp_state, edge_index=edge_index
+                )
+                p_q = self.param_noise.perturbed(p_encoded, reset_rnn=first)
+                p_q = p_q.reshape(n_batch, self.n_groups, n_agents, n_rounds, -1)
+                self.param_noise.observe(q_values, p_q)
+                picked_action = p_q.argmax(-1).gather(1, agent_group).squeeze(1)
+                return picked_action, q_values
             if greedy or self.exploration == BOOTSTRAP:
                 return greedy_action, q_values
             random_actions = th.randint(
