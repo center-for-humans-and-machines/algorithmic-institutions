@@ -1,0 +1,885 @@
+{
+  "model": "Qwen/Qwen3-8B",
+  "rounds": 24,
+  "temperature": 0.0,
+  "max_tokens": 64,
+  "max_concurrent": 256,
+  "prompt_version": "v0",
+  "n_endpoints": 4,
+  "n_gpus": 4,
+  "endpoints": [
+    "http://127.0.0.1:8000/v1",
+    "http://127.0.0.1:8001/v1",
+    "http://127.0.0.1:8002/v1",
+    "http://127.0.0.1:8003/v1"
+  ],
+  "constrained_decode": true,
+  "saturation": [
+    {
+      "width": 64,
+      "wall_s": 3.082,
+      "completions_per_s": 20.76,
+      "ok": 64,
+      "errors": 0,
+      "mean_prompt_tokens": 1099.8,
+      "mean_completion_tokens": 9.6
+    },
+    {
+      "width": 256,
+      "wall_s": 2.659,
+      "completions_per_s": 96.29,
+      "ok": 256,
+      "errors": 0,
+      "mean_prompt_tokens": 1099.9,
+      "mean_completion_tokens": 9.4
+    },
+    {
+      "width": 512,
+      "wall_s": 3.41,
+      "completions_per_s": 150.16,
+      "ok": 512,
+      "errors": 0,
+      "mean_prompt_tokens": 1099.9,
+      "mean_completion_tokens": 9.4
+    },
+    {
+      "width": 1024,
+      "wall_s": 6.377,
+      "completions_per_s": 160.58,
+      "ok": 1024,
+      "errors": 0,
+      "mean_prompt_tokens": 1099.9,
+      "mean_completion_tokens": 9.5
+    },
+    {
+      "width": 2048,
+      "wall_s": 21.017,
+      "completions_per_s": 97.45,
+      "ok": 2048,
+      "errors": 0,
+      "mean_prompt_tokens": 1099.9,
+      "mean_completion_tokens": 9.5
+    }
+  ],
+  "rollouts": [
+    {
+      "episodes": 200,
+      "rollout_wall_s": 25.6,
+      "rollout_minutes": 0.43,
+      "n_calls": 4800,
+      "completions_per_s": 187.52,
+      "mean_prompt_tokens": 1089.1,
+      "mean_completion_tokens": 11.0,
+      "total_prompt_tokens": 5227890,
+      "total_completion_tokens": 52762,
+      "truncated": 0,
+      "parse_failures": 0,
+      "parse_failure_rate": 0.0,
+      "call_errors": 0,
+      "first_round_wall_s": 0.622,
+      "last_round_wall_s": 1.304,
+      "first_round_prompt_tokens": 41327,
+      "last_round_prompt_tokens": 394690,
+      "per_round": [
+        {
+          "round": 0,
+          "wall_s": 0.622,
+          "prompt_tokens": 41327,
+          "completion_tokens": 2199
+        },
+        {
+          "round": 1,
+          "wall_s": 0.862,
+          "prompt_tokens": 57352,
+          "completion_tokens": 2195
+        },
+        {
+          "round": 2,
+          "wall_s": 0.923,
+          "prompt_tokens": 72547,
+          "completion_tokens": 2179
+        },
+        {
+          "round": 3,
+          "wall_s": 0.959,
+          "prompt_tokens": 87772,
+          "completion_tokens": 2179
+        },
+        {
+          "round": 4,
+          "wall_s": 0.957,
+          "prompt_tokens": 102932,
+          "completion_tokens": 2185
+        },
+        {
+          "round": 5,
+          "wall_s": 0.979,
+          "prompt_tokens": 118124,
+          "completion_tokens": 2187
+        },
+        {
+          "round": 6,
+          "wall_s": 1.01,
+          "prompt_tokens": 133240,
+          "completion_tokens": 2181
+        },
+        {
+          "round": 7,
+          "wall_s": 0.988,
+          "prompt_tokens": 148430,
+          "completion_tokens": 2185
+        },
+        {
+          "round": 8,
+          "wall_s": 1.001,
+          "prompt_tokens": 163643,
+          "completion_tokens": 2178
+        },
+        {
+          "round": 9,
+          "wall_s": 1.056,
+          "prompt_tokens": 179031,
+          "completion_tokens": 2182
+        },
+        {
+          "round": 10,
+          "wall_s": 1.027,
+          "prompt_tokens": 194471,
+          "completion_tokens": 2185
+        },
+        {
+          "round": 11,
+          "wall_s": 1.082,
+          "prompt_tokens": 209834,
+          "completion_tokens": 2187
+        },
+        {
+          "round": 12,
+          "wall_s": 1.064,
+          "prompt_tokens": 225214,
+          "completion_tokens": 2187
+        },
+        {
+          "round": 13,
+          "wall_s": 1.036,
+          "prompt_tokens": 240625,
+          "completion_tokens": 2187
+        },
+        {
+          "round": 14,
+          "wall_s": 1.07,
+          "prompt_tokens": 256010,
+          "completion_tokens": 2187
+        },
+        {
+          "round": 15,
+          "wall_s": 1.192,
+          "prompt_tokens": 271407,
+          "completion_tokens": 2184
+        },
+        {
+          "round": 16,
+          "wall_s": 1.182,
+          "prompt_tokens": 286788,
+          "completion_tokens": 2208
+        },
+        {
+          "round": 17,
+          "wall_s": 1.173,
+          "prompt_tokens": 302242,
+          "completion_tokens": 2228
+        },
+        {
+          "round": 18,
+          "wall_s": 1.179,
+          "prompt_tokens": 317656,
+          "completion_tokens": 2227
+        },
+        {
+          "round": 19,
+          "wall_s": 1.262,
+          "prompt_tokens": 332979,
+          "completion_tokens": 2226
+        },
+        {
+          "round": 20,
+          "wall_s": 1.204,
+          "prompt_tokens": 348471,
+          "completion_tokens": 2223
+        },
+        {
+          "round": 21,
+          "wall_s": 1.218,
+          "prompt_tokens": 363844,
+          "completion_tokens": 2225
+        },
+        {
+          "round": 22,
+          "wall_s": 1.225,
+          "prompt_tokens": 379261,
+          "completion_tokens": 2231
+        },
+        {
+          "round": 23,
+          "wall_s": 1.304,
+          "prompt_tokens": 394690,
+          "completion_tokens": 2227
+        }
+      ],
+      "report": {
+        "model": "Qwen/Qwen3-8B",
+        "backend": "http",
+        "endpoints": [
+          "http://127.0.0.1:8000/v1",
+          "http://127.0.0.1:8001/v1",
+          "http://127.0.0.1:8002/v1",
+          "http://127.0.0.1:8003/v1"
+        ],
+        "n_endpoints": 4,
+        "temperature": 0.0,
+        "max_tokens": 64,
+        "max_concurrent": 256,
+        "enable_thinking": false,
+        "constraint_style": "structured_outputs",
+        "seed": null,
+        "n_calls": 4800,
+        "n_errors": 0,
+        "truncated": 0,
+        "prompt_tokens": 5227890,
+        "completion_tokens": 52762,
+        "wall_s": 24.841,
+        "completions_per_s": 193.229,
+        "prompt_version": "v0",
+        "objective": "You are paid on your own group's common pool: the total your group's members contribute, multiplied by 1.6, minus the points you deduct by punishing. Maximise it over the whole game.",
+        "n_punishments": 31,
+        "group_id": 0,
+        "constrained_decode": true,
+        "n_decisions": 4800,
+        "parse_failures": 0,
+        "parse_failure_rate": 0.0,
+        "call_errors": 0
+      },
+      "completions_per_s_per_card": 46.88,
+      "extrapolated_hours_if_linear": {
+        "300": 0.01,
+        "1000": 0.04,
+        "6144": 0.22
+      }
+    },
+    {
+      "episodes": 400,
+      "rollout_wall_s": 98.5,
+      "rollout_minutes": 1.64,
+      "n_calls": 9600,
+      "completions_per_s": 97.46,
+      "mean_prompt_tokens": 1088.6,
+      "mean_completion_tokens": 10.9,
+      "total_prompt_tokens": 10450882,
+      "total_completion_tokens": 104650,
+      "truncated": 0,
+      "parse_failures": 0,
+      "parse_failure_rate": 0.0,
+      "call_errors": 0,
+      "first_round_wall_s": 1.205,
+      "last_round_wall_s": 13.241,
+      "first_round_prompt_tokens": 82679,
+      "last_round_prompt_tokens": 788883,
+      "per_round": [
+        {
+          "round": 0,
+          "wall_s": 1.205,
+          "prompt_tokens": 82679,
+          "completion_tokens": 4348
+        },
+        {
+          "round": 1,
+          "wall_s": 1.611,
+          "prompt_tokens": 114630,
+          "completion_tokens": 4334
+        },
+        {
+          "round": 2,
+          "wall_s": 1.836,
+          "prompt_tokens": 145001,
+          "completion_tokens": 4339
+        },
+        {
+          "round": 3,
+          "wall_s": 1.894,
+          "prompt_tokens": 175291,
+          "completion_tokens": 4339
+        },
+        {
+          "round": 4,
+          "wall_s": 1.899,
+          "prompt_tokens": 205699,
+          "completion_tokens": 4336
+        },
+        {
+          "round": 5,
+          "wall_s": 1.888,
+          "prompt_tokens": 235998,
+          "completion_tokens": 4340
+        },
+        {
+          "round": 6,
+          "wall_s": 2.162,
+          "prompt_tokens": 266415,
+          "completion_tokens": 4343
+        },
+        {
+          "round": 7,
+          "wall_s": 1.962,
+          "prompt_tokens": 296829,
+          "completion_tokens": 4354
+        },
+        {
+          "round": 8,
+          "wall_s": 1.977,
+          "prompt_tokens": 327237,
+          "completion_tokens": 4344
+        },
+        {
+          "round": 9,
+          "wall_s": 2.034,
+          "prompt_tokens": 357946,
+          "completion_tokens": 4350
+        },
+        {
+          "round": 10,
+          "wall_s": 2.048,
+          "prompt_tokens": 388687,
+          "completion_tokens": 4350
+        },
+        {
+          "round": 11,
+          "wall_s": 2.081,
+          "prompt_tokens": 419517,
+          "completion_tokens": 4355
+        },
+        {
+          "round": 12,
+          "wall_s": 2.356,
+          "prompt_tokens": 450289,
+          "completion_tokens": 4351
+        },
+        {
+          "round": 13,
+          "wall_s": 2.16,
+          "prompt_tokens": 481035,
+          "completion_tokens": 4358
+        },
+        {
+          "round": 14,
+          "wall_s": 2.134,
+          "prompt_tokens": 511917,
+          "completion_tokens": 4357
+        },
+        {
+          "round": 15,
+          "wall_s": 2.25,
+          "prompt_tokens": 542625,
+          "completion_tokens": 4351
+        },
+        {
+          "round": 16,
+          "wall_s": 2.195,
+          "prompt_tokens": 573393,
+          "completion_tokens": 4369
+        },
+        {
+          "round": 17,
+          "wall_s": 2.256,
+          "prompt_tokens": 604177,
+          "completion_tokens": 4385
+        },
+        {
+          "round": 18,
+          "wall_s": 3.878,
+          "prompt_tokens": 634929,
+          "completion_tokens": 4386
+        },
+        {
+          "round": 19,
+          "wall_s": 9.068,
+          "prompt_tokens": 665777,
+          "completion_tokens": 4391
+        },
+        {
+          "round": 20,
+          "wall_s": 11.551,
+          "prompt_tokens": 696510,
+          "completion_tokens": 4390
+        },
+        {
+          "round": 21,
+          "wall_s": 12.128,
+          "prompt_tokens": 727301,
+          "completion_tokens": 4387
+        },
+        {
+          "round": 22,
+          "wall_s": 12.678,
+          "prompt_tokens": 758117,
+          "completion_tokens": 4396
+        },
+        {
+          "round": 23,
+          "wall_s": 13.241,
+          "prompt_tokens": 788883,
+          "completion_tokens": 4397
+        }
+      ],
+      "report": {
+        "model": "Qwen/Qwen3-8B",
+        "backend": "http",
+        "endpoints": [
+          "http://127.0.0.1:8000/v1",
+          "http://127.0.0.1:8001/v1",
+          "http://127.0.0.1:8002/v1",
+          "http://127.0.0.1:8003/v1"
+        ],
+        "n_endpoints": 4,
+        "temperature": 0.0,
+        "max_tokens": 64,
+        "max_concurrent": 256,
+        "enable_thinking": false,
+        "constraint_style": "structured_outputs",
+        "seed": null,
+        "n_calls": 9600,
+        "n_errors": 0,
+        "truncated": 0,
+        "prompt_tokens": 10450882,
+        "completion_tokens": 104650,
+        "wall_s": 97.0,
+        "completions_per_s": 98.969,
+        "prompt_version": "v0",
+        "objective": "You are paid on your own group's common pool: the total your group's members contribute, multiplied by 1.6, minus the points you deduct by punishing. Maximise it over the whole game.",
+        "n_punishments": 31,
+        "group_id": 0,
+        "constrained_decode": true,
+        "n_decisions": 9600,
+        "parse_failures": 0,
+        "parse_failure_rate": 0.0,
+        "call_errors": 0
+      },
+      "completions_per_s_per_card": 24.36,
+      "extrapolated_hours_if_linear": {
+        "300": 0.02,
+        "1000": 0.07,
+        "6144": 0.42
+      }
+    },
+    {
+      "episodes": 600,
+      "rollout_wall_s": 209.4,
+      "rollout_minutes": 3.49,
+      "n_calls": 14400,
+      "completions_per_s": 68.77,
+      "mean_prompt_tokens": 1088.4,
+      "mean_completion_tokens": 10.9,
+      "total_prompt_tokens": 15672765,
+      "total_completion_tokens": 157396,
+      "truncated": 0,
+      "parse_failures": 0,
+      "parse_failure_rate": 0.0,
+      "call_errors": 0,
+      "first_round_wall_s": 1.709,
+      "last_round_wall_s": 19.754,
+      "first_round_prompt_tokens": 123997,
+      "last_round_prompt_tokens": 1183340,
+      "per_round": [
+        {
+          "round": 0,
+          "wall_s": 1.709,
+          "prompt_tokens": 123997,
+          "completion_tokens": 6525
+        },
+        {
+          "round": 1,
+          "wall_s": 2.402,
+          "prompt_tokens": 171991,
+          "completion_tokens": 6518
+        },
+        {
+          "round": 2,
+          "wall_s": 2.679,
+          "prompt_tokens": 217528,
+          "completion_tokens": 6496
+        },
+        {
+          "round": 3,
+          "wall_s": 2.738,
+          "prompt_tokens": 263035,
+          "completion_tokens": 6503
+        },
+        {
+          "round": 4,
+          "wall_s": 2.839,
+          "prompt_tokens": 308627,
+          "completion_tokens": 6503
+        },
+        {
+          "round": 5,
+          "wall_s": 2.796,
+          "prompt_tokens": 354065,
+          "completion_tokens": 6493
+        },
+        {
+          "round": 6,
+          "wall_s": 2.83,
+          "prompt_tokens": 399592,
+          "completion_tokens": 6511
+        },
+        {
+          "round": 7,
+          "wall_s": 2.937,
+          "prompt_tokens": 445085,
+          "completion_tokens": 6529
+        },
+        {
+          "round": 8,
+          "wall_s": 2.983,
+          "prompt_tokens": 490605,
+          "completion_tokens": 6522
+        },
+        {
+          "round": 9,
+          "wall_s": 3.03,
+          "prompt_tokens": 536873,
+          "completion_tokens": 6530
+        },
+        {
+          "round": 10,
+          "wall_s": 3.043,
+          "prompt_tokens": 582970,
+          "completion_tokens": 6521
+        },
+        {
+          "round": 11,
+          "wall_s": 3.094,
+          "prompt_tokens": 629092,
+          "completion_tokens": 6546
+        },
+        {
+          "round": 12,
+          "wall_s": 5.104,
+          "prompt_tokens": 675251,
+          "completion_tokens": 6543
+        },
+        {
+          "round": 13,
+          "wall_s": 11.361,
+          "prompt_tokens": 721348,
+          "completion_tokens": 6539
+        },
+        {
+          "round": 14,
+          "wall_s": 12.243,
+          "prompt_tokens": 767447,
+          "completion_tokens": 6542
+        },
+        {
+          "round": 15,
+          "wall_s": 13.073,
+          "prompt_tokens": 813633,
+          "completion_tokens": 6547
+        },
+        {
+          "round": 16,
+          "wall_s": 13.899,
+          "prompt_tokens": 859686,
+          "completion_tokens": 6577
+        },
+        {
+          "round": 17,
+          "wall_s": 14.692,
+          "prompt_tokens": 905885,
+          "completion_tokens": 6608
+        },
+        {
+          "round": 18,
+          "wall_s": 15.534,
+          "prompt_tokens": 952075,
+          "completion_tokens": 6628
+        },
+        {
+          "round": 19,
+          "wall_s": 16.412,
+          "prompt_tokens": 998351,
+          "completion_tokens": 6629
+        },
+        {
+          "round": 20,
+          "wall_s": 17.218,
+          "prompt_tokens": 1044528,
+          "completion_tokens": 6637
+        },
+        {
+          "round": 21,
+          "wall_s": 18.08,
+          "prompt_tokens": 1090759,
+          "completion_tokens": 6644
+        },
+        {
+          "round": 22,
+          "wall_s": 18.935,
+          "prompt_tokens": 1137002,
+          "completion_tokens": 6652
+        },
+        {
+          "round": 23,
+          "wall_s": 19.754,
+          "prompt_tokens": 1183340,
+          "completion_tokens": 6653
+        }
+      ],
+      "report": {
+        "model": "Qwen/Qwen3-8B",
+        "backend": "http",
+        "endpoints": [
+          "http://127.0.0.1:8000/v1",
+          "http://127.0.0.1:8001/v1",
+          "http://127.0.0.1:8002/v1",
+          "http://127.0.0.1:8003/v1"
+        ],
+        "n_endpoints": 4,
+        "temperature": 0.0,
+        "max_tokens": 64,
+        "max_concurrent": 256,
+        "enable_thinking": false,
+        "constraint_style": "structured_outputs",
+        "seed": null,
+        "n_calls": 14400,
+        "n_errors": 0,
+        "truncated": 0,
+        "prompt_tokens": 15672765,
+        "completion_tokens": 157396,
+        "wall_s": 207.287,
+        "completions_per_s": 69.469,
+        "prompt_version": "v0",
+        "objective": "You are paid on your own group's common pool: the total your group's members contribute, multiplied by 1.6, minus the points you deduct by punishing. Maximise it over the whole game.",
+        "n_punishments": 31,
+        "group_id": 0,
+        "constrained_decode": true,
+        "n_decisions": 14400,
+        "parse_failures": 0,
+        "parse_failure_rate": 0.0,
+        "call_errors": 0
+      },
+      "completions_per_s_per_card": 17.19,
+      "extrapolated_hours_if_linear": {
+        "300": 0.03,
+        "1000": 0.1,
+        "6144": 0.6
+      }
+    },
+    {
+      "episodes": 800,
+      "rollout_wall_s": 303.42,
+      "rollout_minutes": 5.06,
+      "n_calls": 19200,
+      "completions_per_s": 63.28,
+      "mean_prompt_tokens": 1088.8,
+      "mean_completion_tokens": 10.9,
+      "total_prompt_tokens": 20904885,
+      "total_completion_tokens": 210183,
+      "truncated": 0,
+      "parse_failures": 0,
+      "parse_failure_rate": 0.0,
+      "call_errors": 0,
+      "first_round_wall_s": 2.135,
+      "last_round_wall_s": 26.32,
+      "first_round_prompt_tokens": 165368,
+      "last_round_prompt_tokens": 1578334,
+      "per_round": [
+        {
+          "round": 0,
+          "wall_s": 2.135,
+          "prompt_tokens": 165368,
+          "completion_tokens": 8751
+        },
+        {
+          "round": 1,
+          "wall_s": 2.974,
+          "prompt_tokens": 229263,
+          "completion_tokens": 8739
+        },
+        {
+          "round": 2,
+          "wall_s": 3.326,
+          "prompt_tokens": 290043,
+          "completion_tokens": 8695
+        },
+        {
+          "round": 3,
+          "wall_s": 3.489,
+          "prompt_tokens": 350871,
+          "completion_tokens": 8696
+        },
+        {
+          "round": 4,
+          "wall_s": 3.521,
+          "prompt_tokens": 411614,
+          "completion_tokens": 8678
+        },
+        {
+          "round": 5,
+          "wall_s": 3.567,
+          "prompt_tokens": 472290,
+          "completion_tokens": 8679
+        },
+        {
+          "round": 6,
+          "wall_s": 3.67,
+          "prompt_tokens": 532937,
+          "completion_tokens": 8694
+        },
+        {
+          "round": 7,
+          "wall_s": 3.688,
+          "prompt_tokens": 593699,
+          "completion_tokens": 8715
+        },
+        {
+          "round": 8,
+          "wall_s": 3.819,
+          "prompt_tokens": 654394,
+          "completion_tokens": 8715
+        },
+        {
+          "round": 9,
+          "wall_s": 6.778,
+          "prompt_tokens": 715936,
+          "completion_tokens": 8727
+        },
+        {
+          "round": 10,
+          "wall_s": 11.826,
+          "prompt_tokens": 777458,
+          "completion_tokens": 8727
+        },
+        {
+          "round": 11,
+          "wall_s": 12.962,
+          "prompt_tokens": 839116,
+          "completion_tokens": 8730
+        },
+        {
+          "round": 12,
+          "wall_s": 14.013,
+          "prompt_tokens": 900536,
+          "completion_tokens": 8742
+        },
+        {
+          "round": 13,
+          "wall_s": 15.136,
+          "prompt_tokens": 962088,
+          "completion_tokens": 8736
+        },
+        {
+          "round": 14,
+          "wall_s": 16.259,
+          "prompt_tokens": 1023734,
+          "completion_tokens": 8743
+        },
+        {
+          "round": 15,
+          "wall_s": 17.318,
+          "prompt_tokens": 1085266,
+          "completion_tokens": 8739
+        },
+        {
+          "round": 16,
+          "wall_s": 18.455,
+          "prompt_tokens": 1146811,
+          "completion_tokens": 8767
+        },
+        {
+          "round": 17,
+          "wall_s": 19.521,
+          "prompt_tokens": 1208459,
+          "completion_tokens": 8819
+        },
+        {
+          "round": 18,
+          "wall_s": 20.674,
+          "prompt_tokens": 1270048,
+          "completion_tokens": 8841
+        },
+        {
+          "round": 19,
+          "wall_s": 21.788,
+          "prompt_tokens": 1331666,
+          "completion_tokens": 8829
+        },
+        {
+          "round": 20,
+          "wall_s": 22.891,
+          "prompt_tokens": 1393329,
+          "completion_tokens": 8839
+        },
+        {
+          "round": 21,
+          "wall_s": 24.077,
+          "prompt_tokens": 1454969,
+          "completion_tokens": 8852
+        },
+        {
+          "round": 22,
+          "wall_s": 25.202,
+          "prompt_tokens": 1516656,
+          "completion_tokens": 8868
+        },
+        {
+          "round": 23,
+          "wall_s": 26.32,
+          "prompt_tokens": 1578334,
+          "completion_tokens": 8862
+        }
+      ],
+      "report": {
+        "model": "Qwen/Qwen3-8B",
+        "backend": "http",
+        "endpoints": [
+          "http://127.0.0.1:8000/v1",
+          "http://127.0.0.1:8001/v1",
+          "http://127.0.0.1:8002/v1",
+          "http://127.0.0.1:8003/v1"
+        ],
+        "n_endpoints": 4,
+        "temperature": 0.0,
+        "max_tokens": 64,
+        "max_concurrent": 256,
+        "enable_thinking": false,
+        "constraint_style": "structured_outputs",
+        "seed": null,
+        "n_calls": 19200,
+        "n_errors": 0,
+        "truncated": 0,
+        "prompt_tokens": 20904885,
+        "completion_tokens": 210183,
+        "wall_s": 300.499,
+        "completions_per_s": 63.894,
+        "prompt_version": "v0",
+        "objective": "You are paid on your own group's common pool: the total your group's members contribute, multiplied by 1.6, minus the points you deduct by punishing. Maximise it over the whole game.",
+        "n_punishments": 31,
+        "group_id": 0,
+        "constrained_decode": true,
+        "n_decisions": 19200,
+        "parse_failures": 0,
+        "parse_failure_rate": 0.0,
+        "call_errors": 0
+      },
+      "completions_per_s_per_card": 15.82,
+      "extrapolated_hours_if_linear": {
+        "300": 0.03,
+        "1000": 0.11,
+        "6144": 0.65
+      }
+    }
+  ],
+  "saturation_width": 512,
+  "peak_completions_per_s": 160.58,
+  "peak_completions_per_s_per_card": 40.15
+}

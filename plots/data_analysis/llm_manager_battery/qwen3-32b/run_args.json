@@ -1,0 +1,42 @@
+{
+  "out": "/u/levinb/repros/ai-runs/llm-manager-experiment/plots/data_analysis/llm_manager_battery/qwen3-32b",
+  "episodes": 200,
+  "chunk": 200,
+  "seeds": "42,43,44,45,46",
+  "device": "cpu",
+  "validate_217": false,
+  "no_stub": false,
+  "llm": {
+    "arm": "llm_qwen3_32b",
+    "config": "/u/levinb/repros/ai-runs/llm-manager-experiment/configs/llm_manager/qwen3_32b.yaml",
+    "model": "Qwen/Qwen3-32B",
+    "prompt_version": "v3_explicit_pool",
+    "prompt_fingerprint": "b211d81b411a",
+    "constrained_decode": true,
+    "temperature": 0.0,
+    "endpoints": [
+      "http://127.0.0.1:8000/v1",
+      "http://127.0.0.1:8001/v1"
+    ],
+    "seat": "predict"
+  },
+  "llm_arm_name": null,
+  "mdd_episodes": "50,200,500,1000,3000",
+  "stack": {
+    "contribution_model": "artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+    "valid_model": "artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt",
+    "switch_model": "artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt",
+    "clone": "artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib"
+  },
+  "arms": [
+    "llm_qwen3_32b",
+    "clone",
+    "never",
+    "thr9_p10",
+    "capped_sigmoid",
+    "never_vs_never",
+    "thr9_vs_thr9",
+    "stub_zero",
+    "stub_thr9_p10"
+  ]
+}
