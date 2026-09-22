@@ -1,7 +1,8 @@
 """Pre-launch guards for the annealed, local epsilon-greedy arm.
 
-Three questions, three subcommands. All of them are asked of the real training
-code path with the real config, because all three failures are silent.
+Four questions, four subcommands. The first three are asked of the real
+training code path with the real config, because all three failures are
+silent; the fourth is a follow-up on what the first three produced.
 
 budget
     How many environment episodes does a 4000-step run consume? The arms are
@@ -24,16 +25,31 @@ shape
     evaluation suite's own RPA bins (`RPA_EDGES` / `RPA_LABELS`, imported, not
     re-declared), with the row count per bin so a reader can see it is not
     noise, and with the human and clone columns beside it. Reported for both
-    the evaluated policy and the behaviour policy, because the mechanism under
-    test is that uniform exploration decorrelates punishment from contribution
-    in the replay buffer -- that shows up as a flat behaviour-policy shape
-    however sharp the greedy one is.
+    the evaluated policy and the behaviour policy, so a reader can see how far
+    the sampled action distribution sits from the evaluated one at each
+    contribution level.
+
+    Note what this is and is not. It describes *actions that were sampled*,
+    not the policy that gets learned. DQN is off-policy and bootstraps toward
+    the max over actions, so a flatter action distribution in the buffer is
+    exploration working rather than failing, and no conclusion about the
+    learned contingency follows from this table alone. See `state`.
 
     The clone column is taken from the same rollout (group 1 is the linear
     punisher throughout), so the reference is not carried over from a
     different run. The human column comes through
     `evaluation_suite.convert.load_human`, which drops the flip duplicates and
     keeps a manager timeout as NaN rather than 0.
+
+state
+    The follow-up the off-policy objection demands. `gap` and `shape` measure
+    actions, and a behaviour policy whose actions differ from the target's is
+    what off-policy learning is for. What off-policy correction cannot supply
+    is *states* the behaviour policy never visited, and here the state
+    distribution is endogenous: contributors are recurrent and group
+    membership responds to punishment. This compares a few state summaries
+    between the two rollouts. It is deliberately weak -- marginal means, no
+    joint, no trajectories -- and is a first cut, not a test.
 
 Usage. `budget` and `shape` need Raven -- torch_geometric is required to
 unpickle the GNNs -- but `gap` is pure pandas and runs locally, which is where
@@ -42,6 +58,7 @@ subcommands that need them rather than taken at module level.
 
     python scripts/rl_anneal_local/guard.py budget CONFIG --out OUT.json
     python scripts/rl_anneal_local/guard.py gap PARQUET [PARQUET ...] --out OUT.md
+    python scripts/rl_anneal_local/guard.py state PARQUET [...] --out OUT.csv
     python scripts/rl_anneal_local/guard.py shape CONFIG MANAGER.pt --out OUT.csv
 """
 
@@ -157,6 +174,17 @@ def cmd_budget(args):
 # --------------------------------------------------------------------------- #
 BEHAVIOUR, EVALUATED = "eps-greedy", "greedy"
 
+# State the manager did not pick directly: what the contributors did and how
+# the group ended up. `punishment` is carried alongside as the action, so a
+# reader can see the action shift and the state shift in one table.
+STATE_METRICS = [
+    "punishment",
+    "contribution",
+    "rl_end_group_size",
+    "common_good",
+    "next_reward",
+]
+
 
 def gap_table(path):
     df = pd.read_parquet(path)
@@ -224,6 +252,57 @@ def cmd_gap(args):
         os.makedirs(os.path.dirname(args.out), exist_ok=True)
         with open(args.out, "w") as fh:
             fh.write(text)
+    return 0
+
+
+# --------------------------------------------------------------------------- #
+# state
+# --------------------------------------------------------------------------- #
+def cmd_state(args):
+    """Does the behaviour rollout visit a different world than the evaluated
+    one?
+
+    The gap and shape guards measure *actions*. DQN is off-policy, so a
+    different action distribution in the buffer is what the algorithm is for
+    and is not by itself a problem. What off-policy correction cannot supply
+    is states the behaviour policy never visited -- and in this environment
+    the state distribution is endogenous to the manager, because the
+    contributors are recurrent and group membership responds to punishment.
+
+    This costs no GPU: the metrics parquet already logs both rollouts at the
+    same update steps and carries state beside the action. It is a weak probe
+    -- four marginal means, not a distribution, and nothing about trajectories
+    -- and the caller should read it as one.
+    """
+    rows = []
+    for path in args.parquet:
+        name = os.path.basename(path).replace(".parquet", "")
+        df = pd.read_parquet(path)
+        steps = sorted(df["update_step"].unique())
+        for step in (steps[0], steps[-1]):
+            sub = df[(df["update_step"] == step) & df["metric"].isin(STATE_METRICS)]
+            w = sub.groupby(["metric", "sampling"])["value"].mean().unstack("sampling")
+            for metric in STATE_METRICS:
+                if metric not in w.index:
+                    continue
+                b, e = w.loc[metric, BEHAVIOUR], w.loc[metric, EVALUATED]
+                rows.append(
+                    {
+                        "run": name,
+                        "update_step": int(step),
+                        "metric": metric,
+                        "is_action": metric == "punishment",
+                        "behaviour": b,
+                        "evaluated": e,
+                        "shift": b - e,
+                        "pct": 100 * (b - e) / e if e else float("nan"),
+                    }
+                )
+    out = pd.DataFrame(rows)
+    print(out.to_string(index=False))
+    if args.out:
+        os.makedirs(os.path.dirname(args.out), exist_ok=True)
+        out.to_csv(args.out, index=False)
     return 0
 
 
@@ -429,6 +508,11 @@ def main():
     g.add_argument("parquet", nargs="+")
     g.add_argument("--out", default=None)
     g.set_defaults(func=cmd_gap)
+
+    st = sub.add_parser("state")
+    st.add_argument("parquet", nargs="+")
+    st.add_argument("--out", default=None)
+    st.set_defaults(func=cmd_state)
 
     s = sub.add_parser("shape")
     s.add_argument("config")

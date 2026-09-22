@@ -32,19 +32,40 @@ This matters more than bookkeeping here: the endpoint 0 is exactly where a near-
 
 ## Primary outcome: policy shape
 
-Revised after launch-time input from the coordinator, and it displaces the level-based reading I started with.
+Revised twice. First after launch-time input from the coordinator, which displaced the level-based reading I started with. Then again after the maintainer's objection below, which does not change the arm, the runs or any number, but does change what they may be claimed to show. The second revision was written after the runs were launched; nothing was re-run.
 
 Human managers are monotone **decreasing** in the contributor's own contribution: 4.76 at contribution 0 falling to 0.27 at contribution 20. Two of the three finished control seeds came out **inverted** — s42 runs 0.08 up to 5.00, s44 runs 0.23 up to 2.00, monotone in the wrong direction across all six bins; the third has the human sign but fires on 7.4% of rounds, and no learned seed is closer to the human policy than never punishing at all.
 
-The mechanism this arm tests is specific: uniform exploration over 31 levels applies punishment **independently of the contribution it is aimed at**, which decorrelates punishment from contribution in the replay buffer and is a plausible route to a policy whose shape is arbitrary and seed-determined. A local proposal keeps the exploratory action attached to the greedy action, which is itself a function of the contribution, so the correlation survives exploration.
+Mean punishment per contribution bin is reported for every seed on the evaluation suite's own bins — `{0}`, `1-5`, `6-10`, `11-15`, `16-19`, `{20}` — by importing `RPA_EDGES` and `RPA_LABELS` from `aimanager.evaluation_suite.metrics` rather than re-declaring them, with the row count per bin beside every mean, and with the human and clone columns alongside. `scripts/rl_anneal_local/guard.py shape` does this for a rollout, and Measured 7 shows that reading the clone out of such a rollout reproduces the human curve bin for bin, so the path is sound. The finished runs should still be read through the same cross-evaluation simulation the control used, so that the columns sit in the same table rather than merely on the same bins.
 
-**So shape is the outcome and the behaviour-versus-evaluated gap is the mechanism.** Mean punishment per contribution bin is reported for every seed on the evaluation suite's own bins — `{0}`, `1-5`, `6-10`, `11-15`, `16-19`, `{20}` — by importing `RPA_EDGES` and `RPA_LABELS` from `aimanager.evaluation_suite.metrics` rather than re-declaring them, with the row count per bin beside every mean, and with the human and clone columns alongside. `scripts/rl_anneal_local/guard.py shape` does this for a rollout, and Measured 7 shows that reading the clone out of such a rollout reproduces the human curve bin for bin, so the path is sound. The finished runs should still be read through the same cross-evaluation simulation the control used, so that the columns sit in the same table rather than merely on the same bins.
+### The off-policy objection, and what survives it
 
-**What this arm cannot distinguish, and I will not claim it does.** A competing explanation for the inverted shape is that the artificial humans respond to punishment without regard to whether it was deserved. If that is so there is no gradient toward correct targeting and *no* exploration method fixes the shape — this arm coming back flat would then be evidence about the clones, not about exploration. Separating the two needs a probe of the contribution model's response to deserved versus undeserved punishment, which is not on this branch. See the successor section.
+**The objection, which is correct and which this log states before a reader has to raise it.** DQN is off-policy. A behaviour policy that differs from the target is what the algorithm is *for*, not evidence against it: Q-learning bootstraps toward the max over actions, so it evaluates the greedy policy whatever collected the data. **The existence of a behaviour-versus-evaluated gap is therefore not a defect.** My earlier framing treated it as one, and the framing was wrong.
+
+The same objection disposes of the inference I originally drew from Measured 7. Broad, decorrelated action coverage within a contribution band is exploration doing its job — it is the standard justification for exploring at all. "The buffer's action distribution is flatter in contribution than the evaluated policy is" does not license "the learned contingency will therefore be arbitrary". That step does not follow from an action-distribution measurement, and I no longer make it.
+
+**What survives is a different and narrower claim.** Off-policy correction buys correctness of the action choice *given a state*. It does not supply states the behaviour policy never visits. Two features of this environment make the state distribution endogenous to the manager's own behaviour in a way that stationary-MDP intuition misses:
+
+- the contributors are **recurrent**, so extra punishment early in an episode moves their hidden state for the remainder of it;
+- group composition is **endogenous**, because members switch groups in response to punishment.
+
+A manager punishing 2.85 therefore produces a different behavioural regime, and a differently composed group, than one punishing 1.5. The buffer holds transitions from a world the evaluated policy does not inhabit — and no amount of off-policy correction manufactures the states it never saw.
+
+The sharpest version is **trajectory** coverage rather than state coverage: what a consistently contingent manager produces over 24 rounds is a trajectory that dithering does not generate cleanly, so the value function never sees the returns of a coherent contingent policy.
+
+**How much of that this branch measured: the aggregate part, weakly; the trajectory part, not at all.** The pilot measured *action* distributions. Measured 8 is a cheap follow-up on the same artifacts that measures a handful of *state summaries*, and it does find a shift — but a few marginal means are not a state distribution, and nothing here tests trajectory coverage. Every claim in this subsection beyond Measured 8's four numbers is argument, not measurement, and it is filed under Inferred accordingly.
+
+### The rival explanation, which is now the stronger one
+
+If the artificial humans respond to punishment **regardless of whether it was deserved**, then no targeting choice changes the return, the learned contingency is arbitrary for reasons that have nothing to do with exploration, and no exploration method fixes the shape. On the maintainer's objection this is the leading alternative, not a footnote: it explains the inversion without needing any claim about buffers at all.
+
+This arm cannot distinguish it from the state-coverage story, and does not try to. A probe of the contribution model's response to deserved versus undeserved punishment is running elsewhere; **its result should be read before this arm's.** If it comes back flat, all four exploration arms are measuring the wrong thing, and my seven runs answer a question that was not the live one.
 
 ## Measured
 
 Everything in this section was run; nothing here is extrapolated except where the arithmetic is stated.
+
+**Read the gap numbers (5, 6) and the action-shape numbers (7) as descriptions of what the behaviour policy sampled, not as a defect being diagnosed.** DQN is off-policy and a gap is expected; the reason to measure it is that it is the input to the state-distribution question of Measured 8, not that a gap is itself wrong.
 
 ### 1. The configs differ in three keys and nothing else
 
@@ -87,7 +108,9 @@ Before measuring my own, I reproduced the brief's number from the control's own 
 | 0 | 4.917 | 4.215 | 0.702 | 1.17 |
 | 3980 | 2.788 | 1.620 | 1.168 | **1.72** |
 
-1.72 is the bottom of the 1.7-to-6.6 range the brief quotes, so `guard.py gap` is reading the quantity the comparison is about and not a lookalike. Note the shape of it: the gap *grows* over training, from 0.70 to 1.17 punishment points, because the evaluated policy comes down while the uniform 1.5-point injection does not. That is the failure mode the anneal is aimed at.
+1.72 is the bottom of the 1.7-to-6.6 range the brief quotes, so `guard.py gap` is reading the quantity the comparison is about and not a lookalike. Note the shape of it: the gap *grows* over training, from 0.70 to 1.17 punishment points, because the evaluated policy comes down while the uniform 1.5-point injection does not.
+
+That growth is what the anneal removes. It is worth being precise about why that might matter, because the obvious reading is wrong: a growing gap is not a growing error. Q-learning would still evaluate the greedy policy correctly from this data. What a growing gap does mean is that the world the buffer is drawn from drifts further from the world the evaluated policy would produce, exactly as training is converging — and states are the one thing off-policy correction cannot supply.
 
 ### 6. The behaviour-versus-evaluated gap, on a short pilot
 
@@ -102,11 +125,13 @@ Two 300-step pilots, `rl_anneal_local_pilot` and `rl_anneal_control_pilot`, diff
 
 The gap closes by a factor of roughly 7 at both ends, and what is left is negative and of order 0.1 punishment points on a level of 4 to 6 — the sign says it is rollout-to-rollout noise, not injected punishment, since an injection can only push the behaviour policy up.
 
+This says the arm does the thing it was built to do. It does **not** say the control was broken: a 1.17x behaviour-to-evaluated ratio is an ordinary epsilon-greedy DQN doing what epsilon-greedy DQN does. The claim this measurement supports is narrow — that the two arms differ in how far the collected data's *action* distribution sits from the evaluated policy's — and the interesting question is what that does to the *states* collected, which is Measured 8.
+
 **Which of the two mechanisms did it.** At update step 0 epsilon is still 0.1 in both pilots, so the entire closure in the step-0 row is the *local proposal*; the anneal has not moved yet. By step 280 the pilot's schedule has been at its 0.01 floor for 55 steps, and the gap there (-0.09) is indistinguishable from the gap at step 0 (-0.03). On this evidence **local sampling does the work and the anneal is insurance** — which is worth knowing, because it means a sibling arm that fixes only the level and not the locality would not reproduce this.
 
 **What the pilot does not show.** 300 steps is 7.5% of a run. Over the full 4000 steps the control's gap *grows*, 0.70 to 1.17 (Measured 5); over 300 steps it shrinks slightly, 0.70 to 0.63. The pilot is too short to reproduce that growth, so it cannot be read as showing the arm beats the control's late-training gap specifically. What it does show is that the arm's gap is near zero from the first step and stays there, which is the property the arm was built for.
 
-### 7. Policy shape on the pilots, and the decorrelation mechanism caught in the act
+### 7. Policy shape on the pilots, and what the behaviour policy sampled
 
 `guard.py shape`, both pilot managers, batch-1000 deterministic rollout, the evaluation suite's own RPA bins. Evidence: `plots/data_analysis/rl_anneal_local/shape_rl_anneal_{local,control}_pilot.csv`.
 
@@ -125,7 +150,7 @@ The gap closes by a factor of roughly 7 at both ends, and what is left is negati
 
 Row counts per bin are in the CSVs; the evaluated columns run 4,753 to 17,696 rows. **Both** pilots are monotone decreasing — the human *sign* — and both punish far harder than any human. At 300 steps neither has inverted, so **the pilot says nothing about whether this arm fixes the inversion**; the inversion is a late-training phenomenon and 300 steps cannot reach it. I am not going to read the arm's lower level as an improvement either: it is one seed at 7.5% of a run.
 
-**What the pilot does show, and it is the mechanism itself.** Compare each pilot's *behaviour* shape to its own *evaluated* shape. If uniform exploration decorrelates punishment from contribution, the behaviour policy should be dragged toward the uniform mean of 15 — down where the policy punishes above 15, up where it punishes below — by about `eps * (15 - evaluated)`. That is a quantitative prediction with no free parameters, and the control obeys it:
+**What the pilot does show is an action distribution, and it is exactly the one the arithmetic predicts.** Compare each pilot's *behaviour* shape to its own *evaluated* shape. If uniform exploration spreads punishment independently of the contribution it is aimed at, the behaviour policy should be dragged toward the uniform mean of 15 — down where the policy punishes above 15, up where it punishes below — by about `eps * (15 - evaluated)`. That is a quantitative prediction with no free parameters, and the control obeys it:
 
 | bin | control evaluated | control behaviour | observed shift | predicted shift |
 |---|---|---|---|---|
@@ -140,9 +165,37 @@ The sign flips exactly where the prediction says it should, at the one bin where
 
 The arm's shifts are -0.19, -0.16, -0.04, 0.00, 0.00, 0.00. Mean absolute shift **0.067 against the control's 0.886, thirteen times smaller**; regression slope **0.199 against 0.891**; range flattening **1.9% against 9.4%**.
 
-So the replay buffer the control trains on carries a measurably different policy shape from the one being evaluated, in the direction uniform exploration predicts and at the magnitude it predicts, and this arm removes that. Whether removing it changes where training ends up is what the seven runs are for.
+So the replay buffer the control trains on carries a measurably different *action* distribution from the one the evaluated policy would produce, in the direction uniform exploration predicts and at the magnitude it predicts, and this arm shrinks that by an order of magnitude.
 
-### 8. Full test suite
+**What this is a claim about, and what it is not.** It is a claim about *what was sampled*, not about *what was learned*. I originally wrote this section up as the decorrelation mechanism "caught in the act", with the implication that a flattened buffer shape is a route to an arbitrary learned contingency. That inference does not follow and I withdraw it: DQN is off-policy, it bootstraps toward the max over actions, and broad action coverage within a contribution band is exploration working as intended rather than a fault. An action-distribution measurement cannot on its own say anything about the shape of the policy that comes out the other end.
+
+The reason to keep the numbers is that they are the input to the question that does survive — whether the *states* the buffer holds differ from the ones the evaluated policy would visit, which off-policy correction cannot fix. Measured 8 takes a first, cheap cut at that. Whether any of it changes where training ends up is what the seven runs are for.
+
+### 8. Does the behaviour rollout visit a different world? A first, cheap cut
+
+Added after the maintainer's off-policy objection. It cost no GPU: the pilots' metrics parquets already log both rollouts at the same update steps, and they carry state alongside the action. `punishment` is what the manager chose; `contribution`, `rl_end_group_size`, `common_good` and `next_reward` are what the world did back.
+
+Behaviour rollout minus evaluated rollout, same update step, percent of the evaluated value:
+
+| | control @0 | control @280 | arm @0 | arm @280 |
+|---|---|---|---|---|
+| punishment (the action) | +16.7% | +9.6% | −0.8% | −1.6% |
+| contribution | **−5.0%** | **−1.1%** | −3.0% | −2.0% |
+| rl_end_group_size | **−12.2%** | **−5.0%** | −3.7% | −2.1% |
+| common_good | −14.6% | −9.5% | −4.2% | −2.4% |
+| next_reward | −22.6% | −12.3% | −6.9% | −5.8% |
+
+**The state distribution is endogenous, and measurably so.** The control's behaviour rollout does not merely punish differently — it ends up with groups 12.2% smaller at step 0 and contributors giving 5.0% less. Those are not actions the manager selected; they are the recurrent contributors and the switching mechanism responding. That is the concrete form of "the buffer holds transitions from a world the evaluated policy does not inhabit", and it is the part of the argument that off-policy correction genuinely cannot repair.
+
+**Three things this does not show, stated plainly.**
+
+- **It is four marginal means, not a state distribution.** A shift in the average group size is consistent with many different distributions over states, and nothing here touches the joint.
+- **It does not test trajectory coverage at all**, which is the sharpest version of the claim. I ran the obvious cheap probe — the per-round contribution shift at the last logged step, to see whether it accumulates over an episode as the recurrence story predicts. The control moves from +0.072 (rounds 0–3) to −0.357 (rounds 20–23) and the arm from −0.115 to −0.167, which is the predicted direction for the control. But the round-to-round swings are the same size as the effect (+0.372 at round 16, −0.295 at round 20), it is one seed at one update step, and I am not prepared to call it evidence. It is under-powered and I am recording it as such rather than quietly dropping it.
+- **The cross-arm comparison is confounded.** The two arms' evaluated policies sit at different operating points (6.58 versus 5.62 punishment at step 280), so "the arm's state shift is smaller" mixes *how far the behaviour policy is from its own target* with *where that target sits*. The within-arm comparison is sound; the between-arm ratio is not clean.
+
+And one honest complication rather than a tidy story: on the contribution channel at step 280 the arm's shift (−2.0%) is **larger** than the control's (−1.1%). The arm reduces the state shift on three of four summaries and at both ends on group size, but it does not eliminate it and does not dominate on every channel. Its own behaviour rollout still visits a measurably different world than its evaluated policy would.
+
+### 9. Full test suite
 
 `python -m pytest src/` on Raven: 186 passed, 11 failed, 4 errors on the first run. Six of the failures were mine and are fixed — `_RecordingManager` in `test_rl_manager_timeout_view.py` is a stand-in whose `get_action` did not accept the new `update_step` keyword, so every rollout test in that file raised `TypeError`. Adding the keyword to the stub fixed all six. The other five failures and all four errors are `FileNotFoundError` on `plots/simulation/22_2g8a_linear_self_ridge_contr/per_round.parquet`, which the isolated remote directory does not carry because `train_cluster.sh` excludes `plots/` from the sync; they are a property of the sandbox, not of this branch.
 
@@ -170,10 +223,14 @@ Guard jobs, same directory: budget 30413186, shape 30413233 (30413194 was the fi
 
 Clearly separated from the above: none of this was run.
 
+- **The state-coverage argument, which is the one that survives the off-policy objection.** Off-policy correction buys the action choice given a state; it does not supply states the behaviour policy never visited. With recurrent contributors and endogenous group membership, a manager punishing harder produces a different behavioural regime and a differently composed group, so the buffer holds transitions from a world the evaluated policy does not inhabit. Measured 8 shows four state summaries shifting, which is consistent with this and is the only part of it that was measured. **That the shift matters for what gets learned is inference, not measurement.**
+- **Trajectory coverage, which is the sharpest version and is wholly unmeasured.** What a consistently contingent manager produces over 24 rounds is a trajectory dithering does not generate cleanly, so the value function never sees the returns of a coherent contingent policy. My pilot measured action distributions; the one cheap trajectory probe I ran (Measured 8) is under-powered and I do not count it. **Nothing on this branch tests this claim.**
+- **What I withdrew.** My first write-up argued that a flattened buffer *action* shape is a route to an arbitrary learned contingency. It does not follow — DQN bootstraps toward the max over actions, and broad action coverage within a contribution band is exploration working, not failing. The numbers in Measured 7 stand; that inference from them does not.
+
 - **The perturbation this arm injects, from the sampler alone.** With the greedy action at 0, the control injects a mean of **1.5** punishment points per member per round (eps 0.1 times the uniform mean 15). This arm injects **0.130** at step 0 and **0.013** at step 3000 — 11.5x and 115x smaller. These are exact properties of the two distributions, asserted in `test_annealed_local_injects_far_less_punishment_than_uniform`; they are listed as inferred rather than measured because the realised gap in training also depends on how the greedy policy itself moves, which only the pilot and the runs can show.
 - **Why local exploration might fix shape and not merely level.** Stated above under the primary outcome. It is a mechanism, not a measurement, and the pilot's shape table is the first evidence either way.
 - **The cost this arm pays, stated up front.** A local proposal buys consistency by giving up coverage. With sigma = 2 truncated at 0, a policy sitting at punishment 0 probes roughly 0 to 6 and effectively never sees 20 or 30. The human means per bin run 0.27 to 4.76, so the region that matters is inside that reach, and the greedy action can drift upward over training with the proposal following it. But if the optimum were far from where the policy initialises, this arm would fail to find it where uniform exploration would have stumbled onto it. That is the trade the arm *is*, not a flaw in it, and it is precisely why the comparison has four arms rather than one.
-- **What a null result would mean.** If the gap closes (mechanism confirmed) and the shape stays inverted, the exploration explanation for the inversion is dead and the clone-response explanation is the live one. That is a useful result and I will report it as one.
+- **What a null result would mean.** The gap is already closed (Measured 6), so if the shape still comes back inverted across five seeds, the exploration explanation for the inversion is dead and the clone-response explanation is the live one. That is a useful result and I will report it as one. Given the maintainer's objection, it is also now the outcome I would bet on.
 
 ## Successor
 
@@ -181,8 +238,13 @@ For whoever picks this up:
 
 1. **The shape tables for the five seeds are not in this branch.** The runs were launched, not awaited. Read them with `scripts/rl_anneal_local/guard.py shape` against each saved manager, and through the same cross-evaluation simulation the control used, so the columns sit beside `plots/data_analysis/evaluation/rl_manager_two_worlds/policy_shape.csv`. The pilot tables (Measured 7) are not a preview of the answer: at 300 steps neither arm has inverted, because the inversion happens late.
 2. **The paired comparison is seed-for-seed.** Five arms times five seeds; compare `rl_anneal_local_s{N}` to `rl_new_clones_s{N}` at the same N, never arm mean to arm mean.
-3. **The confound this arm cannot resolve.** Probe the contribution model directly: hold the contribution fixed and vary whether the punishment was deserved. If its response is the same either way, no exploration scheme can produce a correctly-shaped manager against these clones, and every arm of this comparison is measuring the wrong thing. That probe is cheap and should be run before a fifth arm is designed.
-4. **sigma and the floor were chosen, not tuned.** sigma = 2 and eps_final = 0.01 were picked from the scale of the signal, with no sweep. If the arm half-works, they are the obvious next knobs — but one variable at a time, and not before the confound in item 3 is settled.
+3. **Read the deservedness probe first — it may moot all four arms.** If the artificial humans respond to punishment regardless of whether it was deserved, no targeting choice changes the return, the learned contingency is arbitrary for reasons unrelated to exploration, and no exploration method fixes the shape. On the maintainer's off-policy objection this is the *leading* explanation for the inversion, not a footnote: it needs no claim about buffers at all. A probe of it is running elsewhere. If it comes back flat, every arm of this comparison is measuring the wrong thing and my seven runs answer a dead question. Nothing this branch produced can distinguish the two explanations.
+4. **Measuring the state-coverage claim properly, which Measured 8 only gestures at.** Measured 8 compares four marginal state summaries between the behaviour and evaluated rollouts and finds them shifted. Three upgrades, in increasing cost:
+    - *Free, on the existing pilot parquets.* Compare the **distributions** rather than the means — per-round histograms of contribution and group size, behaviour against evaluated, with a distance rather than a difference of averages. The parquets hold every round of 1000 episodes at 15 update steps.
+    - *Cheap, one GPU-minute per manager.* `guard.py shape` already collects per-cell data; extend it to dump the joint (contribution, group size, round) occupancy of each rollout and report the share of the evaluated policy's occupancy mass that the behaviour rollout covers. That is the state-coverage claim stated as a number.
+    - *The one that actually matters, and it is not cheap.* Trajectory coverage. Score whole 24-round episodes, not cells: sample episodes from both rollouts, and ask whether the return distribution of a consistently contingent policy is represented in the buffer at all. This is the claim the argument rests on and the one nothing on this branch touches.
+5. **The between-arm state-shift comparison in Measured 8 is confounded** and should not be quoted as-is. The two arms' evaluated policies sit at different punishment levels, so the comparison mixes how far each behaviour policy is from its own target with where that target sits. Compare within an arm, or match the operating point first.
+6. **sigma and the floor were chosen, not tuned.** sigma = 2 and eps_final = 0.01 were picked from the scale of the signal, with no sweep. If the arm half-works, they are the obvious next knobs — but one variable at a time, and not before item 3 is settled.
 
 ## Notes
 
@@ -191,3 +253,4 @@ For whoever picks this up:
 3. **No metric was added.** Recording epsilon per step was tempting and was dropped: it is a deterministic function of `update_step` and the config, and adding a row would have made the schema differ from the siblings' for no information.
 4. **`ArtificalManager.load` does not move the model to the device it is handed.** `save` puts the policy model on the CPU first and `load` assigns the unpickled object straight through, so a load onto cuda returns CPU weights with a cuda `self.device` and the first forward pass dies on a device mismatch. The only other caller, `api_manager.RLManager`, loads on the CPU and never meets it. My guard works around it with one `.to(device)` rather than changing the manager: that is a fix for its own branch, and an exploration arm is not the place to smuggle it in.
 5. **`src/aimanager/rl_manager.py` is not black-clean on the base commit** and I left it that way. Running black on the file reformats four hunks I did not touch; including them would have put unrelated churn in an arm's PR. My own hunk is black-clean and flake8 passes at 88 across everything. If the pre-commit hook reformats the file on the maintainer's next commit, that is the pre-existing drift surfacing, not this branch.
+6. **The interpretation in this log was corrected after the runs were launched, and the correction was the maintainer's.** My original framing treated the behaviour-versus-evaluated gap as a defect and read Measured 7 as showing that a flattened buffer action-shape produces an arbitrary learned contingency. Both were wrong, for the same reason: DQN is off-policy, a gap is what the algorithm is for, and broad action coverage within a contribution band is exploration working. **No number changed, no run was restarted, and the arm is exactly what it was.** What changed is the claim: the gap is now presented as the input to a state-distribution question (Measured 8), and the action-shape result as a statement about what was sampled rather than about what will be learned. I am recording the error rather than quietly editing over it, because a reader who knows DQN would have spotted the original framing immediately and should be able to see that it was caught.
