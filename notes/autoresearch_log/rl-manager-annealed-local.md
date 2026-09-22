@@ -233,20 +233,20 @@ My implementation reproduces the sibling's reference exactly on the human manage
 
 | profile | rank | tau-b | mono | range | rel. range | gate | verdict |
 |---|---|---|---|---|---|---|---|
-| human | -1.000 | -1.000 | dec | 4.49 | 2.38 | pending | targets free-riders |
-| clone | -1.000 | -1.000 | dec | 3.00 | 1.85 | pending | targets free-riders |
-| arm 42 | +0.928 | +0.828 | — | 4.97 | 1.69 | pending | targets contributors |
-| arm 43 | -0.941 | -0.894 | dec | 11.49 | 4.38 | pending | targets free-riders |
-| arm 44 | +0.058 | +0.138 | — | 11.83 | 3.27 | pending | no targeting |
-| arm 45 | +0.928 | +0.828 | — | 5.90 | 1.51 | pending | targets contributors |
-| arm 46 | +0.600 | +0.467 | — | 7.96 | 2.68 | pending | no targeting |
-| control 42 | +1.000 | +1.000 | inc | 4.97 | 1.90 | pending | targets contributors |
-| control 43 | -0.845 | -0.775 | dec | 12.38 | 5.70 | pending | targets free-riders |
-| control 44 | +0.941 | +0.894 | inc | 1.91 | 1.52 | pending | targets contributors |
-| control 45 | +0.943 | +0.867 | — | 5.99 | 2.06 | pending | targets contributors |
-| control 46 | +0.943 | +0.867 | — | 9.18 | 3.46 | pending | targets contributors |
+| human | -1.000 | -1.000 | dec | 4.49 | 2.38 | 3 | targets free-riders |
+| clone | -1.000 | -1.000 | dec | 3.00 | 1.85 | 25 | targets free-riders |
+| arm 42 | +0.928 | +0.828 | — | 4.97 | 1.69 | 1242 | targets contributors |
+| arm 43 | -0.941 | -0.894 | dec | 11.49 | 4.38 | 67 | targets free-riders |
+| arm 44 | +0.058 | +0.138 | — | 11.83 | 3.27 | 94 | no targeting |
+| arm 45 | +0.928 | +0.828 | — | 5.90 | 1.51 | 503 | targets contributors |
+| arm 46 | +0.600 | +0.467 | — | 7.96 | 2.68 | 2108 | no targeting |
+| control 42 | +1.000 | +1.000 | inc | 4.97 | 1.90 | 2070 | targets contributors |
+| control 43 | -0.845 | -0.775 | dec | 12.38 | 5.70 | 54 | targets free-riders |
+| control 44 | +0.941 | +0.894 | inc | 1.91 | 1.52 | 227 | targets contributors |
+| control 45 | +0.943 | +0.867 | — | 5.99 | 2.06 | 6970 | targets contributors |
+| control 46 | +0.943 | +0.867 | — | 9.18 | 3.46 | 208 | targets contributors |
 
-Thresholds: |rank| >= 0.8, relative range >= 1.0, gate >= 1.65. Kendall tau-b and the monotonicity flag are carried because Spearman is dragged toward zero by ties and two profiles saturate at exactly 0 in several bins: control seed 43 is monotone decreasing across all six bins and still scores only −0.845 on three tied bins, which is why the rank threshold is 0.8 rather than the 0.9 I first tried. **No verdict in the table turns on that choice.** The gate column is still pending on a congested cluster; rank and relative range are functions of the six committed bin means alone, and a noise gate can only ever turn a verdict into "no targeting", never rescue one, so nothing below depends on it.
+Thresholds: |rank| >= 0.8, relative range >= 1.0, gate >= 1.65. Kendall tau-b and the monotonicity flag are carried because Spearman is dragged toward zero by ties and two profiles saturate at exactly 0 in several bins: control seed 43 is monotone decreasing across all six bins and still scores only −0.845 on three tied bins, which is why the rank threshold is 0.8 rather than the 0.9 I first tried. **No verdict in the table turns on that choice.** The gate is now measured and it binds on nothing: the smallest across the ten runs is 54 and the human reference, on 20 times fewer episodes, is 3.29. Every profile here is distinguishable from flat by a wide margin, so the verdicts turn entirely on rank and size — which is the honest outcome, since a noise gate can only ever turn a verdict into "no targeting", never rescue one.
 
 **What changes.** My headline said "correctly signed: arm 2 of 5, control 1 of 5". On this check it is **arm 1 of 5 and control 1 of 5** — seed 43 in both. Seed 44 was the entirety of the arm's apparent advantage and it fails on rank at **+0.058**: its profile is 12.84 at contribution 0 and then 1.86, 1.01, 2.00, 2.00, 2.00, a spike with no gradation above it. That is precisely the shape that passes a contrast test and fails a rank test. **I withdraw the claim.**
 
