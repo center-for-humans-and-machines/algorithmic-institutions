@@ -45,6 +45,11 @@ N_PUNISHMENTS = 31
 #: Column order of a parameter vector, everywhere in this arm.
 PARAM_NAMES = ("p_max", "c0", "tau", "gamma_ep", "gamma_sw")
 
+#: Not a parameter of the family. Carried as an optional sixth column so the
+#: mechanism probe described in `sigmoid_punishment` can be run through the
+#: same harness; it is 0 for every searched point.
+PROBE_NAMES = ("phase",)
+
 
 def sigmoid_punishment(
     contribution,
@@ -55,6 +60,7 @@ def sigmoid_punishment(
     tau,
     gamma_ep,
     gamma_sw,
+    phase=0.0,
     n_rounds=N_ROUNDS,
     switch_every=SWITCH_EVERY,
     n_punishments=N_PUNISHMENTS,
@@ -66,6 +72,19 @@ def sigmoid_punishment(
     which is what lets one rollout carry a different parameter vector per
     batch element. Returns a float tensor of whole numbers in
     ``[0, n_punishments - 1]``; the caller casts.
+
+    ``phase`` shifts ``m_sw`` around the reshuffle cycle and is **not** a
+    parameter of the family: it is 0 everywhere the family is searched, and
+    exists only as a mechanism probe. ``m_sw``'s trough sits at ``s = 0``,
+    which is exactly the round the switch decision is taken, so a fitted
+    ``gamma_sw > 0`` is consistent with two different stories -- "spend where
+    the remaining tenure is long", which is the reasoning the multiplier was
+    built on, and "punish least on the round the switch predictor reads",
+    which would be exploiting the predictor rather than the incentive. They
+    are indistinguishable at ``phase = 0`` because the two coincide by
+    construction. A non-zero phase moves the trough off the decision round
+    while keeping the same duty cycle and the same average discount, so the
+    two stories come apart.
     """
     c = contribution.to(th.float)
     t = round_number.to(th.float)
@@ -77,7 +96,7 @@ def sigmoid_punishment(
     # clamp the bases at 0: a negative base with a fractional exponent is nan,
     # and t > n_rounds (which no rollout produces) would otherwise go there.
     ep_base = ((n_rounds - t) / n_rounds).clamp(min=0.0)
-    s = (switch_every - 1) - th.remainder(t, switch_every)
+    s = (switch_every - 1) - th.remainder(t + phase, switch_every)
     sw_base = ((s + 1.0) / switch_every).clamp(min=0.0)
 
     raw = p_max * f * ep_base**gamma_ep * sw_base**gamma_sw
@@ -109,7 +128,13 @@ class SigmoidRuleBatch:
         n_punishments=N_PUNISHMENTS,
     ):
         theta = th.as_tensor(theta, dtype=th.float)
-        assert theta.ndim == 2 and theta.shape[1] == len(PARAM_NAMES), theta.shape
+        n_par = len(PARAM_NAMES)
+        assert theta.ndim == 2 and theta.shape[1] in (
+            n_par,
+            n_par + len(PROBE_NAMES),
+        ), theta.shape
+        if theta.shape[1] == n_par:
+            theta = th.cat([theta, th.zeros(len(theta), len(PROBE_NAMES))], dim=1)
         assert (theta[:, 2] > 0).all(), "tau must be strictly positive"
         self.theta = theta
         self.n_rounds = int(n_rounds)
@@ -133,8 +158,9 @@ class SigmoidRuleBatch:
         assert theta.shape[0] == c.shape[0], (theta.shape, c.shape)
         # (B, 1, 1) so every parameter broadcasts across agents and the
         # trailing singleton the env carries.
-        p_max, c0, tau, gamma_ep, gamma_sw = (
-            theta[:, i].view(-1, *([1] * (c.ndim - 1))) for i in range(len(PARAM_NAMES))
+        p_max, c0, tau, gamma_ep, gamma_sw, phase = (
+            theta[:, i].view(-1, *([1] * (c.ndim - 1)))
+            for i in range(len(PARAM_NAMES) + len(PROBE_NAMES))
         )
         p = sigmoid_punishment(
             c,
@@ -144,6 +170,7 @@ class SigmoidRuleBatch:
             tau=tau,
             gamma_ep=gamma_ep,
             gamma_sw=gamma_sw,
+            phase=phase,
             n_rounds=self.n_rounds,
             switch_every=self.switch_every,
             n_punishments=self.n_punishments,

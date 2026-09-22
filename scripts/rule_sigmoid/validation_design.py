@@ -29,14 +29,22 @@ from fit_surrogate import AXES, HI, LO, natural, to_natural, to_unit
 #: How far along a flat direction to step, in units of the unit box.
 RIDGE_STEPS = (-0.35, -0.175, 0.175, 0.35)
 
-#: Exponents below the design box: the multipliers were specified with
-#: `gamma >= 0` on the reasoning that punishment is an investment. If the
-#: fitted optimum sits on that boundary, the box cannot say whether it wants
-#: to go further; these rows can.
-BOUNDARY_GAMMAS = (-0.5, -1.0)
+#: Exponents outside the design box, on both sides.
+#:
+#: Below zero tests the premise the multipliers were built on -- punishment
+#: is an investment, so you discount it towards the end of the horizon rather
+#: than the start. A rule with `gamma < 0` punishes HARDER as the episode
+#: runs out and as the reshuffle approaches, which is the opposite claim.
+#:
+#: Above the box matters because the upper edge is arbitrary in a way the
+#: others are not: `P_max`'s 30 is the action space's own ceiling and `c0`'s
+#: [0, 20] is the contribution scale, but nothing fixes `gamma <= 3`. If the
+#: fitted optimum sits against that edge, the box is the binding constraint
+#: and these rows say how much is left outside it.
+BOUNDARY_GAMMAS = (-1.0, -0.5, 4.0, 6.0)
 
 
-def _row(name, kind, nat):
+def _row(name, kind, nat, phase=0.0):
     return {
         "name": name,
         "kind": kind,
@@ -45,6 +53,7 @@ def _row(name, kind, nat):
         "tau": float(10 ** nat[2]),
         "gamma_ep": nat[3],
         "gamma_sw": nat[4],
+        "phase": float(phase),
     }
 
 
@@ -78,6 +87,13 @@ def main():
                 nat_b = nat.copy()
                 nat_b[AXES.index(axis)] = g
                 rows.append(_row(f"{tag}_{axis}{g}", "boundary", nat_b))
+        # `m_sw`'s trough lands exactly on the round the switch decision is
+        # taken, so `gamma_sw > 0` could be spending where tenure is long or
+        # simply hiding punishment from the switch predictor. A phase shift
+        # keeps the duty cycle and the average discount and moves the trough
+        # off the decision round, which separates the two.
+        for ph in (1.0, 2.0, 3.0):
+            rows.append(_row(f"{tag}_phase{int(ph)}", "phase", nat, phase=ph))
         rows += ridge_rows(
             tag,
             to_unit(nat.reshape(1, -1))[0],
@@ -93,6 +109,7 @@ def main():
             "tau": t,
             "gamma_ep": ge,
             "gamma_sw": gs,
+            "phase": 0.0,
         }
         for n, k, p, c, t, ge, gs in ANCHORS
     ]

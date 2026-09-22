@@ -67,6 +67,7 @@ def sigmoid_manager(row):
         "tau": float(row["tau"]),
         "gamma_ep": float(row["gamma_ep"]),
         "gamma_sw": float(row["gamma_sw"]),
+        "phase": float(row.get("phase", 0.0)),
     }
 
 

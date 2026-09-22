@@ -245,6 +245,7 @@ class RuleBasedManager:
         tau=None,
         gamma_ep=0.0,
         gamma_sw=0.0,
+        phase=0.0,
         n_rounds=24,
         switch_every=4,
         skip_invalid=False,
@@ -267,6 +268,7 @@ class RuleBasedManager:
         self.tau = None if tau is None else float(tau)
         self.gamma_ep = float(gamma_ep)
         self.gamma_sw = float(gamma_sw)
+        self.phase = float(phase)
         self.n_rounds = int(n_rounds)
         self.switch_every = int(switch_every)
         self.skip_invalid = bool(skip_invalid)
@@ -330,6 +332,7 @@ class RuleBasedManager:
                 tau=self.tau,
                 gamma_ep=self.gamma_ep,
                 gamma_sw=self.gamma_sw,
+                phase=self.phase,
                 n_rounds=self.n_rounds,
                 switch_every=self.switch_every,
                 n_punishments=self.n_punishments,

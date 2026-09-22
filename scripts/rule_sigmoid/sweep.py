@@ -37,6 +37,7 @@ from aimanager.manager.paired_rollout import (
 )
 from aimanager.manager.sigmoid_rule import (
     PARAM_NAMES,
+    PROBE_NAMES,
     ConstantManager,
     SigmoidRuleBatch,
 )
@@ -97,8 +98,11 @@ class MixedFocal:
 
 
 def build_focal(shard, chunk, models, device):
+    # `phase` is a mechanism probe, not a parameter: a design that does not
+    # carry the column is a design of ordinary family members.
+    cols = list(PARAM_NAMES) + [c for c in PROBE_NAMES if c in shard.columns]
     theta = th.tensor(
-        shard[list(PARAM_NAMES)].to_numpy(dtype=float), dtype=th.float
+        shard[cols].to_numpy(dtype=float), dtype=th.float
     ).repeat_interleave(chunk, dim=0)
     # a clone row's theta is never read; keep tau positive so the assert holds
     theta[:, 2] = theta[:, 2].clamp(min=1e-9)

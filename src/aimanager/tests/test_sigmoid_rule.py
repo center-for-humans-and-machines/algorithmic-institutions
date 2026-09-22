@@ -128,3 +128,33 @@ def test_constant_manager_is_the_never_control():
     state = {"contribution": th.zeros(2, 4, 1, dtype=th.int64)}
     out, _ = ConstantManager(0).predict(state)
     assert out.sum() == 0 and out.dtype == th.int64
+
+
+def test_phase_rotates_the_switch_trough_without_changing_its_depth():
+    """The mechanism probe: same four values, same average, moved around the
+    reshuffle cycle so the trough no longer sits on the decision round."""
+    base = _p(p_max=20.0, c0=25.0, tau=TAU0, gamma_sw=1.0)[0, :4]
+    assert base.argmin() == 3, "at phase 0 the trough IS the decision round"
+    for shift in (1, 2, 3):
+        moved = _p(p_max=20.0, c0=25.0, tau=TAU0, gamma_sw=1.0, phase=shift)[0, :4]
+        assert sorted(moved.tolist()) == sorted(base.tolist())
+        assert th.equal(moved, base.roll(-shift))
+        assert moved.argmin() != 3, "and off it at any other phase"
+
+
+def test_phase_zero_is_the_family_as_specified():
+    kw = dict(p_max=23.0, c0=8.0, tau=0.5, gamma_ep=1.7, gamma_sw=2.2)
+    assert th.equal(_p(**kw), _p(phase=0.0, **kw))
+
+
+def test_batch_accepts_a_phase_column_and_defaults_it_to_zero():
+    five = th.tensor([[20.0, 25.0, TAU0, 0.0, 1.0]])
+    six = th.cat([five, th.zeros(1, 1)], dim=1)
+    state = {
+        "contribution": th.zeros(1, 1, 1, dtype=th.int64),
+        "round_number": th.full((1, 1, 1), 3),
+    }
+    assert th.equal(
+        SigmoidRuleBatch(five).predict(state)[0],
+        SigmoidRuleBatch(six).predict(state)[0],
+    )
