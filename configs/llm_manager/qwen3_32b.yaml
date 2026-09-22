@@ -24,15 +24,12 @@ serving:
 
 manager:
   model: Qwen/Qwen3-32B
-  prompt_version: v0
-  objective: >-
-    You are paid on your own group's common pool: the total your group's
-    members contribute, multiplied by 1.6, minus the points you deduct by
-    punishing. Maximise it over the whole game.
+  # A name in aimanager.llm.prompt.PROMPT_VERSIONS. The version owns the
+  # text, including the objective, and a result names the version and its
+  # fingerprint. Do not set `objective` here: it is part of the version.
+  prompt_version: v3_explicit_pool
   n_punishments: 31
   group_id: 0
-  n_rounds: 24
-  switch_every: 4
 
   temperature: 0.0
   seed: 42
@@ -42,7 +39,7 @@ manager:
 
   # Qwen3-32B is the same hybrid-thinking family as 8B, so the same
   # `enable_thinking: false` default applies and the same small budget holds.
-  max_tokens: 64
+  max_tokens: 128
 
   max_concurrent: 256
   backend: http

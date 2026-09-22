@@ -30,16 +30,13 @@ serving:
 
 manager:
   model: Qwen/Qwen3-8B
-  prompt_version: v0
-  objective: >-
-    You are paid on your own group's common pool: the total your group's
-    members contribute, multiplied by 1.6, minus the points you deduct by
-    punishing. Maximise it over the whole game.
+  # A name in aimanager.llm.prompt.PROMPT_VERSIONS. The version owns the
+  # text, including the objective, and a result names the version and its
+  # fingerprint. Do not set `objective` here: it is part of the version.
+  prompt_version: v3_explicit_pool
   n_punishments: 31
   # The seat this manager holds in a paired run; the other group is the rival.
   group_id: 0
-  n_rounds: 24
-  switch_every: 4
 
   # Fixed and recorded. Zero makes the manager reproducible, which none of the
   # sampling baselines are; the plan calls determinism the second risk after
@@ -47,22 +44,26 @@ manager:
   temperature: 0.0
   seed: 42
 
-  # CONSTRAIN THE DECODE. The action is four integers in 0..30, so vLLM masks
-  # the logits and the model cannot emit anything else. The parse failure rate
-  # is then zero by construction; the parser stays as a guard, and a non-zero
-  # rate is a bug rather than a property of the model. This matters because
-  # the fallback is not neutral: it is zero punishment, the policy every
-  # collapsed learned manager converged on.
+  # CONSTRAIN THE DECODE. The constraint is built per call from the roster
+  # PRESENT at that decision point -- group size runs 1..8 in the human data
+  # and is four in only 26% of group-rounds -- so vLLM masks the logits and
+  # the model cannot answer for a roster the decision point does not have.
+  # The parse failure rate is then zero by construction; the parser stays as
+  # a guard, and a non-zero rate is a bug rather than a property of the model.
+  # This matters because the fallback is not neutral: it is zero punishment,
+  # the policy every collapsed learned manager converged on.
   constrained_decode: true
   # `structured_outputs` for vLLM 0.19+; `guided` for older builds.
   constraint_style: structured_outputs
 
-  # The reply is a few integers, so the budget is small -- but only safely so
-  # with thinking off. Measured 2026-09-22 on Qwen3-8B: with the default
-  # thinking mode the reply hit `finish_reason: length` at 64 tokens having
-  # emitted only `<think>`, and never produced an answer. `enable_thinking`
-  # left unset means off for any qwen3 model (llm_client.wants_thinking_flag).
-  max_tokens: 64
+  # The reply is one line naming each member, so the budget is small -- but
+  # only safely so with thinking off. Measured 2026-09-22 on Qwen3-8B: with
+  # the default thinking mode the reply hit `finish_reason: length` at 64
+  # tokens having emitted only `<think>`, and never produced an answer.
+  # `enable_thinking` left unset means off for any qwen3 model (see
+  # llm_client.wants_thinking_flag). 128 rather than 64 because the answer
+  # names every member and a group can hold up to eight.
+  max_tokens: 128
 
   # Requests in flight at once, PER ENDPOINT. Tune to the server, not to the
   # episode count.

@@ -38,13 +38,9 @@ import time
 
 import torch as th
 
-from aimanager.manager.llm_manager import (
-    DEFAULT_OBJECTIVE,
-    LLMManager,
-    PlayerRound,
-    RoundContext,
-    RoundRecord,
-)
+from aimanager.llm.prompt import DEFAULT_VERSION, build_prompt
+from aimanager.llm.trace import PlayerRound, RoundRecord
+from aimanager.manager.llm_manager import LLMManager, agent_label
 
 N_AGENTS = 8
 AGENT_GROUPS = [0, 0, 0, 0, 1, 1, 1, 1]
@@ -127,67 +123,61 @@ def one_rollout(manager, n_batch, n_rounds, seed):
     return time.time() - t_start, per_round
 
 
-def deep_context(strategy, history_rounds, n_players, n_punishments, objective):
-    """A context whose trace is already `history_rounds` deep."""
-    history = tuple(
+def deep_records(history_rounds, n_players, episode=0):
+    """A trace already `history_rounds` deep, plus the round being decided.
+
+    `episode` perturbs the numbers so two traces differ. That matters: vLLM
+    has prefix caching on, so a sweep built from one shared trace measures the
+    cache rather than the model. Real episodes share only the fixed header.
+    """
+
+    def player(a, t, punishment):
+        return PlayerRound.from_masked(
+            label=agent_label(a),
+            contribution=(3 * a + t + 7 * episode) % (MAX_CONTRIBUTION + 1),
+            contribution_valid=(a + t + episode) % 17 != 0,
+            punishment=punishment,
+        )
+
+    records = [
         RoundRecord(
             round_number=t,
             players=tuple(
-                PlayerRound(
-                    agent=a,
-                    contribution=(3 * a + t) % (MAX_CONTRIBUTION + 1),
-                    punishment=(a + t) % 8,
-                    contribution_valid=(a + t) % 17 != 0,
-                )
-                for a in range(n_players)
+                player(a, t, (a + t + episode) % 8) for a in range(n_players)
             ),
-            common_good=12.0 + t,
         )
         for t in range(history_rounds)
+    ]
+    records.append(
+        RoundRecord(
+            round_number=history_rounds,
+            players=tuple(player(a, history_rounds, None) for a in range(n_players)),
+        )
     )
-    return RoundContext(
-        episode=0,
-        round_number=history_rounds,
-        n_players=n_players,
-        n_punishments=n_punishments,
-        objective=objective,
-        prompt_version=getattr(strategy, "version", "v0"),
-        history=history,
-        current=tuple(
-            PlayerRound(
-                agent=a,
-                contribution=(5 * a) % (MAX_CONTRIBUTION + 1),
-                punishment=0,
-                contribution_valid=True,
-            )
-            for a in range(n_players)
-        ),
-        n_rounds=24,
-        switch_every=4,
-    )
+    return records
 
 
-def saturation_sweep(manager, widths, history_rounds, n_players):
-    """One batch at each width, at a realistic prompt length."""
-    strategy = manager.strategy
-    ctx = deep_context(
-        strategy,
-        history_rounds,
-        n_players,
-        manager.n_punishments,
-        manager.objective,
-    )
-    messages = strategy.build(ctx)
-    constraint = manager._constraint_for(ctx)  # noqa: SLF001 - same package
+def saturation_sweep(manager, widths, history_rounds, n_players, version):
+    """One batch at each width, at a realistic prompt length.
+
+    Each item in the batch gets its OWN trace, for the reason in
+    `deep_records`.
+    """
     rows = []
     for width in widths:
+        prompts = [
+            build_prompt(deep_records(history_rounds, n_players, i), version=version)
+            for i in range(width)
+        ]
+        conversations = [p.messages for p in prompts]
+        constraints = [manager._constraint_for(p) for p in prompts]  # noqa: SLF001
         stats = manager.client.stats
         before = (stats.n_calls, stats.prompt_tokens, stats.completion_tokens)
         t0 = time.time()
         results = manager.client.complete(
-            [messages] * width,
+            conversations,
             meta=[{"episode": i, "round": history_rounds} for i in range(width)],
-            constraints=[constraint] * width,
+            constraints=constraints,
         )
         dt = time.time() - t0
         n_ok = sum(1 for r in results if r.ok)
@@ -246,7 +236,7 @@ def main(argv=None):
     parser.add_argument("--max-concurrent", type=int, default=256)
     parser.add_argument("--max-tokens", type=int, default=64)
     parser.add_argument("--temperature", type=float, default=0.0)
-    parser.add_argument("--prompt-version", default="v0")
+    parser.add_argument("--prompt-version", default=DEFAULT_VERSION)
     parser.add_argument("--group-id", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--log-dir", default=None)
@@ -277,13 +267,10 @@ def main(argv=None):
             model=args.model,
             api_base=args.api_base,
             prompt_version=args.prompt_version,
-            objective=DEFAULT_OBJECTIVE,
             group_id=args.group_id,
             temperature=args.temperature,
             max_tokens=args.max_tokens,
             max_concurrent=args.max_concurrent,
-            n_rounds=args.rounds,
-            switch_every=4,
             log_path=log_path,
         )
 
@@ -309,7 +296,11 @@ def main(argv=None):
             f"{probe.client.n_endpoints} endpoint(s)"
         )
         rows = saturation_sweep(
-            probe, args.saturation, args.saturation_round, args.n_players
+            probe,
+            args.saturation,
+            args.saturation_round,
+            args.n_players,
+            args.prompt_version,
         )
         results["saturation"] = rows
         width = saturation_width(rows)

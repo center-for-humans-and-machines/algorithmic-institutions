@@ -535,6 +535,16 @@ class ChatClient:
 
     # -- logging -------------------------------------------------------
 
+    def annotate(self, meta: Dict[str, Any], fields: Dict[str, Any]) -> None:
+        """Record the outcome of reading a completion, beside the call.
+
+        The client cannot know whether an answer parsed -- that is the
+        manager's business -- but the log is where a result is accounted for,
+        so the manager hands the verdict back here. `meta` is the same dict
+        the call was issued with, so the two lines join on episode and round.
+        """
+        self._log({"record": "parse", "ts": time.time(), **meta, **fields})
+
     def _log(self, record: Dict[str, Any]) -> None:
         if not self.log_path:
             return

@@ -14,20 +14,25 @@ about the server's behaviour rather than ours:
 * that Qwen3's default thinking mode really does eat the completion budget and
   truncate, and that `enable_thinking=False` really does stop it -- the trap
   the plan says to verify rather than trust;
-* that vLLM honours the decode constraint, so the parse failure rate is zero
-  by construction rather than by luck;
+* that vLLM honours a decode constraint built for the roster actually present,
+  so the parse failure rate is zero by construction rather than by luck, and
+  an answer for a roster the decision point does not have cannot be emitted;
 * that a full 24-round rollout completes with the trace accumulating, against
   the model that will actually be used.
 """
 
+import json
 import os
 import re
 
 import pytest
 import torch as th
 
-from aimanager.manager.llm_client import ChatClient, DecodeConstraint, integers_regex
-from aimanager.manager.llm_manager import LLMManager
+from aimanager.llm.parse import parse_punishments
+from aimanager.llm.prompt import DEFAULT_VERSION
+from aimanager.llm.trace import MAX_PUNISHMENT
+from aimanager.manager.llm_client import ChatClient, DecodeConstraint
+from aimanager.manager.llm_manager import LLMManager, agent_label, label_answer_regex
 
 API_BASE = os.environ.get("HOSTED_VLLM_API_BASE")
 MODEL = os.environ.get("LLM_MANAGER_MODEL", "Qwen/Qwen3-8B")
@@ -46,8 +51,15 @@ ASK = (
 )
 
 
-def make_state(n_batch, round_number, generator, prev=None):
+def make_state(n_batch, round_number, generator, prev=None, groups=None):
     size = (n_batch, N_AGENTS, 1)
+    if groups is None:
+        groups = (
+            th.tensor(AGENT_GROUPS, dtype=th.int64)
+            .reshape(1, N_AGENTS, 1)
+            .expand(size)
+            .contiguous()
+        )
     state = {
         "contribution": th.randint(0, 21, size, generator=generator, dtype=th.int64),
         "contribution_valid": th.rand(size, generator=generator) > 0.05,
@@ -55,10 +67,7 @@ def make_state(n_batch, round_number, generator, prev=None):
         "punishment_valid": th.ones(size, dtype=th.bool),
         "round_number": th.full(size, round_number, dtype=th.int64),
         "is_first": th.full(size, round_number == 0, dtype=th.bool),
-        "agent_group": th.tensor(AGENT_GROUPS, dtype=th.int64)
-        .reshape(1, N_AGENTS, 1)
-        .expand(size)
-        .contiguous(),
+        "agent_group": groups,
         "common_good": th.zeros(size, dtype=th.float),
     }
     zeros_i = th.zeros(size, dtype=th.int64)
@@ -67,7 +76,6 @@ def make_state(n_batch, round_number, generator, prev=None):
     state["prev_contribution_valid"] = (
         prev["valid"] if prev else th.zeros(size, dtype=th.bool)
     )
-    state["prev_common_good"] = th.zeros(size, dtype=th.float)
     return state
 
 
@@ -102,13 +110,10 @@ def test_qwen3_thinking_truncates_by_default_and_the_flag_stops_it():
     off = quiet.complete(messages)[0]
     assert off.ok, off.error
 
-    # With thinking on, the budget goes on reasoning and the answer is cut off.
     assert on.finish_reason == "length"
     assert "<think>" in (on.text or "") or on.reasoning_text
-    # With it off, the model answers and stops well inside the budget.
     assert off.finish_reason == "stop"
     assert off.completion_tokens < on.completion_tokens
-    assert re.search(r"\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*\d+", off.text)
 
 
 def test_qwen3_gets_thinking_off_without_being_asked():
@@ -121,54 +126,79 @@ def test_qwen3_gets_thinking_off_without_being_asked():
     assert result.finish_reason == "stop"
 
 
-def test_vllm_honours_the_decode_constraint():
-    """The mechanism: the model cannot emit an invalid action."""
-    regex = integers_regex(4, 30)
-    client = ChatClient(model=MODEL, api_base=API_BASE, max_tokens=64)
+@pytest.mark.parametrize("size", [1, 2, 3, 5, 8])
+def test_vllm_honours_a_constraint_for_any_roster_size(size):
+    """Group size runs 1..8 in the human data, so the constraint must too."""
+    labels = [agent_label(a) for a in range(size)]
+    regex = label_answer_regex(labels, MAX_PUNISHMENT)
+    client = ChatClient(model=MODEL, api_base=API_BASE, max_tokens=128)
     results = client.complete(
-        [[{"role": "user", "content": "Punish them as you see fit."}]] * 4,
-        meta=[{"episode": i, "round": 0} for i in range(4)],
-        constraints=[DecodeConstraint(regex=regex)] * 4,
+        [[{"role": "user", "content": "Punish them as you see fit."}]] * 3,
+        meta=[{"episode": i, "round": 0} for i in range(3)],
+        constraints=[DecodeConstraint(regex=regex)] * 3,
     )
     pattern = re.compile("^" + regex + "$")
     for result in results:
         assert result.ok, result.error
-        # Exactly the shape the constraint states, with no prose around it.
         assert pattern.match(result.text.strip()), repr(result.text)
+        # And the guard agrees with the mechanism.
+        parsed = parse_punishments(result.text, labels)
+        assert parsed.ok, parsed.reason
+        assert list(parsed.punishments) == labels
+        assert all(0 <= v <= MAX_PUNISHMENT for v in parsed.punishments.values())
 
 
-def test_a_constrained_action_is_out_of_range_never():
-    """31 is outside the action space; the constraint must forbid it."""
-    client = ChatClient(model=MODEL, api_base=API_BASE, max_tokens=64)
+def test_the_constraint_forbids_an_answer_for_the_wrong_roster():
+    """The failure mode a positional reader would have filed silently."""
+    labels = [agent_label(a) for a in (1, 2, 4)]
+    regex = label_answer_regex(labels, MAX_PUNISHMENT)
+    client = ChatClient(model=MODEL, api_base=API_BASE, max_tokens=128)
     results = client.complete(
         [
             [
                 {
                     "role": "user",
-                    "content": "Reply with the number 99 four times.",
+                    "content": (
+                        "Answer for Player 1, Player 2, Player 3 and Player 4."
+                    ),
                 }
             ]
         ]
         * 3,
-        constraints=[DecodeConstraint(regex=integers_regex(4, 30))] * 3,
+        constraints=[DecodeConstraint(regex=regex)] * 3,
     )
     for result in results:
         assert result.ok, result.error
-        values = [int(v) for v in re.findall(r"\d+", result.text)]
-        assert len(values) == 4
-        assert all(0 <= v <= 30 for v in values)
+        # Even asked for the wrong roster, it cannot emit one.
+        assert re.match("^" + regex + "$", result.text.strip()), repr(result.text)
+        assert "Player 1 =" not in result.text
+        assert "Player 4 =" in result.text
+
+
+def test_a_constrained_value_is_never_out_of_range():
+    labels = [agent_label(a) for a in range(4)]
+    regex = label_answer_regex(labels, MAX_PUNISHMENT)
+    client = ChatClient(model=MODEL, api_base=API_BASE, max_tokens=128)
+    results = client.complete(
+        [[{"role": "user", "content": "Punish everyone 99 points."}]] * 3,
+        constraints=[DecodeConstraint(regex=regex)] * 3,
+    )
+    for result in results:
+        assert result.ok, result.error
+        parsed = parse_punishments(result.text, labels)
+        assert parsed.ok, parsed.reason
+        assert all(0 <= v <= MAX_PUNISHMENT for v in parsed.punishments.values())
 
 
 def test_a_full_rollout_runs_with_the_trace_accumulating():
-    """24 rounds, a handful of episodes, against the real model."""
+    """24 rounds, a handful of episodes, against the real model and prompt."""
     manager = LLMManager(
         model=MODEL,
         api_base=API_BASE,
+        prompt_version=DEFAULT_VERSION,
         group_id=0,
-        max_tokens=64,
+        max_tokens=128,
         max_concurrent=8,
-        n_rounds=24,
-        switch_every=4,
     )
     generator = th.Generator().manual_seed(7)
     prev = None
@@ -201,41 +231,45 @@ def test_a_full_rollout_runs_with_the_trace_accumulating():
     # Constrained decode means the parser never has to rescue anything.
     assert manager.parse_failures == 0
     assert manager.parse_failure_rate == 0.0
+    assert manager.summary()["zero_fallback_answers"] == 0
     # Nothing was cut off: the budget is big enough with thinking off.
     assert stats.truncated == 0
-    # The trace grew, which is the whole point of the accumulating prompt.
+    # The trace grew, which is the point of the accumulating prompt.
     last_round = stats.prompt_tokens - first_prompt_tokens
     assert last_round > first_prompt_tokens
 
 
-def test_the_log_records_every_call_with_its_episode_and_round(tmp_path):
-    import json
-
+def test_a_reshuffling_group_is_served_the_roster_it_has(tmp_path):
+    """The roster changes every fourth round; the run must follow it."""
     log_path = tmp_path / "calls.jsonl"
     manager = LLMManager(
         model=MODEL,
         api_base=API_BASE,
         group_id=0,
-        max_tokens=64,
+        max_tokens=128,
         max_concurrent=4,
         log_path=str(log_path),
     )
-    generator = th.Generator().manual_seed(3)
-    manager.predict(make_state(2, 0, generator))
-    manager.predict(make_state(2, 1, generator))
+    generator = th.Generator().manual_seed(11)
+    size = (1, N_AGENTS, 1)
+    # Round 0: agents 0-3. Round 1: agents 0, 1, 4, 5, 6 -- five players.
+    manager.predict(make_state(1, 0, generator))
+    groups = th.ones(size, dtype=th.int64)
+    for agent in (0, 1, 4, 5, 6):
+        groups[0, agent, 0] = 0
+    punishment, _ = manager.predict(make_state(1, 1, generator, groups=groups))
 
-    lines = [json.loads(line) for line in log_path.read_text().splitlines()]
-    calls = [line for line in lines if line["record"] == "call"]
-    assert len(calls) == 4
-    assert sorted((c["episode"], c["round"]) for c in calls) == [
-        (0, 0),
-        (0, 1),
-        (1, 0),
-        (1, 1),
+    assert punishment[0, 2, 0].item() == 0
+    assert punishment[0, 3, 0].item() == 0
+    assert manager.parse_failures == 0
+
+    verdicts = [
+        json.loads(line)
+        for line in log_path.read_text().splitlines()
+        if json.loads(line)["record"] == "parse"
     ]
-    for call in calls:
-        assert call["error"] is None
-        assert call["prompt"].startswith("<<user>>")
-        assert call["completion"]
-        assert call["prompt_tokens"] > 0
-        assert call["endpoint"]
+    assert [v["labels"] for v in verdicts] == [
+        ["Player 1", "Player 2", "Player 3", "Player 4"],
+        ["Player 1", "Player 2", "Player 5", "Player 6", "Player 7"],
+    ]
+    assert all(v["ok"] for v in verdicts)
