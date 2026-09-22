@@ -209,6 +209,10 @@ scripts/remote_test.sh -- -k test_encoder -v
 - `src/aimanager/tests/test_eval_scoring.py` - Evaluation-suite scoring (local)
 - `src/aimanager/tests/test_eval_evaluate.py` - Evaluation-suite end to end (local)
 - `src/aimanager/tests/test_eval_visuals.py` - Evaluation-suite figures (local)
+- `src/aimanager/tests/test_llm_trace.py` - LLM manager trace format (local)
+- `src/aimanager/tests/test_llm_prompt.py` - LLM manager prompt versions (local)
+- `src/aimanager/tests/test_llm_parse.py` - LLM manager answer parser (local)
+- `src/aimanager/tests/test_llm_replay.py` - LLM manager replay harness (local)
 - `scripts/tests/test_remote_test.py` - Remote test script tests (local)
 
 ### Remote Cluster (Raven)
