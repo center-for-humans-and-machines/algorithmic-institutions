@@ -33,6 +33,8 @@ from aggregate import (  # noqa: E402
     shape_curve,
     shape_stats,
     spearman_from_counts,
+    targeting_triple,
+    targeting_triple_from_arrays,
 )
 from aimanager.evaluation_suite.convert import load_human  # noqa: E402
 from aimanager.manager.paired_rollout import RPA_EDGES, RPA_LABELS  # noqa: E402
@@ -75,6 +77,19 @@ def human_targeting(csv_path):
     )
     n, n_pos = tab.sum(), tab[:, 1:].sum()
     total_p = (tab * np.arange(31)[None, :]).sum()
+    # the same magnitude and noise gate the simulated rows carry, with the
+    # human game as the independent block instead of the simulated episode
+    df = df.assign(
+        bin=pd.cut(df["contribution"], list(RPA_EDGES), labels=list(RPA_LABELS))
+    )
+    per_ep = df.groupby(["episode_id", "bin"], observed=False)["punishment"].agg(
+        ["sum", "size"]
+    )
+    num = per_ep["sum"].unstack("bin").reindex(columns=list(RPA_LABELS)).to_numpy(float)
+    den = (
+        per_ep["size"].unstack("bin").reindex(columns=list(RPA_LABELS)).to_numpy(float)
+    )
+    triple = targeting_triple_from_arrays(np.nan_to_num(num), np.nan_to_num(den))
     return pd.DataFrame(
         [
             {
@@ -85,6 +100,7 @@ def human_targeting(csv_path):
                 "mean_p_valid": total_p / n,
                 "punish_rate": n_pos / n,
                 "mean_p_given_positive": total_p / n_pos,
+                **triple,
             }
         ]
     )
@@ -310,7 +326,7 @@ def run(args):
         shape_stats(load_shape(args.design_run), seeds=fit_seeds),
         on="name",
         how="left",
-    )
+    ).merge(targeting_triple(design_ep, seeds=fit_seeds), on="name", how="left")
     design_tab.to_csv(os.path.join(args.out, "design_summary.csv"), index=False)
     matched_spend(design_tab[design_tab["kind"] == "sobol"]).to_csv(
         os.path.join(args.out, "matched_spend.csv"), index=False
@@ -344,7 +360,9 @@ def run(args):
     # that survives a change of intensity, so it is the one a targeting
     # claim may rest on.
     valid_shape = load_shape(args.valid_run)
-    stats = shape_stats(valid_shape, seeds=holdout)
+    stats = shape_stats(valid_shape, seeds=holdout).merge(
+        targeting_triple(valid_ep, seeds=holdout), on="name", how="left"
+    )
     stats = valid_design.merge(stats, on="name", how="inner")
     stats = pd.concat([stats, human_targeting(args.human)], ignore_index=True)
     stats.to_csv(os.path.join(args.out, "targeting.csv"), index=False)

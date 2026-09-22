@@ -181,6 +181,91 @@ def shape_stats(shape, seeds=None):
     return pd.DataFrame(rows)
 
 
+def _bin_means_and_se(num, den, min_bin_n):
+    """Pooled bin means and their standard errors over episodes.
+
+    A bin mean is a ratio of two sums over episodes, so its error is the
+    ratio estimator's: `sum_e (p_e - m * n_e)^2 / (sum_e n_e)^2`. Episodes
+    are the independent unit; agent-rounds inside one are not, which is why
+    the error is taken across episodes and not across cells.
+    """
+    e = len(num)
+    tot_n, tot_p = den.sum(0), num.sum(0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        m = np.where(
+            tot_n >= min_bin_n, tot_p / np.where(tot_n > 0, tot_n, np.nan), np.nan
+        )
+        resid = num - np.nan_to_num(m)[None, :] * den
+        var = (
+            (resid**2).sum(0)
+            * (e / max(e - 1, 1))
+            / np.where(tot_n > 0, tot_n, np.nan) ** 2
+        )
+    return m, np.sqrt(var)
+
+
+def targeting_triple(episodes, seeds=None, min_bin_n=20):
+    """Magnitude and noise gate for a policy shape, per design point.
+
+    A rank correlation alone is not enough to call a rule targeted, in
+    either direction:
+
+      * **It hides force.** The human managers and the clone differ by 1.088
+        on a difference of bin means, which reads as a difference in aim;
+        on rank correlation they are identical, both strictly monotone
+        decreasing across all six bins, and rescaling the clone to the human
+        mean recovers most of the gap. 42% of that apparent difference in
+        aim was purely force.
+      * **It hides flatness.** Rank discards magnitude entirely, so a profile
+        falling 5.00 to 4.99 scores the same as one falling 4.76 to 0.27. A
+        sibling's exploration buffer scored -0.540, which sounds like a real
+        contingency, on a relationship whose spread relative to its own mean
+        was 0.002 -- a flat policy plus sampling noise, ranked.
+
+    So a rule counts as targeting only if it is strong in rank AND
+    non-negligible in `magnitude` (the range of its bin means over their
+    mean) AND above the `noise_gate` (that range over its own standard
+    error). This matters more here than in a hand-picked arm: a search over
+    thousands of candidates will find parameter settings that score well on
+    rank while punishing almost nothing.
+    """
+    if seeds is not None:
+        episodes = episodes[episodes["seed"].isin(list(seeds))]
+    num_cols = [f"rpa_p_{lab}" for lab in RPA_LABELS]
+    den_cols = [f"rpa_n_{lab}" for lab in RPA_LABELS]
+    rows = []
+    for name, g in episodes.groupby("name", sort=False):
+        rows.append(
+            {
+                "name": name,
+                **targeting_triple_from_arrays(
+                    g[num_cols].to_numpy(float),
+                    g[den_cols].to_numpy(float),
+                    min_bin_n,
+                ),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def targeting_triple_from_arrays(num, den, min_bin_n=20):
+    """`(blocks, bins)` punishment sums and counts -> magnitude and gate."""
+    m, se = _bin_means_and_se(num, den, min_bin_n)
+    ok = ~np.isnan(m)
+    if ok.sum() < 2:
+        return {"n_bins": int(ok.sum())}
+    hi, lo = int(np.nanargmax(m)), int(np.nanargmin(m))
+    rng = float(m[hi] - m[lo])
+    se_rng = float(np.sqrt(se[hi] ** 2 + se[lo] ** 2))
+    mean_m = float(np.nanmean(m))
+    return {
+        "n_bins": int(ok.sum()),
+        "bin_mean_range": rng,
+        "magnitude": rng / mean_m if mean_m else np.nan,
+        "noise_gate": rng / se_rng if se_rng > 0 else np.nan,
+    }
+
+
 def shape_curve(shape, name, seeds=None):
     """Mean punishment at every contribution level, for one design point."""
     g = shape[shape["name"] == name]

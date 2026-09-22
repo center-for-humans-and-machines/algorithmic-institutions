@@ -16,7 +16,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "rule_sigmoid"))
 
-from aggregate import spearman_from_counts  # noqa: E402
+from aggregate import (  # noqa: E402
+    spearman_from_counts,
+    targeting_triple_from_arrays,
+)
 
 
 def _table(contribution, punishment):
@@ -76,3 +79,54 @@ def test_a_rule_that_never_punishes_has_no_aim():
     """No variance in the punishment, so nan rather than a spurious 0."""
     c = np.arange(21)
     assert np.isnan(spearman_from_counts(_table(c, np.zeros_like(c))))
+
+
+# --------------------------------------------------------------------- #
+# The other half: rank alone is blind to flatness, so magnitude and a
+# noise gate are reported with it.
+# --------------------------------------------------------------------- #
+
+
+def _blocks(profile, per_bin=40, blocks=50, noise=0.0, seed=0):
+    """Per-block punishment sums and counts for a given profile of bin means."""
+    rng = np.random.default_rng(seed)
+    den = np.full((blocks, len(profile)), float(per_bin))
+    mu = np.asarray(profile, dtype=float)[None, :]
+    num = den * (mu + rng.normal(0, noise, size=den.shape))
+    return num, den
+
+
+def test_a_flat_profile_is_caught_by_magnitude_not_by_rank():
+    """5.00 down to 4.99 ranks the same as 4.76 down to 0.27."""
+    flat = targeting_triple_from_arrays(*_blocks([5.00, 5.00, 4.995, 4.99, 4.99, 4.99]))
+    steep = targeting_triple_from_arrays(*_blocks([4.76, 3.9, 2.5, 1.2, 0.5, 0.27]))
+    assert flat["magnitude"] < 0.01
+    assert steep["magnitude"] > 1.0
+
+
+def test_the_noise_gate_rejects_noise_ranked():
+    """A genuinely flat policy plus sampling noise must not pass the gate,
+    however confidently its rank correlation comes out."""
+    noise_only = targeting_triple_from_arrays(*_blocks([3.0] * 6, noise=0.5, seed=1))
+    real = targeting_triple_from_arrays(
+        *_blocks([5.0, 4.0, 3.0, 2.0, 1.0, 0.2], noise=0.5, seed=1)
+    )
+    assert noise_only["noise_gate"] < 6
+    assert real["noise_gate"] > 40
+
+
+def test_magnitude_is_a_relative_spread_not_an_absolute_one():
+    """Same shape, a third of the force: the flatness measure must agree,
+    because the rule aims the same way -- that is what `mean_p` is for."""
+    a = targeting_triple_from_arrays(*_blocks([6.0, 4.0, 2.0]))
+    b = targeting_triple_from_arrays(*_blocks([2.0, 4.0 / 3, 2.0 / 3]))
+    assert abs(a["magnitude"] - b["magnitude"]) < 1e-9
+    assert a["bin_mean_range"] > b["bin_mean_range"]
+
+
+def test_a_bin_below_the_count_floor_is_dropped():
+    num, den = _blocks([5.0, 1.0, 0.0], per_bin=40, blocks=2)
+    den[:, 2] = 1.0  # 2 decisions pooled, below the floor
+    num[:, 2] = 0.0
+    out = targeting_triple_from_arrays(num, den, min_bin_n=20)
+    assert out["n_bins"] == 2
