@@ -54,11 +54,43 @@ def test_rho_floor_is_attained_by_the_countermonotone_table():
     assert bat.spearman_from_counts(t) == pytest.approx(bat.rho_floor_from_counts(t))
 
 
-def test_rho_floor_bounds_every_joint_with_those_margins():
+def test_the_bounds_hold_both_ways_for_every_joint_with_those_margins():
     rng = np.random.default_rng(1)
     for _ in range(20):
         t = rng.integers(0, 12, size=(21, 31)).astype(float)
-        assert bat.spearman_from_counts(t) >= bat.rho_floor_from_counts(t) - 1e-9
+        rho = bat.spearman_from_counts(t)
+        assert bat.rho_floor_from_counts(t) - 1e-9 <= rho
+        assert rho <= bat.rho_ceiling_from_counts(t) + 1e-9
+
+
+def test_rho_rel_keeps_the_sign_and_stays_inside_one():
+    """An inverted rule must not score beyond 1, nor a correct one above 0.
+
+    Normalising by the floor alone does both: the bound in the wrong
+    direction is the wrong size (measured: `band16_p20` reaches rho +0.498
+    against a floor of -0.458, which would read as 1.086) and dividing a
+    negative rho by a negative floor reports correct targeting as +1.
+    """
+    correct = _table([(c, 20 - c, 10) for c in range(21)])
+    inverted = _table([(c, c + 5, 10) for c in range(21)])
+    for t, sign in ((correct, -1), (inverted, +1)):
+        rho = bat.spearman_from_counts(t)
+        rel = bat.rho_relative(
+            rho, bat.rho_floor_from_counts(t), bat.rho_ceiling_from_counts(t)
+        )
+        assert np.sign(rel) == sign
+        assert abs(rel) == pytest.approx(1.0)
+    # a quiet inverted rule: bounded well short of 1 on rank, but at its own
+    # ceiling, which is exactly what rho_rel is for
+    quiet_inv = _table(
+        [(c, 10, 5) for c in range(17, 21)] + [(c, 0, 100) for c in range(17)]
+    )
+    assert bat.spearman_from_counts(quiet_inv) < 0.6
+    assert bat.rho_relative(
+        bat.spearman_from_counts(quiet_inv),
+        bat.rho_floor_from_counts(quiet_inv),
+        bat.rho_ceiling_from_counts(quiet_inv),
+    ) == pytest.approx(1.0)
 
 
 def test_ties_attenuate_the_rank_and_rho_rel_undoes_it():
@@ -73,7 +105,7 @@ def test_ties_attenuate_the_rank_and_rho_rel_undoes_it():
     r_loud, r_quiet = (bat.spearman_from_counts(t) for t in (loud, quiet))
     assert r_quiet > r_loud  # less negative: attenuated
     rel = [bat.targeting(t, _shape_frame(t))["rho_rel"] for t in (loud, quiet)]
-    assert rel[0] == pytest.approx(1.0) and rel[1] == pytest.approx(1.0)
+    assert rel[0] == pytest.approx(-1.0) and rel[1] == pytest.approx(-1.0)
     assert (
         bat.tie_structure(quiet)["zero_share"] > bat.tie_structure(loud)["zero_share"]
     )
@@ -212,11 +244,30 @@ def test_the_symmetric_control_does_find_a_bias_when_there_is_one():
     assert (f["seat_bias_lo"] > 0).all()
 
 
-def test_sharing_an_episode_makes_the_within_run_difference_cheaper():
-    f = bat.noise_floor(_symmetric_episodes())
-    # shared + independent: sd_episode ~ sqrt(2), sd_diff ~ sqrt(2), so
-    # sd_diff < sqrt(2) * sd_episode exactly to the extent of the sharing
-    assert (f["sd_diff"] < np.sqrt(2) * f["sd_episode"]).all()
+def test_which_design_is_cheaper_is_a_per_quantity_fact():
+    """Sharing an episode helps; partitioning eight players between the
+    seats hurts, and the real harness does both at once.
+
+    Positively correlated seats give `sd_diff < sqrt(2) * sd_episode`;
+    seats whose values must sum to a constant give exactly
+    `sd_diff = 2 * sd_episode`, which is dearer, not cheaper. `members`
+    really is the second case in this game.
+    """
+    shared = bat.noise_floor(_symmetric_episodes())
+    assert (shared["sd_diff"] < np.sqrt(2) * shared["sd_episode"]).all()
+
+    rng = np.random.default_rng(5)
+    n = 500
+    d = {}
+    for q in bat.HEADLINE:
+        f = rng.normal(4, 1, n)
+        d[f"focal_{q}"], d[f"rival_{q}"] = f, 8 - f
+    split = bat.noise_floor(pd.DataFrame(d))
+    assert split["sd_diff"].to_numpy() == pytest.approx(
+        2 * split["sd_episode"].to_numpy()
+    )
+    m = bat.mdd_table(split, (200,))
+    assert (m["mdd_within_run"] > m["mdd_unpaired"]).all()
 
 
 def test_mdd_is_the_textbook_formula_and_scales_as_one_over_root_n():

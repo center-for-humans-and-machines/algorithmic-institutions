@@ -241,21 +241,25 @@ def spearman_from_counts(counts):
     return float(cov / np.sqrt(vc * vp))
 
 
-def rho_floor_from_counts(counts):
-    """The most negative rho these two marginals permit.
+def _rho_extreme(counts, sign):
+    """The most negative (`sign=-1`) or most positive (`+1`) rho these two
+    marginals permit.
 
     Ties put a ceiling on |rho| that has nothing to do with aim. A manager
     that punishes 4% of its decisions has 96% of its punishment column tied
     at zero, and no arrangement of the joint can then reach -1; a manager
     that punishes half of them can get much closer. So the same aim scores
     differently depending on how quiet the manager is, and quiet is exactly
-    what a language model asked to be careful may be.
+    what a language model asked to be careful may be. Measured here at
+    6,144 episodes: `band16_p20`, which punishes 9% of its decisions, is
+    bounded at 0.458, while `inv_thr7_p10`, which punishes 41% of the same
+    kind of decision in the same direction, is bounded at 0.860.
 
     The bound is exact and cheap. Midranks depend only on the marginals, so
     rho is a linear functional of the joint with those margins fixed, and
-    `r_c * r_p` is supermodular; the Frechet lower bound (the countermonotone
-    coupling, built here by a north-west corner fill that pairs the lowest
-    contributions with the highest punishments) attains the minimum.
+    `r_c * r_p` is supermodular; the Frechet bounds -- the countermonotone
+    coupling for the minimum, the comonotone one for the maximum, each built
+    here by a corner fill -- attain it.
     """
     counts = np.asarray(counts, dtype=float)
     if counts.sum() == 0:
@@ -264,19 +268,47 @@ def rho_floor_from_counts(counts):
     if vc <= 0 or vp <= 0:
         return np.nan
     a, b = counts.sum(1).copy(), counts.sum(0).copy()
-    i, j, cov = 0, len(b) - 1, 0.0
-    while i < len(a) and j >= 0:
+    i, cov = 0, 0.0
+    j = len(b) - 1 if sign < 0 else 0
+    step = -1 if sign < 0 else 1
+    while i < len(a) and 0 <= j < len(b):
         if a[i] <= 0:
             i += 1
             continue
         if b[j] <= 0:
-            j -= 1
+            j += step
             continue
         m = min(a[i], b[j])
         cov += m * (rc[i] - mc) * (rp[j] - mp)
         a[i] -= m
         b[j] -= m
     return float((cov / n) / np.sqrt(vc * vp))
+
+
+def rho_floor_from_counts(counts):
+    """The most negative rho these two marginals permit."""
+    return _rho_extreme(counts, -1)
+
+
+def rho_ceiling_from_counts(counts):
+    """The most positive rho these two marginals permit."""
+    return _rho_extreme(counts, +1)
+
+
+def rho_relative(rho, floor, ceiling):
+    """`rho` as a share of what its own marginals allowed, sign preserved.
+
+    Normalised by the bound in the direction the rule actually points, so it
+    lands in [-1, 1] and keeps this project's convention that negative means
+    low contributors were punished. A hard threshold scores exactly -1: it
+    is the countermonotone coupling of its own marginals. Dividing by the
+    floor alone would hand an inverted rule a magnitude above 1 and, worse,
+    report a correctly-targeted one as +1.
+    """
+    if rho != rho:
+        return np.nan
+    bound = abs(floor) if rho < 0 else ceiling
+    return float(rho / bound) if bound and bound == bound else np.nan
 
 
 def tie_structure(counts):
@@ -345,12 +377,14 @@ def targeting(counts, episodes, min_bin_n=20):
     total_p = (counts * levels).sum()
     rho = spearman_from_counts(counts)
     floor = rho_floor_from_counts(counts)
+    ceiling = rho_ceiling_from_counts(counts)
     num = episodes[[f"rpa_p_{lab}" for lab in RPA_LABELS]].to_numpy(float)
     den = episodes[[f"rpa_n_{lab}" for lab in RPA_LABELS]].to_numpy(float)
     return {
         "rho": rho,
         "rho_floor": floor,
-        "rho_rel": (float(rho / floor) if floor is not None and floor < 0 else np.nan),
+        "rho_ceiling": ceiling,
+        "rho_rel": rho_relative(rho, floor, ceiling),
         **tie_structure(counts),
         **targeting_triple_from_arrays(num, den, min_bin_n),
         "n_decisions": int(n),
@@ -571,10 +605,17 @@ def noise_floor(episodes, arm="symmetric"):
       * `sd_episode` -- the spread of the focal seat's own value across
         episodes. This is what sets the error of an arm measured on its own
         and so of any comparison between two separate rollouts.
-      * `sd_diff` -- the spread of the focal-minus-rival difference. Smaller
-        than `sqrt(2) * sd_episode` to the extent that the two seats share
-        an episode's luck, which is what makes the within-run contrast the
-        cheaper of the two designs.
+      * `sd_diff` -- the spread of the focal-minus-rival difference. It is
+        NOT reliably smaller than `sqrt(2) * sd_episode`: the two seats
+        share one fixed set of eight players, so on any quantity that the
+        seats divide between them the difference is *amplified* rather than
+        damped. Measured at 6,144 episodes, `members` has `sd_diff` exactly
+        twice `sd_episode` -- perfect anticorrelation, since the two
+        headcounts sum to 8 -- and the pool's `sd_diff` (67.9) exceeds
+        `sqrt(2) * sd_episode` (62.4). Only `pool_per_member` and
+        `mean_punishment`, which do not partition anything, come out
+        positively correlated and cheaper within a run. So which design is
+        cheaper is a per-quantity fact, and `mdd_table` reports both.
     """
     rows = []
     for q in HEADLINE:
@@ -652,10 +693,12 @@ def mdd_table(floor, episode_counts=EPISODE_BUDGETS, alpha=0.05, power=0.8):
         episodes each. `se = sqrt(2) * sd_episode / sqrt(n)`. This is the
         design for "does the language model beat `thr9_p10`".
       * `within_run` -- the focal seat against the rival seat of the SAME
-        rollout, `n` episodes in total. `se = sd_diff / sqrt(n)`. Cheaper,
-        because the two seats share the episode's luck, but it answers a
-        different question: it compares the manager with whatever sits in
-        the other seat, and it carries the seat bias measured above.
+        rollout, `n` episodes in total. `se = sd_diff / sqrt(n)`. It answers
+        a different question -- it compares the manager with whatever sits
+        in the other seat, and it carries the seat bias measured above --
+        and it is not automatically the cheaper one: on the objective it is
+        measurably dearer, because the two seats compete for one fixed set
+        of eight players (see `noise_floor`).
 
     The numbers are the floor, not the budget: a real run also pays for
     multiple comparisons, and an effect at exactly the MDD is detected half

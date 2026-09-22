@@ -320,6 +320,7 @@ def main():
         "arm",
         "rho",
         "rho_floor",
+        "rho_ceiling",
         "rho_rel",
         "magnitude",
         "noise_gate",
