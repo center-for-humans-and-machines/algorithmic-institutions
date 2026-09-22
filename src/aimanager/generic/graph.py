@@ -3,6 +3,7 @@ import numpy as np
 import torch as th
 from torch_scatter import scatter_mean
 from torch_geometric.nn import MetaLayer
+from aimanager.generic.copula import sample_levels_copula
 from aimanager.generic.encoder import Encoder, IntEncoder
 
 
@@ -144,6 +145,7 @@ class GraphNetwork(th.nn.Module):
         add_global_model=True,
         hidden_size=None,
         default_values={},
+        copula_rho=0.0,
         **_,
     ):
         super().__init__()
@@ -167,6 +169,19 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+        # Contribution copula: `copula_rho` > 0 correlates the free-running
+        # draws of agents sharing a (episode, round, agent_group) cell, keeping
+        # each agent's marginal (calibrated by
+        # scripts/artificial_humans/contribution_copula_rho.py). Absent or 0.0
+        # keeps the pre-change independent draw, RNG consumption included.
+        self.copula_rho = float(copula_rho or 0.0)
+        assert (
+            0.0 <= self.copula_rho < 1.0
+        ), f"copula_rho must lie in [0, 1), got {self.copula_rho}"
+        assert self.copula_rho == 0.0 or y_name == "contribution", (
+            "copula_rho is implemented for the contribution sampler only, "
+            f"got y_name={y_name!r}"
+        )
 
         if op1 is None:
             if add_edge_model:
@@ -334,11 +349,27 @@ class GraphNetwork(th.nn.Module):
         )
         return encoded
 
-    def predict_encoded(self, data, sample=True, reset_rnn=True):
+    def copula_cells(self, agent_group, n_batch, n_nodes, n_rounds, device=None):
+        """Cell ids for the copula sampler, one cell per (episode, round,
+        agent_group), shaped like the decode input: rows are (batch, agent)
+        flattened as in `encode`, rounds on dim 1. agent_group is time-varying,
+        so the cell of an agent follows it when it switches."""
+        device = self.device if device is None else device
+        ag = agent_group.flatten(0, 1).to(device)
+        n_groups = int(ag.max().item()) + 1
+        episode = th.arange(n_batch, device=device).repeat_interleave(n_nodes)
+        rounds = th.arange(n_rounds, device=device)
+        base = (episode.unsqueeze(-1) * n_rounds + rounds.unsqueeze(0)) * n_groups
+        return base + ag
+
+    def predict_encoded(self, data, sample=True, reset_rnn=True, cells=None):
         self.eval()
         y_logit = self(data, reset_rnn)
         y_pred_proba = th.nn.functional.softmax(y_logit, dim=-1)
-        y_pred = self.y_encoder.decode(y_pred_proba, sample)
+        if sample and self.copula_rho > 0.0 and cells is not None:
+            y_pred = sample_levels_copula(y_pred_proba, cells, self.copula_rho)
+        else:
+            y_pred = self.y_encoder.decode(y_pred_proba, sample)
         return y_pred, y_pred_proba
 
     def predict_independent(self, data, sample=True, reset_rnn=True, edge_index=None):
@@ -348,7 +379,18 @@ class GraphNetwork(th.nn.Module):
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
-        predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
+        # A calibrated model must never silently lose its correlation on the
+        # sampling path; teacher-forced callers of predict_encoded keep the
+        # quiet cells=None fallback instead.
+        cells = None
+        if self.copula_rho > 0.0 and sample:
+            assert "agent_group" in data, "copula_rho > 0 needs agent_group"
+            cells = self.copula_cells(
+                data["agent_group"], n_batch, n_nodes, n_rounds, device=self.device
+            )
+        predict = self.predict_encoded(
+            encoded, sample=sample, reset_rnn=reset_rnn, cells=cells
+        )
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
 
@@ -436,6 +478,7 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            "copula_rho",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
