@@ -1,0 +1,48 @@
+# The same manager at 32B, the model the sibling project uses as its
+# workhorse. This file exists to demonstrate that the step from 8B is a config
+# change: nothing below is read by code that 8B does not also go through.
+#
+# Submit with the GPUs the model needs; the serving script derives the number
+# of servers from the job's GPU count and `tensor_parallel_size`:
+#
+#   MODEL=Qwen/Qwen3-32B TP=2 scripts/llm_manager/bench_raven.sh
+#
+# At tensor-parallel two on four A100s that is TWO instances, so the batch is
+# still sharded -- half the data parallelism of 8B, which is what the extra
+# weights cost.
+
+serving:
+  model: Qwen/Qwen3-32B
+  # ~64 GB at bf16: too big for one 80 GB A100 with a useful KV cache, so
+  # tensor parallel two, and two such instances across four cards.
+  gpus: 4
+  tensor_parallel_size: 2
+  n_servers: 2
+  max_model_len: 8192
+  gpu_memory_utilization: 0.90
+  startup_budget_s: 1800
+
+manager:
+  model: Qwen/Qwen3-32B
+  prompt_version: v0
+  objective: >-
+    You are paid on your own group's common pool: the total your group's
+    members contribute, multiplied by 1.6, minus the points you deduct by
+    punishing. Maximise it over the whole game.
+  n_punishments: 31
+  group_id: 0
+  n_rounds: 24
+  switch_every: 4
+
+  temperature: 0.0
+  seed: 42
+
+  constrained_decode: true
+  constraint_style: structured_outputs
+
+  # Qwen3-32B is the same hybrid-thinking family as 8B, so the same
+  # `enable_thinking: false` default applies and the same small budget holds.
+  max_tokens: 64
+
+  max_concurrent: 256
+  backend: http
