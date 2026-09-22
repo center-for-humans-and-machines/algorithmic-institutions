@@ -75,9 +75,103 @@ For orientation, the DQN seeds on the same bins: rl_s42 **+1.218** (inverted), r
 
 **Per member, at the end**, for the two seeds a zero-punishment detector would have called healthy: seed 44 has 40/40 members with a positive slope and seed 46 has 39/40 — but the slopes are 0.002 to 0.027 and −0.202 to +0.003 respectively. The sign is arithmetically defined and substantively meaningless; these are flat policies with rounding. Against generation 0's 24/40 human-sign and a spread of 4.7 slope units, the population has not picked a side, it has stopped having sides.
 
-## R3. Who leaves — the targeting direction, read off behaviour
+## R3. A silent failure in the reference rows, found before it reached a table
 
-See the inserted table.
+Recorded before R4's numbers because it nearly corrupted them, and because the
+failure mode generalises.
+
+The cross-evaluation config began as a copy of
+`24_rl_new_clones_cross_eval.yml`, reference rows and all: `never`,
+`thr9_p10`, `prop10`. The simulation ran, produced a clean
+`per_round.parquet`, and raised nothing. The numbers were nonsense:
+
+| row | mean punishment | max | fraction exactly 0 |
+|---|---|---|---|
+| `never` | **2.569** | 20 | 0.655 |
+| `thr9_p10` | 2.576 | 20 | 0.658 |
+| `prop10` | 2.431 | 20 | 0.693 |
+
+A manager called `never` punishing a mean of 2.57, and three supposedly
+different rules agreeing to two decimal places.
+
+**The cause.** This branch starts at `0ff44a9`, and at that commit
+`api_manager.RuleBasedManager` is a *single fixed formula*,
+`clamp((20 − contribution − round_number) / k, 0, 30)`, with the constructor
+`(self, k=1, n_punishments=31, **_)`. The named rules — `never`, `threshold`,
+`proportional` — were added **later**, on `auto/rl-manager-two-worlds`. So
+`rule: never` was swallowed by `**_`, all three rows silently ran the same
+k=1 shortfall manager, and nothing in the stack objected. A config written
+against a sibling branch's vocabulary is accepted verbatim by a tree that does
+not have it.
+
+**What caught it** was not the guard I had written. It was the arithmetic
+cross-check that three ES seeds ended punishing exactly 0.000 and so *are*
+never-punish managers, which meant a separate `never` row had to agree with
+them and did not. Structural redundancy caught what an assertion did not,
+which is an argument for building tables that contain their own controls.
+
+**The fix**, and it makes the table better rather than merely correct. The
+references are now built only from what this tree has, and chosen so the
+learned policies have exact analogues:
+
+- `never` = `DummyManager(0)` — the floor, and the analogue of seeds 42, 43, 45;
+- `flat1` = `DummyManager(1)` — the exact analogue of **es_s46**'s learned policy;
+- `flat2` = `DummyManager(2)` — the exact analogue of **es_s44**'s learned policy;
+- `shortfall_k1`, `shortfall_k4` = `RuleBasedManager` at k = 1 and 4, named for
+  what the formula computes rather than borrowed from a branch this tree is not
+  on. Both punish *less* the more a player contributed, which is the human
+  direction, so they are the targeted end of the ladder.
+
+The flat rows are the control that decides R4's central question: if es_s44's
+leaver differential equals `flat2`'s and es_s46's equals `flat1`'s, then those
+two seeds are doing nothing beyond a flat tax, and the "it never collapsed"
+reading of R1 is dead on its own terms.
+
+`scripts/rl_es/leaver_selection.py` now refuses to print a table whose
+reference rows fail their contract (`REFERENCE_CONTRACTS`): a row called
+`never` must punish 0 everywhere, `flat1` must only ever punish 0 or 1, and so
+on. That check would have caught this in one second instead of one
+simulation.
+
+## R3b. Who leaves — the targeting direction, read off behaviour
+
+**Measurement queued, not yet returned.** The corrected cross-evaluation
+(`configs/simulation/manager_testing/25_rl_es_cross_eval.yml`) is in the Raven
+queue. When it lands, run:
+
+```
+python scripts/rl_es/leaver_selection.py \
+    plots/simulation/25_rl_es_cross_eval/per_round.parquet
+```
+
+It will refuse to print if the reference rows fail their contract (R3), so a
+table that appears is a table that can be read.
+
+What the table decides, stated in advance so the reading is not chosen after
+seeing it:
+
+* the three zero-punishment seeds (42, 43, 45) must land on `never`. They are
+  never-punish managers by construction, so any gap is a bug, not a finding;
+* **es_s44 must land on `flat2` and es_s46 on `flat1`.** If they do, those two
+  seeds are doing nothing beyond a flat tax and R1's "never collapsed" reading
+  is dead on its own terms. If they differ, the flat tax is doing something a
+  constant cannot, which would be the one genuinely surprising outcome left in
+  this arm;
+* all five should sit well short of `shortfall_k1`/`shortfall_k4`, the
+  targeted end of the ladder, and none should be positive. A positive value
+  would mean the manager sheds contributors rather than free-riders, which is
+  the inversion the DQN arm showed and which a flat policy cannot produce.
+
+An earlier run of this measurement, on the config whose reference rows were
+silently broken (R3), gave the ES rows −1.530 (s42), −1.174 (s43), −1.655
+(s44), −0.990 (s45), −1.789 (s46) and lin_punisher −1.556. Those ES and
+linear rows were unaffected by the defect — the ES punishment levels in that
+simulation matched the training evaluation exactly, 0/0/1.963/0/0.980 — so
+they are recorded here as an indication. They are **not** the result: the
+manager set changed between the two configs and MultiManager's RNG draw
+depends on it, so the corrected run supersedes them. Worth noting even so:
+the three zero-punishment seeds averaged −1.23 there, against the −1.20
+quoted independently for never-punishing on this world.
 
 ## R4. The five pre-registered predictions, scored
 

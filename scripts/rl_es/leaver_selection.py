@@ -97,6 +97,38 @@ def differential(df, n_boot=2000, seed=42):
     }
 
 
+#: What a reference row must do for its name to mean anything. Checked,
+#: because a config can ask for a manager the tree does not have and get a
+#: different one WITHOUT RAISING: at this branch point
+#: `api_manager.RuleBasedManager.__init__` is `(self, k=1, n_punishments=31,
+#: **_)`, so `rule: never` is swallowed by `**_` and silently runs the k=1
+#: shortfall formula. The first version of this analysis reported a `never`
+#: row that punished a mean of 2.57 with a maximum of 20. These assertions are
+#: what would have caught it.
+REFERENCE_CONTRACTS = {
+    "never": lambda p: p.max() == 0,
+    "flat1": lambda p: set(p.dropna().unique()) <= {0.0, 1.0},
+    "flat2": lambda p: set(p.dropna().unique()) <= {0.0, 2.0},
+}
+
+
+def check_reference_rows(raw):
+    """Verify every reference row does what its name says. Returns the
+    complaints; an empty list means the table can be trusted."""
+    problems = []
+    for name, predicate in REFERENCE_CONTRACTS.items():
+        match = [r for r in raw["run"].unique() if short(r) == name]
+        if not match:
+            continue
+        p = raw[(raw["run"] == match[0]) & (raw["group_id"] == 0)]["punishment"]
+        if not predicate(p):
+            problems.append(
+                f"{name}: punishment mean {p.mean():.3f}, max {p.max():.0f}, "
+                f"{(p == 0).mean():.1%} zero -- does not match its name"
+            )
+    return problems
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("per_round")
@@ -105,11 +137,25 @@ def main():
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
+    raw = pd.read_parquet(args.per_round)
+    raw["group_id"] = raw["agent_group"].astype(int)
+    problems = check_reference_rows(raw)
+    if problems:
+        print("REFERENCE ROWS FAILED THEIR CONTRACT -- table not trustworthy:")
+        for line in problems:
+            print("  " + line)
+        raise SystemExit(1)
+
     sims = {short(k): v for k, v in load_sim(args.per_round).items()}
     rows = []
     for name, df in sorted(sims.items()):
         stats = differential(df, n_boot=args.boot)
         if stats:
+            stats["mean_punishment"] = float(
+                raw[(raw["run"].map(short) == name) & (raw["group_id"] == 0)][
+                    "punishment"
+                ].mean()
+            )
             rows.append({"manager": name, **stats})
     out = pd.DataFrame(rows).sort_values("differential")
     out.to_csv(os.path.join(args.out, "leaver_selection.csv"), index=False)
@@ -119,13 +165,13 @@ def main():
         out[
             [
                 "manager",
+                "mean_punishment",
                 "differential",
                 "ci_lo",
                 "ci_hi",
                 "mean_contribution_leavers",
                 "mean_contribution_stayers",
                 "leave_rate",
-                "n_leavers",
             ]
         ]
         .round(3)
@@ -134,8 +180,11 @@ def main():
     print(
         "\nNegative = the manager sheds free-riders. Positive = it sheds "
         "contributors, i.e. selects FOR free-riders.\n"
-        "Reference: correctly targeted -3.51, human clone -2.35, "
-        "never-punishing -1.20, inverted rules positive to +1.83."
+        "Quoted elsewhere on this world: correctly targeted -3.51, human "
+        "clone -2.35, never-punishing -1.20, inverted rules positive to "
+        "+1.83. Compare WITHIN this table first -- MultiManager's RNG draw "
+        "depends on the config's manager set, so rows are only strictly "
+        "stream-comparable inside one config."
     )
 
 
