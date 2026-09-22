@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
 from aimanager.generic.data import MAX_CONTRIBUTION, MISSING_CONTRIBUTION, shift
+from aimanager.manager.llm_manager import LLMManager
 from aimanager.simulation.linear_ah import LinearAHAdapter
 
 
@@ -327,6 +328,7 @@ MANAGER_CLASS = {
     "dummy": DummyManager,
     "rule_based": RuleBasedManager,
     "linear": LinearManager,
+    "llm": LLMManager,
 }
 
 

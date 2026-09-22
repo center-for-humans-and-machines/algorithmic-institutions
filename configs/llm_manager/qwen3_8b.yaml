@@ -1,0 +1,76 @@
+# The language-model manager on Qwen3-8B, served by vLLM on the job's own
+# compute node, four servers data-parallel across four A100s.
+#
+# `serving` is read by scripts/llm_manager/serve_vllm.slurm.sh through the
+# LLM_* environment variables it documents. `manager` is passed straight to
+# `LLMManager(**manager)`. Moving to a bigger model is a change to this file
+# and to the GPU count at submission -- never an edit to the code. See
+# configs/llm_manager/qwen3_32b.yaml for the same run at 32B.
+
+serving:
+  model: Qwen/Qwen3-8B
+  # DATA PARALLEL, not tensor parallel. 8B fits on one A100 with room for a
+  # large KV cache, and this workload is throughput-bound rather than
+  # memory-bound: prompts are a couple of thousand tokens of accumulated trace
+  # and completions are a handful of tokens under the decode constraint.
+  # N independent servers beat one N-way tensor-parallel instance, which for a
+  # small model mostly buys communication overhead.
+  gpus: 4
+  tensor_parallel_size: 1
+  n_servers: 4
+  max_model_len: 8192
+  gpu_memory_utilization: 0.90
+  # Measured 2026-09-22: 201 s from job start to /health for a single server
+  # on one A100; four in parallel came up inside four minutes.
+  startup_budget_s: 600
+  # vLLM has prefix caching on by default (CacheConfig.enable_prefix_caching
+  # is True in 0.19.1). The trace grows by appending, so round r re-prefills
+  # only what round r-1 did not already contain -- provided the prompt stays
+  # append-only. See the contract note in manager/llm_manager.py.
+
+manager:
+  model: Qwen/Qwen3-8B
+  # A name in aimanager.llm.prompt.PROMPT_VERSIONS. The version owns the
+  # text, including the objective, and a result names the version and its
+  # fingerprint. Do not set `objective` here: it is part of the version.
+  prompt_version: v3_explicit_pool
+  n_punishments: 31
+  # The seat this manager holds in a paired run; the other group is the rival.
+  group_id: 0
+
+  # Fixed and recorded. Zero makes the manager reproducible, which none of the
+  # sampling baselines are; the plan calls determinism the second risk after
+  # throughput.
+  temperature: 0.0
+  seed: 42
+
+  # CONSTRAIN THE DECODE. The constraint is built per call from the roster
+  # PRESENT at that decision point -- group size runs 1..8 in the human data
+  # and is four in only 26% of group-rounds -- so vLLM masks the logits and
+  # the model cannot answer for a roster the decision point does not have.
+  # The parse failure rate is then zero by construction; the parser stays as
+  # a guard, and a non-zero rate is a bug rather than a property of the model.
+  # This matters because the fallback is not neutral: it is zero punishment,
+  # the policy every collapsed learned manager converged on.
+  constrained_decode: true
+  # `structured_outputs` for vLLM 0.19+; `guided` for older builds.
+  constraint_style: structured_outputs
+
+  # The reply is one line naming each member, so the budget is small -- but
+  # only safely so with thinking off. Measured 2026-09-22 on Qwen3-8B: with
+  # the default thinking mode the reply hit `finish_reason: length` at 64
+  # tokens having emitted only `<think>`, and never produced an answer.
+  # `enable_thinking` left unset means off for any qwen3 model (see
+  # llm_client.wants_thinking_flag). 128 rather than 64 because the answer
+  # names every member and a group can hold up to eight.
+  max_tokens: 128
+
+  # Requests in flight at once, PER ENDPOINT. Tune to the server, not to the
+  # episode count.
+  max_concurrent: 256
+
+  # `http` speaks the OpenAI protocol from the standard library; `litellm`
+  # routes the identical request through the hosted_vllm/ provider. Wire
+  # equivalent -- http is the default only because litellm is not a dependency
+  # of this project.
+  backend: http

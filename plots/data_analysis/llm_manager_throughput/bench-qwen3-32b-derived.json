@@ -1,0 +1,42 @@
+{
+  "model": "Qwen/Qwen3-32B",
+  "n_endpoints": 2,
+  "tensor_parallel_size": 2,
+  "n_gpus": 4,
+  "prompt_version": "v3_explicit_pool",
+  "constrained_decode": true,
+  "rounds": 24,
+  "source": "derived from the per-call JSONL log: the benchmark writes its JSON only at the end, and the b3000 rollout was cancelled before it could",
+  "rollouts": [
+    {
+      "episodes": 1000,
+      "rounds_seen": 24,
+      "n_calls": 23280,
+      "wall_s": 2732.6,
+      "minutes": 45.54,
+      "complete": false,
+      "completions_per_s": 8.52,
+      "completions_per_s_per_card": 2.13,
+      "seconds_per_episode_round": 0.1174,
+      "mean_prompt_tokens": 1609.1,
+      "mean_completion_tokens": 33.6,
+      "parse_failures": 0,
+      "truncated": 0
+    },
+    {
+      "episodes": 200,
+      "rounds_seen": 24,
+      "n_calls": 4800,
+      "wall_s": 577.0,
+      "minutes": 9.62,
+      "complete": true,
+      "completions_per_s": 8.32,
+      "completions_per_s_per_card": 2.08,
+      "seconds_per_episode_round": 0.1202,
+      "mean_prompt_tokens": 1639.9,
+      "mean_completion_tokens": 33.6,
+      "parse_failures": 0,
+      "truncated": 0
+    }
+  ]
+}
