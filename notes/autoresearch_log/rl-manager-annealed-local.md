@@ -1,5 +1,7 @@
 # rl-manager-annealed-local
 
+**Result, in one line: the arm closed the behaviour-versus-evaluated gap by a factor of four on every seed and did not recover the human policy shape. Three of its five seeds remain inverted. See Result.**
+
 ## Declaration
 
 **Not a slot experiment.** This branch changes no artificial-human model and is not judged by the §2 gates of `notes/autoresearch.md`. It changes the RL manager's *behaviour policy* and nothing else.
@@ -32,7 +34,7 @@ This matters more than bookkeeping here: the endpoint 0 is exactly where a near-
 
 ## Primary outcome: policy shape
 
-Revised twice. First after launch-time input from the coordinator, which displaced the level-based reading I started with. Then again after the maintainer's objection below, which does not change the arm, the runs or any number, but does change what they may be claimed to show. The second revision was written after the runs were launched; nothing was re-run.
+Revised twice before the runs finished. First after launch-time input from the coordinator, which displaced the level-based reading I started with. Then again after the maintainer's off-policy objection, which changed no number but changed what they may be claimed to show. **The answer is in Result: the shape did not come back.**
 
 Human managers are monotone **decreasing** in the contributor's own contribution: 4.76 at contribution 0 falling to 0.27 at contribution 20. Two of the three finished control seeds came out **inverted** — s42 runs 0.08 up to 5.00, s44 runs 0.23 up to 2.00, monotone in the wrong direction across all six bins; the third has the human sign but fires on 7.4% of rounds, and no learned seed is closer to the human policy than never punishing at all.
 
@@ -201,6 +203,97 @@ And one honest complication rather than a tidy story: on the contribution channe
 
 Re-run of the four files that touch this change — `test_exploration.py`, `test_rl_manager_timeout_view.py`, `test_manager_reward.py`, `test_free_punishment.py` — **49 passed**.
 
+## Result
+
+**The arm does not recover the human policy shape.** Three of its five seeds are still inverted, punishing full contributors harder than free-riders. The mechanism it was built to change did change, cleanly and on every seed, and the shape did not follow.
+
+The number that decides it is the contrast between the two end bins, mean punishment at contribution 0 minus mean punishment at contribution 20. Human managers run **+4.49**; the clone **+3.0**; an inverted manager is negative.
+
+| seed | arm | control | paired diff |
+|---|---|---|---|
+| 42 | **−4.40** | **−4.97** | +0.57 |
+| 43 | +11.49 | +12.38 | −0.90 |
+| 44 | +10.84 | **−1.91** | +12.74 |
+| 45 | **−3.56** | **−5.99** | +2.43 |
+| 46 | **−4.85** | **−9.17** | +4.32 |
+
+Correctly signed: **arm 2 of 5, control 1 of 5**. Seed 43 was already correct in the control, so the arm's only genuine flip is seed 44. One seed of five is not a recovery, and I am not going to present it as one.
+
+The directional signal is real but small: the statistic moves toward the human sign on four of the five seeds, median +2.43. Against a distance to the human curve of 9 to 14 points on the inverted seeds, that is a few percent of the way. On seed 42 the arm delivered +0.57 of the +9.46 that would have been needed.
+
+Nor is the shape right where the sign is right. Only one run of ten — arm seed 43 — is monotone decreasing across all six bins (rank correlation with the human curve +0.94), and it punishes **11.49** at contribution 0 against the human **4.76**. Arm seed 44 has the right end-to-end contrast but is not monotone (12.84, 1.86, 1.01, 2.00, 2.00, 2.00; rank correlation −0.06): it punishes free-riders hardest and then everyone else flat.
+
+### Policy shape, every seed
+
+Mean punishment per contribution bin, evaluated policy, batch-1000 deterministic rollout, on the evaluation suite's own RPA bins. Full table with row counts: `plots/data_analysis/rl_anneal_local/policy_shape.csv`.
+
+| bin | human | clone | arm 42 | arm 43 | arm 44 | arm 45 | arm 46 | ctl 42 | ctl 43 | ctl 44 | ctl 45 | ctl 46 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| {0} | 4.76 | 3.91 | 0.60 | 11.49 | 12.84 | 2.44 | 3.11 | 0.03 | 12.38 | 0.09 | 0.01 | 0.11 |
+| 1-5 | 2.97 | 2.64 | 0.03 | 3.98 | 1.86 | 0.10 | 0.06 | 0.05 | 0.66 | 0.13 | 0.01 | 0.10 |
+| 6-10 | 1.67 | 1.70 | 2.07 | 0.27 | 1.01 | 2.92 | 0.00 | 0.99 | 0.00 | 1.31 | 1.15 | 1.56 |
+| 11-15 | 0.98 | 1.05 | 4.93 | 0.00 | 2.00 | 5.97 | 0.52 | 4.61 | 0.00 | 2.00 | 4.33 | 2.00 |
+| 16-19 | 0.69 | 0.83 | 5.00 | 0.00 | 2.00 | 6.00 | 6.16 | 5.00 | 0.00 | 2.00 | 5.97 | 2.88 |
+| {20} | 0.27 | 0.35 | 5.00 | 0.00 | 2.00 | 6.00 | 7.96 | 5.00 | 0.00 | 2.00 | 6.00 | 9.28 |
+
+Row counts run 3,172 to 36,392 per cell for the learned managers and 510 to 2,614 for the humans, so none of this is thin. Two notes on the reference columns. The human column is one fixed curve, read through `convert.load_human`. The clone column is **not** a constant: it shares the world with the manager under test, so its {0} bin moves between 3.16 and 5.24 across the ten rollouts as group composition changes; the column above is its mean and the per-rollout values are in each `shape_*.csv`.
+
+### The leaver/stayer diagnostic agrees, seed for seed
+
+The sibling arm's diagnostic, run per seed: at the rounds where membership actually changes, what did the leavers contribute against what the stayers contributed. Negative means the free-riders leave, which is what a correctly targeted manager produces. Measured on the same rollout as the shape table.
+
+Reference on this rollout: **human managers −1.92**, **clone −3.11**.
+
+| seed | arm | control |
+|---|---|---|
+| 42 | **+0.41** | **+0.40** |
+| 43 | −2.43 | −2.12 |
+| 44 | −2.05 | −0.74 |
+| 45 | **+0.41** | **+0.70** |
+| 46 | **+0.45** | **+0.73** |
+
+Six of the ten runs are **positive**: they do not merely fail to discipline free-riders, they select for them, driving out the contributors they punish. That is three arm seeds and three control seeds — the same seeds the shape statistic calls inverted.
+
+**The two diagnostics agree on 9 of 10 runs, with a correlation of −0.976** between the end-bin contrast and the leaver/stayer difference. They are independent measurements: one reads punishment against contribution, the other reads who left. The single disagreement is control seed 44, whose shape is mildly inverted (−1.91) while its targeting is weakly correct (−0.74) — and −0.74 is worse than never-punishing on the sibling's scale, so it is a borderline case rather than a contradiction.
+
+This diagnostic is worth keeping. It is one number per run, needs no counterfactual, and it would have flagged the inversion from the managers' own output.
+
+### The mechanism did work, at full length, on every seed
+
+The behaviour-versus-evaluated gap at the final evaluation, which was the number the pilot could not supply:
+
+| | arm | control |
+|---|---|---|
+| mean gap | **0.273** | **1.192** |
+| range | 0.09 – 0.63 | 1.08 – 1.25 |
+| mean ratio | 1.13× | 1.93× |
+| range | 1.06 – 1.23× | 1.60 – 2.32× |
+
+Paired, the arm's gap is smaller on all five seeds, by 0.61 to 1.15 points. The control's ratio sits at the low end of the 1.7-to-6.6 range the brief quoted. So the intervention did exactly what it was designed to do — and the shape did not follow. That conjunction is the result.
+
+### Outcome and spread
+
+Final-window means of the evaluated policy, last ten evaluation points (`final_window.csv`):
+
+| | punishment | group size | contribution | common good |
+|---|---|---|---|---|
+| arm mean | 2.195 | 3.506 | 8.056 | 10.626 |
+| arm spread (max−min) | 1.563 | 1.266 | 1.626 | 3.867 |
+| control mean | 1.619 | 3.605 | 7.773 | 10.750 |
+| control spread (max−min) | 0.914 | 0.980 | 1.201 | 2.436 |
+
+Paired, arm minus control: common good **−0.12** on average, with only 2 of 5 seeds favouring the arm. **The arm buys no outcome improvement.** It punishes more (+0.58, 4 of 5 seeds) and contributes slightly more (+0.28), and none of it reaches the common good.
+
+**The seed spread got wider, not narrower**, on every metric — punishment 1.56 against 0.91, common good 3.87 against 2.44. The original motivation for this comparison was a seed spread that extra training did not close. Closing the behaviour-versus-evaluated gap did not close it either; it widened it, because the arm added a second cluster of outcomes (the two correctly-targeted seeds) rather than pulling all five together.
+
+### One thing the data says about the rival explanation
+
+Across the ten runs, those whose targeting is correctly signed average **12.11** common good per member against **9.74** for the rest — a 2.4-point difference on a base of about 10. Targeting is not free in this world; correct targeting pays.
+
+That is a cross-run correlation over ten runs with confounds, not a controlled comparison — the correctly-targeted runs also punish somewhat less. The controlled version is the sibling's level-matched inverted-rule simulation, which puts the cost at 32.75 pool points. Both point the same way, and together they **weaken the strongest form of the rival explanation**: it is not that the clones are indifferent to whether punishment is deserved and no return distinguishes the policies. A return difference exists and is large.
+
+What that leaves is a learning failure rather than an environment-indifference failure: the gradient toward correct targeting is there, and four of ten runs found it, and consistency of the behaviour policy is not what separates the ones that did from the ones that did not. **Read the deservedness probe anyway** — it measures the response directly, where this is inference from outcomes.
+
 ## Launched
 
 Seven runs, `~/repros/ai-runs/rl-anneal-local`, 22 September 2026. Each is 4000 update steps, ~6.2 hours on one A100 at the 5.5 s/step the pilots measured. The uuid is the run-directory name under `.log/training/manager/rl_manager/<job>/`; the SLURM id is what `squeue` shows. Both are recorded because the account is shared with the sibling arms, so `squeue -u levinb` alone does not identify whose job is whose.
@@ -221,7 +314,7 @@ Guard jobs, same directory: budget 30413186, shape 30413233 (30413194 was the fi
 
 ## Inferred
 
-Clearly separated from the above: none of this was run.
+Clearly separated from the above: none of this was run. Two items that sat here before the runs finished have since been measured and moved to Result — whether the arm recovers the shape (it does not) and what the full-length gap is (0.27 against the control's 1.19). What is left is still argument.
 
 - **The state-coverage argument, which is the one that survives the off-policy objection.** Off-policy correction buys the action choice given a state; it does not supply states the behaviour policy never visited. With recurrent contributors and endogenous group membership, a manager punishing harder produces a different behavioural regime and a differently composed group, so the buffer holds transitions from a world the evaluated policy does not inhabit. Measured 8 shows four state summaries shifting, which is consistent with this and is the only part of it that was measured. **That the shift matters for what gets learned is inference, not measurement.**
 - **Trajectory coverage, which is the sharpest version and is wholly unmeasured.** What a consistently contingent manager produces over 24 rounds is a trajectory dithering does not generate cleanly, so the value function never sees the returns of a coherent contingent policy. My pilot measured action distributions; the one cheap trajectory probe I ran (Measured 8) is under-powered and I do not count it. **Nothing on this branch tests this claim.**
@@ -230,21 +323,18 @@ Clearly separated from the above: none of this was run.
 - **The perturbation this arm injects, from the sampler alone.** With the greedy action at 0, the control injects a mean of **1.5** punishment points per member per round (eps 0.1 times the uniform mean 15). This arm injects **0.130** at step 0 and **0.013** at step 3000 — 11.5x and 115x smaller. These are exact properties of the two distributions, asserted in `test_annealed_local_injects_far_less_punishment_than_uniform`; they are listed as inferred rather than measured because the realised gap in training also depends on how the greedy policy itself moves, which only the pilot and the runs can show.
 - **Why local exploration might fix shape and not merely level.** Stated above under the primary outcome. It is a mechanism, not a measurement, and the pilot's shape table is the first evidence either way.
 - **The cost this arm pays, stated up front.** A local proposal buys consistency by giving up coverage. With sigma = 2 truncated at 0, a policy sitting at punishment 0 probes roughly 0 to 6 and effectively never sees 20 or 30. The human means per bin run 0.27 to 4.76, so the region that matters is inside that reach, and the greedy action can drift upward over training with the proposal following it. But if the optimum were far from where the policy initialises, this arm would fail to find it where uniform exploration would have stumbled onto it. That is the trade the arm *is*, not a flaw in it, and it is precisely why the comparison has four arms rather than one.
-- **What a null result would mean.** The gap is already closed (Measured 6), so if the shape still comes back inverted across five seeds, the exploration explanation for the inversion is dead and the clone-response explanation is the live one. That is a useful result and I will report it as one. Given the maintainer's objection, it is also now the outcome I would bet on.
+- **This is the null result I said I would report.** Before the runs I wrote that if the gap closed and the shape stayed inverted, the exploration explanation for the inversion would be dead. The gap closed fourfold on every seed and three of five seeds stayed inverted, so I am reporting it: **action-level dithering is not what makes this manager punish the wrong people.** The one caveat I will allow is that the end-bin contrast did move toward the human sign on four of five seeds, so the effect is not exactly zero — it is a few percent of the distance that would have to be covered, and it changed the sign on one seed.
 
 ## Successor
 
-For whoever picks this up:
+The runs are finished and analysed; this is what I would do next, in order.
 
-1. **The shape tables for the five seeds are not in this branch.** The runs were launched, not awaited. Read them with `scripts/rl_anneal_local/guard.py shape` against each saved manager, and through the same cross-evaluation simulation the control used, so the columns sit beside `plots/data_analysis/evaluation/rl_manager_two_worlds/policy_shape.csv`. The pilot tables (Measured 7) are not a preview of the answer: at 300 steps neither arm has inverted, because the inversion happens late.
-2. **The paired comparison is seed-for-seed.** Five arms times five seeds; compare `rl_anneal_local_s{N}` to `rl_new_clones_s{N}` at the same N, never arm mean to arm mean.
-3. **Read the deservedness probe first — it may moot all four arms.** If the artificial humans respond to punishment regardless of whether it was deserved, no targeting choice changes the return, the learned contingency is arbitrary for reasons unrelated to exploration, and no exploration method fixes the shape. On the maintainer's off-policy objection this is the *leading* explanation for the inversion, not a footnote: it needs no claim about buffers at all. A probe of it is running elsewhere. If it comes back flat, every arm of this comparison is measuring the wrong thing and my seven runs answer a dead question. Nothing this branch produced can distinguish the two explanations.
-4. **Measuring the state-coverage claim properly, which Measured 8 only gestures at.** Measured 8 compares four marginal state summaries between the behaviour and evaluated rollouts and finds them shifted. Three upgrades, in increasing cost:
-    - *Free, on the existing pilot parquets.* Compare the **distributions** rather than the means — per-round histograms of contribution and group size, behaviour against evaluated, with a distance rather than a difference of averages. The parquets hold every round of 1000 episodes at 15 update steps.
-    - *Cheap, one GPU-minute per manager.* `guard.py shape` already collects per-cell data; extend it to dump the joint (contribution, group size, round) occupancy of each rollout and report the share of the evaluated policy's occupancy mass that the behaviour rollout covers. That is the state-coverage claim stated as a number.
-    - *The one that actually matters, and it is not cheap.* Trajectory coverage. Score whole 24-round episodes, not cells: sample episodes from both rollouts, and ask whether the return distribution of a consistently contingent policy is represented in the buffer at all. This is the claim the argument rests on and the one nothing on this branch touches.
-5. **The between-arm state-shift comparison in Measured 8 is confounded** and should not be quoted as-is. The two arms' evaluated policies sit at different punishment levels, so the comparison mixes how far each behaviour policy is from its own target with where that target sits. Compare within an arm, or match the operating point first.
-6. **sigma and the floor were chosen, not tuned.** sigma = 2 and eps_final = 0.01 were picked from the scale of the signal, with no sweep. If the arm half-works, they are the obvious next knobs — but one variable at a time, and not before item 3 is settled.
+1. **Do not run a second exploration arm on the strength of this one.** The gap closed fourfold on every seed and the shape did not follow. Whatever makes three seeds in five punish the wrong people, it is not the consistency of the behaviour policy at the action level. The sibling arms are worth reading for whether any of them moved the shape, but the prior on "more exploration engineering" should now be low.
+2. **Read the deservedness probe.** My Result section gives indirect evidence against its strongest form — correctly-targeted runs earn 12.11 common good per member against 9.74 for the rest, so a return difference exists — but that is a cross-run correlation with confounds and the probe measures the response directly.
+3. **Keep the leaver/stayer diagnostic and run it on everything.** One number per run, no counterfactual, agrees with the shape verdict on 9 of 10 runs at r = −0.976, and it is already wired into `guard.py shape --targeting-out`. It would have flagged the inversion from the managers' own output without anyone having to bin punishment against contribution.
+4. **The interesting question is now seed 43 and 44, not the arm.** Four of the ten runs found correct targeting and six did not, across both arms, and the split is not explained by the behaviour policy. Whatever separates them is where the next experiment is. Seed 43 is correctly signed in *both* arms, which suggests initialisation rather than exploration is carrying it.
+5. **The state- and trajectory-coverage claims remain unmeasured** beyond Measured 8's four marginal means. The upgrades are still worth doing if anyone wants to make the coverage argument properly: compare per-round distributions rather than means (free, on the parquets committed here); dump joint occupancy from `guard.py shape` (about a GPU-minute per manager); score whole episodes for whether a coherent contingent policy's returns are represented at all (not cheap, and the one that matters).
+6. **sigma and the floor were chosen, not tuned**, and given the null result there is no reason to sweep them.
 
 ## Notes
 
