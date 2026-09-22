@@ -238,8 +238,21 @@ def run_arm(
     ep = pd.concat(frames, ignore_index=True)
     ep["episode"] = np.arange(len(ep), dtype=np.int64)
     ep.insert(0, "arm", name)
+    # who the other seat held, carried on every row: a contrast between two
+    # arms that did not face the same rival is not a contrast between their
+    # managers, and `battery.contrasts` uses this to refuse one.
+    ep.insert(1, "rival", spec_name(rival_spec))
     tel = collect_telemetry(focal_spec)
     return ep, counts, tel, wall
+
+
+def spec_name(spec):
+    """A short, stable name for whatever was put in a seat."""
+    if isinstance(spec, str):
+        return spec
+    if isinstance(spec, dict):
+        return str(spec.get("kind", "spec"))
+    return type(spec).__name__
 
 
 def run_battery(
@@ -273,9 +286,7 @@ def run_battery(
             device=device,
         )
         rows.append(bat.battery_row(name, ep, counts, tel, wall))
-        rows[-1]["rival"] = (
-            rival_spec if isinstance(rival_spec, str) else type(rival_spec).__name__
-        )
+        rows[-1]["rival"] = spec_name(rival_spec)
         episode_frames.append(ep)
         shape[name] = counts
         if verbose:

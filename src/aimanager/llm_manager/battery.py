@@ -499,8 +499,14 @@ def contrasts(episodes, reference, seat="focal", quantities=HEADLINE, seed=1):
     out = []
     ref = episodes[episodes["arm"] == reference]
     assert len(ref), f"no reference arm {reference!r} in this run"
+    # only arms that faced the same rival are comparable: a symmetric
+    # control differs from its own arm in the OTHER seat, and putting that
+    # difference in a table of manager contrasts would read as the manager
+    ref_rival = set(ref["rival"]) if "rival" in ref else None
     for arm, g in episodes.groupby("arm", sort=False):
         if arm == reference:
+            continue
+        if ref_rival is not None and set(g["rival"]) != ref_rival:
             continue
         for q in quantities:
             d, lo, hi = _unpaired_ci(g[f"{seat}_{q}"], ref[f"{seat}_{q}"], seed=seed)

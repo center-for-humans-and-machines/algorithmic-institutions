@@ -285,12 +285,26 @@ def test_contrasts_show_the_route_not_just_the_objective():
             d[f"focal_{q}"] = rng.normal(0, 1, n)
         rows.append(pd.DataFrame(d))
     ep = pd.concat(rows, ignore_index=True)
+    ep["rival"] = "clone"
     c = bat.contrasts(ep, "never").set_index(["arm", "quantity"])
     assert list(c.reset_index()["quantity"].unique()) == list(bat.HEADLINE)
     assert bool(c.loc[("a", "pool"), "crosses_zero"])
     assert bool(c.loc[("b", "pool"), "crosses_zero"])
     assert not bool(c.loc[("a", "contribution"), "crosses_zero"])
     assert bool(c.loc[("b", "contribution"), "crosses_zero"])
+
+
+def test_an_arm_that_faced_another_rival_is_not_contrasted():
+    """A symmetric control differs in the other seat, not in the manager."""
+    rng = np.random.default_rng(0)
+    rows = []
+    for arm, riv in (("never", "clone"), ("a", "clone"), ("never_vs_never", "never")):
+        d = {"arm": arm, "rival": riv}
+        for q in bat.HEADLINE:
+            d[f"focal_{q}"] = rng.normal(10, 2, 200)
+        rows.append(pd.DataFrame(d))
+    c = bat.contrasts(pd.concat(rows, ignore_index=True), "never")
+    assert set(c["arm"]) == {"a"}
 
 
 def test_the_published_budgets_span_the_existing_baselines():
