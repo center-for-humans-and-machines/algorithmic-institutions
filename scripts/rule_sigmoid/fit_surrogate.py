@@ -119,8 +119,19 @@ def argmax_mean(gp, seed=0, n_starts=64):
 
 
 def hessian(gp, u0, h=0.02):
-    """Numerical Hessian of the posterior mean, in unit coordinates."""
+    """Numerical Hessian of the posterior mean, in unit coordinates.
+
+    Evaluated at `u0` pushed `h` inside the box. That matters whenever the
+    optimum sits ON a boundary -- which it will if the best `P_max` is zero.
+    A central stencil taken at the boundary clips half its points back onto
+    it, the second difference collapses to zero, and the direction is
+    reported as flat when what is really happening is that the box stops
+    there. The returned `moved` flags say which coordinates that applied to,
+    so a flat eigenvalue in one of them can be read for what it is.
+    """
     d = len(u0)
+    inner = np.clip(u0, h, 1 - h)
+    moved = ~np.isclose(inner, u0)
     H = np.zeros((d, d))
     for i in range(d):
         for j in range(i, d):
@@ -130,11 +141,11 @@ def hessian(gp, u0, h=0.02):
                     e = np.zeros(d)
                     e[i] += si * h
                     e[j] += sj * h
-                    pts.append(np.clip(u0 + e, 0, 1))
+                    pts.append(inner + e)
                     signs.append(si * sj)
             f = gp.predict(np.array(pts))
             H[i, j] = H[j, i] = float(np.dot(signs, f)) / (4 * h * h)
-    return H
+    return H, moved
 
 
 def profiles(gp, u0, n=81):
@@ -216,7 +227,7 @@ def run(args):
         pred = gp.predict(u)
         resid = y - pred
         u_star, f_star = argmax_mean(gp, seed=args.seed)
-        H = hessian(gp, u_star)
+        H, on_boundary = hessian(gp, u_star)
         evals, evecs = np.linalg.eigh(H)
         # what a single well-measured design point is worth: its own sampling
         # error plus whatever the surrogate could not explain
@@ -260,6 +271,7 @@ def run(args):
                 "gp_sd": float(
                     gp.predict(u_star.reshape(1, -1), return_std=True)[1][0]
                 ),
+                "at_box_edge": ",".join(a for a, m in zip(AXES, on_boundary) if m),
                 "best_design_point": sob.loc[int(np.argmax(y)), "name"],
                 "best_design_value": float(y.max()),
             }
