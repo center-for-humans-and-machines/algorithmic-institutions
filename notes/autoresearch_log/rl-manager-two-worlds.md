@@ -98,41 +98,108 @@ the artificial punisher.
    sibling sweep's best rules.
 7. Tables under `plots/data_analysis/evaluation/rl_manager_two_worlds/`.
 
-## Status: both guards pass, three seeds running
+## Status: done
 
-Both blockers are cleared. `auto/manager-common-pool-reward` merged cleanly;
-`auto/free-punishment-fix` merged with the single predicted docstring conflict
-and its own test file passes on the merged tree. Both pre-launch guards pass
-(notes 22-24). Jobs **30401560** (s42), **30401561** (s43), **30401562**
-(s44), ~6 h wall clock.
-
-## Successor
-
-1. Take the common-pool mode from `auto/manager-common-pool-reward`, flip
-   `REWARD_MODE`, regenerate.
-2. Resolve D1 — fixed, or explicitly accepted with the validity-conditioned
-   diagnostic as a first-class output.
-3. Submit the three runs. They fit one wave, but the association's 8 job
-   slots are shared with sibling experiments (note 16).
-4. Read `notes/autoresearch_log/rule-based-manager-sweep.md` for the
-   comparison points before writing the results table.
+Three runs trained, cross-evaluated, measured. Tables under
+`plots/data_analysis/evaluation/rl_manager_two_worlds/`.
 
 ## Results
 
-No training run has been made. The only job submitted is the cost pilot.
+Cross-evaluation `24_rl_new_clones_cross_eval`, job 30412235, 100 episodes,
+seed 42. The manager under test is always group 0; the artificial punisher is
+always group 1. Every figure is group 0's.
 
-| date | run | steps | wall clock | outcome |
+### 1. Does it punish? Yes -- at roughly human rates, in two of three seeds
+
+| manager | punish rate | mean p | mean p given p>0 | RPA distance from human |
 |---|---|---|---|---|
-| 2026-09-21 | `rl_new_clones_pilot` (job 30400864) | 40 | 4:37 total, 3:46 in loop | `COMPLETED`; 5.65 s/step, 5.20 s/step late-stage; projects to ~5.8-6.3 h for 4000 steps (note 15) |
+| *human managers* | *0.306* | *1.791* | *5.858* | — |
+| `lin_punisher` (the clone) | 0.304 | 1.913 | 6.295 | **0.336** |
+| `rl_s42` | 0.383 | 1.700 | 4.440 | 3.120 |
+| `rl_s43` | 0.074 | 0.790 | 10.640 | 1.828 |
+| `rl_s44` | 0.581 | 1.191 | 2.051 | 2.311 |
+| `thr9_p10` | 0.275 | 2.747 | 10.000 | 3.770 |
+| `prop10` | 0.641 | 7.142 | 11.140 | 8.537 |
+| `never` | 0 | 0 | 0 | 1.847 |
 
-The pilot is a timing measurement. Its policy is not read and its reward mode
-is the one being replaced, so nothing behavioural is recorded from it.
+The headline question has a clear answer: **the manager punishes.** It is not
+degenerate and it is not silent. s42 and s44 punish more often than the humans
+did; s43 punishes rarely but hard.
 
-The behavioural table below is the one the experiment exists to fill, per seed:
+### 2. The policy shape: two of three seeds learned it inverted
 
-| seed | punish rate | mean p | mean p given p>0 | mean p at `contribution_valid=False` | common good | verdict |
+Mean punishment by the contribution it responds to (the suite's RPA bins):
+
+| bin | human | clone | `rl_s42` | `rl_s43` | `rl_s44` | `thr9_p10` |
 |---|---|---|---|---|---|---|
-| — | not run | | | | | |
+| {0} | 4.755 | 3.721 | **0.077** | 10.741 | **0.231** | 10.000 |
+| 1-5 | 2.973 | 2.930 | 0.159 | 0.721 | 0.279 | 10.000 |
+| 6-10 | 1.672 | 1.808 | 1.245 | 0.000 | 1.256 | 4.225 |
+| 11-15 | 0.978 | 1.300 | 4.745 | 0.000 | 2.000 | 0.000 |
+| 16-19 | 0.692 | 1.066 | 5.000 | 0.000 | 2.000 | 0.000 |
+| {20} | 0.267 | 0.327 | **5.000** | 0.000 | **2.000** | 0.000 |
+
+The human policy falls monotonically with contribution: punish the free-rider,
+leave the full contributor alone. **`rl_s42` and `rl_s44` learned the exact
+opposite** — they punish the players who contribute *most* and leave the
+free-riders alone. This is not a support artefact: the {20} figures rest on
+1,165 and 1,733 agent-rounds and the {0} figures on 1,702 and 1,197
+(`policy_shape_n.csv`). `rl_s43` has the human sign but fires on 7.4% of
+rounds. Against the suite's own RPA distance, **no learned seed is closer to
+the human policy than never punishing at all** (1.83-3.12 against `never`'s
+1.85), while the clone sits at 0.34.
+
+### 3. The common good, with the world it was measured in
+
+Per-capita common good of group 0, the env's own definition, mean over 100
+episodes with a 95% CI over episodes:
+
+| manager | common good | 95% CI | contribution | mean p | group size |
+|---|---|---|---|---|---|
+| `thr9_p10` | **14.861** | ±1.861 | 11.429 | 3.398 | 4.179 |
+| `rl_s44` | 14.142 | ±1.494 | 9.647 | 1.230 | 4.536 |
+| `rl_s43` | 13.241 | ±1.541 | 9.065 | 1.239 | 4.532 |
+| `never` | 12.780 | ±1.279 | 8.015 | 0 | 4.544 |
+| `lin_punisher` (clone) | 12.529 | ±1.645 | 9.133 | 2.025 | 4.064 |
+| `prop10` | 10.855 | ±2.241 | 11.847 | 7.981 | 3.411 |
+| `rl_s42` | 10.741 | ±1.219 | 8.023 | 1.991 | 4.207 |
+
+### 4. The seed spread is larger than the effect
+
+| statistic | s42 | s43 | s44 | range | clone | best rule | gap to resolve |
+|---|---|---|---|---|---|---|---|
+| punish rate | 0.383 | 0.074 | 0.581 | **0.507** | 0.304 | 0.275 | 0.029 |
+| mean punishment | 1.700 | 0.790 | 1.191 | **0.910** | 1.913 | 2.747 | 0.834 |
+| common good | 10.741 | 13.241 | 14.142 | **3.401** | 12.529 | 14.861 | 2.332 |
+
+The three seeds' mean common good is 12.708 with a seed-level SD of 1.762, so
+the standard error on three seeds is 1.017. Against the clone that is
+**+0.180, t = 0.18** — indistinguishable. Against `never` it is **-0.072**:
+on average the three learned managers do no better than not punishing at all.
+
+## Verdict
+
+**The manager punishes, and punishes the wrong people.** Two of three seeds
+learned a policy that is the inverse of the human one, and no seed's policy is
+closer to the human shape than a manager that never punishes. That is the
+finding, and it is about the policy rather than about the score.
+
+**The two arms question is moot** (arm OLD was dropped), but the control
+question is answered and it is not the comfortable answer. `thr9_p10` — punish
+10 whenever a player contributed 9 or less, one line of code — earns 14.861
+against the best learned seed's 14.142 and the learned mean's 12.708, and it
+does so while holding a *smaller* group. Punishment pays in this world (PR
+#207, reconfirmed here: `thr9_p10` and every learned seed but s42 beat
+`never`), so a learned policy that cannot match a one-line rule is a **training
+failure, not a correct reading of the environment**. I am not softening that.
+
+**Three seeds cannot answer whether a learned manager beats the clone.** The
+range across seeds (3.401) exceeds the gap the experiment exists to resolve
+(2.332). At a seed SD of 1.762, detecting a 1.5-point shift at 80% power needs
+**12 seeds**; a 2.0-point shift needs 7. Recommendation: **12 seeds**, which
+at ~6 h each and 8 concurrent slots is two waves and ~72 A100-hours. Reporting
+a mean over three would have been meaningless — the mean sits 0.07 *below*
+never punishing.
 
 ## Notes
 
@@ -556,3 +623,48 @@ The behavioural table below is the one the experiment exists to fill, per seed:
     baseline in this experiment behaves differently at those cells from the
     baseline in the rule sweep, which used the timeout punisher — a
     comparability caveat for anyone reading the two side by side.
+
+30. **Correction to note 21: `per_round.parquet` does carry
+    `contribution_valid`.** It did not when that note was written; the rule
+    sweep's `d348ba5` added it as one of "the two things the sweep needs from
+    the simulation", and it arrived here with that merge. So the validity
+    split is available from the canonical 100-episode run after all, and
+    `validity_split.csv` is computed from it. It confirms the probe at the
+    proper protocol: **realised punishment at `contribution_valid == False`
+    is exactly 0.0 for every one of the seven managers**, over 169-207
+    timed-out cells each. The standalone probe stays, because it is the only
+    thing that can separate the realised value from the policy's *intended*
+    argmax (note 28), which the recorded output cannot show.
+
+31. **The two of three inverted policies are the substantive result, and they
+    are not a measurement artefact.** Three checks. The bin counts are large
+    (`policy_shape_n.csv`: `rl_s42` has 1,702 rows at contribution 0 and 1,165
+    at 20; `rl_s44` 1,197 and 1,733), so this is not a thin tail. The
+    inversion is monotone across all six bins, not a single odd point. And it
+    shows up independently in the standalone probe on a different rollout
+    (note 28). Two seeds punish full contributors at 5.0 and 2.0 while
+    punishing zero contributors at 0.08 and 0.23.
+
+    I have no mechanism to offer with evidence behind it. The honest statement
+    is that under a common-pool reward punishment is a direct cost whose only
+    return runs through the contribution model's `prev_punishment` channel and
+    through group switching, and that if that return is weak or
+    wrongly-signed in closed loop the argmax over 31 levels is poorly
+    constrained — which is consistent with two seeds landing on opposite
+    shapes and a third landing near-silent. Testing that is a separate
+    experiment: the obvious one is an intervention probe that punishes a fixed
+    amount at a fixed contribution level and measures the next-round response,
+    which is what `RCE` already measures teacher-forced and what
+    `scripts/data_analysis/` has the machinery for.
+
+32. **`prop10` collapses in the competing setting, and that is a warning about
+    reading PR #207's table across settings.** In the sweep's self-paired arm
+    `prop10` was the best manager at 136.04 common good. Here, against the
+    clone with group switching live, it is second worst — 10.855 against
+    `never`'s 12.780 — because it punishes so hard that its group empties:
+    mean group size 3.411 against 4.5 for the quiet managers. When both groups
+    punish identically there is nowhere better to go; when one group punishes
+    and the other does not, there is. The rule that wins here, `thr9_p10`,
+    wins by taking 4.179 members *and* the highest contribution (11.429). Any
+    future comparison of a manager against those sweep numbers has to be in
+    the competing setting or it will rank heavy punishers far too highly.
