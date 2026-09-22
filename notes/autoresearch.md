@@ -25,9 +25,33 @@ next-round contribution change on the punishment received, per contribution
 band 0-4 / 5-9 / 10-14 / 15-19; humans +0.14 / +0.10 / -0.08 / -0.16). An
 experiment may not band-downgrade RCE against its baseline, may not flip
 any of the four band slopes away from the human sign, and may not halve any
-band's slope magnitude (a band's |slope| may not fall to half its baseline
-value or below). Any of the three is a `[FAIL]`, whatever the gates below
-say. Punishment-response experiments — punisher-slot changes, and any
+band's slope magnitude. Any of the three is a `[FAIL]`, whatever the gates
+below say.
+
+The magnitude clause carries two qualifications, both added after it
+misfired twice on its first outing (PRs #190 and #192). A band's |slope|
+falling to half its baseline value or below is a `[FAIL]` **only if** (a)
+the candidate's slope is not closer to the human value than the baseline's
+was, and (b) the change exceeds one pooled standard error of the two
+slopes. Qualification (a) exists because the clause is a magnitude test on
+a signed quantity: on the 10-14 band of PR #192's reference stack it fired
+on a slope moving from +0.013, the wrong sign, to -0.001, toward the human
+-0.077 — an improvement. Qualification (b) exists because the 10-14 band's
+baseline magnitude is routinely around 0.05, so a single-seed fluctuation
+of 0.03 trips a relative threshold; that band is also the one PR #183
+showed is never learned, with the wrong sign teacher-forced and held out.
+Report every band's slope with its standard error, its row count, and the
+change in pooled standard errors, so a firing can be read. Neither
+qualification changes a verdict recorded before it: PRs #190 and #192 both
+failed gate 1 independently.
+
+**All three clauses are subject to the symmetry rule.** RCE's own seed sd
+is 0.106 and it is one of the ten ungateable rows — it sits in band <= 1 in
+exactly one arm of six — so its band-drop clause fires only on a drop
+larger than 0.106, and the sign clause is **retired on the 10-14 and 15-19
+bands**, where retraining an unchanged model flips the sign on its own. The
+0-4 and 5-9 bands keep the sign clause; they are stable across the six
+arms. Punishment-response experiments — punisher-slot changes, and any
 experiment whose declared target is the contributor's reaction to
 punishment — are judged on RCE: it is their target row for gate 1.
 
@@ -36,11 +60,95 @@ punishment — are judged on RCE: it is their target row for gate 1.
    hypothesis declares (candidates from §6) must finish in a better band
    than its baseline — from > 5 into 2-5, from 2-5 into 1-2 or <= 1, from
    1-2 into <= 1. A within-band improvement, however large, is a `[FAIL]`
-   with valuable notes, not a success.
+   with valuable notes, not a success. **The upgrade must also clear the
+   noise floor**: the target row's move must exceed that row's seed
+   standard deviation (table below). A band crossed by less than the floor
+   is a lucky draw, not a result, and the ten rows marked ungateable below
+   cannot serve as a gate-1 target on a single run at all.
 2. **The mean score holds.** The average over all 22 rows may not rise
    more than 10% above the evaluation stack's baseline mean (e.g. baseline
    1.76 -> ceiling 1.936). A band upgrade is allowed to cost a little
    elsewhere — but not to be bought by breaking the rest of the stack.
+   The mean's own seed standard deviation is 0.047 against a margin of
+   about 0.103 on the current frontier, so this gate already sits at
+   roughly two floors and is left as it is. It is the backstop that the
+   symmetry rule below deliberately relies on: many small real losses, each
+   individually under its row's floor, still show up here.
+
+**The noise floor, and the symmetry rule.** PR #195 ran the same
+contributor architecture six ways — five seeds plus the shipped artifact —
+through one stack with everything else held identical, so only the training
+draw varied. The spread is larger than most experiments move:
+
+| row | seed sd | gateable on one run |
+|---|---|---|
+| RPA | 0.018 | yes |
+| PB | 0.023 | yes |
+| RPB | 0.028 | yes |
+| PC | 0.036 | yes |
+| PA | 0.040 | yes |
+| SB | 0.046 | **no** |
+| CE | 0.058 | yes |
+| PD | 0.059 | yes |
+| RCE | 0.106 | **no** |
+| CC | 0.133 | **no** |
+| SC | 0.136 | yes |
+| RCA | 0.141 | yes |
+| CF | 0.141 | **no** |
+| RCB | 0.142 | yes |
+| SA | 0.162 | **no** |
+| RCC | 0.163 | yes |
+| RSA | 0.155 | **no** |
+| CA / CD | 0.188 | **no** |
+| CB | 0.215 | **no** |
+| RCD | 0.270 | yes (marginal) |
+| CG | 0.301 | **no** |
+| 22-row mean | 0.047 | |
+| rows <= 1 | 3.16 (range 6 to 14) | |
+
+A row is **ungateable on one run** when a band boundary falls inside one
+seed sd and the six arms genuinely land in two bands. Ten do: CA, CB, CC,
+CD, CF, CG, SA, SB, RCE and RSA. **Rows <= 1 is the worst of all** and must
+not be quoted as a property of a model: six rows are always at the ceiling,
+six never are, and ten flip on the training draw alone.
+
+**The symmetry rule: no movement smaller than its row's seed sd counts
+either for or against an experiment.** A target must clear the floor to
+earn a gate-1 upgrade, and equally, a row worsening by less than its floor
+is not a cost — it is a retrain. Applying the threshold to gains but not to
+losses would make improvement nearly impossible, since one row would have
+to beat the noise to help while twenty-one could hurt by luck. Gate 2 is
+the backstop against many sub-floor losses accumulating. Report every
+movement with its seed sd beside it, and mark those under the floor as not
+distinguishable from a retrain.
+
+**The frontier baseline is the six-arm mean, not the shipped run.** PR #195
+also found that the shipped contributor ranks first of six on every
+headline aggregate — best mean, most rows at the ceiling, best on 9 of 22
+rows, five times closer to the human contribution level than any member —
+while PR #188 showed its training fit is an ordinary draw. The plausible
+reading is selection: it became the frontier by scoring well on this
+evaluation, so candidates since have been measured against a favourable
+tail. The frontier stack's baseline is therefore the **six-arm mean score
+vector**, `plots/data_analysis/evaluation/seed_spread_noise_floor/per_row.csv`
+on `auto/seed-spread-noise-floor`, headline figures:
+
+| | shipped run (old) | six-arm mean (new) |
+|---|---|---|
+| 22-row mean | 1.0331 | **1.0923** |
+| rows <= 1 | 14 | **10** |
+| RCC | 1.2969 | **1.5734** |
+| RCE | 0.8823 | **1.0683** |
+
+Three consequences, all deliberate. This is a change to the **scoreboard,
+not to the model**: an average cannot be simulated, so the artifact
+candidates are built from is unchanged; only the numbers they are judged
+against move. Scores recorded against the shipped run before this — PRs
+#193, #194 and #196 — are not comparable with scores after it, though
+their conclusions mostly stand. And the reset applies **only to the
+frontier stack**, the one where the six arms were actually run; every other
+evaluation stack keeps its single-run baseline until the same measurement
+is made there, and a candidate on such a stack should say so.
 
 Nothing else gates. **Rows <= 1** (rows at or below the human-vs-human
 noise ceiling) is still computed and reported in every results table (§10),
@@ -58,6 +166,34 @@ recorded before it (21 rows, lagged punisher) are not comparable with scores
 after it (22 rows, RCE included, current-contribution punisher). Stage D
 re-ran the top stack and the four frontier stacks; the post-fix baselines
 are the table in §3.
+
+**Frozen noise model, and how contributor-trunk changes are judged.** The
+copula parameters -- the correlation strength rho and the persistence phi,
+per model family -- are frozen (§8). No experiment recalibrates them as a
+side effect of changing a trunk; altering either is its own declared
+experiment. The reason is attribution: a recalibration riding along with a
+trunk change makes the two indistinguishable.
+
+For the same reason, a **contributor-trunk change is judged with the copula
+disabled**, on the state-spread diagnostic, alongside the usual gates. The
+diagnostic is the decomposition Var(c) = Var(E[c | history]) +
+Var(residual) over a free-running simulation, against the human histories
+(`scripts/data_analysis/copula_closed_loop_variance.py`, §7). Human
+Var(E[c|hist]) is 27.9; the stimulus-skip trunk with the copula disabled
+sits at 18.9 with its residual variance already correct at 11.4. That gap
+is the open defect the group-spread row CG only indirectly reports: the
+copula's episode-long persistence supplies most of CG by compounding (a
+factor of 5.3 on the group's episode mean), and by the late rounds the
+carried state has absorbed the latent, so CG measured with the copula on
+does not tell you whether a trunk change helped. Report the copula-off
+Var(E[c|hist]) for any contributor-slot candidate.
+
+Evidence for both rules: `notes/autoresearch_log/copula-closed-loop-variance.md`,
+`copula-missing-state.md` and `copula-seed-ensemble.md`. The human residual
+dependence is a round-local shock with a one-round echo, not the
+episode-long latent that is shipped, but the shipped shape is kept for now
+because nothing yet replaces the variance it supplies; see
+`doc/plans/post-rebaseline-program.md`.
 
 ## 3. Evaluation protocol
 
@@ -216,6 +352,7 @@ template (2 groups x 8 agents, 24 rounds, 100 episodes, seed 42,
 | fetch results | `scripts/fetch_cluster.sh <remote_path>` | local |
 | evaluate | `python -m aimanager evaluate <sim config>` | local |
 | sweep (maintainer matrix refresh) | `python scripts/data_analysis/evaluation_sweep.py <name> <sim dirs>` | local |
+| state-spread diagnostic (contributor slot) | `python scripts/data_analysis/copula_closed_loop_variance.py` | local |
 | tests | `scripts/remote_test.sh` (PyG) / `pytest` (eval suite) | Raven / local |
 
 ## 8. Frozen surface
@@ -227,6 +364,10 @@ Never modified by agents, under any experiment:
 - `experiments/` (the human data),
 - scoring parameters (500 repeats, master seed 42) and the simulation
   protocol (episode count, seeds, game parameters),
+- the copula parameters per model family (rho and phi): contribution
+  rho 0.0395 / phi 1.0, punisher severity rho 0.4273, switch rho 0.1165 /
+  phi 0.704 -- a retrain of the model a copula is stamped on carries the
+  frozen value over rather than refitting it (§2),
 - the evaluation-stack selection (§3) — the sweep's score matrix and the
   ranking rule — and other branches' (or merged) log files.
 
