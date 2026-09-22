@@ -304,6 +304,13 @@ def run(args):
     design_tab = design.merge(
         per_point(design_ep, seeds=fit_seeds), on="name", how="inner"
     )
+    # aim, level and rate for every design point, so the landscape can be
+    # read in terms of what a rule does and not only of its parameters
+    design_tab = design_tab.merge(
+        shape_stats(load_shape(args.design_run), seeds=fit_seeds),
+        on="name",
+        how="left",
+    )
     design_tab.to_csv(os.path.join(args.out, "design_summary.csv"), index=False)
     matched_spend(design_tab[design_tab["kind"] == "sobol"]).to_csv(
         os.path.join(args.out, "matched_spend.csv"), index=False

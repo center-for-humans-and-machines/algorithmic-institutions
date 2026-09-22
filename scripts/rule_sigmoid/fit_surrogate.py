@@ -201,13 +201,12 @@ def run(args):
     sob = table[table["kind"] == "sobol"].reset_index(drop=True)
     u = to_unit(natural(sob))
     report = {"n_design": int(len(sob)), "fit_seeds": fit_seeds}
-    models, optima = {}, []
+    optima = []
 
     for obj in OBJECTIVES:
         y = sob[obj].to_numpy(dtype=float)
         se = sob[f"se_{obj}"].to_numpy(dtype=float)
         gp, y_std = fit_gp(u, y, se, seed=args.seed)
-        models[obj] = gp
         k = gp.kernel_
         ls = np.atleast_1d(k.k1.k2.length_scale)
         # back out of the normalised target into pool / contribution units
