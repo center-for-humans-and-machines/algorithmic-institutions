@@ -118,59 +118,57 @@ Three things this establishes and one it does not.
 1. The answering context carries a coding-agent system prompt in front of the manager prompt. A served `vllm serve Qwen/Qwen3-8B` does not.
 2. The model is not the model the plan names. A number here does not transfer to Qwen3-8B; what transfers is the harness, the battery and the direction of the variant differences.
 3. The wrapper the proxy needs ("reply with ONLY your answer") pulls against `v5_explicit_reason`, which asks for three sentences of reasoning before the answer line. The `v5` row is therefore the weakest of the five and should be re-run first on a real endpoint, where no wrapper is needed at all.
-4. **Parallel collection can mis-assign a reply to the wrong prompt**, which downstream looks exactly like the model answering for the wrong players -- that is, like a parse failure, the number this branch reports. A real client pairs request and response directly and has no such failure mode. So every cached completion is checked before scoring on DEMONSTRABLE evidence only: a row is dropped when the parser rejects it **and** its own text names rounds none of which is this decision's round. **Measured: 5 of 117 completions (4.3%) were dropped this way** -- 1 in `v3`, 4 in `v4`, none in `v1`, `v2` or `v5` -- and their text is unambiguous, one opening "Decision for Round 8" under a key for round 18 and reasoning about rounds 6 to 8. A further 11 answers name no round at all and answer for a roster the decision point does not have; 9 of those 11 are in `v4`, against 0 to 2 elsewhere. Those are NOT dropped, because there is no evidence either way and dropping on suspicion would quietly select which failures count. The consequence is stated rather than cleaned away: `v4`'s row is contaminated and is reported as such.
+4. **Parallel collection can mis-assign a reply to the wrong prompt**, which downstream looks exactly like the model answering for the wrong players -- that is, like a parse failure, the number this branch reports. A real client pairs request and response directly and has no such failure mode. So every cached completion is checked before scoring on DEMONSTRABLE evidence only: a row is dropped when the parser rejects it **and** its own text names rounds none of which is this decision's round. **Measured: 5 of 120 completions (4.2%) were dropped this way** -- 1 in `v3`, 4 in `v4`, none in `v1`, `v2` or `v5` -- and their text is unambiguous, one opening "Decision for Round 8" under a key for round 18 and reasoning about rounds 6 to 8. A further 11 answers name no round at all and answer for a roster the decision point does not have; 9 of those 11 are in `v4`, against 0 to 2 elsewhere. Those are NOT dropped, because there is no evidence either way and dropping on suspicion would quietly select which failures count. The consequence is stated rather than cleaned away: `v4`'s row is contaminated and is reported as such.
 
-**The sample.** A seed-42 sample of 24 of the 2152 decision points, the SAME 24 for every variant, dumped once and answered once per variant. Of those, **17 were answered by every variant after cleaning** and are what the table below scores: 62 agent-rounds, 58 of them with a valid contribution, 4 no-input. The sample spans rounds 0 to 23 and group sizes 1 to 8.
+**The sample.** A seed-42 sample of 24 of the 2152 decision points, the SAME 24 for every variant, dumped once and answered once per variant. Of those, **19 were answered by every variant after the collection audit** and are what the table below scores: 70 agent-rounds, 65 of them with a valid contribution, 5 no-input. The sample spans rounds 0 to 23 and group sizes 1 to 8.
 
 **Measured**, `plots/data_analysis/llm_prompt_replay/replay/`.
 
 | source | {0} | 1-5 | 6-10 | 11-15 | 16-19 | {20} | rho | contrast | contrast/mean | mean pun. | distinct bins | profile SNR |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | human managers (whole CSV) | 4.755 | 2.973 | 1.672 | 0.978 | 0.692 | 0.267 | -1.000 | 4.488 | 2.430 | 1.847 | 6 | -- |
-| human managers (these 17 points) | 1.750 | 0.538 | 1.167 | 0.000 | 2.333 | 0.000 | -0.510 | 1.750 | 2.071 | 0.845 | 5 | 2.487 |
-| `v1_bare_pool` | 1.250 | 0.769 | 0.111 | 0.000 | 0.000 | 0.000 | **-0.984** | 1.250 | 3.295 | 0.379 | 4 | 4.330 |
-| `v2_stated_pool` | 0.000 | 1.077 | 0.111 | 0.000 | 0.000 | 0.000 | -0.460 | 0.000 | 0.000 | 0.276 | 3 | 7.423 |
-| `v3_explicit_pool` | **2.500** | 0.231 | 0.611 | 0.556 | 0.000 | 0.000 | -0.543 | **2.500** | 3.718 | **0.672** | 5 | 4.249 |
-| `v4_explicit_nopool` (contaminated) | 0.000 | 0.000 | 0.167 | 0.111 | 0.000 | 0.000 | +0.225 | 0.000 | 0.000 | 0.069 | 3 | 4.927 |
-| `v5_explicit_reason` | 1.500 | 0.077 | 0.444 | 0.111 | 0.000 | 0.000 | -0.543 | 1.500 | 3.955 | 0.379 | 5 | 4.791 |
+| human managers (these 19 points) | 2.900 | 0.643 | 1.524 | 0.000 | 2.333 | 0.000 | -0.605 | 2.900 | 2.448 | 1.185 | 5 | 4.075 |
+| `v1_bare_pool` | 1.000 | 0.714 | 0.095 | 0.000 | 0.000 | 0.000 | **-0.987** | 1.000 | 2.955 | 0.338 | 4 | 3.847 |
+| `v2_stated_pool` | 0.000 | 1.000 | 0.095 | 0.000 | 0.000 | 0.000 | -0.400 | 0.000 | 0.000 | 0.246 | 3 | 7.370 |
+| `v3_explicit_pool` | **2.000** | 0.214 | 0.524 | 0.556 | 0.000 | 0.000 | -0.441 | **2.000** | 3.333 | **0.600** | 5 | 3.655 |
+| `v3_explicit_pool` (parsed only) | 2.857 | 0.273 | 0.733 | 0.556 | 0.000 | 0.000 | -0.584 | 2.857 | 3.810 | 0.750 | 5 | 4.209 |
+| `v4_explicit_nopool` (contaminated) | 0.000 | 0.000 | 0.143 | 0.111 | 0.000 | 0.000 | +0.246 | 0.000 | 0.000 | 0.062 | 3 | 4.596 |
+| `v5_explicit_reason` | 1.200 | 0.071 | 0.381 | 0.111 | 0.000 | 0.000 | -0.572 | 1.200 | 3.545 | 0.338 | 5 | 4.347 |
 
-`shape.csv` also carries a "(parsed answers only)" row per variant, which is what separates what the model chose from what the zero fallback chose for it.
+`shape.csv` carries a "(parsed answers only)" row for every variant that had a failure; only `v3`'s is reproduced here. That row is what separates what the model chose from what the zero fallback chose for it.
 
 **What this shows.**
 
-1. **Every clean variant has the human's sign.** `rho` is negative on `v1`, `v2`, `v3` and `v5`: told the rules and the objective and nothing else, the model punishes low contributors more than high ones. Nothing in any prompt says to.
-2. **All of them punish far below the human level.** Mean punishment 0.28 to 0.67 against 0.845 for the real managers on the same 17 points and 1.847 across the whole data. The model's *aim* is human-shaped; its *force* is a third to a fifth.
-3. **Relative to its own force, the aim is if anything sharper than the humans'.** `contrast_over_mean` runs 3.3 to 4.0 on `v1`, `v3`, `v5` against the human 2.071. This is the pair of statements the targeting triple exists to keep apart, and reading either one alone would have got it wrong: on `contrast` the model looks much worse than the humans, on `contrast_over_mean` slightly better, and both are true.
-4. **The cost ladder moves force, not sign.** `v1` (bare) 0.379, `v3` (two sentences of accounting) 0.672. Stating the arithmetic did not suppress punishment -- the plausible worry -- it raised it, and gave the largest `{0}` bin of any variant. `v2` (one sentence) is the odd one out at 0.276 with `contrast` 0: it punishes the 1-5 bin and not the 0 bin, so its rank is negative while its contrast is nil. On 17 points that is as likely to be noise as structure.
-5. **`v5` (reason first) matches `v3` on rank and halves its force.** Its collection is the one the proxy wrapper fights (caveat 3), so this row is the least trustworthy of the clean four.
-6. **`v4` is not interpretable.** Its collection is the one with demonstrable mis-assignment, and its parse failure rate is 52.9% against 0 to 17.6% elsewhere. Since a failure falls back to zero, a high failure rate *manufactures* the never-punish policy `v4` appears to have. The attractive reading -- "removing the pool line stops the model tracking which round's roster it owes an answer for" -- is a real hypothesis and is exactly what the data cannot distinguish from a sloppy collection. **The pool axis is unresolved and is the second thing to re-run.**
+1. **Every clean variant has the human's sign.** `rho` is negative on `v1` (-0.987), `v2` (-0.400), `v3` (-0.441, -0.584 on parsed answers) and `v5` (-0.572). Told the rules and the objective and nothing else, the model punishes low contributors more than high ones. Nothing in any prompt says to.
+2. **All of them punish far below the human level.** Mean punishment 0.246 to 0.600 against 1.185 for the real managers on the same 19 points, and 1.847 across the whole data. The model's *aim* is human-shaped; its *force* is a fifth to a half.
+3. **Relative to its own force the aim is as sharp as the humans' or sharper.** `contrast_over_mean` 2.955 / 3.333 / 3.545 on `v1` / `v3` / `v5` against the human 2.448. This is the pair of statements the targeting triple exists to keep apart: on raw `contrast` the model looks much worse than the humans, on `contrast_over_mean` slightly better, and both are true. Reading either alone would have got it wrong.
+4. **The cost ladder moves force, not sign.** `v1` (bare) 0.338, `v3` (two sentences of accounting) 0.600. Stating the arithmetic did not suppress punishment -- the plausible worry -- it nearly doubled it and gave the largest `{0}` bin of any variant. `v2` (one sentence) is the odd one out at 0.246 with `contrast` 0: it punishes the 1-5 bin and not the 0 bin, so its rank is negative while its contrast is nil. On 19 points that is as likely to be noise as structure.
+5. **`v5` (reason first) has a cleaner rank than `v3` and half its force**, and did not fail to parse once. Its collection is the one the proxy wrapper fights (caveat 3), so it is the least trustworthy of the clean four and the first to re-test.
+6. **`v4` is not interpretable.** Its collection is the one with demonstrable mis-assignment, and its parse failure rate is 47.4% against 0 to 21.1% elsewhere. Since a failure falls back to zero, a high failure rate *manufactures* the never-punish policy `v4` appears to have. The attractive reading -- "removing the pool line stops the model tracking which round's roster it owes an answer for" -- is a real hypothesis and is exactly what this data cannot separate from a sloppy collection. **The pool axis is unresolved and is the second thing to re-run.**
 
-**The n, stated plainly.** 17 decision points and 58 valid agent-rounds. Several bins are exactly 0.000 because nothing was punished in them, `distinct_bins` runs 3 to 5, and the human row's own `profile_snr` on these points is 2.487 -- barely above the gate. The differences among `v1`, `v3` and `v5` are inside what this sample can resolve. What is outside it: the sign, which is negative on four of five variants; the level, which is far below human on all of them; and `v4`'s failure rate.
+**The n, stated plainly.** 19 decision points and 65 valid agent-rounds. Several bins are exactly 0.000 because nothing was punished in them, `distinct_bins` runs 3 to 5, and the human row's own `profile_snr` on these points is 4.075. The differences among `v1`, `v3` and `v5` are inside what this sample can resolve. What is outside it: the sign, negative on four of five variants; the level, far below human on all of them; and `v4`'s failure rate.
 
 ### Step 2: the parse failure rate, and what constrained decoding has to constrain
 
-**Measured, per answer, on the same 17 decision points.** This is the headline number the run is not a result without.
+**Measured, per answer, on the same 19 decision points.** This is the headline number the run is not a result without.
 
 | variant | failure rate | failures | `no_marker` | `label_mismatch` | `not_integer` | answers in the requested form |
 |---|---|---|---|---|---|---|
-| `v1_bare_pool` | **17.6%** | 3 | 1 | 1 | 1 | 14 |
-| `v2_stated_pool` | **0.0%** | 0 | 0 | 0 | 0 | 17 |
-| `v3_explicit_pool` | **11.8%** | 2 | 2 | 0 | 0 | 15 |
-| `v4_explicit_nopool` | **52.9%** | 9 | 1 | 8 | 0 | 8 |
-| `v5_explicit_reason` | **0.0%** | 0 | 0 | 0 | 0 | 17 |
+| `v1_bare_pool` | **15.8%** | 3 | 1 | 1 | 1 | 16 |
+| `v2_stated_pool` | **0.0%** | 0 | 0 | 0 | 0 | 19 |
+| `v3_explicit_pool` | **21.1%** | 4 | 2 | 2 | 0 | 15 |
+| `v4_explicit_nopool` | **47.4%** | 9 | 1 | 8 | 0 | 10 |
+| `v5_explicit_reason` | **0.0%** | 0 | 0 | 0 | 0 | 19 |
 
-Every parsed answer used the labelled form; the positional fallback never fired. No variant ever set a punishment for a player who gave no input, so the wasted-punishment rate is 0 across the board -- the prompt's statement that those players cannot be punished, plus the trace marking them, was enough.
+Every parsed answer used the labelled form; the positional fallback never fired once in 95 answers. No variant ever set a punishment for a player who gave no input, so the **wasted-punishment rate is 0 across the board** -- the prompt's statement that those players cannot be punished, plus the trace marking them, was enough on its own.
 
-**These rates are unacceptable and are a bug, not a finding.** On `v1` and `v3` the numbers in the answer were usually well formed and the model simply wrote `Punishment decision:` or `Round 17 Punishment Decision:` instead of the literal `PUNISHMENT:`. A guided decode removes that entire family. Until it is in place, one round in six to one in nine on `v1` and `v3` silently becomes never-punish, which is the policy under test.
+**These rates are unacceptable and are a bug, not a finding.** On `v1` and `v3` the numbers in the answer were usually well formed and the model simply wrote `Punishment decision:`, `Round 17 Punishment Decision:` or `Final punishment assignment:` instead of the literal `PUNISHMENT:`. A guided decode removes that whole family. Until it is in place, one answer in five on `v3` silently becomes never-punish, which is the policy under test.
 
-**Measured, on a superseded generation of the text, and reported because it is about the PARSER rather than about the prompt.** 64 real completions collected on an earlier wording, parsed with the final parser: failure rates of 16.7% and 22.5%, in two families.
+**One reasoning error worth recording, because it is about the prompt's wording rather than the format.** In a `v5` answer the model exempted a player who *put in 0* from punishment, treating the rule "a member who gave no input cannot be punished" as covering a zero contribution. Those are different states and the trace renders them differently (`put in 0` against `gave no input`), but the rules paragraph is the one place they could be conflated. A `v6` should say "gave no input" and "put in nothing" in a way that cannot be read as the same thing as contributing zero. It is not patched here because it moves every fingerprint.
 
-- `no_marker` (8 of 13): the model wrote `Punishment decision:`, `Decision:`, `Final punishment decision:` or `DECISION:` instead of the literal `PUNISHMENT:` it was asked for, usually with the numbers themselves perfectly well formed after it.
-- `label_mismatch` (5 of 13): **the model answered for the wrong set of players** -- naming a `Player 8` who was not in the group that round, or omitting five of the seven who were.
+**`label_mismatch` is the family that matters for the design**, and the one a lenient parser would have hidden. The model answers for a set of players the group does not have -- naming a `Player 8` who is not in it, or omitting five of the seven who are. A positional parser, or a labelled one that took whatever it could match, would have assigned those numbers to the wrong players and produced a policy shape that looked perfectly fine. The strict label check turns a silent corruption into a counted failure. Across all five variants, 11 of the 120 completions answered for a roster the decision point does not have.
 
-The second family is the one that matters for the design. A positional parser, or a lenient labelled one that took what it could match, would have silently assigned those numbers to the wrong players and produced a policy shape that looked fine. The strict label check turns a silent corruption into a counted failure.
-
-It also says exactly what a guided decode must constrain: not only "four integers in 0..30" but **the label set for that round**, which changes round to round as the group reshuffles. A schema fixed at four players would itself be wrong on the 1597 of 2152 decision points where the group is not four.
+It also says exactly what a guided decode must constrain: not only "integers in 0..30" but **the label set for that round**, which changes as the group reshuffles. A schema fixed at four players would itself be wrong on the **1597 of 2152** decision points where the group is not four; sizes run 1 to 8.
 
 ### Step 3: which prompt, and on what grounds
 
@@ -178,17 +176,18 @@ It also says exactly what a guided decode must constrain: not only "four integer
 
 The grounds, in the order they weighed:
 
-1. **It exercises the action space most.** Mean punishment 0.672 against 0.276 to 0.379 for the other clean variants. That matters more than it looks: zero is both a policy and the parse fallback, so the variant that punishes least is the one whose result is hardest to tell apart from a failure. `v3` is the furthest from that confound.
-2. **Its `{0}` bin is the largest of any variant** at 2.500 (2.857 on parsed answers only), which is the bin the human managers are most distinctive in (4.755 overall, 1.750 on these 17 points). None of the variants reaches the human level; `v3` gets closest.
-3. **Its shape does not move when the failed answers are dropped**: `rho` -0.543 to -0.584, mean 0.672 to 0.750. So what it shows is what the model chose, not what the fallback chose for it. That check is why the "(parsed answers only)" rows exist.
-4. **Low parse failure** at 11.8%, and its failures are `no_marker` only -- the family a guided decode removes entirely.
-5. **It states the trade-off most completely**, which is what the task asked the prompt to make legible, and the replay says that statement costs nothing: it raised punishment rather than suppressing it.
+1. **It exercises the action space most.** Mean punishment 0.600 against 0.246 to 0.338 for the other clean variants, so it closes half the gap to the human 1.185 where the others close a fifth to a quarter. That matters more than it looks: zero is both a policy and the parse fallback, so the variant that punishes least is the one whose result is hardest to tell apart from a failure. `v3` is furthest from that confound.
+2. **Its `{0}` bin is the largest of any variant** at 2.000, and 2.857 on parsed answers only. That is the bin the human managers are most distinctive in (4.755 overall, 2.900 on these 19 points). No variant reaches the human level; `v3` gets closest.
+3. **Its shape improves rather than dissolves when the failed answers are dropped**: `rho` -0.441 to -0.584, contrast 2.000 to 2.857, mean 0.600 to 0.750. So what it shows is what the model chose, not what the fallback chose for it. That check is what the "(parsed answers only)" rows are for, and it is the check `v3` most needed.
+4. **It states the trade-off most completely**, which is what the task asked the prompt to make legible, and the replay says that statement costs nothing: it nearly doubled punishment against `v1` rather than suppressing it.
 
-Against it: `v2` and `v5` both parsed at 0%. That did not decide it, because the failure rate is a serving problem with a known fix (constrained decoding) while the policy shape is the thing the prompt is actually for. `v5_explicit_reason` is the runner-up -- same `rho`, highest `contrast_over_mean`, 0% failures -- and is the first variant to re-test once no collection wrapper is fighting its "reason first" instruction.
+**What argues against it, stated rather than buried.** `v3` has the HIGHEST parse failure rate of the four clean variants, 21.1% against 0.0% for both `v2` and `v5`. On reliability alone the choice would be `v5_explicit_reason`, which also has a cleaner rank (-0.572) at half the force, or `v2_stated_pool`. That did not decide it, for a stated reason: the failure rate is a serving problem with a known fix that the sibling is already adding (constrained decoding), while the policy shape is what the prompt is actually for. If constrained decoding does not land, this choice should be revisited, and `v5` is the runner-up.
+
+`v1_bare_pool` deserves a mention it does not get from the headline: its rank is the cleanest of all five at -0.987, because its profile is the only strictly monotone one. It loses on level, not on aim.
 
 **What was NOT done, deliberately.** No variant was revised after seeing a result. Every one was written once, run once, and is reported here including `v2`, which came out oddly, and `v4`, which came out uninterpretable. There was an obvious temptation after seeing the level gap -- add a sentence encouraging the model to use the range -- and it was not taken, because a prompt tuned until the model matches the human policy measures the tuning.
 
-**The finding worth carrying forward, stated as the caution asked.** Told only the rules and the objective, a small model *aims* like a human manager and *punishes* at a third to a fifth of the human level. If the interesting question is whether an LLM manager arrives at human-like punishment unprompted, the answer on this evidence is: it arrives at the human's target and not at the human's intensity. Closing that gap by telling it to punish harder would be the same error as tuning toward the human policy, and the gap itself is the result.
+**The finding worth carrying forward, stated as the caution asked.** Told only the rules and the objective, a small model *aims* like a human manager and *punishes* at a fifth to a half of the human level. If the interesting question is whether an LLM manager arrives at human-like punishment unprompted, the answer on this evidence is: it arrives at the human's target and not at the human's intensity. Closing that gap by telling it to punish harder would be the same error as tuning toward the human policy, and the gap itself is the result.
 
 ## 4. Measured versus inferred
 
@@ -199,9 +198,9 @@ Everything in this section came out of a run and can be recomputed from the comm
 - The human reference profile through this script's binning: `4.755 / 2.973 / 1.672 / 0.978 / 0.692 / 0.267`, `rho` -1.000, contrast 4.488, contrast/mean 2.430, mean punishment 1.847 -- the published numbers to 0.0004.
 - 2152 decision points; 104 manager timeouts excluded; 280 of 9600 agent-rounds with `player_no_input`; 1597 of 2152 decision points with a group that is not four; 218 of 2152 with a gap in the trace from an empty group; 68.5% of human agent-rounds at punishment 0.
 - The reference-policy battery: `human_table` -0.998, `inverted` +0.868 at a higher mean punishment than the human managers, `never` and `flat3` refused by the gate.
-- The prompt-variant replay on 17 paired decision points and 58 valid agent-rounds: `rho` -0.984 / -0.460 / -0.543 / +0.225 / -0.543 and mean punishment 0.379 / 0.276 / 0.672 / 0.069 / 0.379 for `v1` to `v5`, against a human -0.510 and 0.845 on the same points.
-- The parse failure rate per answer: 17.6% / 0.0% / 11.8% / 52.9% / 0.0%; every parsed answer in the labelled form; wasted punishment 0 everywhere.
-- The collection audit: 5 of 117 completions demonstrably mis-assigned and dropped, 11 more with a wrong roster and no round named, 9 of those in `v4`.
+- The prompt-variant replay on 19 paired decision points and 65 valid agent-rounds: `rho` -0.987 / -0.400 / -0.441 / +0.246 / -0.572 and mean punishment 0.338 / 0.246 / 0.600 / 0.062 / 0.338 for `v1` to `v5`, against a human -0.605 and 1.185 on the same points.
+- The parse failure rate per answer: 15.8% / 0.0% / 21.1% / 47.4% / 0.0%; every one of the 95 parsed answers in the labelled form; wasted punishment 0 everywhere.
+- The collection audit: 5 of 120 completions demonstrably mis-assigned and dropped, 11 more with a wrong roster and no round named, 9 of those 11 in `v4`.
 
 ### Inferred
 
@@ -210,4 +209,4 @@ Everything here is judgement on top of those numbers and is labelled as such.
 - **That a number from this proxy transfers to Qwen3-8B.** It does not. The collection used a different model behind a coding-agent system prompt. What is meant to transfer is the harness, the battery, the direction of the variant differences, and the failure modes the parser caught.
 - **That the replay ordering predicts a rollout ordering.** Replay holds the state fixed; a rollout lets the manager move it. A manager that looks quiet on replay may look different once contributions react to it. Replay bounds what the prompt communicates, not what the manager achieves.
 - **Where the noise gate's threshold sits.** `guard_report.py` reads "below about 2 the six bin means are within their own sampling noise" off a different replication axis (evaluation points, not episodes). The number is carried over as a rule of thumb, not re-derived for this axis.
-- **The n.** 24 decision points is a small paired sample, chosen against a wall-clock budget, not a statistical one. With a served endpoint the whole 2152 is affordable and should be run before any of this is treated as settled.
+- **The n.** 19 paired decision points is a small sample, chosen against a wall-clock budget, not a statistical one. With a served endpoint the whole 2152 is affordable and should be run before any of this is treated as settled.
