@@ -1,0 +1,104 @@
+{
+  "config": "configs/training/rl_manager/rl_new_clones_percapita_s42.yml",
+  "guard1": {
+    "expected": "1.6*sum(c) - sum(p), divided by count_valid_per_group -- the players who gave an input, which is the divisor share_pool_per_group uses and the game's own rule",
+    "mean_reward": 1.33318030834198,
+    "vs_common_good_state_field": {
+      "max": 1.9073486328125e-06,
+      "mean": 3.7514837458729744e-08
+    },
+    "vs_raw_share_no_zeroing": {
+      "max": 14.400001525878906,
+      "mean": 0.32356026768684387
+    },
+    "vs_recomputed_share": {
+      "max": 0.0,
+      "mean": 0.0
+    }
+  },
+  "guard1c_sum_contrast": {
+    "mean_reward": 24.383913040161133,
+    "vs_recomputed_pool": {
+      "max": 240.0,
+      "mean": 42.83356857299805
+    }
+  },
+  "guard2": {
+    "agent_cells_observed": 36864,
+    "prev_punishment_values_served_at_prev_timeout": {
+      "0.0": 627
+    },
+    "punishment_values_served_at_timeout": {
+      "0.0": 1659
+    },
+    "timeout_cells_observed": 1659,
+    "timeout_rate": 0.045003255208333336
+  },
+  "guard3_divided_not_relabelled": {
+    "a_mean_reward_common_pool": 25.729751586914062,
+    "a_mean_reward_per_capita": 1.33318030834198,
+    "a_ratio_free_rollout": {
+      "distinct_nearest_integers": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "max": 8.0,
+      "max_abs_dev_from_nearest_integer": 4.76837158203125e-07,
+      "min": 1.0,
+      "n_group_rounds": 2725
+    },
+    "a_reward_gap_vs_common_pool": {
+      "max": 224.0,
+      "mean": 46.376983642578125
+    },
+    "a_same_trajectory": {
+      "max": 0.0,
+      "mean": 0.0
+    },
+    "b_reward_times_n_valid_vs_pool": {
+      "max": 7.62939453125e-06,
+      "mean": 9.324867278337479e-08
+    },
+    "c_equal_headcount": {
+      "headcount": 4.0,
+      "members_max": 4.0,
+      "members_min": 4.0,
+      "n_valid_max": 4.0,
+      "n_valid_min": 4.0,
+      "ratio": {
+        "distinct_nearest_integers": [
+          4
+        ],
+        "max": 4.0,
+        "max_abs_dev_from_nearest_integer": 0.0,
+        "min": 4.0,
+        "n_group_rounds": 3067
+      },
+      "reward_times_n_vs_common_pool": {
+        "max": 0.0,
+        "mean": 0.0
+      }
+    }
+  },
+  "reward_mode": "common_pool_per_capita",
+  "verdict": {
+    "ALL_PASS": true,
+    "guard1_reward_is_the_pool_over_n_valid": true,
+    "guard1c_sum_differs": true,
+    "guard2_no_punishment_at_timeout": true,
+    "guard2_saw_timeouts": true,
+    "guard3a_differs_from_common_pool": true,
+    "guard3a_divisor_varies_per_group": true,
+    "guard3a_same_trajectory": true,
+    "guard3b_reward_times_n_valid_is_the_pool": true,
+    "guard3c_exact_agreement_after_scaling": true,
+    "guard3c_headcount_really_equal": true,
+    "guard3c_ratio_is_exactly_the_headcount": true
+  }
+}
