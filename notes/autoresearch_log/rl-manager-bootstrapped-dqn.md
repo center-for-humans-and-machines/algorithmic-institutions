@@ -162,7 +162,91 @@ Specifically not measured, and each of these would have to be added:
 
 The one coverage-adjacent quantity I do have is §3's head spread, and it speaks to whether *distinct* policies are being run at all, not to where they take the system.
 
-### 8. Launched
+### 8. THE RUNS FINISHED. First read.
+
+All five COMPLETED, exit 0:0, 6:05 to 7:33 elapsed. Each printed `rollouts 4200, episodes 4200000, episode_rounds 100800000` — the budget claim, now measured on the real runs rather than extrapolated from pilots.
+
+**The inversion reproduces. Four of five seeds are inverted.** Count-weighted over the last five evaluation points (`policy_shape_all.csv`):
+
+| bin | human | clone | s42 | s43 | s44 | s45 | s46 |
+|---|---|---|---|---|---|---|---|
+| {0} | 4.755 | 3.721 | 0.144 | 0.112 | 0.163 | 0.105 | 0.220 |
+| 1-5 | 2.973 | 2.930 | 0.138 | 0.112 | 0.150 | 0.104 | 0.026 |
+| 6-10 | 1.672 | 1.808 | 0.528 | 0.606 | 0.659 | 0.562 | 0.007 |
+| 11-15 | 0.978 | 1.300 | 2.106 | 1.633 | 2.253 | 1.610 | 0.002 |
+| 16-19 | 0.692 | 1.066 | 2.653 | 1.813 | 2.680 | 1.815 | 0.003 |
+| {20} | 0.267 | 0.327 | 2.788 | 1.886 | 2.803 | 1.888 | 0.002 |
+
+Monotone increasing across all six bins on 21,000-166,000 agent-rounds per bin. s46 punishes essentially nothing (0.22 falling to 0.002). **§9 corrects the first version of this paragraph, which described s46 as having "the human sign": on the three statistics that have to be reported together it has no resolved targeting at all, and the sign was not reportable.**
+
+**Removing action-level dithering entirely did not fix the shape.** That is the headline and it is a negative result for the hypothesis this comparison was built on.
+
+**The heads disagree about the sign — the number this arm existed to produce.** `final_per_head_slope.csv`, per-head RPA slope (bin {20} minus bin {0}, negative = human sign), mean over the last ten evaluation points:
+
+| seed | heads with human sign | heads inverted | min | max | sign spread |
+|---|---|---|---|---|---|
+| s42 | 5 | 15 | −4.02 | +2.57 | 0.249 |
+| s43 | 9 | 11 | −5.22 | +1.60 | 0.278 |
+| s44 | 2 | 18 | −2.27 | +2.59 | 0.150 |
+| s45 | 5 | 15 | −6.67 | +1.75 | 0.234 |
+| s46 | **20** | **0** | −8.12 | −0.89 | 0.012 |
+
+Within a single run, twenty heads that each held one coherent policy for a whole episode, each trained on its own bootstrap of the same replay, **do not agree on whether to punish free-riders or full contributors.** Four seeds split 2-9 against 11-18; head slopes span 9.4 to 11.6 units.
+
+**These raw counts overstate the disagreement and §9 corrects them:** most individual heads' slopes are not resolved above their own noise, and restricted to resolved heads the splits are 1-6, 4-3, 1-7, 2-4 and 14-0. The disagreement survives — s43 and s45 genuinely split — but the headline number to quote is the resolved one. The magnitude check that could have voided the whole comparison does pass: the heads are not flat, median relative slope 1.19 to 1.96.
+
+**The inversion is late and it replaces a correctly-signed policy.** `final_slope_trajectory.csv`, consensus slope over training:
+
+| step | 0 | 200 | 500 | 980 | 2000 | 3980 |
+|---|---|---|---|---|---|---|
+| s42 | 0.05 | 0.08 | **−12.41** | +2.55 | +2.56 | +2.57 |
+| s44 | 0.03 | 0.08 | **−7.33** | +2.57 | +2.53 | +2.59 |
+| s45 | −0.12 | 0.05 | **−6.15** | +1.70 | +1.71 | +1.73 |
+| s46 | −0.53 | 0.09 | 0.00 | −1.62 | −0.01 | −1.02 |
+
+Three seeds pass through a **strongly human-signed** policy around step 500 — steeper than the human −4.49 — and then flip to inverted by step 980 and stay there for the remaining 3000 steps. Fraction of all 200 evaluation points carrying the human sign: s42 0.040, s43 0.050, s44 0.050, s45 0.050, s46 0.845. This also retrospectively vindicates the caution about pilots: at 200 steps every seed reads ~0.05, i.e. nothing, and the pilot could not have predicted any of this.
+
+**Two secondary measurements I was asked to make rather than assume.** The consensus rule barely matters on the visited states: mean-of-Q and plurality vote agree on 98.0-100.0% of cells, so the choice of mean-of-Q did not drive the result. And the ensemble is alive but narrow at the end — `head_disagree_frac` 0.112-0.133, action spread 2.3-2.7 levels — so the heads agree on the action in ~87% of cells, and the ~13% where they differ is enough to flip the sign of the whole shape.
+
+The behaviour-versus-evaluated ratio (a description of sampling, per §5) is 1.12-1.35 for four seeds and 6.57 for s46, against the epsilon-greedy runs' 1.7-6.6.
+
+### 9. Targeting, checked three ways — and two corrections to §8
+
+A sign is not reportable on its own. A difference of bin means confuses force with aim; a rank correlation has the opposite failure and discards magnitude entirely, so a profile falling 5.00 to 4.99 ranks exactly like one falling 4.76 to 0.27. Rank, relative magnitude and a noise gate go together or none of them mean anything. `targeting_three_stats.csv`, consensus policy, pooled over the last 20 evaluation points; the gate is the range over its standard error across those points:
+
+| policy | rank corr | range | range/mean | gate | mean punishment |
+|---|---|---|---|---|---|
+| human managers | −1.000 | 4.488 | 2.375 | — | 1.890 |
+| lin_punisher (clone) | −1.000 | 3.394 | 1.826 | — | 1.859 |
+| s42 | +0.943 | 2.652 | 1.827 | 579 | 1.452 |
+| s43 | +1.000 | 1.781 | 1.711 | 970 | 1.041 |
+| s44 | +0.943 | 2.653 | 1.805 | 811 | 1.469 |
+| s45 | +0.943 | 1.782 | 1.750 | 1098 | 1.018 |
+| s46 | −0.943 | **0.126** | 5.030 | **1.65** | 0.025 |
+
+**Correction 1 to §8: s46 does not have "the human sign at a near-zero level". It has no resolved targeting at all.** Its range is 0.126 punishment points and its gate is 1.65 — indistinguishable from noise. Its `range/mean` of 5.03 looks large only because the denominator is 0.025, which is exactly why the relative-range statistic cannot be read without the gate. Calling it human-signed was the error I had just been warned about, made on my own result. The corrected statement is: **zero of five seeds target correctly. Four target strongly in the wrong direction; one does not target at all.**
+
+The four inverted seeds pass all three criteria and pass them convincingly: rank +0.94 to +1.00, relative range 1.71 to 1.83 — **comparable to the clone's own 1.826 and not far from the human 2.375** — and gates of 579 to 1098. Their inversion is real targeting, not an intensity artefact.
+
+**The per-head magnitude check, which is what could have made the headline meaningless.** Twenty heads each ranking a flat profile would produce sign disagreement that means nothing. They are not flat: median |slope| is 1.10 to 1.42 punishment points against seed mean punishment of 0.73 to 1.01, so median relative slope 1.19 to 1.96. The magnitude criterion passes.
+
+**Correction 2 to §8: the raw sign counts overstated the disagreement.** Most individual heads' slopes are not resolved above their own across-evaluation-point standard error (median gate 1.42 to 2.65). Restricting to heads with gate > 3 (`head_slope_resolved.csv`):
+
+| seed | resolved heads | human sign | inverted | (raw count was) |
+|---|---|---|---|---|
+| s42 | 7 / 20 | 1 | 6 | 5 vs 15 |
+| s43 | 7 / 20 | 4 | 3 | 9 vs 11 |
+| s44 | 8 / 20 | 1 | 7 | 2 vs 18 |
+| s45 | 6 / 20 | 2 | 4 | 5 vs 15 |
+| s46 | 14 / 20 | **14** | **0** | 20 vs 0 |
+
+The disagreement survives but is weaker than §8 reported. s43 (4 vs 3) and s45 (2 vs 4) show genuine resolved sign disagreement within one run; s42 and s44 are predominantly inverted with a single resolved dissenter. **§8's claim stands in weakened form** — heads within a run do disagree on the sign, and the disagreement is not a flat-profile artefact — but "twenty heads split 5 to 15" was counting unresolved heads and should not be quoted.
+
+**A finding about my own consensus rule, which I would not have seen without this check.** s46's heads are the *most* resolved of any seed (14 of 20) and unanimously human-signed, with slopes from −1.28 to −8.87. Yet s46's consensus serves essentially nothing: mean 0.025, range 0.126, gate 1.65. **Mean-of-Q washed out a contingency that every resolved head agreed on.** Measured, not explained. It is a point against the rule I chose, and it is the one place in this arm where the choice between mean-of-Q and vote-over-argmax might have mattered — though `consensus_vote_agree` is 0.980 for s46, which argues the vote would not have rescued it either.
+
+**Limitation carried forward.** A rank correlation over six bin means tests the monotonicity of six numbers, not the agent-round joint distribution. The exact statistic needs the joint histogram of contribution against punishment, which these runs do not log. `head_probe` now logs each head's full bin profile (`head_mean_h<k>_b<i>`) so the next run can compute all three statistics per head directly instead of inferring them from endpoints; the joint histogram is still missing.
+
+### 10. Launched
 
 Five seeds, 42-46, K=20, `per_episode`, `bootstrap_p` 0.5, `reward_mode: common_pool`, 4000 update steps. SLURM 30413435, 30413438, 30413439, 30413441, 30413443. `AI_REMOTE_DIR=~/repros/ai-runs/rl-bootstrapped-dqn`.
 
@@ -180,11 +264,21 @@ Kept separate on purpose. None of this is measured.
 
 5. **Why the collapse matters under the trajectory framing, if it persists.** A constant-punishment head is coherent across the episode but not *contingent* on contribution. If the surviving heads at 4000 steps are still constants, then the ensemble is generating consistent trajectories that nonetheless never realise the contingent policy whose returns the value function has never seen — which would mean the mechanism ran but did not deliver the thing it was chosen for. That would be a result about this implementation of the mechanism (a single linear readout on a fully shared torso), not about deep exploration as such. Unmeasured; §7 lists what would have to be logged to say it.
 
-6. **The rival explanation, restated at the top of the list.** If the artificial humans respond to punishment regardless of desert, the returns of a coherent contingent trajectory equal the returns of an incoherent one, there is nothing for deep exploration to find, and the contingency is arbitrary for reasons unrelated to exploration. Under the reframing this is the strongest rival to anything my arm might show. Nothing above distinguishes it from "coherent trajectories were never generated or never valued". The separate probe settles it; I do not.
+6. **The rival explanation, restated at the top of the list — and the finished runs make it stronger, not weaker.** If the artificial humans respond to punishment regardless of desert, the returns of a coherent contingent trajectory equal the returns of an incoherent one, there is nothing for deep exploration to find, and the contingency is arbitrary for reasons unrelated to exploration. Under the reframing this was already the strongest rival. §8 is what that explanation predicts: twenty heads, each a valid bootstrap estimate of the same value function trained on 4,000,000 episodes, **fail to agree on the sign** — which is what you would see if the return signal does not separate the two policies. It is also what you would see if the signal exists but 4000 steps cannot resolve it, and **nothing I measured distinguishes those.** The separate probe settles it; I do not.
+
+7. **What §8 does and does not license about the comparison's hypothesis.** Measured: removing action-level dithering entirely did not prevent the inversion, 4 of 5 seeds. That is a real negative for "dithering causes the inversion", and it is the strongest thing this arm produced. Not measured, and therefore not claimed: whether coherent contingent *trajectories* were actually generated. §7 still stands — I logged no trajectory-level quantity, and the per-head action spread of 2.3-2.7 levels at the end is consistent both with "coherent alternative policies were run" and with "the ensemble narrowed to near-identical policies that differ only at the margin". A reader who wants the trajectory claim has to measure it.
+
+8. **The transient at step 500 is the most interesting unexplained thing here.** Three seeds pass through a strongly human-signed policy and abandon it. I have no measurement of why. It is before the first target-network sync at step 1000, so the obvious attribution to the sync is wrong. Worth a successor's attention because a policy that the value function briefly preferred and then rejected is a much more specific object than "training failed".
 
 ## Successor
 
 1. **Read the five runs on shape, not on level.** `python scripts/rl_bootstrapped/guard.py artifacts/manager/rl_bootstrap_s4*/metrics/*.parquet`. The primary outcome is the per-bin table against the human and clone columns; the sign of `rpa_slope` is the headline and `head_slope_sign_spread` is the number this arm exists to produce. For a shape comparable cell-for-cell with `auto/rl-manager-two-worlds`, run a cross-evaluation simulation of the saved managers and feed it to `scripts/rl_two_worlds/measure.py`, which is the path the finished epsilon-greedy seeds went through.
+
+   **Do not reuse the named-rule manager entries from `24_rl_new_clones_cross_eval.yml` on this branch.** At `0ff44a9`, which is where this branch starts, `RuleBasedManager.__init__` is `(self, k=1, n_punishments=31, **_)` — a single fixed formula. The named rules (`never`, `thr9_p10`, `prop10`) arrived later on a different branch, so **a config line reading `rule: never` is swallowed by `**_` and silently ignored**: the run completes clean, nothing warns, and you get the default formula wearing the label you asked for. The evolution strategies arm lost a run to exactly this — a `never` row punishing 2.57 to a maximum of 20, and three supposedly different rules agreeing to two decimal places. What caught it was redundancy, not a guard: three of its seeds punish exactly zero and so *are* never-punish managers, and the separate `never` row disagreed with them.
+
+   If you include any named rule as a reference column, **check the realised behaviour, not the label, and assert it**. `scripts/rl_bootstrapped/guard.py::validate_reference` does this and hard-fails: `never` must be exactly 0.000 with maximum 0, and no two named rules may agree to two decimal places. It runs automatically whenever the reference file is loaded, and `scripts/tests/test_rl_bootstrapped_guard.py` covers it. **The reference columns this branch ships are sound** — checked, not eyeballed: `never` is 0.0000 across all six bins with maximum 0.0000, `prop10` peaks at 20.0 and `thr9_p10` at 10.0, all distinct. They were produced on `auto/rl-manager-two-worlds` after it merged `auto/rule-based-manager-sweep`, so the dispatcher existed there.
+
+   Comparing only against `lin_punisher` and the human data is unaffected either way: both come from artifacts rather than the rule dispatcher, and those are the only two reference columns `guard.py` puts in its table.
 
 2. **A device trap on that path.** `ArtificalManager.load` ignores the device it is handed: `save` puts the model on CPU and `load` assigns straight through, so loading onto cuda gives CPU weights with a cuda `self.device` and the first forward pass dies. The only existing caller loads on CPU and never hits it. Add one `.to(device)` at your own call site rather than changing the manager — that file is being edited by three other exploration arms concurrently and is not an exploration arm's business to fix.
 
@@ -196,4 +290,6 @@ Kept separate on purpose. None of this is measured.
 
 6. **Instrument trajectory coverage, because nobody in this comparison has.** §7 lists what is missing and it is the claim the whole comparison now rests on. The cheapest first cut, and it needs no retraining: take the five saved managers plus the epsilon-greedy seeds, run matched rollouts, and compare *episode-level* trajectories rather than per-round marginals — the within-episode serial correlation of punishment with contribution, the path of group composition, and a distance between the visited contributor-state distributions. Until something like that exists, "coherent trajectories were or were not generated" is not a measured statement for any arm.
 
-7. **The per-head shape comparison is the high-value read on the finished runs.** Under the trajectory framing it gets more valuable, not less: each head held a single policy for a whole episode, so if heads disagree about the *sign* of the contribution-punishment relationship, that is direct evidence that coherent contingent trajectories were generated and that the value function has not resolved their returns. `head_slope_h*` and `head_slope_sign_spread` are logged every round for exactly this. At 200 steps the answer is degenerate — every head's slope is exactly 0.000, so there are no signs to disagree about.
+7. **If you use the leaver diagnostic, use it as a ranking and report the number — do not classify on its sign.** An earlier instruction circulated that it goes positive for inverted managers; **that is wrong.** Measured across ten managers it tracks policy shape at r = −0.95 and orders managers correctly, but only one inverted manager crosses zero, so the sign is not a classifier. Its noise floor is 0.577 at 100 episodes, measured, so it cannot support fine distinctions either. This arm does not use it anywhere — recorded here so the correction travels with the branch rather than being rediscovered.
+
+8. **The per-head shape comparison is the high-value read on the finished runs.** Under the trajectory framing it gets more valuable, not less: each head held a single policy for a whole episode, so if heads disagree about the *sign* of the contribution-punishment relationship, that is direct evidence that coherent contingent trajectories were generated and that the value function has not resolved their returns. `head_slope_h*` and `head_slope_sign_spread` are logged every round for exactly this. At 200 steps the answer is degenerate — every head's slope is exactly 0.000, so there are no signs to disagree about.

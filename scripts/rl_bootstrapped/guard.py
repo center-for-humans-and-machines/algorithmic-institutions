@@ -117,6 +117,48 @@ def shape_table(wide, sampling=EVAL_TAG, last_n=5):
     return out
 
 
+def validate_reference(reference):
+    """Hard-fail if a named-rule reference column was not actually produced by
+    the rule it is labelled with.
+
+    At `0ff44a9`, the commit this branch is built on, `RuleBasedManager` is a
+    single fixed formula with signature `(self, k=1, n_punishments=31, **_)`.
+    The named rules -- `never`, `thr9_p10`, `prop10` -- arrived later on a
+    different branch. So a simulation config line reading `rule: never` is
+    swallowed by `**_` and SILENTLY IGNORED: the run completes clean and you
+    get the default formula wearing the label you asked for. The evolution
+    strategies arm lost a run to this, with a `never` row punishing 2.57 to a
+    maximum of 20 and three supposedly different rules agreeing to two
+    decimal places.
+
+    Nothing raises, so the label cannot be trusted and the realised behaviour
+    has to be checked instead. `never` must punish exactly 0. Distinct rules
+    must actually differ.
+    """
+    if reference is None:
+        return
+    if "never" in reference.columns:
+        col = reference["never"]
+        if not ((col.abs() < 1e-9) | col.isna()).all():
+            raise SystemExit(
+                "reference column 'never' punishes "
+                f"{col.mean():.4f} (max {col.max():.4f}), not 0.000. The rule "
+                "was NOT applied -- `rule:` is swallowed by RuleBasedManager's "
+                "`**_` at this commit -- and every reference number in this "
+                "table is wrong. Regenerate it on a branch whose "
+                "RuleBasedManager dispatches on `rule`."
+            )
+    named = [c for c in ("never", "thr9_p10", "prop10") if c in reference.columns]
+    for i, a in enumerate(named):
+        for b in named[i + 1 :]:
+            if reference[a].round(2).equals(reference[b].round(2)):
+                raise SystemExit(
+                    f"reference columns '{a}' and '{b}' agree to two decimal "
+                    "places. Different rules do not produce identical "
+                    "policies; the rule dispatcher was not applied."
+                )
+
+
 def behaviour_tag(wide):
     present = set(wide["sampling"].unique())
     for tag in BEHAVIOUR_TAGS:
@@ -212,6 +254,7 @@ def main():
     reference = None
     if os.path.exists(REFERENCE):
         reference = pd.read_csv(REFERENCE, index_col="contribution_bin")
+        validate_reference(reference)
 
     shapes, gaps, distortions = {}, [], []
     for path in args.parquets:
