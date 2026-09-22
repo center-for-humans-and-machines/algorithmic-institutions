@@ -212,6 +212,86 @@ Every claim in this arm is a contrast between two rules measured in the same har
 
 The sweep lands within 0.05 of the published numbers on all three; this cross-check run sits about 0.4 above both. Its own symmetric control is asymmetric (4.46 focal against 3.54 rival where the published control was 4.00 / 4.00), which is where the offset comes from. **This is reported rather than explained.** The cross-check config carries a different manager set from the parent's, and `MultiManager` evaluates every manager in a file on every round, so the RNG stream differs -- the parent arms' note 4 on exactly this point. That accounts for a redraw; whether it accounts for a redraw this large is not established here, and it is left open.
 
+### 3.6 Held-out validation: both fitted rules beat the incumbent, decisively (measured)
+
+52 rules on seeds 45, 46 and 47 -- never used to fit anything -- at 2,048 episodes each, so **6,144 episodes per rule**. Focal seat against the clone. Standard errors are in `validation_table.csv`; they run 0.34-0.40 on contribution and 0.54-0.71 on the pool, so a difference of two rules carries about +/- 0.55 and +/- 0.9 respectively.
+
+| rule | `P_max` | `gamma_ep` | total contribution | common pool | members | realised spend | severity when it fires |
+|---|---|---|---|---|---|---|---|
+| `best_design_pool` | 27.2 | 2.90 | 47.45 | **70.21** | 4.38 | 1.30 | 6.32 |
+| **`opt_pool`** (fitted) | 30.0 | 3.00 | 47.02 | **69.71** | 4.38 | 1.26 | 6.83 |
+| `best_cap20_pool` | 18.2 | 2.84 | 44.89 | **67.53** | 4.38 | 0.98 | 4.52 |
+| `best_cap10_pool` | 9.3 | 1.09 | 43.35 | **65.19** | 4.41 | 0.94 | 3.05 |
+| **`opt_contribution`** (fitted) | 30.0 | 0.00 | **49.92** | 64.87 | 4.01 | 3.74 | 17.03 |
+| `best_design_contribution` | 23.0 | 0.80 | 47.62 | 65.31 | 4.07 | 2.68 | 6.17 |
+| `best_cap10_contr` | 9.7 | 0.63 | 44.44 | 64.20 | 4.27 | 1.61 | 3.84 |
+| `thr4_p10` | 10.0 | 0 | 42.61 | 62.02 | 4.29 | 1.44 | 10.00 |
+| **`thr9_p10`** (incumbent) | 10.0 | 0 | 44.64 | 60.19 | 3.87 | 2.90 | 10.00 |
+| `never` | 0 | -- | 37.30 | 59.68 | 4.58 | 0 | -- |
+| `ah_punisher` (clone control) | -- | -- | 40.09 | 56.85 | 4.04 | 1.80 | 5.97 |
+
+**Against `thr9_p10`, plainly:**
+
+| claim | margin | standard error | verdict |
+|---|---|---|---|
+| `opt_pool` on the pool | **+9.52** | 0.86 | beats it, 11 sd |
+| `opt_contribution` on contribution | **+5.28** | 0.53 | beats it, 10 sd |
+| `opt_pool` on contribution | +2.38 | 0.52 | also beats it |
+| `opt_contribution` on the pool | +4.68 | 0.91 | also beats it |
+
+**This is not a tie and it is not close.** Both fitted rules beat the incumbent on both objectives at once, and the pool margin is more than ten times its own standard error.
+
+### 3.7 The margin survives a hard severity cap, and the capped rule wins on spend as well (measured)
+
+The unconstrained optima sit at `P_max = 30`, the top of the action space, where the contribution model has almost no evidence. The capped champions are the best design points whose `P_max` never exceeds 20 or 10, so nothing they can ever issue is an extrapolation.
+
+| rule | max punishment it can issue | spend | common pool | vs `thr9_p10` |
+|---|---|---|---|---|
+| `best_cap20_pool` | 18.2 | 0.98 | 67.53 | **+7.34** (8.5 sd) |
+| `best_cap10_pool` | 9.3 | 0.94 | 65.19 | **+5.00** (5.9 sd) |
+| `thr9_p10` | 10.0 | 2.90 | 60.19 | -- |
+
+**`best_cap10_pool` cannot punish harder than the incumbent, punishes a third as much on average, and produces five more pool points.** That margin is a claim about the model's behaviour inside the region the model was trained on, which the `P_max = 30` optima are not. Its cost is 1.29 contribution points against `thr9_p10` (2.4 sd), so it is not free -- it is the pool-side end of the same trade the two objectives disagree about.
+
+It wins by holding its members rather than by raising contributions: **4.41 members against 3.87**, +0.54, while mean contribution per valid member is lower. The whole margin is membership times a slightly smaller per-member pool.
+
+**At matched spend the family dominates the incumbent across the range.** Binning the 1,024 design points by realised spend, the best attainable pool per decile (fit seeds):
+
+| spend decile | 0.09 | 0.34 | 0.57 | 0.83 | 1.14 | 1.50 | 1.95 | 2.57 | 3.48 | 5.75 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| best pool | 65.3 | 66.6 | 68.1 | 70.6 | **72.9** | 70.0 | 69.8 | 69.4 | 66.4 | 63.8 |
+| best contribution | 41.3 | 42.8 | 44.4 | 46.7 | 49.0 | 47.8 | 49.2 | **50.3** | 49.8 | 50.2 |
+
+`thr9_p10` spends 2.80 and reaches 61.3 pool on the same seeds; the best rule at *one tenth* of that spend reaches 65.3. The pool optimum sits at spend 1.14 and the contribution optimum at 2.57, which is the trade in one line.
+
+### 3.8 What the horizon exponents actually do (measured)
+
+**The episode exponent is a lever on spend, and the two objectives pull it in opposite directions.** Probing outside the design box at the fitted optima:
+
+| `gamma_ep` | `opt_pool`: pool | `opt_pool`: spend | `opt_contribution`: contribution | `opt_contribution`: spend |
+|---|---|---|---|---|
+| -1.0 | 65.35 | 3.59 | 50.67 | 4.41 |
+| -0.5 | 65.18 | 3.45 | **51.22** | 4.10 |
+| 0.0 | -- | -- | 49.92 | 3.74 |
+| 3.0 (fitted) | **69.71** | 1.26 | -- | -- |
+| 4.0 | 68.91 | 1.10 | -- | -- |
+| 6.0 | 68.06 | 0.88 | -- | -- |
+
+**The premise the multiplier was built on holds for the pool and fails for contribution.** Punishment as an investment -- discount it as the horizon runs out -- is right on the pool: inverting the exponent costs 4.4 pool points, and the fitted value of 3.0 is genuinely near the optimum rather than pinned by the box (4.0 and 6.0 are both slightly worse). On total contribution the opposite is true: the box edge at 0 *was* binding, and pushing to `gamma_ep = -0.5` -- punish **harder** as the episode runs out -- buys another **+1.30** contribution (2.4 sd). Contribution does not care that the investment has no time to pay back; the pool does, because it pays the bill.
+
+**The reshuffle exponent works through its alignment with the switch decision, not only through the length of the remaining tenure.** `m_sw`'s trough sits at `s = 0`, which is by construction the round the switch predictor's decision is read, so the two explanations coincide at phase 0. Rotating the cycle keeps the same four multipliers and the same average discount and moves the trough off that round:
+
+| phase | `opt_pool` pool | `opt_contribution` pool | `opt_contribution` contribution |
+|---|---|---|---|
+| 0 (aligned) | **69.71** | **64.87** | **49.92** |
+| 1 | 67.13 | 61.44 | 47.08 |
+| 2 | 65.99 | 58.59 | 45.43 |
+| 3 | 64.72 | 58.68 | 45.59 |
+
+**Misaligning the cycle costs 2.6 to 5.0 pool points for the pool optimum and 3.4 to 6.3 for the contribution optimum**, against a standard error of about 0.9. `opt_contribution` is the clean case: its `gamma_ep` is exactly 0, so its episode multiplier is off entirely and the phase changes *nothing* except where the trough falls in the reshuffle cycle. The effect is therefore reshuffle alignment and nothing else.
+
+So the honest reading of `gamma_sw` is narrower than the reasoning it was built on: what it buys is **not punishing on the round the switch decision is taken**. Whether that is responding to the incentive or exploiting the switch predictor is not settled here -- both would produce this measurement -- but the "remaining tenure" story alone does not, because it is indifferent to phase.
+
 ## 4. Notes
 
 1. **Measured against inferred.** Sections 3.1 to 3.7 are measurements. The *readings* are inferences and are marked as such where they appear: that `gamma_ep` trades contribution for spend, that `gamma_sw` works by moving punishment away from the switch-decision round, and that the fitted optimum's advantage over the incumbent is a redistribution of spend rather than more of it. The first and third are supported by the round-resolved series and by the matched-spend table; the second is supported by the phase probe, which is a direct measurement of that specific mechanism and not an argument about it.
