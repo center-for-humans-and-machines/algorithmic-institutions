@@ -21,7 +21,7 @@
 #SBATCH --constraint="gpu"
 #SBATCH --gres=gpu:a100:1
 #
-#SBATCH --time=01:00:00
+#SBATCH --time=00:20:00
 
 set -e
 
