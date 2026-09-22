@@ -123,6 +123,28 @@ class EdgeEncoder(th.nn.Module):
         return th.cat(encoding, dim=-1)
 
 
+class AgentLatentEncoder(th.nn.Module):
+    """Per-agent, per-episode posterior over a latent ``z``.
+
+    Consumes one agent's whole encoded round sequence and returns the
+    parameters of a diagonal Gaussian, read off the final GRU hidden state.
+    """
+
+    def __init__(self, in_features, hidden_size, z_dim):
+        super().__init__()
+        self.z_dim = z_dim
+        self.rnn = GRU(
+            input_size=in_features, hidden_size=hidden_size, batch_first=True
+        )
+        self.head = Lin(in_features=hidden_size, out_features=2 * z_dim)
+
+    def forward(self, seq):
+        # seq: [N, T, F_seq]; h_n: [1, N, hidden_size] -> last state per agent.
+        _, h_n = self.rnn(seq)
+        mu, logvar = self.head(h_n[-1]).chunk(2, dim=-1)
+        return mu, logvar
+
+
 class GraphNetwork(th.nn.Module):
     def __init__(
         self,
@@ -132,6 +154,7 @@ class GraphNetwork(th.nn.Module):
         rnn_g=None,
         bias=None,
         b_encoding=None,
+        z_encoder=None,
         *,
         y_levels=21,
         y_name="contribution",
@@ -144,6 +167,7 @@ class GraphNetwork(th.nn.Module):
         add_global_model=True,
         hidden_size=None,
         default_values={},
+        agent_latent=None,
         **_,
     ):
         super().__init__()
@@ -167,8 +191,23 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+        self.agent_latent = agent_latent
+        self.z_dim = int(agent_latent["dim"]) if agent_latent else 0
 
         if op1 is None:
+            # z is concatenated onto every node feature vector before op1, so
+            # widening x_features once carries into all three sub-models.
+            x_features = x_features + self.z_dim
+            if self.z_dim > 0:
+                # +1 is the mask channel appended in sample_posterior.
+                self.z_encoder = AgentLatentEncoder(
+                    in_features=self.x_encoder.size + self.y_encoder.size + 1,
+                    hidden_size=agent_latent.get("hidden_size", 20),
+                    z_dim=self.z_dim,
+                )
+            else:
+                self.z_encoder = None
+
             if add_edge_model:
                 edge_model = EdgeModel(
                     x_features=x_features,
@@ -251,8 +290,13 @@ class GraphNetwork(th.nn.Module):
             self.rnn_n = rnn_n
             self.rnn_g = rnn_g
             self.bias = bias
+            self.z_encoder = z_encoder
             self.rnn_n_h0 = None
             self.rnn_g_h0 = None
+
+        # Simulation-time prior sample, held for the duration of one episode.
+        # A plain attribute (never a buffer/parameter) so save() cannot see it.
+        self._z_cache = None
 
     def forward(self, data, reset_rnn=True):
         x = data["x"]
@@ -267,6 +311,15 @@ class GraphNetwork(th.nn.Module):
             )
         u = data["u"]
         batch = data["batch"]
+        if self.z_dim > 0:
+            # z: [N, 1, z_dim], broadcast over the round dim. An absent z falls
+            # back to the prior mean so unconditioned calls stay well defined.
+            z = data.get("z")
+            if z is None:
+                z = th.zeros(
+                    (x.shape[0], 1, self.z_dim), dtype=x.dtype, device=x.device
+                )
+            x = th.cat([x, z.expand(-1, x.shape[1], -1)], dim=-1)
         x, _, u = self.op1(x, edge_index, edge_attr, u, batch)
         if self.rnn_n is not None:
             x, self.rnn_n_h0 = self.rnn_n(x, None if reset_rnn else self.rnn_n_h0)
@@ -334,6 +387,37 @@ class GraphNetwork(th.nn.Module):
         )
         return encoded
 
+    def sample_posterior(self, encoded):
+        """Amortised posterior over z from an ``encode(..., y_encode=True)`` dict.
+
+        Returns ``(z, kl_per_dim)`` with z of shape [N, 1, z_dim], ready to be
+        put into the forward dict, and the per-dimension KL to N(0, 1).
+        """
+        x = encoded["x"]
+        y_enc = encoded["y_enc"]
+        # encode() unsqueezes y_enc at dim 1 before the shared flatten(0, 1),
+        # so it survives as [n_batch, n_player, n_rounds, y_levels] while x is
+        # already [N, n_rounds, F_x]; one more flatten aligns the node axes
+        # (both are row-major over (batch, player), so the order matches).
+        if y_enc.dim() == 4:
+            y_enc = y_enc.flatten(0, 1)
+        mask = encoded.get("mask")
+        if mask is None:
+            mask = th.ones(x.shape[:2], dtype=x.dtype, device=x.device)
+        seq = th.cat([x, y_enc, mask.unsqueeze(-1).float()], dim=-1)
+        mu, logvar = self.z_encoder(seq)
+        if self.training:
+            z = mu + th.randn_like(mu) * (0.5 * logvar).exp()
+        else:
+            z = mu
+        kl_per_dim = (0.5 * (mu.pow(2) + logvar.exp() - logvar - 1)).mean(dim=0)
+        return z.unsqueeze(1), kl_per_dim
+
+    def sample_prior_z(self, n_nodes, device=None):
+        return th.randn(
+            (n_nodes, 1, self.z_dim), device=device if device else self.device
+        )
+
     def predict_encoded(self, data, sample=True, reset_rnn=True):
         self.eval()
         y_logit = self(data, reset_rnn)
@@ -348,6 +432,19 @@ class GraphNetwork(th.nn.Module):
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
+        if self.z_dim > 0:
+            # encode() does not carry z, so pass a caller-supplied one through
+            # untouched. Otherwise (the simulation case: no observed rounds to
+            # condition on) z comes from the prior. z is an episode-level trait,
+            # so it is drawn once at the episode boundary -- reset_rnn, which the
+            # environment sets at round 0 -- and reused for the later rounds.
+            z = data.get("z")
+            if z is None:
+                n = n_batch * n_nodes
+                if reset_rnn or self._z_cache is None or self._z_cache.shape[0] != n:
+                    self._z_cache = self.sample_prior_z(n)
+                z = self._z_cache
+            encoded["z"] = z
         predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
@@ -436,6 +533,11 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            # z_dim is recomputed from agent_latent in __init__; both keys are
+            # absent from pre-latent checkpoints, where the __init__ defaults
+            # (agent_latent=None -> z_dim 0, z_encoder=None) restore them.
+            "agent_latent",
+            "z_encoder",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 
