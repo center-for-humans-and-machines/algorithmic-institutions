@@ -164,11 +164,11 @@ That is not a difference of degree dressed up. The set of parameter vectors the 
 
 | parameter | contribution | common pool | overlap |
 |---|---|---|---|
-| `P_max` | 24.8 - 29.8 | 25.8 - 29.8 | yes |
-| `c0` | 7.8 - 9.9 | 6.0 - 8.5 | yes |
-| `tau` | 0.05 - 0.69 | 0.10 - 1.13 | yes |
-| **`gamma_ep`** | **0.03 - 0.78** | **1.70 - 2.92** | **none** |
-| `gamma_sw` | 0.33 - 1.93 | 0.91 - 2.14 | yes |
+| `P_max` | 25.2 - 29.7 | 25.8 - 29.9 | yes |
+| `c0` | 7.9 - 10.0 | 6.0 - 8.5 | yes |
+| `tau` | 0.06 - 0.65 | 0.10 - 1.13 | yes |
+| **`gamma_ep`** | **0.03 - 0.77** | **1.70 - 2.92** | **none** |
+| `gamma_sw` | 0.47 - 1.95 | 0.91 - 2.14 | yes |
 
 (5th to 95th percentile of a 65,536-point Sobol sweep of the box kept within `delta` of the optimum; `delta` is 0.94 for contribution and 1.53 for pool, each the standard error of a single well-measured design point.)
 
