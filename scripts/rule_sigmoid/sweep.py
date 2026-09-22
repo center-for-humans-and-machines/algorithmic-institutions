@@ -238,6 +238,10 @@ def run(args):
             args.out, f"shape_p{args.part:02d}_shard{local_si:03d}.parquet"
         )
         shape_rows(tables, shard["name"].to_numpy()).to_parquet(shape_path, index=False)
+        round_path = os.path.join(
+            args.out, f"rounds_p{args.part:02d}_shard{local_si:03d}.parquet"
+        )
+        round_rows(rounds, shard["name"].to_numpy()).to_parquet(round_path, index=False)
         done = (local_si + 1) / len(shards)
         el = time.time() - t0
         print(
