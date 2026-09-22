@@ -61,7 +61,7 @@ The width is a property of *this* prompt length, *this* round count and *this* G
 | run | model | servers | width x seeds | episodes per arm | LLM wall clock |
 |---|---|---|---|---|---|
 | `qwen3-8b` | Qwen3-8B | 4 data-parallel, 1 card each | 200 x 30 (seeds 42-71) | **6,000** | 28.8 min |
-| `qwen3-32b` | Qwen3-32B | 2 at tensor-parallel 2 | 200 x 5 (seeds 42-46) | **1,000** | see below |
+| `qwen3-32b` | Qwen3-32B | 2 at tensor-parallel 2 | 200 x 5 (seeds 42-46) | **1,000** | 53.0 min |
 
 Weights were reused from the 77 GB cache at `/ptmp/levinb/llm-manager-2026-09-22`; nothing was re-downloaded. The isolated run directory is `~/repros/ai-runs/llm-manager-experiment` on Raven, account `levinb`; no `rsync --delete` was used against it. As in #221, `episodes.parquet` (one row per episode) stays on the cluster and every committed table is derived from it; it regenerates from the command in each run's `run_args.json`.
 
