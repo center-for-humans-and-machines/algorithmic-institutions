@@ -169,9 +169,29 @@ Mean punishment per contribution bin, evaluation-suite RPA bins, over 1.1–1.5 
 
 Row counts, param-noise buffer: 167,001 / 247,804 / 331,710 / 242,879 / 90,534 / 313,865. Clone: 442,067 / 876,416 / 1,209,967 / 890,903 / 279,313 / 947,541. Human: 809 / 1,955 / 2,614 / 1,794 / 510 / 1,232.
 
-**Epsilon-greedy adds a constant; weight noise adds a contingency.** Every eps-greedy bin rises by 1.00 ± 0.02, which is exactly `eps × (15 − 5)`, the uniform drag, and the buffer's contrast stays at 0.014 — the policy had no contingency and the exploration did not give it one. The param-noise buffer's contrast is 0.839, with the human sign, from an evaluated contrast of exactly zero.
+**Epsilon-greedy adds a constant; weight noise adds a contingency.** Every eps-greedy bin rises by 1.00 ± 0.02, which is exactly `eps × (15 − 5)`, the uniform drag. The param-noise buffer's contrast is 0.839 from an evaluated contrast of exactly zero.
 
 That is **what was sampled, not what was learned**, and the human sign of that 0.839 is an accident of this particular seed's perturbations, not a result.
+
+#### Targeting, on a statistic force cannot move
+
+`contrast` is a difference of bin means and therefore scales with how hard a manager punishes. Two managers with *identical* contingency, one punishing half as hard, differ by a factor of two on it. The arm is judged on targeting, so targeting needs a statistic that is invariant to force: `rho`, the count-weighted rank correlation between contribution bin and punishment served, which depends only on the *order* of the bin means and so cannot be moved by any monotone rescaling. `scripts/rl_param_noise/targeting.py`; the trap is a test in `scripts/tests/test_param_noise_targeting.py`.
+
+| | `rho` | contrast | contrast / mean | mean punishment | profile SNR |
+|---|---|---|---|---|---|
+| evaluated policy (both runs) | — (flat) | 0.000 | 0.000 | 5.000 | — |
+| eps-greedy buffer | −0.540 | 0.014 | **0.002** | 6.006 | 2.90 |
+| param-noise buffer | **−0.827** | 0.839 | **0.143** | 5.848 | 3.02 |
+| artificial punisher (clone) | **−1.000** | 3.400 | 2.087 | 1.630 | — |
+| human managers | **−1.000** | 4.488 | 2.430 | 1.847 | — |
+
+Negative is the human sign. NaN for the evaluated policies is the honest answer to a perfectly flat profile: there is nothing to rank, which is a different statement from a measured absence of relationship.
+
+**The trap, demonstrated on this table's own reference columns.** On `contrast` the clone (3.400) and the human managers (4.488) differ by 1.088 punishment points, which reads as a targeting difference. On `rho` they are **identical at −1.000**: both are strictly monotone decreasing over all six bins, so their *aim* is the same and only their force differs. The clone punishes less hard overall — mean 1.630 against 1.847. Rescaling the clone's profile to the human mean puts its contrast at 3.853, so **42% of that apparent 1.088-point targeting gap is intensity, not aim**. Had I compared the arms on `contrast` alone I would have read force as targeting on exactly this axis.
+
+**And the opposite error, which `rho` alone would have caused.** The eps-greedy buffer's `rho` is −0.540, which sounds like a real contingency. Its `contrast_over_mean` is 0.002 — the relationship is genuine in rank and utterly negligible in magnitude, which is what a uniform drag plus sampling noise looks like when you rank six nearly equal numbers. `rho` carries no magnitude and must never be read alone; `profile_snr` of 2.90 is barely above the point where it would be ranking noise outright. Both columns, always.
+
+Read together, the param-noise buffer is the only non-reference row with a contingency that is both strong in rank (−0.827) and non-negligible in size (0.143) — against an evaluated policy that has none at all.
 
 #### The uniform-drag discriminator
 
@@ -230,8 +250,14 @@ Remote dir `~/repros/ai-runs/rl-param-noise`, isolated from every sibling arm. ~
 
 ## Successor
 
-1. **Read the shape first, from the parquet, no simulation needed.** `rpa_mean_{bin}` / `rpa_n_{bin}` at `sampling == "greedy"` is the evaluated policy's contingency at every evaluation point of every seed; `rpa_opp_mean_{bin}` is the artificial punisher on the same rollouts. Human reference: 4.755 / 2.973 / 1.672 / 0.978 / 0.692 / 0.267, contrast +4.488. The question is the contrast's **sign and spread across the five seeds**, not its mean.
+1. **Read the shape first, from the parquet, no simulation needed.** `rpa_mean_{bin}` / `rpa_n_{bin}` at `sampling == "greedy"` is the evaluated policy's contingency at every evaluation point of every seed; `rpa_opp_mean_{bin}` is the artificial punisher on the same rollouts. Human reference: 4.755 / 2.973 / 1.672 / 0.978 / 0.692 / 0.267.
+
+   **Judge targeting on `rho` from `targeting.py`, never on `contrast`.** Both references sit at `rho` −1.000 while their contrasts differ by 1.088 points, 42% of which is force rather than aim; the arms will differ in how hard they punish, so a contrast comparison across arms would read intensity as targeting. Read `contrast_over_mean` beside it for magnitude and `profile_snr` before either — the eps-greedy pilot buffer scores `rho` −0.540 on a relationship of size 0.002. The question is `rho`'s **sign and spread across the five seeds**, not its mean.
 2. **Then read `param_noise_scale` over update steps.** If it sits at or near `max_scale` for a long stretch, weight noise could not match epsilon-greedy's displacement and the arm under-explored; that is a finding about the method, not a bug, and it changes how the shape result should be read.
 3. **Then the paired comparison.** Same five seeds in all four arms, so pair by seed rather than comparing means of five.
 4. **Do not stop at the shape.** If no arm moves it, the rival explanation — artificial humans that respond to punishment regardless of desert — is the live one, and the probe of that is the experiment to read next. This arm cannot distinguish the two and does not claim to.
-5. **Unfinished business in this arm.** (a) One perturbation is shared across the 1000 parallel episodes of a rollout; a chunked rollout would give K perturbations per update step at the same episode cost and is the obvious next variant. (b) The per-episode divergence is extremely noisy on a near-degenerate policy; a controller on a percentile rather than the mean would regulate better. (c) Neither state coverage nor trajectory coverage is measured anywhere, and that is the claim the corrected framing leaves standing.
+5. **Two hazards this arm checked and is clear of, recorded so the check is not repeated.**
+   - **Named rules are silently ignored at this commit.** `RuleBasedManager.__init__(self, k=1, n_punishments=31, **_)` swallows `rule: never` into `**_` and hands back the default formula wearing the label. A sibling arm published a `never` row punishing 2.57 with a maximum of 20; nothing raised. **This arm's reference columns are the artifact-loaded clone (`load_opponent`, a `.joblib`) and the human CSV, neither of which goes through that dispatcher**, verified by grep over `rl_manager.py`, `linear_opponent.py`, the configs and the analysis scripts — no reference to `RuleBasedManager` anywhere in the path. `guard_report.assert_rule_labels_are_real` asserts realised behaviour against the label anyway, so this stays true if a rule column is ever added.
+   - **The leaver diagnostic is not used here and should not be classified on.** Measured across ten managers, only one inverted manager goes positive and the other three sit between −0.02 and −1.21; it tracks shape at r = −0.95 and orders managers correctly, with a measured noise floor of 0.577 at 100 episodes. A ranking, not a classifier, and this arm reports `rho` instead.
+
+6. **Unfinished business in this arm.** (a) One perturbation is shared across the 1000 parallel episodes of a rollout; a chunked rollout would give K perturbations per update step at the same episode cost and is the obvious next variant. (b) The per-episode divergence is extremely noisy on a near-degenerate policy; a controller on a percentile rather than the mean would regulate better. (c) Neither state coverage nor trajectory coverage is measured anywhere, and that is the claim the corrected framing leaves standing. (d) `rho` is computed from per-bin means, so it is the rank correlation on the bin-aggregated profile, not the agent-round joint distribution; recording the (contribution, punishment) joint histogram per rollout would give the exact statistic. Not worth discarding 33 GPU-hours of in-flight runs for, since bin means and counts are sufficient for everything reported here.
