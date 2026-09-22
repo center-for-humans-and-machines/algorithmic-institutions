@@ -35,7 +35,23 @@ VALID_MODEL = "artifacts/artificial_humans/raven_script_22/model/rnn_False__data
 
 # K, chosen from the pilot measurement recorded in
 # notes/autoresearch_log/rl-manager-bootstrapped-dqn.md, not from convention.
-N_HEADS = 10
+#
+# The binding constraint turned out to be ensemble survival, not cost, and it
+# is monotone in K over the range tested. On 200-step pilots (seed 42, one
+# variable): at K=4 the ensemble is dead by update step 10 -- head
+# disagreement 0.000, action spread 0.0, punishment exactly 0 under both the
+# behaviour and the evaluated policy. At K=10 it survives, disagreement 1.000
+# and spread 2.0 at step 190. At K=20 it survives wider, spread 3.0, and it is
+# the ONLY bootstrap configuration whose evaluated policy still punishes at
+# all (2.63 against 0.00 at K=4 and K=10) -- a consensus pinned at zero cannot
+# express a policy shape, which is this comparison's outcome measure.
+#
+# Cost does not constrain the choice: 5.56 / 5.72 / 6.89 / 5.84 s per update
+# step at K = 1 / 4 / 10 / 20. Not monotone -- the K=10 job drew a slower node
+# -- so within node-to-node noise K is free up to 20. The head is 31*K outputs
+# off a 100-wide readout, negligible beside the artificial humans' forward
+# passes.
+N_HEADS = 20
 BOOTSTRAP_P = 0.5
 
 TEMPLATE = """\
