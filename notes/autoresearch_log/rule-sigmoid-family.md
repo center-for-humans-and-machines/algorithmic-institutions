@@ -292,6 +292,49 @@ It wins by holding its members rather than by raising contributions: **4.41 memb
 
 So the honest reading of `gamma_sw` is narrower than the reasoning it was built on: what it buys is **not punishing on the round the switch decision is taken**. Whether that is responding to the incentive or exploiting the switch predictor is not settled here -- both would produce this measurement -- but the "remaining tenure" story alone does not, because it is indifferent to phase.
 
+### 3.9 Policy shape, aim, and the leaver diagnostic (measured)
+
+Mean punishment per contribution bin, the evaluation suite's own `RPA_EDGES`, held-out seeds, **valid cells only** (`policy_shape.csv`):
+
+| bin | `opt_pool` | `opt_contribution` | `best_cap10_pool` | `thr9_p10` | clone | human | `never` |
+|---|---|---|---|---|---|---|---|
+| {0} | 3.88 | 16.50 | 1.77 | 10.00 | 4.63 | *4.76* | 0 |
+| 1-5 | 5.85 | 19.09 | 2.30 | 10.00 | 3.03 | *2.97* | 0 |
+| 6-10 | 0.81 | 5.61 | 1.23 | 4.34 | 1.83 | *1.67* | 0 |
+| 11-15 | 0 | 0 | 0 | 0 | 1.05 | *0.98* | 0 |
+| 16-19 | 0 | 0 | 0 | 0 | 0.76 | *0.69* | 0 |
+| {20} | 0 | 0 | 0 | 0 | 0.37 | *0.27* | 0 |
+
+Two things stand out. **The clone tracks the human bin for bin** (4.63/3.03/1.83/1.05/0.76/0.37 against 4.76/2.97/1.67/0.98/0.69/0.27), which is the sanity check on the reference row. And **every fitted rule punishes nothing at all above contribution 10**, where the human and the clone still spend 0.27 to 1.05 -- the family's whole spend is concentrated below the threshold, which is where the search put it.
+
+The fitted shapes are also **non-monotone across bins**: `1-5` gets more than `{0}` (5.85 against 3.88 for `opt_pool`). That is a composition effect of the horizon multipliers, not a targeting decision -- the `{0}` cells are not distributed across rounds the same way the `1-5` cells are -- and it is exactly why the bin means are not the targeting statistic.
+
+**Aim, magnitude and gate, reported together:**
+
+| rule | `rho` | magnitude | noise gate | spend | rate | severity | share of spend above 10 / 20 |
+|---|---|---|---|---|---|---|---|
+| *human* | *-0.319* | *2.375* | *4.1* | *1.85* | *0.315* | *5.86* | -- |
+| clone | -0.328 | 2.191 | 74.9 | 1.84 | 0.308 | 5.97 | 0.47 / 0.22 |
+| `thr9_p10` | **-0.797** | 2.465 | inf | 2.96 | 0.296 | 10.00 | 0 / 0 |
+| `opt_pool` | -0.578 | **3.330** | 110 | 1.28 | 0.188 | 6.83 | 0.57 / 0.29 |
+| `best_cap20_pool` | -0.591 | 3.132 | 127 | 1.00 | 0.221 | 4.52 | 0.53 / **0** |
+| `best_cap10_pool` | -0.568 | 2.603 | 212 | 0.96 | 0.315 | 3.05 | **0 / 0** |
+| `opt_contribution` | -0.724 | 2.780 | 463 | 3.81 | 0.224 | 17.03 | 0.91 / 0.50 |
+| `never` | nan | nan | nan | 0 | 0 | -- | -- |
+
+Every fitted rule is strong in rank, large in magnitude and far above the gate, so none of them is the "flat policy, ranked" artefact the triple exists to catch. `thr9_p10`'s gate is infinite because its extreme bins are the same number in every episode -- maximal evidence, not missing evidence -- and `never`'s statistics are nan because a rule that never punishes has no aim to measure.
+
+**The clone reproduces the human's aim and not merely its level**: `rho` -0.328 against -0.319, magnitude 2.19 against 2.38, spend 1.84 against 1.85. The human's gate is only 4.1 because it rests on 50 games rather than 6,144 episodes; it still clears.
+
+**The leaver diagnostic, as a ranking** (`c_gap`, leavers' contribution minus stayers', valid cells at the decision rounds):
+
+| rule | `never` | `best_cap10_pool` | `best_cap20_pool` | `opt_pool` | clone | `opt_contribution` | `thr9_p10` |
+|---|---|---|---|---|---|---|---|
+| `c_gap` | -1.21 | -1.67 | -1.86 | -1.91 | -2.23 | -3.20 | -3.61 |
+| spend | 0 | 0.96 | 1.00 | 1.28 | 1.84 | 3.81 | 2.96 |
+
+Every rule here is negative and the ordering tracks spend, which is the ranking the diagnostic is good for. **No rule is classified by its sign**: the reference range quoted for correctly-targeted managers is -1.9 to -3.5 and these span -1.21 to -3.61 straddling it, and with a 0.577 noise floor most of the adjacent gaps here are not resolvable. It is reported because it is cheap and it reads straight off the recorded rounds, not because anything rests on it.
+
 ## 4. Notes
 
 1. **Measured against inferred.** Sections 3.1 to 3.7 are measurements. The *readings* are inferences and are marked as such where they appear: that `gamma_ep` trades contribution for spend, that `gamma_sw` works by moving punishment away from the switch-decision round, and that the fitted optimum's advantage over the incumbent is a redistribution of spend rather than more of it. The first and third are supported by the round-resolved series and by the matched-spend table; the second is supported by the phase probe, which is a direct measurement of that specific mechanism and not an argument about it.
