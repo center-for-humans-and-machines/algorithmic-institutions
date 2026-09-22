@@ -105,15 +105,19 @@ FIRES_ON = {
 def check_dispatch(df):
     """Each seat must carry its manager's signature in the output.
 
-    Extends the parent's check with the two inverted rules: an inverted seat
-    punishes only 0 or its amount, punishes NOTHING at or below its
-    threshold minus one, and punishes EVERY valid cell at or above it. A
-    seat that had the forward rule, or static dispatch, fails all three."""
+    Signatures are evaluated on cells where the player gave an input, as the
+    parent's `prop10` check already was, because `per_round.parquet` records
+    a timed-out player's OWN contribution while the manager was served 0.
+    The two therefore disagree on exactly those cells, and the disagreement
+    is a fact about the env, not a dispatch failure.
+
+    That fact is then checked in its own right, as a positive test rather
+    than an exemption: `timeout_side` asserts that a forward rule punishes
+    EVERY timed-out cell of its seat and an inverted rule punishes NONE of
+    them. A seat holding the wrong rule fails it."""
 
     def inv_sig(threshold, amount):
-        def f(d):
-            c = d["contribution"].to_numpy()
-            p = d["punishment"].to_numpy()
+        def f(c, p):
             return bool(
                 set(np.unique(p)) <= {0, amount}
                 and (p[c < threshold] == 0).all()
@@ -123,17 +127,25 @@ def check_dispatch(df):
         return f
 
     sig = {
-        NEVER: lambda d: set(d["punishment"].unique()) <= {0},
-        CORRECT: lambda d: bool(
-            set(d["punishment"].unique()) <= {0, 10}
-            and (
-                d["punishment"].to_numpy()[d["contribution"].to_numpy() <= 9] == 10
-            ).all()
+        NEVER: lambda c, p: set(np.unique(p)) <= {0},
+        CORRECT: lambda c, p: bool(
+            set(np.unique(p)) <= {0, 10}
+            and (p[c <= 9] == 10).all()
+            and (p[c > 9] == 0).all()
         ),
         INV_LEVEL: inv_sig(11, 10),
         INV_SPEND: inv_sig(7, 10),
         BAND_MILD: inv_sig(16, 10),
         BAND_MATCHED: inv_sig(16, 20),
+    }
+    # what the seat must do to a cell the env served as contribution 0
+    timeout_side = {
+        NEVER: 0.0,
+        CORRECT: 1.0,  # c=0 is below the threshold, so every timeout is hit
+        INV_LEVEL: 0.0,
+        INV_SPEND: 0.0,
+        BAND_MILD: 0.0,
+        BAND_MATCHED: 0.0,
     }
     out = []
     for (pairing, gid), sub in df.groupby(["pairing", "group_id"]):
@@ -141,11 +153,33 @@ def check_dispatch(df):
         m = paired.seat_manager(pairing, seat)
         if m not in sig or not len(sub):
             continue
-        holds = sig[m](sub)
-        out.append({"pairing": pairing, "seat": seat, "manager": m, "holds": holds})
+        valid = sub["contribution_valid"].astype(bool).to_numpy()
+        c = sub["contribution"].to_numpy()
+        p = sub["punishment"].to_numpy()
+        holds = sig[m](c[valid], p[valid])
+        to = p[~valid]
+        hit = float((to > 0).mean()) if len(to) else timeout_side[m]
+        to_ok = abs(hit - timeout_side[m]) < 1e-9
+        out.append(
+            {
+                "pairing": pairing,
+                "seat": seat,
+                "manager": m,
+                "holds": holds,
+                "timeout_hit_rate": hit,
+                "timeout_as_expected": to_ok,
+            }
+        )
         assert holds, f"{m} signature violated on the {seat} seat of {pairing}"
+        assert to_ok, (
+            f"{m} on the {seat} seat of {pairing} hit {hit:.3f} of its timeout "
+            f"cells, expected {timeout_side[m]:.0f}"
+        )
     n = len(out)
-    print(f"dispatch check: {n}/{n} seats carry their manager's signature")
+    print(
+        f"dispatch check: {n}/{n} seats carry their manager's signature "
+        f"on valid cells AND the expected timeout behaviour"
+    )
     return pd.DataFrame(out)
 
 
@@ -165,8 +199,12 @@ def mirror_match(df, out_dir, tag):
     `fires_counterfactual` is the third column that makes the two
     comparable: the rate at which each rule WOULD fire on the untreated
     contribution distribution (the `never_vs_never` control of this same
-    run), which is how the spend-matched threshold was chosen ex ante."""
-    base = df[df["pairing"] == f"{NEVER}_vs_{NEVER}"]["contribution"].to_numpy()
+    run), which is how the spend-matched threshold was chosen ex ante. It
+    is taken over cells where the player gave an input, because a timed-out
+    cell reaches the rule as a served 0 rather than as the contribution the
+    parquet records -- see `check_dispatch`."""
+    ctrl = df[df["pairing"] == f"{NEVER}_vs_{NEVER}"]
+    base = ctrl.loc[ctrl["contribution_valid"].astype(bool), "contribution"].to_numpy()
     rows = []
     for (pairing, gid), sub in df.groupby(["pairing", "group_id"]):
         seat = "focal" if gid == 0 else "rival"
@@ -396,9 +434,12 @@ def fig_spend_vs_pool(lv, out_dir, tag):
         1, 2, figsize=(11, 4.4), sharey=True, constrained_layout=True
     )
     for ax, rival in zip(axes, RIVALS):
-        sub = lv[lv["rival"] == rival]
-        for _, r in sub.iterrows():
+        sub = lv[lv["rival"] == rival].sort_values("mean_p")
+        # neighbouring rules can land at almost the same spend, so labels
+        # alternate above and below rather than colliding
+        for i, (_, r) in enumerate(sub.iterrows()):
             m = r["manager"]
+            dy, va = (14, "bottom") if i % 2 == 0 else (-16, "top")
             ax.plot(
                 [r["mean_p"]],
                 [r["pool_corr"]],
@@ -426,12 +467,14 @@ def fig_spend_vs_pool(lv, out_dir, tag):
                 m,
                 (r["mean_p"], r["pool_corr"]),
                 textcoords="offset points",
-                xytext=(0, 14),
+                xytext=(0, dy),
                 ha="center",
+                va=va,
                 fontsize=8.5,
                 color=INK,
             )
         _style(ax)
+        ax.margins(x=0.13, y=0.16)
         ax.set_title(f"rival: {rival}", fontsize=10, color=INK)
         ax.set_xlabel(
             "realised punishment per member per round", fontsize=9.5, color=INK

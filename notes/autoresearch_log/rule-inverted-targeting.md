@@ -119,4 +119,190 @@ Every margin below is on the **corrected** accounting.
 
 ## 3. Results
 
-*(filled in below from the measured run)*
+**The headline: the inversion is heavily penalised in this world. Punishing the wrong people is not close to free.** The level-matched inverted rule loses **-32.75 pool points** [-38.14, -27.40] against never-punishing in the same seat, while the correctly-targeted rule loses **+0.10** [-7.07, +7.45] -- indistinguishable from never. That is 10.5x the median seed spread.
+
+### 3.1 What was run (measured)
+
+Three simulations, all `COMPLETED`, on the frontier stack with byte-identical artifacts and the standard protocol (2 groups x 8 agents, 24 rounds, 100 episodes, `save_per_round: true`, `reseed_per_run: true`). Nothing was trained or recalibrated.
+
+| seed | config | job | wall |
+|---|---|---|---|
+| 42 | `26_rule_inverted_targeting_s42.yml` | 30414875 | 17:59 |
+| 43 | `26_rule_inverted_targeting_s43.yml` | 30414876 | 17:57 |
+| 44 | `26_rule_inverted_targeting_s44.yml` | 30414877 | 17:59 |
+
+Each file is 14 pairings x 100 episodes x 24 rounds x 8 agents = 268,800 agent-rounds. Every table below **pools the three seeds** (300 episodes per pairing) and every interval is a 95% bootstrap over episodes.
+
+An earlier submission (30414716/17/18) was cancelled by this arm at 11:26:08 and resubmitted at 11:27:24, after the near-ceiling rules were added; `sacct` shows all three cancelled in the same second under this arm's own job name, in this arm's own directory. Nothing external cancelled them, and the completed jobs ran the full 14-pairing, five-focal config.
+
+**The dispatch check passes 19/19 seats**, on two separate tests. Each seat carries its manager's signature on cells where the player gave an input -- a `never` seat punishes only 0, a threshold seat only 0 or its amount and *every* cell on its side of the cut. And each seat shows the *expected timeout behaviour*: `thr9_p10` punishes **1.000** of its timed-out cells, every inverted rule punishes **0.000** of them. Static dispatch, or dispatch keyed on the initial rather than the current group, could not produce this.
+
+That second test is worth stating because it caught a real discrepancy rather than papering over one. `per_round.parquet` records a timed-out player's **own** contribution while the manager was served **0**, so the recorded contribution and the rule's input disagree on exactly those cells (1.9% of them). The parent's report already restricted its `prop10` check to valid cells for the same reason; here the disagreement is additionally checked in its own right, because it is the one asymmetry between the two directions that cannot be designed away.
+
+**The seed-to-seed spread, measured here, is the yardstick** (`seed_spread.csv`, sd of the three per-seed 100-episode means): group size **0.22** members (max 0.49), common pool **3.13** (max 9.38). Close to the parent's 0.16 and 3.15.
+
+**The symmetric controls.** With the same manager on both sides, focal minus rival:
+
+| control | group size | common pool |
+|---|---|---|
+| `ah_punisher_vs_ah_punisher` | +0.08 [-0.32, +0.46] | +0.99 [-7.14, +9.01] |
+| `never_vs_never` | -0.33 [-0.72, +0.05] | **-7.69** [-14.06, -1.31] |
+
+Group size shows no seat effect. The pool control in `never_vs_never` does exclude zero at -7.7, slightly larger than the parent's -6.11 [-13.21, +0.94]. **So a pool margin smaller than about 8 points should not be read as the rule here.** Every margin this log rests on is between 21 and 42 points, so none of them is at risk; but the correctly-targeted rule's +0.10 and +3.75 are *inside* that band, and are reported as "indistinguishable from never", not as a win.
+
+### 3.2 Is the mirror fair? The realised spend of every rule (measured)
+
+Realised mean punishment per member-round on the focal seat, cells where the player gave an input (`mirror_match_pooled.csv`). The ex-ante column is what each rule would fire on the untreated distribution; the realised columns are what it actually spent, and they differ because a rule moves the contributions it then reads.
+
+| rule | levels fired | P(fire) ex ante | realised mean p, vs clone | realised mean p, vs never |
+|---|---|---|---|---|
+| `thr9_p10` (correct) | 10 of 21 | 0.634 | **2.80** | **3.26** |
+| `inv_thr11_p10` (inverted, level-matched) | 10 of 21 | 0.280 | **2.17** | **1.98** |
+| `inv_thr7_p10` (inverted, spend-matched) | 14 of 21 | 0.487 | **4.49** | **4.40** |
+| `band16_p10` (near-ceiling, mild) | 5 of 21 | 0.144 | **1.07** | **1.14** |
+| `band16_p20` (near-ceiling, matched) | 5 of 21 | 0.144 | **1.62** | **1.73** |
+| `ah_punisher` (the clone, reference) | -- | -- | ~1.9 | ~2.0 |
+
+**The ex-ante matching did not survive contact with the closed loop, and it did not need to.** `inv_thr7_p10` was chosen to match `thr9_p10`'s firing rate and ended up spending 60% more; `inv_thr11_p10` was chosen to under-spend and ended up spending 22% *less*. The reason is visible in the contribution column of section 3.3: `thr9_p10` drives mean contribution up to 11.5, which lifts players out of its own firing zone, while the inverted rules drive it down to 6.8-8.5, which lifts players out of *theirs*.
+
+What matters is that **the two broad inverted rules bracket the correct rule on realised spend** (2.17 and 4.49 against 2.80), so no reading below depends on an intensity advantage. In particular `inv_thr11_p10` punishes **less** than `thr9_p10` and still loses 32.8 pool points to it.
+
+### 3.3 The levels: what each focal seat holds and produces (measured)
+
+Focal seat, pooled, per round, corrected accounting (`levels_pooled.csv`).
+
+**Rival = the clone (`ah_punisher`):**
+
+| focal | mean p | members (of 8) | common good, group total | common good per member | mean c |
+|---|---|---|---|---|---|
+| `never` | 0 | **4.57** [4.39, 4.75] | **62.22** [57.19, 67.01] | 12.82 [12.00, 13.64] | 8.48 |
+| `thr9_p10` | 2.80 | 3.92 [3.73, 4.12] | **62.32** [56.85, 67.69] | **14.02** [13.09, 14.97] | 11.48 |
+| `band16_p10` | 1.07 | 4.04 [3.85, 4.23] | 40.51 [37.87, 43.34] | 9.68 [9.17, 10.22] | 7.78 |
+| `band16_p20` | 1.62 | 3.78 [3.59, 3.98] | 32.29 [30.03, 34.75] | 7.91 [7.50, 8.33] | 7.12 |
+| `inv_thr11_p10` | 2.17 | 3.55 [3.36, 3.75] | 29.51 [27.60, 31.62] | 7.96 [7.51, 8.45] | 7.72 |
+| `inv_thr7_p10` | 4.49 | **2.78** [2.62, 2.93] | **20.75** [19.24, 22.41] | 6.96 [6.49, 7.48] | 8.49 |
+
+**Rival = never-punish:**
+
+| focal | mean p | members (of 8) | common good, group total | common good per member | mean c |
+|---|---|---|---|---|---|
+| `never` (control) | 0 | 3.83 [3.64, 4.03] | 44.40 [40.57, 48.41] | 10.49 [9.79, 11.21] | 7.29 |
+| `thr9_p10` | 3.26 | 3.36 [3.16, 3.55] | **48.13** [42.94, 53.36] | **11.53** [10.57, 12.49] | 10.44 |
+| `band16_p10` | 1.14 | 3.46 [3.28, 3.64] | 35.43 [32.80, 38.15] | 9.28 [8.76, 9.85] | 7.47 |
+| `band16_p20` | 1.73 | 3.07 [2.90, 3.24] | 27.10 [24.96, 29.24] | 7.61 [7.18, 8.04] | 7.00 |
+| `inv_thr11_p10` | 1.98 | 2.81 [2.65, 2.96] | 21.83 [20.25, 23.48] | 6.95 [6.54, 7.39] | 6.83 |
+| `inv_thr7_p10` | 4.40 | **2.24** [2.12, 2.36] | **17.26** [15.99, 18.69] | 6.58 [6.09, 7.08] | 8.34 |
+
+**Every inverted rule loses on both quantities at once** -- fewer members *and* less common good per member each. That is the difference from the parent branch, where `prop10` lost members but raised its stayers' contributions to the highest figure in either log. Here there is no compensating gain to point at: the inverted seats hold fewer people who contribute less.
+
+### 3.4 The decision: direction, separated from amount (measured)
+
+Two contrasts, both on the focal seat with the rival and the seat held fixed (`decision_pooled.csv`). **The never-punish contrast carries both the cost of punishing and the cost of mis-targeting; only the `thr9_p10` contrast isolates direction.**
+
+**Contrast 1 -- focal seat MINUS the never-punish seat. Is the inversion penalised at all?**
+
+| focal | rival = clone | rival = never |
+|---|---|---|
+| `thr9_p10` (correct) | **+0.10** [-7.07, +7.45] | **+3.75** [-2.81, +10.30] |
+| `band16_p10` | **-21.71** [-27.38, -16.16] | **-8.99** [-13.72, -4.36] |
+| `band16_p20` | **-29.94** [-35.55, -24.32] | **-17.31** [-21.68, -13.02] |
+| `inv_thr11_p10` | **-32.75** [-38.14, -27.40] | **-22.56** [-26.81, -18.57] |
+| `inv_thr7_p10` | **-41.50** [-46.82, -36.25] | **-27.14** [-31.28, -23.17] |
+
+**This is the answer to the question the arm was run to settle.** The inverted rule loses substantially to never-punishing -- 22 to 42 pool points, 7x to 13x the median seed spread and 2.3x to 4.5x the max, every interval far clear of the -7.7 seat control. The correctly-targeted rule, by contrast, is indistinguishable from never-punishing. **Punishing the wrong people is not approximately free; it is the single most expensive thing a manager does in this world.**
+
+**Contrast 2 -- focal seat MINUS the `thr9_p10` seat. Does direction matter, holding the amount roughly fixed?**
+
+| focal | realised p vs `thr9_p10`'s | rival = clone | rival = never |
+|---|---|---|---|
+| `band16_p10` | 1.07 vs 2.80 (**less**) | **-21.81** [-28.18, -15.74] | **-12.70** [-18.58, -6.95] |
+| `band16_p20` | 1.62 vs 2.80 (**less**) | **-30.04** [-36.08, -24.13] | **-21.01** [-26.58, -15.53] |
+| `inv_thr11_p10` | 2.17 vs 2.80 (**less**) | **-32.84** [-38.69, -27.10] | **-26.27** [-31.80, -20.85] |
+| `inv_thr7_p10` | 4.49 vs 2.80 (more) | **-41.59** [-47.43, -36.13] | **-30.85** [-36.23, -25.50] |
+
+**Direction is not explained by amount.** Three of the four wrong-direction rules punish *less* than `thr9_p10` and every one of them loses 12 to 33 pool points to it. `inv_thr11_p10` is the clean case: it fires on the same number of levels at the same amount, spends 22% less in realisation, and still ends 32.8 points below.
+
+Amount does matter *within* the wrong direction -- the four rules order monotonically by spend, 40.5 / 32.3 / 29.5 / 20.8 against the clone -- but the ordering runs the wrong way and extrapolates to `never`. **Inside the wrong-direction family the best attainable policy is to punish nothing at all.** In the right direction, spending 2.80 buys back everything it costs.
+
+### 3.5 The near-ceiling hypothesis was tested and did not hold (measured)
+
+The hypothesis: punishing nearly-full contributors may be a valid strategy, because they are close to the ceiling and so cheap to push the rest of the way up.
+
+**It fails, on its own terms and at its own chosen intensity.**
+
+* `band16_p10` -- the mild near-ceiling rule, realised spend **1.07**, *below* the clone's 1.9-2.0 -- produces **40.51** [37.87, 43.34] against `thr9_p10`'s 62.32 and never's 62.22. It loses **-21.81** [-28.18, -15.74] to the correctly-targeted rule and **-21.71** [-27.38, -16.16] to never-punishing.
+* `band16_p20`, at spend 1.62, is worse still: 32.29, losing -30.04 and -29.94.
+
+**The manner of the failure is the informative part, and it is not the one the parent branch would predict.** `band16_p10` does **not** lose members: 4.04 [3.85, 4.23] against `thr9_p10`'s 3.92, a difference of **+0.11** [-0.15, +0.38] -- indistinguishable, and above the 4-of-8 start. It keeps its people. What it loses is what those people produce: **9.68 common good per member against 14.02**, a gap of **-4.34** [-5.44, -3.22], and mean contribution **7.78 against 11.48**.
+
+So the near-ceiling rule is not punished by the migration channel that dominated the parent branch. It is punished by the contribution response directly: it pushes its near-ceiling contributors *down*, not up. Mean contribution under it (7.78) sits **below** never-punishing's (8.48), which is the sharpest single statement of the result -- a manager that punishes only the best contributors, gently, ends up with a group that contributes less than one that does nothing at all.
+
+**The individual-level measurement and the group-level outcome agree, so there is nothing to reconcile.** The intervention surface says the contributor response flips sign near contribution 12, so punishment above that produces withdrawal rather than compliance. That is exactly what the group-level run shows, and the two are consistent. Had they disagreed, the disagreement would have been the finding; they do not.
+
+This also does not support the "amount dominates direction" reading the learned seeds suggested. `band16_p10` **is** the mild wrong-direction case -- milder than our clone of a human manager -- and mildness did not rescue it. At matched or lower intensity, direction still costs about 22 pool points.
+
+### 3.6 The mechanism: the inverted rule sheds its contributors and keeps its free-riders (measured)
+
+Comparing the members who leave a seat with those who stay, at the round the move is decided (`who_leaves_pooled.csv`, 3,900-8,100 decisions per seat). `c_gap` is leavers' mean contribution minus stayers'.
+
+| seat's manager | leave rate | c, leavers vs stayers | **c_gap** | p_gap |
+|---|---|---|---|---|
+| `thr9_p10` (vs clone) | 0.26 | 9.59 vs 13.10 | **-3.51** | +2.64 |
+| `ah_punisher`, the clone (control) | 0.24 | 8.45 vs 10.81 | **-2.35** | +1.87 |
+| `never` (control) | 0.23 | 6.27 vs 7.47 | **-1.20** | 0 |
+| `band16_p10` (vs clone) | 0.24 | 7.55 vs 6.66 | **+0.89** | +0.74 |
+| `band16_p20` (vs clone) | 0.27 | 7.14 vs 5.81 | **+1.33** | +2.00 |
+| `inv_thr11_p10` (vs clone) | 0.28 | 7.61 vs 5.92 | **+1.69** | +1.15 |
+| `inv_thr7_p10` (vs never) | 0.46 | 8.35 vs 6.51 | **+1.83** | +1.53 |
+
+**The sign of `c_gap` flips with the direction of the rule, in every seat.** Where the manager punishes low contributors -- or does not punish at all -- the members who leave are the ones who contributed *less* than those who stay, so the group that remains improves. Where the manager punishes high contributors, the members who leave are the ones who contributed *more*, so the group that remains degrades.
+
+That is the whole result in one mechanism, and it is a composition effect the parent branch never saw because every rule it ran pointed the right way. An inverted manager does not merely fail to discipline free-riders: it actively selects for them, by driving out precisely the members worth keeping. The punishment gap stays positive in every seat -- the punished always leave -- but *who* gets punished decides whether that selection helps or hurts.
+
+### 3.7 What the rival collects (measured)
+
+The parent's cross-group public good, re-measured. The rival seat, facing this rule, changing nothing itself:
+
+| rival | facing | group size | common pool |
+|---|---|---|---|
+| `never` | `inv_thr7_p10` | **+1.60** [+1.36, +1.83] | **+21.68** [+14.37, +29.02] |
+| the clone | `inv_thr7_p10` | **+1.27** [+1.01, +1.51] | **+16.22** [+8.76, +23.69] |
+| `never` | `thr9_p10` | +0.48 [+0.20, +0.75] | **+13.41** [+6.84, +20.11] |
+| `never` | `inv_thr11_p10` | **+1.03** [+0.78, +1.27] | +10.77 [+3.51, +17.72] |
+| the clone | `band16_p10` | +0.00 [-0.26, +0.28] | -0.97 [-8.18, +6.32] |
+
+The inverted rules export members roughly twice as fast as the correctly-targeted one, which is consistent with section 3.6: the people they drive out are the good contributors, and they are worth more to whoever receives them. `band16_p10` is again the exception -- it exports nobody, and its rival gains nothing -- confirming that its loss is a contribution effect rather than a migration effect.
+
+### 3.8 Free punishment on timed-out cells, carried forward (measured)
+
+`auto/free-punishment-fix` still had not landed. As established in section 3.1, the asymmetry is total: `thr9_p10` punishes 1.000 of its timed-out cells, every inverted rule punishes 0.000 of them.
+
+**This works entirely against the correctly-targeted rule and cannot have manufactured the result.** `thr9_p10` is the only focal here paying for punishment the env then discards, and it is the one that comes out ahead; closing D1 would improve its position and leave every inverted rule's unchanged. The env and corrected accountings differ by 1 to 2 pool points per seat and change no conclusion in this log.
+
+## 4. Notes
+
+1. **Measured against inferred.** Sections 3.1 to 3.8 are measurements: realised spends, group sizes, pools recomputed from contributions and punishments, leave rates and leaver/stayer gaps, all with episode bootstraps and all judged against this branch's own seed spread and seat controls. The *reading* of section 3.6 -- that the inverted rule selects for free-riders -- is an inference from a measured sign flip in `c_gap` across seven seats. It is a strong and consistent inference, but this run does not decompose the resulting pool loss into the composition channel and the direct contribution-response channel, and it should not be quoted as though it did. Section 3.5 bounds them indirectly for `band16_p10`, where membership does not move and the loss must therefore be contribution response.
+
+2. **The ex-ante mirror matching did not survive the closed loop, and the log says so rather than quietly re-deriving it.** The thresholds were chosen from the parent's untreated distribution before the run and are not tuned to the answer. Realised spends came out different (section 3.2). The claim rests on the fact that the two broad inverted rules *bracket* `thr9_p10` on realised spend and both lose heavily, plus the monotone ordering within the wrong-direction family -- not on any single pair being exactly matched.
+
+3. **The correctly-targeted rule is not shown to beat never-punishing here.** +0.10 [-7.07, +7.45] and +3.75 [-2.81, +10.30] are inside the `never_vs_never` seat control's -7.7, so they are reported as indistinguishable. This arm is not evidence that punishing pays; it is evidence that punishing *the wrong people* is very costly. The parent's conclusion -- that in a competitive world punishing barely pays for itself -- stands unchallenged.
+
+4. **`never_vs_never`'s pool control excludes zero here** (-7.69 [-14.06, -1.31]) where the parent's did not (-6.11 [-13.21, +0.94]). The manager set differs, so the RNG stream differs, and this is an ordinary redraw rather than a new finding. It is reported because it sets the floor below which a pool margin should not be read, and because a successor pooling more seeds should watch whether it persists.
+
+5. **One asymmetry between manager types is left in place and is not confounding.** The clone is a `LinearManager` reading the raw round history, so a switcher's `prev_punishment` is what they really received in the other seat. This applies identically in the clone-against-clone control and cancels out of every contrast reported.
+
+6. **The near-ceiling rules are `inv_threshold` at 16, not a new mechanism.** They are named for what they do rather than for the hypothesis they test, and both intensities are reported whichever way they fell. They fell against the hypothesis.
+
+### Successor
+
+1. **The exploration arms are testing the right thing.** The four running arms (`rl-anneal-local`, `rl-bootstrapped-dqn`, `rl-es`, `rl-param-noise`) are trying to fix an inversion that this arm shows the environment prices heavily -- 22 to 42 pool points against never-punishing, 12 to 33 against the correct rule. The learned managers failed at something the environment did reward, so an exploration method that finds the correct targeting has a large prize waiting. Had the answer gone the other way, those arms would have been measuring a difference the world does not price; they are not.
+
+2. **Report `c_gap` for every trained manager.** Section 3.6 gives a single-number diagnostic that separates a correctly-targeted manager from an inverted one without needing a counterfactual: the contribution gap between leavers and stayers on its own seat. It is negative for every right-direction policy measured here and positive for every wrong-direction one. It is cheap, it reads off `per_round.parquet`, and it would have flagged the learned managers' inversion from their own simulation output.
+
+3. **Decompose the two channels that `band16_p10` separates by accident.** It loses 21.8 pool points while holding its members exactly, so its loss is pure contribution response; the broad inverted rules lose members as well. A successor that masks the contribution model's cross-group edges at simulation time (the parent's successor item 4) would bound the graph channel and complete the decomposition this run leaves open.
+
+4. **Do not use this arm as evidence that punishing pays.** See note 3. The honest bar for a trained manager in the competing setting is still the clone's seat and `never`'s seat, with group size reported alongside the pool, exactly as the parent's successor item 1 said.
+
+5. **`auto/free-punishment-fix` is worth landing before any positive claim about a punishing policy**, since it is the correctly-targeted rule that pays the free-punishment bill. It cannot change this log's sign, but it would sharpen `thr9_p10`'s position against `never`.
+
+6. **Nothing here needs a retrain, and nothing here was one.** Three 18-minute GPU jobs reproduce every number in this log.
