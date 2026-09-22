@@ -1,0 +1,150 @@
+# Does the reward a manager is paid on explain the inverted targeting?
+#
+# Two arms of three seeds, trained identically except for `reward_mode`:
+#
+#   pool arm       rl_s{42,43,44}     reward_mode: common_pool
+#                                     the group's UNDIVIDED pool, 1.6*sum(c) - sum(p)
+#   per-capita arm rl_pc_s{42,43,44}  reward_mode: common_pool_per_capita
+#                                     that same pool over the valid headcount
+#
+# Verified at parse level, not by eye: for each of the three seeds the two
+# training configs differ in exactly three keys -- `env_args.reward_mode`,
+# `job_id` and `output_dir` -- and the last two are labels. Same world
+# artifacts, same opponent, same seed, same hyperparameters. The training code
+# is also shared: both arms descend from 0ff44a9 and the per-capita branch adds
+# only a new branch in `compute_reward`, leaving the `common_pool` path
+# untouched. So a difference between the paired rows below is a difference in
+# what the manager was paid for.
+#
+# The arithmetic under test: measured in this very setting, a correctly
+# targeted rule against `never` buys +3.01 contribution and -0.65 members, and
+# on the undivided pool those cancel (+0.10, CI [-7.07, +7.45]). Every learned
+# manager in this project was paid on that undivided pool, so correct targeting
+# may simply earn nothing. The per-capita arm removes the headcount term and
+# asks whether targeting reappears.
+#
+# WHY ALL TEN MANAGERS SIT IN ONE FILE. PR #207 section 3.0 and the
+# rule-based-manager-sweep log both warn that `MultiManager` evaluates every
+# manager in the config on every round, so a config's RNG stream depends on its
+# manager *set*: two managers are only stream-comparable inside one file. The
+# six learned managers therefore have to share this file, and because adding
+# them already changed the set, the pool-arm rows here are NOT expected to
+# reproduce 24_rl_new_clones_cross_eval's numbers digit for digit. The
+# comparison that carries the claim is pool vs per-capita *within this file*,
+# seed against paired seed.
+#
+# `reseed_per_run: true` restarts every run from `seed`, so every manager meets
+# the same episode-0 draw and the same validity pattern rather than inheriting
+# the RNG position its predecessors left behind. The streams still diverge from
+# episode 1 on, because a manager that punishes differently makes the players
+# act differently -- which is what the second sim seed
+# (25_reward_targeting_cross_eval_s142.yml) is for: run twice, and the movement
+# of a row between the two runs is this harness's Monte-Carlo noise floor,
+# measured rather than assumed. A null is only a tight null if the paired
+# difference is small against that floor.
+#
+# The world is the training world, slot for slot -- the same contribution,
+# validity and switch artifacts all six managers were trained against.
+# `lin_punisher` is this project's clone of a human manager: the opponent every
+# learned manager faces in group 1, and, through `lin_punisher_self`, a group-0
+# row scored exactly as the learned ones are. The rule rows are PR #207's
+# winners (`thr9_p10`, `prop10`) and its floor (`never`), re-run here rather
+# than quoted, for the same stream reason.
+#
+# See notes/autoresearch_log/rl-manager-reward-targeting.md.
+
+seed: 42
+reseed_per_run: true
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  # --- pool arm: paid the undivided group pool --------------------------- #
+  rl_s42:
+    type: rl
+    path: artifacts/manager/rl_new_clones_s42/model/rl_new_clones_s42_manager.pt
+  rl_s43:
+    type: rl
+    path: artifacts/manager/rl_new_clones_s43/model/rl_new_clones_s43_manager.pt
+  rl_s44:
+    type: rl
+    path: artifacts/manager/rl_new_clones_s44/model/rl_new_clones_s44_manager.pt
+  # --- per-capita arm: paid that pool over the valid headcount ----------- #
+  rl_pc_s42:
+    type: rl
+    path: artifacts/manager/rl_new_clones_percapita_s42/model/rl_new_clones_percapita_s42_manager.pt
+  rl_pc_s43:
+    type: rl
+    path: artifacts/manager/rl_new_clones_percapita_s43/model/rl_new_clones_percapita_s43_manager.pt
+  rl_pc_s44:
+    type: rl
+    path: artifacts/manager/rl_new_clones_percapita_s44/model/rl_new_clones_percapita_s44_manager.pt
+  # --- the clone, and the rule controls ---------------------------------- #
+  lin_punisher:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_ceiling_severity_copula.joblib
+  never:
+    type: rule_based
+    rule: never
+  thr9_p10:
+    type: rule_based
+    rule: threshold
+    threshold: 9
+    amount: 10
+  prop10:
+    type: rule_based
+    rule: proportional
+    rate: 1.0
+
+pairings:
+  # every learned manager against the punisher it trained against
+  - name: rl_s42_vs_punisher
+    group_0: rl_s42
+    group_1: lin_punisher
+  - name: rl_s43_vs_punisher
+    group_0: rl_s43
+    group_1: lin_punisher
+  - name: rl_s44_vs_punisher
+    group_0: rl_s44
+    group_1: lin_punisher
+  - name: rl_pc_s42_vs_punisher
+    group_0: rl_pc_s42
+    group_1: lin_punisher
+  - name: rl_pc_s43_vs_punisher
+    group_0: rl_pc_s43
+    group_1: lin_punisher
+  - name: rl_pc_s44_vs_punisher
+    group_0: rl_pc_s44
+    group_1: lin_punisher
+  # the clone and the rule controls, in the same group-0 seat
+  - name: lin_punisher_self
+    group_0: lin_punisher
+    group_1: lin_punisher
+  - name: never_vs_punisher
+    group_0: never
+    group_1: lin_punisher
+  - name: thr9_p10_vs_punisher
+    group_0: thr9_p10
+    group_1: lin_punisher
+  - name: prop10_vs_punisher
+    group_0: prop10
+    group_1: lin_punisher
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/25_reward_targeting_cross_eval
+figure_name: reward_targeting_cross_eval
+save_per_round: true
+basedir: .
