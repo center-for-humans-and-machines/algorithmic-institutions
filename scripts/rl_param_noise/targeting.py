@@ -158,7 +158,47 @@ def kendall_tau_b(means, counts):
     return float(concordant_minus_discordant / denom) if denom > 0 else float("nan")
 
 
-def monotonicity(means):
+# Monotonicity tolerance, as a fraction of the profile's own range. A step in
+# the wrong direction smaller than this does not count as breaking
+# monotonicity.
+#
+# It is needed, and measured: seed 46 of this arm runs
+# [0.999, 0.884, 0.051, 0.000, 0.000, 0.000298] -- a rise of 0.000298 on a
+# profile spanning 0.999, which is 0.03% of its range. With an exact test that
+# dust flips the verdict from "targets free-riders" to "no clean targeting"
+# and changes the arm's headline from 2 of 5 to 1 of 5.
+#
+# The choice is not load-bearing. In this arm's five seeds the violations are
+# 0.000, 0.000, 0.0003, 0.425 and 0.435 of range, so every tolerance between
+# 0.001 and 0.42 -- a factor of 400 -- gives identical verdicts.
+# `rise_fraction` is reported so that stays checkable rather than asserted.
+#
+# The violation is measured CUMULATIVELY, as the total movement against the
+# profile's direction, not as the largest single step. A per-step tolerance
+# lets many small steps accumulate: [0.08, 1, 2, 3, 4, 5] climbs the whole way
+# in five steps of about 1, and a per-step slack of 1.5 would call that flat.
+MONOTONE_TOLERANCE = 0.02
+
+
+def violation_fractions(means):
+    """Total movement up and total movement down, each over the range."""
+    m = np.asarray(means, dtype=float)
+    rng = float(m.max() - m.min())
+    if rng <= 0:
+        return 0.0, 0.0
+    d = np.diff(m)
+    return float(d[d > 0].sum()) / rng, float(-d[d < 0].sum()) / rng
+
+
+def rise_fraction(means):
+    """How far the profile is from monotone in whichever direction suits it
+    better, as a fraction of its range. Zero for a perfectly monotone
+    profile. Reported beside the verdict so the tolerance is auditable."""
+    up, down = violation_fractions(means)
+    return min(up, down)
+
+
+def monotonicity(means, tolerance=MONOTONE_TOLERANCE):
     """Weak monotonicity of the bin-mean sequence -- tie-proof, unlike a rank
     correlation, and the thing 'correctly targeted' actually means.
 
@@ -166,15 +206,21 @@ def monotonicity(means):
     (the inversion), "flat" (no contingency at all) or "none". A profile with a
     large endpoint difference that is NOT monotone is the shape that got two
     sibling seeds withdrawn, so this is checked before any headline.
+
+    Violations smaller than `tolerance` times the profile's range are ignored;
+    see `MONOTONE_TOLERANCE` for why and for the evidence that the threshold
+    does not decide anything here.
     """
     m = np.asarray(means, dtype=float)
-    down = bool(np.all(np.diff(m) <= 0))
-    up = bool(np.all(np.diff(m) >= 0))
-    if down and up:
+    if float(m.max() - m.min()) <= 0:
         return "flat"
-    if down:
+    up, down = violation_fractions(m)
+    is_down, is_up = up <= tolerance, down <= tolerance
+    if is_down and is_up:
+        return "flat"
+    if is_down:
         return "decreasing"
-    if up:
+    if is_up:
         return "increasing"
     return "none"
 
@@ -268,6 +314,7 @@ def targeting(means, counts):
         "monotonicity": "none",
         "n_distinct_bins": 0,
         "n_zero_bins": 0,
+        "rise_fraction": float("nan"),
         "contrast": float("nan"),
         "contrast_over_mean": float("nan"),
         "relative_range": float("nan"),
@@ -294,6 +341,7 @@ def targeting(means, counts):
         # gone, and six of them is all of it.
         "n_distinct_bins": int(len(np.unique(m))),
         "n_zero_bins": int((m == 0.0).sum()),
+        "rise_fraction": rise_fraction(m),
         "contrast": contrast,
         "contrast_over_mean": contrast / mean_p if mean_p else float("nan"),
         # Range rather than endpoints: it survives a non-monotone profile,

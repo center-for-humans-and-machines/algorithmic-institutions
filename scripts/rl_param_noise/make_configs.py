@@ -169,6 +169,17 @@ RUN_BANNER = """\
 #     policy shape on a 200-step pilot, epsilon-greedy against this arm.
 # See notes/autoresearch_log/rl-manager-param-noise.md."""
 
+CONTROL_BANNER = """\
+# PAIRED CONTROL. Byte-identical to rl_pnoise_s<seed>.yml except that
+# `param_noise.enabled` is false, which puts the agent back on exactly the
+# epsilon-greedy path it took before this branch -- same seed, same artifacts,
+# same env, same 4000 update steps, same 4,200,000 environment episodes. The
+# three finished runs on auto/rl-manager-two-worlds are also epsilon-greedy
+# controls, but there are only three of them and they predate the live RPA
+# shape rows, so their profiles came from a separate cross-evaluation
+# simulation rather than from the same statistic on the same pipeline. These
+# five make the comparison paired seed by seed."""
+
 GUARD_BANNER = """\
 # GUARD PILOT -- 200 update steps, not a result. Run in a matched pair
 # (rl_pnoise_guard / rl_epsgreedy_guard, same seed, same everything else) to
@@ -202,8 +213,10 @@ def write(job_id, seed, n_update_steps, eval_period, banner, param_noise):
 
 def main():
     block = PARAM_NOISE_BLOCK.format(init_scale=INIT_SCALE, target=TARGET_DIVERGENCE)
+    off = "  param_noise:\n      enabled: false\n"
     for seed in SEEDS:
         write(f"rl_pnoise_s{seed}", seed, 4000, 20, RUN_BANNER, block)
+        write(f"rl_epsgreedy_s{seed}", seed, 4000, 20, CONTROL_BANNER, off)
     write("rl_pnoise_guard", 42, 200, 10, GUARD_BANNER, block)
     # The paired reference: the same 200 steps with the mechanism switched
     # off, so the gap this arm reports is measured against its own stack and

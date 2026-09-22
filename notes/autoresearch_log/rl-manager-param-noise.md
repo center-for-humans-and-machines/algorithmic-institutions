@@ -284,32 +284,102 @@ Two things follow for how this arm should be written up.
 
 The leaver diagnostic and the profile check disagree on exactly one manager, which aims hard at the zero-contribution bin and makes no distinction at all among the rest. Both are right about different things: it does drive out the players it punishes, and its contingency is not graded. Keep both statistics; do not replace one with the other, and do not treat the disagreement as an error to be fixed.
 
-## Status: launched, five seeds
+## Results
 
-| seed | config | SLURM job | output |
-|---|---|---|---|
-| 42 | `rl_pnoise_s42.yml` | 30414853 | `artifacts/manager/rl_pnoise_s42/metrics/rl_pnoise_s42.parquet` |
-| 43 | `rl_pnoise_s43.yml` | 30414854 | `artifacts/manager/rl_pnoise_s43/…` |
-| 44 | `rl_pnoise_s44.yml` | 30414855 | `artifacts/manager/rl_pnoise_s44/…` |
-| 45 | `rl_pnoise_s45.yml` | 30414856 | `artifacts/manager/rl_pnoise_s45/…` |
-| 46 | `rl_pnoise_s46.yml` | 30414857 | `artifacts/manager/rl_pnoise_s46/…` |
+All five seeds completed: 30414853–30414857, 9 h 31 m to 10 h 24 m. Tables in `plots/data_analysis/evaluation/rl_manager_param_noise/results_{shape,cost,noise}.csv` and `results.md`. Evaluated policy — the fully deterministic rollout, every exploration mechanism off — pooled over the last 10 of 200 evaluation points, i.e. 10,000 episodes per seed.
 
-Remote dir `~/repros/ai-runs/rl-param-noise`, isolated from every sibling arm. ~10 h each at the measured 9.1 s/update step. Earlier jobs on this branch: probe 30413190, guard pair 30413251 / 30413252, re-guard after the dead-zone fix.
+### Did the shape recover: 2 of 5
 
-**No results yet, and none are claimed.** The PR is tagged `[LAUNCHED]`.
+| seed | {0} | 1-5 | 6-10 | 11-15 | 16-19 | {20} | monotone | `rho` | `tau_b` | rel. range | verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| s42 | 9.359 | 1.780 | 1.944 | 4.959 | 5.000 | 5.000 | none | +0.441 | +0.540 | 2.048 | no clean targeting |
+| **s43** | 18.193 | 5.069 | 0.080 | 0.000 | 0.000 | 0.000 | decreasing | **−0.973** | −0.939 | 10.320 | **targets free-riders** |
+| s44 | 13.740 | 3.937 | 0.023 | 0.909 | 5.510 | 5.998 | none | −0.018 | +0.012 | 4.716 | no clean targeting |
+| s45 | 0.023 | 0.024 | 0.811 | 1.000 | 1.000 | 1.000 | increasing | +0.982 | +0.954 | 1.782 | **inverted** |
+| **s46** | 0.999 | 0.884 | 0.051 | 0.000 | 0.000 | 0.000 | decreasing | **−0.940** | −0.853 | 2.794 | **targets free-riders** |
+| artificial punisher (clone) | 4.003 | 2.605 | 1.725 | 1.099 | 0.835 | 0.338 | decreasing | −1.000 | −1.000 | 2.125 | targets free-riders |
+| human managers | 4.755 | 2.973 | 1.672 | 0.978 | 0.692 | 0.267 | decreasing | −1.000 | −1.000 | 2.430 | targets free-riders |
+
+Row counts run from 34,509 to 371,334 per bin per seed; the human reference has 809 to 2,614. Spread of each seed's own contrast across the ten pooled evaluation points: 0.051 (s45), 0.107 (s46), 2.404 (s43), 3.684 (s42), 5.393 (s44) — so s45 and s46 are settled and s42 and s44 are still moving, which is itself part of why they have no clean shape.
+
+**The number that decides it is `rho`, with monotonicity checked first.** Two choices made earlier turned out to be load-bearing on real data, and both would have changed the headline:
+
+- **`contrast` would have missed s46 entirely.** Its absolute contrast is 0.999 against the human managers' 4.488, a fifth of the size. Its *relative* range is 2.794 against the human 2.430 — it is a scaled-down copy of the human shape, as graded relative to its own level as the humans are to theirs. This is precisely the level-versus-shape trap, and it appeared in my own results rather than only in the synthetic test.
+- **An exact monotonicity test would have reported 1 of 5.** s46's profile rises by 0.000298 at the last bin, on a range of 0.999 — 0.03% of range, floating-point dust. A tolerance was added, measured cumulatively, and every verdict here is identical for any tolerance between 0.001 and 0.42 (`rise_fraction` is reported so this stays checkable). The genuine violations are 0.425 (s42) and 0.435 (s44), a factor of over 1,400 away from s46's.
+
+No seed is tie-attenuated: `verdict` and `verdict_shape_only` agree on every row. s43 has three bins at exactly zero and s46 two, so the tie machinery was needed but did not bind.
+
+### What it spent: targeting does not predict payoff, punishment level does
+
+Paired within-run comparison against the artificial punisher — same episodes, same contributors, no separate baseline run. **Per member, not summed**: `group_payoff_sum` sums over whoever is in the group, and membership is endogenous, so a manager that merely retains more players scores higher without anyone being better off. The summed differences span −40.2 to +30.6; per member they span −4.06 to +1.99, so the confound was worth an order of magnitude.
+
+Sorted by punishment:
+
+| seed | mean punishment | contribution | common good | payoff/member vs clone | targeting verdict |
+|---|---|---|---|---|---|
+| s46 | 0.346 | 8.089 | 12.559 | **+1.985** | targets free-riders |
+| s45 | 0.502 | 8.057 | 12.345 | +1.279 | inverted |
+| s43 | 1.853 | **9.093** | **12.660** | +0.209 | targets free-riders |
+| s44 | 2.906 | 8.391 | 10.452 | −2.612 | no clean targeting |
+| s42 | 3.384 | 8.087 | 9.464 | −4.056 | no clean targeting |
+
+**The payoff ordering is exactly the punishment ordering.** Pearson(mean punishment, payoff per member) = **−0.974**; the rank correlation is −1 over all five seeds. Targeting direction does not predict payoff at all: the two seeds that target are ranked first and third, and the inverted seed is second.
+
+**One seed did buy a behavioural response, and it did not pay for itself.** s43 is the only seed to move contributions: 9.093 against roughly 8.06–8.39 for the other four, worth about +1.50 pool points at the 1.6 multiplier. It spent 1.507 more punishment per member-round than s46. Those two numbers cancel to within 0.01, and s43 ends up third on payoff behind two seeds that simply punish less. **n = 1**; the near-exact cancellation is an observation with the arithmetic shown, not a law.
+
+So targeting and restraint come apart here in a specific way: s43 has targeting without restraint; s46 has both but punishes so weakly (0.999 at contribution 0 against the humans' 4.755) that its correct shape barely bites; s45 has restraint with the wrong sign and still finishes second.
+
+### Was the mechanism live
+
+| seed | final scale | target | divergence held | verdict |
+|---|---|---|---|---|
+| s42 | 0.248 | 1.219 | 1.784 | regulating |
+| s43 | 0.271 | 1.432 | 1.000 | regulating |
+| s44 | 0.199 | 1.353 | 0.521 | under target |
+| s45 | 2.624 | 1.431 | 16.719 | far over target |
+| s46 | 2.572 | 1.477 | 1.079 | regulating |
+
+No seed reached the cap of 100, so the cap never bound and the concern raised by the pilot did not materialise at full length. The scale settles in two clusters an order of magnitude apart (0.20–0.27 and 2.57–2.62) with no relation to the outcome: the two seeds that target sit in different clusters. s45's divergence of 16.7 punishment levels means its acting network was close to random within an episode, and it still produced the most stable profile of the five — a coherent but arbitrary contingency, held all episode, which is exactly what the arm does and not at all what it was hoped to do.
+
+### Against the paired control
+
+**Not yet available.** No 5-seed epsilon-greedy control existed at full length: the three finished `rl_new_clones_s4x` runs predate the live RPA rows, so their profiles came from a separate cross-evaluation simulation rather than from this statistic on this pipeline. Five paired controls were launched on discovering this — `rl_epsgreedy_s42`–`s46`, jobs **30432224–30432228**, byte-identical to the param-noise configs but for `param_noise.enabled: false`, so the comparison will be seed-by-seed on the same statistic.
+
+Interim, unpaired: of the three published control seeds, two are monotone inverted and one has the human sign while firing on 7.4% of rounds — **1 of 3**. Against 2 of 5 here. **These are not comparable** — different seeds, different measurement pipeline, three against five — and no claim rests on the difference until the paired control lands.
+
+### In context
+
+| arm | targets free-riders |
+|---|---|
+| annealed local epsilon-greedy | 1 of 5 — the same count and the same seed as its own control |
+| bootstrapped DQN | 0 of 5 — four invert strongly, the fifth clears every threshold on a spread too small to mean anything |
+| evolution strategies | 0 of 5 — all five converge on no contingency, three punishing nothing and two levying a flat tax |
+| **parameter-space noise (this arm)** | **2 of 5** |
+
+2 of 5 is the highest of the four arms, and **that is not yet a result.** With five seeds the difference between 2 and 1 and 0 is within what seed noise produces; the annealed arm's 1 of 5 was matched exactly by its own control on the same seed; and one of my two, s46, targets with a fifth of the human force. The honest reading is that no arm has demonstrated recovery and this one has the least bad count. Whether it beats its own control is the open question and the paired runs will answer it.
+
+**And the finding that cuts across all four arms is in the cost table, not the shape table.** Payoff in this world is a near-deterministic decreasing function of how much the manager punishes (r = −0.974 over my five seeds) and is unrelated to whom it punishes. That is what the rival explanation predicts: if the artificial humans respond to punishment regardless of desert, the return is a function of total punishment and the targeting is unidentified by the reward, so no exploration method can be expected to find it. **This arm cannot rule that in or out** — s43's contribution gain shows the contingency is not *completely* unidentified, only that it does not pay — but four arms failing to move the shape while payoff tracks punishment level alone is what that explanation looks like from here.
+
+## Status: five seeds complete, paired control running
+
+| seed | config | SLURM job | elapsed | verdict |
+|---|---|---|---|---|
+| 42 | `rl_pnoise_s42.yml` | 30414853 | 10:23:46 | no clean targeting |
+| 43 | `rl_pnoise_s43.yml` | 30414854 | 09:46:10 | targets free-riders |
+| 44 | `rl_pnoise_s44.yml` | 30414855 | 09:51:07 | no clean targeting |
+| 45 | `rl_pnoise_s45.yml` | 30414856 | 09:34:52 | inverted |
+| 46 | `rl_pnoise_s46.yml` | 30414857 | 09:30:55 | targets free-riders |
+
+Paired epsilon-greedy control `rl_epsgreedy_s42`–`s46`, jobs 30432224–30432228, launched and running (~6 h, epsilon-greedy is faster than this arm because it does not forward the unperturbed policy for the divergence). Remote dir `~/repros/ai-runs/rl-param-noise`, isolated from every sibling arm.
+
+**On intervals.** Nothing reported here bootstraps over episodes. A symmetric control elsewhere in this campaign disagreed with an independent measurement of the same quantity at similar episode counts, with non-overlapping intervals, and the live hypothesis is that episodes within a rollout are correlated enough that bootstrap intervals over episodes are too narrow. Every spread quoted above is across **seeds** or across **evaluation points**, neither of which rests on that assumption; no within-episode interval is given. If the correlation hypothesis is confirmed it does not touch these numbers, and if it is refuted it still does not, which is the reason for reporting them this way.
 
 ## Successor
 
-1. **Read the shape first, from the parquet, no simulation needed.** `rpa_mean_{bin}` / `rpa_n_{bin}` at `sampling == "greedy"` is the evaluated policy's contingency at every evaluation point of every seed; `rpa_opp_mean_{bin}` is the artificial punisher on the same rollouts. Human reference: 4.755 / 2.973 / 1.672 / 0.978 / 0.692 / 0.267.
-
-   **Run the three-statistic check before writing anything.** `targeting.py` returns `verdict` (the campaign rule, comparable across arms), `verdict_shape_only`, and `tie_attenuated` where they disagree. Check `monotonicity`, `n_distinct_bins` and `n_zero_bins` *before* quoting any rank number: a quiet seed with several bins saturated at zero can be perfectly monotone and still score −0.35, and three of five seeds in a sibling arm saturated that way. A row where the two verdicts disagree is read by hand, never counted. A large `contrast` on a non-monotone profile is what got two sibling seeds withdrawn and has already overturned one claim in this log.
-
-   **Judge targeting on `rho` from `targeting.py`, never on `contrast`.** Both references sit at `rho` −1.000 while their contrasts differ by 1.088 points, 42% of which is force rather than aim; the arms will differ in how hard they punish, so a contrast comparison across arms would read intensity as targeting. Read `contrast_over_mean` beside it for magnitude and `profile_snr` before either — the eps-greedy pilot buffer scores `rho` −0.540 on a relationship of size 0.002. The question is `rho`'s **sign and spread across the five seeds**, not its mean.
-2. **Then read `param_noise_scale` over update steps.** If it sits at or near `max_scale` for a long stretch, weight noise could not match epsilon-greedy's displacement and the arm under-explored; that is a finding about the method, not a bug, and it changes how the shape result should be read.
-3. **Then the paired comparison.** Same five seeds in all four arms, so pair by seed rather than comparing means of five.
-4. **Do not stop at the shape.** If no arm moves it, the rival explanation — artificial humans that respond to punishment regardless of desert — is the live one, and the probe of that is the experiment to read next. This arm cannot distinguish the two and does not claim to.
-5. **Two hazards this arm checked and is clear of, recorded so the check is not repeated.**
-   - **Named rules are silently ignored at this commit.** `RuleBasedManager.__init__(self, k=1, n_punishments=31, **_)` swallows `rule: never` into `**_` and hands back the default formula wearing the label. A sibling arm published a `never` row punishing 2.57 with a maximum of 20; nothing raised. **This arm's reference columns are the artifact-loaded clone (`load_opponent`, a `.joblib`) and the human CSV, neither of which goes through that dispatcher**, verified by grep over `rl_manager.py`, `linear_opponent.py`, the configs and the analysis scripts — no reference to `RuleBasedManager` anywhere in the path. `guard_report.assert_rule_labels_are_real` asserts realised behaviour against the label anyway, so this stays true if a rule column is ever added.
-   - **The leaver diagnostic is not used here and should not be classified on.** Measured across ten managers, only one inverted manager goes positive and the other three sit between −0.02 and −1.21; it tracks shape at r = −0.95 and orders managers correctly, with a measured noise floor of 0.577 at 100 episodes. A ranking, not a classifier, and this arm reports `rho` instead.
-
-6. **Unfinished business in this arm.** (a) One perturbation is shared across the 1000 parallel episodes of a rollout; a chunked rollout would give K perturbations per update step at the same episode cost and is the obvious next variant. (b) The per-episode divergence is extremely noisy on a near-degenerate policy; a controller on a percentile rather than the mean would regulate better. (c) Neither state coverage nor trajectory coverage is measured anywhere, and that is the claim the corrected framing leaves standing. (d) `rho` is computed from per-bin means, so it is the rank correlation on the bin-aggregated profile, not the agent-round joint distribution; recording the (contribution, punishment) joint histogram per rollout would give the exact statistic. Not worth discarding 33 GPU-hours of in-flight runs for, since bin means and counts are sufficient for everything reported here.
+1. **Read the paired control when 30432224–30432228 land**, with `scripts/rl_param_noise/results.py` over all ten parquets at once. The question is not whether this arm reaches 2 of 5 but whether it beats its own control **on the same seeds**. The annealed arm's 1 of 5 was matched exactly by its control on the same seed; if that happens here the arm has no effect and should be written up as such.
+2. **Then read the cost table before the shape table.** Payoff tracks punishment level at r = −0.974 and is unrelated to targeting direction. Any claim that an arm "recovered the shape" has to survive the observation that shape does not pay in this world.
+3. **The experiment that actually matters next is not a fifth exploration arm.** It is whether the artificial humans respond to punishment according to desert. If they do not, the contingency is unidentified by the reward and no exploration method can find it; four arms have now failed to move it. s43 is the one piece of evidence against the strong form — it raised contributions by 0.94 over the other seeds — so the probe should be powered to detect an effect of that size, not a large one.
+4. **Two hazards this arm checked and is clear of, recorded so the check is not repeated.**
+   - **Named rules are silently ignored at this commit.** `RuleBasedManager.__init__(self, k=1, n_punishments=31, **_)` swallows `rule: never` into `**_` and hands back the default formula wearing the label. A sibling arm published a `never` row punishing 2.57 with a maximum of 20; nothing raised. **This arm's reference columns are the artifact-loaded clone (`load_opponent`, a `.joblib`) and the human CSV, neither of which goes through that dispatcher**, verified by grep. `guard_report.assert_rule_labels_are_real` asserts realised behaviour against the label anyway.
+   - **The leaver diagnostic is not used here and should not be classified on.** It tracks shape at r = −0.95 and orders managers correctly, with a measured noise floor of 0.577 at 100 episodes, but only one of four inverted managers goes positive. A ranking, not a classifier. It also disagrees with the profile check on exactly one manager, which aims hard at the zero-contribution bin and grades nothing else — both statistics are right about different things and both should be kept.
+5. **Unfinished business in this arm.** (a) One perturbation is shared across the 1000 parallel episodes of a rollout; a chunked rollout would give K perturbations per update step at the same episode cost and is the obvious next variant. (b) The per-episode divergence is extremely noisy on a near-degenerate policy — s45 held 16.7 punishment levels against a target of 1.43 — so a controller on a percentile rather than the mean would regulate better. (c) Neither state coverage nor trajectory coverage is measured anywhere, and that is the claim the corrected framing leaves standing. (d) `rho` is computed from per-bin means, so it is the rank correlation on the bin-aggregated profile, not the agent-round joint distribution; recording the (contribution, punishment) joint histogram per rollout would give the exact statistic and would also expose within-bin tie structure, which the bin means hide.

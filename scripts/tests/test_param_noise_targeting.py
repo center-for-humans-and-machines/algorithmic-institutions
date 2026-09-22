@@ -251,3 +251,59 @@ def test_verdicts_do_not_turn_on_0_8_versus_0_9():
         if rho == rho and abs(rho) < 0.9:
             continue
         assert verdict(strict) == stats["verdict"]
+
+
+# ── the monotonicity tolerance ───────────────────────────────────────
+
+# Seed 46 of this arm, as measured: a rise of 0.000298 on a profile spanning
+# 0.999. An exact test calls that non-monotone and flips the arm's headline
+# from 2 of 5 to 1 of 5.
+S46_MEANS = [0.99912, 0.88394, 0.05095, 0.0, 0.0, 0.0003]
+# Seed 44, genuinely non-monotone: it falls to 0.02 and climbs back to 6.0.
+S44_MEANS = [13.74043, 3.93686, 0.02285, 0.90915, 5.51021, 5.99828]
+
+
+def test_dust_does_not_decide_a_verdict():
+    from rl_param_noise.targeting import monotonicity
+
+    assert monotonicity(S46_MEANS, tolerance=0.0) == "none"  # exact test
+    assert monotonicity(S46_MEANS) == "decreasing"  # with tolerance
+    out = targeting(S46_MEANS, [102737, 291909, 301818, 174372, 46874, 134110])
+    assert out["rise_fraction"] < 0.001
+    assert out["verdict"] == "targets free-riders"
+
+
+def test_a_real_violation_still_breaks_monotonicity():
+    out = targeting(S44_MEANS, [51409, 225480, 323605, 145177, 34509, 111875])
+    assert out["rise_fraction"] > 0.3
+    assert out["monotonicity"] == "none"
+    assert out["verdict"] == "no clean targeting (not monotone)"
+
+
+def test_the_tolerance_is_not_load_bearing():
+    """Every verdict in this arm's five seeds is identical for any tolerance
+    between 0.001 and 0.33 -- a factor of 300. If that ever stops being true
+    the tolerance is doing the work and has to be reported as a choice."""
+    from rl_param_noise.targeting import monotonicity
+
+    profiles = [
+        HUMAN_MEANS,
+        INVERTED_MEANS,
+        S46_MEANS,
+        S44_MEANS,
+        [9.35879, 1.78008, 1.94364, 4.95893, 5.0, 5.0],
+        [0.0232, 0.02364, 0.81055, 1.0, 1.0, 1.0],
+        [18.19302, 5.06946, 0.07978, 0.0, 0.0, 0.0],
+    ]
+    for means in profiles:
+        verdicts = {monotonicity(means, tolerance=t) for t in (0.001, 0.02, 0.1, 0.4)}
+        assert len(verdicts) == 1, (means, verdicts)
+
+
+def test_a_per_step_tolerance_would_have_called_a_climb_flat():
+    """Why the violation is cumulative: [0.08, 1, 2, 3, 4, 5] climbs the whole
+    way in five steps of about 1, so a per-step slack of 1.5 reads every step
+    as within tolerance and the profile as flat."""
+    from rl_param_noise.targeting import monotonicity
+
+    assert monotonicity(INVERTED_MEANS, tolerance=0.3) == "increasing"
