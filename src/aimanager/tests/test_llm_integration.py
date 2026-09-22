@@ -169,10 +169,14 @@ def test_the_constraint_forbids_an_answer_for_the_wrong_roster():
     )
     for result in results:
         assert result.ok, result.error
-        # Even asked for the wrong roster, it cannot emit one.
+        # Even asked for the wrong roster, it cannot emit one: the prompt
+        # names Players 1-4, the roster is Players 2, 3 and 5, and the answer
+        # is for the roster.
         assert re.match("^" + regex + "$", result.text.strip()), repr(result.text)
-        assert "Player 1 =" not in result.text
-        assert "Player 4 =" in result.text
+        for label in labels:
+            assert f"{label} =" in result.text
+        for absent in ("Player 1 =", "Player 4 ="):
+            assert absent not in result.text
 
 
 def test_a_constrained_value_is_never_out_of_range():
