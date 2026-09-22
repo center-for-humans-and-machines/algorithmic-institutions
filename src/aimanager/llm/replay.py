@@ -97,7 +97,7 @@ def _labels(sub):
     return {pid: label_for(i) for i, pid in enumerate(order)}
 
 
-def _rows(sub, upto, labels):
+def _rows(sub, upto):
     """Trace rows up to and including `upto`; `upto` has no punishments yet."""
     window = sub[sub["round_number"] <= upto]
     return [
@@ -113,11 +113,13 @@ def _rows(sub, upto, labels):
     ]
 
 
-def decisions(df, rounds=None):
+def decisions(df):
     """Every decision point in `df`, in a fixed order.
 
     A round is skipped when the manager's group is empty (nothing to decide)
-    or when the human manager timed out (nothing to compare against).
+    or when the human manager timed out (nothing to compare against). An empty
+    round therefore leaves a gap in the trace it precedes; 218 of the 2152
+    decision points carry at least one, and the format does not yet say so.
     """
     out = []
     for (episode_id, group_id), sub in df.groupby(["episode_id", "group_id"]):
@@ -125,12 +127,10 @@ def decisions(df, rounds=None):
         labels = _labels(sub)
         present = sorted(sub["round_number"].unique())
         for upto in present:
-            if rounds is not None and upto not in rounds:
-                continue
             here = sub[sub["round_number"] == upto]
             if here.empty or bool(here["manager_no_input"].iloc[0]):
                 continue
-            records = build_records(_rows(sub, upto, labels), labels)
+            records = build_records(_rows(sub, upto), labels)
             target = records[-1]
             out.append(
                 Decision(

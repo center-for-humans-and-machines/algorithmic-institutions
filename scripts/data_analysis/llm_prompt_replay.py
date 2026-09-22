@@ -49,6 +49,7 @@ and to re-score completions already collected, with no model at all:
 """
 
 import argparse
+import json
 import os
 import sys
 
@@ -298,6 +299,33 @@ def _endpoint_client(model, rng, api_base=None, temperature=0.0):
     return call
 
 
+def paired_subset(points, args):
+    """The decision points every cache answered, so the comparison stays paired.
+
+    A collection can come back partial. Scoring each variant on whatever it
+    happens to have would compare variants on different states, which is the
+    one thing the replay design exists to avoid, so the intersection is taken
+    instead and its size is printed.
+    """
+    answered = None
+    for model in args.models:
+        for version in args.variants:
+            path = args.cache.replace("{version}", version).replace("{model}", model)
+            if not os.path.exists(path):
+                continue
+            keys = set()
+            with open(path) as handle:
+                for line in handle:
+                    if line.strip():
+                        keys.add(json.loads(line)["key"].split("|", 1)[1])
+            answered = keys if answered is None else (answered & keys)
+    if answered is None:
+        return points
+    return [
+        p for p in points if f"{p.episode_id}|{p.group_id}|{p.round_number}" in answered
+    ]
+
+
 def sample_points(points, n, seed):
     """A fixed subsample, identical across variants so the comparison is
     paired: the same states, the same group sizes, the same bins."""
@@ -353,6 +381,10 @@ def main():
         return
 
     rng = np.random.default_rng(args.seed)
+    if args.client == "cached" and args.cache:
+        points = paired_subset(points, args)
+        print(f"{len(points)} answered by every cache -- the paired subset")
+
     frames = {}
     if args.reference:
         for policy in STUB_POLICIES:
@@ -407,8 +439,6 @@ def main():
 
 
 def _dump(points, variants, out_dir):
-    import json
-
     from aimanager.llm.prompt import build_prompt
 
     os.makedirs(out_dir, exist_ok=True)

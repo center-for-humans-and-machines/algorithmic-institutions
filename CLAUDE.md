@@ -214,6 +214,7 @@ scripts/remote_test.sh -- -k test_encoder -v
 - `src/aimanager/tests/test_llm_parse.py` - LLM manager answer parser (local)
 - `src/aimanager/tests/test_llm_replay.py` - LLM manager replay harness (local)
 - `scripts/tests/test_remote_test.py` - Remote test script tests (local)
+- `scripts/tests/test_llm_prompt_replay.py` - LLM replay battery (local)
 
 ### Remote Cluster (Raven)
 
