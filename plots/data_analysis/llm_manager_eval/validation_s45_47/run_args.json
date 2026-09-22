@@ -1,0 +1,26 @@
+{
+  "out": "plots/data_analysis/llm_manager_eval/validation_s45_47",
+  "episodes": 2048,
+  "chunk": 1024,
+  "seeds": "45,46,47",
+  "device": "cpu",
+  "validate_217": false,
+  "no_stub": false,
+  "mdd_episodes": "50,200,500,1000,3000",
+  "stack": {
+    "contribution_model": "artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+    "valid_model": "artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt",
+    "switch_model": "artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt",
+    "clone": "artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib"
+  },
+  "arms": [
+    "clone",
+    "never",
+    "thr9_p10",
+    "capped_sigmoid",
+    "never_vs_never",
+    "thr9_vs_thr9",
+    "stub_zero",
+    "stub_thr9_p10"
+  ]
+}
