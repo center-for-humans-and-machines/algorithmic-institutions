@@ -7,6 +7,7 @@ from aimanager.manager.manager import ArtificalManager
 from aimanager.generic.data import MAX_CONTRIBUTION, MISSING_CONTRIBUTION, shift
 from aimanager.manager.llm_manager import LLMManager
 from aimanager.simulation.linear_ah import LinearAHAdapter
+from aimanager.manager.sigmoid_rule import sigmoid_punishment
 
 
 class Round(BaseModel):
@@ -205,6 +206,13 @@ class RuleBasedManager:
       else 0 -- a shape that separates how often from how hard.
     - `decay`: p = (20 - c - round_number) // `k`, the original #99-era
       rule, kept so configs written against it keep their meaning.
+    - `sigmoid`: the parametrised family of
+      `aimanager.manager.sigmoid_rule`, a logistic in the contribution
+      times two horizon multipliers. It nests `threshold` as `tau -> 0`
+      and `never` as `p_max = 0`; the five parameters are `p_max`, `c0`,
+      `tau`, `gamma_ep`, `gamma_sw`. Carried here so a fitted parameter
+      vector can be re-run through the established simulation path beside
+      the rules it has to beat.
 
     `skip_invalid` (default False) zeroes the action wherever the env has
     marked the player as having given no input. It is off by default
@@ -221,6 +229,7 @@ class RuleBasedManager:
         "table",
         "severity_table",
         "decay",
+        "sigmoid",
     )
 
     def __init__(
@@ -232,6 +241,14 @@ class RuleBasedManager:
         table=None,
         prob_table=None,
         k=1,
+        p_max=None,
+        c0=None,
+        tau=None,
+        gamma_ep=0.0,
+        gamma_sw=0.0,
+        phase=0.0,
+        n_rounds=24,
+        switch_every=4,
         skip_invalid=False,
         n_punishments=31,
         **_,
@@ -247,6 +264,14 @@ class RuleBasedManager:
             None if prob_table is None else th.tensor(prob_table, dtype=th.float)
         )
         self.k = int(k)
+        self.p_max = None if p_max is None else float(p_max)
+        self.c0 = None if c0 is None else float(c0)
+        self.tau = None if tau is None else float(tau)
+        self.gamma_ep = float(gamma_ep)
+        self.gamma_sw = float(gamma_sw)
+        self.phase = float(phase)
+        self.n_rounds = int(n_rounds)
+        self.switch_every = int(switch_every)
         self.skip_invalid = bool(skip_invalid)
         self.n_punishments = int(n_punishments)
         self.model = None
@@ -293,6 +318,26 @@ class RuleBasedManager:
             prob = self._lookup(self.prob_table, contribution)
             fires = th.rand(prob.shape, device=prob.device) < prob
             return th.where(fires, severity, th.zeros_like(severity))
+        if self.rule == "sigmoid":
+            assert (
+                self.p_max is not None
+                and self.c0 is not None
+                and self.tau is not None
+                and self.tau > 0
+            )
+            return sigmoid_punishment(
+                contribution,
+                data["round_number"],
+                p_max=self.p_max,
+                c0=self.c0,
+                tau=self.tau,
+                gamma_ep=self.gamma_ep,
+                gamma_sw=self.gamma_sw,
+                phase=self.phase,
+                n_rounds=self.n_rounds,
+                switch_every=self.switch_every,
+                n_punishments=self.n_punishments,
+            )
         # decay
         return (
             (20 - contribution - data["round_number"])
