@@ -160,9 +160,7 @@ def main():
     cfg_path = (
         Path(sys.argv[1])
         if len(sys.argv) > 1
-        else (
-            ROOT / "configs/training/baselines/contribution/ridge.yml"
-        )
+        else (ROOT / "configs/training/baselines/contribution/ridge.yml")
     )
     cfg = load_config(cfg_path)
     model = resolve_model(cfg)

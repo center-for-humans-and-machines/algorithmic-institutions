@@ -22,6 +22,7 @@ Examples:
     python scripts/plotting/plot_cv_metric.py run_a/metrics/x.parquet run_b \\
         --metric accuracy --set test --best max --labels "A" "B"
 """
+
 import argparse
 from pathlib import Path
 
@@ -87,19 +88,38 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("runs", nargs="+", help="metrics parquet(s) or artifact dir(s)")
-    ap.add_argument("--labels", nargs="*", default=None,
-                    help="legend labels (one per run); defaults derived from paths")
-    ap.add_argument("--metric", default="log_loss", help="metric name (default log_loss)")
-    ap.add_argument("--set", dest="split", default="test",
-                    help="data split: train or test (default test)")
-    ap.add_argument("--best", choices=["min", "max"], default="min",
-                    help="whether best = min or max of the metric (default min)")
-    ap.add_argument("--report", choices=["best", "last"], default="best",
-                    help="legend text value: the best-epoch value or the last-epoch "
-                         "value (default best). The best-epoch dot is shown either "
-                         "way; use 'last' for short/non-overfit runs still descending.")
-    ap.add_argument("--out", default="plots/group_selection/cv_metric.png",
-                    help="output image path")
+    ap.add_argument(
+        "--labels",
+        nargs="*",
+        default=None,
+        help="legend labels (one per run); defaults derived from paths",
+    )
+    ap.add_argument(
+        "--metric", default="log_loss", help="metric name (default log_loss)"
+    )
+    ap.add_argument(
+        "--set",
+        dest="split",
+        default="test",
+        help="data split: train or test (default test)",
+    )
+    ap.add_argument(
+        "--best",
+        choices=["min", "max"],
+        default="min",
+        help="whether best = min or max of the metric (default min)",
+    )
+    ap.add_argument(
+        "--report",
+        choices=["best", "last"],
+        default="best",
+        help="legend text value: the best-epoch value or the last-epoch "
+        "value (default best). The best-epoch dot is shown either "
+        "way; use 'last' for short/non-overfit runs still descending.",
+    )
+    ap.add_argument(
+        "--out", default="plots/group_selection/cv_metric.png", help="output image path"
+    )
     ap.add_argument("--title", default=None, help="plot title (default derived)")
     ap.add_argument("--ymin", type=float, default=None)
     ap.add_argument("--ymax", type=float, default=None)
@@ -123,15 +143,37 @@ def main():
         col = cmap(i % 10)
         # legend reports best or last per --report; the best-epoch dot stays either way
         word, val = ("last", last) if args.report == "last" else ("best", best)
-        ax.plot(ep, mean, color=col, linewidth=1.6,
-                label=f"{lab}  (start {mean[0]:.3f} -> {word} {val:.4f}, {n_folds} folds)")
-        ax.scatter([ep[0]], [mean[0]], color=col, s=40, zorder=3, marker="s",
-                   edgecolor="black", linewidth=0.6)
-        ax.scatter([ep[int(pick(mean))]], [best], color=col, s=45, zorder=3,
-                   edgecolor="black", linewidth=0.6)
+        ax.plot(
+            ep,
+            mean,
+            color=col,
+            linewidth=1.6,
+            label=f"{lab}  (start {mean[0]:.3f} -> {word} {val:.4f}, {n_folds} folds)",
+        )
+        ax.scatter(
+            [ep[0]],
+            [mean[0]],
+            color=col,
+            s=40,
+            zorder=3,
+            marker="s",
+            edgecolor="black",
+            linewidth=0.6,
+        )
+        ax.scatter(
+            [ep[int(pick(mean))]],
+            [best],
+            color=col,
+            s=45,
+            zorder=3,
+            edgecolor="black",
+            linewidth=0.6,
+        )
         los.append(float(np.min(mean)))
         his.append(float(np.max(mean)))
-        print(f"{lab:<44} start {mean[0]:.3f}  best {best:.4f}  last {last:.4f}  ({n_folds} folds)")
+        print(
+            f"{lab:<44} start {mean[0]:.3f}  best {best:.4f}  last {last:.4f}  ({n_folds} folds)"
+        )
 
     ax.set_xlabel("epoch")
     ax.set_ylabel(f"{args.split} {args.metric} (mean across folds)")

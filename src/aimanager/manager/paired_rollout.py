@@ -189,9 +189,17 @@ def _leaver_diagnostic(rec, seat_group, switch_every):
     paired arms used (`rule_vs_clone_paired_report.who_leaves`) and which
     keeps the imputed contribution out of the average.
 
-    Correctly-targeted managers run negative here (leavers contributed less
-    than stayers, so the group that remains improves) and inverted ones go
-    positive.
+    **Read this as a ranking, not as a sign test.** It reproduces the
+    ordering of managers well -- it correlates with policy shape at r = -0.95
+    over ten of them -- but the zero point does not separate correctly- from
+    incorrectly-targeted rules: measured across four inverted managers, only
+    one crossed zero (+0.291) and the other three sat between -0.02 and
+    -1.21. Its noise floor is about 0.577, the same size as the differences
+    a fine contrast would ask it to resolve, so it is useful between distant
+    rules and not between close ones. For a targeting statement that does not
+    depend on the sign convention, use the rank correlation in
+    `contingency()` instead, which is also invariant to how hard a rule
+    punishes.
     """
     c, p, v, g = (rec[k] for k in ("contribution", "punishment", "valid", "group"))
     n_rounds = c.shape[-1]
@@ -206,6 +214,36 @@ def _leaver_diagnostic(rec, seat_group, switch_every):
         out[f"{tag}_c"] = (cf * sel).sum(dim=(1, 2))
         out[f"{tag}_p"] = (pf * sel).sum(dim=(1, 2))
     return out
+
+
+def contingency(rec, param_idx, n_params, seat_group=0, n_c=21, n_p=31):
+    """Joint counts of (contribution, punishment) on the focal seat's valid
+    cells, one 21 x 31 table per design point.
+
+    This is the policy at full resolution, and it is what a targeting
+    statistic should be computed from. **A difference of bin means is not a
+    targeting statistic**: it moves when a rule merely punishes harder or
+    more often. The largest shape difference a sibling arm measured, -11.1,
+    turned out to be entirely that -- mean punishment down to a third, punish
+    rate up threefold, and the contribution-to-punishment relationship
+    unchanged to the third decimal. A rank correlation taken from this table
+    is invariant to any monotone rescaling of the punishment, so it separates
+    aim from force; `aggregate.shape_stats` reports it beside the level and
+    the rate rather than instead of them.
+
+    Timed-out cells are excluded. Their recorded contribution is an imputed
+    9 that the manager never saw and their punishment is forced to 0, so they
+    are not decisions; including them drags the 6-10 column down with rows
+    that never happened. (`evaluation_suite.convert.load_sim` does not apply
+    this mask, so every simulated policy-shape table built through it carries
+    those rows -- a live defect in frozen shared code, not fixed here.)
+    """
+    c, p, v, g = (rec[k] for k in ("contribution", "punishment", "valid", "group"))
+    keep = (g == seat_group) & v
+    pi = param_idx.view(-1, 1, 1).expand_as(c)
+    flat = (pi * n_c + c.clamp(0, n_c - 1)) * n_p + p.clamp(0, n_p - 1)
+    counts = th.bincount(flat[keep].reshape(-1), minlength=n_params * n_c * n_p)
+    return counts.reshape(n_params, n_c, n_p)
 
 
 def summarise(rec, focal_group=0, rival_group=1, switch_every=4):

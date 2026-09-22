@@ -18,6 +18,7 @@ For each chosen pairing, emits:
                                           rows back-filled so means sum to
                                           n_agents at every round
 """
+
 import argparse
 import os
 import sys
@@ -73,9 +74,7 @@ def parse_sides(pairing: str) -> tuple:
     return f"g0:{pairing}", f"g1:{pairing}"
 
 
-def plot_pairing_variables(
-    df_pair: pd.DataFrame, pairing: str, out_path: str
-) -> None:
+def plot_pairing_variables(df_pair: pd.DataFrame, pairing: str, out_path: str) -> None:
     m0, m1 = parse_sides(pairing)
     sub = df_pair.copy()
     sub["side"] = sub["group_id"].map({0: f"g0: {m0}", 1: f"g1: {m1}"})
@@ -131,13 +130,9 @@ def plot_pairing_group_size(
     ax.axhline(
         n_agents / 2, ls=":", color="gray", alpha=0.5, label=f"start ({n_agents // 2})"
     )
-    ax.axhline(
-        n_agents, ls=":", color="black", alpha=0.3, label=f"max ({n_agents})"
-    )
+    ax.axhline(n_agents, ls=":", color="black", alpha=0.3, label=f"max ({n_agents})")
     ax.set_ylim(0, n_agents + 0.5)
-    ax.set_title(
-        f"group_size: {pairing}  (95% CI across episodes, empty groups = 0)"
-    )
+    ax.set_title(f"group_size: {pairing}  (95% CI across episodes, empty groups = 0)")
     ax.set_xlabel("round_number")
     ax.set_ylabel("group_size (# agents)")
     ax.legend()

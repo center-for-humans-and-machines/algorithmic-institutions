@@ -23,6 +23,7 @@ Examples:
         plots/simulation/19_2g8a_rule_based_vs_zero \\
         --opposition zero --managers rule_k1 rule_k4 rule_k8
 """
+
 import argparse
 import os
 import re
@@ -106,9 +107,7 @@ def compute_metrics(df, mirror_pairs, n_agents):
     return contr, switches
 
 
-def first_switch_role_frame(
-    df, mirror_pairs, switch_round: int, n_rounds_shown: int
-):
+def first_switch_role_frame(df, mirror_pairs, switch_round: int, n_rounds_shown: int):
     # For each (pairing, episode, participant) classify by group membership
     # at switch_round-1 (pre) and switch_round (post) relative to that
     # pairing's opposition group, and return the full trajectory plus an
@@ -137,9 +136,7 @@ def first_switch_role_frame(
         .rename("post_g")
     )
     roles = pd.concat([pre, post], axis=1).reset_index()
-    opp_lookup = (
-        df[key + ["opp_g", "condition"]].drop_duplicates(subset=key)
-    )
+    opp_lookup = df[key + ["opp_g", "condition"]].drop_duplicates(subset=key)
     roles = roles.merge(opp_lookup, on=key)
     roles = roles.dropna(subset=["pre_g", "post_g"])
     roles["role"] = "other"
@@ -160,9 +157,7 @@ def plot_first_switch_breakdown(
     switch_round: int = 4,
     n_rounds_shown: int = 8,
 ):
-    frame = first_switch_role_frame(
-        df, mirror_pairs, switch_round, n_rounds_shown
-    )
+    frame = first_switch_role_frame(df, mirror_pairs, switch_round, n_rounds_shown)
     in_opp = frame[frame["is_opp"]]
     leaver_after = frame[(frame["role"] == "leaver") & (~frame["is_opp"])]
     joiner_before = frame[(frame["role"] == "joiner") & (~frame["is_opp"])]
@@ -213,14 +208,31 @@ def plot_first_switch_breakdown(
         ax.set_xticks(range(n_rounds_shown))
     axes[0].set_ylabel("contribution (avg per agent)")
     from matplotlib.lines import Line2D
+
     handles = [
         Line2D([0], [0], color=role_palette["stayer"], lw=2, label="stayer"),
-        Line2D([0], [0], color=role_palette["leaver"], lw=2, label="leaver (in opposition)"),
-        Line2D([0], [0], color=role_palette["joiner"], lw=2, label="joiner (in opposition)"),
-        Line2D([0], [0], color=leaver_ref_color, lw=1.5, ls="--",
-               label="leaver (post-leave, in rule group)"),
-        Line2D([0], [0], color=joiner_ref_color, lw=1.5, ls="--",
-               label="joiner (pre-join, in rule group)"),
+        Line2D(
+            [0], [0], color=role_palette["leaver"], lw=2, label="leaver (in opposition)"
+        ),
+        Line2D(
+            [0], [0], color=role_palette["joiner"], lw=2, label="joiner (in opposition)"
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=leaver_ref_color,
+            lw=1.5,
+            ls="--",
+            label="leaver (post-leave, in rule group)",
+        ),
+        Line2D(
+            [0],
+            [0],
+            color=joiner_ref_color,
+            lw=1.5,
+            ls="--",
+            label="joiner (pre-join, in rule group)",
+        ),
     ]
     fig.legend(
         handles=handles,

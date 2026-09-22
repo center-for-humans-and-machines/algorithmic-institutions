@@ -12,6 +12,7 @@ from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.manager.paired_rollout import (
     RPA_LABELS,
     BatchedPairEnv,
+    contingency,
     make_env,
     rollout,
     summarise,
@@ -246,3 +247,28 @@ def test_leaver_diagnostic_reads_only_the_focal_seat():
     )
     s = summarise(rec)
     assert s["lv_n"].item() == 0.0 and s["st_n"].item() == 0.0
+
+
+def test_contingency_counts_only_real_decisions():
+    """Two design points, one episode each; the timed-out cell is excluded."""
+    rec = _rec(
+        contribution=[[[3], [9]], [[20], [20]]],
+        punishment=[[[10], [0]], [[0], [0]]],
+        valid=[[[True], [False]], [[True], [True]]],
+        group=[[[0], [0]], [[0], [0]]],
+    )
+    cnt = contingency(rec, th.tensor([0, 1]), 2)
+    assert cnt.shape == (2, 21, 31)
+    assert cnt[0].sum() == 1 and cnt[0, 3, 10] == 1
+    assert cnt[1].sum() == 2 and cnt[1, 20, 0] == 2
+
+
+def test_contingency_ignores_the_rival_seat():
+    rec = _rec(
+        contribution=[[[5], [5]]],
+        punishment=[[[7], [2]]],
+        valid=[[[True], [True]]],
+        group=[[[0], [1]]],
+    )
+    cnt = contingency(rec, th.tensor([0]), 1)
+    assert cnt.sum() == 1 and cnt[0, 5, 7] == 1

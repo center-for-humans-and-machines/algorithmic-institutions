@@ -54,7 +54,7 @@ RATIOS = {
 
 def load_sweep(run_dir):
     """Every episode of a sweep run, one row each."""
-    shards = sorted(glob.glob(os.path.join(run_dir, "episodes_shard*.parquet")))
+    shards = sorted(glob.glob(os.path.join(run_dir, "episodes_*.parquet")))
     assert shards, f"no episode shards in {run_dir}"
     return pd.concat([pd.read_parquet(p) for p in shards], ignore_index=True)
 
@@ -89,6 +89,95 @@ def per_point(df, seeds=None, by=("name",)):
 
 def with_design(summary, design):
     return design.merge(summary, on="name", how="inner")
+
+
+def _midranks(marginal):
+    """Tie-corrected ranks for a level with `marginal` observations."""
+    cum = np.cumsum(marginal)
+    return cum - marginal + (marginal + 1) / 2.0
+
+
+def spearman_from_counts(counts):
+    """Exact tie-corrected Spearman rho from a contribution x punishment
+    contingency table.
+
+    **The targeting statistic.** It is invariant to any monotone rescaling of
+    the punishment, so a rule that punishes the same people three times as
+    hard scores the same -- which a difference of bin means does not. Negative
+    means the rule punishes low contributors (correct targeting), positive
+    means it punishes high ones, and a rule that never punishes has no
+    variance and scores nan rather than 0.
+    """
+    counts = np.asarray(counts, dtype=float)
+    n = counts.sum()
+    if n == 0:
+        return np.nan
+    rc = _midranks(counts.sum(1))[:, None]
+    rp = _midranks(counts.sum(0))[None, :]
+    mc = (counts * rc).sum() / n
+    mp = (counts * rp).sum() / n
+    cov = (counts * (rc - mc) * (rp - mp)).sum() / n
+    vc = (counts * (rc - mc) ** 2).sum() / n
+    vp = (counts * (rp - mp) ** 2).sum() / n
+    if vc <= 0 or vp <= 0:
+        return np.nan
+    return float(cov / np.sqrt(vc * vp))
+
+
+def load_shape(run_dir):
+    """Every sweep part's contingency tables, stacked."""
+    parts = sorted(glob.glob(os.path.join(run_dir, "shape_*.parquet")))
+    assert parts, f"no shape tables in {run_dir}"
+    return pd.concat([pd.read_parquet(p) for p in parts], ignore_index=True)
+
+
+def shape_stats(shape, seeds=None):
+    """Aim, level and rate per design point -- the three kept apart.
+
+    `rho` is the rank correlation between contribution and punishment: the
+    aim, invariant to force. `mean_p_valid` is the force. `punish_rate` and
+    `mean_p_given_positive` split that force into how often and how hard, so
+    a reader can see whether two rules differ in aim or only in intensity.
+    """
+    if seeds is not None:
+        shape = shape[shape["seed"].isin(list(seeds))]
+    rows = []
+    for name, g in shape.groupby("name", sort=False):
+        tab = (
+            g.pivot_table(
+                index="contribution",
+                columns="punishment",
+                values="count",
+                aggfunc="sum",
+                fill_value=0,
+            )
+            .reindex(index=range(21), columns=range(31), fill_value=0)
+            .to_numpy()
+        )
+        n = tab.sum()
+        n_pos = tab[:, 1:].sum()
+        total_p = (tab * np.arange(31)[None, :]).sum()
+        rows.append(
+            {
+                "name": name,
+                "rho": spearman_from_counts(tab),
+                "n_decisions": int(n),
+                "mean_p_valid": total_p / n if n else np.nan,
+                "punish_rate": n_pos / n if n else np.nan,
+                "mean_p_given_positive": total_p / n_pos if n_pos else np.nan,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def shape_curve(shape, name, seeds=None):
+    """Mean punishment at every contribution level, for one design point."""
+    g = shape[shape["name"] == name]
+    if seeds is not None:
+        g = g[g["seed"].isin(list(seeds))]
+    tot = g.groupby("contribution")["count"].sum()
+    num = g.assign(x=g["count"] * g["punishment"]).groupby("contribution")["x"].sum()
+    return (num / tot).reindex(range(21))
 
 
 def paired_bootstrap(df, name_a, name_b, column, n=10000, seed=42):

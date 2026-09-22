@@ -29,7 +29,12 @@ import torch as th
 import yaml
 
 from aimanager.manager.linear_opponent import LinearPunisherOpponent
-from aimanager.manager.paired_rollout import make_env, rollout, summarise
+from aimanager.manager.paired_rollout import (
+    contingency,
+    make_env,
+    rollout,
+    summarise,
+)
 from aimanager.manager.sigmoid_rule import (
     PARAM_NAMES,
     ConstantManager,
@@ -113,6 +118,25 @@ def build_rival(kind, models, device):
     raise ValueError(f"unknown rival {kind!r}")
 
 
+def shape_rows(tables, names):
+    """`{seed: (P, 21, 31) counts}` -> a long frame of the non-zero cells."""
+    out = []
+    for seed, cnt in tables.items():
+        pi, ci, ppi = th.nonzero(cnt, as_tuple=True)
+        out.append(
+            pd.DataFrame(
+                {
+                    "name": names[pi.numpy()],
+                    "seed": np.int32(seed),
+                    "contribution": ci.numpy().astype(np.int16),
+                    "punishment": ppi.numpy().astype(np.int16),
+                    "count": cnt[pi, ci, ppi].numpy().astype(np.int64),
+                }
+            )
+        )
+    return pd.concat(out, ignore_index=True)
+
+
 def run(args):
     device = th.device(args.device)
     stack = dict(DEFAULT_STACK)
@@ -126,8 +150,17 @@ def run(args):
     assert args.episodes % args.chunk == 0, "episodes must be a multiple of chunk"
     n_reps = args.episodes // args.chunk
 
+    # One job per contiguous slice of the design. The slice index also seeds
+    # the shard index below, so two parts can never produce the same stream
+    # for the same design row.
+    assert 0 <= args.part < args.n_parts
+    edges = np.linspace(0, len(design), args.n_parts + 1).astype(int)
+    offset = int(edges[args.part])
+    design = design.iloc[offset : int(edges[args.part + 1])].reset_index(drop=True)
+    assert len(design), f"part {args.part} of {args.n_parts} is empty"
+
     os.makedirs(args.out, exist_ok=True)
-    with open(os.path.join(args.out, "run_args.json"), "w") as f:
+    with open(os.path.join(args.out, f"run_args_p{args.part:02d}.json"), "w") as f:
         json.dump({**vars(args), "stack": stack}, f, indent=2)
 
     shards = [
@@ -135,7 +168,8 @@ def run(args):
         for i in range(0, len(design), args.shard_size)
     ]
     t0 = time.time()
-    for si, shard in enumerate(shards):
+    for local_si, shard in enumerate(shards):
+        si = offset + local_si * args.shard_size
         env = make_env(
             contribution_model=models["contribution_model"],
             valid_model=models["valid_model"],
@@ -146,12 +180,14 @@ def run(args):
         focal = build_focal(shard, args.chunk, models, device)
         rival = build_rival(args.rival, models, device)
         name = np.repeat(shard["name"].to_numpy(), args.chunk)
-        frames = []
+        param_idx = th.arange(len(shard)).repeat_interleave(args.chunk)
+        frames, tables = [], {}
         for seed in seeds:
             for rep in range(n_reps):
                 th.manual_seed(seed * 1_000_003 + si * 1009 + rep)
                 np.random.seed((seed * 7919 + si * 101 + rep) % (2**31))
-                summary = summarise(rollout(env, focal, rival))
+                rec = rollout(env, focal, rival)
+                summary = summarise(rec)
                 frame = pd.DataFrame(
                     {k: v.numpy().astype(np.float32) for k, v in summary.items()}
                 )
@@ -159,12 +195,20 @@ def run(args):
                 frame.insert(1, "seed", np.int32(seed))
                 frame.insert(2, "rep", np.int32(rep))
                 frames.append(frame)
-        out = os.path.join(args.out, f"episodes_shard{si:03d}.parquet")
+                cnt = contingency(rec, param_idx, len(shard))
+                tables[seed] = cnt if seed not in tables else tables[seed] + cnt
+        out = os.path.join(
+            args.out, f"episodes_p{args.part:02d}_shard{local_si:03d}.parquet"
+        )
         pd.concat(frames, ignore_index=True).to_parquet(out, index=False)
-        done = (si + 1) / len(shards)
+        shape_path = os.path.join(
+            args.out, f"shape_p{args.part:02d}_shard{local_si:03d}.parquet"
+        )
+        shape_rows(tables, shard["name"].to_numpy()).to_parquet(shape_path, index=False)
+        done = (local_si + 1) / len(shards)
         el = time.time() - t0
         print(
-            f"shard {si + 1}/{len(shards)} ({len(shard)} points) "
+            f"shard {local_si + 1}/{len(shards)} ({len(shard)} points) "
             f"{el / 60:.1f} min elapsed, {el / done / 60:.1f} min projected",
             flush=True,
         )
@@ -182,6 +226,8 @@ def main():
     ap.add_argument("--shard-size", type=int, default=128)
     ap.add_argument("--chunk", type=int, default=16)
     ap.add_argument("--rival", default="clone", choices=("clone", "never"))
+    ap.add_argument("--part", type=int, default=0)
+    ap.add_argument("--n-parts", type=int, default=1)
     ap.add_argument("--stack", default=None)
     ap.add_argument("--device", default="cuda" if th.cuda.is_available() else "cpu")
     run(ap.parse_args())

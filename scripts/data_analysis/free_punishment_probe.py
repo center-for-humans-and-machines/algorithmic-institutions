@@ -304,7 +304,10 @@ def sim_mode(config_path, episodes):
                 state["contribution"], p_raw, valid, cg_raw.gather(1, env.agent_groups)
             )[2]
             pay_zero = env.compute_payoff_per_group(
-                state["contribution"], p_zeroed, valid, cg_zero.gather(1, env.agent_groups)
+                state["contribution"],
+                p_zeroed,
+                valid,
+                cg_zero.gather(1, env.agent_groups),
             )[2]
             max_d_payoff = max(max_d_payoff, float((pay_raw - pay_zero).abs().max()))
 
@@ -326,10 +329,14 @@ def sim_mode(config_path, episodes):
         "agent_rounds": n_cells,
         "timeouts": timeouts,
         "timeout_rate": timeouts / n_cells if n_cells else float("nan"),
-        "punisher_spend_at_timeout_cells": {str(k): v for k, v in sorted(spent.items())},
+        "punisher_spend_at_timeout_cells": {
+            str(k): v for k, v in sorted(spent.items())
+        },
         "free_punishments": free_spent,
         "free_punishment_rate_of_timeouts": free_spent / timeouts if timeouts else 0.0,
-        "free_punishment_rate_of_agent_rounds": free_spent / n_cells if n_cells else 0.0,
+        "free_punishment_rate_of_agent_rounds": (
+            free_spent / n_cells if n_cells else 0.0
+        ),
         "env_recorded_punishment_at_timeouts": {
             str(k): v for k, v in sorted(recorded_p.items())
         },

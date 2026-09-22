@@ -405,9 +405,7 @@ def check_alignment(model, data, df, dense, label):
     for k in (-1, 0, 1):
         sl = slice(2 + k, n_rounds - 2 + k)
         m = ok[:, :, core] & ok[:, :, sl]
-        pr = np.take_along_axis(
-            p[:, :, core], lvl[:, :, sl][..., None], axis=3
-        )[..., 0]
+        pr = np.take_along_axis(p[:, :, core], lvl[:, :, sl][..., None], axis=3)[..., 0]
         print(f"    k={k:+d}  {f(-np.log(np.clip(pr[m], 1e-12, None)).mean())}")
 
     # (4) the slope

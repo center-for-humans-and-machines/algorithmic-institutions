@@ -145,9 +145,7 @@ def main():
     model_args = manager_args["model_args"]
     reads = [n["name"] for n in model_args["x_encoding"]]
     reads += [n["name"] for n in model_args["b_encoding"]]
-    rl_manager.replay_keys = sorted(
-        set(reads + ["punishment", "agent_group"])
-    )
+    rl_manager.replay_keys = sorted(set(reads + ["punishment", "agent_group"]))
 
     replay_mem = Memory(
         n_episode_steps=env.n_rounds, device=device, **cfg["replay_memory_args"]

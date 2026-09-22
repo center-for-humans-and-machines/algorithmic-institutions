@@ -58,7 +58,13 @@ TRAIN_CFG = ROOT / "configs/training/baselines/punishment/multinomial_current_co
 EXPERIMENTS = ["ah_group_switching"]
 SWITCH_EVERY = 4
 N_LEVELS = 31
-BASE = ["contribution", "prev_contribution", "prev_punishment", "round_number", "is_first"]
+BASE = [
+    "contribution",
+    "prev_contribution",
+    "prev_punishment",
+    "round_number",
+    "is_first",
+]
 MODELS = {
     "linear": BASE,
     "+max": BASE + ["contribution_max"],

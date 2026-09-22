@@ -69,11 +69,13 @@ def collect(artifact_dirs):
             stats = analyze_parquet(f)
             if stats is None:
                 continue
-            rows.append({
-                "artifact": d.name,
-                "job": f.stem,
-                **stats,
-            })
+            rows.append(
+                {
+                    "artifact": d.name,
+                    "job": f.stem,
+                    **stats,
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -100,8 +102,14 @@ def main():
 
     df = df.sort_values("best_mean").reset_index(drop=True)
 
-    cols = ["artifact", "job", "best_mean", "best_std",
-            "globally_best_ep", "final_loss"]
+    cols = [
+        "artifact",
+        "job",
+        "best_mean",
+        "best_std",
+        "globally_best_ep",
+        "final_loss",
+    ]
     if args.show_epochs:
         cols.append("best_ep_per_fold")
         cols.append("per_fold_best")

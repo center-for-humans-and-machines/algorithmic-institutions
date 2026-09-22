@@ -157,7 +157,12 @@ def plot_factor_group(group, outpath):
 
     if feature == "punishment":
         own_t = ("pun_t", "real_pun_t", f"focal pun(t*={t_star})", "punishment")
-        own_t1 = ("pun_t1", "real_pun_t1", f"focal pun(t*+1={t_star + 1})", "punishment")
+        own_t1 = (
+            "pun_t1",
+            "real_pun_t1",
+            f"focal pun(t*+1={t_star + 1})",
+            "punishment",
+        )
         cross_t1 = (
             "contrib_t1",
             "real_contrib_t1",
@@ -367,9 +372,7 @@ def plot_group_scenario(group, outpath):
         r_std = g[real_col].std() if len(g) > 1 else 0.0
 
         ax.bar(0, b_mean, width, yerr=b_std, color="C0", capsize=4, label="baseline")
-        ax.bar(
-            1, t_mean, width, yerr=t_std, color="C1", capsize=4, label="treatment"
-        )
+        ax.bar(1, t_mean, width, yerr=t_std, color="C1", capsize=4, label="treatment")
         ax.bar(
             2,
             r_mean,

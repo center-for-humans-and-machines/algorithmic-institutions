@@ -18,6 +18,7 @@ Writes:
 Usage:
     .venv/bin/python scripts/data_creation/split_baseline_holdout.py
 """
+
 import os
 import random
 from pathlib import Path
@@ -83,9 +84,11 @@ def main():
     print(f"fold sizes (pairs): {fold_sizes}")
     print(f"TEST  = fold {HOLDOUT_FOLD}: {len(test_pairs)} pairs {test_pairs}")
     print(f"        {len(test)} rows -> {test_path.relative_to(ROOT)}")
-    print(f"TRAIN = rest: {len(fold_of_pair) - len(test_pairs)} pairs, "
-          f"{len(train)} rows -> {train_path.relative_to(ROOT)}  "
-          f"(CV folds decided at run time by run_baseline_cv's cv args)")
+    print(
+        f"TRAIN = rest: {len(fold_of_pair) - len(test_pairs)} pairs, "
+        f"{len(train)} rows -> {train_path.relative_to(ROOT)}  "
+        f"(CV folds decided at run time by run_baseline_cv's cv args)"
+    )
 
 
 if __name__ == "__main__":

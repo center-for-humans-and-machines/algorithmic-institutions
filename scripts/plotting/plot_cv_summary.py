@@ -31,9 +31,7 @@ def load_metrics(artifact_dir, job_id=None):
     if not files:
         print(f"No parquet files in {metrics_dir}", file=sys.stderr)
         sys.exit(1)
-    return pd.concat(
-        [pd.read_parquet(os.path.join(metrics_dir, f)) for f in files]
-    )
+    return pd.concat([pd.read_parquet(os.path.join(metrics_dir, f)) for f in files])
 
 
 def load_confusion_matrix(artifact_dir, job_id=None):
@@ -44,9 +42,7 @@ def load_confusion_matrix(artifact_dir, job_id=None):
     if not files:
         print(f"No parquet files in {cm_dir}", file=sys.stderr)
         sys.exit(1)
-    return pd.concat(
-        [pd.read_parquet(os.path.join(cm_dir, f)) for f in files]
-    )
+    return pd.concat([pd.read_parquet(os.path.join(cm_dir, f)) for f in files])
 
 
 def _extract_loss_curves(metrics):
@@ -65,12 +61,8 @@ def _extract_loss_curves(metrics):
     if has_shuffle:
         train = train[train["shuffle_feature"].isna()]
         test = test[test["shuffle_feature"].isna()]
-    train_pivot = train.pivot_table(
-        index="epoch", columns="cv_split", values="value"
-    )
-    test_pivot = test.pivot_table(
-        index="epoch", columns="cv_split", values="value"
-    )
+    train_pivot = train.pivot_table(index="epoch", columns="cv_split", values="value")
+    test_pivot = test.pivot_table(index="epoch", columns="cv_split", values="value")
     return train_pivot, test_pivot
 
 
@@ -119,12 +111,8 @@ def plot_loss_curves(metrics, output_path, title=None, compare=None):
     else:
         compare_metrics, label_primary, label_compare = compare
         c_train, c_test = _extract_loss_curves(compare_metrics)
-        _plot_series(
-            ax, train_pivot, "tab:blue", f"Train ({label_primary})"
-        )
-        _plot_series(
-            ax, test_pivot, "tab:orange", f"Test ({label_primary})"
-        )
+        _plot_series(ax, train_pivot, "tab:blue", f"Train ({label_primary})")
+        _plot_series(ax, test_pivot, "tab:orange", f"Test ({label_primary})")
         _plot_series(
             ax,
             c_train,
@@ -164,10 +152,7 @@ def compute_class_metrics(cm_df):
 
     # Resolve greedy predictions (argmax proba per sample)
     group_cols = ["idx", "round_number"]
-    has_cv = (
-        "cv_split" in valid.columns
-        and valid["cv_split"].notna().any()
-    )
+    has_cv = "cv_split" in valid.columns and valid["cv_split"].notna().any()
     if has_cv:
         group_cols.append("cv_split")
 
@@ -175,19 +160,13 @@ def compute_class_metrics(cm_df):
         return pd.Series(
             {
                 "true": int(g[true_col].iloc[0]),
-                "pred": int(
-                    g.loc[g["proba"].idxmax(), pred_col]
-                ),
-                "cv_split": (
-                    g["cv_split"].iloc[0] if has_cv else 0
-                ),
+                "pred": int(g.loc[g["proba"].idxmax(), pred_col]),
+                "cv_split": (g["cv_split"].iloc[0] if has_cv else 0),
             }
         )
 
     pred = (
-        valid.groupby(group_cols)[[
-            true_col, pred_col, "proba", "cv_split"
-        ]]
+        valid.groupby(group_cols)[[true_col, pred_col, "proba", "cv_split"]]
         .apply(_agg)
         .reset_index(drop=True)
     )
@@ -195,10 +174,7 @@ def compute_class_metrics(cm_df):
     if target_name == "does_switch":
         class_names = {0: "stay", 1: "switch"}
     else:
-        class_names = {
-            v: str(v)
-            for v in sorted(pred["true"].unique())
-        }
+        class_names = {v: str(v) for v in sorted(pred["true"].unique())}
 
     rows = []
     for fold in sorted(pred["cv_split"].unique()):
@@ -213,9 +189,7 @@ def compute_class_metrics(cm_df):
 
             p = tp / (tp + fp) if (tp + fp) > 0 else 0.0
             r = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-            f1 = (
-                2 * p * r / (p + r) if (p + r) > 0 else 0.0
-            )
+            f1 = 2 * p * r / (p + r) if (p + r) > 0 else 0.0
 
             rows.append(
                 {
@@ -233,12 +207,9 @@ def compute_class_metrics(cm_df):
 
 def print_summary(class_metrics):
     """Print mean +/- std of per-class metrics across folds."""
-    summary = (
-        class_metrics.groupby("class")[
-            ["precision", "recall", "f1", "support"]
-        ]
-        .agg(["mean", "std"])
-    )
+    summary = class_metrics.groupby("class")[
+        ["precision", "recall", "f1", "support"]
+    ].agg(["mean", "std"])
 
     print("\n=== Per-class metrics (mean +/- std across folds) ===\n")
     header = (
@@ -290,9 +261,7 @@ def print_summary(class_metrics):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Plot CV summary from AH artifacts"
-    )
+    parser = argparse.ArgumentParser(description="Plot CV summary from AH artifacts")
     parser.add_argument(
         "artifact_dir",
         help="Path to artifact directory",
@@ -300,10 +269,7 @@ def main():
     parser.add_argument(
         "--output-dir",
         default=None,
-        help=(
-            "Output directory for plots "
-            "(default: plots/group_selection)"
-        ),
+        help=("Output directory for plots " "(default: plots/group_selection)"),
     )
     parser.add_argument(
         "--title",
@@ -330,9 +296,7 @@ def main():
 
     base_name = os.path.basename(args.artifact_dir.rstrip("/"))
     model_name = f"{base_name}__{args.job_id}" if args.job_id else base_name
-    output_dir = args.output_dir or os.path.join(
-        "plots", "group_selection"
-    )
+    output_dir = args.output_dir or os.path.join("plots", "group_selection")
 
     metrics = load_metrics(args.artifact_dir, job_id=args.job_id)
 
@@ -352,12 +316,8 @@ def main():
         return
 
     # Loss curves
-    loss_path = os.path.join(
-        output_dir, f"{model_name}_loss_cv.png"
-    )
-    plot_loss_curves(
-        metrics, loss_path, title=args.title or model_name
-    )
+    loss_path = os.path.join(output_dir, f"{model_name}_loss_cv.png")
+    plot_loss_curves(metrics, loss_path, title=args.title or model_name)
 
     # Per-class metrics
     cm_df = load_confusion_matrix(args.artifact_dir, job_id=args.job_id)

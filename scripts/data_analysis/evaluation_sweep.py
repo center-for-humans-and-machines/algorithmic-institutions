@@ -307,9 +307,9 @@ def fig_switch_unrolled(scores, out_dir):
         ax.set_ylim(lo, hi)
         ax.set_aspect("equal")
         ax.grid(alpha=0.25, linewidth=0.5)
-        for b in [1,2,5]:
-            ax.vlines(x=b, ymin=lo, ymax=hi, colors='k', alpha=0.5, linestyles='dashed')
-            ax.hlines(y=b, xmin=lo, xmax=hi, colors='k', alpha=0.5, linestyles='dashed')
+        for b in [1, 2, 5]:
+            ax.vlines(x=b, ymin=lo, ymax=hi, colors="k", alpha=0.5, linestyles="dashed")
+            ax.hlines(y=b, xmin=lo, xmax=hi, colors="k", alpha=0.5, linestyles="dashed")
         ax.spines[["top", "right"]].set_visible(False)
     axes[0].set_ylabel("score with gnn switch")
     handles = [

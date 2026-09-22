@@ -45,13 +45,16 @@ def ols(A, feats, tgt):
 
 
 def switch_feature_importance():
-    p = (ART / "switch_pred_opt_50ep_doubled/metrics/"
-         "architecture_mlp+rnn+edge__dataset_50ep_doubled.parquet")
+    p = (
+        ART / "switch_pred_opt_50ep_doubled/metrics/"
+        "architecture_mlp+rnn+edge__dataset_50ep_doubled.parquet"
+    )
     m = pd.read_parquet(p)
     ll = m[(m["set"] == "test") & (m["name"] == "log_loss")]
     llf = ll[ll["epoch"] == ll["epoch"].max()]
-    base = llf[llf["shuffle_feature"].isna()
-               & llf["leave_one_in_shuffle_feature"].isna()]
+    base = llf[
+        llf["shuffle_feature"].isna() & llf["leave_one_in_shuffle_feature"].isna()
+    ]
     bm = base.groupby("cv_split")["value"].mean().mean()
     print(f"\n# SWITCH feature importance (baseline test log_loss = {bm:.4f})")
     for f, g in llf[llf["shuffle_feature"].notna()].groupby("shuffle_feature"):
@@ -86,10 +89,14 @@ def switch_structure(df):
     S = pd.DataFrame(rows)
     r2, b = ols(S, ["own_cg", "oth_cg"], "sw")
     print(f"\n# SWITCH structure (N={len(S)}, switch rate={S['sw'].mean():.1%})")
-    print(f"  corr(switch, gap=oth-own)        = "
-          f"{S['sw'].corr(S['oth_cg'] - S['own_cg']):+.3f}")
-    print(f"  std OLS switch ~ own_cg + oth_cg  R2={r2:.3f}  "
-          f"own={b['own_cg']:+.3f}  oth={b['oth_cg']:+.3f}")
+    print(
+        f"  corr(switch, gap=oth-own)        = "
+        f"{S['sw'].corr(S['oth_cg'] - S['own_cg']):+.3f}"
+    )
+    print(
+        f"  std OLS switch ~ own_cg + oth_cg  R2={r2:.3f}  "
+        f"own={b['own_cg']:+.3f}  oth={b['oth_cg']:+.3f}"
+    )
     print(f"  separability corr(own_cg, oth_cg) = {S['own_cg'].corr(S['oth_cg']):+.3f}")
     return b["own_cg"], b["oth_cg"]
 
@@ -112,24 +119,33 @@ def punishment_structure(df):
         subset=["punishment", "contribution", "own_loo_mean_c", "oth_mean_c"]
     )
     print(f"\n# PUNISHMENT structure (N={len(P)})")
-    print(f"  corr(punish, same-round contribution) = "
-          f"{P['punishment'].corr(P['contribution']):+.3f}")
-    print(f"  corr(punish, prev-round contribution) = "
-          f"{P['punishment'].corr(P['prev_contribution']):+.3f}  "
-          f"(model uses prev_contribution)")
+    print(
+        f"  corr(punish, same-round contribution) = "
+        f"{P['punishment'].corr(P['contribution']):+.3f}"
+    )
+    print(
+        f"  corr(punish, prev-round contribution) = "
+        f"{P['punishment'].corr(P['prev_contribution']):+.3f}  "
+        f"(model uses prev_contribution)"
+    )
     r2, b = ols(P, ["contribution", "own_loo_mean_c", "oth_mean_c"], "punishment")
     print(f"  std OLS punish ~ self_c + own_mean + oth_mean  R2={r2:.3f}")
-    for k, lbl in [("contribution", "self_c"), ("own_loo_mean_c", "own_mean"),
-                   ("oth_mean_c", "oth_mean")]:
+    for k, lbl in [
+        ("contribution", "self_c"),
+        ("own_loo_mean_c", "own_mean"),
+        ("oth_mean_c", "oth_mean"),
+    ]:
         print(f"      {lbl:9s} {b[k]:+.3f}")
     return b["own_loo_mean_c"], b["oth_mean_c"]
 
 
 def summary_figure(sw, pun):
     # contribution numbers come from the contribution report (§5a)
-    models = ["contribution\n(c ~ own/other avg c)",
-              "switch\n(switch ~ own/other cg)",
-              "punishment\n(punish ~ own/other mean c)"]
+    models = [
+        "contribution\n(c ~ own/other avg c)",
+        "switch\n(switch ~ own/other cg)",
+        "punishment\n(punish ~ own/other mean c)",
+    ]
     own = [0.19, sw[0], pun[0]]
     oth = [0.00, sw[1], pun[1]]
     x = np.arange(len(models))
@@ -144,10 +160,22 @@ def summary_figure(sw, pun):
     ax.set_title("The other group matters only for switching")
     ax.legend()
     for xi, (o, t) in enumerate(zip(own, oth)):
-        ax.text(xi - w / 2, o, f"{o:+.2f}", ha="center",
-                va="bottom" if o >= 0 else "top", fontsize=8)
-        ax.text(xi + w / 2, t, f"{t:+.2f}", ha="center",
-                va="bottom" if t >= 0 else "top", fontsize=8)
+        ax.text(
+            xi - w / 2,
+            o,
+            f"{o:+.2f}",
+            ha="center",
+            va="bottom" if o >= 0 else "top",
+            fontsize=8,
+        )
+        ax.text(
+            xi + w / 2,
+            t,
+            f"{t:+.2f}",
+            ha="center",
+            va="bottom" if t >= 0 else "top",
+            fontsize=8,
+        )
     fig.tight_layout()
     f = OUTDIR / "expressiveness_own_vs_other_by_target.png"
     fig.savefig(f, dpi=130)

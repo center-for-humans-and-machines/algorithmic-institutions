@@ -28,8 +28,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 METRICS = (
-    ROOT
-    / "artifacts/artificial_humans/group_switching_contribution_50ep/metrics/"
+    ROOT / "artifacts/artificial_humans/group_switching_contribution_50ep/metrics/"
     "architecture_node+edge+rnn__dataset_50ep__epochs_575.parquet"
 )
 DATA = ROOT / "experiments/2group_8agent_50ep.csv"
@@ -81,9 +80,7 @@ def behavioural_structure():
     gs = df.groupby(["episode_id", "round_number", "group_id"])["player_id"].nunique()
     print("\n# Group-size distribution (players per group per round)")
     print(gs.value_counts().sort_index().to_string())
-    print(
-        f"mean {gs.mean():.2f}  std {gs.std():.2f}  min {gs.min()}  max {gs.max()}"
-    )
+    print(f"mean {gs.mean():.2f}  std {gs.std():.2f}  min {gs.min()}  max {gs.max()}")
 
     rows = []
     for (_, _), sub in df[df["round_number"] >= 1].groupby(
@@ -209,9 +206,11 @@ def candidate_features():
         pred = X.values @ beta
         return 1 - ((y - pred) ** 2).sum() / ((y - y.mean()) ** 2).sum()
 
-    cands = [("avg contribution", "own_avg_c"),
-             ("common good", "own_cg"),
-             ("avg punishment", "own_avg_p")]
+    cands = [
+        ("avg contribution", "own_avg_c"),
+        ("common good", "own_cg"),
+        ("avg punishment", "own_avg_p"),
+    ]
     print(f"\n# Candidate own-group features  (N = {len(A)})")
     print("(1) ALONE (univariate R^2):")
     print(f"  {'self':20s} {r2(['self_c']):.4f}")
@@ -233,8 +232,10 @@ def candidate_features():
     print("(4) UNIQUE (drop from full self+all-three):")
     for name, col in cands:
         print(f"  {name:20s} ΔR2={r2([x for x in full if x != col]) - rf:+.4f}")
-    print(f"collinearity corr(own_cg, own_avg_c) = "
-          f"{A['own_cg'].corr(A['own_avg_c']):.2f}")
+    print(
+        f"collinearity corr(own_cg, own_avg_c) = "
+        f"{A['own_cg'].corr(A['own_avg_c']):.2f}"
+    )
     # §8: does switching move contribution?
     r_sw = r2(["self_c", "own_avg_c", "sw"])
     r_no = r2(["self_c", "own_avg_c"])
