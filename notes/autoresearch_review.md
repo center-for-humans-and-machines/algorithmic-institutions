@@ -246,10 +246,11 @@ one `main` or whether adopting both means a merge that nobody has done.
 
 ## 8. Conventions
 
-- Review work lives on its own branch, `autoresearch-review`, branched
-  from `main`; one PR at the end. It adds this file and the per-lineage
-  findings documents of §6, and nothing else. A lineage review spun off
-  on its own still lands on that branch — separate documents, one PR.
+- Review work lives on the long-lived `autoresearch` branch alongside
+  the campaign's reporting, and is not merged into `main`. It adds this
+  file and the per-lineage findings documents of §6, and nothing else. A
+  lineage review spun off on its own still lands there — separate
+  documents, same branch.
 - Experiment branches are never modified, rebased, or pushed to. A
   finding that implies a fix names the fix; it does not make it.
 - A verdict recorded in a PR is never re-judged here. A finding may say

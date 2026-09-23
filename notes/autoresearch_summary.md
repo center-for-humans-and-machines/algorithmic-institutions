@@ -163,8 +163,12 @@ vs its own baseline, four toggleable ranking criteria: Δ mean,
 
 ## 6. Conventions
 
-- All work happens on the dedicated branch (`autoresearch-summary`), one
-  PR into main at the end.
+- All work happens on the long-lived `autoresearch` branch, which holds
+  the campaign's reporting and review work and is **not merged into
+  `main`**. That keeps `main` free of this pipeline's gitignore rules and
+  of the ~5 MB rebuilt bundle, and it is why the rendered outputs can
+  simply be dropped (§2) rather than negotiated with `main`. Anything
+  genuinely wanted on `main` is cherry-picked deliberately.
 - Scripts run locally (macOS): `gh` + `git lfs` for collection and
   fetching, hand-authored SVG + vanilla JS for the build — no plotting or
   charting libraries. Nothing here touches Raven or the frozen surface of
