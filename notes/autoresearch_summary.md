@@ -8,7 +8,8 @@ what each experiment was judged by at its time, and never re-judges.
 **The deliverable** is a single self-contained file,
 `plots/data_analysis/autoresearch_summary/report_bundle.html`, regenerated
 end-to-end by the pipeline in §2 and published as a Claude artifact by
-that pipeline's last step. Re-running the pipeline updates the same
+that pipeline's last step. It is **generated, not tracked** — see the
+regeneration note below. Re-running the pipeline updates the same
 artifact in place, so its URL — and any share link served from it —
 stays valid.
 
@@ -43,6 +44,23 @@ so the scripts import each other):
 | 7 | build | `build_report.py` (multi-file working copy; `progress_tree.py` holds its tree-layout helpers) | `.../report.html` |
 | 8 | bundle | `bundle_report.py` (THE deliverable: machinery, leaderboard and stories become in-page layers; figures inlined as data URIs) | `.../report_bundle.html` |
 | 9 | publish | the Artifact tool, with the parameters step 8 prints (from `data/artifact.json`) | the artifact, updated in place |
+
+**The rendered outputs are not committed.** `report_bundle.html` and its
+siblings (`report.html`, `machinery.html`, `leaderboard.html`,
+`machinery_pages/`) are gitignored: they rebuild byte-for-byte from the
+committed inputs, and the bundle inlines 72 JPEGs as base64, so tracking
+it would add ~5 MB of incompressible history per rebuild. One command
+brings them all back:
+
+```bash
+scripts/data_analysis/autoresearch_summary/regenerate.sh
+```
+
+which runs steps 3-8 in order and ends by printing the step-9 publish
+call. What *is* committed is everything those steps read: the
+`data/*.json` caches and `stack_visuals/` — the latter deliberately,
+because it is fetched from the experiment branches rather than
+generated, and would be unrecoverable once those branches are deleted.
 
 **Step 9 is the one step a shell cannot run.** Publishing goes through
 the Artifact tool, so step 8 ends by printing the exact call to make.

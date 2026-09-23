@@ -41,3 +41,9 @@ src/aimanager/evaluation_suite/examples/
 # summary pipeline intermediates are committed (autoresearch_summary.md §2)
 !scripts/data_analysis/autoresearch_summary/data/
 !scripts/data_analysis/autoresearch_summary/data/**
+# ...but its rendered outputs are not: they rebuild byte-identically from
+# those caches via regenerate.sh, and the bundle inlines 72 JPEGs as
+# base64, so every rebuild would add ~5 MB of incompressible history.
+# stack_visuals/ IS kept -- it is fetched from PR branches, not generated.
+plots/data_analysis/autoresearch_summary/*.html
+plots/data_analysis/autoresearch_summary/machinery_pages/
