@@ -165,3 +165,49 @@ def test_gnn_punisher_data_reads_current_contribution():
     assert tuple(x.shape) == (2, 8, 2, 2)
     np.testing.assert_allclose(x[0, :4, -1, 0].numpy() * 20, C1[:4], atol=1e-5)
     np.testing.assert_allclose(x[0, :4, -1, 1].numpy() * 20, C0[:4], atol=1e-5)
+
+
+# agent 0 timed out (the env recorded `timeout_contribution` for them),
+# agent 1 chose to give 0
+CV_TIMEOUT = [False] + [True] * 7
+
+
+def _round_with_timeout(t, contributions, punishments):
+    r = _round(t, contributions, punishments)
+    r["contribution_valid"] = list(CV_TIMEOUT)
+    return r
+
+
+def test_linear_punisher_reads_the_validity_flag():
+    ah = _adapter(["contribution", "contribution_valid"])
+    c1 = [0] + C1[1:]
+    ah.get_punishments([_round(0, C0, P0), _round_with_timeout(1, c1, [None] * 8)])
+    X = ah.estimator.seen[-1]
+    np.testing.assert_array_equal(X[:2], [[0.0, 0.0], [0.0, 1.0]])
+    np.testing.assert_array_equal(X[2:, 1], [1.0] * 6)
+
+
+def test_linear_punisher_reads_the_recorded_timeout_value():
+    ah = _adapter(["contribution"])
+    c1 = [7] + C1[1:]  # recorded with timeout_contribution: 7
+    ah.get_punishments([_round(0, C0, P0), _round_with_timeout(1, c1, [None] * 8)])
+    assert ah.estimator.seen[-1][0, 0] == 7.0
+
+
+def test_contribution_valid_legality():
+    import aimanager.simulation.linear_ah  # noqa: F401
+    from handcrafted_grid import validate_feature_legality
+
+    validate_feature_legality(
+        {
+            "data": {"target": "punishment"},
+            "blocks": {"b": {"sets": [["contribution", "contribution_valid"]]}},
+        }
+    )
+    with pytest.raises(ValueError, match="contribution target"):
+        validate_feature_legality(
+            {
+                "data": {"target": "contribution"},
+                "blocks": {"b": {"sets": [["contribution_valid"]]}},
+            }
+        )
