@@ -39,15 +39,15 @@ sys.path.insert(0, str(ROOT / "scripts" / "artificial_humans"))
 
 ARTIFACT_NAME = "architecture_node+edge+rnn__dataset_50ep__epochs_575.pt"
 BASE = ROOT / (
-    "artifacts/artificial_humans/group_switching_contribution_50ep/model/"
+    "artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode/model/"
     + ARTIFACT_NAME
 )
 PARAMS = ROOT / (
-    "artifacts/artificial_humans/group_switching_contribution_50ep_herding_copula_v2"
+    "artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_herding_copula"
     "/calibration/copula_params.json"
 )
 OUT = ROOT / (
-    "artifacts/artificial_humans/group_switching_contribution_50ep_herding_copula_v2"
+    "artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_herding_copula"
     "/model/" + ARTIFACT_NAME
 )
 SWITCH_EVERY = 1  # contributions are decided every round (plan step 2)
