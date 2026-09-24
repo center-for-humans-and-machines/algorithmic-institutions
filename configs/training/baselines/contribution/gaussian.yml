@@ -31,7 +31,7 @@ blocks:
   B2_own_group:               # own group, self excluded (observational: t-1 roster of the CURRENT group id)
     components: [prev_contribution_mean_group, prev_punishment_mean_group, prev_payoff_mean_group, prev_group_size, prev_common_good]
     sets:    [[prev_contribution_mean_group, prev_punishment_mean_group, prev_group_size], [prev_payoff_mean_group, prev_group_size], [prev_common_good, prev_group_size], [prev_payoff_mean_group], [prev_common_good], [prev_contribution_mean_group, prev_group_size], [prev_contribution_mean_group]]
-  
+
   B3_other_group:             # the other group
     components: [prev_contribution_mean_other, prev_punishment_mean_other, prev_common_good_other, prev_payoff_mean_other, prev_group_size_other]
     sets:    [[prev_contribution_mean_other, prev_punishment_mean_other, prev_group_size_other], [prev_payoff_mean_other, prev_group_size_other], [prev_common_good_other, prev_group_size_other], [prev_contribution_mean_other, prev_group_size_other], [prev_contribution_mean_other], [prev_payoff_mean_other], [prev_common_good_other]]
@@ -44,6 +44,6 @@ blocks:
     components: [prev_win_contribution_mean_group, prev_win_punishment_mean_group, prev_win_common_good, prev_win_payoff_mean_group]
     sets:    [[prev_win_contribution_mean_group, prev_win_punishment_mean_group], [prev_win_payoff_mean_group], [prev_win_common_good]]
 
-  B7_structural:              
+  B7_structural:
     components: [round_number, switched_last_choice, rounds_since_switch, group_size]
     sets: [[round_number, switched_last_choice, rounds_since_switch], [switched_last_choice, rounds_since_switch, group_size], [round_number], [switched_last_choice], [group_size]]
