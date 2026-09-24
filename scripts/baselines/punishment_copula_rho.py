@@ -4,15 +4,16 @@ Estimates the within-(episode, round, group) latent correlation of human
 punishments by pairwise-likelihood MLE of an exchangeable Gaussian copula
 (each observation keeps its own fitted discrete marginal), on the bundle's
 own train split only, and saves the marginal bundle plus `copula_rho` as
-artifacts/baselines/punishment_multinomial_severity_copula.joblib. The
-randomized-PIT moment estimator is printed as an attenuated diagnostic only.
+artifacts/baselines/punishment_multinomial_severity_copula.joblib (or
+--out). The randomized-PIT moment estimator is printed as an attenuated
+diagnostic only.
 
 Method details, formulas, and the estimator revision history:
 notes/autoresearch_log/punisher-severity-copula.md (appendix).
 
 Runs locally (CPU torch, no PyG):
     .venv/bin/python scripts/baselines/punishment_copula_rho.py \
-        [--preflight] [--roundtrip]
+        [--preflight] [--roundtrip] [--bundle <marginal.joblib>] [--out <path>]
 """
 
 import argparse
@@ -460,7 +461,7 @@ NEW_KEYS = {
 }
 
 
-def save_bundle(bundle, X, rho, se, ci, data_file, n_pairs):
+def save_bundle(bundle, X, rho, se, ci, data_file, n_pairs, out=OUT):
     import joblib
 
     new = dict(bundle)
@@ -476,15 +477,15 @@ def save_bundle(bundle, X, rho, se, ci, data_file, n_pairs):
     )
     for k, v in bundle.items():
         assert new[k] is v, f"pre-existing bundle key modified: {k}"
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(new, OUT)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    joblib.dump(new, out)
 
     ref = bundle["estimator"].predict_proba(bundle["scaler"].transform(X[:100]))
-    back = joblib.load(OUT)
+    back = joblib.load(out)
     got = back["estimator"].predict_proba(back["scaler"].transform(X[:100]))
     assert np.array_equal(ref, got), "reloaded estimator is not bit-identical"
     assert set(back) - set(bundle) == NEW_KEYS
-    print(f"\nsaved {OUT.relative_to(ROOT)}")
+    print(f"\nsaved {out.relative_to(ROOT)}")
     print(f"  copula_rho={f(new['copula_rho'])} estimator=pairwise_mle")
     print("  predict_proba on the first 100 rows: bit-identical after reload")
 
@@ -506,13 +507,27 @@ def main():
         action="store_true",
         help="acceptance gate: recover a known rho from synthetic copula data",
     )
+    ap.add_argument(
+        "--bundle",
+        type=Path,
+        default=BUNDLE,
+        help="marginal multinomial punisher bundle to calibrate on",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=OUT,
+        help="where to save the bundle with copula_rho stamped on it",
+    )
     args = ap.parse_args()
+    bundle_path = args.bundle if args.bundle.is_absolute() else ROOT / args.bundle
+    out_path = args.out if args.out.is_absolute() else ROOT / args.out
 
-    bundle = joblib.load(BUNDLE)
+    bundle = joblib.load(bundle_path)
     features = list(bundle["features"])
     cfg = load_config(ROOT / bundle["config"])
     train_file = cfg["data"]["data_file"]
-    print(f"bundle    {BUNDLE.relative_to(ROOT)}")
+    print(f"bundle    {bundle_path.relative_to(ROOT)}")
     print(
         f"  model={bundle['model']} target={bundle['target']} "
         f"n_levels={bundle['n_levels']} features={features}"
@@ -671,7 +686,7 @@ def main():
         print(f"group-spread ratio copula       {f(cop)}  (rho={f(rho_hat)})")
         print(f"group-spread ratio human        {f(human)}")
 
-    save_bundle(bundle, tr["X"], rho_hat, se, ci, train_file, len(ii))
+    save_bundle(bundle, tr["X"], rho_hat, se, ci, train_file, len(ii), out=out_path)
     print(f"total runtime {time.time() - t0:.1f}s")
 
 
