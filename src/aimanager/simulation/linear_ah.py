@@ -158,10 +158,13 @@ class LinearAHAdapter:
     # ------------------------------------------------------------------ #
     # feature-pool reconstruction (shared)
     # ------------------------------------------------------------------ #
-    def _pool_from_arrays(self, c, p, cg, ag, T):
+    def _pool_from_arrays(self, c, p, cg, ag, T, cv=None):
         """[A, T] measure/membership arrays -> the [1, A, T] create_torch_data
-        tensors -> build_feature_pool's feature dict."""
+        tensors -> build_feature_pool's feature dict. `cv` is the contribution
+        validity mask (None: all valid)."""
         A = c.shape[0]
+        if cv is None:
+            cv = np.ones((A, T), dtype=bool)
         dv = self.default_values
         rec = np.ones((A, T), dtype=float)  # every agent is present in the sim
         rounds = np.tile(np.arange(T, dtype=float), (A, 1))
@@ -174,6 +177,7 @@ class LinearAHAdapter:
         # read (asserted at load) never consume them.
         d = {
             "contribution": b(c),
+            "contribution_valid": b(cv.astype(bool)),
             "punishment": b(p),
             "common_good": b(cg),
             "prev_contribution": b(_shift(c[None], dv["contribution"])[0]),
@@ -242,7 +246,7 @@ class LinearAHAdapter:
                 nv = int(cv[sel, t].sum())
                 if nv:
                     cg[sel, t] = (1.6 * cz[sel, t].sum() - pz[sel, t].sum()) / nv
-        return self._pool_from_arrays(c, p, cg, ag, T)
+        return self._pool_from_arrays(c, p, cg, ag, T, cv=cv)
 
     # ------------------------------------------------------------------ #
     # level sampling (shared by contribution and punishment)

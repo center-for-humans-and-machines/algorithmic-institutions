@@ -170,6 +170,7 @@ def _switched_last_choice(arrival, switch_every):
 CURRENT_VALUED = frozenset(
     [
         "contribution",
+        "contribution_valid",
         "punishment",
         "payoff",
         "common_good",
@@ -205,6 +206,7 @@ CURRENT_VALUED = frozenset(
 PUNISHMENT_LEGAL_CURRENT = frozenset(
     [
         "contribution",
+        "contribution_valid",
         "contribution_mean_group",
         "contribution_mean_other",
         "contribution_mean_gap",
@@ -271,6 +273,7 @@ def build_feature_pool(d, switch_every):
             "agent_group",
             "recorded",
             "prev_recorded",
+            "contribution_valid",
         )
     }
     f = {}
@@ -288,6 +291,9 @@ def build_feature_pool(d, switch_every):
     p = npd["punishment"].astype(float)
     cg = npd["common_good"].astype(float)  # own group's per-capita cg
     f["contribution"] = c
+    # did the player give input at all? (a timeout is recorded as
+    # timeout_contribution); legal for the punishment target only
+    f["contribution_valid"] = npd["contribution_valid"].astype(float)
     f["punishment"] = p
     f["common_good"] = cg
     f["payoff"] = _payoff(c, p, cg)
