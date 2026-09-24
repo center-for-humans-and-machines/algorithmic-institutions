@@ -215,8 +215,9 @@ scripts/remote_test.sh -- -k test_encoder -v
 ### Remote Cluster (Raven)
 
 - Host: raven.mpcdf.mpg.de (via ProxyJump through gate.mpcdf.mpg.de)
-- User: levinb (own checkout; the earlier documented account certuer belongs to a colleague)
-- Project path: ~/algorithmic-institutions (symlink to ~/repros/algorithmic-institutions)
+- User: each contributor uses their own account and checkout; record yours in
+  `CLAUDE.local.md` (gitignored), which is loaded alongside this file
+- Project path: ~/algorithmic-institutions (on the ssh alias `raven`)
 - Remote `.venv` must be pre-configured
 - Tests run on login node (no GPU needed)
 
