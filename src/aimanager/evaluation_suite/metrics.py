@@ -30,8 +30,8 @@ GROUP_CELL = ["episode_id", "round_number", "group_id"]
 ROUNDS = pd.RangeIndex(24, name="round_number")
 DECISION_ROUNDS = pd.Index([3, 7, 11, 15, 19], name="round_number")
 
-RCB_EDGES = [0.0, 0.25, 0.5, 1.0, float("inf")]
-RCB_LABELS = ["(0,0.25]", "(0.25,0.5]", "(0.5,1]", ">1"]
+RCB_EDGES = [-1.0, 0.0, 0.25, 0.5, 1.0, float("inf")]
+RCB_LABELS = ["{0}", "(0,0.25]", "(0.25,0.5]", "(0.5,1]", ">1"]
 
 RCE_EDGES = [-0.5, 4.5, 9.5, 14.5, 19.5]
 RCE_LABELS = ["0-4", "5-9", "10-14", "15-19"]
@@ -306,9 +306,10 @@ class ResponseMetrics(MetricGroup):
         return self.rca(df).groupby(level=0).size()
 
     def rcb(self, df):
-        """Mean contribution change of punished non-full contributors per
+        """Mean contribution change of non-full contributors per
         punishment-rate bin; rate = punishment / (20 - contribution),
-        punishment per point of shortfall."""
+        punishment per point of shortfall. The unpunished are the `{0}`
+        bin, so the drift of unpunished players is compared too."""
         pop = self._rcb_population(df)
         stat = pop.groupby("rate_bin", observed=False)["dc"].mean()
         stat.index = stat.index.astype(str)
@@ -350,7 +351,7 @@ class ResponseMetrics(MetricGroup):
     def rce(self, df):
         """Punishment response slope: per contribution band, the OLS slope
         of dc on punishment received over punished non-full contributors
-        (RCB's population) -- how the next-round change depends on the
+        (RCB's punished bins) -- how the next-round change depends on the
         dose, at a fixed level. NaN where a band is empty or every
         punishment in it is the same."""
         return self._rce_fit(df)["slope"].rename("RCE")
@@ -408,7 +409,7 @@ class ResponseMetrics(MetricGroup):
     def _rcb_population(self, df):
         d = self._with_dc(df)
         pop = d[
-            (d["punishment"] > 0) & (d["contribution"] < 20) & d["dc"].notna()
+            d["punishment"].notna() & (d["contribution"] < 20) & d["dc"].notna()
         ].copy()
         rate = pop["punishment"] / (20 - pop["contribution"])
         pop["rate_bin"] = pd.cut(rate, RCB_EDGES, labels=RCB_LABELS)
@@ -416,6 +417,7 @@ class ResponseMetrics(MetricGroup):
 
     def _rce_population(self, df):
         pop = self._rcb_population(df)
+        pop = pop[pop["punishment"] > 0].copy()
         pop["band"] = pd.cut(pop["contribution"], RCE_EDGES, labels=RCE_LABELS)
         return pop
 

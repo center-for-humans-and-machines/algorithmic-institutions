@@ -157,13 +157,16 @@ kinds of round: no switch was allowed, the player switched, the player chose to
 stay, the player stayed but their group's composition changed.
 Canonical: EMD per round type, averaged over the 4 types.
 
-**RCB -- reaction to punishment:** the average contribution change of punished
-non-full contributors, split by punishment rate bins (0, 0.25], (0.25, 0.5],
-(0.5, 1], > 1; how strongly people respond to being punished. Punishment rate
-= punishment / (20 − contribution), punishment per point of shortfall: "> 1"
-means punished more than the entire shortfall, and the rate is undefined at
-contribution 20 -- exactly the ceiling case RCC exists for.
-Canonical: abs Δ per bin, averaged over the 4 bins.
+**RCB -- reaction to punishment:** the average contribution change of non-full
+contributors, split by punishment rate bins {0} (unpunished), (0, 0.25],
+(0.25, 0.5], (0.5, 1], > 1; how strongly people respond to being punished, and
+how the unpunished drift. Punishment rate = punishment / (20 − contribution),
+punishment per point of shortfall: "> 1" means punished more than the entire
+shortfall, and the rate is undefined at contribution 20 -- exactly the ceiling
+case RCC exists for. The {0} bin is about two thirds of the rows; without it,
+a model whose unpunished players drift up while humans' drift down could look
+under-responsive on RCB and over-rising on CB at once.
+Canonical: abs Δ per bin, averaged over the 5 bins with human-frequency weights.
 
 **RCC -- reaction at the ceiling:** among full contributors (gave 20), the average
 contribution change of punished minus unpunished players; RCB's rate is
@@ -175,7 +178,7 @@ change on the gap between the receiving group's mean contribution and their own;
 whether switchers adapt toward their new group.
 Canonical: abs Δ of the regression slope (the pull coefficient).
 
-**RCE -- punishment response slope:** over RCB's population (punished non-full contributors with a valid contribution change), split into contribution bands 0-4, 5-9, 10-14, 15-19, the OLS slope of the contribution change on the punishment received; how the reaction depends on the dose at a fixed contribution level, which is the channel a manager actually controls. RCB's rate mixes level and dose (a rate above one is reached by a low contributor punished heavily and by a high contributor punished lightly), and its bin means can be matched by the right composition without any within-level response; the slope cannot. Humans comply at low levels and withdraw at high ones (slopes +0.14, +0.10, -0.08, -0.16). The unpunished are left out on purpose: their contribution change sits below the punished rows' regression line in every band (a step at zero dose, the extensive margin), so pooling them would blend that step into the dose response and flip the 10-14 sign. A band whose punishments are all equal has no slope and counts as empty.
+**RCE -- punishment response slope:** over RCB's punished bins (punished non-full contributors with a valid contribution change), split into contribution bands 0-4, 5-9, 10-14, 15-19, the OLS slope of the contribution change on the punishment received; how the reaction depends on the dose at a fixed contribution level, which is the channel a manager actually controls. RCB's rate mixes level and dose (a rate above one is reached by a low contributor punished heavily and by a high contributor punished lightly), and its bin means can be matched by the right composition without any within-level response; the slope cannot. Humans comply at low levels and withdraw at high ones (slopes +0.14, +0.10, -0.08, -0.16). The unpunished are left out on purpose: their contribution change sits below the punished rows' regression line in every band (a step at zero dose, the extensive margin), so pooling them would blend that step into the dose response and flip the 10-14 sign. A band whose punishments are all equal has no slope and counts as empty.
 Canonical: abs Δ of the slope per band, averaged over the 4 bands with human-frequency weights.
 
 **RSA -- switching after punishment:** the share of punished players who switch

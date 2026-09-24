@@ -259,9 +259,12 @@ def test_human_punishment_pins(human):
 
 def test_human_response_pins(human):
     rcb = R.rcb(human)
+    # unpunished humans drift down; every punished bin rises
+    assert rcb.loc["{0}"] == pytest.approx(-0.165, abs=1e-3)
     assert rcb.loc["(0,0.25]"] == pytest.approx(0.892, abs=1e-3)
     assert rcb.loc[">1"] == pytest.approx(2.014, abs=1e-3)
     assert R.weights("RCB", human).to_dict() == {
+        "{0}": 4607,
         "(0,0.25]": 1238,
         "(0.25,0.5]": 672,
         "(0.5,1]": 473,
@@ -277,7 +280,8 @@ def test_human_response_pins(human):
         "10-14": 560,
         "15-19": 206,
     }
-    assert R.weights("RCE", human).sum() == R.weights("RCB", human).sum()
+    # RCE covers exactly RCB's punished bins
+    assert R.weights("RCE", human).sum() == R.weights("RCB", human).drop("{0}").sum()
     assert R.rcd(human).loc["pull"] == pytest.approx(0.430247, abs=1e-5)
     # 539 Q4-study events minus 26 tainted by no-input masking
     events = R._switch_events(human).dropna(subset=["dc", "receiving_mean"])
@@ -436,12 +440,15 @@ def test_rca_d_raises_on_empty_stratum(response_frame):
 
 def test_rcb_stat_and_weights(response_frame):
     # a: rate 5/10=0.5 dc +2 | c: 2/16=0.125 dc 0 | b: 13/12>1 dc +1 |
-    # d: 9/14 dc +1; e is punished but dc-invalid, i is full -> both out
+    # d: 9/14 dc +1; e is punished but dc-invalid, i is full -> both out.
+    # {0}: 11 unpunished dc-valid non-full rows (ep0 b2 d2 a3 c3 and all of
+    # r4, ep1 f3 g3 h3); dc sums to -8 (a3 -7 across the switch, c3 -1)
     stat = R.rcb(response_frame)
     assert stat.to_dict() == pytest.approx(
-        {"(0,0.25]": 0.0, "(0.25,0.5]": 2.0, "(0.5,1]": 1.0, ">1": 1.0}
+        {"{0}": -8 / 11, "(0,0.25]": 0.0, "(0.25,0.5]": 2.0, "(0.5,1]": 1.0, ">1": 1.0}
     )
     assert R.weights("RCB", response_frame).to_dict() == {
+        "{0}": 11,
         "(0,0.25]": 1,
         "(0.25,0.5]": 1,
         "(0.5,1]": 1,
@@ -450,14 +457,15 @@ def test_rcb_stat_and_weights(response_frame):
 
 
 def test_rcb_d(response_frame):
-    # bump b's round-4 contribution 9 -> 11: only the ">1" bin's mean
-    # moves (+1 -> +3), so d = 2/4 with equal bin counts
+    # bump b's round-4 contribution 9 -> 11: the ">1" bin's mean moves
+    # +1 -> +3 (|2|, weight 1) and b's unpunished round-4 dc 0 -> -2 moves
+    # the {0} mean by 2/11 (weight 11), so d = (2 + 11 * 2/11) / 15
     bumped = response_frame.copy()
     bumped.loc[
         (bumped["participant_code"] == "b") & (bumped["round_number"] == 4),
         "contribution",
     ] = 11.0
-    assert R.d("RCB", response_frame, bumped) == pytest.approx(0.5)
+    assert R.d("RCB", response_frame, bumped) == pytest.approx(4 / 15)
 
 
 def test_rcc_contrast(response_frame):
