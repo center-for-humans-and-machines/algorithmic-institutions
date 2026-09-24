@@ -48,16 +48,23 @@ def create_data(rounds, groups, default_values):
     are not yet known, so `punishment[..., -1]` is the default placeholder.
     """
 
-    def create_tensor(record_key, default_key):
+    def create_tensor(record_key, default_key, invalid_reads_record=False):
+        # invalid_reads_record: a flagged own-group cell keeps its recorded
+        # value (for contributions, the env's timeout_contribution)
+        default = int(default_values[default_key])
+
+        def cell(value, is_valid, g1, g2):
+            if g1 != g2:
+                return default
+            if is_valid or (invalid_reads_record and value is not None):
+                return int(value)
+            return default
+
         return th.tensor(
             [
                 [
                     [
-                        (
-                            int(value)
-                            if (is_valid and g1 == g2)
-                            else int(default_values[default_key])
-                        )
+                        cell(value, is_valid, g1, g2)
                         for value, is_valid, g1 in zip(
                             r[record_key], r[f"{record_key}_valid"], r["group"]
                         )
@@ -84,7 +91,9 @@ def create_data(rounds, groups, default_values):
             dtype=th.bool,
         )
 
-    contribution = create_tensor("contribution", "contribution")
+    contribution = create_tensor(
+        "contribution", "contribution", invalid_reads_record=True
+    )
     contribution_valid = create_bool_tensor("contribution")
 
     punishment = create_tensor("punishment", "punishment")
