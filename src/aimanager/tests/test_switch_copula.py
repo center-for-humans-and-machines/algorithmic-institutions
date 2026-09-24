@@ -1,7 +1,7 @@
 """Tests for the herding-copula sampler (plan step 12).
 
 Plain pytest, no PyG imports -- runs locally:
-    uv run pytest tests/switch/ -q
+    uv run pytest src/aimanager/tests/test_switch_copula.py -q
 
 The reference numbers rho / phi are the calibrated ones from
 notes/autoresearch_log/switch-herding-copula.md (notes 12-13).

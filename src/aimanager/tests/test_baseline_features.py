@@ -23,8 +23,8 @@ originals of experiments/2group_8agent_50ep.csv. The fixture under fixtures/ was
 extracted with pure pandas (see git history for the one-off extract script):
   * episode_raw.csv        -- all 8 agents' raw per-round fields (wide)
 
-Run:  .venv/bin/python -m pytest tests/baselines/test_baseline_features.py
-Eyeball:  .venv/bin/python tests/baselines/test_baseline_features.py
+Run:  .venv/bin/python -m pytest src/aimanager/tests/test_baseline_features.py
+Eyeball:  .venv/bin/python src/aimanager/tests/test_baseline_features.py
 """
 
 import os
@@ -32,12 +32,12 @@ import sys
 from pathlib import Path
 
 os.environ.setdefault("DISABLE_PANDERA_IMPORT_WARNING", "True")
-import numpy as np
-import pandas as pd
-import pytest
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+import pytest  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]  # tests/baselines -> repo root
+ROOT = HERE.parents[2]  # src/aimanager/tests -> repo root
 DATA = HERE / "fixtures"
 RAW = ROOT / "experiments/2group_8agent_50ep.csv"
 TARGET, EPISODE_ID, EXPERIMENT, SWITCH_EVERY = 6, 70, "ah_group_switching", 4

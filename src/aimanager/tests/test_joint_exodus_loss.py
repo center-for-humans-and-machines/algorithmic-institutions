@@ -2,12 +2,12 @@
 
 Runs locally on macOS with plain pytest:
 
-    PYTHONPATH=$PWD/src uv run pytest tests/switch/test_joint_exodus_loss.py -q
+    PYTHONPATH=$PWD/src uv run pytest src/aimanager/tests/test_joint_exodus_loss.py -q
 
 `aimanager.artificial_humans.train` pulls in `torch_scatter`,
 `torch_geometric.nn` (via `AH_MODELS`) and `tqdm`, none of which are installed
 on macOS in this project. Stand-ins are installed ONLY when the real packages
-are missing -- the same discipline as tests/switch/test_joint_exodus_graph.py --
+are missing -- the same discipline as src/aimanager/tests/test_joint_exodus_graph.py --
 so on Raven this file exercises the real PyG. The stand-ins implement message
 passing and a progress bar; they cannot manufacture a pass on the count
 arithmetic, which is pure torch either way.

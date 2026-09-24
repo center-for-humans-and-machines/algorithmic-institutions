@@ -2,9 +2,9 @@
 contribution-group-vnode).
 
 Runs locally on macOS with plain pytest:
-    PYTHONPATH=$PWD/src <venv python> -m pytest -q tests/vnode/test_group_vnode_graph.py
+    PYTHONPATH=src python -m pytest -q src/aimanager/tests/test_group_vnode_graph.py
 
-Modelled on tests/switch/test_joint_exodus_graph.py: `aimanager.generic.graph`
+Modelled on src/aimanager/tests/test_joint_exodus_graph.py: `aimanager.generic.graph`
 imports `torch_scatter` and `torch_geometric.nn`, Linux-only in this project
 (see the `sys_platform` markers in pyproject.toml). Every assertion here is an
 INVARIANCE -- off equals the pre-change module, saved equals loaded, on
@@ -28,7 +28,7 @@ failure to fetch is recorded in `LEGACY_UNAVAILABLE_REASON` and only the two
 tests that actually need the pre-change module skip, with that reason named
 explicitly; every other gate in this file imports and runs unchanged.
 
-Numerics of the node itself live in tests/vnode/test_group_vnode.py.
+Numerics of the node itself live in src/aimanager/tests/test_group_vnode.py.
 Context: notes/autoresearch_log/contribution-group-vnode.md, plan step 4.
 """
 
@@ -42,13 +42,13 @@ import types
 import pytest
 import torch as th
 
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 PRE_CHANGE_REV = "7b440ee^"
 PRE_CHANGE_PATH = "src/aimanager/generic/graph.py"
 
 
 # --------------------------------------------------------------------------- #
-# PyG stand-ins (macOS only) -- verbatim from tests/switch/test_joint_exodus_graph.py
+# PyG stand-ins (macOS only) -- verbatim from test_joint_exodus_graph.py
 # --------------------------------------------------------------------------- #
 def _scatter_mean(src, index, dim=0, dim_size=None):
     assert dim == 0, "the stand-in only implements dim=0, which is all graph.py uses"

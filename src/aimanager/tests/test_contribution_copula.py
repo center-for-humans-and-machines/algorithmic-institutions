@@ -2,10 +2,10 @@
 of contribution-herding-copula-v2).
 
 Plain pytest, torch + numpy only (no PyG, no scipy) -- runs locally:
-    uv run pytest tests/copula/ -q
+    uv run pytest src/aimanager/tests/test_contribution_copula.py -q
 
 The 2-level switch head's version of these gates lives in
-tests/switch/test_switch_copula.py; this file re-checks the ones that depend on
+src/aimanager/tests/test_switch_copula.py; this file re-checks the ones that depend on
 the level count -- marginal preservation over a 21-level categorical, the
 induced within-cell dependence, the AR(1) latent, and the inverse-CDF
 convention the rho estimator is fitted under -- for the contribution head.

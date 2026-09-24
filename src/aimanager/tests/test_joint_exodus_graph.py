@@ -1,7 +1,7 @@
 """Tests for the joint exodus GATE in `GraphNetwork` (plan step 1).
 
 Runs locally on macOS with plain pytest:
-    uv run pytest tests/switch/test_joint_exodus_graph.py -q
+    uv run pytest src/aimanager/tests/test_joint_exodus_graph.py -q
 
 `aimanager.generic.graph` imports `torch_scatter` and `torch_geometric.nn`,
 which are Linux-only in this project (see the `sys_platform` markers in
@@ -11,7 +11,7 @@ sides with the same message-passing implementation, so a stand-in for those
 two symbols cannot manufacture a pass. The stand-ins are installed only when
 the real packages are missing, so on Raven this file exercises the real PyG.
 
-Numerics of the head itself live in tests/switch/test_joint_exodus.py.
+Numerics of the head itself live in src/aimanager/tests/test_joint_exodus.py.
 Context: notes/autoresearch_log/switch-joint-exodus.md.
 """
 
@@ -216,7 +216,7 @@ def test_head_on_does_not_disturb_the_per_agent_forward_pass():
     # and on a NON-decision round (make_data's round_number 0, switch_every 4)
     # sampling still takes the legacy draw, bit-for-bit and RNG-for-RNG --
     # step 4 confines the joint draw to decision rounds. The decision-round
-    # behaviour is tested in tests/switch/test_joint_exodus_sampling.py.
+    # behaviour is tested in src/aimanager/tests/test_joint_exodus_sampling.py.
     (ref_pred, _), ref_rng = run_seeded(
         lambda: legacy_predict(on, data, edge_index=edge_index)
     )

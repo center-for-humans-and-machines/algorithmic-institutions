@@ -2,11 +2,11 @@
 
 Runs locally on macOS with plain pytest:
 
-    PYTHONPATH=$PWD/src uv run pytest tests/switch/test_joint_exodus_detach.py -q
+    PYTHONPATH=$PWD/src uv run pytest src/aimanager/tests/test_joint_exodus_detach.py -q
 
 Stand-ins for `torch_scatter` / `torch_geometric.nn` are installed only when
 the real packages are missing -- the same discipline as
-tests/switch/test_joint_exodus_graph.py and test_joint_exodus_loss.py -- so on
+src/aimanager/tests/test_joint_exodus_graph.py and test_joint_exodus_loss.py -- so on
 Raven this file exercises the real PyG. Every assertion here is an INVARIANCE
 (head-on trunk gradients equal head-off trunk gradients) or an EXCLUSION (the
 joint term reaches the head and nothing above it), both evaluated with the same

@@ -2,7 +2,7 @@
 
 Runs on Raven (api_manager imports GraphNetwork -> torch_scatter). The
 feature-parity of the underlying adapter is covered locally in
-tests/baselines/test_baseline_features.py.
+src/aimanager/tests/test_baseline_features.py.
 """
 
 from pathlib import Path

@@ -5,7 +5,7 @@ Plain pytest, no PyG imports -- the module under test imports nothing from
 `torch_geometric.nn` stand-ins the sibling `test_joint_exodus_*.py` files
 install. Runs locally on macOS:
 
-    PYTHONPATH=$PWD/src uv run pytest tests/switch/test_conditional_bernoulli.py -q
+    PYTHONPATH=src uv run pytest src/aimanager/tests/test_conditional_bernoulli.py -q
 
 Context: notes/autoresearch_log/switch-joint-exodus.md, plan step 3.
 """
@@ -65,7 +65,7 @@ def test_marginal_recovery_from_the_poisson_binomial_of_m():
     what "conditioning on the sum" means.
 
     N_SAMPLES = 20000, tolerance = 5 binomial standard errors per agent
-    (matching the convention `tests/switch/test_switch_copula.py`'s own
+    (matching the convention `src/aimanager/tests/test_switch_copula.py`'s own
     marginal test uses), fixed seed 20260902.
     """
     N_SAMPLES = 20000

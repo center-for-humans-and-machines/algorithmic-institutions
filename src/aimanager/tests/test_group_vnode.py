@@ -3,11 +3,11 @@ contribution-group-vnode).
 
 Plain pytest, torch only -- no `torch_geometric` / `torch_scatter` -- so this
 runs locally on macOS:
-    uv run pytest tests/vnode/test_group_vnode.py -q
+    uv run pytest src/aimanager/tests/test_group_vnode.py -q
 
 The `GraphNetwork` gate (default off, save/load back-compat, forward pass
 unchanged, the copula co-existing with the node) is covered by
-tests/vnode/test_group_vnode_graph.py.
+src/aimanager/tests/test_group_vnode_graph.py.
 Context: notes/autoresearch_log/contribution-group-vnode.md.
 """
 

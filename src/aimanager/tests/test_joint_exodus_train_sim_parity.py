@@ -42,11 +42,11 @@ the *real* `JointExodusHead`, wired into a real `GraphNetwork` forward pass
 over message-passed embeddings, pools with `pool_by_group` and reports a `k`
 consistent with its own `agent_group` input is already covered -- with PyG
 stand-ins locally, with real PyG on Raven -- by
-`tests/switch/test_joint_exodus_loss.py
+`src/aimanager/tests/test_joint_exodus_loss.py
 ::test_training_counts_match_the_heads_own_pooling` and by the runtime
 assert in `train.joint_exodus_loss` itself. The claim that the simulation's
 drawn pair is spent on the group it was drawn for is covered the same way by
-`tests/switch/test_joint_exodus_sampling.py` and the runtime assert in
+`src/aimanager/tests/test_joint_exodus_sampling.py` and the runtime assert in
 `GraphNetwork._predict_encoded_joint_exodus`. This file's job is the piece
 neither of those touches: whether `environment.py`'s own bookkeeping of
 `agent_group` across a real `Environment.step()` call produces the same
@@ -68,7 +68,7 @@ import torch as th
 
 # --------------------------------------------------------------------------- #
 # stand-ins (macOS only) -- installed only when the real packages are absent,
-# the same discipline as tests/switch/test_joint_exodus_loss.py and its
+# the same discipline as src/aimanager/tests/test_joint_exodus_loss.py and its
 # siblings. They exist solely so `import aimanager.artificial_humans.train`
 # succeeds; nothing under test here calls into them.
 # --------------------------------------------------------------------------- #

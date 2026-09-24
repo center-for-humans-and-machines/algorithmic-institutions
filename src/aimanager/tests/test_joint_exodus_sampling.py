@@ -2,11 +2,11 @@
 
 Runs locally on macOS with plain pytest:
 
-    PYTHONPATH=$PWD/src uv run pytest tests/switch/test_joint_exodus_sampling.py -q
+    PYTHONPATH=src uv run pytest src/aimanager/tests/test_joint_exodus_sampling.py -q
 
 Stand-ins for `torch_scatter` / `torch_geometric.nn` are installed only when the
 real packages are missing -- the same discipline as
-tests/switch/test_joint_exodus_graph.py, test_joint_exodus_loss.py and
+src/aimanager/tests/test_joint_exodus_graph.py, test_joint_exodus_loss.py and
 test_joint_exodus_detach.py -- so on Raven this file exercises the real PyG.
 Nothing asserted here depends on the message-passing implementation: every
 claim is about WHICH categorical draws are made, how many, and how their

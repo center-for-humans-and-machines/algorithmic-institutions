@@ -5,7 +5,7 @@ correlation, bit-identical legacy path for bundles without `copula_rho`
 Invariants and rationale: notes/autoresearch_log/punisher-severity-copula.md.
 
 Local test (CPU torch, no PyG):
-    .venv/bin/python -m pytest tests/baselines/test_punishment_copula.py
+    .venv/bin/python -m pytest src/aimanager/tests/test_punishment_copula.py
 """
 
 import os
@@ -18,7 +18,7 @@ import pytest  # noqa: E402
 import torch as th  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]  # tests/baselines -> repo root
+ROOT = HERE.parents[2]  # src/aimanager/tests -> repo root
 # this checkout's src must win over any installed/editable aimanager, so the
 # adapter under test is the one in THIS worktree
 sys.path.insert(0, str(ROOT / "src"))

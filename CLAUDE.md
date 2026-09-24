@@ -210,6 +210,11 @@ scripts/remote_test.sh -- -k test_encoder -v
 - `src/aimanager/tests/test_eval_scoring.py` - Evaluation-suite scoring (local)
 - `src/aimanager/tests/test_eval_evaluate.py` - Evaluation-suite end to end (local)
 - `src/aimanager/tests/test_eval_visuals.py` - Evaluation-suite figures (local)
+- `src/aimanager/tests/test_*copula*.py`, `test_joint_exodus*.py`, `test_group_vnode*.py`,
+  `test_conditional_bernoulli.py` - Frontier-stack mechanisms (the copula, joint-exodus
+  and group-vnode tests run locally; some substitute PyG stand-ins on macOS)
+- `src/aimanager/tests/test_baseline_features.py` - Linear-baseline feature parity (local;
+  fixture in `src/aimanager/tests/fixtures/`)
 - `scripts/tests/test_remote_test.py` - Remote test script tests (local)
 
 ### Remote Cluster (Raven)

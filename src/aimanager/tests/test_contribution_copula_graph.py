@@ -12,7 +12,7 @@ than every k-th (the switch head's `k=4` is asserted in the sibling file).
 The gate this file shares with it is the LEGACY path: an artifact without
 `copula_rho` must sample exactly as before, values and torch RNG consumption
 alike. The sampler itself is covered locally by
-tests/copula/test_contribution_copula.py.
+src/aimanager/tests/test_contribution_copula.py.
 Context: notes/autoresearch_log/contribution-herding-copula-v2.md.
 """
 
@@ -34,7 +34,7 @@ N_LEVELS = 21
 GROUPS = [0, 0, 0, 0, 1, 1, 1, 1]
 # A deliberately large dose, so the induced dependence is measurable at
 # N_REPEATS forward passes; the calibrated ~0.07 (PR #149) is exercised at
-# large N in tests/copula/test_contribution_copula.py.
+# large N in src/aimanager/tests/test_contribution_copula.py.
 RHO = 0.3
 PHI = 0.7
 N_REPEATS = 3000

@@ -5,7 +5,7 @@ Imports torch_geometric via `aimanager.generic.graph`, so it runs on Raven:
 
 The gate this file owns is the LEGACY path: an artifact without `copula_rho`
 must sample exactly as before, values and torch RNG consumption alike. The
-sampler itself is covered locally by tests/switch/test_switch_copula.py.
+sampler itself is covered locally by src/aimanager/tests/test_switch_copula.py.
 Context: notes/autoresearch_log/switch-herding-copula.md.
 """
 

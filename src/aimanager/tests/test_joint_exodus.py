@@ -1,10 +1,10 @@
 """Tests for the joint exodus head's numerics (plan step 1).
 
 Plain pytest, no PyG imports -- runs locally on macOS:
-    uv run pytest tests/switch/test_joint_exodus.py -q
+    uv run pytest src/aimanager/tests/test_joint_exodus.py -q
 
 The GraphNetwork gate (default off, save/load back-compat, forward pass
-unchanged) is covered by tests/switch/test_joint_exodus_graph.py.
+unchanged) is covered by src/aimanager/tests/test_joint_exodus_graph.py.
 Context: notes/autoresearch_log/switch-joint-exodus.md.
 """
 
