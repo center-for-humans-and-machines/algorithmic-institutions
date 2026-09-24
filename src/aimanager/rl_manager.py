@@ -130,9 +130,7 @@ def run_batch(
             )
 
         if opponent_manager is not None:
-            metrics["next_reward"] = (
-                reward[:, rl_group_id].to(th.float).mean().item()
-            )
+            metrics["next_reward"] = reward[:, rl_group_id].to(th.float).mean().item()
         else:
             metrics["next_reward"] = reward.mean().item()
         metrics["q_min"] = q_values.min().item()
@@ -140,12 +138,8 @@ def run_batch(
         metrics["q_mean"] = q_values.mean().item()
         if opponent_manager is not None:
             groups_after = env.agent_groups.squeeze(-1)
-            rl_size = (
-                (groups_after == rl_group_id).float().sum(dim=1).mean().item()
-            )
-            opp_size = (
-                (groups_after != rl_group_id).float().sum(dim=1).mean().item()
-            )
+            rl_size = (groups_after == rl_group_id).float().sum(dim=1).mean().item()
+            opp_size = (groups_after != rl_group_id).float().sum(dim=1).mean().item()
             # Same per-round value; aggregator (last vs mean across rounds)
             # differs downstream: end_* keys are taken at the final round,
             # avg_* keys are averaged across the episode.
@@ -380,9 +374,9 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
                         "opp_punishment",
                         "opp_sum_payoff",
                     ):
-                        log[f"eval/{k}"] = sum(
-                            m[k] for m in on_policy_metrics
-                        ) / len(on_policy_metrics)
+                        log[f"eval/{k}"] = sum(m[k] for m in on_policy_metrics) / len(
+                            on_policy_metrics
+                        )
                 wandb.log(log)
 
     model_file = os.path.join(model_dir, f"{config['job_id']}_manager.pt")
@@ -413,9 +407,7 @@ def train_manager(config: dict, labels=None, data_dir: str = None):
     # single-manager parquets are unchanged.
     if metrics_list and "rl_end_group_size" in metrics_list[0]:
         value_vars.extend(
-            k
-            for k in metrics_list[0]
-            if k.startswith("rl_") or k.startswith("opp_")
+            k for k in metrics_list[0] if k.startswith("rl_") or k.startswith("opp_")
         )
 
     metrics_path = os.path.join(metrics_dir, f"{config['job_id']}.parquet")

@@ -331,8 +331,11 @@ def main(config):
     conf_m_all = []
 
     for i, train_data, test_data in get_cross_validations(
-        data, n_cross_val, fraction_training,
-        holdout_fold=holdout_fold, group_key=pair_id,
+        data,
+        n_cross_val,
+        fraction_training,
+        holdout_fold=holdout_fold,
+        group_key=pair_id,
     ):
         model = AH_MODELS[model_name](
             default_values=default_values, autoregressive=autoregression, **model_args
