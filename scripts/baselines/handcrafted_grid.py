@@ -9,10 +9,14 @@ folds. Consumed by:
 
 Feature semantics are specified in notes/baseline_feature_defs.md: a current
 family (no prefix) for the switch target -- anchored at the pre-switch round
-since #123 -- and a prev family for the contribution target. Only
-create_torch_data + get_cross_validations are used from src/; every derived
-feature is computed here from the raw [G, A, T] tensors. payoff = 20 -
-contribution - punishment + common_good (per-capita, reports/basics.md).
+since #123 -- and a prev family for the contribution target. The punishment
+target sits in between: the manager punishes round t after seeing round t's
+contributions, so the current contribution features are legal for it while
+the current punishment / payoff / common-good features (they contain p_t)
+are not. Only create_torch_data + get_cross_validations are used from src/;
+every derived feature is computed here from the raw [G, A, T] tensors.
+payoff = 20 - contribution - punishment + common_good (per-capita,
+reports/basics.md).
 
 Runs locally (CPU torch, no PyG).
 """
@@ -162,7 +166,7 @@ def _switched_last_choice(arrival, switch_every):
 # Current-family features that read round-t contributions/punishments/common
 # good -- the round the contribution target is drawn in. ILLEGAL for the
 # contribution target (hard error at config validation); membership-derived
-# current features (sizes, tenure counters) are legal for both targets.
+# current features (sizes, tenure counters) are legal for every target.
 CURRENT_VALUED = frozenset(
     [
         "contribution",
@@ -192,25 +196,56 @@ CURRENT_VALUED = frozenset(
 )
 
 
+# The subset of CURRENT_VALUED built from round-t contributions only. The
+# manager sets round t's punishment after the round's contributions are in
+# (human data: corr(p_t, c_t) = -0.28 vs corr(p_t, c_{t-1}) = -0.19, and
+# P(p > 0 | c_t <= 4, c_{t-1} = 20) = 0.57 vs 0.18 the other way round), so
+# these are legal for the punishment target. Everything else in
+# CURRENT_VALUED contains p_t, or the common good it enters, and stays illegal.
+PUNISHMENT_LEGAL_CURRENT = frozenset(
+    [
+        "contribution",
+        "contribution_mean_group",
+        "contribution_mean_other",
+        "contribution_mean_gap",
+        "win_contribution_mean_group",
+        "win_contribution_mean_other",
+    ]
+)
+
+
+def illegal_current_features(target):
+    """The current-valued features that leak the target's own round: all of
+    them for the contribution target (drawn before round t is played), the
+    punishment-bearing ones for the punishment target (set after round t's
+    contributions, before its punishments), none for the switch target
+    (decided at the end of the round)."""
+    if target == "contribution":
+        return CURRENT_VALUED
+    if target == "punishment":
+        return CURRENT_VALUED - PUNISHMENT_LEGAL_CURRENT
+    return frozenset()
+
+
 def validate_feature_legality(cfg):
     """Hard error if a contribution- or punishment-target config selects a
-    current-valued feature (leak rules #123 / #127). Both targets are
-    prev-anchored -- the punishment predictor conditions on round t-1 only,
-    like its GNN (prev_contribution, prev_punishment); only the switch target
-    may read the current family."""
-    if cfg["data"]["target"] not in ("contribution", "punishment"):
-        return
+    current-valued feature that reads the target's own round (leak rules
+    #123 / #127). The contribution target is prev-anchored; the punishment
+    target may read round t's contributions (the manager sees them before
+    punishing) but not round t's punishments, payoffs or common good; only
+    the switch target may read the whole current family."""
+    target = cfg["data"]["target"]
     used = {
         feat
         for blk in cfg.get("blocks", {}).values()
         for s in blk["sets"]
         for feat in s
     }
-    illegal = sorted(used & CURRENT_VALUED)
+    illegal = sorted(used & illegal_current_features(target))
     if illegal:
         raise ValueError(
             f"current-valued features are illegal for the "
-            f"{cfg['data']['target']} target (they read the target's round): "
+            f"{target} target (they read the target's round): "
             f"{illegal}"
         )
 
