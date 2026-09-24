@@ -363,10 +363,13 @@ class ArtificialHumanEnv:
         return self.state
 
     def punish(self, punishment):
+        """Apply the punishment; one aimed at a timed-out player is charged 0."""
         assert self.state is not None
         assert punishment.max() < self.n_punishments
         assert punishment.dtype == th.int64
-        self.punishment = punishment
+        self.punishment = th.where(
+            self.contribution_valid, punishment, th.zeros_like(punishment)
+        )
         self.punishment_valid = th.ones_like(self.punishment_valid)
         self.update_common_good()
         self.update_payoff()
