@@ -515,14 +515,18 @@ def test_feature_matches_pipeline(compared, feature):
 # membership-derived features available); the switch model at the END of round t
 # (current values realised) -> every feature available.
 # --------------------------------------------------------------------------- #
-def adapter_features(target):
+def episode_states(target):
+    """Teacher-forced env-like states for the fixture episode, one per round:
+    ``prev_*`` = the realised round t-1 values, ``agent_group`` = post-arrival
+    membership. The switch target additionally gets round t's realised current
+    values (it is called at the END of round t). Returns
+    ``(states, n_agents, default_values)``; reused by the mlp adapter test."""
     import random
 
     import torch as th
 
     sys.path.insert(0, str(ROOT / "scripts/baselines"))
     from aimanager.generic.data import create_torch_data
-    from aimanager.simulation.linear_ah import LinearAHAdapter
 
     random.seed(38381)
     np.random.seed(38381)
@@ -534,6 +538,38 @@ def adapter_features(target):
     data, default_values, pair_id = create_torch_data(df, switch_every=SWITCH_EVERY)
     g = int(np.where(np.asarray(pair_id) == pair)[0][0])
     A, T = data["contribution"].shape[1], data["contribution"].shape[2]
+
+    states = []
+    for t in range(T):
+        state = {  # env-like state: prev_* = realised t-1, agent_group = current
+            "round_number": th.full((1, A, 1), t, dtype=th.int64),
+            "prev_contribution": data["prev_contribution"][g, :, t].reshape(1, A, 1),
+            "prev_punishment": data["prev_punishment"][g, :, t].reshape(1, A, 1),
+            "prev_common_good": data["prev_common_good"][g, :, t].reshape(1, A, 1),
+            "prev_agent_group": data["prev_agent_group"][g, :, t].reshape(1, A, 1),
+            "agent_group": data["agent_group"][g, :, t].reshape(1, A, 1),
+        }
+        if target == "does_switch":
+            # switch model is called at the END of round t: current realised
+            state.update(
+                {
+                    "contribution": data["contribution"][g, :, t].reshape(1, A, 1),
+                    "punishment": data["punishment"][g, :, t].reshape(1, A, 1),
+                    "common_good": data["common_good"][g, :, t].reshape(1, A, 1),
+                }
+            )
+        states.append(state)
+    return states, A, default_values
+
+
+def adapter_features(target):
+    import torch as th
+
+    sys.path.insert(0, str(ROOT / "scripts/baselines"))
+    from aimanager.simulation.linear_ah import LinearAHAdapter
+
+    states, A, default_values = episode_states(target)
+    T = len(states)
 
     # only the fields LinearAHAdapter reads to rebuild features are needed
     bundle = {
@@ -552,31 +588,13 @@ def adapter_features(target):
     ad = LinearAHAdapter(
         bundle, n_agents=A, n_contributions=21, device=th.device("cpu")
     )
-    is_switch = target == "does_switch"
 
-    features = ALL_FEATURES if is_switch else CONTRIB_SAFE
+    features = ALL_FEATURES if target == "does_switch" else CONTRIB_SAFE
     collected = {name: np.zeros(T) for name in features}
     for t in range(T):
-        state = {  # env-like state: prev_* = realised t-1, agent_group = current
-            "round_number": th.full((1, A, 1), t, dtype=th.int64),
-            "prev_contribution": data["prev_contribution"][g, :, t].reshape(1, A, 1),
-            "prev_punishment": data["prev_punishment"][g, :, t].reshape(1, A, 1),
-            "prev_common_good": data["prev_common_good"][g, :, t].reshape(1, A, 1),
-            "prev_agent_group": data["prev_agent_group"][g, :, t].reshape(1, A, 1),
-            "agent_group": data["agent_group"][g, :, t].reshape(1, A, 1),
-        }
-        if is_switch:
-            # switch model is called at the END of round t: current realised
-            state.update(
-                {
-                    "contribution": data["contribution"][g, :, t].reshape(1, A, 1),
-                    "punishment": data["punishment"][g, :, t].reshape(1, A, 1),
-                    "common_good": data["common_good"][g, :, t].reshape(1, A, 1),
-                }
-            )
         if t == 0:
             ad._reset_history()
-        ad._record(state, t)
+        ad._record(states[t], t)
         pool = ad._build_pool(t)
         for name in features:
             collected[name][t] = pool[name][0, TARGET, t]
