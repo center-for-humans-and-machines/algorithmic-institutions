@@ -92,7 +92,57 @@ class SameGroupEdgeEncoder(th.nn.Module):
         return same.float().unsqueeze(-1)  # (E, n_rounds, 1)
 
 
-EDGE_ENCODERS = {"same_group": SameGroupEdgeEncoder}
+class ARPunishmentEdgeEncoder(th.nn.Module):
+    """Autoregressive within-round conditioning on groupmate punishments.
+
+    Two channels per edge and round: a gate that is on only where source and
+    destination share the sub-group at that round *and* the source agent's
+    punishment is already decided (``autoreg_mask`` false), and the gated,
+    normalised punishment of the source agent. The channel therefore carries
+    only the manager's own already-decided punishments of the same round and
+    the same agent group -- never the other group's punishments (the graph is
+    fully connected across sub-groups) and never any current-round
+    contribution.
+
+    Relational like ``SameGroupEdgeEncoder``, so it reads its state at both
+    endpoints via ``edge_index`` instead of using the per-node encoders.
+    """
+
+    masked_key = "punishment_masked"
+    mask_key = "autoreg_mask"
+
+    def __init__(self, name="ar_punishment", n_levels=31, **_):
+        super().__init__()
+        assert n_levels > 1, f"ar_punishment needs n_levels > 1, got {n_levels}"
+        self.name = name
+        self.n_levels = n_levels
+        self.size = 2
+
+    def forward(self, *, edge_index, **state):
+        # agent_group, punishment_masked, autoreg_mask: (N, n_rounds), each
+        # flattened with per-batch node offsets so edge_index gathers endpoints
+        # directly (no batch handling).
+        for key in ("agent_group", self.masked_key, self.mask_key):
+            assert key in state, (
+                f"ar_punishment requires '{key}' in the edge state; the data "
+                "passed to encode() must carry agent_group, "
+                f"{self.masked_key} and {self.mask_key} "
+                "(see apply_mask_pattern / predict_autoreg)"
+            )
+        ag = state["agent_group"]
+        y_masked = state[self.masked_key]
+        undecided = state[self.mask_key].bool()
+        row, col = edge_index
+        gate = (ag[row] == ag[col]) & ~undecided[row]  # (E, n_rounds) bool
+        gate = gate.float().unsqueeze(-1)  # (E, n_rounds, 1)
+        value = y_masked[row].float().unsqueeze(-1) / (self.n_levels - 1)
+        return th.cat([gate, gate * value], dim=-1)  # (E, n_rounds, 2)
+
+
+EDGE_ENCODERS = {
+    "same_group": SameGroupEdgeEncoder,
+    "ar_punishment": ARPunishmentEdgeEncoder,
+}
 
 
 class EdgeEncoder(th.nn.Module):
@@ -322,13 +372,19 @@ class GraphNetwork(th.nn.Module):
             edge_index = self.create_fully_connected(n_player, n_batch=n_batch)
         encoded["edge_index"] = edge_index
         encoded = {k: v.to(device) for k, v in encoded.items() if v is not None}
-        # Per-edge features (e.g. same_group). agent_group is flattened to
-        # (N, n_rounds) so edge_index gathers endpoints directly; only passed
-        # when present, so empty edge_encoding (punishment / legacy models)
-        # never requires it. Empty edge_encoding -> (E, n_rounds, 0).
+        # Per-edge features (e.g. same_group, ar_punishment). Every per-node
+        # tensor is flattened to (N, n_rounds) so edge_index gathers endpoints
+        # directly; each is only passed when present, so empty edge_encoding
+        # (punishment / legacy models) never requires any of them. Empty
+        # edge_encoding -> (E, n_rounds, 0).
         edge_state = {}
         if "agent_group" in data:
             edge_state["agent_group"] = data["agent_group"].flatten(0, 1).to(device)
+        y_masked_name = f"{self.y_name}_masked"
+        if y_masked_name in data:
+            edge_state[y_masked_name] = data[y_masked_name].flatten(0, 1).to(device)
+        if "autoreg_mask" in data:
+            edge_state["autoreg_mask"] = data["autoreg_mask"].flatten(0, 1).to(device)
         encoded["edge_attr"] = self.edge_encoder(
             edge_index=encoded["edge_index"], n_rounds=n_rounds, **edge_state
         )
@@ -353,13 +409,16 @@ class GraphNetwork(th.nn.Module):
         return predict
 
     def predict_autoreg(self, data, sample=True, reset_rnn=True, edge_index=None):
-        # `reset_rnn` accepted for signature parity with predict_independent
-        # (the autoreg model has no RNN). `edge_index` honoured if provided so
-        # batched callers don't pay to rebuild it per call.
+        # `reset_rnn` accepted for signature parity with predict_independent.
+        # `edge_index` honoured if provided so batched callers don't pay to
+        # rebuild it per call.
+        #
+        # RNN contract: the full round history is re-fed on every AR step and
+        # `self(encoded)` runs with `reset_rnn=True`, so the GRU advances once
+        # per round and never per AR step. The reveal order comes from the
+        # caller's seeded numpy RNG, and downstream `MultiManager` consumes
+        # only round -1.
         self.eval()
-        assert (
-            self.rnn_n is None and self.rnn_g is None
-        ), "Autoregressive predictions do not support RNN"
 
         n_batch, n_nodes, n_rounds = data["contribution"].shape
         if edge_index is None:
