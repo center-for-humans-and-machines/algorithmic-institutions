@@ -8,6 +8,8 @@ value reported:
   * ridge / gaussian (mu-head) -> signed standardized coefficient
   * multinomial (one coef per class) -> magnitude via --cat-metric:
     absmag (mean |coef|, default) / l2 (coef norm) / perm (delta in-sample log-loss).
+  * gaussian_mlp -> none: its mean map is not affine, so the coefficient view
+    raises. --save-best works for it (it never touches coefficients).
 
 Usage:
     .venv/bin/python scripts/baselines/inspect_best_model.py out.csv \
@@ -34,6 +36,7 @@ sys.path.insert(0, str(ROOT / "scripts/baselines"))
 from handcrafted_grid import load_config, prepare_data  # noqa: E402
 from gaussian_regressor import binned_logloss  # noqa: E402
 from baseline_models import (  # noqa: E402
+    GAUSSIAN_MODELS,
     build_model,
     floor_score,
     predict_scores,
@@ -53,7 +56,7 @@ def _row_setting(row, model, cfg):
     """(label, setting) for a CV-output row: read the model's swept hyper-parameter
     columns off the row. label is a short display string."""
     setting = {
-        k: (int(row[k]) if k == "epochs" else float(row[k]))
+        k: (int(row[k]) if k in ("epochs", "hidden") else float(row[k]))
         for k in setting_keys(model)
     }
     label = " ".join(f"{k}={v}" for k, v in setting.items())
@@ -83,10 +86,11 @@ def save_best(args, df, cfg, model, n_levels, metric_col, prep_tr):
     """Refit the CV-best model on all train with the row's swept setting, evaluate
     on the locked test split, and save the fitted model + metadata under artifacts/.
 
-    Both continuous models are sampleable in the sim (#121): gaussian from its
-    trained heteroscedastic head, contribution ~ N(mu(x), sigma(x)); ridge is a
-    point model, so it stores a homoscedastic `sigma` = sqrt(train MSE) and samples
-    contribution ~ N(mu(x), sigma). Features are standardized (scaler saved)."""
+    Every continuous model is sampleable in the sim (#121): gaussian and
+    gaussian_mlp from their trained heteroscedastic heads, contribution ~
+    N(mu(x), sigma(x)); ridge is a point model, so it stores a homoscedastic
+    `sigma` = sqrt(train MSE) and samples contribution ~ N(mu(x), sigma).
+    Features are standardized (scaler saved)."""
     import joblib
 
     row = df[df["rank"] == args.rank].iloc[0]
@@ -129,11 +133,11 @@ def save_best(args, df, cfg, model, n_levels, metric_col, prep_tr):
         "switch_every": prep_tr["switch_every"],
     }
 
-    # Both continuous models are distributional -> report a binned 21-way test CE
+    # All continuous models are distributional -> report a binned 21-way test CE
     # (comparable to the multinomial / GNN). ridge: N(mu(x), sigma) homoscedastic;
-    # gaussian: N(mu(x), sigma(x)) from its trained head.
+    # gaussian / gaussian_mlp: N(mu(x), sigma(x)) from their trained heads.
     extra = []
-    if model in ("ridge", "gaussian"):
+    if model in ("ridge",) + GAUSSIAN_MODELS:
         Xte, yte = sc.transform(prep_te["X"][:, cols]), prep_te["y_cont"]
         k = int(cfg["data"].get("categorical_levels", 21))
         if model == "ridge":  # point model -> homoscedastic sigma makes it sampleable
@@ -142,7 +146,7 @@ def save_best(args, df, cfg, model, n_levels, metric_col, prep_tr):
             bundle["sigma"] = sigma  # sim samples N(mu(x), sigma) on standardized feats
             sig_te = sigma
             extra.append(f"  sigma (homoscedastic, sqrt train MSE) = {sigma:.4f}")
-        else:  # gaussian: trained sigma(x) head (heteroscedastic, no scalar sigma)
+        else:  # gaussian*: trained sigma(x) head (heteroscedastic, no scalar sigma)
             sig_te = m.predict_std(Xte)
             bundle["sigma_mean"] = float(sig_te.mean())  # info; sim uses sigma(x)
             extra.append(
