@@ -1,0 +1,74 @@
+description: >-
+  Autoresearch experiment contribution-cg-selfdrop: the M4 feature set
+  (#114: own_grp_prev_mean_contr node feature + same_group edge feature)
+  trained with training-time input dropout on prev_contribution (p=0.10).
+  Targets CG: humans converge on a shared group contribution norm (CG ratio
+  0.848 vs the independence floor ~0.55) while the M0 GNN free-runs at the
+  floor; masking the self-anchor loads the conditional distribution onto
+  shared group context so group means diverge. p=0.10 probes whether most
+  of the dropout's CG gain (PR #144: 7.587 at p=0 -> 5.961 at p=0.15)
+  arrives before most of its RCA/RCB cost. Identical data / CV / seed /
+  epochs to the p=0.15 arm; separate output_dir.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 575
+    own_group: true
+    same_group: true
+    self_dropout: '0.10'
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/auto_contribution_cg_selfdrop_10
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: own_grp_prev_mean_contr
+        etype: float
+        norm: 20
+    edge_encoding:
+      - name: same_group
+        etype: bool
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+    input_dropout:
+      prev_contribution: 0.10
+  device: cuda
+  autoregression: False
