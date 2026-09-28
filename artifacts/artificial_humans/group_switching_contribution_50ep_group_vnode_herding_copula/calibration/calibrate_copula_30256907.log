@@ -1,0 +1,167 @@
+cwd        /raven/u/certuer/autoresearch/contribution-group-vnode
+aimanager  /raven/u/certuer/autoresearch/contribution-group-vnode/src/aimanager/__init__.py
+/u/certuer/algorithmic-institutions/.venv/lib/python3.9/site-packages/torch_geometric/typing.py:110: UserWarning: An issue occurred while importing 'torch-sparse'. Disabling its usage. Stacktrace: libcusparse.so.11: cannot open shared object file: No such file or directory
+  warnings.warn(f"An issue occurred while importing 'torch-sparse'. "
+/raven/u/certuer/autoresearch/contribution-group-vnode/src/aimanager/generic/data.py:93: FutureWarning: Downcasting object dtype arrays on .fillna, .ffill, .bfill is deprecated and will change in a future version. Call result.infer_objects(copy=False) instead. To opt-in to the future behavior, set `pd.set_option('future.no_silent_downcasting', True)`
+  df.groupby(["episode_id", "player_id"])["contribution_valid"]
+fatal: not a git repository: /Users/ertuerkan/Desktop/algorithmic-institutions/.git/worktrees/contribution-group-vnode
+model     artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+  y_name=contribution y_levels=21 autoregressive=False
+  x_encoding=['prev_contribution', 'prev_punishment', 'agent_group']
+  edge_encoding=[]
+data      experiments/2group_8agent_50ep.csv (episodes=100)
+  train split experiments/baseline/2group_8agent_50ep_bline_train.csv: 40 episodes, 40 distinct games
+  contribution default=9.0
+  teacher-forced rows: episodes=40 agents=8 rounds=24
+  rows=7457 cells=1814 cells>=2=1608 pairs=15090
+  cell size histogram=[0, 206, 231, 228, 466, 201, 213, 194, 75]
+  Phi_2 quadrature nodes=32, max abs err vs scipy mvn=2.220446049250313e-16
+
+=== rho: pairwise-likelihood MLE (train split) ===
+rho_hat                      0.0435568043640977
+  pairwise nll(rho_hat)      53663.533153060154
+  pairwise nll(0)            53672.05666585586
+  2*(nll(0) - nll(rho_hat))  17.04702559141151  (pairwise LR, not chi2-calibrated)
+  n_pairs=15090  nll evals=27  fit 0.92s
+cluster bootstrap (200 resamples over 40 episodes)
+  SE                         0.009443613923707331
+  95% percentile CI          [0.024859738353023016, 0.05941458216657012]
+  bootstrap min/max          0.010078492718828234 / 0.0673962495376873   [85.3s]
+
+=== ACCEPTANCE GATE: round-trip recovery (3 synthetic datasets per rho) ===
+rho_true   rho_hat MLE            bias                   rho_hat PIT (attenuated)
+0.10       0.09164692900813214    -0.00835307099186787   0.07064379811788682
+0.20       0.19312287763754732    -0.006877122362452692  0.14936093456052338
+0.30       0.28990137954901507    -0.010098620450984919  0.22385433693803414
+0.40       0.3934999159052494     -0.006500084094750613  0.30468027989700924
+0.50       0.4915017073026465     -0.008498292697353527  0.38006414125700444
+max |bias| = 0.010098620450984919  -> PASS (tolerance 0.03)   [14.1s]
+
+=== phi: lag-1 persistence of the group latent ===
+cross-round pairs (all)      35317
+  same participant (self)    6603  DIAGNOSTIC only
+  different participants     28714  PRIMARY
+  PRIMARY = cross-player: within-round rho is cross-player by construction and the
+  AR(1) latent is a group-level object; self-pairs confound the individual serial
+  stickiness the marginal model already conditions on via prev_contribution.
+rho_lag1 cross-player        0.02692889219396216  PRIMARY
+  pairwise nll(rho_lag1)     101474.48483366786
+  2*(nll(0) - nll(rho_lag1)) 12.135755964089185
+rho_lag1 all pairs           0.033358253537384676  DIAGNOSTIC
+  2*(nll(0) - nll(rho_lag1)) 23.329013287089765
+phi = rho_lag1_cross / rho   0.6182476558394783  PRIMARY
+phi_allpairs (never used)    0.7658563116462391  DIAGNOSTIC
+  the MLE grid is non-negative (0.0 to 0.9), so rho_lag1 = 0 is a
+  boundary hit, read as no measurable persistence   [4.9s]
+paired cluster bootstrap (200 resamples over 40 episodes, rho and rho_lag1 refit on the same draw)
+  phi 95% percentile CI      [0.21163458285772926, 1.2637034657775452]
+  phi bootstrap median       0.6623889997354233
+  phi SE                     0.3243059454171758  (a RATIO: heavy-tailed as the denominator approaches 0, no finite moments -- read the percentile CI, not this)
+  degenerate draws (rho=0)   0
+  draws with rho < 0.01      0
+  rho draws min/max          0.010078458671583914 / 0.06739626266859858
+  rho_lag1 min/mean/max      0.005740680149954016 / 0.02665388332152823 / 0.05025669254803107   [515.7s]
+VERDICT: PHI KEPT
+
+=== ATTENUATED DIAGNOSTIC: randomized-PIT moment estimator (R=20) ===
+rho_pit (pair-weighted)      0.02756938755648941
+  per-replicate min/max      0.019843163729023183 / 0.03674163998286333
+  replicate sd               0.004899300909729368
+cross-check per-cell weight  0.040143405197641806
+cross-check ICC(1) one-way   0.0469167096707047
+sensitivity mid-point PIT    0.033590485804006635
+cluster bootstrap (1000 resamples, crossed with the 20 PIT replicates)
+  SE                         0.006507350540557139
+  95% percentile CI          [0.014532377052242322, 0.03964716398219262]
+
+=== diagnostic splits only (never a selection criterion) ===
+split                        rho MLE                 rho PIT (att.)
+excluding round 0            0.048053236141415566    0.02974125416830653     rows=7149 cells>=2=1528 pairs=14643
+rounds 0-7                   0.024255333488518434    0.018590293955828906    rows=2480 cells>=2=564 pairs=4742
+rounds 8-15                  0.051536111889719884    0.03026947996783415     rows=2487 cells>=2=508 pairs=5351
+rounds 16-23                 0.06453456473382796     0.03354347641790785     rows=2490 cells>=2=536 pairs=4997
+cell size 2                  0.1824558518595075      0.11123309727810035     rows=462 cells>=2=231 pairs=231
+cell size 3                  0.03014402195330078     0.023382927199572783    rows=684 cells>=2=228 pairs=684
+cell size 4                  0.029474404155562735    0.016379259474054504    rows=1864 cells>=2=466 pairs=2796
+cell size 5                  4.4695348834308653e-07  -0.0011454664271494078  rows=1005 cells>=2=201 pairs=2010
+cell size 6                  0.01836145787343428     0.011980007197401147    rows=1278 cells>=2=213 pairs=3195
+cell size 7                  0.058829833185480504    0.03996384650527912     rows=1358 cells>=2=194 pairs=4074
+cell size 8                  0.08498836567449898     0.05527269866217022     rows=600 cells>=2=75 pairs=2100
+
+OUT-OF-SAMPLE CHECK ONLY (experiments/baseline/2group_8agent_50ep_bline_test.csv, episodes=10)
+  rho MLE=0.09616091860476199  rho PIT=0.04972066517483476  rows=1863 cells>=2=388 pairs=4043
+
+=== pre-flight (go/no-go; rho is NEVER tuned to it), 50 repeats ===
+group-spread ratio independent  0.8363286876779291
+group-spread ratio copula       0.8419995722079179  (rho=0.0435568043640977)
+group-spread ratio human        0.8472681041593946
+CAVEAT: the AR(1) persistence (phi) cannot appear in a ONE-STEP redraw; this
+pre-flight bounds the within-round part only. The compounding is what the sim measures.
+
+wrote artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_herding_copula/calibration/copula_params.json
+  cell_key: episode_round_agent_group
+  copula_switch_every: 1
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  data_file_holdout: experiments/baseline/2group_8agent_50ep_bline_test.csv
+  data_note: create_torch_data on the full human file (training defaults), restricted to the 40 single-copy train episodes; teacher-forced marginals from the source model; rows where contribution_valid
+  date: 2026-09-15T19:59:50+00:00
+  diag_pit: randomized
+  diag_pit_rho: 0.02756938755648941
+  estimator: pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only
+  git_head: unavailable: Command '['git', '-C', '/raven/u/certuer/autoresearch/contribution-group-vnode', 'rev-parse', 'HEAD']' returned non-zero exit status 128.
+  holdout_rho: 0.09616091860476199
+  lag_step: 1
+  n_bootstrap: 200
+  n_bootstrap_phi: 200
+  n_cells: 1608
+  n_cross_pairs: 35317
+  n_cross_pairs_cross_player: 28714
+  n_cross_pairs_self: 6603
+  n_episodes: 40
+  n_pairs: 15090
+  n_rows: 7457
+  phi: 0.6182476558394783
+  phi_allpairs: 0.7658563116462391
+  phi_ci: [0.21163458285772926, 1.2637034657775452]
+  phi_drop_reason: None
+  phi_kept: True
+  phi_verdict: PHI KEPT
+  preflight: {'independent': 0.8363286876779291, 'copula': 0.8419995722079179, 'human': 0.8472681041593946}
+  rho: 0.0435568043640977
+  rho_ci: [0.024859738353023016, 0.05941458216657012]
+  rho_lag1_all: 0.033358253537384676
+  rho_lag1_cross: 0.02692889219396216
+  rho_se: 0.009443613923707331
+  roundtrip_max_bias: 0.010098620450984919
+  script: scripts/artificial_humans/contribution_copula_rho.py
+  seed: 38381
+  source_model: artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+  source_model_sha256: 714bf40be1b640a2df09395164ef053fce7a60de9c9d4e034b0f2627a6d01013
+total runtime 638.8s
+                                  
+================================= 
+Global information about the job: 
+================================= 
+  
+Job owner: certuer(51795)
+Job name:  cg_copula_rho_vnode
+Node list: ravc4073
+Job start: Tue Sep 15 21:49:04 CEST 2026
+Job end:   Tue Sep 15 21:59:50 CEST 2026
+Work dir:  /u/certuer/autoresearch/contribution-group-vnode/.
+Command:   /raven/u/certuer/autoresearch/contribution-group-vnode/scripts/artificial_humans/calibrate_copula_group_vnode.slurm
+  
+  
+  
+==========================================================================================
+Information on jobsteps (Note: MaxRSS/AveRSS is the maximum/average over all 
+tasks of the per-task memory high-water marks; cf. "man sacct"): 
+==========================================================================================
+  
+JobID            JobName NNodes NTasks  NCPUS       MaxRSS       AveRSS    Elapsed ExitCode
+------------- ---------- ------ ------ ------ ------------ ------------ ---------- --------
+30256907      cg_copula_      1             8                             00:10:46      0:0
+  
+Maximum memory per node: 0.344289 GB (defined as MaxRSS*Ntasks/NNodes)
+CPU utilization: 194.0 %
+  

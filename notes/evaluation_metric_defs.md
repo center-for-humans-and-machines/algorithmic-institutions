@@ -175,6 +175,9 @@ change on the gap between the receiving group's mean contribution and their own;
 whether switchers adapt toward their new group.
 Canonical: abs Δ of the regression slope (the pull coefficient).
 
+**RCE -- punishment response slope:** over RCB's population (punished non-full contributors with a valid contribution change), split into contribution bands 0-4, 5-9, 10-14, 15-19, the OLS slope of the contribution change on the punishment received; how the reaction depends on the dose at a fixed contribution level, which is the channel a manager actually controls. RCB's rate mixes level and dose (a rate above one is reached by a low contributor punished heavily and by a high contributor punished lightly), and its bin means can be matched by the right composition without any within-level response; the slope cannot. Humans comply at low levels and withdraw at high ones (slopes +0.14, +0.10, -0.08, -0.16). The unpunished are left out on purpose: their contribution change sits below the punished rows' regression line in every band (a step at zero dose, the extensive margin), so pooling them would blend that step into the dose response and flip the 10-14 sign. A band whose punishments are all equal has no slope and counts as empty.
+Canonical: abs Δ of the slope per band, averaged over the 4 bands with human-frequency weights.
+
 **RSA -- switching after punishment:** the share of punished players who switch
 at the next opportunity, split by punishment size bins 1-3, 4-15, 16+; who
 leaves after being punished.

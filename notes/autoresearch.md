@@ -15,9 +15,21 @@ definitions in `notes/evaluation_metric_defs.md`).
 
 ## 2. The metrics
 
-Everything comes from one `evaluation/scores.csv` (21 rows), judged against
+Everything comes from one `evaluation/scores.csv` (22 rows), judged against
 the evaluation stack's own baseline scores (§3; on a parent `[SUCCESS]` PR,
-the parent's — §9). Two gates, both required for success:
+the parent's — §9). One protected row, then two gates, all required for
+success:
+
+**Protected row: RCE** (punishment response slope, the OLS slope of the
+next-round contribution change on the punishment received, per contribution
+band 0-4 / 5-9 / 10-14 / 15-19; humans +0.14 / +0.10 / -0.08 / -0.16). An
+experiment may not band-downgrade RCE against its baseline, may not flip
+any of the four band slopes away from the human sign, and may not halve any
+band's slope magnitude (a band's |slope| may not fall to half its baseline
+value or below). Any of the three is a `[FAIL]`, whatever the gates below
+say. Punishment-response experiments — punisher-slot changes, and any
+experiment whose declared target is the contributor's reaction to
+punishment — are judged on RCE: it is their target row for gate 1.
 
 1. **A band upgrade on a target row.** The scoring bands
    (<= 1 / 1-2 / 2-5 / > 5) are the classes: at least one row your
@@ -25,7 +37,7 @@ the parent's — §9). Two gates, both required for success:
    than its baseline — from > 5 into 2-5, from 2-5 into 1-2 or <= 1, from
    1-2 into <= 1. A within-band improvement, however large, is a `[FAIL]`
    with valuable notes, not a success.
-2. **The mean score holds.** The average over all 21 rows may not rise
+2. **The mean score holds.** The average over all 22 rows may not rise
    more than 10% above the evaluation stack's baseline mean (e.g. baseline
    1.76 -> ceiling 1.936). A band upgrade is allowed to cost a little
    elsewhere — but not to be bought by breaking the rest of the stack.
@@ -33,6 +45,19 @@ the parent's — §9). Two gates, both required for success:
 Nothing else gates. **Rows <= 1** (rows at or below the human-vs-human
 noise ceiling) is still computed and reported in every results table (§10),
 in the same column as always — context for the reader, not a criterion.
+
+**Re-baseline (`auto/punisher-current-contribution`).** Until that branch,
+both artificial punishers conditioned on round t-1's contribution while the
+human manager punishes round t's
+(`notes/autoresearch_log/punisher-current-contribution.md`). The fix
+retrains both punisher families, and since one punisher artifact sits in
+every stack it moves every row of every stack. The ledger's baselines — the
+score matrix and ranking of §3 and §6, and the confirmed scores of the
+frontier PRs — are therefore reset by that branch's stage D; scores
+recorded before it (21 rows, lagged punisher) are not comparable with scores
+after it (22 rows, RCE included, current-contribution punisher). Stage D
+re-ran the top stack and the four frontier stacks; the post-fix baselines
+are the table in §3.
 
 ## 3. Evaluation protocol
 
@@ -49,21 +74,42 @@ with the `run` column filtered to your punisher pairing. There is no
 confirmation sweep — winning in your base model's best context is the
 claim. (When the maintainer targets a parent `[SUCCESS]` PR, the stack and
 baseline come from the parent instead — §9.) E.g. a lin-switch candidate
-evaluates inside `gnn x lin x multinomial` (rows <= 1: 9/21, mean 1.845);
-GNN contribution, GNN switch, and multinomial punisher candidates all
-evaluate inside the top stack itself.
+evaluates inside `gnn x lin x multinomial` (pre-fix sweep figures: rows
+<= 1: 9/21, mean 1.845 — that stack has no post-fix sim yet; re-run it with
+the current-contribution punisher before using it as a baseline); GNN
+contribution, GNN switch, and multinomial punisher candidates all evaluate
+inside the top stack itself.
 
 Artifact paths for any stack are read off its sim config,
 `configs/simulation/manager_testing/23_2g8a_self_<contr>_contr_<switch>_switch.yml`
 (which also carries the shared `valid_model` — plumbing, not a slot). The
-current top of the ranking, `gnn x gnn x multinomial` (rows <= 1: 11/21,
-mean 1.759):
+current top of the ranking, `gnn x gnn x multinomial` (post-fix, 22 rows:
+rows <= 1: 13/22, mean 1.7405; sim
+`plots/simulation/23_2g8a_self_gnn_contr_gnn_switch_curpun`, run
+`lin_multinomial_self`; the pre-fix sweep figure was 11/21, mean 1.759):
 
 | slot | model | artifact |
 |---|---|---|
 | contribution | `gnn` | `artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt` |
 | switch | `gnn` | `artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt` |
-| punisher | `lin_multinomial` | `artifacts/baselines/punishment_multinomial_best_with_contr.joblib` |
+| punisher | `lin_multinomial` | `artifacts/baselines/punishment_multinomial_current_contr.joblib` (copula-stamped copy for the frontier stacks: `punishment_multinomial_current_contr_severity_copula.joblib`) |
+
+**Post-fix baselines (stage D of `auto/punisher-current-contribution`,
+22 rows, RCE included; full tables in
+`plots/data_analysis/evaluation/punisher_current_contr/rebaseline_table.md`).**
+These replace the confirmed scores in the frontier PRs' bodies and the
+pre-fix rows of the score matrix for these stacks; a successor of one of
+these stacks is judged against the row here, at full precision in the
+`_curpun` sim's `evaluation/scores.csv`:
+
+| stack (sim dir `plots/simulation/<...>_curpun`) | punisher | rows <= 1 | mean | RCE (bands 0-4 / 5-9 / 10-14 / 15-19) |
+|---|---|---|---|---|
+| PR #179 `23_2g8a_contr_group_vnode_self_gnncopar1_contr_gnn_switch` | lin_multinomial copula | 9/22 | 1.1079 | 1.2682 (+0.049 / -0.007 / -0.017 / +0.040) |
+| PR #181 `23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch` | lin_multinomial copula | 13/22 | 1.0357 | 0.8942 (+0.095 / +0.020 / -0.058 / -0.160) |
+| PR #177 `23_2g8a_infl_self_gaussian_mlp_inflated_group_copula_contr_gnn_joint_exodus_k_onehot_switch` | lin_multinomial copula | 12/22 | 1.1012 | 0.8508 (+0.068 / +0.109 / -0.020 / -0.193) |
+| PR #174 `23_2g8a_kexo_self_gaussian_mlp_v2_group_copula_contr_gnn_joint_exodus_k_onehot_switch` | lin_multinomial copula | 8/22 | 1.1880 | 0.7046 (+0.120 / +0.071 / -0.112 / -0.205) |
+| main `23_2g8a_self_gnn_contr_gnn_switch` | lin_multinomial | 13/22 | 1.7405 | 0.9976 (+0.064 / +0.092 / +0.044 / -0.098) |
+| main `23_2g8a_self_gnn_contr_gnn_switch` | gnn | 8/22 | 1.7094 | 1.0048 (+0.073 / +0.050 / +0.013 / +0.029) |
 
 Only the human maintainer refreshes the score matrix (and with it this
 ranking), when a candidate is accepted.
@@ -85,8 +131,10 @@ direction the evaluations point to (§6) or a finding you make and document:
 
 - architecture changes,
 - new input features — only information the real player or manager observably
-  had at decision time (punishment models condition on round t-1, never on
-  the current round's contributions),
+  had at decision time (contribution models condition on round t-1;
+  punishment models may condition on the current round's contributions —
+  the manager sees them before punishing — but never on the current round's
+  punishments, payoffs or common good),
 - hyperparameter search, including selecting between variants by their
   evaluation score,
 - training-data handling within the conventions (GNNs train on the
@@ -131,7 +179,7 @@ target list: fetch your base model's deficit profile, then declare targets.
 
 | resource | what it gives you |
 |---|---|
-| `plots/data_analysis/evaluation/23_stack_sweep_updated/score_matrix.csv` | every score: 32 stacks x 21 rows |
+| `plots/data_analysis/evaluation/23_stack_sweep_updated/score_matrix.csv` | every score: 32 stacks x 21 rows (pre-fix sweep, lagged punisher — deficit profiles only; post-fix baselines for the six re-run stacks, 22 rows, are in §3 and `plots/data_analysis/evaluation/punisher_current_contr/rebaseline_table.csv`) |
 | `.../23_stack_sweep_updated/slot_report.jpg` | each slot option's rows, averaged over the other slots |
 | `.../23_stack_sweep_updated/slot_concordance.jpg` | whether a deficit / ranking is stable across contexts |
 | `plots/simulation/23_*/evaluation/scores.csv` + `visuals/` | per-stack scores and one figure per row |

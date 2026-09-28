@@ -9,7 +9,7 @@ Group/Other is always keyed to the agent's CURRENT group id at the row being rea
 
 Leak rule: any current-family feature that reads round-t contributions/punishments/common good (self values, group/other/gap means, win_* windows) is ILLEGAL for the contribution target and rejected with a hard error at config validation.
 
-- **Punishment target (#127).** Prev-anchored like the contribution target: the punishment predictor at row t conditions on round t-1 only, matching its GNN's feature convention (`prev_contribution`, `prev_punishment`). The whole current family is ILLEGAL for it, rejected with the same hard error.
+- **Punishment target (#127, re-anchored on `auto/punisher-current-contribution`).** The manager sets round t's punishment after round t's contributions are in and before any of round t's punishments exist (the human data: corr(p_t, c_t) = -0.28 vs corr(p_t, c_{t-1}) = -0.19; P(p > 0 | c_t <= 4, c_{t-1} = 20) = 0.57 vs 0.18 the other way round). So the punishment predictor at row t may read the current-family contribution features -- `contribution`, `contribution_mean_group`, `contribution_mean_other`, `contribution_mean_gap`, `win_contribution_mean_group`, `win_contribution_mean_other` (`PUNISHMENT_LEGAL_CURRENT` in `handcrafted_grid.py`) -- alongside the whole prev family and the structural features. Every other current-family feature contains p_t (`punishment`, `payoff`, `common_good` and their group/other/gap means and windows) and is ILLEGAL for it, rejected with the same hard error. (Before the re-anchoring the punisher was prev-anchored like the contribution target, a lag with no behavioural basis; the GNN punisher's `x_encoding` carries `contribution` for the same reason.)
 
 ## Current -- Self
 

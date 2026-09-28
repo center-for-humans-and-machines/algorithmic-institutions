@@ -1,0 +1,53 @@
+# The multinomial punisher the best autoresearch stacks use
+# (artifacts/baselines/punishment_multinomial_best_with_contr.joblib: the
+# handcrafted_grid_cat.yml entry B1 [prev_contribution, prev_punishment] x
+# B7 [round_number, is_first], C = 1.0, bundle key `config` points there)
+# with the current round's `contribution` added. The human manager punishes
+# round t's contribution, not round t-1's (corr(p_t, c_t) = -0.28 vs
+# corr(p_t, c_{t-1}) = -0.19); see
+# notes/autoresearch_log/punisher-current-contribution.md. One feature set,
+# so the grid is only that set plus its block-OFF subsets.
+#
+# Produces artifacts/baselines/punishment_multinomial_current_contr.joblib:
+#   .venv/bin/python scripts/baselines/run_baseline_cv.py \
+#       configs/training/baselines/punishment/multinomial_current_contr.yml
+#   .venv/bin/python scripts/baselines/inspect_best_model.py \
+#       data/baselines/punishment_cv_multinomial_current_contr.csv \
+#       --config configs/training/baselines/punishment/multinomial_current_contr.yml \
+#       --save-best --name punishment_multinomial_current_contr.joblib
+#   (pass --rank <row> if a block-OFF subset outranks the full 5-feature set;
+#   the artifact is the full set, so the stack's punisher keeps its lags)
+# and the severity-copula-stamped copy
+# artifacts/baselines/punishment_multinomial_current_contr_severity_copula.joblib:
+#   .venv/bin/python scripts/baselines/punishment_copula_rho.py --roundtrip \
+#       --bundle artifacts/baselines/punishment_multinomial_current_contr.joblib \
+#       --out artifacts/baselines/punishment_multinomial_current_contr_severity_copula.joblib
+data:
+  # TRAIN split only. Same locked split as contribution/switch (episode-level;
+  # the mask differs). Test fold lives in the _test sibling file and is NOT
+  # touched here. See split_baseline_holdout.py.
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: punishment
+  target_type: categorical
+  categorical_levels: 31        # punishment is an integer 0..30
+  mask: punishment_valid        # rounds where the manager gave input
+  exclude_flipped: true         # train file is already undoubled; no-op safety filter
+  switch_every: 4
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/punishment_cv_multinomial_current_contr.csv
+
+setting:              # multinomial logistic; only C is valid here
+  C: 1.0
+
+blocks:
+  B1_self:                    # what was just contributed, plus the agent's own lags
+    components: [contribution, prev_contribution, prev_punishment]
+    sets: [[contribution, prev_contribution, prev_punishment]]
+
+  B7_structural:              # is_first: round 0's prev_* are imputed medians
+    components: [round_number, is_first]
+    sets: [[round_number, is_first]]
