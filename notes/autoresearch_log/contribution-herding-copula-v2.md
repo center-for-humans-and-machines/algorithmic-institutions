@@ -1,0 +1,614 @@
+# Autoresearch log: contribution-herding-copula-v2
+
+AR(1)-persistent herding copula for the GNN contributor — the third leg of
+the copula triptych (punisher PR #160, switch PR #150) — stacked on the
+maintainer-designated parent PR #160. Supersedes the un-PRed branch
+`auto/contribution-herding-copula` (same mechanism, parented on PR #162):
+the maintainer redirected the parent to #160 (2026-08-27, "work on the
+contribution model on top of PR #160") before that branch's calibration
+ever ran, so no result is discarded — its tested code is ported, its
+baselines are re-anchored here.
+
+## 1. Declaration
+
+- **Slot:** contribution
+- **Base model:** `gnn` contributor
+  (`artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt`),
+  unchanged — the change is at the free-running sampler only.
+- **Parent PR (§9):** #160, branch `auto/punisher-severity-copula-v2`
+  (`[SUCCESS]`, PD 2.93 -> 1.53). Evaluation stack: the parent's config
+  `configs/simulation/manager_testing/23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch.yml`
+  — `gnn` contribution x plain `gnn` switch x severity-copula
+  `lin_multinomial` punisher (rho = 0.3507588625344979).
+- **Baseline** (the parent's confirmed run,
+  `plots/simulation/23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch/evaluation/scores.csv`,
+  single `lin_multinomial_copula_self` pairing): rows <= 1 **10/21**,
+  mean **1.6879978841849728**. Contribution-slot rows >= 2 (§6 target
+  candidates): CG 9.808514112722413 (band > 5; raw ratio gap
+  0.2594222471221652, noise ceiling 0.026448679600274437),
+  RCD 2.941928428442498 (band 2-5), RCA 2.0829074791966917 (band 2-5).
+- **Target rows:** **CG** (primary; gate 1 needs CG < 5, i.e. the
+  spread-ratio gap halves to < 0.13224339800137218) and **RCD**
+  (secondary; gate 1 needs RCD < 2, i.e. the pull-coefficient gap below
+  0.16021334822457584). Gate 2 requires the 21-row mean below
+  1.6879978841849728. RCA (2.0829) and RCB (1.9881) are watch items, not
+  targets — the mechanism makes no clean claim on them.
+- **Hypothesis:** groups develop a persistent shared culture —
+  group-mates' contributions co-move beyond what observed history
+  explains, and the shared component persists across the episode. The
+  prior record triangulates this as the one unclaimed piece of the CG
+  deficit: within-round residual dependence is real but small (PR #149:
+  rho ~ 0.07, ~14% of the teacher-forced gap, growing by round thirds
+  0.035 / 0.074 / 0.119 — lock-in), exposure bias is real but small
+  (PR #163: schedsamp closes ~7% free-running, family vetoed on cost),
+  and an episode-persistent shared latent is the only mechanism that has
+  moved CG without taxing the marginals (PR #159: spread ratio
+  0.586 -> 0.662, tax-free, dose capped by teacher-forced MLE). The
+  switch slot's arm comparison (PR #150) showed the same structure: a
+  fresh per-round latent mean-reverts through the dynamics and regresses,
+  an AR(1)-persistent one wins. An AR(1) shared per-(episode, group)
+  Gaussian latent at the contribution sampler injects the shared
+  component every round; because each member's draw feeds back through
+  their own `prev_contribution` (this artifact's `x_encoding` is
+  `[prev_contribution, prev_punishment, agent_group]` with a group-blind
+  fully-connected EdgeModel — no explicit same-group conformity feature,
+  the mechanism correction inherited from the prior branch's note 3), a
+  *persistent* shift compounds through the closed loop instead of
+  washing out, widening the per-(game, round, group) mean spread CG
+  measures. **RCD:** a switcher's copula cell is their *arrival* group
+  (`apply_switch` updates `agent_group` before `update_contribution`),
+  so from the switch round on their draws share the receiving group's
+  latent — coherent assimilation toward the new group's level, which is
+  exactly the switching pull RCD regresses. Marginals are preserved by
+  construction (each agent's draw passes through their own predicted
+  CDF), so the C-block/CG anti-correlation tax (§6) is avoided the same
+  way the severity and herding copulas avoided it, and no retraining.
+- **Planned change:** Gaussian-copula sampling for the GNN contribution
+  head. Port the head-agnostic AR(1) copula machinery from the switch
+  precedent (PR #150/#162 branches: `src/aimanager/generic/copula.py`,
+  the `GraphNetwork` copula dispatch) and the contribution-specific work
+  from the superseded branch (head-gate relaxation to
+  `y_name in {"does_switch", "contribution"}`, `copula_switch_every = 1`
+  since contributions are decided every round, tests, the calibration
+  script `scripts/artificial_humans/contribution_copula_rho.py` with the
+  AR(1) lag-1 extension, artifact stamping). rho and phi estimated on
+  the teacher-forced residual dependence of the frozen contribution GNN
+  on the human train split only (pairwise-likelihood MLE, the #146/#149
+  estimator; PRIMARY phi from cross-player-only lag-1 pairs — the
+  orchestrator amendment inherited from the prior branch, recorded
+  before any calibration number was seen). rho must reproduce #149's
+  0.06958238086256316 exactly or the data path moved. Parameters stored
+  as fields on a copy of the contribution artifact (artifacts without
+  the fields sample independently, bit-identical legacy path); the plain
+  `gnn` switch artifact carries no copula fields, so the switch slot's
+  behavior is untouched (§4). One simulation in the parent's stack, one
+  evaluation, verdict from the §2 gates.
+- **Iteration budget (§5):** no retraining — one CPU calibration job and
+  one standard-protocol GPU simulation; far under the 3x bound.
+
+## 2. Plan
+
+Written by the planning subagent (Opus), validated by the orchestrator
+2026-08-27: targets per §2, every step legal per §5, frozen surface
+untouched per §8. Orchestrator amendments at validation, before anything
+ran: (i) the remote PyG test suites run via login-node pytest **inside
+the isolated dir** (step 6 before step 7) — `scripts/remote_test.sh`'s
+shared-checkout `--delete` sync is skipped entirely, the race that
+voided the superseded branch's first run; (ii) port set A is minimal —
+`dump_switch_probs.py`, `switch_copula_rho.py`,
+`make_switch_copula_artifact.py` are not ported (docstring-only
+references); (iii) only doc pointers to the superseded
+`contribution-herding-copula.md` log are repointed to this file; switch-
+slot pointers stay as historical PR references.
+
+- [x] 1. Provenance survey, no code. Verified at planning: `b7dabfc` is
+      an ancestor of both donor branches, so both ports are clean path
+      checkouts; `scripts/baselines/punishment_copula_rho.py` is
+      byte-identical between base and donor (the estimator
+      `contribution_copula_rho.py` imports is unchanged, #149's rho
+      reproducible); port set A is self-contained (`copula.py` imports
+      only `math` + `torch`). Record in Notes; no commit of its own.
+- [x] 2. Port the machinery (commit): `git checkout
+      auto/switch-herding-copula-v2 -- src/aimanager/generic/copula.py
+      src/aimanager/generic/graph.py
+      src/aimanager/tests/test_switch_copula_graph.py
+      tests/switch/test_switch_copula.py`. Nothing else; no edits.
+- [x] 3. Port the contribution work (commit): `git checkout
+      auto/contribution-herding-copula -- src/aimanager/generic/graph.py
+      src/aimanager/tests/test_switch_copula_graph.py
+      src/aimanager/tests/test_contribution_copula_graph.py
+      tests/copula/test_contribution_copula.py` — head gate relaxed to
+      `y_name in ("does_switch", "contribution")`, rejection case moved
+      to `contribution_valid`, plus the two new suites. Repoint dangling
+      references to the superseded log file to this one. NOT ported: the
+      superseded branch's sim config and log, every #162
+      artifact/config/log.
+- [x] 4. Re-verify the mechanism points once in the new tree, by
+      reading, into Notes (commit with step 3 or alone): head-agnostic
+      sampler; 21-level ordering == encoder; per-round sim calls with
+      `n_rounds=1`; `reset_rnn` clears `_copula_z` at round 0;
+      `copula_switch_every=1` advances the AR(1) every round;
+      `apply_switch` before `update_contribution` (arrival-group cells);
+      invalid-agent overwrite after the draw; `agent_group` and
+      `round_number` present in `env.state`.
+- [x] 5. Port the calibration tooling (commit): `git checkout
+      auto/contribution-herding-copula --
+      scripts/artificial_humans/contribution_copula_rho.py
+      scripts/artificial_humans/calibrate_copula.slurm`, then rename the
+      artifact dir in both from `..._herding_copula` to
+      `..._herding_copula_v2`. Estimator, data path, train split (40
+      single-copy episodes), teacher-forced `sample=False`, cell
+      `(episode, round, agent_group)`, pairwise MLE, round-trip gate,
+      200-episode-cluster bootstrap, PRIMARY cross-player-only lag-1 phi
+      all carried over unchanged.
+- [x] 6. Create the isolated remote dir `~/iso_contr_herdcopar1_v2`
+      (squeue PENDING check first) by direct rsync of the branch
+      including `artifacts/`; md5-verify `copula.py`, `graph.py`,
+      `environment.py`, `contribution_copula_rho.py` against the local
+      branch. Everything remote for this experiment runs here, never in
+      the shared checkout.
+- [x] 7. Tests. Raven (PyG): login-node pytest inside the isolated dir
+      for `test_switch_copula_graph.py` +
+      `test_contribution_copula_graph.py` (+ the other src suites).
+      Local (torch-only, main checkout's interpreter with `PYTHONPATH`
+      at this worktree's `src`): `pytest tests/copula tests/switch` +
+      the eval-suite tests. Log entry only if green.
+- [x] 8. `sbatch scripts/artificial_humans/calibrate_copula.slurm` in
+      the isolated dir (CPU job; no compute on login nodes).
+      Acceptance: rho must reproduce #149's 0.06958238086256316 exactly
+      (SE 0.010418260898762315, CI [0.04592661278794028,
+      0.0854596547235886], round-trip max |bias| 0.009462259703284237)
+      — a mismatch means the data path moved: stop and report, never
+      tune. STOP-GATE: rho CI includes 0, or phi_hat <= 0, or phi CI
+      includes 0, or phi_hat >= 1 -> no artifact, no simulation,
+      calibration-only `[FAIL]` PR. Otherwise continue regardless of
+      preflight magnitude.
+- [x] 9. Commit the calibration output: job log +
+      `artifacts/artificial_humans/group_switching_contribution_50ep_herding_copula_v2/calibration/copula_params.json`;
+      log rho, phi, both CIs, the all-pairs phi diagnostic, job id,
+      unrounded.
+- [x] 10. Port `scripts/artificial_humans/make_contribution_copula_artifact.py`
+      with the `PARAMS`/`OUT` dirs renamed to `..._herding_copula_v2`;
+      run in the isolated dir (stamps `copula_rho`, `copula_phi`,
+      `copula_switch_every=1`; bit-identical check on every pre-existing
+      key; three-field round-trip through `GraphNetwork.load`; honesty
+      check: teacher-forced train-split probabilities bit-identical to
+      the base). Fetch and commit script + stamped artifact
+      (`.../group_switching_contribution_50ep_herding_copula_v2/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt`,
+      LFS) + `.copula.json` sidecar.
+- [x] 11. Sim config `configs/simulation/manager_testing/23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch.yml`:
+      byte-copy of the parent's
+      `23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch.yml` with
+      exactly three edits — contribution artifact path, `output_dir`,
+      figure name. Manager list (single `lin_multinomial_copula_self`
+      pairing), seed 42, episode count, `save_per_round: true` all
+      untouched; dir name parses under the sweep DIR_PATTERN with switch
+      token `gnn`.
+- [x] 12. Isolated simulation: rsync config + artifact into
+      `~/iso_contr_herdcopar1_v2`, re-md5 the code, submit one job that
+      prints provenance first (`aimanager.__file__`, md5 of
+      `copula.py`/`graph.py`/`environment.py`, sha256 of all four
+      artifacts, torch/CUDA versions, loaded
+      `copula_rho`/`copula_phi`/`copula_switch_every`). squeue PENDING
+      check before the rsync; one job, seed 42; confirm
+      `per_round.parquet`.
+- [x] 13. Fetch into
+      `plots/simulation/23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch/`;
+      `python -m aimanager evaluate <config>`; commit sim outputs +
+      evaluation, scores unrounded.
+- [x] 14. Verdict per §2 against the declaration's baseline (gate 1:
+      CG < 5 from 9.808514112722413, or RCD < 2 from 2.941928428442498;
+      gate 2: mean < 1.6879978841849728; rows <= 1 vs 10/21 as context).
+      Fill results table + Notes; PR with
+      `--base auto/punisher-severity-copula-v2`, titled
+      `[SUCCESS]`/`[FAIL]`, body Hypothesis / Results / Collateral.
+
+### Plan revision (2026-08-27, after step 8, before step 9 — §9.4)
+
+Step 8 ran: rho reproduced PR #149 bit-exactly
+(0.06958238086256316, SE 0.010418260898762315, CI
+[0.04592661278794028, 0.0854596547235886], round-trip max |bias|
+0.009462259703284237, preflight 0.7837119164031583 ->
+0.7928150641319318 vs human 0.8472681041593946 — all four acceptance
+numbers match). The phi stop-gate fired: PRIMARY cross-player lag-1
+phi_hat = 1.1588380212468576, CI [0.8256631146532615,
+1.6415133722844082]; all-pairs diagnostic 1.1114407681084841;
+rho_lag1_cross = 0.0806347085524179 > rho. The job exits 1 by design
+("STOP-ESCALATE", `contribution_copula_rho.py:603-609`).
+
+**Orchestrator ruling — adopt phi = 1.0, the unit-root boundary
+(static episode latent), and continue.** Rationale, recorded before any
+artifact was stamped or simulation run:
+
+1. The CI spans 1: the estimator saturated at its boundary; it did not
+   measure a real super-unit persistence.
+2. `phi = rho_lag1 / rho` assumes a stationary latent-only dependence
+   structure. PR #149 documented round-growing rho
+   (0.035 / 0.074 / 0.119 by thirds) and the `prev_contribution`
+   feedback adds cross-round dependence outside the latent — both bias
+   phi_hat upward.
+3. phi = 1.0 is exact in the sampler (`z_next = z_prev`, variance 1,
+   marginals untouched) and conservative: it predicts cross-round
+   cross-player dependence rho = 0.0696, still below the observed
+   0.0806.
+4. It is the declared hypothesis in its purest form — one shared
+   standard-normal per (episode, group), the copula analog of
+   PR #159's episode-persistent latent. The dose is untouched: rho
+   stays the MLE value. Persistence-class boundary decision, not a
+   tuned parameter; no evaluation score was involved.
+5. The ported stamper already implements exactly this path
+   (`phi_final` = "1.0 exactly for a static episode latent",
+   `make_contribution_copula_artifact.py` docstring + the (0, 1]
+   assert) — the prior branch designed the escape hatch; only the two
+   sampler asserts were never relaxed to match.
+
+Amended steps, validated (targets unchanged, §5 legal — simpler model,
+no frozen surface):
+
+- [x] 8b. Relax the two strict asserts to admit the boundary
+      (`copula.py` `0.0 <= phi <= 1.0`; `graph.py:180` likewise);
+      extend the test suites with phi = 1.0 cases (latent constant
+      across rounds, cell-switch pickup, marginals preserved, RNG
+      contract unchanged); rerun the affected local + Raven suites.
+- [x] 9'. Step 9 additionally: append `phi_final: 1.0` +
+      `phi_final_reason` (this ruling) to the committed
+      `copula_params.json` — the field the stamper is designed to
+      read; the estimated phi stays in the JSON unaltered.
+- [x] 10'. Step 10 stamps `copula_phi = 1.0` via `phi_final`; the
+      `.copula.json` sidecar carries both the estimate and the adopted
+      value.
+
+## 3. Results
+
+| date | change (one line) | stage | target scores | rows <= 1 | mean | verdict |
+|---|---|---|---|---|---|---|
+| 2026-08-27 | episode-persistent group copula at the contribution sampler, rho=0.06958238086256316 (pairwise MLE), phi=1.0 (boundary ruling) | single | CG 4.163465133854436 (baseline 9.808514112722413), RCD 1.9647336396755046 (baseline 2.941928428442498) | 11/21 (baseline 10/21) | 1.2893632310269196 (baseline 1.6879978841849728) | SUCCESS — gate 1 twice (CG > 5 -> 2-5, RCD 2-5 -> 1-2), gate 2 mean down |
+
+## 4. Notes
+
+1. Re-parenting decision (2026-08-27): the maintainer pointed this
+   experiment at PR #160 after the prior branch had declared against
+   PR #162 (a titled `[FAIL]` with a config-dependent passing draw).
+   #160's stack is also the cleaner claim: every slot in it is either a
+   confirmed `[SUCCESS]` or the reference model, and the CG baseline
+   here (9.8085) matches the re-baselined #149/ar1-copula declarations,
+   so the whole prior CG record reads directly against this run.
+
+2. The copula cell computation `cells = batch_index * 2 + agent_group`
+   hard-codes `n_groups = 2` — correct for the whole 23 family, silently
+   wrong if a future config changes group count (planning-stage flag (d),
+   recorded for the next reader).
+
+3. Steps 1-4 done in the worktree branch
+   `auto/contribution-herding-copula-v2`. **Provenance (step 1), re-run
+   here:** `git merge-base b7dabfc auto/switch-herding-copula-v2` ==
+   `b7dabfc259965d8300ee01ef7cc5749cfeb80b3a`, and the same for
+   `auto/contribution-herding-copula` — `b7dabfc` is an ancestor of both
+   donors, so both ports are clean path checkouts with no merge.
+   `git diff b7dabfc <donor> -- scripts/baselines/punishment_copula_rho.py`
+   is empty for both donors, so the estimator #149's rho came from is
+   byte-identical and step 8's acceptance number is reproducible. Port set
+   A is self-contained: `copula.py` on the donor imports only `math`
+   (`copula.py:15`) and `torch` (`copula.py:17`). **Ports:** step 2 is the
+   four donor files verbatim (`copula.py` new, `graph.py` +78/-1,
+   `test_switch_copula_graph.py` +361, `tests/switch/test_switch_copula.py`
+   +316); step 3 adds only the head-gate relaxation in `graph.py`, the
+   rejection-case move in `test_switch_copula_graph.py`, and the two new
+   contribution suites — no unexpected hunks in `graph.py` in either
+   direction. Four dangling pointers to the superseded log were repointed
+   to this file (`graph.py:177`, `test_switch_copula_graph.py:332`,
+   `test_contribution_copula_graph.py:2,16`,
+   `tests/copula/test_contribution_copula.py:2,12`), their stale plan-step
+   numbers renumbered to this plan's step 3; switch-slot log and PR
+   references were left as historical pointers per plan amendment (iii).
+   **Mechanism re-verification (step 4), by reading this tree:**
+   (a) head-agnostic sampler — `copula.py:48` `sample_correlated_levels`
+   takes `proba` as `(N, L)` with the only shape constraints
+   `proba.dim() == 2` (`copula.py:74`) and `n_levels >= 2`
+   (`copula.py:76`), and the level comes from a generic row-cumsum
+   `searchsorted` (`copula.py:43-45`, called at `copula.py:101`); nothing
+   assumes L == 2. (b) 21-level ordering == encoder — the head's decoder is
+   `IntEncoder(encoding="onehot", n_levels=y_levels)`
+   (`graph.py:156`, `y_levels=21` default at `graph.py:137`), whose onehot
+   map has row `i` hot at position `i` (`encoder.py:21-25`, indexed at
+   `encoder.py:47`) and whose sampling decode returns the column index
+   itself (`encoder.py:55-58`); so softmax column `i` is contribution value
+   `i` and the copula's returned level is the contribution directly (the
+   artifact's stored `y_levels` is re-checked at load in step 10).
+   (c) one predictor call per round with `n_rounds=1` — `env.reset()`
+   (`simulate.py:258`) and `env.step()` (`simulate.py:300`) each call
+   `update_contribution` once (`environment.py:346`, `environment.py:407`),
+   which calls `artifical_humans.predict(self.state, ...)`
+   (`environment.py:318-322`); `predict` dispatches to
+   `predict_independent` for the non-autoregressive head
+   (`graph.py:497-501`), which reads `n_rounds` off the state tensor shape
+   (`graph.py:419`), and the env's state tensors are
+   `(batch_size, n_agents, 1)` (`environment.py:136`) — so the copula loop
+   `for r in range(n_rounds)` (`graph.py:391`) runs exactly once per round.
+   (d) `reset_rnn` clears the copula state at round 0 —
+   `_predict_encoded_copula` sets `self._copula_z = None` when `reset_rnn`
+   (`graph.py:377-378`), and the env passes
+   `reset_rnn=self.round_number[0, 0, 0] == 0` (`environment.py:320`), i.e.
+   True only on the round-0 call; the field is initialised to `None` at
+   construction (`graph.py:194`). (e) `copula_switch_every=1` advances the
+   AR(1) every round — the existing gate is
+   `(int(rounds[r]) + 1) % self.copula_switch_every == 0`
+   (`graph.py:408`), which is unconditionally true at `k=1`, with `rounds`
+   taken from the state's `round_number` (`graph.py:386-390`); no code
+   change was needed for the every-round case. (f) arrival-group cells —
+   `step` calls `apply_switch(pending_switch)` (`environment.py:405-406`)
+   before `update_contribution()` (`environment.py:407`), and
+   `apply_switch` rewrites `state["agent_group"]`
+   (`environment.py:368-373`), so a switcher's cell id
+   (`graph.py:381-382`) is their receiving group from the switch round on —
+   the RCD claim in §1 holds as written. (g) invalid-agent overwrite after
+   the draw — the copula draw happens at `environment.py:318-322` and the
+   `contribution[~contribution_valid] = default` overwrite only at
+   `environment.py:331-334`, so the validity model never perturbs the
+   copula's RNG consumption or its latent. (h) required state keys present
+   — `round_number` (`environment.py:140`) and `agent_group`
+   (`environment.py:150-154`) are both in the dict `reset_state` builds,
+   and `round_number` is advanced at `environment.py:396`; the copula
+   sampler reads them off the raw state, which `predict_independent`
+   forwards untouched (`graph.py:426-428`). All eight points OK; nothing in
+   the diffs was unexpected. Not run at these steps: any Python, hence no
+   `pre-commit`/flake8 pass — the only hand edits are comments and
+   docstrings, all within 88 characters (checked with `awk`).
+
+4. Steps 5-7 (calibration tooling ported, isolated remote setup, tests).
+   **Port (step 5):** `contribution_copula_rho.py` (613 lines) and
+   `calibrate_copula.slurm` checked out from
+   `auto/contribution-herding-copula`. The artifact dir
+   `group_switching_contribution_50ep_herding_copula` occurred exactly ONCE
+   across both files (`calibrate_copula.slurm:25`, the `PARAMS` path) and is
+   now `..._herding_copula_v2`; a post-edit grep for the old name returns
+   nothing. Estimator specifics re-confirmed by reading the whole file:
+   train split `experiments/baseline/2group_8agent_50ep_bline_train.csv`
+   with `N_TRAIN_EP = 40` asserted in `select_split`; teacher-forced
+   `predict_independent(..., sample=False, reset_rnn=True)`; cell
+   `(episode * n_rounds + round) * N_GROUPS + agent_group` (meta
+   `cell_key="episode_round_agent_group"`); pairwise-likelihood MLE via
+   `pc.rho_mle`; round-trip gate at tolerance 0.03 behind `--roundtrip`;
+   episode-cluster bootstrap at `pc.N_BOOT = 200`; PRIMARY phi from
+   `cross_pairs` filtered to `agent[i] != agent[j]` with the all-pairs refit
+   kept as `phi_allpairs` ("never used"); `--write-params` dumps estimates
+   plus `source_model_sha256` and `git_head`. `pc` is
+   `scripts/baselines/punishment_copula_rho.py`, still byte-identical to
+   base (`git diff b7dabfc` empty), so step 8's acceptance number is
+   reproducible; `SEED = 38381`, `RHO_GRID = 0.0..0.90` non-negative.
+   **Slurm adaptation (flagged):** the donor script's only environment
+   assumption was the relative `source .venv/bin/activate`, and the
+   isolated dir carries no venv. Replaced with
+   `PY="$HOME/algorithmic-institutions/.venv/bin/python"` plus
+   `export PYTHONPATH="$PWD/src:..."`, so the shared checkout supplies only
+   the interpreter while THIS tree supplies the code (the script's own
+   `sys.path.insert(0, ROOT / "src")` off `__file__` is the second guard);
+   the job now echoes `cwd` and `aimanager.__file__` before running. No
+   absolute `~/algorithmic-institutions` path was ever hard-coded in either
+   file, and `#SBATCH --chdir=.` already resolves to the submission dir.
+   **Isolated setup (step 6):** `~/iso_contr_herdcopar1_v2`, populated by
+   direct `rsync` from the worktree (`src/`, `scripts/`, `configs/`,
+   `pyproject.toml`, the three human CSVs, the base contribution artifact
+   dir, and `artifacts/baselines/`); the shared checkout was never synced,
+   read, or run from beyond borrowing its interpreter. squeue at the start:
+   one unrelated RUNNING gpu job (29666118 `architec`), no PENDING, so no
+   sync race. All nine md5s match local vs remote:
+   `copula.py 96393213cfd3244aa4ef26ef22c2e11e`,
+   `graph.py c277589c2e9471d8eeafb48294d1face`,
+   `environment.py e0f14eeefc088c53250709e6a8a9bf13`,
+   `contribution_copula_rho.py 140723dd30a95bcdb3a93dde5fd60ffd`, plus the
+   slurm, the three CSVs and the base `.pt`
+   (`c70309eac20b48ad18d96aa5c5bf7725`). No shipped file is an LFS pointer:
+   scanned locally before the rsync and again remotely
+   (`grep -rl 'version https://git-lfs.github.com/spec/v1'` returns
+   nothing), and the CSVs/`.pt` were byte-sniffed remotely (CSV header, `PK`
+   zip magic).
+   **Tests (step 7), both import paths verified before trusting a result:**
+   local `aimanager.__file__` ==
+   `<worktree>/src/aimanager/__init__.py`, remote ==
+   `/u/certuer/iso_contr_herdcopar1_v2/src/aimanager/__init__.py` — neither
+   fell through to an editable install. Local (main checkout's interpreter,
+   `PYTHONPATH` at this worktree's `src`): `tests/copula`, `tests/switch`
+   and the five eval-suite suites, **101 passed**. Raven login-node pytest
+   inside the isolated dir: `test_switch_copula_graph.py`,
+   `test_contribution_copula_graph.py`, `test_encoder.py`,
+   `test_edge_encoder.py`, `test_environment.py`,
+   `test_linear_manager.py`, **41 passed**. The remote run first showed
+   `1 failed` — `test_linear_manager.py::test_multimanager_linear_side`
+   raised a bare `FileNotFoundError` for
+   `artifacts/baselines/punishment_multinomial_best_with_contr.joblib`,
+   i.e. a gap in what I had shipped, not a code failure; shipping
+   `artifacts/baselines/` (needed for the parent stack's
+   `lin_multinomial_copula_self` punisher at step 12 regardless) made it
+   pass with no source edit. Lint, one batched pass over
+   `git diff --name-only b7dabfc -- 'src/**/*.py' 'scripts/**/*.py'`
+   (5 files): flake8 (88, `E203,W503`) clean and `black --check` reports all
+   5 unchanged; the two branch-added `tests/` suites are clean too. No fix
+   was needed, so nothing was edited for lint.
+
+5. Steps 8b and 9 (boundary phi admitted, calibration output committed).
+   **Calibration numbers, job 29666293** (`cg_copula_rho`, node ravc4115,
+   8 CPUs, 00:12:29 elapsed, ExitCode 1:0 -- the exit-1 is BY DESIGN, the
+   script's `STOP-ESCALATE` on `phi >= 1.0`, not a crash; the whole run
+   completed and wrote its params first, total runtime 715.1s):
+   rows=7457, cells>=2=1608, pairs=15090 over the 40 single-copy train
+   episodes (24 rounds, 8 agents), Phi_2 quadrature max abs err vs scipy
+   2.220446049250313e-16.
+   rho = **0.06958238086256316** (SE 0.010418260898762315, 95% cluster-
+   bootstrap CI [0.04592661278794028, 0.0854596547235886], bootstrap
+   min/max 0.03714875071909212 / 0.09852826610976997, pairwise LR
+   45.923711626266595 on 15090 pairs) -- PR #149's number bit-exactly, so
+   the data path did not move. Round-trip acceptance gate: max |bias|
+   0.009462259703284237 -> PASS at tolerance 0.03.
+   phi: rho_lag1_cross = 0.0806347085524179 (PRIMARY, 28714 cross-player
+   pairs; 6603 self-pairs excluded), so phi_hat =
+   **1.1588380212468576**, paired-bootstrap 95% CI
+   [0.8256631146532615, 1.6415133722844082] (median 1.179254232832173,
+   0 degenerate draws, 0 draws with rho < 0.01). All-pairs diagnostic
+   (never used): rho_lag1_all = 0.07733669483270429, phi_allpairs =
+   1.1114407681084841. Pre-flight group-spread ratio (one-step redraw,
+   50 repeats): independent 0.7837119164031583 -> copula
+   0.7928150641319318 vs human 0.8472681041593946. Diagnostics, not
+   selection criteria: PIT rho 0.045726003288415626, holdout rho
+   0.13423231991344123, round-thirds rho 0.03450698559687487 /
+   0.07363186867146107 / 0.11868440333255369 (the lock-in growth that
+   biases a stationary-latent phi upward, ruling point 2).
+   **Ruling implemented (step 8b):** the two strict asserts now admit
+   phi = 1.0 (`copula.py:82`, `graph.py:180`); rho keeps [0, 1). New
+   phi = 1.0 cases pass in both suites -- local
+   `pytest tests/copula tests/switch` 34 passed, Raven login-node pytest
+   in `~/iso_contr_herdcopar1_v2` for the two graph suites 23 passed
+   (md5 of all four shipped files verified local vs remote, remote
+   `aimanager.__file__` inside the isolated dir). flake8 (88,
+   `E203,W503`) and `black --check` clean on the four touched files.
+   **Committed (step 9'):** the params JSON with `phi_final: 1.0` and
+   `phi_final_reason` appended (all 38 estimator fields byte-unchanged,
+   including the untouched `phi: 1.1588380212468576`; sorted-key order
+   preserved) plus the job log next to it as
+   `calibration/calibrate_copula_29666293.log`. Neither file is
+   LFS-tracked (`.gitattributes` covers only `*.csv`, `*.parquet`,
+   `*.pt`; `git check-attr filter` says `unspecified` for both), but the
+   job log needed `git add -f`: `.gitignore:4` is `*.log`, and plan
+   step 9 asks for the log itself, so this one 10 KB text file is a
+   deliberate narrow exception (flagged for the reviewer).
+
+6. Step 10 (artifact stamped). **Port:** the stamper checked out from
+   `auto/contribution-herding-copula`; the only edits are the `PARAMS`
+   and `OUT` dirs renamed to `..._herding_copula_v2` (two occurrences,
+   post-edit grep for the old name returns nothing), the log pointer in
+   the module docstring repointed to this file, and two stale
+   prior-branch pointers renumbered to this plan ("note-7 decision rule"
+   -> the plan-revision ruling in this log, assert message "plan step
+   8b/8c" -> "plan step 8b"). Read in full first: it stamps
+   `params["phi_final"]` when present and refuses a `phi_final` without
+   a `phi_final_reason`; asserts `0 < rho < 1` and `0 < phi <= 1`;
+   re-checks `phi_kept`, `copula_switch_every`, `source_model` and
+   `source_model_sha256` against the base; walks every pre-existing key
+   with a bit-level `same()` after reload and asserts the only new keys
+   are the three copula fields; round-trips the three fields through
+   `GraphNetwork.load`; and runs the honesty check (teacher-forced
+   `sample=False` train-split probability matrix bit-identical to the
+   base). **Run (job 29667403, `cg_copula_stamp`, COMPLETED 00:00:14,
+   ExitCode 0:0):** via `sbatch` from the isolated dir, not the login
+   node -- the script unpickles PyG modules and does a full teacher-
+   forced pass, i.e. real compute. The wrapper
+   `scripts/artificial_humans/stamp_copula.slurm` copies
+   `calibrate_copula.slurm`'s pattern (shared checkout's interpreter,
+   `PYTHONPATH="$PWD/src"`, `--chdir=.`, provenance echo); it queued
+   ~9 min on `QOSGrpCpuLimit` behind an unrelated 8-CPU job of another
+   session in `~/iso_contr_herdcopar1` (no `_v2`, a different dir --
+   nothing wrote into ours). Remote `aimanager.__file__` was inside the
+   isolated dir; md5 of the stamper, the wrapper and the params JSON
+   verified local vs remote before submission.
+   **Verification lines:** base sha256
+   `3748e9e12461eaa70c7d5ff5c445e7ac1a54396b928624bf32f5d6b9974925c1`
+   (== the params' `source_model_sha256`), params sha256
+   `9ee42b1f433ee3eb353adcbdbb72382e347e4d73e9d202d06234243c34bdbbc5`,
+   stamped sha256
+   `4a32785d88707662ac70f393b8fd6bec1c59bf9be27446426731b12b1f01614b`
+   (re-hashed after the fetch: identical). "10 tensors compared
+   bit-identically vs the base artifact" over modules
+   `['op1', 'op2', 'rnn_n']`; `loads {'copula_rho':
+   0.06958238086256316, 'copula_phi': 1.0, 'copula_switch_every': 1}`;
+   "7457 teacher-forced train-split rows bit-identical to the base
+   model's"; "artifact verified bit-identical to the base outside the
+   copula fields". The `.copula.json` sidecar carries both numbers --
+   `phi_lag1_diagnostic 1.1588380212468576` (the estimate) and
+   `phi_stamped`/`copula_phi 1.0` (adopted) -- plus the ruling text and
+   both CIs. `git check-attr filter` on the `.pt` says `lfs`, so it was
+   committed normally through the LFS filter; the sidecar is plain JSON.
+   The stamper's own job log is not committed (`.gitignore` `*.log`);
+   its key lines are the ones quoted above.
+
+7. Steps 11-13 (sim config, isolated simulation, evaluation).
+   **Config (step 11):** `cp` of the parent's
+   `23_2g8a_severity_copula_v2_self_gnn_contr_gnn_switch.yml` followed by
+   exactly three edits; `diff` against the parent reports 6 changed lines
+   (3 `-` / 3 `+`) and nothing else -- contribution artifact path ->
+   `..._herding_copula_v2/...`, `output_dir` and `figure_name` slugged
+   `23_2g8a_contr_herding_copula_v2_self_gnncopar1_contr_gnn_switch`. Verified
+   untouched by grep: `seed: 42`, `n_episodes: 100`, `n_rounds: 24`,
+   `switch_every: 4`, `save_per_round: true`, and the single
+   `lin_multinomial_copula_self` pairing. The header comment still names the
+   parent branch -- deliberately left, since the plan and the orchestrator
+   brief both specify exactly three edits (flagged for the reviewer). The dir
+   name parses under the sweep's `DIR_PATTERN` as
+   `{'contr': 'gnncopar1', 'switch': 'gnn'}` (checked by running the compiled
+   regex from `evaluation_sweep.py:90`).
+   **Isolated simulation (step 12), job 29667869** (`cg_copula_sim`, node
+   ravg1010, 1x A100-SXM4-40GB, **00:02:20** elapsed, ExitCode 0:0; PENDING in
+   `gpu1` for ~4 min before start). squeue before the rsync: one unrelated
+   RUNNING `small` job of another session (29666338 `contrcop`, 47 min in),
+   **no PENDING**, so no sync race. Shipped into `~/iso_contr_herdcopar1_v2`
+   by direct `rsync --relative` from the worktree: the new config, the stamped
+   artifact dir, and -- newly needed for this stack, absent since step 6 --
+   the `raven_script_22` (valid) and
+   `switch_pred_opt_50ep_doubled_reanchored` (switch) artifact dirs plus the
+   parent's punisher joblib. The shared checkout was never synced, read, or
+   run from beyond borrowing its interpreter. All four code/config md5s match
+   local vs remote (`copula.py a163eee6253d29af6480d08266744a58`,
+   `graph.py 4375327572ea22cdb4d5cbcaaf3e827a`,
+   `environment.py e0f14eeefc088c53250709e6a8a9bf13`, config
+   `534b7b43abf13a1a39cdc22a88b73164`); the first two differ from note 4's
+   values because step 8b relaxed the two phi asserts. No shipped file is an
+   LFS pointer (remote `grep -rl` over `artifacts/ configs/ src/` returns
+   nothing; the `.pt` byte-sniffs as `PK` zip magic locally). New wrapper
+   `scripts/simulate_iso.slurm` copies `run_simulation.sh`'s resource block
+   (a100 GPU, `cuda/11.4`, 2 CPUs, 16 GB, 1 h) onto the
+   `calibrate_copula.slurm`/`stamp_copula.slurm` interpreter pattern
+   (`PY="$HOME/algorithmic-institutions/.venv/bin/python"`,
+   `PYTHONPATH="$PWD/src"`, `--chdir=.`) and prints the provenance block
+   demanded by the plan step before simulating -- rather than
+   `simulate_cluster.sh`, whose `rsync --delete` into the shared checkout is
+   the race this experiment is isolated against.
+   **Provenance block as printed:** `cwd
+   /raven/u/certuer/iso_contr_herdcopar1_v2`; `aimanager
+   /raven/u/certuer/iso_contr_herdcopar1_v2/src/aimanager/__init__.py` (inside
+   the isolated dir, no fall-through to the editable install); torch
+   `1.11.0+cu113`, cuda available True, cuda `11.3`; artifact sha256s
+   `4a32785d88707662ac70f393b8fd6bec1c59bf9be27446426731b12b1f01614b`
+   (contribution -- the step-10 stamped artifact),
+   `f9a19012fab31c5354ed0dd4bec600cc764e930d505de71703f74522454e6ae6` (valid),
+   `184f7f5c8ed326d49983fe455ef6478715fcac79c8161f08fa685b9cfb25d037` (switch),
+   `9e3cf677ce71cee46594059ebb12f7aa31fc7659b6d863691b08ece3ac78cc2f`
+   (manager `lin_multinomial_copula`); loaded contribution fields
+   `y_name contribution`, `y_levels 21`, `copula_rho 0.06958238086256316`,
+   **`copula_phi 1.0`**, `copula_switch_every 1`; config `seed 42`,
+   `n_episodes 100`, `save_per_round True`. The sim ran on `cuda` and wrote
+   `per_round.parquet` plus the four standard figures and `aggregates.csv`.
+   **Fetch + evaluation (step 13):** the output dir was `rsync`ed back and
+   `per_round.parquet` verified bit-identical across the hop (sha256
+   `4f64fc42fe23cad1cf14423f79b8496adff9874e2e546c05a0d7683055960be2` on both
+   sides). Evaluated locally with the main checkout's interpreter and THIS
+   worktree's code (`aimanager.__file__` confirmed at
+   `<worktree>/src/aimanager/__init__.py` first); the human CSV was already
+   real content, not an LFS pointer, so no `git lfs pull` was needed. Wrote 21
+   metric rows, 21 scores and 24 figures. **Result: rows <= 1 11/21 (baseline
+   10/21), 21-row mean 1.2893632310269196 (baseline 1.6879978841849728);
+   targets CG 4.163465133854436 (baseline 9.808514112722413, raw ratio gap
+   0.1101181553522297 vs 0.2594222471221652 over ceiling
+   0.026448679600274437) and RCD 1.9647336396755046 (baseline
+   2.941928428442498, raw gap 0.15738827739093497).** Watch items:
+   RCA 1.4753607514349265 (baseline 2.0829074791966917), RCB
+   1.7383880025982466 (baseline 1.9881). No eval-suite file, metric
+   definition, scoring parameter, seed, episode count or game parameter was
+   touched (`git diff --stat main...HEAD` over
+   `src/aimanager/evaluation_suite/`, `notes/evaluation_metric_defs.md`,
+   `notes/eval_scoring_schema.md`, `experiments/` is empty). Verdict is step
+   14's, not recorded here.
+
+8. Verdict (step 14): both declared targets band-upgraded in the single
+   §3 evaluation — CG 9.808514112722413 -> 4.163465133854436 (> 5 into
+   2-5; raw ratio gap 0.2594222471221652 -> 0.1101181553522297) and RCD
+   2.941928428442498 -> 1.9647336396755046 (2-5 into 1-2) — and the mean
+   dropped 1.6879978841849728 -> 1.2893632310269196, the lowest 21-row
+   mean on record for any stack. Collateral band movements: RCA
+   2.0829074791966917 -> 1.4753607514349265 (a third band upgrade, on a
+   declared watch item), CC 1.6268858908646675 -> 0.9650336011427679
+   (into the ceiling), RSA back under 1, PD
+   1.5324969616723312 -> 1.002888436797886; the marginal C block ticks
+   up but stays at or near the ceiling (CF 1.0080725240834727 is the
+   one ceiling exit, 0.8% over), the expected direction of the
+   marginal/joint trade. The three group-dispersion mechanisms now in
+   the stack (severity copula, this latent, and SC's remaining 2.19)
+   all moved the way the PR #140 shared-root-cause analysis predicted.

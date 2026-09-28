@@ -123,6 +123,21 @@ def parse_agent_rounds(df, switch_every=None):
     return df
 
 
+MAX_CONTRIBUTION = 20  # the per-round endowment (reports/basics.md)
+
+# What the game charged, paid out and showed everyone when a player gave no
+# input: zero. Verified on the human data by the accounting identity
+# common_good == 1.6 * sum(contribution) - sum(punishment), which holds to
+# 1.4e-14 on all 516 group-rounds containing a timed-out player when that
+# player's contribution is counted as 0, and fails on every one of them
+# (mean |residual| 15.6) when it is counted as the imputed median of 9.
+# `default_values["contribution"]` is the right fill for an ABSENT cell and
+# for a target that must not be learned from; it is the wrong value to hand
+# a model as a FEATURE the real manager saw.
+# See notes/autoresearch_log/punisher-timeout-feature.md.
+MISSING_CONTRIBUTION = 0
+
+
 def shift(tensor, default):
     tensor = th.roll(tensor, 1, 2)
     tensor[:, :, 0] = default
@@ -196,6 +211,13 @@ def create_torch_data_new(df, default_values=None):
             if k in default_values
         },
     }
+    # Contributed the whole endowment this round: a bool the punisher can
+    # read (the human manager almost never punishes a full contributor,
+    # P(p>0 | c_t = 20) = 0.04 vs 0.20 in the 15-19 band, a step a numeric
+    # `contribution` interpolates away). Derived after the fill, so absent
+    # cells (default contribution) read False; api_manager.create_data
+    # derives it the same way at simulation time.
+    data["contribution_max"] = data["contribution"] == MAX_CONTRIBUTION
 
     # Per-episode pair_id (group_key for fold-aware CV). Falls back to
     # the tensor-row index when the column is absent (legacy datasets).

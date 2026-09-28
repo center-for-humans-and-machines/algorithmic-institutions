@@ -1,0 +1,28 @@
+{
+  "config": "configs/training/rl_manager/rl_anneal_local_s42.yml",
+  "full_run": {
+    "batch_size": 1000,
+    "behaviour_episodes": 4000000,
+    "behaviour_rollouts": 4000,
+    "eval_episodes": 200000,
+    "eval_period": 20,
+    "eval_rollouts": 200,
+    "n_update_steps": 4000,
+    "total_agent_rounds": 806400000,
+    "total_episode_rounds": 100800000,
+    "total_episodes": 4200000
+  },
+  "probe": {
+    "batch_size": 4,
+    "constructor_reset": 1.0,
+    "env_resets": 10,
+    "env_rounds": 216,
+    "episodes": 36.0,
+    "eval_period": 2,
+    "n_update_steps": 6,
+    "rollouts_expected": 9,
+    "rollouts_match": true,
+    "rollouts_measured": 9.0,
+    "rollouts_per_update_step": 1.5
+  }
+}

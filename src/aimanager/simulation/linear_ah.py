@@ -26,7 +26,9 @@ Timing / leakage (mirrors handcrafted_grid, re-anchored per #123):
   * Switch model: called at the END of round s -> current family realised,
     matching the training anchoring of ``does_switch[s]``.
   * Punishment model (#127): called AFTER round t's contributions, BEFORE its
-    punishments -> prev-anchored (same assert).
+    punishments -> round t's contribution features are legal (the manager
+    punishes what was just contributed), round t's punishment / payoff /
+    common-good features are not (same assert, punishment-specific set).
 """
 
 import sys
@@ -35,12 +37,17 @@ from pathlib import Path
 import numpy as np
 import torch as th
 
+from aimanager.generic.data import MISSING_CONTRIBUTION
+
 # build_feature_pool (scripts/baselines) is the single source of truth for the
 # feature engineering (spec: notes/baseline_feature_defs.md; parity test:
 # tests/baselines). Import it so sim features can never drift from training.
 _ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_ROOT / "scripts" / "baselines"))
-from handcrafted_grid import CURRENT_VALUED, build_feature_pool  # noqa: E402
+from handcrafted_grid import (  # noqa: E402
+    build_feature_pool,
+    illegal_current_features,
+)
 
 
 def _shift(a, default):
@@ -85,6 +92,20 @@ class LinearAHAdapter:
         # multinomial = predict_proba tempered by `temperature` (T=1 as-is).
         self.sigma = float(bundle.get("sigma") or 0.0)
         self.temperature = float(bundle.get("temperature", 1.0))
+        # Severity copula: `copula_rho` on a punishment bundle correlates a
+        # group's punishments via one shared latent per round (calibrated by
+        # scripts/baselines/punishment_copula_rho.py). Absent or 0.0 keeps the
+        # independent path -- and its exact RNG consumption -- unchanged.
+        self.copula_rho = float(bundle.get("copula_rho", 0.0) or 0.0)
+        assert (
+            0.0 <= self.copula_rho < 1.0
+        ), f"copula_rho must lie in [0, 1), got {self.copula_rho}"
+        assert self.copula_rho == 0.0 or (
+            self.is_punishment and self.model_type == "multinomial"
+        ), (
+            "copula_rho is implemented for the multinomial punishment sampler "
+            f"only, got target={self.target!r} model={self.model_type!r}"
+        )
         self.default_values = dict(bundle["default_values"])
         self.switch_every = bundle.get("switch_every")
         # env-driven use (predict) needs both; the rounds-driven manager path
@@ -96,12 +117,11 @@ class LinearAHAdapter:
         # match the GNN switch predictor (sample=True); set False for a
         # deterministic proba>0.5 threshold.
         self.switch_sample = switch_sample
-        if not self.is_switch:
-            illegal = sorted(set(self.features) & CURRENT_VALUED)
-            assert not illegal, (
-                f"{self.target} bundle contains current-valued features "
-                f"(illegal, they read the target's round): {illegal}"
-            )
+        illegal = sorted(set(self.features) & illegal_current_features(self.target))
+        assert not illegal, (
+            f"{self.target} bundle contains current-valued features "
+            f"(illegal, they read the target's round): {illegal}"
+        )
         self._reset_history()
 
     def to(self, device):
@@ -114,6 +134,7 @@ class LinearAHAdapter:
     def _reset_history(self):
         self._measure = {m: {} for m in self._MEASURES}  # round -> (A,) float
         self._group = {}  # round -> (A,) int membership
+        self._valid = {}  # round -> (A,) bool contribution validity
 
     def _record(self, state, t):
         """Fold the current env state into the episode history.
@@ -132,28 +153,37 @@ class LinearAHAdapter:
             for m in self._MEASURES:
                 self._measure[m][t - 1] = col(f"prev_{m}").astype(float)
             self._group[t - 1] = col("prev_agent_group").astype(int)
+            if "prev_contribution_valid" in state:
+                self._valid[t - 1] = col("prev_contribution_valid").astype(bool)
         self._group[t] = col("agent_group").astype(int)
         if self.is_switch:
             for m in self._MEASURES:
                 self._measure[m][t] = col(m).astype(float)
+            if "contribution_valid" in state:
+                self._valid[t] = col("contribution_valid").astype(bool)
 
     # ------------------------------------------------------------------ #
     # feature-pool reconstruction (shared)
     # ------------------------------------------------------------------ #
-    def _pool_from_arrays(self, c, p, cg, ag, T):
+    def _pool_from_arrays(self, c, p, cg, ag, T, cv=None):
         """[A, T] measure/membership arrays -> the [1, A, T] create_torch_data
-        tensors -> build_feature_pool's feature dict."""
+        tensors -> build_feature_pool's feature dict.
+
+        `cv` is the per-agent contribution-validity mask; None reads as
+        all-valid."""
         A = c.shape[0]
         dv = self.default_values
         rec = np.ones((A, T), dtype=float)  # every agent is present in the sim
         rounds = np.tile(np.arange(T, dtype=float), (A, 1))
+        if cv is None:
+            cv = np.ones((A, T), dtype=bool)
 
         # -> contiguous [1, A, T] torch tensor (build_feature_pool .numpy()s it)
         def b(x):
             return th.from_numpy(np.ascontiguousarray(x[None]))
 
-        # Not-yet-realised cells stay at defaults; the (asserted prev-family)
-        # features never consume them.
+        # Not-yet-realised cells stay at defaults; the features a target may
+        # read (asserted at load) never consume them.
         d = {
             "contribution": b(c),
             "punishment": b(p),
@@ -166,6 +196,7 @@ class LinearAHAdapter:
             "agent_group": b(ag.astype(int)),
             "recorded": b(rec.astype(bool)),
             "round_number": b(rounds),
+            "contribution_valid": b(cv.astype(bool)),
         }
         return build_feature_pool(d, self.switch_every)
 
@@ -186,12 +217,24 @@ class LinearAHAdapter:
         p = stack(self._measure["punishment"], dv["punishment"], float)
         cg = stack(self._measure["common_good"], dv["common_good"], float)
         ag = stack(self._group, 0, int)
-        return self._pool_from_arrays(c, p, cg, ag, T)
+        # The env now serves the recorded 0 for a timed-out player
+        # (environment.served_state), so `c` already carries it; the mask
+        # itself is carried through so `contribution_valid` is a real feature
+        # here too, as it is on the rounds-driven punisher path. Cells no
+        # round has realised yet default to True, which is what `cv=None`
+        # meant before and is never read (features are anchored at a
+        # realised round).
+        cv = stack(self._valid, True, bool)
+        return self._pool_from_arrays(c, p, cg, ag, T, cv=cv)
 
     def _pool_from_rounds(self, rounds):
         """Rounds-driven path (punishment manager): rebuild the tensors from
         the round-dict history, recomputing per-capita common good with the
-        env formula."""
+        env formula. The last round dict is the one being punished: its
+        contributions are realised (column T-1 of `c` is round t's
+        contribution, the punisher's same-round input), its punishments are
+        None and stay at the default, and its common good is left at the
+        default too (it needs the punishments)."""
         A, T = len(rounds[0]["contribution"]), len(rounds)
         dv = self.default_values
 
@@ -220,22 +263,33 @@ class LinearAHAdapter:
                 nv = int(cv[sel, t].sum())
                 if nv:
                     cg[sel, t] = (1.6 * cz[sel, t].sum() - pz[sel, t].sum()) / nv
-        return self._pool_from_arrays(c, p, cg, ag, T)
+        # A timed-out player contributed nothing -- that is what the game
+        # charged and what the manager saw (MISSING_CONTRIBUTION). The env
+        # hands us the imputed default in its place, so put the recorded
+        # value back before the punisher's features are built.
+        c = np.where(cv, c, float(MISSING_CONTRIBUTION))
+        return self._pool_from_arrays(c, p, cg, ag, T, cv=cv)
 
     # ------------------------------------------------------------------ #
     # level sampling (shared by contribution and punishment)
     # ------------------------------------------------------------------ #
+    def _class_probs(self, Xs, n_levels):
+        """[n, n_levels] class probabilities of a multinomial bundle; shared
+        by the independent and copula samplers so marginals cannot drift."""
+        proba = self.estimator.predict_proba(Xs)
+        P = np.full((len(Xs), n_levels), 1e-12)
+        P[:, self.estimator.classes_] = proba
+        if self.temperature != 1.0:
+            P = P ** (1.0 / self.temperature)
+        P /= P.sum(1, keepdims=True)
+        return P
+
     def _sample_levels(self, Xs, n_levels):
         """Discrete levels [n]; sample=False -> deterministic. Randomness is
         drawn from the torch RNG so th.manual_seed governs linear and GNN
         sampling alike."""
         if self.model_type == "multinomial":
-            proba = self.estimator.predict_proba(Xs)
-            P = np.full((len(Xs), n_levels), 1e-12)
-            P[:, self.estimator.classes_] = proba
-            if self.temperature != 1.0:
-                P = P ** (1.0 / self.temperature)
-            P /= P.sum(1, keepdims=True)
+            P = self._class_probs(Xs, n_levels)
             if self.sample:
                 lvl = th.multinomial(th.from_numpy(P), 1).reshape(-1)
                 return lvl.numpy().astype(np.int64)
@@ -250,6 +304,32 @@ class LinearAHAdapter:
         else:  # no sigma stored / sample=False -> deterministic point prediction
             yhat = mu
         return np.clip(np.rint(yhat), 0, n_levels - 1).astype(np.int64)
+
+    def _sample_levels_copula(self, Xs, n_levels, groups):
+        """Discrete levels [A], one shared severity latent per group id:
+        u_i = Phi(sqrt(rho) z_g(i) + sqrt(1-rho) eps_i), inverted through the
+        agent's own CDF. Same marginals as ``_sample_levels``; always exactly
+        2A torch draws per call. Conventions and rationale:
+        notes/autoresearch_log/punisher-severity-copula.md (appendix)."""
+        P = self._class_probs(Xs, n_levels)
+        if not self.sample:
+            return P.argmax(1).astype(np.int64)
+
+        n = len(Xs)
+        zs = th.randn(n, dtype=th.float64)  # fixed 2A draws, composition-stable
+        eps = th.randn(n, dtype=th.float64)
+        g = np.asarray(groups).reshape(-1)
+        assert len(g) == n, f"groups has {len(g)} entries for {n} agents"
+        first, pick = {}, np.empty(n, dtype=np.int64)
+        for i, gid in enumerate(g):
+            pick[i] = first.setdefault(int(gid), i)
+
+        a = float(np.sqrt(self.copula_rho))
+        b = float(np.sqrt(1.0 - self.copula_rho))
+        u = th.special.ndtr(a * zs[th.from_numpy(pick)] + b * eps)
+        cum = th.from_numpy(np.cumsum(P, axis=1))
+        lvl = th.searchsorted(cum.contiguous(), u.reshape(-1, 1).contiguous())
+        return lvl.reshape(-1).clamp(0, n_levels - 1).numpy().astype(np.int64)
 
     # ------------------------------------------------------------------ #
     # env-facing predict (contribution / switch)
@@ -290,7 +370,14 @@ class LinearAHAdapter:
         T = len(rounds)
         pool = self._pool_from_rounds(rounds)
         X = np.column_stack([pool[f][0, :, T - 1] for f in self.features])
-        lvl = self._sample_levels(self.scaler.transform(X), self.n_levels)
+        Xs = self.scaler.transform(X)
+        if self.sample and self.copula_rho > 0.0:
+            # membership from the same round dict the features come from
+            gid = rounds[-1].get("agent_group")
+            groups = np.zeros(len(X), np.int64) if gid is None else np.asarray(gid)
+            lvl = self._sample_levels_copula(Xs, self.n_levels, groups)
+        else:
+            lvl = self._sample_levels(Xs, self.n_levels)
         return th.tensor(lvl, dtype=th.int64)
 
 

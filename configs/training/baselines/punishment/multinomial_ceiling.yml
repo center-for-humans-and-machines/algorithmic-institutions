@@ -1,0 +1,58 @@
+# The current-contribution multinomial punisher (multinomial_current_contr.yml:
+# contribution, prev_contribution, prev_punishment, round_number, is_first,
+# C = 1.0) with an explicit indicator that the player contributed the
+# maximum. The human manager almost never punishes a full contributor
+# (P(p>0 | c_t = 20) = 0.038 vs 0.196 in the 15-19 band) but punishes hard
+# when it does (E[p | p>0] 7.0 vs 3.9); a linear term in c_t interpolates the
+# ceiling from the 15-19 band (fitted P(p>0 | c_t = 20) 0.105). On the human
+# decision the indicator carries -1.74 logit (cluster SE 0.61, p = 0.004,
+# LR 127 vs the linear model; scripts/data_analysis/punisher_ceiling_check.py),
+# a zero-contribution indicator does not (p = 0.27) and worsens the 31-class
+# CV, so the grid carries both sets and the artifact is the rank-1 row. See
+# notes/autoresearch_log/punisher-ceiling-fix.md.
+#
+# Produces artifacts/baselines/punishment_multinomial_ceiling.joblib:
+#   .venv/bin/python scripts/baselines/run_baseline_cv.py \
+#       configs/training/baselines/punishment/multinomial_ceiling.yml
+#   .venv/bin/python scripts/baselines/inspect_best_model.py \
+#       data/baselines/punishment_cv_multinomial_ceiling.csv \
+#       --config configs/training/baselines/punishment/multinomial_ceiling.yml \
+#       --save-best --name punishment_multinomial_ceiling.joblib
+# and the severity-copula-stamped copy (rho carried over unchanged from
+# punishment_multinomial_current_contr_severity_copula.joblib, the copula
+# parameters being frozen by protocol; the refit is printed for the record):
+#   .venv/bin/python scripts/baselines/punishment_copula_rho.py --roundtrip \
+#       --bundle artifacts/baselines/punishment_multinomial_ceiling.joblib \
+#       --out artifacts/baselines/punishment_multinomial_ceiling_severity_copula.joblib \
+#       --stamp-rho 0.4273
+data:
+  # TRAIN split only. Same locked split as contribution/switch (episode-level;
+  # the mask differs). Test fold lives in the _test sibling file and is NOT
+  # touched here. See split_baseline_holdout.py.
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: punishment
+  target_type: categorical
+  categorical_levels: 31        # punishment is an integer 0..30
+  mask: punishment_valid        # rounds where the manager gave input
+  exclude_flipped: true         # train file is already undoubled; no-op safety filter
+  switch_every: 4
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/punishment_cv_multinomial_ceiling.csv
+
+setting:              # multinomial logistic; only C is valid here
+  C: 1.0
+
+blocks:
+  B1_self:                    # what was just contributed (+ the ceiling step), own lags
+    components: [contribution, contribution_max, contribution_zero, prev_contribution, prev_punishment]
+    sets:
+      - [contribution, contribution_max, prev_contribution, prev_punishment]
+      - [contribution, contribution_max, contribution_zero, prev_contribution, prev_punishment]
+
+  B7_structural:              # is_first: round 0's prev_* are imputed medians
+    components: [round_number, is_first]
+    sets: [[round_number, is_first]]

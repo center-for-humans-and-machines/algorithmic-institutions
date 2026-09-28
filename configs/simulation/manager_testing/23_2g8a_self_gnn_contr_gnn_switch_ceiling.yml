@@ -1,0 +1,50 @@
+# punisher-current-contribution re-baseline, case e: the main sweep's top
+# stack (23_2g8a_self_gnn_contr_gnn_switch -- gnn contributor x gnn switch)
+# with both punisher families retrained on the CURRENT round's contribution:
+# the plain lin_multinomial (no copula, mirroring
+# punishment_multinomial_best_with_contr.joblib) and the GNN punisher. The
+# ridge and gaussian pairings of the source config are dropped (no retrained
+# artifact); pairing names are kept so the run labels match the "before"
+# rows in plots/simulation/23_2g8a_self_gnn_contr_gnn_switch/evaluation/.
+# Protocol byte-identical to the source (seed 42, 100 episodes, 24 rounds).
+# Source: main (also on origin/auto/contribution-punishment-response). The
+# `_ceiling` suffix breaks evaluation_sweep.py's DIR_PATTERN on purpose.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_ceiling.joblib
+  gnn:
+    type: human
+    path: artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_ceiling/model/architecture_node+edge+rnn__dataset_50ep_doubled.pt
+
+pairings:
+  - name: lin_multinomial_self
+    group_0: lin_multinomial
+    group_1: lin_multinomial
+  - name: gnn_self
+    group_0: gnn
+    group_1: gnn
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_self_gnn_contr_gnn_switch_ceiling
+figure_name: 2g8a_self_gnn_contr_gnn_switch_ceiling
+save_per_round: true
+basedir: .

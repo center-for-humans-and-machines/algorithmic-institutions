@@ -1,0 +1,86 @@
+{
+  "config": "configs/training/rl_manager/rl_new_clones_s42.yml",
+  "guard1": {
+    "mean_reward": 25.78971290588379,
+    "vs_common_good_times_n_valid": {
+      "max": 1.52587890625e-05,
+      "mean": 2.779221688342659e-07
+    },
+    "vs_raw_pool_no_zeroing": {
+      "max": 31.200000762939453,
+      "mean": 0.8833985328674316
+    },
+    "vs_recomputed_pool": {
+      "max": 0.0,
+      "mean": 0.0
+    }
+  },
+  "guard1c_sum_contrast": {
+    "mean_reward": 23.914548873901367,
+    "vs_recomputed_pool": {
+      "max": 240.0,
+      "mean": 42.88631820678711
+    }
+  },
+  "guard2": {
+    "agent_cells_observed": 36864,
+    "prev_punishment_values_served_at_timeout": {
+      "0.0": 1247,
+      "1.0": 52,
+      "10.0": 10,
+      "11.0": 2,
+      "12.0": 6,
+      "14.0": 4,
+      "15.0": 6,
+      "16.0": 2,
+      "17.0": 13,
+      "2.0": 26,
+      "20.0": 3,
+      "22.0": 4,
+      "25.0": 2,
+      "28.0": 4,
+      "3.0": 28,
+      "30.0": 181,
+      "4.0": 7,
+      "5.0": 24,
+      "6.0": 14,
+      "7.0": 13,
+      "8.0": 4,
+      "9.0": 7
+    },
+    "punishment_values_served_at_timeout": {
+      "0.0": 1207,
+      "1.0": 48,
+      "10.0": 9,
+      "11.0": 3,
+      "12.0": 6,
+      "14.0": 6,
+      "15.0": 6,
+      "16.0": 3,
+      "17.0": 18,
+      "2.0": 30,
+      "20.0": 3,
+      "22.0": 3,
+      "25.0": 3,
+      "28.0": 6,
+      "3.0": 33,
+      "30.0": 194,
+      "4.0": 6,
+      "5.0": 27,
+      "6.0": 21,
+      "7.0": 12,
+      "8.0": 6,
+      "9.0": 9
+    },
+    "timeout_cells_observed": 1659,
+    "timeout_rate": 0.045003255208333336
+  },
+  "reward_mode": "common_pool",
+  "verdict": {
+    "ALL_PASS": false,
+    "guard1_reward_is_common_pool": true,
+    "guard1c_sum_differs": true,
+    "guard2_no_punishment_at_timeout": false,
+    "guard2_saw_timeouts": true
+  }
+}
