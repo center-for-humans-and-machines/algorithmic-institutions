@@ -1,0 +1,74 @@
+description: >-
+  Held-out teacher-forced RCB test (notes/autoresearch_log/
+  rcb-holdout-teacher-forced.md): the PR #179 group-vnode contributor
+  (group_switching_contribution_50ep_group_vnode.yml) retrained five
+  times, each with one of its own 5-fold CV folds held out
+  (holdout_fold: k), so every game is predicted once by a model that
+  never saw it. Same seed (38381) as the shipped artifact, so the fold
+  partition is byte-identical to the CV folds of that run (get_cross_
+  validations shuffles the episode index once under random.seed before
+  splitting); train.py then saves the fold model (the holdout path
+  yields fold id None). Everything else is byte-identical to the parent
+  config: node+edge+rnn, hidden=20, lr=3e-4, 575 epochs, batch 4, same
+  x_encoding, shuffle_features, data file and mask. The grid turns the
+  five folds into five parallel SLURM jobs, labelled fold_0..fold_4.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+grid:
+  - holdout_fold: [0, 1, 2, 3, 4]
+    labels.fold: [0, 1, 2, 3, 4]
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 575
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  holdout_fold: 0
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_holdout
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    group_vnode: True
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: False
