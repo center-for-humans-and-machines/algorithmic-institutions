@@ -71,8 +71,18 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
         columns=columns,
         value_name="agent_group",
     )
+    contribution_valid = using_multiindex(
+        recorder.memory["contribution_valid"].squeeze(1).numpy(),
+        columns=columns,
+        value_name="contribution_valid",
+    )
 
-    df_sim = punishments.merge(common_good).merge(contributions).merge(agent_group)
+    df_sim = (
+        punishments.merge(common_good)
+        .merge(contributions)
+        .merge(agent_group)
+        .merge(contribution_valid)
+    )
 
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
     df_sim["payoff"] = (
