@@ -1,0 +1,41 @@
+# #179 frontier stack (group vnode + herding copula, joint-exodus switch) with
+# the issue #224 punisher: reads round t's contribution and the timeout flag
+# (C7), and a timed-out player recorded as 0. Same seed and protocol as
+# 23_2g8a_contr_group_vnode_self_gnncopar1_contr_gnn_switch.
+
+seed: 45
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_group_vnode_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_current_contr_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+# Contribution recorded for a timed-out player: 0-20, or "default" (dataset
+# median, also when absent). Training data records 0.
+timeout_contribution: 0
+
+output_dir: plots/simulation/23_2g8a_contr_group_vnode_curpun_t0_s45_self_gnncopar1_contr_gnn_switch
+figure_name: 2g8a_contr_group_vnode_curpun_t0_s45_self_gnncopar1_contr_gnn_switch
+save_per_round: true
+basedir: .
