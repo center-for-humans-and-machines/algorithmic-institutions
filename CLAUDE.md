@@ -140,11 +140,21 @@ evaluation suite likewise keeps one copy per game.
   (normalised scores), and `evaluation/visuals/*.jpg` (one figure per row).
 - A score is a multiple of the human-vs-human noise ceiling (500 resampling
   repeats, master seed 42): <= 1 at the ceiling, 1-2 minor, 2-5 clear deviation,
-  \> 5 not reproduced. Row definitions: `notes/evaluation_metric_defs.md`;
-  schema: `notes/eval_scoring_schema.md`.
+  \> 5 not reproduced. 22 rows; row definitions: `notes/evaluation_metric_defs.md`;
+  schema: `notes/eval_scoring_schema.md`. A single seed moves a row by ~0.1-0.3
+  (contribution rows most): compare stacks over several seeds.
 - Simulation configs reference model artifacts by path and dispatch on
   extension: `.joblib` -> linear-baseline adapter, `.pt` -> GNN; one config may
   mix both (see `simulation/simulate.py`).
+- Timeouts: `per_round.parquet` records `contribution_valid`, and `load_sim`
+  blanks timed-out contributions as `load_human` does. The sim config's
+  `timeout_contribution` sets the contribution recorded for a timed-out player
+  (0-20, or `default` = the dataset median, also when absent; training data
+  records 0). A punishment aimed at a timed-out player is always charged 0.
+- The punisher reads round t's contribution (the manager punishes after that
+  round's contributions); see `notes/baseline_feature_defs.md`.
+- Reference sim: `plots/simulation/24_FRONTIER_vnode_curpun_self_gnncopar1_contr_gnn_switch`
+  (seed replicates and ablations: `configs/simulation/manager_testing/ablation_224/`).
 - A sim run directory looks like `plots/simulation/<name>/{per_round.parquet,
   evaluation/{metrics.csv, scores.csv, visuals/}}`.
 - `scripts/data_analysis/evaluation_sweep.py` aggregates a sweep's `scores.csv`
