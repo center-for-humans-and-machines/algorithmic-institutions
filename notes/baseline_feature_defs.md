@@ -14,6 +14,8 @@ Leak rule: any current-family feature that reads round-t contributions/punishmen
 ## Current -- Self
 
 **contribution:** own contribution this round
+**contribution_max:** 1 if the own contribution this round is the whole endowment (20), else 0. The human manager almost never punishes a full contributor (P(p>0 | c_t = 20) = 0.038 vs 0.196 in the 15-19 band) but punishes hard when it does (E[p | p>0] 7.0 vs 3.9), a step a linear term in `contribution` interpolates away; the indicator is legal for the punishment target (`PUNISHMENT_LEGAL_CURRENT`) like `contribution` itself. The GNN reads the same bool as `contribution_max` (derived in `create_torch_data_new` / `api_manager.create_data`).
+**contribution_zero:** 1 if the own contribution this round is 0, else 0 (the punish rate at 0 is 0.47; on the human decision the indicator carries no weight beyond the linear term, see `scripts/data_analysis/punisher_ceiling_check.py`). Same legality as `contribution_max`.
 **punishment:** own punishment this round
 **payoff:** own payoff this round = 20 - contribution - punishment + common_good
 
