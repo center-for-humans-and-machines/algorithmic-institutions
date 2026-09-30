@@ -123,6 +123,9 @@ def parse_agent_rounds(df, switch_every=None):
     return df
 
 
+MAX_CONTRIBUTION = 20  # the per-round endowment (reports/basics.md)
+
+
 def shift(tensor, default):
     tensor = th.roll(tensor, 1, 2)
     tensor[:, :, 0] = default
@@ -196,6 +199,9 @@ def create_torch_data_new(df, default_values=None):
             if k in default_values
         },
     }
+    # full contributor this round (the punisher's ceiling indicator); derived
+    # after the fill, as api_manager.create_data does at simulation time
+    data["contribution_max"] = data["contribution"] == MAX_CONTRIBUTION
 
     # Per-episode pair_id (group_key for fold-aware CV). Falls back to
     # the tensor-row index when the column is absent (legacy datasets).

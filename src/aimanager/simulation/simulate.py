@@ -71,8 +71,18 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
         columns=columns,
         value_name="agent_group",
     )
+    contribution_valid = using_multiindex(
+        recorder.memory["contribution_valid"].squeeze(1).numpy(),
+        columns=columns,
+        value_name="contribution_valid",
+    )
 
-    df_sim = punishments.merge(common_good).merge(contributions).merge(agent_group)
+    df_sim = (
+        punishments.merge(common_good)
+        .merge(contributions)
+        .merge(agent_group)
+        .merge(contribution_valid)
+    )
 
     # Calculate payoff: endowment (20) - contribution - punishment + common_good
     df_sim["payoff"] = (
@@ -88,13 +98,22 @@ def mem_to_df(recorder, name: str) -> pd.DataFrame:
     return df_sim
 
 
-def make_round(contributions, round_num, groups, episode_group_idx, agent_group=None):
-    """Create a round dictionary."""
+def make_round(
+    contributions,
+    round_num,
+    groups,
+    episode_group_idx,
+    agent_group=None,
+    contribution_valid=None,
+):
+    """Create a round dictionary; `contribution_valid` is the env's input flag."""
     if agent_group is None:
         agent_group = [0] * len(contributions)
+    if contribution_valid is None:
+        contribution_valid = [c is not None for c in contributions]
     return {
         "contribution": contributions,
-        "contribution_valid": [c is not None for c in contributions],
+        "contribution_valid": [bool(v) for v in contribution_valid],
         "punishment_valid": [False] * len(contributions),
         "punishment": [None] * len(contributions),
         "group": groups,
@@ -227,6 +246,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
         agent_groups = config.get("agent_groups", None)
         reward_mode = config.get("reward_mode", "sum")
+        timeout_contribution = config.get("timeout_contribution", "default")
 
         # Create environment
         env = ArtificialHumanEnv(
@@ -243,6 +263,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
             device=device,
             agent_groups=agent_groups,
             reward_mode=reward_mode,
+            timeout_contribution=timeout_contribution,
         )
 
         # Create recorder
@@ -278,15 +299,19 @@ def run_simulation(config: dict, output_dir: str) -> list:
                     groups,
                     episode_group_idx,
                     agent_group=current_agent_group,
+                    contribution_valid=state["contribution_valid"].reshape(-1).tolist(),
                 )
                 punishments = mm.get_punishments(rounds + [round_dict])[0]
-                round_dict = add_punishments(round_dict, punishments)
-                rounds.append(round_dict)
-
                 punishments_tensor = th.tensor(
                     punishments, dtype=th.int64, device=device
                 )
                 state = env.punish(punishments_tensor.unsqueeze(-1).unsqueeze(0))
+
+                # record what was charged (punish zeroes timed-out players)
+                round_dict = add_punishments(
+                    round_dict, state["punishment"].reshape(-1).tolist()
+                )
+                rounds.append(round_dict)
 
                 recorder.add(
                     **{

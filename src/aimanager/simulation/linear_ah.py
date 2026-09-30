@@ -26,7 +26,9 @@ Timing / leakage (mirrors handcrafted_grid, re-anchored per #123):
   * Switch model: called at the END of round s -> current family realised,
     matching the training anchoring of ``does_switch[s]``.
   * Punishment model (#127): called AFTER round t's contributions, BEFORE its
-    punishments -> prev-anchored (same assert).
+    punishments -> round t's contribution features are legal (the manager
+    punishes what was just contributed), round t's punishment / payoff /
+    common-good features are not (same assert, punishment-specific set).
 """
 
 import sys
@@ -40,7 +42,10 @@ import torch as th
 # src/aimanager/tests). Import it so sim features can never drift from training.
 _ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(_ROOT / "scripts" / "baselines"))
-from handcrafted_grid import CURRENT_VALUED, build_feature_pool  # noqa: E402
+from handcrafted_grid import (  # noqa: E402
+    build_feature_pool,
+    illegal_current_features,
+)
 
 
 def _shift(a, default):
@@ -110,12 +115,11 @@ class LinearAHAdapter:
         # match the GNN switch predictor (sample=True); set False for a
         # deterministic proba>0.5 threshold.
         self.switch_sample = switch_sample
-        if not self.is_switch:
-            illegal = sorted(set(self.features) & CURRENT_VALUED)
-            assert not illegal, (
-                f"{self.target} bundle contains current-valued features "
-                f"(illegal, they read the target's round): {illegal}"
-            )
+        illegal = sorted(set(self.features) & illegal_current_features(self.target))
+        assert not illegal, (
+            f"{self.target} bundle contains current-valued features "
+            f"(illegal, they read the target's round): {illegal}"
+        )
         self._reset_history()
 
     def to(self, device):
@@ -154,10 +158,13 @@ class LinearAHAdapter:
     # ------------------------------------------------------------------ #
     # feature-pool reconstruction (shared)
     # ------------------------------------------------------------------ #
-    def _pool_from_arrays(self, c, p, cg, ag, T):
+    def _pool_from_arrays(self, c, p, cg, ag, T, cv=None):
         """[A, T] measure/membership arrays -> the [1, A, T] create_torch_data
-        tensors -> build_feature_pool's feature dict."""
+        tensors -> build_feature_pool's feature dict. `cv` is the contribution
+        validity mask (None: all valid)."""
         A = c.shape[0]
+        if cv is None:
+            cv = np.ones((A, T), dtype=bool)
         dv = self.default_values
         rec = np.ones((A, T), dtype=float)  # every agent is present in the sim
         rounds = np.tile(np.arange(T, dtype=float), (A, 1))
@@ -166,10 +173,11 @@ class LinearAHAdapter:
         def b(x):
             return th.from_numpy(np.ascontiguousarray(x[None]))
 
-        # Not-yet-realised cells stay at defaults; the (asserted prev-family)
-        # features never consume them.
+        # Not-yet-realised cells stay at defaults; the features a target may
+        # read (asserted at load) never consume them.
         d = {
             "contribution": b(c),
+            "contribution_valid": b(cv.astype(bool)),
             "punishment": b(p),
             "common_good": b(cg),
             "prev_contribution": b(_shift(c[None], dv["contribution"])[0]),
@@ -205,7 +213,11 @@ class LinearAHAdapter:
     def _pool_from_rounds(self, rounds):
         """Rounds-driven path (punishment manager): rebuild the tensors from
         the round-dict history, recomputing per-capita common good with the
-        env formula."""
+        env formula. The last round dict is the one being punished: its
+        contributions are realised (column T-1 of `c` is round t's
+        contribution, the punisher's same-round input), its punishments are
+        None and stay at the default, and its common good is left at the
+        default too (it needs the punishments)."""
         A, T = len(rounds[0]["contribution"]), len(rounds)
         dv = self.default_values
 
@@ -234,7 +246,7 @@ class LinearAHAdapter:
                 nv = int(cv[sel, t].sum())
                 if nv:
                     cg[sel, t] = (1.6 * cz[sel, t].sum() - pz[sel, t].sum()) / nv
-        return self._pool_from_arrays(c, p, cg, ag, T)
+        return self._pool_from_arrays(c, p, cg, ag, T, cv=cv)
 
     # ------------------------------------------------------------------ #
     # level sampling (shared by contribution and punishment)

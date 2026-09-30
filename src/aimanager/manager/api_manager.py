@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
-from aimanager.generic.data import shift
+from aimanager.generic.data import MAX_CONTRIBUTION, shift
 from aimanager.simulation.linear_ah import LinearAHAdapter
 
 
@@ -40,18 +40,31 @@ def parse_round(round) -> Round:
 
 
 def create_data(rounds, groups, default_values):
-    """Create data object for the algorithmic manager based on round records."""
+    """Create data object for the algorithmic manager based on round records.
 
-    def create_tensor(record_key, default_key):
+    The last round dict is the one being punished: `contribution[..., -1]`
+    holds that round's realised contributions (the punisher's same-round
+    input) and `prev_contribution[..., -1]` the round before; its punishments
+    are not yet known, so `punishment[..., -1]` is the default placeholder.
+    """
+
+    def create_tensor(record_key, default_key, invalid_reads_record=False):
+        # invalid_reads_record: a flagged own-group cell keeps its recorded
+        # value (for contributions, the env's timeout_contribution)
+        default = int(default_values[default_key])
+
+        def cell(value, is_valid, g1, g2):
+            if g1 != g2:
+                return default
+            if is_valid or (invalid_reads_record and value is not None):
+                return int(value)
+            return default
+
         return th.tensor(
             [
                 [
                     [
-                        (
-                            int(value)
-                            if (is_valid and g1 == g2)
-                            else int(default_values[default_key])
-                        )
+                        cell(value, is_valid, g1, g2)
                         for value, is_valid, g1 in zip(
                             r[record_key], r[f"{record_key}_valid"], r["group"]
                         )
@@ -78,7 +91,9 @@ def create_data(rounds, groups, default_values):
             dtype=th.bool,
         )
 
-    contribution = create_tensor("contribution", "contribution")
+    contribution = create_tensor(
+        "contribution", "contribution", invalid_reads_record=True
+    )
     contribution_valid = create_bool_tensor("contribution")
 
     punishment = create_tensor("punishment", "punishment")
@@ -111,6 +126,9 @@ def create_data(rounds, groups, default_values):
         "agent_group": agent_group.permute(0, 2, 1),
         "is_first": round_number.permute(0, 2, 1) == 0,
         "in_group": in_group.permute(0, 2, 1),
+        # as create_torch_data_new: derived from the filled tensor, so
+        # invalid / other-group cells (default contribution) read False
+        "contribution_max": contribution.permute(0, 2, 1) == MAX_CONTRIBUTION,
     }
 
     calc_prev = ["punishment", "contribution", "punishment_valid", "contribution_valid"]

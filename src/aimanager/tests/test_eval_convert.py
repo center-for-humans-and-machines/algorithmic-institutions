@@ -88,3 +88,14 @@ def test_episode_shapes(human, sims):
         assert (rounds["max"] == 23).all()
         assert (rounds["size"] == 8 * 24).all()
         assert set(df["group_id"]) <= {0, 1}
+
+
+def test_sim_timeouts_are_blanked_like_human_ones(tmp_path):
+    raw = pd.read_parquet(REPO / SIM_EXAMPLE_FILE)
+    raw["contribution_valid"] = True
+    raw.loc[raw.index[:3], "contribution_valid"] = False
+    path = tmp_path / "per_round.parquet"
+    raw.to_parquet(path)
+    loaded = pd.concat(load_sim(path).values())
+    assert loaded["contribution"].isna().sum() == 3
+    assert loaded["punishment"].notna().all()

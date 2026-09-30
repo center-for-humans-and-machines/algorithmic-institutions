@@ -43,6 +43,7 @@ class ArtificialHumanEnv:
         agent_groups=None,
         default_values=None,
         reward_mode="sum",
+        timeout_contribution="default",
     ):
         """
         Args:
@@ -62,6 +63,9 @@ class ArtificialHumanEnv:
             n_rounds: The number of rounds.
             device: The device to use.
             default_values: The default values for the state.
+            timeout_contribution: The contribution recorded for a timed-out
+                player: an int in [0, n_contributions - 1], or "default" for
+                the dataset median. The training data records 0.
         """
         self.batch_size = batch_size
         self.default_values = (
@@ -82,6 +86,16 @@ class ArtificialHumanEnv:
         if reward_mode not in ("avg", "sum"):
             raise ValueError(f"reward_mode must be 'avg' or 'sum', got {reward_mode!r}")
         self.reward_mode = reward_mode
+        if timeout_contribution != "default" and not (
+            isinstance(timeout_contribution, int)
+            and not isinstance(timeout_contribution, bool)
+            and 0 <= timeout_contribution < n_contributions
+        ):
+            raise ValueError(
+                "timeout_contribution must be 'default' or an int in "
+                f"[0, {n_contributions - 1}], got {timeout_contribution!r}"
+            )
+        self.timeout_contribution = timeout_contribution
         self.batch = th.tensor(
             [i for i in range(self.batch_size) for a in range(self.n_agents)],
             device=self.device,
@@ -329,9 +343,11 @@ class ArtificialHumanEnv:
                 edge_index=self.batch_edge_index,
             )[0]
             contribution_valid = contribution_valid.to(th.bool)
-            contribution[~contribution_valid] = self.artifical_humans.default_values[
-                "contribution"
-            ]
+            contribution[~contribution_valid] = (
+                self.artifical_humans.default_values["contribution"]
+                if self.timeout_contribution == "default"
+                else self.timeout_contribution
+            )
         else:
             contribution_valid = th.ones_like(self.contribution_valid)
 
@@ -347,10 +363,13 @@ class ArtificialHumanEnv:
         return self.state
 
     def punish(self, punishment):
+        """Apply the punishment; one aimed at a timed-out player is charged 0."""
         assert self.state is not None
         assert punishment.max() < self.n_punishments
         assert punishment.dtype == th.int64
-        self.punishment = punishment
+        self.punishment = th.where(
+            self.contribution_valid, punishment, th.zeros_like(punishment)
+        )
         self.punishment_valid = th.ones_like(self.punishment_valid)
         self.update_common_good()
         self.update_payoff()

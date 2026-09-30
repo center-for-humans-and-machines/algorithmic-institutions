@@ -127,6 +127,9 @@ def load_sim(parquet_path, switch_every=4):
     out = {}
     for run, run_df in df.groupby("run"):
         run_df = run_df.rename(columns={"episode": "episode_id"})
+        if "contribution_valid" in run_df.columns:  # blank timeouts, as load_human
+            valid = run_df["contribution_valid"].astype(bool)
+            run_df["contribution"] = run_df["contribution"].where(valid)
         run_df = _derive_switching(run_df, switch_every)
         out[run] = _finalize(run_df)
     return out

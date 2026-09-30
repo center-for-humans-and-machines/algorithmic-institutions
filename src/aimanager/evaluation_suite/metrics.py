@@ -30,8 +30,11 @@ GROUP_CELL = ["episode_id", "round_number", "group_id"]
 ROUNDS = pd.RangeIndex(24, name="round_number")
 DECISION_ROUNDS = pd.Index([3, 7, 11, 15, 19], name="round_number")
 
-RCB_EDGES = [0.0, 0.25, 0.5, 1.0, float("inf")]
-RCB_LABELS = ["(0,0.25]", "(0.25,0.5]", "(0.5,1]", ">1"]
+RCB_EDGES = [-1.0, 0.0, 0.25, 0.5, 1.0, float("inf")]
+RCB_LABELS = ["{0}", "(0,0.25]", "(0.25,0.5]", "(0.5,1]", ">1"]
+
+RCE_EDGES = [-0.5, 4.5, 9.5, 14.5, 19.5]
+RCE_LABELS = ["0-4", "5-9", "10-14", "15-19"]
 
 RSA_EDGES = [0.0, 3.0, 15.0, float("inf")]
 RSA_LABELS = ["1-3", "4-15", "16+"]
@@ -285,6 +288,7 @@ class ResponseMetrics(MetricGroup):
         "RCB": "statistic",
         "RCC": "statistic",
         "RCD": "statistic",
+        "RCE": "statistic",
         "RSA": "statistic",
         "RPA": "stratified_distribution",
         "RPB": "stratified_distribution",
@@ -302,9 +306,10 @@ class ResponseMetrics(MetricGroup):
         return self.rca(df).groupby(level=0).size()
 
     def rcb(self, df):
-        """Mean contribution change of punished non-full contributors per
+        """Mean contribution change of non-full contributors per
         punishment-rate bin; rate = punishment / (20 - contribution),
-        punishment per point of shortfall."""
+        punishment per point of shortfall. The unpunished are the `{0}`
+        bin, so the drift of unpunished players is compared too."""
         pop = self._rcb_population(df)
         stat = pop.groupby("rate_bin", observed=False)["dc"].mean()
         stat.index = stat.index.astype(str)
@@ -342,6 +347,18 @@ class ResponseMetrics(MetricGroup):
 
     def rcd_weights(self, df=None):
         return pd.Series({"pull": 1.0})
+
+    def rce(self, df):
+        """Punishment response slope: per contribution band, the OLS slope
+        of dc on punishment received over punished non-full contributors
+        (RCB's punished bins) -- how the next-round change depends on the
+        dose, at a fixed level. NaN where a band is empty or every
+        punishment in it is the same."""
+        return self._rce_fit(df)["slope"].rename("RCE")
+
+    def rce_weights(self, df):
+        """Human frequency of each contribution band."""
+        return self._rce_fit(df)["n"]
 
     def rsa(self, df):
         """Switch share at valid opportunities per received-punishment
@@ -392,11 +409,41 @@ class ResponseMetrics(MetricGroup):
     def _rcb_population(self, df):
         d = self._with_dc(df)
         pop = d[
-            (d["punishment"] > 0) & (d["contribution"] < 20) & d["dc"].notna()
+            d["punishment"].notna() & (d["contribution"] < 20) & d["dc"].notna()
         ].copy()
         rate = pop["punishment"] / (20 - pop["contribution"])
         pop["rate_bin"] = pd.cut(rate, RCB_EDGES, labels=RCB_LABELS)
         return pop
+
+    def _rce_population(self, df):
+        pop = self._rcb_population(df)
+        pop = pop[pop["punishment"] > 0].copy()
+        pop["band"] = pd.cut(pop["contribution"], RCE_EDGES, labels=RCE_LABELS)
+        return pop
+
+    def _rce_fit(self, df):
+        """Per contribution band: OLS slope of dc on punishment, its
+        standard error and the row count (one frame, RCE_LABELS index).
+        The unpunished are left out on purpose: their dc sits off the
+        punished rows' regression line in every band (a step at zero
+        dose), so pooling them would blend that extensive margin into
+        the dose response."""
+        pop = self._rce_population(df)
+        rows = {}
+        for band in RCE_LABELS:
+            g = pop[pop["band"] == band]
+            x, y, n = g["punishment"], g["dc"], len(g)
+            if n < 2 or x.var() == 0:
+                rows[band] = (float("nan"), float("nan"), n)
+                continue
+            slope = x.cov(y) / x.var()
+            resid = y - y.mean() - slope * (x - x.mean())
+            sxx = ((x - x.mean()) ** 2).sum()
+            se = ((resid**2).sum() / (n - 2) / sxx) ** 0.5 if n > 2 else float("nan")
+            rows[band] = (slope, se, n)
+        return pd.DataFrame(rows, index=["slope", "se", "n"]).T.astype(
+            {"slope": float, "se": float, "n": int}
+        )
 
     def _with_dc(self, df):
         df = df.sort_values(PARTICIPANT + ["round_number"]).copy()
