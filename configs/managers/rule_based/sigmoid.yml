@@ -7,8 +7,16 @@
 #   th        torch
 #   each name declared under `params`, from the params JSON
 # It must set `punishment`; the manager then clamps it to [0, 30] and casts
-# to integers. The params JSON must hold exactly the names declared under
-# `params`.
+# to integers. Python builtins are not available: use `th` for the maths.
+#
+# Checked when the manager is built:
+#   - the only top-level keys are `params`, `constraints` and `code`
+#   - `params` declares every fittable param; none may be named c, t, th or
+#     punishment; the params JSON holds exactly these names, as finite numbers
+#   - `code` reads only c, t, th, declared params and names it assigns, reads
+#     every declared param, and assigns `punishment`
+#   - `constraints` (optional) are comparisons over declared params only;
+#     each must hold for the params JSON
 #
 # Fitted sets in params/, both from #219 (final stack, one group against the
 # AH manager):
@@ -19,9 +27,15 @@
 params:
   p_max: punishment at full strength
   c0: contribution at which the gate is half open
-  tau: softness of the gate around c0 (> 0)
+  tau: softness of the gate around c0
   gamma_ep: how fast punishment fades over the episode (0 = no fading)
   gamma_sw: how much it drops before a reshuffle (0 = no drop)
+
+constraints:
+  - tau > 0
+  - p_max >= 0
+# gamma_ep and gamma_sw stay free: #219's validation design probes negative
+# values, and the bases are > 0 on every round 0-23.
 
 code: |
   f = 1 / (1 + th.exp((c - c0) / tau))     # the contribution gate

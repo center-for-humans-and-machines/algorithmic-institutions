@@ -1,4 +1,9 @@
+import ast
+import json
+import math
+
 import torch as th
+import yaml
 from typing import Optional, List, Union
 from pydantic import BaseModel
 
@@ -182,10 +187,120 @@ class DummyManager:
         return th.full_like(data["punishment"], self.constant_punishment)
 
 
+#: What the rule code sees besides its params, and the name it must assign.
+RULE_INPUTS = ("c", "t", "th")
+RULE_OUTPUT = "punishment"
+RULE_KEYS = {"params", "constraints", "code"}
+
+
+def _names(tree):
+    """(names read, names bound) anywhere in a parsed snippet."""
+    read, bound = set(), set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            raise ValueError("imports are not allowed")
+        if isinstance(node, ast.Name):
+            (read if isinstance(node.ctx, ast.Load) else bound).add(node.id)
+        elif isinstance(node, ast.arg):
+            bound.add(node.arg)
+    return read, bound
+
+
+def load_rule(rule_path, params_path):
+    """Read a rule YAML and its params JSON; return (compiled code, params).
+
+    The YAML declares its fittable params by name under `params`; the JSON
+    must hold exactly those names. The code is checked against the
+    declaration, never used to discover it. See the header of
+    configs/managers/rule_based/sigmoid.yml for the full list of checks.
+    """
+    with open(rule_path) as f:
+        rule = yaml.safe_load(f)
+    with open(params_path) as f:
+        params = json.load(f)
+
+    if not isinstance(rule, dict):
+        raise ValueError(f"{rule_path}: must be a YAML mapping")
+    unknown = sorted(set(rule) - RULE_KEYS)
+    if unknown:
+        raise ValueError(f"{rule_path}: unknown keys {unknown}")
+
+    declared = rule.get("params")
+    if not isinstance(declared, dict) or not declared:
+        raise ValueError(f"{rule_path}: needs a non-empty `params` mapping")
+    reserved = sorted(set(declared) & {*RULE_INPUTS, RULE_OUTPUT})
+    if reserved:
+        raise ValueError(f"{rule_path}: params use reserved names {reserved}")
+
+    code = rule.get("code")
+    if not isinstance(code, str):
+        raise ValueError(f"{rule_path}: needs a `code` block")
+    try:
+        read, bound = _names(ast.parse(code, rule_path, "exec"))
+    except ValueError as e:
+        raise ValueError(f"{rule_path}: code: {e}") from None
+    undefined = sorted(read - bound - set(RULE_INPUTS) - set(declared))
+    if undefined:
+        raise ValueError(f"{rule_path}: code reads undefined names {undefined}")
+    unused = sorted(set(declared) - read)
+    if unused:
+        raise ValueError(f"{rule_path}: code never reads params {unused}")
+    if RULE_OUTPUT not in bound:
+        raise ValueError(f"{rule_path}: code never assigns `{RULE_OUTPUT}`")
+
+    if not isinstance(params, dict):
+        raise ValueError(f"{params_path}: must be a JSON object")
+    missing = sorted(set(declared) - set(params))
+    undeclared = sorted(set(params) - set(declared))
+    if missing or undeclared:
+        raise ValueError(
+            f"{params_path} does not match the params declared in {rule_path}:"
+            f" missing {missing}, undeclared {undeclared}"
+        )
+    for name, value in params.items():
+        is_number = isinstance(value, (int, float)) and not isinstance(value, bool)
+        if not is_number or not math.isfinite(value):
+            raise ValueError(
+                f"{params_path}: {name} = {value!r} is not a finite number"
+            )
+
+    constraints = rule.get("constraints", [])
+    if not isinstance(constraints, list):
+        raise ValueError(f"{rule_path}: `constraints` must be a list")
+    for expr in constraints:
+        if not isinstance(expr, str):
+            raise ValueError(f"{rule_path}: constraint {expr!r} is not a string")
+        tree = ast.parse(expr, rule_path, "eval")
+        if not isinstance(tree.body, ast.Compare):
+            raise ValueError(f"{rule_path}: constraint `{expr}` is not a comparison")
+        read, _ = _names(tree)
+        undefined = sorted(read - set(declared))
+        if undefined:
+            raise ValueError(
+                f"{rule_path}: constraint `{expr}` reads undeclared names {undefined}"
+            )
+        if not eval(compile(tree, rule_path, "eval"), {"__builtins__": {}}, params):
+            values = ", ".join(f"{n} = {params[n]}" for n in sorted(read))
+            raise ValueError(f"{params_path}: constraint `{expr}` failed: {values}")
+
+    return compile(code, rule_path, "exec"), params
+
+
 class RuleBasedManager:
-    # punish = clamp((20 - contribution - round_number) / k, 0, n_punishments - 1)
-    def __init__(self, k=1, n_punishments=31, **_):
-        self.k = int(k)
+    # Without `rule`: punish = clamp((20 - contribution - round_number) / k,
+    # 0, n_punishments - 1). With `rule` and `params`: the rule YAML's code,
+    # run on this round's contribution and round number (see load_rule).
+    def __init__(self, k=None, rule=None, params=None, n_punishments=31, **_):
+        if (rule is None) != (params is None):
+            raise ValueError("rule_based: `rule` and `params` must be set together")
+        if rule is not None and k is not None:
+            raise ValueError("rule_based: `k` cannot be combined with `rule`")
+        if rule is None:
+            self.k = int(k) if k is not None else 1
+            self.code, self.params = None, None
+        else:
+            self.k = None
+            self.code, self.params = load_rule(rule, params)
         self.n_punishments = int(n_punishments)
         self.model = None
         self.default_values = {
