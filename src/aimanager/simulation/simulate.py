@@ -152,14 +152,19 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
     print(f"Using device: {device}")
 
-    # Add model_path to managers config. Entries without a path
+    # Add model_path to managers config, and resolve a rule-based manager's
+    # rule and params files against basedir. Entries without a path
     # (e.g. type: dummy) pass through untouched.
     managers = {
-        k: (
-            {**v, "model_path": os.path.join(basedir, v["path"])}
-            if "path" in v
-            else {**v}
-        )
+        k: {
+            **v,
+            **({"model_path": os.path.join(basedir, v["path"])} if "path" in v else {}),
+            **{
+                key: os.path.join(basedir, v[key])
+                for key in ("rule", "params")
+                if key in v
+            },
+        }
         for k, v in managers_config.items()
     }
     print(f"Managers: {managers}")
