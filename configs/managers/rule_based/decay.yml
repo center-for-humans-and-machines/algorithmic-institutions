@@ -1,0 +1,19 @@
+# Yannik's decay rule (#99, #103): punish the shortfall from a full
+# contribution, less as the episode goes on, scaled down by k.
+#
+# `code` runs inside RuleBasedManager with these names in scope:
+#   c         contribution this round, per player (float tensor, 0-20)
+#   t         round number, per player (float tensor, 0-23)
+#   th        torch
+#   each name declared under `params`, from the params JSON
+# It must set `punishment`; the manager then clamps it to [0, 30] and casts
+# to integers. The params JSON must hold exactly the names declared under
+# `params`.
+#
+# Sets in params/: decay_k1.json, decay_k2.json, decay_k4.json, decay_k8.json
+
+params:
+  k: leniency divisor, 1 is the harshest
+
+code: |
+  punishment = th.floor((20 - c - t) / k)
