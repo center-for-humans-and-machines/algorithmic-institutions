@@ -314,8 +314,31 @@ class RuleBasedManager:
     def get_punishments(self, data):
         contribution = data["contribution"]
         round_number = data["round_number"]
-        raw = (20 - contribution - round_number).div(self.k, rounding_mode="floor")
+        if self.code is None:
+            raw = (20 - contribution - round_number).div(self.k, rounding_mode="floor")
+        else:
+            raw = self._run_rule(contribution, round_number)
         return raw.clamp(0, self.n_punishments - 1).to(data["punishment"].dtype)
+
+    def _run_rule(self, contribution, round_number):
+        # c and t are fresh float copies, so in-place ops in the rule cannot
+        # touch the history; no builtins, so the maths goes through th
+        scope = {
+            "__builtins__": {},
+            "th": th,
+            **self.params,
+            "c": contribution.to(th.float),
+            "t": round_number.to(th.float),
+        }
+        exec(self.code, scope)
+        if RULE_OUTPUT not in scope:
+            raise ValueError("rule_based: the rule code did not set `punishment`")
+        # a scalar rule (e.g. a constant) is broadcast to every player and round;
+        # the cast in get_punishments floors non-integer values after the clamp
+        raw = th.as_tensor(scope[RULE_OUTPUT], dtype=th.float)
+        if th.isnan(raw).any():
+            raise ValueError("rule_based: the rule code produced NaN punishments")
+        return raw.broadcast_to(contribution.shape)
 
 
 class LinearManager:
