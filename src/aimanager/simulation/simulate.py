@@ -582,13 +582,16 @@ def create_plots(
 
     # Plot 4: Group-size evolution per run (sim + pilot comparison)
     if n_groups > 1 and "group_id" in df.columns:
+        # an empty group has no rows: fill it in as size 0
         per_episode_sizes = (
-            df.groupby(
-                ["run", "episode", "round_number", "group_id"],
-                as_index=False,
-            )["participant_code"]
+            df.groupby(["run", "episode", "round_number", "group_id"])[
+                "participant_code"
+            ]
             .nunique()
-            .rename(columns={"participant_code": "group_size"})
+            .unstack("group_id", fill_value=0)
+            .stack()
+            .rename("group_size")
+            .reset_index()
         )
         max_agents = (
             df.groupby(["run", "episode", "round_number"])["participant_code"]
