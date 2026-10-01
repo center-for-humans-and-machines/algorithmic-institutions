@@ -1,10 +1,10 @@
-"""Rule-vs-zero win-rate tables from a sim's per_round.parquet.
+"""Pairwise win-rate tables from a sim's per_round.parquet.
 
-For each rule strength (e.g. k1/k4/k8) reports the fraction of episodes
-the rule-managed group beats the zero-punishment group on a per-group
-aggregate of a metric, averaged across the rounds of the episode. Both
-position assignments (rule as group 0 and rule as group 1) are pooled,
-so the result is symmetric in group label.
+For each matchup (e.g. rule_k1 vs zero, rule_k1 vs ah) reports the fraction
+of episodes side a beats side b on a per-group aggregate of a metric,
+averaged across the rounds of the episode. Both position assignments
+(`a_vs_b` and `b_vs_a`) are pooled, so the result is symmetric in group
+label. A same-manager pairing (`x_vs_x`) reports group 0 vs group 1.
 
 Per-group aggregation is selectable with --agg:
   - sum : per round, SUM the metric over the agents in the group
@@ -18,10 +18,8 @@ a manager that empties its group is penalised, not excused.
 
 Three metrics are tabled by default (payoff, common_good, contribution).
 
-The rule group of each run is detected as the agent_group with the
-larger mean punishment (the zero manager never punishes); runs with no
-punisher at all (e.g. zero_vs_zero) are skipped. The matchup key is the
-``k<N>`` token parsed from the run/pairing name.
+Sides are read from the pairing name `<g0>_vs_<g1>`; a matchup is oriented
+as its first pairing in the file.
 
 Usage:
     python scripts/plotting/plot_winrates.py <sim_dir> \\
@@ -36,7 +34,6 @@ Example:
 
 import argparse
 import os
-import re
 import sys
 
 import pandas as pd
@@ -51,32 +48,24 @@ def load_per_round(sim_dir: str) -> pd.DataFrame:
     return pd.read_parquet(path)
 
 
-def detect_rule_group(df: pd.DataFrame) -> dict:
-    """Map run -> agent_group of the rule (punishing) manager.
+def pairing_sides(df: pd.DataFrame) -> dict:
+    """Map run -> (matchup, group of side a).
 
-    The zero manager never punishes, so the group with the larger mean
-    punishment is the rule group. Runs with no punisher are skipped.
+    Sides come from the pairing name `<g0>_vs_<g1>`. A matchup is oriented
+    as its first pairing in the file (config order), so `x_vs_y` and
+    `y_vs_x` pool into one matchup; for `x_vs_x`, side a is group 0.
     """
-    pun = (
-        df.groupby(["run", "agent_group"])["punishment"].mean().unstack(fill_value=0.0)
-    )
-    rule_of = {}
-    for run, row in pun.iterrows():
-        if row.max() <= 1e-9:
-            continue  # no punisher in this run (e.g. zero_vs_zero)
-        rule_of[run] = int(row.idxmax())
-    return rule_of
+    sides, orient = {}, {}
+    for run in df["run"].unique():
+        pairing = run.split("managed by ")[-1]
+        g0, g1 = pairing.split("_vs_")
+        a, b = orient.setdefault(frozenset((g0, g1)), (g0, g1))
+        sides[run] = (f"{a} vs {b}", 0 if g0 == a else 1)
+    return sides
 
 
-def matchup_key(run: str) -> str:
-    """Position-independent matchup label, e.g. 'k1' from the run name."""
-    pairing = run.split("managed by ")[-1]
-    m = re.search(r"k(\d+)", pairing)
-    return f"k{m.group(1)}" if m else pairing
-
-
-def episode_scores(sub: pd.DataFrame, rule_g: int, metric: str, agg: str):
-    """Return (rule_score, zero_score) Series indexed by episode.
+def episode_scores(sub: pd.DataFrame, a_g: int, metric: str, agg: str):
+    """Return (a_score, b_score) Series indexed by episode.
 
     Per (episode, round, group) aggregate the metric over agents (sum or
     mean), zero-fill empty group-rounds, then average across rounds.
@@ -88,7 +77,7 @@ def episode_scores(sub: pd.DataFrame, rule_g: int, metric: str, agg: str):
     )
     piv = piv.reindex(columns=[0, 1]).fillna(0.0)  # empty group-round -> 0
     ep = piv.groupby("episode").mean()  # average across the episode's rounds
-    return ep[rule_g], ep[1 - rule_g]
+    return ep[a_g], ep[1 - a_g]
 
 
 def empty_fraction(sub: pd.DataFrame, group: int) -> float:
@@ -101,39 +90,38 @@ def empty_fraction(sub: pd.DataFrame, group: int) -> float:
     return float(cpiv[group].isna().mean())
 
 
-def winrate_table(df: pd.DataFrame, rule_of: dict, metric: str, agg: str):
+def winrate_table(df: pd.DataFrame, sides: dict, metric: str, agg: str):
     """Per-matchup win-rate rows pooled over both position assignments."""
     rows = []
-    for run, rule_g in rule_of.items():
+    for run, (matchup, a_g) in sides.items():
         sub = df[df["run"] == run]
-        rule, zero = episode_scores(sub, rule_g, metric, agg)
-        re_empty = empty_fraction(sub, rule_g)
-        ze_empty = empty_fraction(sub, 1 - rule_g)
-        for epid in rule.index:
+        a, b = episode_scores(sub, a_g, metric, agg)
+        a_empty = empty_fraction(sub, a_g)
+        b_empty = empty_fraction(sub, 1 - a_g)
+        for epid in a.index:
             rows.append(
                 {
-                    "matchup": matchup_key(run),
-                    "rule": rule[epid],
-                    "zero": zero[epid],
-                    "rule_empty": re_empty,
-                    "zero_empty": ze_empty,
+                    "matchup": matchup,
+                    "a": a[epid],
+                    "b": b[epid],
+                    "a_empty": a_empty,
+                    "b_empty": b_empty,
                 }
             )
     res = pd.DataFrame(rows)
     out = []
-    for key in sorted(res["matchup"].unique()):
+    for key in res["matchup"].unique():
         s = res[res["matchup"] == key]
-        n = len(s)
         out.append(
             {
-                "matchup": f"{key} vs zero",
-                "episodes": n,
-                "rule_win%": round(100 * float((s["rule"] > s["zero"]).mean()), 1),
-                "zero_win%": round(100 * float((s["zero"] > s["rule"]).mean()), 1),
-                "rule_mean": round(float(s["rule"].mean()), 2),
-                "zero_mean": round(float(s["zero"].mean()), 2),
-                "rule_empty%": round(100 * float(s["rule_empty"].mean()), 1),
-                "zero_empty%": round(100 * float(s["zero_empty"].mean()), 1),
+                "matchup (a vs b)": key,
+                "episodes": len(s),
+                "a_win%": round(100 * float((s["a"] > s["b"]).mean()), 1),
+                "b_win%": round(100 * float((s["b"] > s["a"]).mean()), 1),
+                "a_mean": round(float(s["a"].mean()), 2),
+                "b_mean": round(float(s["b"].mean()), 2),
+                "a_empty%": round(100 * float(s["a_empty"].mean()), 1),
+                "b_empty%": round(100 * float(s["b_empty"].mean()), 1),
             }
         )
     return pd.DataFrame(out)
@@ -173,20 +161,18 @@ def main() -> None:
     args = parser.parse_args()
 
     df = load_per_round(args.sim_dir)
-    rule_of = detect_rule_group(df)
-    if not rule_of:
-        sys.exit("No punishing (rule) manager found in any run.")
+    sides = pairing_sides(df)
 
     blocks = [
-        f"# Win rates — rule vs zero ({args.agg} per group, empty round = 0)",
+        f"# Win rates ({args.agg} per group, empty round = 0)",
         f"_Source: {os.path.join(args.sim_dir, 'per_round.parquet')} — "
-        f"{len(rule_of)} runs pooled by matchup._",
+        f"{len(sides)} runs pooled by matchup._",
     ]
     for metric in args.metrics:
         if metric not in df.columns:
             print(f"skipping {metric!r}: not a column", file=sys.stderr)
             continue
-        tbl = winrate_table(df, rule_of, metric, args.agg)
+        tbl = winrate_table(df, sides, metric, args.agg)
         blocks.append(f"\n## {metric}\n\n{to_markdown(tbl)}")
 
     text = "\n".join(blocks)
