@@ -230,6 +230,8 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Lint**: `flake8 src/ --max-line-length=88 --extend-ignore=E203,W503`
 - **Run tests**: `scripts/remote_test.sh`
 - **Fetch from cluster**: `scripts/fetch_cluster.sh <remote_path>` (path relative to `~/algorithmic-institutions`, no trailing slash)
+- **Renew the Kerberos ticket**: `scripts/kinit_mpcdf.sh` (`--check` reports only, `--force` renews regardless). The KDC caps a ticket at 10 h but grants a 30-day renewable window, so the script extends an existing ticket with `kinit -R` and no password, falling back to `MPCDF_PW` from `.env` only once the window lapses.
+- **Cluster access needs two things, and they fail separately.** A valid Kerberos ticket, and a live SSH master connection. The MPCDF gateways enforce multi-factor: `gssapi-with-mic` authenticates with *partial success* and the gate then demands a password, which no stored credential can answer. So a ticket alone cannot reconnect. The master persists 24 h and only a human can open it, with `ssh raven` in a terminal. `scripts/kinit_mpcdf.sh --check` reports both states, because a dead master and an expired ticket produce the same symptom: every ssh, rsync and squeue fails, and an empty `squeue` looks exactly like a finished job.
 - **Train AH models**: `python -m aimanager train-ah <config>`
 - **Train RL manager**: `python -m aimanager train-manager <config>`
 - **Run simulation**: `python -m aimanager simulate <config>` (set `save_per_round: true` if the run will be evaluated)
