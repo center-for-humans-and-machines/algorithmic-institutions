@@ -132,16 +132,155 @@ def add_punishments(round_dict, punishments):
     }
 
 
+def load_humans(config: dict, humans: str, device):
+    """The contribution, valid and (optional) switch models of an AH block."""
+    basedir = config.get("basedir", ".")
+    ah_config = config["artificial_humans"][humans]
+    kwargs = dict(
+        device=device,
+        n_agents=config["n_agents"],
+        n_contributions=config["n_contributions"],
+    )
+    # .joblib -> linear-baseline adapter, .pt -> GNN (a config may mix both,
+    # e.g. GNN valid_model + linear contribution/switch models). See #121.
+    ah = load_ah_model(os.path.join(basedir, ah_config["contribution_model"]), **kwargs)
+    ah_val = load_ah_model(os.path.join(basedir, ah_config["valid_model"]), **kwargs)
+    ah_switch = None
+    if "switch_model" in ah_config:
+        ah_switch = load_ah_model(
+            os.path.join(basedir, ah_config["switch_model"]), **kwargs
+        )
+    return ah, ah_val, ah_switch
+
+
+def make_env(config: dict, ah, ah_val, ah_switch, batch_size: int, device):
+    """The simulation's environment around an AH block's models."""
+    return ArtificialHumanEnv(
+        artifical_humans=ah,
+        artifical_humans_valid=ah_val,
+        artifical_humans_switch=ah_switch,
+        switch_every=config.get("switch_every", None),
+        n_agents=config["n_agents"],
+        n_contributions=config["n_contributions"],
+        n_punishments=config["n_punishments"],
+        n_rounds=config["n_rounds"],
+        n_groups=config["n_groups"],
+        batch_size=batch_size,
+        device=device,
+        agent_groups=config.get("agent_groups", None),
+        reward_mode=config.get("reward_mode", "sum"),
+        timeout_contribution=config.get("timeout_contribution", "default"),
+    )
+
+
+#: The env state entries a batched run records, one [B, A, T] tensor each.
+BATCHED_KEYS = (
+    "punishment",
+    "common_good",
+    "contribution",
+    "agent_group",
+    "contribution_valid",
+)
+
+
+def run_batched(config: dict, runs: dict, mm, device, episode_batch_size: int):
+    """Play the runs' episodes in lockstep batches of `episode_batch_size`.
+
+    The episodes of all runs that share an AH block are chunked into batches,
+    pairings mixed within a batch. Every manager in a batch punishes the
+    whole batch; each agent takes the punishment of the manager its episode's
+    pairing assigns to its current agent_group. Batch i is seeded with
+    `seed + i` when the config sets a seed.
+
+    Returns one (episodes, record) per batch: `episodes` lists the batch's
+    (run name, episode index) pairs in batch order, `record` maps each of
+    BATCHED_KEYS to a [B, A, n_rounds] tensor on `device`.
+    """
+    n_episodes = config["n_episodes"]
+    seed = config.get("seed")
+    # one side per agent group: (group_0 manager, group_1 manager) per run
+    sides = {
+        name: (
+            (run["pairing"]["group_0"], run["pairing"]["group_1"])
+            if run["pairing"] is not None
+            else (run["groups"][0], run["groups"][0])
+        )
+        for name, run in runs.items()
+    }
+
+    unbatched = sorted(
+        {
+            mm.manager_info[m]["type"]
+            for pair in sides.values()
+            for m in pair
+            if not hasattr(mm.managers[m], "batched_punish")
+        }
+    )
+    if unbatched:
+        raise ValueError(
+            f"managers of type {unbatched} have no batched form;"
+            " set episode_batch_size: 1"
+        )
+
+    batches = []
+    for humans in dict.fromkeys(run["humans"] for run in runs.values()):
+        ah, ah_val, ah_switch = load_humans(config, humans, device)
+        episodes = [
+            (name, e)
+            for name, run in runs.items()
+            if run["humans"] == humans
+            for e in range(n_episodes)
+        ]
+        for start in range(0, len(episodes), episode_batch_size):
+            if seed is not None:
+                batch_seed = seed + len(batches)
+                random.seed(batch_seed)
+                np.random.seed(batch_seed)
+                th.manual_seed(batch_seed)
+                if th.cuda.is_available():
+                    th.cuda.manual_seed_all(batch_seed)
+
+            batch = episodes[start : start + episode_batch_size]
+            print(f"Start batch {len(batches)}: {len(batch)} episodes")
+            used = list(dict.fromkeys(m for name, _ in batch for m in sides[name]))
+            # [B, 2]: index into `used` of each episode's group_0 / group_1 manager
+            side_idx = th.tensor(
+                [[used.index(m) for m in sides[name]] for name, _ in batch],
+                device=device,
+            )
+
+            env = make_env(config, ah, ah_val, ah_switch, len(batch), device)
+            state = env.reset()
+            record = {k: [] for k in BATCHED_KEYS}
+            while True:
+                # [B, A, 1]: index into `used` of each agent's manager
+                agent_manager = side_idx.gather(1, state["agent_group"].squeeze(-1))
+                agent_manager = agent_manager.unsqueeze(-1)
+                punishment = th.zeros_like(state["punishment"])
+                for i, m in enumerate(used):
+                    punishment = th.where(
+                        agent_manager == i,
+                        mm.managers[m].batched_punish(state),
+                        punishment,
+                    )
+                state = env.punish(punishment)
+                for k in BATCHED_KEYS:
+                    record[k].append(state[k].clone())
+
+                state, _, done = env.step()
+                if done:
+                    break
+
+            batches.append((batch, {k: th.cat(v, -1) for k, v in record.items()}))
+    return batches
+
+
 def run_simulation(config: dict, output_dir: str) -> list:
     """Run the simulation and return list of DataFrames."""
     # Extract config parameters
     artificial_humans = config["artificial_humans"]
     managers_config = config["managers"]
-    n_groups = config["n_groups"]
     n_agents = config["n_agents"]
-    n_contributions = config["n_contributions"]
-    n_punishments = config["n_punishments"]
-    n_rounds = config["n_rounds"]
     n_episode_steps = config["n_episode_steps"]
     n_episodes = config["n_episodes"]
     basedir = config.get("basedir", ".")
@@ -213,63 +352,8 @@ def run_simulation(config: dict, output_dir: str) -> list:
         groups = run["groups"]
         pairing = run["pairing"]
 
-        # Load artificial humans
-        hm_path = os.path.join(
-            basedir, artificial_humans[run["humans"]]["contribution_model"]
-        )
-        hmv_path = os.path.join(
-            basedir, artificial_humans[run["humans"]]["valid_model"]
-        )
-
-        # .joblib -> linear-baseline adapter, .pt -> GNN (a config may mix both,
-        # e.g. GNN valid_model + linear contribution/switch models). See #121.
-        ah = load_ah_model(
-            hm_path,
-            device=device,
-            n_agents=n_agents,
-            n_contributions=n_contributions,
-        )
-        ah_val = load_ah_model(
-            hmv_path,
-            device=device,
-            n_agents=n_agents,
-            n_contributions=n_contributions,
-        )
-
-        # Load optional switch predictor
-        ah_switch = None
-        switch_every = config.get("switch_every", None)
-        ah_config = artificial_humans[run["humans"]]
-        if "switch_model" in ah_config:
-            hms_path = os.path.join(basedir, ah_config["switch_model"])
-            ah_switch = load_ah_model(
-                hms_path,
-                device=device,
-                n_agents=n_agents,
-                n_contributions=n_contributions,
-            )
-
-        agent_groups = config.get("agent_groups", None)
-        reward_mode = config.get("reward_mode", "sum")
-        timeout_contribution = config.get("timeout_contribution", "default")
-
-        # Create environment
-        env = ArtificialHumanEnv(
-            artifical_humans=ah,
-            artifical_humans_valid=ah_val,
-            artifical_humans_switch=ah_switch,
-            switch_every=switch_every,
-            n_agents=n_agents,
-            n_contributions=n_contributions,
-            n_punishments=n_punishments,
-            n_rounds=n_rounds,
-            n_groups=n_groups,
-            batch_size=1,
-            device=device,
-            agent_groups=agent_groups,
-            reward_mode=reward_mode,
-            timeout_contribution=timeout_contribution,
-        )
+        ah, ah_val, ah_switch = load_humans(config, run["humans"], device)
+        env = make_env(config, ah, ah_val, ah_switch, 1, device)
 
         # Create recorder
         recorder = Memory(
