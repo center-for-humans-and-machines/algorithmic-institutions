@@ -181,6 +181,12 @@ evaluation suite likewise keeps one copy per game.
   `episode_batch_size` (#232).
 - A sim with `pairings:` puts two managers in the two groups; pairing names are
   `<g0>_vs_<g1>`, which the plotting scripts parse.
+- `episode_batch_size: N` in a sim config (1-20000, default 1) plays N episodes
+  at once on the GPU, pairings mixed within a batch (#232), several times
+  faster than one at a time. Batch i is seeded with `seed + i`, so results
+  depend on N and never match a per-episode run bit for bit. Only managers
+  with `batched_punish` (`dummy`, `rule_based`, `linear`) run batched; `rl`
+  and `human` need `episode_batch_size: 1`.
 - A rule-based manager is a config, not code: `type: rule_based` with `rule:`
   (a YAML in `configs/managers/rule_based/` with `params`, optional
   `constraints` and `code`) and `params:` (a JSON of the values). The YAML's
@@ -289,7 +295,7 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Fetch from cluster**: `scripts/fetch_cluster.sh <remote_path>` (path relative to `~/algorithmic-institutions`, no trailing slash)
 - **Train AH models**: `python -m aimanager train-ah <config>`
 - **Train RL manager**: `python -m aimanager train-manager <config>`
-- **Run simulation**: `python -m aimanager simulate <config>` (set `save_per_round: true` if the run will be evaluated)
+- **Run simulation**: `python -m aimanager simulate <config>` (set `save_per_round: true` if the run will be evaluated; `episode_batch_size` to batch episodes, see Manager Comparison)
 - **Evaluate sim vs human**: `python -m aimanager evaluate <config>` (needs the simulation's `per_round.parquet`)
 - **Plot confusion matrix**: `python scripts/plotting/plot_confusion_matrix.py <artifact_dir>`
 
