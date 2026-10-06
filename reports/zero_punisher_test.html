@@ -484,7 +484,7 @@ footer { color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--lin
 <!-- PAGE: win rates -->
 <section class="page" id="page-winrates" hidden>
   <div class="hero compact">
-    <div class="eyebrow">Runs 1–3 of #226 · final stack · seed 42 · 200 episodes per matchup (Levin's rules: 100, one position)</div>
+    <div class="eyebrow">Runs 1–3 of #226 · final stack · seed 42 · 1000 episodes per pairing, batched (#232) · 2000 per matchup (Levin's rules: 1000, one position)</div>
     <h1>Five ways to call a winner</h1>
   </div>
   <div class="defpick" id="defpick" role="tablist"></div>
@@ -539,7 +539,7 @@ footer { color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--lin
     <div class="wcard forest" id="forest-levin"></div>
     <div class="verdict">
       <div class="eyebrow">Reading</div>
-      <p>Even under that definition no winner can be declared. The lenient rules (k4, k8) have positive margins and larger groups than the AH control, but the results are not decisive.</p>
+      <p>With 1000 episodes per pairing, this definition does name winners: opt clearly, cap10 and k4 narrowly, while AH loses. They win only against the AH model; head to head (definition 5), none of them beats zero.</p>
     </div>
   </div>
 
@@ -563,7 +563,7 @@ footer { color: var(--muted); font-size: 12.5px; border-top: 1px solid var(--lin
     <div class="wcard forest" id="forest-h2h"></div>
     <div class="verdict">
       <div class="eyebrow">Reading</div>
-      <p>Head to head with margins, the harsh rules and AH clearly lose; the lenient rules don't win either.</p>
+      <p>Head to head with margins, AH and the decay rules k1–k4 lose to zero; k8 and Levin's sigmoid rules come closest but don't beat it.</p>
     </div>
   </div>
 </section>
@@ -618,38 +618,28 @@ const POL = {
 // [policy, policy win %, policy mean, opponent mean, opponent (default: the card's), run 3?]
 const WIN = {
   payoff: {
-    ah:   [["k1",34.5,77.6,104.8],["k2",50.5,95.8,92.1],["k4",58.0,104.0,85.6],["k8",62.5,109.4,83.2],
-           ["opt",60.0,112.3,83.2,null,1],["cap",68.0,115.5,72.3,null,1]],
-    zero: [["AH",35.0,80.7,112.8],["k1",27.0,69.2,121.8],["k2",32.0,76.4,119.2],["k4",48.0,95.7,107.1],["k8",42.5,93.6,107.3],
-           ["opt",50.0,93.7,104.2,null,1],["cap",45.0,86.6,103.0,null,1]],
-    opt:  [["opt",61.0,111.3,81.6,"k1",1],["opt",63.0,114.7,81.7,"k2",1],["opt",46.0,96.3,104.0,"k4",1],["opt",45.0,83.7,111.5,"k8",1],["opt",51.0,99.3,99.2,"cap",1]],
-    cap:  [["cap",62.0,110.5,80.6,"k1",1],["cap",57.0,103.8,94.0,"k2",1],["cap",50.0,97.3,97.8,"k4",1],["cap",55.0,99.1,97.2,"k8",1]]
+    ah: [["k1",40.4,81.0,101.6],["k2",53.8,96.4,90.4],["k4",61.2,108.0,82.2],["k8",66.1,113.3,77.9],["opt",59.9,105.6,86.5,null,1],["cap",60.0,105.8,83.7,null,1]],
+    zero: [["AH",34.2,77.1,115.3],["k1",27.8,68.2,123.9],["k2",36.2,80.9,115.9],["k4",42.5,89.6,108.9],["k8",47.8,95.9,103.5],["opt",42.9,89.9,107.6,null,1],["cap",42.4,90.5,106.6,null,1]],
+    opt: [["opt",65.2,112.1,77.8,"k1",1],["opt",56.2,103.7,91.0,"k2",1],["opt",50.7,97.7,99.9,"k4",1],["opt",46.8,93.8,102.7,"k8",1],["opt",46.7,95.0,100.5,"cap",1]],
+    cap: [["cap",68.9,116.8,74.0,"k1",1],["cap",59.8,108.2,86.0,"k2",1],["cap",51.3,98.0,97.6,"k4",1],["cap",45.3,93.9,104.4,"k8",1]]
   },
   contrib: {
-    ah:   [["k1",48.5,9.84,10.03],["k2",51.5,9.41,9.15],["k4",49.0,8.69,8.64],["k8",50.0,8.24,8.51],
-           ["opt",53.0,10.68,9.75,null,1],["cap",63.0,9.20,8.00,null,1]],
-    zero: [["AH",49.0,8.38,8.07],["k1",48.0,8.92,8.67],["k2",46.0,8.13,8.13],["k4",59.5,8.87,8.29],["k8",45.5,7.51,7.84],
-           ["opt",51.0,9.14,8.23,null,1],["cap",63.0,7.43,6.48,null,1]],
-    opt:  [["opt",56.0,11.26,10.57,"k1",1],["opt",62.0,10.30,9.27,"k2",1],["opt",51.0,9.98,9.71,"k4",1],["opt",48.0,8.66,8.56,"k8",1],["opt",56.0,10.03,9.76,"cap",1]],
-    cap:  [["cap",51.0,10.14,10.21,"k1",1],["cap",49.0,9.36,9.73,"k2",1],["cap",58.0,8.85,8.52,"k4",1],["cap",58.0,8.69,7.73,"k8",1]]
+    ah: [["k1",50.3,10.09,9.94],["k2",49.7,9.22,9.08],["k4",52.9,8.75,8.52],["k8",50.8,8.19,8.15],["opt",55.6,10.0,9.44,null,1],["cap",54.0,9.04,8.72,null,1]],
+    zero: [["AH",51.6,8.05,7.79],["k1",52.4,9.07,8.57],["k2",51.9,8.51,8.09],["k4",53.6,7.88,7.58],["k8",54.6,7.55,7.33],["opt",59.6,9.04,8.26,null,1],["cap",56.2,8.32,7.72,null,1]],
+    opt: [["opt",53.3,10.51,10.28,"k1",1],["opt",54.1,9.9,9.61,"k2",1],["opt",54.9,9.67,9.28,"k4",1],["opt",57.8,9.25,8.53,"k8",1],["opt",53.4,9.54,9.24,"cap",1]],
+    cap: [["cap",53.3,9.96,9.89,"k1",1],["cap",52.7,9.36,9.14,"k2",1],["cap",51.9,8.68,8.62,"k4",1],["cap",53.2,8.67,8.37,"k8",1]]
   },
   cg: {
-    ah:   [["k1",44.5,13.47,14.69],["k2",54.0,14.02,13.14],["k4",54.0,13.45,12.45],["k8",55.5,13.18,12.30],
-           ["opt",56.0,16.18,14.33,null,1],["cap",64.0,14.00,11.45,null,1]],
-    zero: [["AH",41.0,11.97,13.12],["k1",37.0,11.94,14.15],["k2",37.5,11.85,13.26],["k4",53.0,13.83,13.49],["k8",44.0,11.93,12.75],
-           ["opt",46.0,13.50,13.37,null,1],["cap",52.0,10.96,10.59,null,1]],
-    opt:  [["opt",59.0,17.13,14.85,"k1",1],["opt",59.0,15.62,13.81,"k2",1],["opt",48.0,14.85,15.24,"k4",1],["opt",43.0,12.60,13.70,"k8",1],["opt",54.0,15.03,15.07,"cap",1]],
-    cap:  [["cap",57.0,15.61,14.31,"k1",1],["cap",51.0,14.37,14.75,"k2",1],["cap",54.0,13.43,13.20,"k4",1],["cap",55.0,13.25,12.32,"k8",1]]
+    ah: [["k1",46.1,13.95,14.5],["k2",51.5,13.67,13.12],["k4",59.0,13.6,12.24],["k8",60.1,13.09,11.62],["opt",57.8,15.0,13.87,null,1],["cap",57.5,13.79,12.65,null,1]],
+    zero: [["AH",41.0,11.47,12.7],["k1",38.7,12.23,13.96],["k2",44.5,12.5,13.17],["k4",48.7,12.16,12.35],["k8",52.1,12.03,11.94],["opt",49.8,13.36,13.45,null,1],["cap",48.6,12.59,12.56,null,1]],
+    opt: [["opt",58.6,15.79,14.37,"k1",1],["opt",53.9,14.81,14.39,"k2",1],["opt",50.8,14.42,14.48,"k4",1],["opt",50.2,13.69,13.64,"k8",1],["opt",51.1,14.2,14.19,"cap",1]],
+    cap: [["cap",59.9,15.36,13.72,"k1",1],["cap",54.8,14.32,13.58,"k2",1],["cap",49.3,13.17,13.41,"k4",1],["cap",48.4,13.16,13.4,"k8",1]]
   }
 };
 // [policy, margin, lo, hi, extra]
 // [policy, policy group's pool, zero group's pool, margin, lo, hi, note]
-const LEVIN = [["AH",53.4,60.9,-7.5,-15.4,0.7,"4.00 members"],["k1",56.1,60.9,-4.8,-13.5,3.8,"3.50 members"],
-  ["k2",63.5,60.9,2.6,-6.7,12.0,"3.95 members"],["k4",61.4,60.9,0.4,-8.0,8.4,"4.22 members"],["k8",61.2,60.9,0.3,-8.3,8.6,"4.34 members"],
-  ["opt",78.1,60.9,17.1,6.3,28.3,"4.51 members"],["cap",70.2,60.9,9.2,-1.2,19.8,"4.76 members"]];
-const H2H = [["AH",50.1,60.9,-10.9,-19.6,-2.1,"wins 39.0%"],["k1",47.7,68.5,-20.8,-30.5,-11.3,"wins 32.0%"],
-  ["k2",46.0,64.3,-18.3,-27.4,-8.9,"wins 35.0%"],["k4",58.0,60.3,-2.3,-11.7,7.1,"wins 48.0%"],["k8",50.9,57.7,-6.8,-15.6,2.3,"wins 45.0%"],
-  ["opt",59.3,59.0,0.3,-12.4,12.7,"wins 48.0%"],["cap",46.5,46.4,0.0,-10.7,10.9,"wins 48.0%"]];
+const LEVIN = [["AH",56.0,60.5,-4.5,-7.1,-1.8,"4.00 members"],["k1",59.3,60.5,-1.2,-4.0,1.8,"3.63 members"],["k2",61.3,60.5,0.9,-1.8,3.6,"4.05 members"],["k4",63.5,60.5,3.0,0.4,5.8,"4.37 members"],["k8",62.2,60.5,1.7,-0.9,4.4,"4.52 members"],["opt",71.0,60.5,10.5,7.1,14.1,"4.31 members"],["cap",63.9,60.5,3.5,0.2,6.7,"4.37 members"]];
+const H2H = [["AH",46.5,60.5,-14.0,-16.8,-11.2,"wins 37.1%"],["k1",47.6,69.8,-22.2,-25.3,-19.0,"wins 32.4%"],["k2",50.9,63.0,-12.0,-15.0,-9.0,"wins 40.1%"],["k4",50.9,57.0,-6.1,-9.0,-3.3,"wins 44.1%"],["k8",51.0,53.1,-2.2,-4.8,0.5,"wins 48.8%"],["opt",57.1,60.2,-3.0,-7.2,1.1,"wins 46.6%"],["cap",53.6,56.1,-2.5,-6.4,1.4,"wins 46.2%"]];
 
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -739,7 +729,7 @@ function winCard(title, opp, rows, unit) {
         <div class="seg" style="width:${o}%;background:${POL[q].color};color:${to}">${o >= 12 ? o.toFixed(1) + "%" : ""}</div>
         <div class="half"></div>
       </div>${who(q)}</div>
-      <div class="wmeans"><span>${POL[p].label} ${a}${unit}</span>${run3 ? `<span class="run3">run 3 · 100 episodes</span>` : ""}<span>${POL[q].label} ${b}${unit}</span></div>`;
+      <div class="wmeans"><span>${POL[p].label} ${a}${unit}</span>${run3 ? `<span class="run3">run 3 · 1000 episodes</span>` : ""}<span>${POL[q].label} ${b}${unit}</span></div>`;
   }).join("");
   return `<div class="wcard"><h4>${title}</h4>${lines}
     <div class="waxis2"><span>policy's share of episodes won</span><span>50%</span><span>opponent's share</span></div></div>`;
@@ -751,7 +741,7 @@ function winSection(id, n, title, formula, bullets, data, unit) {
         <ul>${bullets.map(b => `<li>${b}</li>`).join("")}</ul></div>
       <div class="defcard schema"><div class="eyebrow">Who is compared</div>
         <div class="world"><span class="w">one run</span><span class="seat focal">policy</span><span class="seat focal">opponent</span></div>
-        <div class="note">The higher group wins the episode. Each bar splits the episodes by who won them: 200 for runs 1–2, 100 for Levin's rules (run 3). Within ±2 s.e. of a coin flip is 43–57% at 200 episodes and 40–60% at 100.</div></div>
+        <div class="note">The higher group wins the episode. Each bar splits the episodes by who won them: 2000 for runs 1–2, 1000 for Levin's rules (run 3). Within ±2 s.e. of a coin flip is 47.8–52.2% at 2000 episodes and 46.8–53.2% at 1000.</div></div>
     </div>
     <div class="pair-charts">
       ${winCard(`The rules <span>against AH</span>`, "AH", data.ah, unit)}
@@ -820,12 +810,12 @@ document.addEventListener("click", e => {
 
 dumbbell(); picker(); defpick();
 winSection("sec-payoff", 1, "Our win rate: payoff sum", "Σ payoff = 20·members + 0.6·Σc − Σp",
-  ["Per round, summed over the group's members; empty group = 0", "Averaged over the episode's 24 rounds", "Win rate: share of the 200 episodes won"], WIN.payoff, "");
+  ["Per round, summed over the group's members; empty group = 0", "Averaged over the episode's 24 rounds", "Win rate: share of the episodes won"], WIN.payoff, "");
 winSection("sec-contrib", 2, "Per-capita contribution", "mean c per member",
   ["Per round, averaged over the group's members; empty group = 0", "Averaged over the episode's 24 rounds", "Used alongside the payoff sum in #108, #113, #116"], WIN.contrib, "");
 winSection("sec-cg", 3, "Per-capita common good", "1.6·Σc / members",
   ["Per round, the common good each member receives; empty group = 0", "Averaged over the episode's 24 rounds", "Used alongside the payoff sum in #108, #113, #116"], WIN.cg, "");
-gapChart("forest-levin", `Each policy's group against AH, next to zero's group against AH <span style="color:var(--muted);font-weight:400">· separate runs</span>`, LEVIN, "zero's group against AH (60.9 pool, 4.45 members)");
+gapChart("forest-levin", `Each policy's group against AH, next to zero's group against AH <span style="color:var(--muted);font-weight:400">· separate runs</span>`, LEVIN, "zero's group against AH (60.5 pool, 4.57 members)");
 gapChart("forest-h2h", `Each policy's group and the zero group it plays <span style="color:var(--muted);font-weight:400">· same episodes</span>`, H2H, "the zero group in the same episodes");
 go(location.hash.slice(1));
 </script>
