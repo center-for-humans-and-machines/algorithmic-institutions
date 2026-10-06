@@ -1,0 +1,52 @@
+# Issue #226, run 1 on Levin's stack (24_LEVIN): AH and zero-punisher managers,
+# symmetric pairings. ah_vs_ah and zero_vs_zero check group symmetry;
+# ah_vs_zero / zero_vs_ah check whether zero punishment exploits the stack.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  zero:
+    type: dummy
+    constant_punishment: 0
+
+pairings:
+  - name: ah_vs_ah
+    group_0: ah
+    group_1: ah
+  - name: ah_vs_zero
+    group_0: ah
+    group_1: zero
+  - name: zero_vs_ah
+    group_0: zero
+    group_1: ah
+  - name: zero_vs_zero
+    group_0: zero
+    group_1: zero
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+# Contribution recorded for a timed-out player: 0-20, or "default" (dataset
+# median, also when absent). Training data records 0.
+timeout_contribution: 0
+
+output_dir: plots/simulation/25_LEVIN_run1_ah_zero_pairings
+figure_name: LEVIN_run1_ah_zero_pairings
+save_per_round: true
+basedir: .

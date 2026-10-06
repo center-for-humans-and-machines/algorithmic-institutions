@@ -42,13 +42,16 @@ def load_per_round(sim_dir: str) -> pd.DataFrame:
     return df
 
 
-def attach_payoff_sum(df: pd.DataFrame) -> pd.DataFrame:
+def attach_payoff_sum(df: pd.DataFrame, gs: pd.DataFrame) -> pd.DataFrame:
     key = ["pairing", "episode", "round_number", "group_id"]
     df = df.copy()
     df["payoff_sum"] = (
         df.groupby(key)["payoff"].transform("sum").where(~df.duplicated(key))
     )
-    return df
+    # one row per empty group-round with payoff_sum 0 (other variables NaN,
+    # so their means skip it)
+    empty = gs.loc[gs["group_size"] == 0, key].assign(payoff_sum=0.0)
+    return pd.concat([df, empty], ignore_index=True)
 
 
 def compute_group_size(df: pd.DataFrame, n_groups: int = 2) -> pd.DataFrame:
@@ -172,8 +175,8 @@ def main() -> None:
     os.makedirs(out_dir, exist_ok=True)
 
     df = load_per_round(args.sim_dir)
-    df = attach_payoff_sum(df)
     gs = compute_group_size(df, n_groups=args.n_groups)
+    df = attach_payoff_sum(df, gs)
 
     pairings = args.pairings or sorted(df["pairing"].unique())
     for p in pairings:
