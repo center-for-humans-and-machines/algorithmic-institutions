@@ -200,6 +200,12 @@ evaluation suite likewise keeps one copy per game.
 
 **IMPORTANT**: All commits must be made using the `/commit` skill. This ensures staged files are reviewed before committing.
 
+- `main` is frozen for now: do not commit, push or merge to it (a team
+  convention; GitHub does not enforce it).
+- Work on the optimized stack (Levin's stack, the rule-based managers, RL
+  training on them) goes on `autoresearch-optimized-stack`: branch off it and
+  open PRs into it, not into `main`.
+
 ### Environment
 
 - PyG/CUDA packages are Linux-only (see `sys_platform` markers in `pyproject.toml`)
