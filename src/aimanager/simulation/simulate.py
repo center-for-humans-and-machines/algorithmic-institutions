@@ -8,9 +8,11 @@ Usage:
 """
 
 import argparse
+import math
 import os
 import random
 import sys
+from collections import Counter
 from itertools import count
 from types import SimpleNamespace
 
@@ -131,6 +133,24 @@ def add_punishments(round_dict, punishments):
         "punishment": punishments,
         "punishment_valid": [p is not None for p in punishments],
     }
+
+
+#: Largest episode_batch_size: ~9 GB of A100 memory for the env and AH
+#: models (#232), leaving room for the managers.
+MAX_EPISODE_BATCH_SIZE = 20000
+
+
+def get_episode_batch_size(config: dict) -> int:
+    """`episode_batch_size` from the config: 1 (default) plays episodes one at
+    a time, above 1 in lockstep batches of that many."""
+    size = config.get("episode_batch_size", 1)
+    if isinstance(size, bool) or not isinstance(size, int):
+        raise ValueError(f"episode_batch_size must be an integer, got {size!r}")
+    if not 1 <= size <= MAX_EPISODE_BATCH_SIZE:
+        raise ValueError(
+            f"episode_batch_size must be in 1..{MAX_EPISODE_BATCH_SIZE}, got {size}"
+        )
+    return size
 
 
 def load_humans(config: dict, humans: str, device):
@@ -376,8 +396,16 @@ def run_simulation(config: dict, output_dir: str) -> list:
             for h in artificial_humans.keys()
         }
 
-    episode_batch_size = config.get("episode_batch_size", 1)
+    episode_batch_size = get_episode_batch_size(config)
     if episode_batch_size > 1:
+        n_batches = sum(
+            math.ceil(n_runs * n_episodes / episode_batch_size)
+            for n_runs in Counter(run["humans"] for run in runs.values()).values()
+        )
+        print(
+            f"Batched: {len(runs)} runs x {n_episodes} episodes in {n_batches}"
+            f" batches of up to {episode_batch_size}"
+        )
         batches = run_batched(config, runs, mm, device, episode_batch_size)
         return batches_to_dfs(batches, runs, config)
 
@@ -879,6 +907,7 @@ def run_cli(config, config_path):
     """
     output_dir = get_output_dir(config, config_path)
     basedir = config.get("basedir", ".")
+    get_episode_batch_size(config)  # fail on a bad value before any work
 
     print(f"Config: {config_path}")
     print(f"Output directory: {output_dir}")
