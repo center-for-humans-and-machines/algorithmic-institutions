@@ -186,6 +186,10 @@ class DummyManager:
     def get_punishments(self, data):
         return th.full_like(data["punishment"], self.constant_punishment)
 
+    def batched_punish(self, state):
+        """Env state ([B, A, 1] tensors) -> punishment [B, A, 1] int64."""
+        return th.full_like(state["punishment"], self.constant_punishment)
+
 
 #: What the rule code sees besides its params, and the name it must assign.
 RULE_INPUTS = ("c", "t", "th")
@@ -320,6 +324,14 @@ class RuleBasedManager:
             raw = self._run_rule(contribution, round_number)
         return raw.clamp(0, self.n_punishments - 1).to(data["punishment"].dtype)
 
+    def batched_punish(self, state):
+        """Env state ([B, A, 1] tensors) -> punishment [B, A, 1] int64.
+
+        The rule reads only the current round's contribution and round number,
+        which the env state holds as the round history's last column does.
+        """
+        return self.get_punishments(state)
+
     def _run_rule(self, contribution, round_number):
         # c and t are fresh float copies, so in-place ops in the rule cannot
         # touch the history; no builtins, so the maths goes through th
@@ -335,7 +347,9 @@ class RuleBasedManager:
             raise ValueError("rule_based: the rule code did not set `punishment`")
         # a scalar rule (e.g. a constant) is broadcast to every player and round;
         # the cast in get_punishments floors non-integer values after the clamp
-        raw = th.as_tensor(scope[RULE_OUTPUT], dtype=th.float)
+        raw = th.as_tensor(
+            scope[RULE_OUTPUT], dtype=th.float, device=contribution.device
+        )
         if th.isnan(raw).any():
             raise ValueError("rule_based: the rule code produced NaN punishments")
         return raw.broadcast_to(contribution.shape)
@@ -348,11 +362,27 @@ class LinearManager:
     def __init__(self, model_path, sample=True, **_):
         import joblib
 
-        self.model = LinearAHAdapter(joblib.load(model_path), sample=sample)
+        self.bundle = joblib.load(model_path)
+        self.sample = sample
+        self.model = LinearAHAdapter(self.bundle, sample=sample)
         self.default_values = self.model.default_values
+        self._batched = None
 
     def get_punishments(self, rounds):
         return self.model.get_punishments(rounds)
+
+    def batched_punish(self, state):
+        """Env state ([B, A, 1] tensors) -> punishment [B, A, 1] int64.
+
+        Served by the RL opponent's batched adapter, built on first use: it
+        only supports multinomial bundles with local features, which the
+        per-episode path does not need.
+        """
+        if self._batched is None:
+            from aimanager.manager.linear_opponent import LinearPunisherOpponent
+
+            self._batched = LinearPunisherOpponent(self.bundle, sample=self.sample)
+        return self._batched.predict(state)[0]
 
 
 MANAGER_CLASS = {
