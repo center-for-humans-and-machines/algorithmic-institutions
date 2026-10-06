@@ -66,7 +66,9 @@ configs/                          # YAML experiment configurations
   training/artificial_humans/     # AH (GNN) training configs
   training/baselines/             # Linear baseline training configs
   training/rl_manager/            # RL manager training configs
-  simulation/                     # Simulation configs (current family: manager_testing/23_*)
+  managers/rule_based/            # Rule-based manager rules (YAML) and params (JSON)
+  simulation/                     # Simulation configs (stacks: manager_testing/24_*;
+                                  #   manager pairings: manager_testing/25_*)
 plots/                            # Generated plots and figures
   simulation/                     # Simulation result plots (incl. per-run evaluation/)
   data_analysis/                  # Cross-run analysis outputs (incl. sweep score matrices)
@@ -155,12 +157,39 @@ evaluation suite likewise keeps one copy per game.
   round's contributions); see `notes/baseline_feature_defs.md`.
 - Reference sim: `plots/simulation/24_FRONTIER_vnode_curpun_self_gnncopar1_contr_gnn_switch`
   (seed replicates and ablations: `configs/simulation/manager_testing/ablation_224/`).
+  It is the evaluation-suite reference only; manager sims and RL runs use
+  Levin's stack (see Manager Comparison).
 - A sim run directory looks like `plots/simulation/<name>/{per_round.parquet,
   evaluation/{metrics.csv, scores.csv, visuals/}}`.
 - `scripts/data_analysis/evaluation_sweep.py` aggregates a sweep's `scores.csv`
   files into a score matrix and slot-level figures under
   `plots/data_analysis/evaluation/<name>/`; it parses the sim-dir naming
   convention `..._self_<contr>_contr_<switch>_switch`.
+
+### Manager Comparison
+
+- Experimental stack for manager sims and RL runs: Levin's stack,
+  `configs/simulation/manager_testing/24_LEVIN_vnode_skip_timeoutpun_self_gnncopar1_contr_gnn_switch.yml`
+  (its `artificial_humans` block names the three models; 22-row mean
+  1.07 ± 0.06 over seeds 42-46).
+- Final #226 sims on it (`plots/simulation/25_LEVIN_run{1,2,3}_*`, seed 42):
+  - Run 1: AH loses to zero head to head (payoff sum 35%, pool margin -10.9).
+  - Run 2: no decay rule (k1-k8) beats zero on payoff sum or common pool; k1
+    and k2 lose clearly.
+  - Run 3: Levin's `opt_pool` is the first to clear Levin's criterion (+17.1
+    over zero against AH) but, like `best_cap10_pool`, only ties zero head to
+    head; both beat AH.
+- A sim with `pairings:` puts two managers in the two groups; pairing names are
+  `<g0>_vs_<g1>`, which the plotting scripts parse.
+- A rule-based manager is a config, not code: `type: rule_based` with `rule:`
+  (a YAML in `configs/managers/rule_based/` with `params`, optional
+  `constraints` and `code`) and `params:` (a JSON of the values). The YAML's
+  header lists the load-time checks. The old `k:` form still runs the decay rule.
+- `scripts/plotting/plot_winrates.py <sim_dir> [<sim_dir> ...]` tables the five
+  win definitions of #226. Definitions 1-3 and 5 are head to head. Definition 4
+  (Levin's) ranks managers by their group's common pool against `ah`, so it
+  compares only managers that played `ah` (others are named in a warning);
+  pass the run with `zero_vs_ah` for its reference margins.
 
 ### Git Workflow
 
