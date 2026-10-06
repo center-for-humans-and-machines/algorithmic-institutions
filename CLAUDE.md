@@ -190,6 +190,11 @@ evaluation suite likewise keeps one copy per game.
   (Levin's) ranks managers by their group's common pool against `ah`, so it
   compares only managers that played `ah` (others are named in a warning);
   pass the run with `zero_vs_ah` for its reference margins.
+- RL training on Levin's stack: `configs/training/rl_manager/04_2g8a_levin.yml`
+  (check a setup first with `04_2g8a_levin_smoke.yml`, 50 update steps). Its
+  `opponent_manager` may be a `.joblib` linear punisher
+  (`manager/linear_opponent.py`, batched) or a `.pt` GNN; set
+  `env_args.timeout_contribution` as in the sims.
 
 ### Git Workflow
 
@@ -254,6 +259,8 @@ scripts/remote_test.sh -- -k test_encoder -v
   and group-vnode tests run locally; some substitute PyG stand-ins on macOS)
 - `src/aimanager/tests/test_baseline_features.py` - Linear-baseline feature parity (local;
   fixture in `src/aimanager/tests/fixtures/`)
+- `src/aimanager/tests/test_linear_opponent.py` - RL linear opponent parity with the
+  sim path (local)
 - `scripts/tests/test_remote_test.py` - Remote test script tests (local)
 
 ### Remote Cluster (Raven)

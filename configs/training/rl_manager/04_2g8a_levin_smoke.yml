@@ -1,0 +1,65 @@
+# Smoke test of 04_2g8a_levin.yml: same stack and settings, 50 update steps.
+# Checks that the stack loads, the linear opponent serves and training runs
+# before committing GPU hours to the full recipe.
+
+artificial_humans: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+artificial_humans_valid: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+# `.joblib` -> the batched linear punisher (manager/linear_opponent.py)
+opponent_manager: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+artificial_humans_model: "graph"
+job_id: 04_2g8a_levin_smoke
+seed: 42
+
+manager_args:
+  opt_args:
+      lr: 2.e-4
+  gamma: 0.98
+  eps: 0.1
+  target_update_freq: 1000
+  model_args:
+      hidden_size: 100
+      add_rnn: true
+      add_edge_model: true
+      add_global_model: False
+      x_encoding:
+        - name: contribution
+          n_levels: 21
+          encoding: numeric
+        - name: prev_punishment
+          n_levels: 31
+          encoding: numeric
+        - etype: bool
+          name: contribution_valid
+        - etype: bool
+          name: in_group
+      b_encoding:
+        - name: round_number
+          n_levels: 24
+          encoding: onehot
+
+replay_memory_args:
+  n_episodes: 100
+
+n_update_steps: 50
+eval_period: 10
+training_batch_size: 1
+
+env_args:
+  n_groups: 2
+  n_agents: 8
+  agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+  rl_group_id: 0
+  switch_every: 4
+  n_contributions: 21
+  n_punishments: 31
+  n_rounds: 24
+  batch_size: 1000
+  reward_mode: sum
+  # Contribution recorded for a timed-out player, as in the sims on this
+  # stack: 0-20 or "default" (dataset median). Training data records 0.
+  timeout_contribution: 0
+
+device: "cuda"
+output_dir: "artifacts/manager/04_2g8a_levin_smoke"
+basedir: "."
