@@ -12,6 +12,7 @@ import os
 import random
 import sys
 from itertools import count
+from types import SimpleNamespace
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -275,6 +276,35 @@ def run_batched(config: dict, runs: dict, mm, device, episode_batch_size: int):
     return batches
 
 
+def batches_to_dfs(batches, runs: dict, config: dict) -> list:
+    """Split run_batched's batches back into one DataFrame per run.
+
+    Rebuilds the per-episode recorder's store ([n_episodes, 1, A,
+    n_episode_steps] per key, episode e in row e) and converts it with
+    mem_to_df, so the frames match a per-episode run's in columns, dtypes,
+    episode numbering and order (runs in config order).
+    """
+    n_episodes = config["n_episodes"]
+    n_steps = config["n_episode_steps"]
+    store = {}
+    for episodes, record in batches:
+        record = {k: v.cpu() for k, v in record.items()}
+        rows = {}
+        for i, (name, e) in enumerate(episodes):
+            rows.setdefault(name, ([], []))
+            rows[name][0].append(i)
+            rows[name][1].append(e)
+        for name, (idx, eps) in rows.items():
+            if name not in store:
+                store[name] = {
+                    k: th.zeros((n_episodes, 1, v.shape[1], n_steps), dtype=v.dtype)
+                    for k, v in record.items()
+                }
+            for k, v in record.items():
+                store[name][k][eps, 0, :, : v.shape[-1]] = v[idx]
+    return [mem_to_df(SimpleNamespace(memory=store[name]), name=name) for name in runs]
+
+
 def run_simulation(config: dict, output_dir: str) -> list:
     """Run the simulation and return list of DataFrames."""
     # Extract config parameters
@@ -345,6 +375,11 @@ def run_simulation(config: dict, output_dir: str) -> list:
             for m in managers.keys()
             for h in artificial_humans.keys()
         }
+
+    episode_batch_size = config.get("episode_batch_size", 1)
+    if episode_batch_size > 1:
+        batches = run_batched(config, runs, mm, device, episode_batch_size)
+        return batches_to_dfs(batches, runs, config)
 
     dfs = []
     for name, run in runs.items():
