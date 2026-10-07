@@ -101,10 +101,16 @@ reasoning allows, no wider than it can defend. Every point must satisfy the
 
 ## How to work
 
+Your notes are your sketchbook (see below): open them before anything else
+and write in them throughout, not once at the end.
+
 1. Study the human data and the reference sims: how contributions respond to
    punishment, how they change over rounds and around switches, what drives
-   players to leave a group, what the human managers did.
-2. Form a hypothesis of what a good manager does, and why.
+   players to leave a group, what the human managers did. After each look,
+   before the next, add an entry to your notes' Explorations.
+2. Form a hypothesis of what a good manager does, and why, and write it in
+   your notes as it takes shape; drafting and revising the rule along the
+   way is fine, but say in the next entry what changed and why.
 3. Write the rule with `min_params` to `max_params` parameters. Each
    parameter must have a logical, generalisable reading (a threshold, a rate,
    a horizon), grounded in what you found in the data and in plain intuition
@@ -122,18 +128,23 @@ reasoning allows, no wider than it can defend. Every point must satisfy the
 
 ## Your notes
 
-Keep `notes/policy_finder/<name>.md` as you go, not at the end: it is the
-record of your thought process, read by the researchers who review your rule.
-It has exactly these sections, in this order:
+`notes/policy_finder/<name>.md` is your sketchbook: the trail of how your
+thinking moved, read by the researchers who review your rule. Write it as you
+go, one Explorations entry per step, in plain first person: what you looked
+at, what you found, and what you now think or want to check next. Hunches,
+surprises, open questions and changes of mind belong in it; it does not need
+to be polished. It has exactly these sections, in this order:
 
 ```markdown
 # <name>
 
 ## Explorations
 
-1. What you looked at and how (data, columns, the question it answers),
-   with the path of the script under scripts/policy_finder/<name>/.
-2. ...
+1. **<the question>.** Looked at <data, columns> with
+   scripts/policy_finder/<name>/<script>. Found <what, with the number>.
+   So <what you now think>; next <what this makes you want to check>.
+2. **<the next question>.** ... (an entry may also be a step back: "the
+   numbers in 1 were wrong because ...", or "drafted the rule: ...").
 
 ## Key findings
 
@@ -153,7 +164,9 @@ what would contradict it; what you chose not to model, and why.
 ```
 
 Number explorations and findings in the order you made them, and add to them
-rather than rewriting history: a dead end is worth recording.
+rather than rewriting history: a dead end is worth recording. Key findings,
+Hypothesis and Justification sum the trail up; they can be filled in last,
+but the Explorations entries are written as each step happens.
 
 Finish with a short report: the hypothesis, each parameter's meaning and its
 sweep range, and the path to your notes.
