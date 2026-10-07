@@ -105,3 +105,43 @@ def test_main_rejects_an_invalid_rule(repo, monkeypatch):
     )
     with pytest.raises(SystemExit, match="Invalid: .*declares 2 params"):
         gen.main()
+
+
+def test_parts_split_the_sweep(repo):
+    rule = "configs/managers/rule_based/toy.yml"
+    design = validate_rule(rule, n_points=16)
+    ((_, whole),) = gen.build_sim_configs(rule, design, n_episodes=300)
+    parts = gen.build_sim_configs(rule, design, n_episodes=300, n_parts=3)
+
+    assert [s for s, _ in parts] == ["_p1of3", "_p2of3", "_p3of3"]
+    pairings = [p for _, c in parts for p in c["pairings"]]
+    assert pairings == whole["pairings"]
+    for suffix, config in parts:
+        assert (
+            config["output_dir"] == f"plots/simulation/policy_finder/toy_sweep{suffix}"
+        )
+        assert set(config["managers"]) == {"ah"} | {
+            p["group_0"] for p in config["pairings"]
+        }
+    # batch seeds never repeat: part k starts after the parts before it
+    batch = whole["episode_batch_size"]
+    sizes = [len(c["pairings"]) for _, c in parts]
+    assert sizes == [5, 6, 5]
+    seeds = [c["seed"] for _, c in parts]
+    assert seeds[0] == 42
+    for k in (1, 2):
+        assert seeds[k] == seeds[k - 1] + -(-sizes[k - 1] * 300 // batch)
+    with pytest.raises(ValueError, match="--n-parts"):
+        gen.build_sim_configs(rule, design, n_parts=17)
+
+
+def test_main_writes_parts(repo, monkeypatch):
+    rule = repo / "configs/managers/rule_based/toy.yml"
+    argv = ["gen", "--config", str(rule), "--sobol-points", "8", "--n-parts", "2"]
+    monkeypatch.setattr(sys, "argv", argv)
+    gen.main()
+    written = sorted(p.name for p in (repo / gen.CONFIG_DIR).iterdir())
+    assert written == ["toy_sweep_p1of2.yml", "toy_sweep_p2of2.yml"]
+    monkeypatch.setattr(sys, "argv", argv + ["--out", str(repo / "x.yml")])
+    with pytest.raises(SystemExit, match="one config"):
+        gen.main()

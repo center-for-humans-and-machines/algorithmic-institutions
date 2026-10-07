@@ -99,3 +99,43 @@ def test_check_sweep_rejects(change, match):
     change(config)
     with pytest.raises(ValueError, match=match):
         check_sweep(config)
+
+
+def _result(points, **extra):
+    """A sweep.json-like result: `{name: pool}`."""
+    return {
+        "rule": RULE_PATH,
+        "anchor": "ah",
+        "score": "def 4",
+        "n_episodes": 500,
+        "episode_batch_size": 1000,
+        "seed": 42,
+        "points": [
+            {"name": n, "params": {"a": pool / 100}, "pool": pool}
+            for n, pool in points.items()
+        ],
+        **extra,
+    }
+
+
+def test_merge_sweeps():
+    from aimanager.simulation.sweep import merge_sweeps
+
+    merged = merge_sweeps(
+        [
+            _result({"toy_s1000": 61.0, "toy_s1001": 70.0}, seed=43),
+            _result({"toy_s200": 64.0, "toy_s999": 60.0}),
+        ]
+    )
+    assert [p["name"] for p in merged["points"]] == [
+        "toy_s200",
+        "toy_s999",
+        "toy_s1000",
+        "toy_s1001",
+    ]
+    assert merged["best_name"] == "toy_s1001" and merged["best"] == {"a": 0.7}
+    assert merged["seeds"] == [43, 42] and "seed" not in merged
+    with pytest.raises(ValueError, match="more than one part"):
+        merge_sweeps([_result({"toy_s000": 1.0}), _result({"toy_s000": 2.0})])
+    with pytest.raises(ValueError, match="differ in `n_episodes`"):
+        merge_sweeps([_result({"toy_s000": 1.0}), _result({}, n_episodes=200)])

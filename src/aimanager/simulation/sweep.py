@@ -68,7 +68,7 @@ def sweep_result(df, config: dict) -> dict:
                 "n_episodes": n,
             }
         )
-    best = max(points, key=lambda point: point["pool"])
+    best = _best(points)
     return {
         "best": best["params"],
         "best_name": best["name"],
@@ -92,3 +92,40 @@ def write_sweep(df, config: dict, output_dir: str) -> str:
     with open(path, "w") as f:
         json.dump(sweep_result(df, config), f, indent=2)
     return path
+
+
+def _best(points: list) -> dict:
+    return max(points, key=lambda point: point["pool"])
+
+
+def merge_sweeps(results: list) -> dict:
+    """One sweep.json from the sweep.json of a sweep's parts (--n-parts).
+
+    The parts must share their rule, anchor, score and episodes; points are
+    joined in design order (the index in `<rule>_s<index>`) and `best` is
+    taken over all of them.
+    """
+    if not results:
+        raise ValueError("merge: no sweep results")
+    first = results[0]
+    for key in ("rule", "anchor", "score", "n_episodes", "episode_batch_size"):
+        values = {json.dumps(r.get(key)) for r in results}
+        if len(values) > 1:
+            raise ValueError(f"merge: the parts differ in `{key}`: {sorted(values)}")
+    points = [p for r in results for p in r["points"]]
+    points.sort(key=lambda p: int(p["name"].rsplit("_s", 1)[1]))
+    names = [p["name"] for p in points]
+    duplicates = sorted({n for n in names if names.count(n) > 1})
+    if duplicates:
+        raise ValueError(f"merge: points in more than one part: {duplicates}")
+    best = _best(points)
+    merged = {k: v for k, v in first.items() if k not in ("points", "seed")}
+    merged.update(
+        {
+            "best": best["params"],
+            "best_name": best["name"],
+            "seeds": [r.get("seed") for r in results],
+            "points": points,
+        }
+    )
+    return merged
