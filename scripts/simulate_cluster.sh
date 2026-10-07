@@ -12,7 +12,9 @@
 #   scripts/simulate_cluster.sh --no-sync <config> # simulate without syncing
 #
 # Set AI_REMOTE_DIR to sync and run in an isolated remote dir (e.g.
-# ~/autoresearch/<slug>) instead of the shared checkout. Isolated dirs
+# ~/autoresearch/<slug>) instead of the shared checkout; a checkout with a
+# .raven_remote_dir file (policy-finder-base and its branches) does so by
+# default, one dir per branch (see raven_remote_dir.sh). Isolated dirs
 # carry no venv: jobs use the shared checkout's venv and import their
 # own code via PYTHONPATH.
 #
@@ -21,8 +23,9 @@ set -euo pipefail
 # ── Configuration ────────────────────────────────────────────────────
 REMOTE_HOST="raven"
 CANONICAL_REMOTE_DIR="~/algorithmic-institutions"
-REMOTE_PROJECT_DIR="${AI_REMOTE_DIR:-${CANONICAL_REMOTE_DIR}}"
 LOCAL_PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "${LOCAL_PROJECT_DIR}/scripts/raven_remote_dir.sh"
+REMOTE_PROJECT_DIR="$(raven_remote_dir "${LOCAL_PROJECT_DIR}" "${CANONICAL_REMOTE_DIR}")"
 
 # ── Parse arguments ──────────────────────────────────────────────────
 DO_SYNC=true

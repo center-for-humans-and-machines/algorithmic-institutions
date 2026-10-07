@@ -5,6 +5,8 @@ Usage:
     python -m aimanager train-manager <config>
     python -m aimanager simulate <config>
     python -m aimanager evaluate <config>
+    python -m aimanager validate-rule <rule.yml> [--min-params N]
+        [--max-params N] [--sobol-points N]
 """
 
 import argparse
@@ -123,6 +125,23 @@ DISPATCH = {
 }
 
 
+def validate_rule(args):
+    """Check a rule config for a sweep; exit 1 with the reason if it fails."""
+    from aimanager.manager.rule import validate_rule
+
+    try:
+        design = validate_rule(
+            args.rule, args.min_params, args.max_params, args.sobol_points
+        )
+    except ValueError as e:
+        print(f"Invalid: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(
+        f"Valid: {args.rule}, {len(design)} distinct design points"
+        f" of {args.sobol_points} Sobol points"
+    )
+
+
 # -- Entry point -----------------------------------------------------
 
 
@@ -142,7 +161,16 @@ def main():
             help="Path to YAML config file",
         )
 
+    p = sub.add_parser("validate-rule", help="Check a rule config for a sweep")
+    p.add_argument("rule", help="Path to the rule YAML")
+    p.add_argument("--min-params", type=int, default=1)
+    p.add_argument("--max-params", type=int, default=4)
+    p.add_argument("--sobol-points", type=int, default=256)
+
     args = parser.parse_args()
+    if args.command == "validate-rule":
+        validate_rule(args)
+        return
 
     config = load_and_validate(args.config, args.command)
     DISPATCH[args.command](config, args.config)

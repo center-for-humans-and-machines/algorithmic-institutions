@@ -191,6 +191,11 @@ evaluation suite likewise keeps one copy per game.
   `constraints` and `code`) and `params:` (a JSON of the values), both
   required. `load_rule` in `manager/api_manager.py` documents the schema and
   the load-time checks.
+- `sweep: true` in a sim config (#227; written by
+  `scripts/policy_finder/generate_sim_config.py`) plays one rule's design points
+  against `ah`, skips the plots and writes `sweep.json`: every point's params and
+  definition-4 pool, and `best`, which loads as a manager's `params:`. Definition 4
+  lives in `simulation/pool_scores.py`, shared with `plot_winrates.py`.
 - `scripts/plotting/plot_winrates.py <sim_dir> [<sim_dir> ...]` tables the five
   win definitions of #226. Definitions 1-3 and 5 are head to head. Definition 4
   (Levin's) ranks managers by their group's common pool against `ah`, so it
@@ -214,6 +219,10 @@ evaluation suite likewise keeps one copy per game.
 - `policy-finder-base` is cut from `autoresearch-optimized-stack` with the
   existing rule-based managers removed (#235). It never merges back: #227 and
   the agent core land on it, and every policy-finder instance branches off it.
+  It carries `.raven_remote_dir`, so the cluster scripts (`/simulate`,
+  `remote_test.sh`, `fetch_cluster.sh`) sync, run and fetch in
+  `~/ai-isolated/<branch>` (`/` as `--`) on Raven, never in the shared
+  checkout; `AI_REMOTE_DIR` still overrides (`scripts/raven_remote_dir.sh`).
 
 ### Environment
 
@@ -276,6 +285,8 @@ scripts/remote_test.sh -- -k test_encoder -v
   fixture in `src/aimanager/tests/fixtures/`)
 - `src/aimanager/tests/test_linear_opponent.py` - RL linear opponent parity with the
   sim path (local)
+- `src/aimanager/tests/test_rule_validate.py` - Rule sweep design and `validate-rule`
+  (local; `test_rule_config.py`, the rule-based manager, runs on Raven)
 - `scripts/tests/test_remote_test.py` - Remote test script tests (local)
 
 ### Remote Cluster (Raven)
@@ -299,6 +310,8 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Train AH models**: `python -m aimanager train-ah <config>`
 - **Train RL manager**: `python -m aimanager train-manager <config>`
 - **Run simulation**: `python -m aimanager simulate <config>` (set `save_per_round: true` if the run will be evaluated; `episode_batch_size` to batch episodes, see Manager Comparison)
+- **Validate a rule config**: `python -m aimanager validate-rule <rule.yml> [--max-params N]` (local; the checks and the Sobol design are in `manager/rule.py`)
+- **Generate a rule's sweep sim config**: `python scripts/policy_finder/generate_sim_config.py --config <rule.yml>` (local; 256 Sobol points x 500 episodes against `ah` by default, written to `configs/simulation/policy_finder/<rule>_sweep.yml`)
 - **Evaluate sim vs human**: `python -m aimanager evaluate <config>` (needs the simulation's `per_round.parquet`)
 - **Plot confusion matrix**: `python scripts/plotting/plot_confusion_matrix.py <artifact_dir>`
 

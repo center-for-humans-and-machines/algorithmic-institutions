@@ -27,8 +27,10 @@ def _rule(tmp_path, rule, params, name="rule"):
     return {"rule": str(rule_path), "params": str(params_path)}
 
 
+A = {"definition": "a scale", "type": "float"}
 BASE = {
-    "params": {"a": "a scale"},
+    "params": {"a": A},
+    "sweep_config": {"a": [0.5, 2]},
     "constraints": ["a > 0"],
     "code": "punishment = a * (20 - c)",
 }
@@ -127,7 +129,7 @@ def test_rule_and_params_required(tmp_path):
         ({**BASE, "parms": {}}, {"a": 1}, r"unknown keys \['parms'\]"),
         ({**BASE, "params": {}}, {}, "non-empty `params`"),
         (
-            {**BASE, "params": {"a": "x", "t": "y"}, "code": "punishment = a * t"},
+            {**BASE, "params": {"a": A, "t": A}, "code": "punishment = a * t"},
             {"a": 1, "t": 2},
             r"reserved names \['t'\]",
         ),
@@ -139,9 +141,36 @@ def test_rule_and_params_required(tmp_path):
         ),
         ({**BASE, "code": "punishment = abs(a * c)"}, {"a": 1}, r"\['abs'\]"),
         (
-            {**BASE, "params": {"a": "x", "b": "y"}},
+            {**BASE, "params": {"a": A, "b": A}, "sweep_config": {"a": 1, "b": 2}},
             {"a": 1, "b": 2},
             r"never reads params \['b'\]",
+        ),
+        ({**BASE, "params": {"a": "a scale"}}, {"a": 1}, "must declare exactly"),
+        (
+            {**BASE, "params": {"a": {**A, "range": [0, 1]}}},
+            {"a": 1},
+            "must declare exactly",
+        ),
+        ({**BASE, "params": {"a": {**A, "definition": " "}}}, {"a": 1}, "definition"),
+        ({**BASE, "params": {"a": {**A, "type": "bool"}}}, {"a": 1}, "type 'bool'"),
+        ({**BASE, "params": {"a": {**A, "type": "int"}}}, {"a": 1.5}, "not an integer"),
+        ({**BASE, "sweep_config": [1, 2]}, {"a": 1}, "must be a mapping"),
+        ({**BASE, "sweep_config": {}}, {"a": 1}, r"missing \['a'\]"),
+        (
+            {**BASE, "sweep_config": {"a": 1, "z": 2}},
+            {"a": 1},
+            r"undeclared \['z'\]",
+        ),
+        ({**BASE, "sweep_config": {"a": [1]}}, {"a": 1}, r"\[low, high\]"),
+        ({**BASE, "sweep_config": {"a": [1, "2"]}}, {"a": 1}, r"\[low, high\]"),
+        ({**BASE, "sweep_config": {"a": True}}, {"a": 1}, r"\[low, high\]"),
+        ({**BASE, "sweep_config": {"a": [2, 2]}}, {"a": 1}, "not below high"),
+        ({**BASE, "sweep_config": {"a": [1, 2, "lin"]}}, {"a": 1}, "must be `log`"),
+        ({**BASE, "sweep_config": {"a": [0, 2, "log"]}}, {"a": 1}, "low > 0"),
+        (
+            {**BASE, "params": {"a": {**A, "type": "int"}}, "sweep_config": {"a": 1.5}},
+            {"a": 1},
+            "not an integer",
         ),
         ({**BASE, "code": "p = a * c"}, {"a": 1}, "never assigns `punishment`"),
         (
@@ -163,6 +192,13 @@ def test_rule_and_params_required(tmp_path):
             r"reads undeclared names \['c'\]",
         ),
         (BASE, {"a": -0.5}, r"constraint `a > 0` failed: a = -0.5"),
+        (
+            {**BASE, "params": {"a": A, "best": A}, "code": "punishment = a * best"},
+            {"a": 1, "best": 2},
+            r"reserved names \['best'\]",
+        ),
+        (BASE, {"best": [1]}, "`best`: must be a JSON object"),
+        (BASE, {"best": {"a": -1}, "points": []}, "`best`: constraint `a > 0` failed"),
     ],
 )
 def test_load_errors(tmp_path, rule, params, match):
@@ -177,5 +213,38 @@ def test_load_accepts(tmp_path):
 
     no_constraints = {k: v for k, v in BASE.items() if k != "constraints"}
     RuleBasedManager(**_rule(tmp_path, no_constraints, {"a": -1}, "a"))
+    no_sweep = {k: v for k, v in BASE.items() if k != "sweep_config"}
+    RuleBasedManager(**_rule(tmp_path, no_sweep, {"a": 1}, "d"))
     comprehension = {**BASE, "code": "g = [x * a for x in (1, 2)]\npunishment = g[0]"}
     RuleBasedManager(**_rule(tmp_path, comprehension, {"a": 1}, "b"))
+    as_int = {**BASE, "params": {"a": {**A, "type": "int"}}}
+    for i, sweep in enumerate([2, 2.0, [1, 8], [0.1, 10, "log"]]):
+        rule = {**as_int, "sweep_config": {"a": sweep}}
+        RuleBasedManager(**_rule(tmp_path, rule, {"a": 2.0}, f"c{i}"))
+
+
+# -- where the params come from -------------------------------------------
+
+
+def test_params_inline_or_best(grid, tmp_path):
+    from aimanager.manager.api_manager import RuleBasedManager
+
+    from_file = _rule(tmp_path, BASE, {"a": 0.5})
+    expected = RuleBasedManager(**from_file).get_punishments(grid)
+    inline = {"a": 0.5}
+    sweep = {"best": {"a": 0.5}, "points": [{"name": "s000", "params": {"a": 2}}]}
+    sweep_path = _rule(tmp_path, BASE, sweep, "sweep")["params"]
+    for params in (inline, sweep_path):
+        manager = RuleBasedManager(rule=from_file["rule"], params=params)
+        assert th.equal(manager.get_punishments(grid), expected)
+    assert inline == {"a": 0.5}
+
+
+def test_inline_params_errors_name_their_source(tmp_path):
+    from aimanager.manager.api_manager import RuleBasedManager
+
+    rule = _rule(tmp_path, BASE, {"a": 1})["rule"]
+    with pytest.raises(ValueError, match=r"^inline params: a = 'x'"):
+        RuleBasedManager(rule=rule, params={"a": "x"})
+    with pytest.raises(ValueError, match=r"^inline params `best` does not match"):
+        RuleBasedManager(rule=rule, params={"best": {}})

@@ -24,6 +24,7 @@ import torch as th
 import yaml
 
 from aimanager.simulation.linear_ah import load_ah_model
+from aimanager.simulation.sweep import check_sweep, write_sweep
 from aimanager.manager.api_manager import MultiManager
 from aimanager.manager.environment import ArtificialHumanEnv
 from aimanager.manager.memory import Memory
@@ -343,7 +344,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
 
     # Add model_path to managers config, and resolve a rule-based manager's
     # rule and params files against basedir. Entries without a path
-    # (e.g. type: dummy) pass through untouched.
+    # (e.g. type: dummy) and inline params (a mapping) pass through untouched.
     managers = {
         k: {
             **v,
@@ -351,7 +352,7 @@ def run_simulation(config: dict, output_dir: str) -> list:
             **{
                 key: os.path.join(basedir, v[key])
                 for key in ("rule", "params")
-                if key in v
+                if isinstance(v.get(key), str)
             },
         }
         for k, v in managers_config.items()
@@ -908,6 +909,9 @@ def run_cli(config, config_path):
     output_dir = get_output_dir(config, config_path)
     basedir = config.get("basedir", ".")
     get_episode_batch_size(config)  # fail on a bad value before any work
+    sweep = bool(config.get("sweep", False))
+    if sweep:
+        check_sweep(config)
 
     print(f"Config: {config_path}")
     print(f"Output directory: {output_dir}")
@@ -937,6 +941,13 @@ def run_cli(config, config_path):
         per_round_path = os.path.join(output_dir, "per_round.parquet")
         df_sim.to_parquet(per_round_path, index=False)
         print(f"Saved: {per_round_path}")
+
+    # A sweep (#227) scores its design points and skips the plots: one figure
+    # per pairing over hundreds of pairings is the slowest part of a sweep
+    if sweep:
+        print(f"Saved: {write_sweep(df_sim, config, output_dir)}")
+        print("Simulation complete!")
+        return
 
     # Load pilot data if available
     df_pilot = load_pilot_data(config, basedir)

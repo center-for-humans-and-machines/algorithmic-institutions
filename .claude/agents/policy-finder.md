@@ -60,15 +60,23 @@ A guard rejects anything outside these limits; do not try to work around it.
 - `reports/`, `notes/`: the game rules, the human behaviour analyses and the
   evaluation metrics.
 - `src/aimanager/`: the simulation, the artificial humans and the
-  rule-based manager (`manager/api_manager.py`: `load_rule`,
+  rule-based manager (`manager/rule.py`: the rule schema, `load_rule`,
+  `sobol_design`, `validate_rule`; `manager/api_manager.py`:
   `RuleBasedManager`).
 
 ## The rule config
 
 ```yaml
-params:            # every fittable parameter, with a one-line meaning
-  a: punishment per point of shortfall below c0
-  c0: contribution from which no one is punished
+params:            # every parameter: what it means, and int or float
+  a:
+    definition: punishment per point of shortfall below c0
+    type: float
+  c0:
+    definition: contribution from which no one is punished
+    type: int
+sweep_config:      # every parameter: the range the sweep draws it from
+  a: [0.1, 5, log] #   [low, high, log]: log-uniform (low > 0), for scales
+  c0: [0, 20]      #   [low, high]: uniform; a number fixes the parameter
 constraints:       # optional comparisons over params only
   - a >= 0
 code: |
@@ -76,10 +84,18 @@ code: |
 ```
 
 `code` runs with `c` (each player's contribution this round, float tensor,
-0-20), `t` (the round number, 0-23), `th` (torch) and your params in scope. It
-must assign `punishment`, which the manager clamps to 0-30 and floors to
-integers. No imports and no Python builtins: do the maths with `th`. Do not
-use the example above as your rule; it only shows the format.
+0-20), `t` (the round number, 0-23), `th` (torch) and your params (0-d float
+tensors) in scope. It must assign `punishment`, which the manager clamps to
+0-30 and floors to integers. No imports and no Python builtins: do the maths
+with `th`. Do not use the example above as your rule; it only shows the
+format.
+
+The sweep that follows your work draws 256 points over your `sweep_config`
+(a Sobol design; `int` parameters are rounded to the nearest integer) and
+plays each against `ah`. The best point's values become the rule's values, so
+a range decides what the rule can become: wide enough to hold the values your
+reasoning allows, no wider than it can defend. Every point must satisfy the
+`constraints`.
 
 ## How to work
 
@@ -93,12 +109,14 @@ use the example above as your rule; it only shows the format.
    about incentives. Do not fit quirks of the artificial humans: a parameter
    that only makes sense for this simulator is a flaw. Where the range
    allows, fewer, clearer parameters beat more.
-4. Leave the values to a later sweep; say in your notes what range each
-   parameter should be swept over and why.
+4. Leave the values to the sweep: give each parameter its range in
+   `sweep_config` and say in your notes why that range.
 5. Before finishing, validate the rule:
    `PYTHONPATH=src <python> -m aimanager validate-rule
-   configs/managers/rule_based/<name>.yml --max-params <max_params>`
-   and fix it until it passes.
+   configs/managers/rule_based/<name>.yml --min-params <min_params>
+   --max-params <max_params>`
+   and fix it until it passes. It checks the schema, draws the sweep's
+   design and runs your code on every point of it.
 
 ## Your notes
 
