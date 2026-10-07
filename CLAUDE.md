@@ -302,6 +302,7 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Train RL manager**: `python -m aimanager train-manager <config>`
 - **Run simulation**: `python -m aimanager simulate <config>` (set `save_per_round: true` if the run will be evaluated; `episode_batch_size` to batch episodes, see Manager Comparison)
 - **Validate a rule config**: `python -m aimanager validate-rule <rule.yml> [--max-params N]` (local; the checks and the Sobol design are in `manager/rule.py`)
+- **Generate a rule's sweep sim config**: `python scripts/policy_finder/generate_sim_config.py --config <rule.yml>` (local; 256 Sobol points x 500 episodes against `ah` by default, written to `configs/simulation/policy_finder/<rule>_sweep.yml`)
 - **Evaluate sim vs human**: `python -m aimanager evaluate <config>` (needs the simulation's `per_round.parquet`)
 - **Plot confusion matrix**: `python scripts/plotting/plot_confusion_matrix.py <artifact_dir>`
 
