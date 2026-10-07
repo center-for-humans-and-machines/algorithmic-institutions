@@ -200,6 +200,9 @@ PARAM_FIELDS = {"definition", "type"}
 PARAM_TYPES = ("int", "float")
 #: The marker that makes a `sweep_config` range log-uniform.
 LOG_SCALE = "log"
+#: The key under which a params JSON (a sweep's `sweep.json`) holds the set to
+#: load; everything else in such a file is the sweep's record.
+PARAMS_BEST = "best"
 
 
 def _names(tree):
@@ -271,8 +274,12 @@ def _check_sweep_config(rule_path, declared, sweep):
                 raise ValueError(f"{where}: a log range needs low > 0, got {low}")
 
 
-def load_rule(rule_path, params_path):
-    """Read a rule YAML and its params JSON; return (compiled code, params).
+def load_rule(rule_path, params):
+    """Read a rule YAML and its params; return (compiled code, params).
+
+    `params` is a JSON path or a mapping (inline in a sim config). If it has
+    a `best` key, the set under `best` is loaded and the rest ignored, so a
+    sweep's `sweep.json` loads as params.
 
     The YAML declares its fittable params under `params`, each with a
     `definition` (what it means) and a `type` (`int` or `float`); the JSON
@@ -296,20 +303,24 @@ def load_rule(rule_path, params_path):
         and `code`
       - `params` declares every fittable param with exactly a non-empty
         `definition` and a `type`; none may be named c, t, th or punishment;
-        the params JSON holds exactly these names, as finite numbers, and
-        integers for `int` params
+        none may be named `best`; the params hold exactly these names, as
+        finite numbers, and integers for `int` params
       - `sweep_config` (optional here; `validate-rule` requires it) covers
         exactly the declared params; a fixed `int` is an integer, a range has
         low < high
       - `code` reads only c, t, th, declared params and names it assigns, reads
         every declared param, and assigns `punishment`
       - `constraints` (optional) are comparisons over declared params only;
-        each must hold for the params JSON
+        each must hold for the params
     """
     with open(rule_path) as f:
         rule = yaml.safe_load(f)
-    with open(params_path) as f:
-        params = json.load(f)
+    if isinstance(params, dict):
+        source = "inline params"
+    else:
+        source = params
+        with open(params) as f:
+            params = json.load(f)
 
     if not isinstance(rule, dict):
         raise ValueError(f"{rule_path}: must be a YAML mapping")
@@ -320,7 +331,7 @@ def load_rule(rule_path, params_path):
     declared = rule.get("params")
     if not isinstance(declared, dict) or not declared:
         raise ValueError(f"{rule_path}: needs a non-empty `params` mapping")
-    reserved = sorted(set(declared) & {*RULE_INPUTS, RULE_OUTPUT})
+    reserved = sorted(set(declared) & {*RULE_INPUTS, RULE_OUTPUT, PARAMS_BEST})
     if reserved:
         raise ValueError(f"{rule_path}: params use reserved names {reserved}")
     _check_declared(rule_path, declared)
@@ -344,21 +355,24 @@ def load_rule(rule_path, params_path):
         raise ValueError(f"{rule_path}: code never assigns `{RULE_OUTPUT}`")
 
     if not isinstance(params, dict):
-        raise ValueError(f"{params_path}: must be a JSON object")
+        raise ValueError(f"{source}: must be a JSON object")
+    if PARAMS_BEST in params:
+        params, source = params[PARAMS_BEST], f"{source} `{PARAMS_BEST}`"
+        if not isinstance(params, dict):
+            raise ValueError(f"{source}: must be a JSON object")
+    params = dict(params)
     missing = sorted(set(declared) - set(params))
     undeclared = sorted(set(params) - set(declared))
     if missing or undeclared:
         raise ValueError(
-            f"{params_path} does not match the params declared in {rule_path}:"
+            f"{source} does not match the params declared in {rule_path}:"
             f" missing {missing}, undeclared {undeclared}"
         )
     for name, value in params.items():
         if not _is_number(value):
-            raise ValueError(
-                f"{params_path}: {name} = {value!r} is not a finite number"
-            )
+            raise ValueError(f"{source}: {name} = {value!r} is not a finite number")
         if declared[name]["type"] == "int" and value != int(value):
-            raise ValueError(f"{params_path}: {name} = {value} is not an integer")
+            raise ValueError(f"{source}: {name} = {value} is not an integer")
 
     constraints = rule.get("constraints", [])
     if not isinstance(constraints, list):
@@ -377,7 +391,7 @@ def load_rule(rule_path, params_path):
             )
         if not eval(compile(tree, rule_path, "eval"), {"__builtins__": {}}, params):
             values = ", ".join(f"{n} = {params[n]}" for n in sorted(read))
-            raise ValueError(f"{params_path}: constraint `{expr}` failed: {values}")
+            raise ValueError(f"{source}: constraint `{expr}` failed: {values}")
 
     return compile(code, rule_path, "exec"), params
 

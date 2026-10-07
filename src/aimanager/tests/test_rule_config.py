@@ -192,6 +192,13 @@ def test_rule_and_params_required(tmp_path):
             r"reads undeclared names \['c'\]",
         ),
         (BASE, {"a": -0.5}, r"constraint `a > 0` failed: a = -0.5"),
+        (
+            {**BASE, "params": {"a": A, "best": A}, "code": "punishment = a * best"},
+            {"a": 1, "best": 2},
+            r"reserved names \['best'\]",
+        ),
+        (BASE, {"best": [1]}, "`best`: must be a JSON object"),
+        (BASE, {"best": {"a": -1}, "points": []}, "`best`: constraint `a > 0` failed"),
     ],
 )
 def test_load_errors(tmp_path, rule, params, match):
@@ -214,3 +221,30 @@ def test_load_accepts(tmp_path):
     for i, sweep in enumerate([2, 2.0, [1, 8], [0.1, 10, "log"]]):
         rule = {**as_int, "sweep_config": {"a": sweep}}
         RuleBasedManager(**_rule(tmp_path, rule, {"a": 2.0}, f"c{i}"))
+
+
+# -- where the params come from -------------------------------------------
+
+
+def test_params_inline_or_best(grid, tmp_path):
+    from aimanager.manager.api_manager import RuleBasedManager
+
+    from_file = _rule(tmp_path, BASE, {"a": 0.5})
+    expected = RuleBasedManager(**from_file).get_punishments(grid)
+    inline = {"a": 0.5}
+    sweep = {"best": {"a": 0.5}, "points": [{"name": "s000", "params": {"a": 2}}]}
+    sweep_path = _rule(tmp_path, BASE, sweep, "sweep")["params"]
+    for params in (inline, sweep_path):
+        manager = RuleBasedManager(rule=from_file["rule"], params=params)
+        assert th.equal(manager.get_punishments(grid), expected)
+    assert inline == {"a": 0.5}
+
+
+def test_inline_params_errors_name_their_source(tmp_path):
+    from aimanager.manager.api_manager import RuleBasedManager
+
+    rule = _rule(tmp_path, BASE, {"a": 1})["rule"]
+    with pytest.raises(ValueError, match=r"^inline params: a = 'x'"):
+        RuleBasedManager(rule=rule, params={"a": "x"})
+    with pytest.raises(ValueError, match=r"^inline params `best` does not match"):
+        RuleBasedManager(rule=rule, params={"best": {}})
