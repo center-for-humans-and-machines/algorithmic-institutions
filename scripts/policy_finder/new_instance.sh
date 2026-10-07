@@ -23,7 +23,9 @@
 #     A sandbox write deny beats any narrower allow, so writes are denied by
 #     complement: every existing entry beside the write paths, level by
 #     level. New files can still be created at those levels;
-#     check_instance.sh flags them.
+#     check_instance.sh flags them. Claude Code itself makes this checkout's
+#     .git writable for a worktree (it guards only .git/hooks), and a write to
+#     .git/config could run commands outside the sandbox: it is denied too.
 #   - auto memory off (a worktree shares this checkout's memory)
 #   - the guard hook (.claude/hooks/policy_finder_guard.py) on every tool call
 #
@@ -139,7 +141,7 @@ settings = {
             # home, its .git is not
             "denyRead": [home, "/private/tmp", "/Volumes", f"{wt}/.git"],
             "allowRead": [wt, uv_python, f"{main}/.venv", session_tmp],
-            "denyWrite": deny_write,
+            "denyWrite": deny_write + [f"{main}/.git"],
         },
     },
     "hooks": {
