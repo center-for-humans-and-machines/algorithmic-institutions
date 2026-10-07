@@ -215,8 +215,24 @@ def load_rule(rule_path, params_path):
 
     The YAML declares its fittable params by name under `params`; the JSON
     must hold exactly those names. The code is checked against the
-    declaration, never used to discover it. See the header of
-    configs/managers/rule_based/sigmoid.yml for the full list of checks.
+    declaration, never used to discover it.
+
+    `code` runs inside RuleBasedManager with these names in scope:
+      c         contribution this round, per player (float tensor, 0-20)
+      t         round number, per player (float tensor, 0-23)
+      th        torch
+      each name declared under `params`, from the params JSON
+    It must set `punishment`; the manager then clamps it to [0, 30] and casts
+    to integers. Python builtins are not available: use `th` for the maths.
+
+    Checked here:
+      - the only top-level keys are `params`, `constraints` and `code`
+      - `params` declares every fittable param; none may be named c, t, th or
+        punishment; the params JSON holds exactly these names, as finite numbers
+      - `code` reads only c, t, th, declared params and names it assigns, reads
+        every declared param, and assigns `punishment`
+      - `constraints` (optional) are comparisons over declared params only;
+        each must hold for the params JSON
     """
     with open(rule_path) as f:
         rule = yaml.safe_load(f)
@@ -291,20 +307,12 @@ def load_rule(rule_path, params_path):
 
 
 class RuleBasedManager:
-    # Without `rule`: punish = clamp((20 - contribution - round_number) / k,
-    # 0, n_punishments - 1). With `rule` and `params`: the rule YAML's code,
-    # run on this round's contribution and round number (see load_rule).
-    def __init__(self, k=None, rule=None, params=None, n_punishments=31, **_):
-        if (rule is None) != (params is None):
-            raise ValueError("rule_based: `rule` and `params` must be set together")
-        if rule is not None and k is not None:
-            raise ValueError("rule_based: `k` cannot be combined with `rule`")
-        if rule is None:
-            self.k = int(k) if k is not None else 1
-            self.code, self.params = None, None
-        else:
-            self.k = None
-            self.code, self.params = load_rule(rule, params)
+    # The rule YAML's code, run on this round's contribution and round number
+    # (see load_rule).
+    def __init__(self, rule=None, params=None, n_punishments=31, **_):
+        if rule is None or params is None:
+            raise ValueError("rule_based: `rule` and `params` are required")
+        self.code, self.params = load_rule(rule, params)
         self.n_punishments = int(n_punishments)
         self.model = None
         self.default_values = {
@@ -316,12 +324,7 @@ class RuleBasedManager:
         }
 
     def get_punishments(self, data):
-        contribution = data["contribution"]
-        round_number = data["round_number"]
-        if self.code is None:
-            raw = (20 - contribution - round_number).div(self.k, rounding_mode="floor")
-        else:
-            raw = self._run_rule(contribution, round_number)
+        raw = self._run_rule(data["contribution"], data["round_number"])
         return raw.clamp(0, self.n_punishments - 1).to(data["punishment"].dtype)
 
     def batched_punish(self, state):
