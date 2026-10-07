@@ -276,6 +276,8 @@ scripts/remote_test.sh -- -k test_encoder -v
   fixture in `src/aimanager/tests/fixtures/`)
 - `src/aimanager/tests/test_linear_opponent.py` - RL linear opponent parity with the
   sim path (local)
+- `src/aimanager/tests/test_rule_validate.py` - Rule sweep design and `validate-rule`
+  (local; `test_rule_config.py`, the rule-based manager, runs on Raven)
 - `scripts/tests/test_remote_test.py` - Remote test script tests (local)
 
 ### Remote Cluster (Raven)
@@ -299,6 +301,7 @@ scripts/remote_test.sh -- -k test_encoder -v
 - **Train AH models**: `python -m aimanager train-ah <config>`
 - **Train RL manager**: `python -m aimanager train-manager <config>`
 - **Run simulation**: `python -m aimanager simulate <config>` (set `save_per_round: true` if the run will be evaluated; `episode_batch_size` to batch episodes, see Manager Comparison)
+- **Validate a rule config**: `python -m aimanager validate-rule <rule.yml> [--max-params N]` (local; the checks and the Sobol design are in `manager/rule.py`)
 - **Evaluate sim vs human**: `python -m aimanager evaluate <config>` (needs the simulation's `per_round.parquet`)
 - **Plot confusion matrix**: `python scripts/plotting/plot_confusion_matrix.py <artifact_dir>`
 

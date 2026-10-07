@@ -1,9 +1,4 @@
-import ast
-import json
-import math
-
 import torch as th
-import yaml
 from typing import Optional, List, Union
 from pydantic import BaseModel
 
@@ -11,6 +6,7 @@ from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
 from aimanager.generic.data import MAX_CONTRIBUTION, shift
 from aimanager.simulation.linear_ah import LinearAHAdapter
+from aimanager.manager.rule import load_rule, run_rule
 
 
 class Round(BaseModel):
@@ -191,214 +187,9 @@ class DummyManager:
         return th.full_like(state["punishment"], self.constant_punishment)
 
 
-#: What the rule code sees besides its params, and the name it must assign.
-RULE_INPUTS = ("c", "t", "th")
-RULE_OUTPUT = "punishment"
-RULE_KEYS = {"params", "sweep_config", "constraints", "code"}
-#: The fields every declared param carries, and the types it may have.
-PARAM_FIELDS = {"definition", "type"}
-PARAM_TYPES = ("int", "float")
-#: The marker that makes a `sweep_config` range log-uniform.
-LOG_SCALE = "log"
-#: The key under which a params JSON (a sweep's `sweep.json`) holds the set to
-#: load; everything else in such a file is the sweep's record.
-PARAMS_BEST = "best"
-
-
-def _names(tree):
-    """(names read, names bound) anywhere in a parsed snippet."""
-    read, bound = set(), set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise ValueError("imports are not allowed")
-        if isinstance(node, ast.Name):
-            (read if isinstance(node.ctx, ast.Load) else bound).add(node.id)
-        elif isinstance(node, ast.arg):
-            bound.add(node.arg)
-    return read, bound
-
-
-def _is_number(value):
-    """A finite int or float; bools are not numbers here."""
-    is_number = isinstance(value, (int, float)) and not isinstance(value, bool)
-    return is_number and math.isfinite(value)
-
-
-def _check_declared(rule_path, declared):
-    """Each declared param is a mapping of exactly `definition` and `type`."""
-    for name, spec in declared.items():
-        if not isinstance(spec, dict) or set(spec) != PARAM_FIELDS:
-            raise ValueError(
-                f"{rule_path}: param `{name}` must declare exactly"
-                f" {sorted(PARAM_FIELDS)}"
-            )
-        if not isinstance(spec["definition"], str) or not spec["definition"].strip():
-            raise ValueError(f"{rule_path}: param `{name}` needs a `definition`")
-        if spec["type"] not in PARAM_TYPES:
-            raise ValueError(
-                f"{rule_path}: param `{name}` has type {spec['type']!r},"
-                f" not one of {list(PARAM_TYPES)}"
-            )
-
-
-def _check_sweep_config(rule_path, declared, sweep):
-    """`sweep_config` gives every declared param a fixed value or a range."""
-    if not isinstance(sweep, dict):
-        raise ValueError(f"{rule_path}: `sweep_config` must be a mapping")
-    missing = sorted(set(declared) - set(sweep))
-    undeclared = sorted(set(sweep) - set(declared))
-    if missing or undeclared:
-        raise ValueError(
-            f"{rule_path}: `sweep_config` does not match the declared params:"
-            f" missing {missing}, undeclared {undeclared}"
-        )
-    for name, spec in sweep.items():
-        where = f"{rule_path}: sweep_config `{name}`"
-        if _is_number(spec):
-            if declared[name]["type"] == "int" and spec != int(spec):
-                raise ValueError(f"{where} = {spec} is not an integer")
-            continue
-        is_range = isinstance(spec, list) and len(spec) in (2, 3)
-        if not is_range or not all(_is_number(v) for v in spec[:2]):
-            raise ValueError(
-                f"{where} must be a number, [low, high] or [low, high, log],"
-                f" got {spec!r}"
-            )
-        low, high = spec[:2]
-        if low >= high:
-            raise ValueError(f"{where}: low {low} is not below high {high}")
-        if len(spec) == 3:
-            if spec[2] != LOG_SCALE:
-                raise ValueError(f"{where}: third entry must be `log`, got {spec[2]!r}")
-            if low <= 0:
-                raise ValueError(f"{where}: a log range needs low > 0, got {low}")
-
-
-def load_rule(rule_path, params):
-    """Read a rule YAML and its params; return (compiled code, params).
-
-    `params` is a JSON path or a mapping (inline in a sim config). If it has
-    a `best` key, the set under `best` is loaded and the rest ignored, so a
-    sweep's `sweep.json` loads as params.
-
-    The YAML declares its fittable params under `params`, each with a
-    `definition` (what it means) and a `type` (`int` or `float`); the JSON
-    must hold exactly those names. `sweep_config` gives each param a fixed
-    value or the range a sweep draws it from:
-      a number              fixed
-      [low, high]           uniform over the range
-      [low, high, log]      log-uniform over the range (low > 0)
-    The code is checked against the declaration, never used to discover it.
-
-    `code` runs inside RuleBasedManager with these names in scope:
-      c         contribution this round, per player (float tensor, 0-20)
-      t         round number, per player (float tensor, 0-23)
-      th        torch
-      each name declared under `params`, from the params JSON
-    It must set `punishment`; the manager then clamps it to [0, 30] and casts
-    to integers. Python builtins are not available: use `th` for the maths.
-
-    Checked here:
-      - the only top-level keys are `params`, `sweep_config`, `constraints`
-        and `code`
-      - `params` declares every fittable param with exactly a non-empty
-        `definition` and a `type`; none may be named c, t, th or punishment;
-        none may be named `best`; the params hold exactly these names, as
-        finite numbers, and integers for `int` params
-      - `sweep_config` (optional here; `validate-rule` requires it) covers
-        exactly the declared params; a fixed `int` is an integer, a range has
-        low < high
-      - `code` reads only c, t, th, declared params and names it assigns, reads
-        every declared param, and assigns `punishment`
-      - `constraints` (optional) are comparisons over declared params only;
-        each must hold for the params
-    """
-    with open(rule_path) as f:
-        rule = yaml.safe_load(f)
-    if isinstance(params, dict):
-        source = "inline params"
-    else:
-        source = params
-        with open(params) as f:
-            params = json.load(f)
-
-    if not isinstance(rule, dict):
-        raise ValueError(f"{rule_path}: must be a YAML mapping")
-    unknown = sorted(set(rule) - RULE_KEYS)
-    if unknown:
-        raise ValueError(f"{rule_path}: unknown keys {unknown}")
-
-    declared = rule.get("params")
-    if not isinstance(declared, dict) or not declared:
-        raise ValueError(f"{rule_path}: needs a non-empty `params` mapping")
-    reserved = sorted(set(declared) & {*RULE_INPUTS, RULE_OUTPUT, PARAMS_BEST})
-    if reserved:
-        raise ValueError(f"{rule_path}: params use reserved names {reserved}")
-    _check_declared(rule_path, declared)
-    if "sweep_config" in rule:
-        _check_sweep_config(rule_path, declared, rule["sweep_config"])
-
-    code = rule.get("code")
-    if not isinstance(code, str):
-        raise ValueError(f"{rule_path}: needs a `code` block")
-    try:
-        read, bound = _names(ast.parse(code, rule_path, "exec"))
-    except ValueError as e:
-        raise ValueError(f"{rule_path}: code: {e}") from None
-    undefined = sorted(read - bound - set(RULE_INPUTS) - set(declared))
-    if undefined:
-        raise ValueError(f"{rule_path}: code reads undefined names {undefined}")
-    unused = sorted(set(declared) - read)
-    if unused:
-        raise ValueError(f"{rule_path}: code never reads params {unused}")
-    if RULE_OUTPUT not in bound:
-        raise ValueError(f"{rule_path}: code never assigns `{RULE_OUTPUT}`")
-
-    if not isinstance(params, dict):
-        raise ValueError(f"{source}: must be a JSON object")
-    if PARAMS_BEST in params:
-        params, source = params[PARAMS_BEST], f"{source} `{PARAMS_BEST}`"
-        if not isinstance(params, dict):
-            raise ValueError(f"{source}: must be a JSON object")
-    params = dict(params)
-    missing = sorted(set(declared) - set(params))
-    undeclared = sorted(set(params) - set(declared))
-    if missing or undeclared:
-        raise ValueError(
-            f"{source} does not match the params declared in {rule_path}:"
-            f" missing {missing}, undeclared {undeclared}"
-        )
-    for name, value in params.items():
-        if not _is_number(value):
-            raise ValueError(f"{source}: {name} = {value!r} is not a finite number")
-        if declared[name]["type"] == "int" and value != int(value):
-            raise ValueError(f"{source}: {name} = {value} is not an integer")
-
-    constraints = rule.get("constraints", [])
-    if not isinstance(constraints, list):
-        raise ValueError(f"{rule_path}: `constraints` must be a list")
-    for expr in constraints:
-        if not isinstance(expr, str):
-            raise ValueError(f"{rule_path}: constraint {expr!r} is not a string")
-        tree = ast.parse(expr, rule_path, "eval")
-        if not isinstance(tree.body, ast.Compare):
-            raise ValueError(f"{rule_path}: constraint `{expr}` is not a comparison")
-        read, _ = _names(tree)
-        undefined = sorted(read - set(declared))
-        if undefined:
-            raise ValueError(
-                f"{rule_path}: constraint `{expr}` reads undeclared names {undefined}"
-            )
-        if not eval(compile(tree, rule_path, "eval"), {"__builtins__": {}}, params):
-            values = ", ".join(f"{n} = {params[n]}" for n in sorted(read))
-            raise ValueError(f"{source}: constraint `{expr}` failed: {values}")
-
-    return compile(code, rule_path, "exec"), params
-
-
 class RuleBasedManager:
     # The rule YAML's code, run on this round's contribution and round number
-    # (see load_rule).
+    # (see manager/rule.py).
     def __init__(self, rule=None, params=None, n_punishments=31, **_):
         if rule is None or params is None:
             raise ValueError("rule_based: `rule` and `params` are required")
@@ -426,26 +217,7 @@ class RuleBasedManager:
         return self.get_punishments(state)
 
     def _run_rule(self, contribution, round_number):
-        # c and t are fresh float copies, so in-place ops in the rule cannot
-        # touch the history; no builtins, so the maths goes through th
-        scope = {
-            "__builtins__": {},
-            "th": th,
-            **self.params,
-            "c": contribution.to(th.float),
-            "t": round_number.to(th.float),
-        }
-        exec(self.code, scope)
-        if RULE_OUTPUT not in scope:
-            raise ValueError("rule_based: the rule code did not set `punishment`")
-        # a scalar rule (e.g. a constant) is broadcast to every player and round;
-        # the cast in get_punishments floors non-integer values after the clamp
-        raw = th.as_tensor(
-            scope[RULE_OUTPUT], dtype=th.float, device=contribution.device
-        )
-        if th.isnan(raw).any():
-            raise ValueError("rule_based: the rule code produced NaN punishments")
-        return raw.broadcast_to(contribution.shape)
+        return run_rule(self.code, self.params, contribution, round_number)
 
 
 class LinearManager:
