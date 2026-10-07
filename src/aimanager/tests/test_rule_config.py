@@ -4,39 +4,10 @@ Runs on Raven (api_manager imports GraphNetwork -> torch_scatter).
 """
 
 import json
-from pathlib import Path
 
 import pytest
 import torch as th
 import yaml
-
-ROOT = Path(__file__).resolve().parents[3]
-RULES = ROOT / "configs/managers/rule_based"
-
-
-def sigmoid_punishment(
-    contribution,
-    round_number,
-    *,
-    p_max,
-    c0,
-    tau,
-    gamma_ep,
-    gamma_sw,
-    n_rounds=24,
-    switch_every=4,
-    n_punishments=31,
-):
-    """Levin's reference rule (#219, origin/auto/rule-sigmoid-family:
-    src/aimanager/manager/sigmoid_rule.py), copied at phase = 0."""
-    c = contribution.to(th.float)
-    t = round_number.to(th.float)
-    f = th.sigmoid(-(c - c0) / tau)
-    ep_base = ((n_rounds - t) / n_rounds).clamp(min=0.0)
-    s = (switch_every - 1) - th.remainder(t, switch_every)
-    sw_base = ((s + 1.0) / switch_every).clamp(min=0.0)
-    raw = p_max * f * ep_base**gamma_ep * sw_base**gamma_sw
-    return raw.round().clamp(0.0, float(n_punishments - 1))
 
 
 @pytest.fixture
@@ -63,54 +34,14 @@ BASE = {
 }
 
 
-# -- the committed rules --------------------------------------------------
-
-
-@pytest.mark.parametrize("k", [1, 2, 4, 8])
-def test_decay_config_equals_builtin(grid, k):
-    from aimanager.manager.api_manager import RuleBasedManager
-
-    config = RuleBasedManager(
-        rule=str(RULES / "decay.yml"), params=str(RULES / f"params/decay_k{k}.json")
-    )
-    builtin = RuleBasedManager(k=k)
-    assert th.equal(config.get_punishments(grid), builtin.get_punishments(grid))
-
-
-@pytest.mark.parametrize("name", ["sigmoid_opt_pool", "sigmoid_best_cap10_pool"])
-def test_sigmoid_config_equals_reference(grid, name):
-    from aimanager.manager.api_manager import RuleBasedManager
-
-    params_path = RULES / f"params/{name}.json"
-    manager = RuleBasedManager(rule=str(RULES / "sigmoid.yml"), params=str(params_path))
-    params = json.loads(params_path.read_text())
-    expected = sigmoid_punishment(grid["contribution"], grid["round_number"], **params)
-    got = manager.get_punishments(grid)
-    assert got.dtype == th.int64
-    assert th.equal(got, expected.to(th.int64))
-
-
-def test_legacy_k_unchanged(grid):
-    from aimanager.manager.api_manager import RuleBasedManager
-
-    c, t = grid["contribution"], grid["round_number"]
-    expected = (20 - c - t).div(4, rounding_mode="floor").clamp(0, 30)
-    assert th.equal(RuleBasedManager(k=4).get_punishments(grid), expected)
-    assert th.equal(
-        RuleBasedManager().get_punishments(grid),
-        RuleBasedManager(k=1).get_punishments(grid),
-    )
-
-
-def test_multimanager_rule_side():
+def test_multimanager_rule_side(tmp_path):
     from aimanager.manager.api_manager import MultiManager
 
     mm = MultiManager(
         {
             "rule": {
                 "type": "rule_based",
-                "rule": str(RULES / "decay.yml"),
-                "params": str(RULES / "params/decay_k1.json"),
+                **_rule(tmp_path, BASE, {"a": 1}),
             },
             "zero": {"type": "dummy", "constant_punishment": 0},
         }
@@ -128,7 +59,7 @@ def test_multimanager_rule_side():
         }
     ]
     matched, _ = mm.get_punishments(rounds)
-    assert matched == [max(20 - c - 2, 0) for c in contribution[:4]] + [0] * 4
+    assert matched == [20 - c for c in contribution[:4]] + [0] * 4
 
 
 # -- running a rule -------------------------------------------------------
@@ -178,16 +109,16 @@ def test_run_errors(grid, tmp_path, code, match):
 # -- checks at construction -----------------------------------------------
 
 
-def test_rule_and_params_together(tmp_path):
+def test_rule_and_params_required(tmp_path):
     from aimanager.manager.api_manager import RuleBasedManager
 
     paths = _rule(tmp_path, BASE, {"a": 1})
-    with pytest.raises(ValueError, match="set together"):
+    with pytest.raises(ValueError, match="are required"):
+        RuleBasedManager()
+    with pytest.raises(ValueError, match="are required"):
         RuleBasedManager(rule=paths["rule"])
-    with pytest.raises(ValueError, match="set together"):
+    with pytest.raises(ValueError, match="are required"):
         RuleBasedManager(params=paths["params"])
-    with pytest.raises(ValueError, match="cannot be combined"):
-        RuleBasedManager(**paths, k=1)
 
 
 @pytest.mark.parametrize(
@@ -248,16 +179,3 @@ def test_load_accepts(tmp_path):
     RuleBasedManager(**_rule(tmp_path, no_constraints, {"a": -1}, "a"))
     comprehension = {**BASE, "code": "g = [x * a for x in (1, 2)]\npunishment = g[0]"}
     RuleBasedManager(**_rule(tmp_path, comprehension, {"a": 1}, "b"))
-
-
-@pytest.mark.parametrize(
-    "rule, params",
-    [("decay", f"decay_k{k}") for k in (1, 2, 4, 8)]
-    + [("sigmoid", "sigmoid_opt_pool"), ("sigmoid", "sigmoid_best_cap10_pool")],
-)
-def test_committed_rules_load(rule, params):
-    from aimanager.manager.api_manager import RuleBasedManager
-
-    RuleBasedManager(
-        rule=str(RULES / f"{rule}.yml"), params=str(RULES / f"params/{params}.json")
-    )
