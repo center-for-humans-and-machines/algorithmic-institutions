@@ -68,6 +68,14 @@ def test_design_fixed_and_merged(tmp_path):
     assert sobol_design(rule, 256) == [{"c0": 5, "p": 2.0, "tau": 1.5}]
 
 
+def test_int_range_gives_each_integer_an_equal_share(tmp_path):
+    rule, _ = read_rule(_write(tmp_path, _with(c0=[0, 3], p=2, tau=1.5)))
+    rule["sweep_config"]["p"] = [0, 3]  # keep points distinct, so none merge
+    design = sobol_design(rule, 256)
+    counts = [sum(point["c0"] == k for point in design) for k in range(4)]
+    assert counts == [64, 64, 64, 64]  # the ends too, not half as often
+
+
 @pytest.mark.parametrize("n", [0, 3, 100])
 def test_design_needs_a_power_of_two(tmp_path, n):
     rule, _ = read_rule(_write(tmp_path, RULE))

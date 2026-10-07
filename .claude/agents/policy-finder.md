@@ -76,7 +76,9 @@ params:            # every parameter: what it means, and int or float
     type: int
 sweep_config:      # every parameter: the range the sweep draws it from
   a: [0.1, 5, log] #   [low, high, log]: log-uniform (low > 0), for scales
-  c0: [0, 20]      #   [low, high]: uniform; a number fixes the parameter
+  c0: [0, 20]      #   [low, high]: uniform; a number fixes the parameter;
+                   #   an int range takes each integer low..high, equally
+                   #   often, and needs integer bounds
 constraints:       # optional comparisons over params only
   - a >= 0
 code: |
@@ -91,7 +93,7 @@ with `th`. Do not use the example above as your rule; it only shows the
 format.
 
 The sweep that follows your work draws 256 points over your `sweep_config`
-(a Sobol design; `int` parameters are rounded to the nearest integer) and
+(a Sobol design; an `int` range gives each of its integers the same share) and
 plays each against `ah`. The best point's values become the rule's values, so
 a range decides what the rule can become: wide enough to hold the values your
 reasoning allows, no wider than it can defend. Every point must satisfy the

@@ -10,7 +10,8 @@ A rule YAML:
         definition: contribution at which punishment starts
         type: int          # int or float
     sweep_config:          # per param: a number (fixed), [low, high] or
-      c0: [0, 20]          # [low, high, log] (log-uniform, low > 0)
+      c0: [0, 20]          # [low, high, log] (log-uniform, low > 0); an int
+                           # range takes each integer low..high, equally often
     constraints:           # optional comparisons over params only
       - c0 >= 0
     code: |
@@ -110,6 +111,10 @@ def _check_sweep_config(rule_path, declared, sweep):
         low, high = spec[:2]
         if low >= high:
             raise ValueError(f"{where}: low {low} is not below high {high}")
+        if declared[name]["type"] == "int" and (low != int(low) or high != int(high)):
+            raise ValueError(
+                f"{where}: an int range takes integer bounds, got [{low}, {high}]"
+            )
         if len(spec) == 3:
             if spec[2] != LOG_SCALE:
                 raise ValueError(f"{where}: third entry must be `log`, got {spec[2]!r}")
@@ -128,7 +133,7 @@ def read_rule(rule_path):
         `best`
       - `sweep_config` (optional here; `validate_rule` requires it) covers
         exactly the declared params; a fixed `int` is an integer, a range has
-        low < high
+        low < high, and an `int` range has integer bounds
       - `code` reads only c, t, th, declared params and names it assigns, reads
         every declared param, and assigns `punishment`
       - `constraints` (optional) are comparisons over declared params only
@@ -276,8 +281,10 @@ def sobol_design(rule, n_points=SOBOL_POINTS):
 
     A scrambled Sobol sequence over the ranged params of `sweep_config`
     (uniform, or uniform in log for `log` ranges), fixed params held at their
-    value. `int` params are rounded to the nearest integer and points that
-    become identical are merged, so the design can hold fewer than `n_points`.
+    value. An `int` range [low, high] is drawn over [low - 0.5, high + 0.5]
+    and rounded to the nearest integer, so each integer low..high gets the same
+    share (in log for `log` ranges); points that become identical are merged,
+    so the design can hold fewer than `n_points`.
     """
     if n_points < 1 or n_points & (n_points - 1):
         raise ValueError(f"sobol points must be a power of two, got {n_points}")
@@ -295,8 +302,11 @@ def sobol_design(rule, n_points=SOBOL_POINTS):
     for row in u:
         point = {}
         for name, spec in sweep.items():
+            is_int = declared[name]["type"] == "int"
             if name in ranged:
                 low, high = spec[:2]
+                if is_int:  # every integer gets a full unit of the range
+                    low, high = low - 0.5, high + 0.5
                 x = row[ranged.index(name)]
                 if len(spec) == 3:
                     value = math.exp(math.log(low) + x * math.log(high / low))
@@ -304,8 +314,10 @@ def sobol_design(rule, n_points=SOBOL_POINTS):
                     value = low + x * (high - low)
             else:
                 value = spec
-            if declared[name]["type"] == "int":
+            if is_int:
                 value = int(math.floor(value + 0.5))
+                if name in ranged:  # float error at the widened edges
+                    value = min(max(value, int(spec[0])), int(spec[1]))
             else:
                 value = float(value)
             point[name] = value

@@ -153,7 +153,15 @@ def test_rule_and_params_required(tmp_path):
         ),
         ({**BASE, "params": {"a": {**A, "definition": " "}}}, {"a": 1}, "definition"),
         ({**BASE, "params": {"a": {**A, "type": "bool"}}}, {"a": 1}, "type 'bool'"),
-        ({**BASE, "params": {"a": {**A, "type": "int"}}}, {"a": 1.5}, "not an integer"),
+        (
+            {
+                **BASE,
+                "params": {"a": {**A, "type": "int"}},
+                "sweep_config": {"a": [1, 2]},
+            },
+            {"a": 1.5},
+            "not an integer",
+        ),
         ({**BASE, "sweep_config": [1, 2]}, {"a": 1}, "must be a mapping"),
         ({**BASE, "sweep_config": {}}, {"a": 1}, r"missing \['a'\]"),
         (
@@ -167,6 +175,15 @@ def test_rule_and_params_required(tmp_path):
         ({**BASE, "sweep_config": {"a": [2, 2]}}, {"a": 1}, "not below high"),
         ({**BASE, "sweep_config": {"a": [1, 2, "lin"]}}, {"a": 1}, "must be `log`"),
         ({**BASE, "sweep_config": {"a": [0, 2, "log"]}}, {"a": 1}, "low > 0"),
+        (
+            {
+                **BASE,
+                "params": {"a": {**A, "type": "int"}},
+                "sweep_config": {"a": [0.5, 3]},
+            },
+            {"a": 1},
+            "int range takes integer bounds",
+        ),
         (
             {**BASE, "params": {"a": {**A, "type": "int"}}, "sweep_config": {"a": 1.5}},
             {"a": 1},
@@ -218,7 +235,7 @@ def test_load_accepts(tmp_path):
     comprehension = {**BASE, "code": "g = [x * a for x in (1, 2)]\npunishment = g[0]"}
     RuleBasedManager(**_rule(tmp_path, comprehension, {"a": 1}, "b"))
     as_int = {**BASE, "params": {"a": {**A, "type": "int"}}}
-    for i, sweep in enumerate([2, 2.0, [1, 8], [0.1, 10, "log"]]):
+    for i, sweep in enumerate([2, 2.0, [1, 8], [1, 10, "log"]]):
         rule = {**as_int, "sweep_config": {"a": sweep}}
         RuleBasedManager(**_rule(tmp_path, rule, {"a": 2.0}, f"c{i}"))
 
