@@ -194,7 +194,12 @@ class DummyManager:
 #: What the rule code sees besides its params, and the name it must assign.
 RULE_INPUTS = ("c", "t", "th")
 RULE_OUTPUT = "punishment"
-RULE_KEYS = {"params", "constraints", "code"}
+RULE_KEYS = {"params", "sweep_config", "constraints", "code"}
+#: The fields every declared param carries, and the types it may have.
+PARAM_FIELDS = {"definition", "type"}
+PARAM_TYPES = ("int", "float")
+#: The marker that makes a `sweep_config` range log-uniform.
+LOG_SCALE = "log"
 
 
 def _names(tree):
@@ -210,12 +215,73 @@ def _names(tree):
     return read, bound
 
 
+def _is_number(value):
+    """A finite int or float; bools are not numbers here."""
+    is_number = isinstance(value, (int, float)) and not isinstance(value, bool)
+    return is_number and math.isfinite(value)
+
+
+def _check_declared(rule_path, declared):
+    """Each declared param is a mapping of exactly `definition` and `type`."""
+    for name, spec in declared.items():
+        if not isinstance(spec, dict) or set(spec) != PARAM_FIELDS:
+            raise ValueError(
+                f"{rule_path}: param `{name}` must declare exactly"
+                f" {sorted(PARAM_FIELDS)}"
+            )
+        if not isinstance(spec["definition"], str) or not spec["definition"].strip():
+            raise ValueError(f"{rule_path}: param `{name}` needs a `definition`")
+        if spec["type"] not in PARAM_TYPES:
+            raise ValueError(
+                f"{rule_path}: param `{name}` has type {spec['type']!r},"
+                f" not one of {list(PARAM_TYPES)}"
+            )
+
+
+def _check_sweep_config(rule_path, declared, sweep):
+    """`sweep_config` gives every declared param a fixed value or a range."""
+    if not isinstance(sweep, dict):
+        raise ValueError(f"{rule_path}: `sweep_config` must be a mapping")
+    missing = sorted(set(declared) - set(sweep))
+    undeclared = sorted(set(sweep) - set(declared))
+    if missing or undeclared:
+        raise ValueError(
+            f"{rule_path}: `sweep_config` does not match the declared params:"
+            f" missing {missing}, undeclared {undeclared}"
+        )
+    for name, spec in sweep.items():
+        where = f"{rule_path}: sweep_config `{name}`"
+        if _is_number(spec):
+            if declared[name]["type"] == "int" and spec != int(spec):
+                raise ValueError(f"{where} = {spec} is not an integer")
+            continue
+        is_range = isinstance(spec, list) and len(spec) in (2, 3)
+        if not is_range or not all(_is_number(v) for v in spec[:2]):
+            raise ValueError(
+                f"{where} must be a number, [low, high] or [low, high, log],"
+                f" got {spec!r}"
+            )
+        low, high = spec[:2]
+        if low >= high:
+            raise ValueError(f"{where}: low {low} is not below high {high}")
+        if len(spec) == 3:
+            if spec[2] != LOG_SCALE:
+                raise ValueError(f"{where}: third entry must be `log`, got {spec[2]!r}")
+            if low <= 0:
+                raise ValueError(f"{where}: a log range needs low > 0, got {low}")
+
+
 def load_rule(rule_path, params_path):
     """Read a rule YAML and its params JSON; return (compiled code, params).
 
-    The YAML declares its fittable params by name under `params`; the JSON
-    must hold exactly those names. The code is checked against the
-    declaration, never used to discover it.
+    The YAML declares its fittable params under `params`, each with a
+    `definition` (what it means) and a `type` (`int` or `float`); the JSON
+    must hold exactly those names. `sweep_config` gives each param a fixed
+    value or the range a sweep draws it from:
+      a number              fixed
+      [low, high]           uniform over the range
+      [low, high, log]      log-uniform over the range (low > 0)
+    The code is checked against the declaration, never used to discover it.
 
     `code` runs inside RuleBasedManager with these names in scope:
       c         contribution this round, per player (float tensor, 0-20)
@@ -226,9 +292,15 @@ def load_rule(rule_path, params_path):
     to integers. Python builtins are not available: use `th` for the maths.
 
     Checked here:
-      - the only top-level keys are `params`, `constraints` and `code`
-      - `params` declares every fittable param; none may be named c, t, th or
-        punishment; the params JSON holds exactly these names, as finite numbers
+      - the only top-level keys are `params`, `sweep_config`, `constraints`
+        and `code`
+      - `params` declares every fittable param with exactly a non-empty
+        `definition` and a `type`; none may be named c, t, th or punishment;
+        the params JSON holds exactly these names, as finite numbers, and
+        integers for `int` params
+      - `sweep_config` (optional here; `validate-rule` requires it) covers
+        exactly the declared params; a fixed `int` is an integer, a range has
+        low < high
       - `code` reads only c, t, th, declared params and names it assigns, reads
         every declared param, and assigns `punishment`
       - `constraints` (optional) are comparisons over declared params only;
@@ -251,6 +323,9 @@ def load_rule(rule_path, params_path):
     reserved = sorted(set(declared) & {*RULE_INPUTS, RULE_OUTPUT})
     if reserved:
         raise ValueError(f"{rule_path}: params use reserved names {reserved}")
+    _check_declared(rule_path, declared)
+    if "sweep_config" in rule:
+        _check_sweep_config(rule_path, declared, rule["sweep_config"])
 
     code = rule.get("code")
     if not isinstance(code, str):
@@ -278,11 +353,12 @@ def load_rule(rule_path, params_path):
             f" missing {missing}, undeclared {undeclared}"
         )
     for name, value in params.items():
-        is_number = isinstance(value, (int, float)) and not isinstance(value, bool)
-        if not is_number or not math.isfinite(value):
+        if not _is_number(value):
             raise ValueError(
                 f"{params_path}: {name} = {value!r} is not a finite number"
             )
+        if declared[name]["type"] == "int" and value != int(value):
+            raise ValueError(f"{params_path}: {name} = {value} is not an integer")
 
     constraints = rule.get("constraints", [])
     if not isinstance(constraints, list):
