@@ -53,8 +53,15 @@ import sys
 import numpy as np
 import pandas as pd
 
+from aimanager.simulation.pool_scores import (
+    POOL,
+    add_pool,
+    against_anchor,
+    group_round_scores,
+    pairing_of,
+)
+
 DEFAULT_METRICS = ["payoff", "common_good", "contribution"]
-POOL = "pool"  # per-agent 1.6*c - p; its group sum is the common pool
 N_BOOT = 10000
 BOOT_SEED = 0
 
@@ -92,13 +99,7 @@ def load_per_round(sim_dirs: list) -> pd.DataFrame:
             # keep runs of different sims apart; the pairing name stays last
             df["run"] = sim_dir + " | " + df["run"]
         frames.append(df)
-    df = pd.concat(frames, ignore_index=True)
-    df[POOL] = 1.6 * df["contribution"] - df["punishment"]
-    return df
-
-
-def pairing_of(run: str) -> tuple:
-    return tuple(run.split("managed by ")[-1].split("_vs_"))
+    return add_pool(pd.concat(frames, ignore_index=True))
 
 
 def pairing_sides(df: pd.DataFrame) -> dict:
@@ -116,16 +117,6 @@ def pairing_sides(df: pd.DataFrame) -> dict:
     return sides
 
 
-def group_round_scores(sub: pd.DataFrame, metric: str, agg: str) -> pd.DataFrame:
-    """Per (episode, round): each group's aggregate, empty group-round = 0."""
-    grouped = sub.groupby(["episode", "round_number", "agent_group"])[metric]
-    per_round = grouped.sum() if agg == "sum" else grouped.mean()
-    piv = per_round.reset_index().pivot_table(
-        index=["episode", "round_number"], columns="agent_group", values=metric
-    )
-    return piv.reindex(columns=[0, 1]).fillna(0.0)  # empty group-round -> 0
-
-
 def episode_scores(sub: pd.DataFrame, a_g: int, metric: str, agg: str):
     """Return (a_score, b_score) Series indexed by episode.
 
@@ -134,16 +125,6 @@ def episode_scores(sub: pd.DataFrame, a_g: int, metric: str, agg: str):
     """
     ep = group_round_scores(sub, metric, agg).groupby("episode").mean()
     return ep[a_g], ep[1 - a_g]
-
-
-def episode_members(sub: pd.DataFrame, group: int) -> pd.Series:
-    """Mean group size per episode, empty group-round = 0."""
-    counts = sub.groupby(["episode", "round_number", "agent_group"]).size()
-    cpiv = counts.reset_index(name="n").pivot_table(
-        index=["episode", "round_number"], columns="agent_group", values="n"
-    )
-    cpiv = cpiv.reindex(columns=[0, 1]).fillna(0.0)
-    return cpiv[group].groupby("episode").mean()
 
 
 def empty_fraction(sub: pd.DataFrame, group: int) -> float:
@@ -235,30 +216,6 @@ def pool_h2h_table(df: pd.DataFrame, sides: dict) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(out)
-
-
-def against_anchor(df: pd.DataFrame, anchor: str) -> dict:
-    """Manager -> per-episode (pool, members) of its group against the anchor.
-
-    Pools every pairing of the manager with the anchor, in either position.
-    The anchor's own entry comes from `anchor_vs_anchor`, both groups.
-    """
-    scores = {}
-    for run in df["run"].unique():
-        g0, g1 = pairing_of(run)
-        if anchor not in (g0, g1):
-            continue
-        sub = df[df["run"] == run]
-        ep = group_round_scores(sub, POOL, "sum").groupby("episode").mean()
-        for group, manager in ((0, g0), (1, g1)):
-            other = g1 if group == 0 else g0
-            if other != anchor:
-                continue
-            frame = pd.DataFrame(
-                {"pool": ep[group], "members": episode_members(sub, group)}
-            )
-            scores.setdefault(manager, []).append(frame)
-    return {m: pd.concat(f, ignore_index=True) for m, f in scores.items()}
 
 
 def anchor_table(df: pd.DataFrame, anchor: str, reference: str):

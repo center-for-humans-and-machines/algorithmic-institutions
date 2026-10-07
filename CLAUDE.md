@@ -191,6 +191,11 @@ evaluation suite likewise keeps one copy per game.
   `constraints` and `code`) and `params:` (a JSON of the values), both
   required. `load_rule` in `manager/api_manager.py` documents the schema and
   the load-time checks.
+- `sweep: true` in a sim config (#227; written by
+  `scripts/policy_finder/generate_sim_config.py`) plays one rule's design points
+  against `ah`, skips the plots and writes `sweep.json`: every point's params and
+  definition-4 pool, and `best`, which loads as a manager's `params:`. Definition 4
+  lives in `simulation/pool_scores.py`, shared with `plot_winrates.py`.
 - `scripts/plotting/plot_winrates.py <sim_dir> [<sim_dir> ...]` tables the five
   win definitions of #226. Definitions 1-3 and 5 are head to head. Definition 4
   (Levin's) ranks managers by their group's common pool against `ah`, so it
