@@ -171,10 +171,9 @@ evaluation suite likewise keeps one copy per game.
 - Experimental stack for manager sims and RL runs: Levin's stack,
   `configs/simulation/manager_testing/24_LEVIN_vnode_skip_timeoutpun_self_gnncopar1_contr_gnn_switch.yml`
   (its `artificial_humans` block names the three models).
-- The #226 sims on it, `configs/simulation/manager_testing/25_LEVIN_run{1,2,3}_*`:
-  Run 1 AH and zero, Run 2 the decay rules (k1-k8), Run 3 Levin's sigmoid
-  rules. Results and the five win definitions: `reports/zero_punisher_test.html`,
-  published for the organization at <https://claude.ai/artifact/UowH31jRbmLjX6orNQkWKb>.
+- The #226 reference sims on it, `configs/simulation/manager_testing/25_LEVIN_run1_*`:
+  the AH manager and the zero punisher, with outputs in
+  `plots/simulation/25_LEVIN_run1_*`.
 - At 100 episodes per pairing a manager's win rates and margins move with the
   seed by more than most gaps between managers. Compare managers on the
   `*_batched.yml` runs: 1000 episodes per pairing, cheap with
@@ -189,8 +188,9 @@ evaluation suite likewise keeps one copy per game.
   and `human` need `episode_batch_size: 1`.
 - A rule-based manager is a config, not code: `type: rule_based` with `rule:`
   (a YAML in `configs/managers/rule_based/` with `params`, optional
-  `constraints` and `code`) and `params:` (a JSON of the values). The YAML's
-  header lists the load-time checks. The old `k:` form still runs the decay rule.
+  `constraints` and `code`) and `params:` (a JSON of the values), both
+  required. `load_rule` in `manager/api_manager.py` documents the schema and
+  the load-time checks.
 - `scripts/plotting/plot_winrates.py <sim_dir> [<sim_dir> ...]` tables the five
   win definitions of #226. Definitions 1-3 and 5 are head to head. Definition 4
   (Levin's) ranks managers by their group's common pool against `ah`, so it
@@ -211,6 +211,9 @@ evaluation suite likewise keeps one copy per game.
 - Work on the optimized stack (Levin's stack, the rule-based managers, RL
   training on them) goes on `autoresearch-optimized-stack`: branch off it and
   open PRs into it, not into `main`.
+- `policy-finder-base` is cut from `autoresearch-optimized-stack` with the
+  existing rule-based managers removed (#235). It never merges back: #227 and
+  the agent core land on it, and every policy-finder instance branches off it.
 
 ### Environment
 

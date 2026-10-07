@@ -26,13 +26,6 @@ would be playing in two episode with the manager changing.
 
 We collected ~45 episodes a 16 rounds with a rule based manager.
 
-In pilot two we utilized a rule to determine the punishments. The rule has the form:
-$$pun = (20-cont) \cdot s + (cont != 20) \cdot  c - b$$
-
-The factors s,c and b were distinct for each contributor and round. However,
-they were sampled from a multivariate normal distribution ensuring correlation
-over the rounds as well as a correlation between rounds.
-
 ## Models
 
 ### Artificial Humans
