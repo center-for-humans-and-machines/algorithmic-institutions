@@ -42,9 +42,8 @@ Usage:
 
 Example:
     python scripts/plotting/plot_winrates.py \\
-        plots/simulation/25_LEVIN_run1_ah_zero_pairings \\
-        plots/simulation/25_LEVIN_run3_sigmoid_pairings \\
-        --out plots/simulation/25_LEVIN_run3_sigmoid_pairings/winrates.md
+        plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched \\
+        --out plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/winrates.md
 """
 
 import argparse

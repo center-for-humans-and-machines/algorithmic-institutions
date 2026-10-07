@@ -20,8 +20,8 @@ Usage:
 
 Examples:
     python scripts/plotting/plot_sim_opposition_behavior.py \\
-        plots/simulation/19_2g8a_rule_based_vs_zero \\
-        --opposition zero --managers rule_k1 rule_k4 rule_k8
+        plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched \\
+        --opposition zero --managers ah
 """
 import argparse
 import os
@@ -218,9 +218,9 @@ def plot_first_switch_breakdown(
         Line2D([0], [0], color=role_palette["leaver"], lw=2, label="leaver (in opposition)"),
         Line2D([0], [0], color=role_palette["joiner"], lw=2, label="joiner (in opposition)"),
         Line2D([0], [0], color=leaver_ref_color, lw=1.5, ls="--",
-               label="leaver (post-leave, in rule group)"),
+               label="leaver (post-leave, in policy group)"),
         Line2D([0], [0], color=joiner_ref_color, lw=1.5, ls="--",
-               label="joiner (pre-join, in rule group)"),
+               label="joiner (pre-join, in policy group)"),
     ]
     fig.legend(
         handles=handles,
@@ -233,7 +233,7 @@ def plot_first_switch_breakdown(
     fig.suptitle(
         "Opposition-group contribution by role around the first switch "
         f"(round {switch_round}); solid = while in opposition, "
-        "dashed tinted = same agents while in the rule group",
+        "dashed tinted = same agents while in the policy group",
         fontsize=11,
     )
     fig.tight_layout(rect=[0, 0.05, 1, 1])
