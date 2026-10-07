@@ -11,7 +11,9 @@
 # (git diff policy-finder-base...policy-finder/<name>) nor in its worktree
 # (uncommitted or untracked files), and wrote both the rule and its notes,
 # with the notes' sections in order: Explorations, Key findings, Hypothesis
-# and its Justification. Prints what is wrong otherwise.
+# and its Justification, and the rule passes `validate-rule` (#227) within
+# the instance's min_params and max_params, run with the instance's python
+# from .claude/policy_finder.json. Prints what is wrong otherwise.
 # --commit then commits the write paths on the instance's branch, since the
 # agent has no git. PF_BASE and PF_WORKTREE_ROOT as in new_instance.sh.
 
@@ -83,7 +85,19 @@ for heading in "## Explorations" "## Key findings" "## Hypothesis" \
     last="$line"
 done
 
-# #227 adds the rule validation here
+# the rule passes validate-rule (#227) within the instance's limits
+CONF="$WT/.claude/policy_finder.json"
+{ read -r PY; read -r MIN_PARAMS; read -r MAX_PARAMS; } < <(
+    python3 -c 'import json, sys
+c = json.load(open(sys.argv[1]))
+print(c["python"], c["min_params"], c["max_params"], sep="\n")' "$CONF"
+) || { echo "FAIL: cannot read python, min_params, max_params from $CONF" >&2; exit 1; }
+if ! (cd "$WT" && PYTHONPATH="$WT/src" "$PY" -m aimanager validate-rule "$RULE" \
+    --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS"); then
+    echo "FAIL: $RULE does not pass validate-rule" >&2
+    exit 1
+fi
+
 echo "OK: $BRANCH touches only $RULE, $NOTES and $SCRIPTS"
 
 if [[ "$COMMIT" == 1 ]]; then

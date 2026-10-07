@@ -4,8 +4,10 @@ Each test builds a throwaway repo with a base branch and an instance worktree,
 the layout new_instance.sh makes, and runs the check from the repo's copy.
 """
 
+import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -32,6 +34,13 @@ Punish early.
 
 Finding 1.
 """
+RULE_TEXT = """params:
+  a: {definition: punishment per point of shortfall, type: float}
+sweep_config:
+  a: [0, 2]
+code: |
+  punishment = a * (20 - c)
+"""
 
 
 def git(cwd, *args):
@@ -57,7 +66,9 @@ def repo(tmp_path):
     wt = tmp_path / "policy-finder-worktrees" / NAME
     git(main, "worktree", "add", "-q", "-b", f"policy-finder/{NAME}", str(wt))
     (wt / ".claude").mkdir()
-    (wt / ".claude/policy_finder.json").write_text("{}")  # gitignored
+    # gitignored; the interpreter runs validate-rule
+    config = {"python": sys.executable, "min_params": 1, "max_params": 4}
+    (wt / ".claude/policy_finder.json").write_text(json.dumps(config))
     return main, wt
 
 
@@ -69,8 +80,8 @@ def check(main, *args):
     )
 
 
-def write_rule(wt, notes=NOTES_TEXT):
-    (wt / RULE).write_text("params: {a: x}\ncode: punishment = a\n")
+def write_rule(wt, notes=NOTES_TEXT, rule=RULE_TEXT):
+    (wt / RULE).write_text(rule)
     if notes is not None:
         (wt / NOTES).parent.mkdir(parents=True, exist_ok=True)
         (wt / NOTES).write_text(notes)
@@ -121,6 +132,36 @@ def test_notes_sections_in_order(repo, notes, missing):
     result = check(main)
     assert result.returncode == 1
     assert f"needs the section '{missing}" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "rule, reason",
+    [
+        ("params: {a: x}\ncode: punishment = a\n", "must declare exactly"),
+        (RULE_TEXT.replace("sweep_config:\n  a: [0, 2]\n", ""), "sweep_config"),
+        (
+            RULE_TEXT.replace("[0, 2]", "[-1, 2]").replace("(20 - c)", "th.log(a)"),
+            "NaN",
+        ),
+    ],
+)
+def test_invalid_rule_fails(repo, rule, reason):
+    main, wt = repo
+    write_rule(wt, rule=rule)
+    result = check(main)
+    assert result.returncode == 1
+    assert reason in result.stderr
+    assert f"FAIL: {RULE} does not pass validate-rule" in result.stderr
+
+
+def test_rule_outside_param_limits_fails(repo):
+    main, wt = repo
+    write_rule(wt)
+    config = {"python": sys.executable, "min_params": 2, "max_params": 2}
+    (wt / ".claude/policy_finder.json").write_text(json.dumps(config))
+    result = check(main)
+    assert result.returncode == 1
+    assert "declares 1 params, allowed 2 to 2" in result.stderr
 
 
 @pytest.mark.parametrize(
