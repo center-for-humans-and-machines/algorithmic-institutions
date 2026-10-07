@@ -18,10 +18,12 @@ set -euo pipefail
 # ── Configuration ────────────────────────────────────────────────────
 REMOTE_HOST="raven"
 CANONICAL_REMOTE_DIR="~/algorithmic-institutions"
-# Set AI_REMOTE_DIR to sync and test in an isolated experiment dir
+# Set AI_REMOTE_DIR to sync and test in an isolated experiment dir; a
+# checkout with .raven_remote_dir does so by default (raven_remote_dir.sh)
 # (shared venv + own code via PYTHONPATH; no venv of its own).
-REMOTE_PROJECT_DIR="${AI_REMOTE_DIR:-${CANONICAL_REMOTE_DIR}}"
 LOCAL_PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "${LOCAL_PROJECT_DIR}/scripts/raven_remote_dir.sh"
+REMOTE_PROJECT_DIR="$(raven_remote_dir "${LOCAL_PROJECT_DIR}" "${CANONICAL_REMOTE_DIR}")"
 LOG_DIR="${LOCAL_PROJECT_DIR}/.claude/test-logs"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 LOG_FILE="${LOG_DIR}/test_${TIMESTAMP}.log"

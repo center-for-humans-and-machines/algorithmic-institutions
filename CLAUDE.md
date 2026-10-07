@@ -219,6 +219,10 @@ evaluation suite likewise keeps one copy per game.
 - `policy-finder-base` is cut from `autoresearch-optimized-stack` with the
   existing rule-based managers removed (#235). It never merges back: #227 and
   the agent core land on it, and every policy-finder instance branches off it.
+  It carries `.raven_remote_dir`, so the cluster scripts (`/simulate`,
+  `remote_test.sh`, `fetch_cluster.sh`) sync, run and fetch in
+  `~/ai-isolated/<branch>` (`/` as `--`) on Raven, never in the shared
+  checkout; `AI_REMOTE_DIR` still overrides (`scripts/raven_remote_dir.sh`).
 
 ### Environment
 
