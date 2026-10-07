@@ -7,8 +7,8 @@ wrapper and the policy-finder subagent alike). Reads the hook input JSON on
 stdin and prints a PreToolUse deny decision, or nothing to let the call
 through to the permission rules and the sandbox.
 
-- Write/Edit/NotebookEdit: only configs/managers/rule_based/<name>.yml and
-  scripts/policy_finder/<name>/**
+- Write/Edit/NotebookEdit: only configs/managers/rule_based/<name>.yml,
+  notes/policy_finder/<name>.md and scripts/policy_finder/<name>/**
 - Read/Grep/Glob: only inside the worktree, never its .git
 - Bash: no `git` or `gh` anywhere in the command
 - WebFetch, WebSearch and MCP tools: never
@@ -58,8 +58,9 @@ def write_paths():
     if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name):
         raise Denied(f"bad instance name {name!r} in {INSTANCE_FILE}")
     rule = os.path.join(ROOT, "configs", "managers", "rule_based", f"{name}.yml")
+    notes = os.path.join(ROOT, "notes", "policy_finder", f"{name}.md")
     scripts = os.path.join(ROOT, "scripts", "policy_finder", name)
-    return rule, scripts
+    return rule, notes, scripts
 
 
 def check_write(tool_input, cwd):
@@ -67,11 +68,11 @@ def check_write(tool_input, cwd):
     if not isinstance(path, str) or not path:
         raise Denied("no file path to check")
     path = _resolve(path, cwd)
-    rule, scripts = write_paths()
-    if path != rule and not _inside(path, scripts):
+    rule, notes, scripts = write_paths()
+    if path not in (rule, notes) and not _inside(path, scripts):
         raise Denied(
-            f"writes are limited to {os.path.relpath(rule, ROOT)} and "
-            f"{os.path.relpath(scripts, ROOT)}/"
+            f"writes are limited to {os.path.relpath(rule, ROOT)}, "
+            f"{os.path.relpath(notes, ROOT)} and {os.path.relpath(scripts, ROOT)}/"
         )
 
 

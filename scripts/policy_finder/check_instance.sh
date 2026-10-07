@@ -4,11 +4,14 @@
 # Usage:
 #   scripts/policy_finder/check_instance.sh <name> [--commit]
 #
-# Passes when the instance changed nothing outside its two write paths,
-# configs/managers/rule_based/<name>.yml and scripts/policy_finder/<name>/:
+# Passes when the instance changed nothing outside its write paths,
+# configs/managers/rule_based/<name>.yml, notes/policy_finder/<name>.md and
+# scripts/policy_finder/<name>/:
 # neither on branch policy-finder/<name> since policy-finder-base
 # (git diff policy-finder-base...policy-finder/<name>) nor in its worktree
-# (uncommitted or untracked files). Prints the offending paths otherwise.
+# (uncommitted or untracked files), and wrote both the rule and its notes,
+# with the notes' sections in order: Explorations, Key findings, Hypothesis
+# and its Justification. Prints what is wrong otherwise.
 # --commit then commits the write paths on the instance's branch, since the
 # agent has no git. PF_BASE and PF_WORKTREE_ROOT as in new_instance.sh.
 
@@ -36,6 +39,7 @@ BASE="${PF_BASE:-policy-finder-base}"
 BRANCH="policy-finder/$NAME"
 WT="${PF_WORKTREE_ROOT:-$(dirname "$MAIN")/policy-finder-worktrees}/$NAME"
 RULE="configs/managers/rule_based/$NAME.yml"
+NOTES="notes/policy_finder/$NAME.md"
 SCRIPTS="scripts/policy_finder/$NAME/"
 
 git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null \
@@ -53,33 +57,44 @@ changed="$(
 bad=0
 while IFS= read -r path; do
     [[ -n "$path" ]] || continue
-    if [[ "$path" != "$RULE" && "$path" != "$SCRIPTS"* ]]; then
+    if [[ "$path" != "$RULE" && "$path" != "$NOTES" && "$path" != "$SCRIPTS"* ]]; then
         echo "outside the write paths: $path" >&2
         bad=1
     fi
 done <<< "$changed"
 if [[ "$bad" == 1 ]]; then
-    echo "FAIL: $BRANCH changed files outside $RULE and $SCRIPTS" >&2
+    echo "FAIL: $BRANCH changed files outside $RULE, $NOTES and $SCRIPTS" >&2
     exit 1
 fi
 
-if [[ ! -f "$WT/$RULE" ]]; then
-    echo "FAIL: no rule at $RULE" >&2
-    exit 1
-fi
+for path in "$RULE" "$NOTES"; do
+    [[ -f "$WT/$path" ]] || { echo "FAIL: no $path" >&2; exit 1; }
+done
+
+# the notes' required headings, each after the previous one
+last=0
+for heading in "## Explorations" "## Key findings" "## Hypothesis" \
+    "### Justification"; do
+    line="$(grep -n -x -F -- "$heading" "$WT/$NOTES" | head -1 | cut -d: -f1 || true)"
+    if [[ -z "$line" || "$line" -le "$last" ]]; then
+        echo "FAIL: $NOTES needs the section '$heading', in order" >&2
+        exit 1
+    fi
+    last="$line"
+done
 
 # #227 adds the rule validation here
-echo "OK: $BRANCH touches only $RULE and $SCRIPTS"
+echo "OK: $BRANCH touches only $RULE, $NOTES and $SCRIPTS"
 
 if [[ "$COMMIT" == 1 ]]; then
-    git -C "$WT" add -- "$RULE"
+    git -C "$WT" add -- "$RULE" "$NOTES"
     if [[ -n "$(find "$WT/$SCRIPTS" -type f 2>/dev/null)" ]]; then
         git -C "$WT" add -- "$SCRIPTS"
     fi
     if git -C "$WT" diff --cached --quiet; then
         echo "nothing to commit"
     else
-        git -C "$WT" commit -q -m "policy-finder $NAME: rule and analysis"
+        git -C "$WT" commit -q -m "policy-finder $NAME: rule, notes and analysis"
         git -C "$WT" log --oneline -1
     fi
 fi

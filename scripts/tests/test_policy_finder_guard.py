@@ -52,6 +52,7 @@ def run(root, tool_name, tool_input, cwd=None, raw=None):
     "path",
     [
         f"configs/managers/rule_based/{NAME}.yml",
+        f"notes/policy_finder/{NAME}.md",
         f"scripts/policy_finder/{NAME}/analysis.py",
         f"scripts/policy_finder/{NAME}/sub/dir/test_rule.py",
     ],
@@ -74,6 +75,10 @@ def test_notebook_allowed(root):
         f"configs/managers/rule_based/{NAME}.json",
         f"configs/managers/rule_based/{NAME}.yml.bak",
         "scripts/policy_finder/new_instance.sh",
+        "notes/policy_finder/other.md",
+        f"notes/policy_finder/{NAME}.txt",
+        f"notes/policy_finder/{NAME}/a.md",
+        "notes/autoresearch.md",
         "scripts/policy_finder/check_instance.sh",
         f"scripts/policy_finder/{NAME}x/a.py",
         "scripts/policy_finder/other/a.py",

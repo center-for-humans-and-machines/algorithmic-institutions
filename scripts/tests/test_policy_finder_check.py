@@ -13,6 +13,25 @@ import pytest
 CHECK = Path(__file__).resolve().parents[1] / "policy_finder/check_instance.sh"
 NAME = "probe1"
 RULE = f"configs/managers/rule_based/{NAME}.yml"
+NOTES = f"notes/policy_finder/{NAME}.md"
+NOTES_TEXT = """# probe1
+
+## Explorations
+
+1. Contributions by round.
+
+## Key findings
+
+1. They rise.
+
+## Hypothesis
+
+Punish early.
+
+### Justification
+
+Finding 1.
+"""
 
 
 def git(cwd, *args):
@@ -50,8 +69,11 @@ def check(main, *args):
     )
 
 
-def write_rule(wt):
+def write_rule(wt, notes=NOTES_TEXT):
     (wt / RULE).write_text("params: {a: x}\ncode: punishment = a\n")
+    if notes is not None:
+        (wt / NOTES).parent.mkdir(parents=True, exist_ok=True)
+        (wt / NOTES).write_text(notes)
 
 
 def test_rule_and_scripts_pass(repo):
@@ -68,7 +90,37 @@ def test_no_rule_fails(repo):
     main, _ = repo
     result = check(main)
     assert result.returncode == 1
-    assert "no rule" in result.stderr
+    assert f"no {RULE}" in result.stderr
+
+
+def test_no_notes_fails(repo):
+    main, wt = repo
+    write_rule(wt, notes=None)
+    result = check(main)
+    assert result.returncode == 1
+    assert f"no {NOTES}" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "notes, missing",
+    [
+        (NOTES_TEXT.replace("## Key findings", "## Findings"), "## Key findings"),
+        (NOTES_TEXT.replace("### Justification", "## Justification"), "### Just"),
+        (NOTES_TEXT.replace("## Explorations", "### Explorations"), "## Explor"),
+        (
+            NOTES_TEXT.replace("## Hypothesis\n\nPunish early.\n\n", "")
+            + "\n## Hypothesis\n",
+            "### Justification",  # found, but before the moved Hypothesis
+        ),
+        ("", "## Explorations"),
+    ],
+)
+def test_notes_sections_in_order(repo, notes, missing):
+    main, wt = repo
+    write_rule(wt, notes=notes)
+    result = check(main)
+    assert result.returncode == 1
+    assert f"needs the section '{missing}" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -76,6 +128,8 @@ def test_no_rule_fails(repo):
     [
         "newfile.txt",
         "configs/managers/rule_based/other.yml",
+        "notes/policy_finder/other.md",
+        "notes/other.md",
         f"scripts/policy_finder/{NAME}x/a.py",
         "scripts/policy_finder/check_instance.sh",
         "src.py",
@@ -118,7 +172,7 @@ def test_commit_commits_only_write_paths(repo):
     files = git(
         main, "diff", "--name-only", f"policy-finder-base...policy-finder/{NAME}"
     )
-    assert files.split() == [RULE, f"scripts/policy_finder/{NAME}/a.py"]
+    assert files.split() == [RULE, NOTES, f"scripts/policy_finder/{NAME}/a.py"]
     assert git(wt, "status", "--porcelain") == ""
     assert check(main).returncode == 0  # still passes once committed
 
@@ -130,5 +184,5 @@ def test_commit_rule_only(repo):
     assert result.returncode == 0, result.stderr
     assert (
         git(wt, "log", "-1", "--format=%s")
-        == f"policy-finder {NAME}: rule and analysis\n"
+        == f"policy-finder {NAME}: rule, notes and analysis\n"
     )

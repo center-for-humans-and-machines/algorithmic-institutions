@@ -37,12 +37,14 @@ human manager. It is judged by its group's common pool against `ah`'s group.
 
 ## Your instance
 
-`.claude/policy_finder.json` holds your instance `name`, `max_params` (the
-most parameters your rule may declare) and `python` (the interpreter to use).
+`.claude/policy_finder.json` holds your instance `name`, `min_params` and
+`max_params` (the fewest and most parameters your rule may declare; equal
+values mean exactly that many) and `python` (the interpreter to use).
 Run Python as `PYTHONPATH=src <python> ...`.
 
 You may write only:
 - `configs/managers/rule_based/<name>.yml`, your rule
+- `notes/policy_finder/<name>.md`, your notes (required, see below)
 - `scripts/policy_finder/<name>/`, your analysis, calculations and tests
 
 Everything else is read-only, and you have no network, no `git` and no `gh`.
@@ -85,18 +87,53 @@ use the example above as your rule; it only shows the format.
    punishment, how they change over rounds and around switches, what drives
    players to leave a group, what the human managers did.
 2. Form a hypothesis of what a good manager does, and why.
-3. Write the rule with at most `max_params` parameters. Each parameter must
-   have a logical, generalisable reading (a threshold, a rate, a horizon),
-   grounded in what you found in the data and in plain intuition about
-   incentives. Do not fit quirks of the artificial humans: a parameter that
-   only makes sense for this simulator is a flaw. Fewer, clearer parameters
-   beat more.
-4. Leave the values to a later sweep; explain in your analysis what range each
+3. Write the rule with `min_params` to `max_params` parameters. Each
+   parameter must have a logical, generalisable reading (a threshold, a rate,
+   a horizon), grounded in what you found in the data and in plain intuition
+   about incentives. Do not fit quirks of the artificial humans: a parameter
+   that only makes sense for this simulator is a flaw. Where the range
+   allows, fewer, clearer parameters beat more.
+4. Leave the values to a later sweep; say in your notes what range each
    parameter should be swept over and why.
 5. Before finishing, validate the rule:
    `PYTHONPATH=src <python> -m aimanager validate-rule
    configs/managers/rule_based/<name>.yml --max-params <max_params>`
    and fix it until it passes.
 
+## Your notes
+
+Keep `notes/policy_finder/<name>.md` as you go, not at the end: it is the
+record of your thought process, read by the researchers who review your rule.
+It has exactly these sections, in this order:
+
+```markdown
+# <name>
+
+## Explorations
+
+1. What you looked at and how (data, columns, the question it answers),
+   with the path of the script under scripts/policy_finder/<name>/.
+2. ...
+
+## Key findings
+
+1. A finding in one or two sentences, with the number behind it and the
+   exploration it comes from.
+2. ...
+
+## Hypothesis
+
+What a good manager does in this game, and why, in a short paragraph. Then
+the rule: each parameter, its meaning and its sweep range.
+
+### Justification
+
+How the key findings support the hypothesis and each parameter, by number;
+what would contradict it; what you chose not to model, and why.
+```
+
+Number explorations and findings in the order you made them, and add to them
+rather than rewriting history: a dead end is worth recording.
+
 Finish with a short report: the hypothesis, each parameter's meaning and its
-sweep range, and the evidence behind them, with paths to your analysis.
+sweep range, and the path to your notes.

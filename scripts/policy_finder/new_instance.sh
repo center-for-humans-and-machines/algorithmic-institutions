@@ -2,7 +2,8 @@
 # Create and start a policy-finder instance (#236).
 #
 # Usage:
-#   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--no-start]
+#   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
+#       [--no-start | --headless [--prompt TEXT]]
 #
 # Makes branch policy-finder/<name> off policy-finder-base, checked out as its
 # own worktree in ../policy-finder-worktrees/<name> (outside this checkout;
@@ -10,16 +11,22 @@
 # the instance's gitignored .claude/policy_finder.json and
 # .claude/settings.local.json, and starts `claude --agent policy-finder-host`
 # there with no MCP servers. --no-start stops before starting the session.
+# --headless runs the session non-interactively instead (`claude -p`, Bash
+# pre-allowed: the sandbox and the guard are the boundary) on --prompt
+# (default: design your rule) and saves the agent's final report to
+# ../policy-finder-worktrees/<name>.report.md, outside the worktree.
+# The rule declares between --min-params (default 1) and --max-params
+# (default 4) params; equal values ask for exactly that many.
 # PF_BASE overrides the base branch, to try a branch before it lands on
 # policy-finder-base.
 #
 # The instance settings bind only that worktree:
-#   - permissions: Edit only on the two write paths; Read denied on .git, this
+#   - permissions: Edit only on the write paths; Read denied on .git, this
 #     checkout and ~/.claude; WebFetch and WebSearch denied
 #   - sandbox: Bash, and so any Python it runs, reads the worktree minus .git
 #     (plus the Python install, this checkout's .venv and the session's own
 #     temp dir, where the Bash tool collects output) and modifies nothing
-#     outside the two write paths; no network; no unsandboxed escape.
+#     outside the write paths; no network; no unsandboxed escape.
 #     A sandbox write deny beats any narrower allow, so writes are denied by
 #     complement: every existing entry beside the write paths, level by
 #     level. New files can still be created at those levels;
@@ -34,17 +41,23 @@
 set -euo pipefail
 
 usage() {
-    sed -n '4,5p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '4,6p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
 }
 
 NAME=""
 MAX_PARAMS=4
+MIN_PARAMS=1
 START=1
+HEADLESS=0
+PROMPT="Design your rule."
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --max-params) MAX_PARAMS="${2:-}"; shift 2 ;;
+        --min-params) MIN_PARAMS="${2:-}"; shift 2 ;;
         --no-start) START=0; shift ;;
+        --headless) HEADLESS=1; shift ;;
+        --prompt) PROMPT="${2:-}"; shift 2 ;;
         -h|--help) usage ;;
         -*) echo "unknown option: $1" >&2; usage ;;
         *) [[ -z "$NAME" ]] || usage; NAME="$1"; shift ;;
@@ -56,8 +69,18 @@ if [[ ! "$NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
     echo "name must match [a-z0-9][a-z0-9_-]*: $NAME" >&2
     exit 2
 fi
-if [[ ! "$MAX_PARAMS" =~ ^[1-9][0-9]*$ ]]; then
-    echo "--max-params must be a positive integer: $MAX_PARAMS" >&2
+for n in "$MAX_PARAMS" "$MIN_PARAMS"; do
+    if [[ ! "$n" =~ ^[1-9][0-9]*$ ]]; then
+        echo "--max-params and --min-params must be positive integers: $n" >&2
+        exit 2
+    fi
+done
+if (( MIN_PARAMS > MAX_PARAMS )); then
+    echo "--min-params $MIN_PARAMS is above --max-params $MAX_PARAMS" >&2
+    exit 2
+fi
+if [[ "$HEADLESS" == 1 && "$START" == 0 ]]; then
+    echo "--headless and --no-start exclude each other" >&2
     exit 2
 fi
 
@@ -86,17 +109,19 @@ WT="$(cd "$WT" && pwd -P)"
 git -C "$WT" lfs pull --include \
     "experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_*/**"
 
-"$PYTHON" - "$WT" "$MAIN" "$NAME" "$MAX_PARAMS" "$PYTHON" "$UV_PYTHON_DIR" <<'EOF'
+"$PYTHON" - "$WT" "$MAIN" "$NAME" "$MIN_PARAMS" "$MAX_PARAMS" "$PYTHON" "$UV_PYTHON_DIR" <<'EOF'
 import json
 import os
 import re
 import sys
 
-wt, main, name, max_params, python, uv_python = sys.argv[1:]
+wt, main, name, min_params, max_params, python, uv_python = sys.argv[1:]
 home = os.path.expanduser("~")
 rule = f"configs/managers/rule_based/{name}.yml"
+notes = f"notes/policy_finder/{name}.md"
 scripts = f"scripts/policy_finder/{name}"
 os.makedirs(os.path.join(wt, scripts), exist_ok=True)
+os.makedirs(os.path.join(wt, os.path.dirname(notes)), exist_ok=True)
 # the Bash tool writes command output here; Python drops stdout it cannot stat
 session_tmp = f"/private/tmp/claude-{os.getuid()}/" + re.sub(r"[^A-Za-z0-9]", "-", wt)
 
@@ -112,17 +137,24 @@ def complement(path):
     return denied
 
 
-# at the top level each chain lists the other's first entry; keep both
-keep = {os.path.join(wt, "configs"), os.path.join(wt, "scripts")}
-deny_write = sorted(set(complement(rule) + complement(scripts)) - keep)
+# at the top level each chain lists the others' first entries; keep them
+keep = {os.path.join(wt, p.split("/")[0]) for p in (rule, notes, scripts)}
+deny_write = sorted(
+    set(complement(rule) + complement(notes) + complement(scripts)) - keep
+)
 
-instance = {"name": name, "max_params": int(max_params), "python": python}
+instance = {
+    "name": name,
+    "min_params": int(min_params),
+    "max_params": int(max_params),
+    "python": python,
+}
 
 settings = {
     "autoMemoryEnabled": False,
     "permissions": {
         # `/x` is relative to the worktree, `//x` is an absolute path
-        "allow": [f"Edit(/{rule})", f"Edit(/{scripts}/**)"],
+        "allow": [f"Edit(/{rule})", f"Edit(/{notes})", f"Edit(/{scripts}/**)"],
         "deny": [
             "Read(/.git)",
             "Read(/.git/**)",
@@ -167,8 +199,15 @@ with open(os.path.join(wt, ".claude", "settings.local.json"), "w") as f:
     f.write("\n")
 EOF
 
-echo "instance $NAME: branch $BRANCH, worktree $WT, max_params $MAX_PARAMS"
-if [[ "$START" == 1 ]]; then
-    cd "$WT"
+echo "instance $NAME: branch $BRANCH, worktree $WT," \
+    "params $MIN_PARAMS-$MAX_PARAMS"
+[[ "$START" == 1 ]] || exit 0
+cd "$WT"
+if [[ "$HEADLESS" == 1 ]]; then
+    REPORT="$WT_ROOT/$NAME.report.md"
+    claude -p "$PROMPT" --agent policy-finder-host --strict-mcp-config \
+        --allowedTools=Bash < /dev/null > "$REPORT"
+    echo "report: $REPORT"
+else
     exec claude --agent policy-finder-host --strict-mcp-config
 fi
