@@ -67,9 +67,10 @@ def esc(text) -> str:
 
 
 def read(path: Path):
+    """A file's text, or None if it is missing or not text (an agent's cache)."""
     try:
         return path.read_text()
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
 
 
@@ -370,7 +371,11 @@ def show_scripts(wt: Path, name: str):
     pick = st.selectbox(f"{len(files)} files", labels, key=f"script-{name}")
     path = folder / pick
     language = {".py": "python", ".yml": "yaml", ".yaml": "yaml", ".md": "markdown"}
-    st.code(read(path) or "", language=language.get(path.suffix, None))
+    text = read(path)
+    if text is None:
+        empty(f"{pick} is not a text file.")
+    else:
+        st.code(text, language=language.get(path.suffix, None))
 
 
 @st.cache_data(show_spinner=False)
