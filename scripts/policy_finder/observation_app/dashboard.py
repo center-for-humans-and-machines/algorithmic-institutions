@@ -1,9 +1,10 @@
 """Live dashboard of policy-finder instances (#236, #227).
 
 Reads the instance worktrees (`../policy-finder-worktrees`, or
-$PF_WORKTREE_ROOT) and this checkout's sweep outputs, and refreshes every few
-seconds: per instance its status, rule, notes, scripts, final report and, once
-swept, its sweep result. Read-only: it never writes to a worktree.
+$PF_WORKTREE_ROOT) and refreshes every few seconds: per instance its status,
+rule, notes, scripts, final report and, once swept, its sweep result, which
+run_sweep.sh (#241) commits in the worktree. Read-only: it never writes to a
+worktree.
 
 Run from the repo root (streamlit is not a project dependency):
     uv run --no-sync --with streamlit streamlit run scripts/policy_finder/observation_app/dashboard.py
@@ -26,7 +27,13 @@ WT_ROOT = Path(
     os.environ.get("PF_WORKTREE_ROOT", MAIN.parent / "policy-finder-worktrees")
 )
 BASE = os.environ.get("PF_BASE", "policy-finder-base")
-SWEEPS = MAIN / "plots/simulation/policy_finder"
+#: An instance's merged sweep, relative to its worktree (run_sweep.sh)
+SWEEP_DIR = "plots/simulation/policy_finder/{name}_sweep"
+#: The best point's matchup against `ah` (simulation/sweep.py's BEST_PLOTS)
+BEST_PLOTS = {
+    "comparison_pairing_side.jpg": "Best point vs ah, by side",
+    "group_size_evolution_global.jpg": "Group sizes",
+}
 #: The reference sim with `zero` (never punish) against `ah`.
 REFERENCE = MAIN / "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched"
 REFRESH_S = 5
@@ -471,10 +478,11 @@ def landscape(points: pd.DataFrame, param: str, zero):
     )
 
 
-def show_sweep(name: str):
-    path = SWEEPS / f"{name}_sweep" / "sweep.json"
+def show_sweep(wt: Path, name: str):
+    folder = wt / SWEEP_DIR.format(name=name)
+    path = folder / "sweep.json"
     if not path.exists():
-        empty(f"No merged sweep yet: {path.relative_to(MAIN)}")
+        empty("Not swept yet.")
         return
     sweep = json.loads(path.read_text())
     points = pd.DataFrame(
@@ -502,6 +510,11 @@ def show_sweep(name: str):
         f'<div class="chips"><span class="eyebrow">Best</span>{chips}</div>',
         unsafe_allow_html=True,
     )
+    plots = [(folder / f, c) for f, c in BEST_PLOTS.items() if (folder / f).exists()]
+    if plots:
+        st.markdown('<div class="section">Best point</div>', unsafe_allow_html=True)
+        for col, (plot, caption) in zip(st.columns(len(plots)), plots):
+            col.image(str(plot), caption=caption, use_container_width=True)
     params = list(sweep["best"])
     st.markdown('<div class="section">Landscape</div>', unsafe_allow_html=True)
     st.caption(
@@ -517,18 +530,6 @@ def show_sweep(name: str):
         hide_index=True,
         width="stretch",
     )
-    for other in sorted(SWEEPS.glob(f"{name}_*")):
-        per_round = other / "per_round.parquet"
-        if other.name.startswith(f"{name}_sweep") or not per_round.exists():
-            continue
-        st.markdown(
-            f'<div class="section">{esc(other.name)}</div>', unsafe_allow_html=True
-        )
-        try:
-            table = scores_vs_ah(str(per_round), per_round.stat().st_mtime)
-            st.dataframe(table.round(2), hide_index=True, width="stretch")
-        except Exception as e:  # never break the page over one run
-            st.caption(f"could not score: {e}")
 
 
 def show_instance(wt: Path, key: str):
@@ -541,7 +542,7 @@ def show_instance(wt: Path, key: str):
         f"{esc(wt)}</div>",
         unsafe_allow_html=True,
     )
-    tabs = st.tabs(["Notes", "Rule", "Scripts", "Report", "Sweep"])
+    tabs = st.tabs(["Notes", "Rule", "Scripts", "Report"])
     with tabs[0]:
         notes = read(wt / "notes/policy_finder" / f"{name}.md")
         if notes:
@@ -552,6 +553,8 @@ def show_instance(wt: Path, key: str):
         rule = read(wt / "configs/managers/rule_based" / f"{name}.yml")
         if rule:
             show_rule(rule)
+            st.markdown('<div class="section">Sweep</div>', unsafe_allow_html=True)
+            show_sweep(wt, name)
         else:
             empty("No rule yet.")
     with tabs[2]:
@@ -562,8 +565,6 @@ def show_instance(wt: Path, key: str):
             doc(report, "report")
         else:
             empty("No report yet: still running, or stopped.")
-    with tabs[4]:
-        show_sweep(name)
 
 
 st.set_page_config(page_title="Policy finders", page_icon="◐", layout="wide")
