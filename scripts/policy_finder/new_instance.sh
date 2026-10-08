@@ -14,7 +14,9 @@
 # --headless runs the session non-interactively instead (`claude -p`, Bash
 # pre-allowed: the sandbox and the guard are the boundary) on --prompt
 # (default: design your rule) and saves the agent's final report to
-# ../policy-finder-worktrees/<name>.report.md, outside the worktree.
+# ../policy-finder-worktrees/<name>.report.md, outside the worktree; then
+# checks and commits the instance (check_instance.sh --commit) and runs its
+# sweep on Raven (run_sweep.sh, #241).
 # The rule declares between --min-params (default 1) and --max-params
 # (default 4) params; equal values ask for exactly that many.
 # PF_BASE overrides the base branch, to try a branch before it lands on
@@ -208,6 +210,8 @@ if [[ "$HEADLESS" == 1 ]]; then
     claude -p "$PROMPT" --agent policy-finder-host --strict-mcp-config \
         --allowedTools=Bash < /dev/null > "$REPORT"
     echo "report: $REPORT"
+    "$MAIN/scripts/policy_finder/check_instance.sh" "$NAME" --commit
+    "$MAIN/scripts/policy_finder/run_sweep.sh" "$NAME"
 else
     exec claude --agent policy-finder-host --strict-mcp-config
 fi
