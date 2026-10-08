@@ -34,6 +34,9 @@ describes this game and how humans played it.
 Your rule is tested in simulation against artificial humans (models trained on
 the human experiments) while the other group is run by `ah`, an artificial
 human manager. It is judged by its group's common pool against `ah`'s group.
+You do not run that simulation: it needs the cluster and runs after you finish
+(the sweep below). Your job is the rule, designed from what you can study
+here; its untested state is expected, not a gap in your work.
 
 ## Your instance
 
