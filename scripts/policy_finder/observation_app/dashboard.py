@@ -76,7 +76,8 @@ def read(path: Path):
 def instances():
     if not WT_ROOT.is_dir():
         return []
-    dirs = [d for d in WT_ROOT.iterdir() if d.is_dir() and d.name.startswith("pf-")]
+    # instance worktrees only, not the <name>.sweep_parts beside them
+    dirs = [d for d in WT_ROOT.iterdir() if (d / ".claude/policy_finder.json").exists()]
     return sorted(dirs, key=lambda d: d.stat().st_mtime, reverse=True)
 
 
@@ -514,7 +515,7 @@ def show_sweep(wt: Path, name: str):
     if plots:
         st.markdown('<div class="section">Best point</div>', unsafe_allow_html=True)
         for col, (plot, caption) in zip(st.columns(len(plots)), plots):
-            col.image(str(plot), caption=caption, use_container_width=True)
+            col.image(str(plot), caption=caption, width="stretch")
     params = list(sweep["best"])
     st.markdown('<div class="section">Landscape</div>', unsafe_allow_html=True)
     st.caption(
@@ -542,7 +543,7 @@ def show_instance(wt: Path, key: str):
         f"{esc(wt)}</div>",
         unsafe_allow_html=True,
     )
-    tabs = st.tabs(["Notes", "Rule", "Scripts", "Report"])
+    tabs = st.tabs(["Notes", "Rule", "Scripts", "Report", "Sweep"])
     with tabs[0]:
         notes = read(wt / "notes/policy_finder" / f"{name}.md")
         if notes:
@@ -553,8 +554,6 @@ def show_instance(wt: Path, key: str):
         rule = read(wt / "configs/managers/rule_based" / f"{name}.yml")
         if rule:
             show_rule(rule)
-            st.markdown('<div class="section">Sweep</div>', unsafe_allow_html=True)
-            show_sweep(wt, name)
         else:
             empty("No rule yet.")
     with tabs[2]:
@@ -565,6 +564,8 @@ def show_instance(wt: Path, key: str):
             doc(report, "report")
         else:
             empty("No report yet: still running, or stopped.")
+    with tabs[4]:
+        show_sweep(wt, name)
 
 
 st.set_page_config(page_title="Policy finders", page_icon="◐", layout="wide")
