@@ -12,8 +12,8 @@
 # (uncommitted or untracked files), its sweep (run_sweep.sh) aside, and
 # wrote both the rule and its notes, with the notes' sections in order:
 # Explorations, Key findings, Hypothesis and its Justification, and the rule passes `validate-rule` (#227) within
-# the instance's min_params and max_params, run with the instance's python
-# from .claude/policy_finder.json. Prints what is wrong otherwise.
+# the instance's min_params and max_params on its sobol_points design, run
+# with the instance's python from .claude/policy_finder.json. Prints what is wrong otherwise.
 # --commit then commits the write paths on the instance's branch, since the
 # agent has no git. PF_BASE and PF_WORKTREE_ROOT as in new_instance.sh.
 
@@ -91,13 +91,15 @@ done
 
 # the rule passes validate-rule (#227) within the instance's limits
 CONF="$WT/.claude/policy_finder.json"
-{ read -r PY; read -r MIN_PARAMS; read -r MAX_PARAMS; } < <(
+{ read -r PY; read -r MIN_PARAMS; read -r MAX_PARAMS; read -r SOBOL_POINTS; } < <(
     python3 -c 'import json, sys
 c = json.load(open(sys.argv[1]))
-print(c["python"], c["min_params"], c["max_params"], sep="\n")' "$CONF"
+print(c["python"], c["min_params"], c["max_params"], c.get("sobol_points", 256),
+      sep="\n")' "$CONF"
 ) || { echo "FAIL: cannot read python, min_params, max_params from $CONF" >&2; exit 1; }
 if ! (cd "$WT" && PYTHONPATH="$WT/src" "$PY" -m aimanager validate-rule "$RULE" \
-    --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS"); then
+    --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
+    --sobol-points "$SOBOL_POINTS"); then
     echo "FAIL: $RULE does not pass validate-rule" >&2
     exit 1
 fi

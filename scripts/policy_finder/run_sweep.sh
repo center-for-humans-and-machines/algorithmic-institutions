@@ -6,8 +6,9 @@
 #
 # Run once the instance passed check_instance.sh, outside the agent's sandbox
 # (new_instance.sh --headless calls it). From the instance worktree: writes
-# the sweep sim configs of its rule (generate_sim_config.py, split into parts
-# of at most MAX_JOB_EPISODES episodes, what one 16 GB job holds), syncs the
+# the sweep sim configs of its rule (generate_sim_config.py: the instance's
+# sobol_points, 256 if unset, split into parts of at most MAX_JOB_EPISODES
+# episodes, what one 16 GB job holds), syncs the
 # worktree to its own Raven dir (its .raven_remote_dir:
 # ~/ai-isolated/policy-finder--<name>), submits every part, waits for the
 # jobs, fetches each part's sweep.json and best-point plots (never
@@ -19,7 +20,6 @@
 
 set -euo pipefail
 
-SOBOL_POINTS=256
 N_EPISODES=500
 MAX_JOB_EPISODES=125000
 POLL_SECONDS=60
@@ -34,10 +34,11 @@ CONF="$WT/.claude/policy_finder.json"
 RULE="configs/managers/rule_based/$NAME.yml"
 OUT_DIR="plots/simulation/policy_finder"
 [[ -f "$CONF" ]] || { echo "no instance $NAME: $CONF missing" >&2; exit 1; }
-{ read -r PY; read -r MIN_PARAMS; read -r MAX_PARAMS; } < <(
+{ read -r PY; read -r MIN_PARAMS; read -r MAX_PARAMS; read -r SOBOL_POINTS; } < <(
     python3 -c 'import json, sys
 c = json.load(open(sys.argv[1]))
-print(c["python"], c["min_params"], c["max_params"], sep="\n")' "$CONF"
+print(c["python"], c["min_params"], c["max_params"], c.get("sobol_points", 256),
+      sep="\n")' "$CONF"
 )
 
 cd "$WT"

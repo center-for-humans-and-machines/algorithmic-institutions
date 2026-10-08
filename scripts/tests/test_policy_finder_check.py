@@ -246,3 +246,20 @@ def test_committed_sweep_passes(repo):
     assert result.returncode == 0, result.stderr
     (wt / f"plots/simulation/policy_finder/{NAME}_sweepx.json").write_text("")
     assert "outside the write paths" in check(main).stderr
+
+
+def test_check_uses_the_instance_sobol_points(repo):
+    """validate-rule draws the instance's design, not the default 256."""
+    main, wt = repo
+    write_rule(wt)
+    config = {"python": sys.executable, "min_params": 1, "max_params": 4}
+    (wt / ".claude/policy_finder.json").write_text(
+        json.dumps({**config, "sobol_points": 512})
+    )
+    result = check(main)
+    assert result.returncode == 0, result.stderr
+    assert "of 512 Sobol points" in result.stdout
+    (wt / ".claude/policy_finder.json").write_text(
+        json.dumps({**config, "sobol_points": 100})
+    )
+    assert "power of two" in check(main).stderr

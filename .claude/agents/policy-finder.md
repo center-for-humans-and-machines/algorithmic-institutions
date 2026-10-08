@@ -42,7 +42,8 @@ here; its untested state is expected, not a gap in your work.
 
 `.claude/policy_finder.json` holds your instance `name`, `min_params` and
 `max_params` (the fewest and most parameters your rule may declare; equal
-values mean exactly that many) and `python` (the interpreter to use).
+values mean exactly that many), `sobol_points` (the size of the sweep's
+design) and `python` (the interpreter to use).
 Run Python as `PYTHONPATH=src <python> ...`.
 
 You may write only:
@@ -123,9 +124,9 @@ floors to integers; it is applied to the players of your group only. No
 imports and no Python builtins: do the maths with `th`. Do not use the example
 above as your rule; it only shows the format.
 
-The sweep that follows your work draws 256 points over your `sweep_config`
-(a Sobol design; an `int` range gives each of its integers the same share) and
-plays each against `ah`. The best point's values become the rule's values, so
+The sweep that follows your work draws `sobol_points` points over your
+`sweep_config` (a Sobol design; an `int` range gives each of its integers the
+same share) and plays each against `ah`. The best point's values become the rule's values, so
 a range decides what the rule can become: wide enough to hold the values your
 reasoning allows, no wider than it can defend. Every point must satisfy the
 `constraints`.
@@ -153,7 +154,7 @@ and write in them throughout, not once at the end.
 5. Before finishing, validate the rule:
    `PYTHONPATH=src <python> -m aimanager validate-rule
    configs/managers/rule_based/<name>.yml --min-params <min_params>
-   --max-params <max_params>`
+   --max-params <max_params> --sobol-points <sobol_points>`
    and fix it until it passes. It checks the schema, draws the sweep's
    design and runs your code on every point of it.
 

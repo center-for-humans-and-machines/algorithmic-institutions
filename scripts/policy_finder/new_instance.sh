@@ -3,7 +3,7 @@
 #
 # Usage:
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
-#       [--no-start | --headless [--prompt TEXT]]
+#       [--sobol-points N] [--no-start | --headless [--prompt TEXT]]
 #
 # Makes branch policy-finder/<name> off policy-finder-base, checked out as its
 # own worktree in ../policy-finder-worktrees/<name> (outside this checkout;
@@ -18,7 +18,9 @@
 # checks and commits the instance (check_instance.sh --commit) and runs its
 # sweep on Raven (run_sweep.sh, #241).
 # The rule declares between --min-params (default 1) and --max-params
-# (default 4) params; equal values ask for exactly that many.
+# (default 4) params; equal values ask for exactly that many. --sobol-points
+# (a power of two, default 256) sets the size of the sweep's design, which
+# validate-rule, check_instance.sh and run_sweep.sh read from the instance.
 # PF_BASE overrides the base branch, to try a branch before it lands on
 # policy-finder-base.
 #
@@ -50,6 +52,7 @@ usage() {
 NAME=""
 MAX_PARAMS=4
 MIN_PARAMS=1
+SOBOL_POINTS=256
 START=1
 HEADLESS=0
 PROMPT="Design your rule."
@@ -57,6 +60,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --max-params) MAX_PARAMS="${2:-}"; shift 2 ;;
         --min-params) MIN_PARAMS="${2:-}"; shift 2 ;;
+        --sobol-points) SOBOL_POINTS="${2:-}"; shift 2 ;;
         --no-start) START=0; shift ;;
         --headless) HEADLESS=1; shift ;;
         --prompt) PROMPT="${2:-}"; shift 2 ;;
@@ -77,6 +81,10 @@ for n in "$MAX_PARAMS" "$MIN_PARAMS"; do
         exit 2
     fi
 done
+if [[ ! "$SOBOL_POINTS" =~ ^[1-9][0-9]*$ ]] || (( SOBOL_POINTS & (SOBOL_POINTS - 1) )); then
+    echo "--sobol-points must be a power of two: $SOBOL_POINTS" >&2
+    exit 2
+fi
 if (( MIN_PARAMS > MAX_PARAMS )); then
     echo "--min-params $MIN_PARAMS is above --max-params $MAX_PARAMS" >&2
     exit 2
@@ -111,13 +119,14 @@ WT="$(cd "$WT" && pwd -P)"
 git -C "$WT" lfs pull --include \
     "experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_*/**"
 
-"$PYTHON" - "$WT" "$MAIN" "$NAME" "$MIN_PARAMS" "$MAX_PARAMS" "$PYTHON" "$UV_PYTHON_DIR" <<'EOF'
+"$PYTHON" - "$WT" "$MAIN" "$NAME" "$MIN_PARAMS" "$MAX_PARAMS" "$PYTHON" "$UV_PYTHON_DIR" \
+    "$SOBOL_POINTS" <<'EOF'
 import json
 import os
 import re
 import sys
 
-wt, main, name, min_params, max_params, python, uv_python = sys.argv[1:]
+wt, main, name, min_params, max_params, python, uv_python, sobol_points = sys.argv[1:]
 home = os.path.expanduser("~")
 rule = f"configs/managers/rule_based/{name}.yml"
 notes = f"notes/policy_finder/{name}.md"
@@ -149,6 +158,7 @@ instance = {
     "name": name,
     "min_params": int(min_params),
     "max_params": int(max_params),
+    "sobol_points": int(sobol_points),
     "python": python,
 }
 
@@ -202,7 +212,7 @@ with open(os.path.join(wt, ".claude", "settings.local.json"), "w") as f:
 EOF
 
 echo "instance $NAME: branch $BRANCH, worktree $WT," \
-    "params $MIN_PARAMS-$MAX_PARAMS"
+    "params $MIN_PARAMS-$MAX_PARAMS, $SOBOL_POINTS Sobol points"
 [[ "$START" == 1 ]] || exit 0
 cd "$WT"
 if [[ "$HEADLESS" == 1 ]]; then

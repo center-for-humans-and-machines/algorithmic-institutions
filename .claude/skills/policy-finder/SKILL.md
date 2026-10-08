@@ -1,15 +1,21 @@
 ---
 name: policy-finder
-description: Run a policy-finder instance (#236) that designs one rule-based manager config in its own sandboxed worktree, then sweeps it on Raven and keeps the result on its own branch (#241). Use when the user asks to run the policy finder, e.g. "run the policy finder with up to 5 params" or "with exactly 3 params".
-argument-hint: "[up to|exactly] <N> params"
+description: Run a policy-finder instance (#236) that designs one rule-based manager config in its own sandboxed worktree, then sweeps it on Raven and keeps the result on its own branch (#241). Use when the user asks to run the policy finder, e.g. "run the policy finder with up to 5 params" or "with exactly 3 params and 512 sobol points".
+argument-hint: "--num-params \"up to N\"|\"exactly N\" [--sobol-points N]"
 ---
 
 Run a policy-finder instance: it designs its rule, is checked, and sweeps it.
 
 $ARGUMENTS
 
-1. **Parameters.** "exactly N" -> `--min-params N --max-params N`; "up to N"
-   or a bare N -> `--max-params N`; nothing -> the defaults (1 to 4).
+1. **Arguments.**
+   - `--num-params "up to N"` -> `--max-params N`; `--num-params "exactly N"`
+     -> `--min-params N --max-params N`; left out -> the defaults (1 to 4).
+     Free text ("up to 5 params", "exactly 3") reads the same way.
+   - `--sobol-points N` -> `--sobol-points N`: the sweep's design size, a
+     power of two; left out -> 256. The sweep runs in parts of at most 125k
+     episodes (500 per point), so 256 points take 2 jobs, 512 take 3.
+   Anything else, or N not a positive integer: stop and ask.
 2. **Name.** `pf-<YYYYMMDD>-<n>`, with `<n>` the first number for which
    neither branch `policy-finder/<name>` nor
    `../policy-finder-worktrees/<name>` exists.
@@ -20,7 +26,7 @@ $ARGUMENTS
    and jobs):
 
    ```bash
-   scripts/policy_finder/new_instance.sh <name> <param flags> --headless
+   scripts/policy_finder/new_instance.sh <name> <param flags> [--sobol-points N] --headless
    ```
 
    It runs the agent, then `check_instance.sh <name> --commit`, then
