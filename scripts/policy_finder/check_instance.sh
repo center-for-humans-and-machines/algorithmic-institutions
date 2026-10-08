@@ -9,9 +9,9 @@
 # scripts/policy_finder/<name>/:
 # neither on branch policy-finder/<name> since policy-finder-base
 # (git diff policy-finder-base...policy-finder/<name>) nor in its worktree
-# (uncommitted or untracked files), and wrote both the rule and its notes,
-# with the notes' sections in order: Explorations, Key findings, Hypothesis
-# and its Justification, and the rule passes `validate-rule` (#227) within
+# (uncommitted or untracked files), its sweep (run_sweep.sh) aside, and
+# wrote both the rule and its notes, with the notes' sections in order:
+# Explorations, Key findings, Hypothesis and its Justification, and the rule passes `validate-rule` (#227) within
 # the instance's min_params and max_params, run with the instance's python
 # from .claude/policy_finder.json. Prints what is wrong otherwise.
 # --commit then commits the write paths on the instance's branch, since the
@@ -43,6 +43,9 @@ WT="${PF_WORKTREE_ROOT:-$(dirname "$MAIN")/policy-finder-worktrees}/$NAME"
 RULE="configs/managers/rule_based/$NAME.yml"
 NOTES="notes/policy_finder/$NAME.md"
 SCRIPTS="scripts/policy_finder/$NAME/"
+# what run_sweep.sh (#241) commits once the check passed
+SWEEP_CONFIGS="configs/simulation/policy_finder/${NAME}_sweep"
+SWEEP="plots/simulation/policy_finder/${NAME}_sweep"
 
 git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null \
     || { echo "no branch $BRANCH" >&2; exit 1; }
@@ -59,7 +62,8 @@ changed="$(
 bad=0
 while IFS= read -r path; do
     [[ -n "$path" ]] || continue
-    if [[ "$path" != "$RULE" && "$path" != "$NOTES" && "$path" != "$SCRIPTS"* ]]; then
+    if [[ "$path" != "$RULE" && "$path" != "$NOTES" && "$path" != "$SCRIPTS"* \
+        && "$path" != "$SWEEP_CONFIGS"* && "$path" != "$SWEEP/"* ]]; then
         echo "outside the write paths: $path" >&2
         bad=1
     fi

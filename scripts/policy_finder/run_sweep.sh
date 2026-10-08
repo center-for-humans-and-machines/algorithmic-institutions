@@ -11,8 +11,9 @@
 # worktree to its own Raven dir (its .raven_remote_dir:
 # ~/ai-isolated/policy-finder--<name>), submits every part, waits for the
 # jobs, fetches each part's sweep.json and best-point plots (never
-# per_round.parquet) and merges them into
-# plots/simulation/policy_finder/<name>_sweep/ in the worktree.
+# per_round.parquet) into ../policy-finder-worktrees/<name>.sweep_parts/,
+# merges them into plots/simulation/policy_finder/<name>_sweep/ in the
+# worktree and commits that and the sim configs on policy-finder/<name>.
 # Needs the SSH ControlMaster to Raven (`ssh raven`).
 # PF_WORKTREE_ROOT as in new_instance.sh.
 
@@ -77,20 +78,30 @@ while true; do
     sleep "$POLL_SECONDS"
 done
 
-# 4. fetch each part's results; a part without sweep.json failed
+# 4. fetch each part's results; a part without sweep.json failed. Parts go
+# beside the worktree, so only the merged sweep lands in it
+PART_ROOT="$WT_ROOT/$NAME.sweep_parts"
+(( N_PARTS > 1 )) || PART_ROOT="$OUT_DIR"
+dirs=()
 for part in "${PARTS[@]}"; do
-    mkdir -p "$OUT_DIR/$part"
+    mkdir -p "$PART_ROOT/$part"
     rsync -az --exclude=per_round.parquet \
-        "raven:$REMOTE/$OUT_DIR/$part/" "$OUT_DIR/$part/" \
+        "raven:$REMOTE/$OUT_DIR/$part/" "$PART_ROOT/$part/" \
         || { echo "FAIL: cannot fetch $part (see .log/ in $REMOTE)" >&2; exit 1; }
-    [[ -f "$OUT_DIR/$part/sweep.json" ]] \
+    [[ -f "$PART_ROOT/$part/sweep.json" ]] \
         || { echo "FAIL: $part wrote no sweep.json (see .log/ in $REMOTE)" >&2; exit 1; }
+    dirs+=("$PART_ROOT/$part")
 done
 
 # 5. merge the parts
+SWEEP="$OUT_DIR/${NAME}_sweep"
 if (( N_PARTS > 1 )); then
-    dirs=()
-    for part in "${PARTS[@]}"; do dirs+=("$OUT_DIR/$part"); done
-    PYTHONPATH="$WT/src" "$PY" scripts/policy_finder/merge_sweeps.py "${dirs[@]}"
+    PYTHONPATH="$WT/src" "$PY" scripts/policy_finder/merge_sweeps.py "${dirs[@]}" \
+        --out "$SWEEP/sweep.json"
 fi
-echo "sweep of $NAME: $WT/$OUT_DIR/${NAME}_sweep"
+
+# 6. commit the sweep on the instance branch, never on policy-finder-base
+git add -- "$SWEEP" "configs/simulation/policy_finder/${NAME}_sweep"*.yml
+git commit -q -m "policy-finder $NAME: sweep"
+git log --oneline -1
+echo "sweep of $NAME: $WT/$SWEEP"

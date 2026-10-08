@@ -227,3 +227,22 @@ def test_commit_rule_only(repo):
         git(wt, "log", "-1", "--format=%s")
         == f"policy-finder {NAME}: rule, notes and analysis\n"
     )
+
+
+def test_committed_sweep_passes(repo):
+    """run_sweep.sh (#241) commits the sweep configs and the merged sweep."""
+    main, wt = repo
+    write_rule(wt)
+    assert check(main, "--commit").returncode == 0
+    for path in (
+        f"configs/simulation/policy_finder/{NAME}_sweep_p1of2.yml",
+        f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json",
+    ):
+        (wt / path).parent.mkdir(parents=True, exist_ok=True)
+        (wt / path).write_text("{}\n")
+    git(wt, "add", "-A")
+    git(wt, "commit", "-q", "-m", "sweep")
+    result = check(main)
+    assert result.returncode == 0, result.stderr
+    (wt / f"plots/simulation/policy_finder/{NAME}_sweepx.json").write_text("")
+    assert "outside the write paths" in check(main).stderr
