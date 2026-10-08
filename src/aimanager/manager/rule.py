@@ -17,9 +17,11 @@ A rule YAML:
     code: |
       punishment = 5 * (c < c0)
 
-`code` runs with these names in scope:
-  c         contribution this round, per player (float tensor, 0-20)
-  t         round number, per player (float tensor, 0-23)
+`code` runs with these names in scope (rule_inputs computes them):
+  RULE_INPUTS, each a float tensor with one value per player:
+    the player:  c, valid, c_prev, p_prev, t
+    own group:   n, c_group
+    other group: n_other, c_other, p_prev_other
   th        torch
   each name declared under `params`, from the params (0-d float tensor)
 It must set `punishment`; the manager then clamps it to [0, 30] and casts to
@@ -35,8 +37,24 @@ import numpy as np
 import torch as th
 import yaml
 
-#: What the rule code sees besides its params, and the name it must assign.
-RULE_INPUTS = ("c", "t", "th")
+#: What the rule code sees, one value per player, at the moment the manager
+#: punishes round t: after round t's contributions, before any of its
+#: punishments (rule_inputs; the agent prompt lists the same).
+RULE_INPUTS = (
+    "c",  # own contribution this round, 0-20 (the timeout value if timed out)
+    "valid",  # 1 if the player contributed this round, 0 if timed out
+    "c_prev",  # own contribution last round (round 0: c)
+    "p_prev",  # own punishment last round (round 0: 0)
+    "t",  # round number, 0-23
+    "n",  # own group's size, the player included
+    "c_group",  # mean contribution of the rest of the own group, valid only
+    "n_other",  # the other group's size
+    "c_other",  # the other group's mean contribution, valid only
+    "p_prev_other",  # last round's mean punishment of the players now in the
+    # other group
+)
+#: Besides the inputs and the params.
+RULE_MODULES = ("th",)
 RULE_OUTPUT = "punishment"
 RULE_KEYS = {"params", "sweep_config", "constraints", "code"}
 #: The fields every declared param carries, and the types it may have.
@@ -129,12 +147,12 @@ def read_rule(rule_path):
       - the only top-level keys are `params`, `sweep_config`, `constraints`
         and `code`
       - `params` declares every fittable param with exactly a non-empty
-        `definition` and a `type`; none may be named c, t, th, punishment or
-        `best`
+        `definition` and a `type`; none may take the name of an input
+        (RULE_INPUTS), th, punishment or `best`
       - `sweep_config` (optional here; `validate_rule` requires it) covers
         exactly the declared params; a fixed `int` is an integer, a range has
         low < high, and an `int` range has integer bounds
-      - `code` reads only c, t, th, declared params and names it assigns, reads
+      - `code` reads only the inputs, th, declared params and names it assigns, reads
         every declared param, and assigns `punishment`
       - `constraints` (optional) are comparisons over declared params only
     """
@@ -150,7 +168,9 @@ def read_rule(rule_path):
     declared = rule.get("params")
     if not isinstance(declared, dict) or not declared:
         raise ValueError(f"{rule_path}: needs a non-empty `params` mapping")
-    reserved = sorted(set(declared) & {*RULE_INPUTS, RULE_OUTPUT, PARAMS_BEST})
+    reserved = sorted(
+        set(declared) & {*RULE_INPUTS, *RULE_MODULES, RULE_OUTPUT, PARAMS_BEST}
+    )
     if reserved:
         raise ValueError(f"{rule_path}: params use reserved names {reserved}")
     _check_declared(rule_path, declared)
@@ -164,7 +184,9 @@ def read_rule(rule_path):
         read, bound = _names(ast.parse(code, rule_path, "exec"))
     except ValueError as e:
         raise ValueError(f"{rule_path}: code: {e}") from None
-    undefined = sorted(read - bound - set(RULE_INPUTS) - set(declared))
+    undefined = sorted(
+        read - bound - set(RULE_INPUTS) - set(RULE_MODULES) - set(declared)
+    )
     if undefined:
         raise ValueError(f"{rule_path}: code reads undefined names {undefined}")
     unused = sorted(set(declared) - read)
@@ -244,30 +266,100 @@ def load_rule(rule_path, params):
     return code, check_params(rule_path, rule, params, source)
 
 
-def run_rule(code, params, contribution, round_number):
-    """Run compiled rule code; return the raw float punishment, broadcast to
-    the contribution's shape (before the manager's clamp and integer cast)."""
-    # c and t are fresh float copies, so in-place ops in the rule cannot
-    # touch the history; no builtins, so the maths goes through th. Params are
-    # 0-d float tensors on c's device, so th functions take them alone too
-    # (th.log(p)), not only combined with c or t
-    device = contribution.device
+def _mean(total, count):
+    """total / count, 0 where count is 0 (an empty group, no valid player)."""
+    return th.where(count > 0, total / count.clamp(min=1), th.zeros_like(total))
+
+
+def rule_inputs(
+    contribution, valid, prev_contribution, prev_punishment, agent_group, round_number
+):
+    """RULE_INPUTS from the env state's tensors, all [B, A, 1] over episodes B
+    and players A of both groups; `agent_group` holds each player's group
+    (0 or 1). Returns float tensors of the same shape.
+
+    Group means count only players who contributed this round (`valid`);
+    `c_group` leaves the player out. A mean over nobody is 0: `n` and
+    `n_other` tell the empty cases apart. In round 0, which has no last round,
+    `c_prev` is `c` and `p_prev` is 0.
+    """
+    c = contribution.to(th.float)
+    t = round_number.to(th.float)
+    v = valid.to(th.float)
+    first = t == 0
+    c_prev = th.where(first, c, prev_contribution.to(th.float))
+    p_prev = th.where(first, th.zeros_like(c), prev_punishment.to(th.float))
+
+    group = agent_group.to(th.long)  # [B, A, 1]
+    # [B, 2, A, 1]: 1 where player a is in group k
+    member = th.stack([(group == k).to(th.float) for k in (0, 1)], 1)
+
+    def per_group(x):  # [B, A, 1] -> [B, 2, 1] sums over each group
+        return (member * x.unsqueeze(1)).sum(2)
+
+    def own(x):  # [B, 2, 1] -> [B, A, 1], each player's own group's value
+        return x.gather(1, group)
+
+    def other(x):
+        return x.gather(1, 1 - group)
+
+    size, n_valid = per_group(th.ones_like(c)), per_group(v)
+    c_sum, p_sum = per_group(v * c), per_group(p_prev)
+    return {
+        "c": c,
+        "valid": v,
+        "c_prev": c_prev,
+        "p_prev": p_prev,
+        "t": t,
+        "n": own(size),
+        "c_group": _mean(own(c_sum) - v * c, own(n_valid) - v),
+        "n_other": other(size),
+        "c_other": _mean(other(c_sum), other(n_valid)),
+        "p_prev_other": _mean(other(p_sum), other(size)),
+    }
+
+
+def run_rule(code, params, inputs):
+    """Run compiled rule code on `inputs` (rule_inputs); return the raw float
+    punishment, broadcast to the inputs' shape (before the manager's clamp and
+    integer cast)."""
+    # the inputs go in as copies, so in-place ops in the rule cannot touch
+    # them; no builtins, so the maths goes through th. Params are 0-d float
+    # tensors on the inputs' device, so th functions take them alone too
+    # (th.log(p)), not only combined with an input
+    c = inputs["c"]
     scope = {
         "__builtins__": {},
         "th": th,
-        **{k: th.tensor(v, dtype=th.float, device=device) for k, v in params.items()},
-        "c": contribution.to(th.float),
-        "t": round_number.to(th.float),
+        **{k: th.tensor(v, dtype=th.float, device=c.device) for k, v in params.items()},
+        **{k: inputs[k].clone() for k in RULE_INPUTS},
     }
     exec(code, scope)
     if RULE_OUTPUT not in scope:
         raise ValueError("rule_based: the rule code did not set `punishment`")
     # a scalar rule (e.g. a constant) is broadcast to every player and round;
     # the manager's cast floors non-integer values after the clamp
-    raw = th.as_tensor(scope[RULE_OUTPUT], dtype=th.float, device=contribution.device)
+    raw = th.as_tensor(scope[RULE_OUTPUT], dtype=th.float, device=c.device)
     if th.isnan(raw).any():
         raise ValueError("rule_based: the rule code produced NaN punishments")
-    return raw.broadcast_to(contribution.shape)
+    return raw.broadcast_to(c.shape)
+
+
+def dry_run_inputs(n_states=2048, n_players=8, seed=0):
+    """rule_inputs over random env states, for validate_rule: every round,
+    contributions 0-20 with timeouts, punishments 0-30, and group splits from
+    all players in one group to an even split."""
+    g = th.Generator().manual_seed(seed)
+    shape = (n_states, n_players, 1)
+    in_group_1 = th.rand(n_states, 1, 1, generator=g)  # each state its own split
+    return rule_inputs(
+        contribution=th.randint(0, 21, shape, generator=g),
+        valid=th.rand(shape, generator=g) > 0.1,
+        prev_contribution=th.randint(0, 21, shape, generator=g),
+        prev_punishment=th.randint(0, 31, shape, generator=g),
+        agent_group=(th.rand(shape, generator=g) < in_group_1).to(th.long),
+        round_number=th.randint(0, 24, (n_states, 1, 1), generator=g).expand(shape),
+    )
 
 
 #: Sweep design defaults: Sobol points (a power of two keeps the design
@@ -334,7 +426,7 @@ def validate_rule(rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS):
     On top of read_rule: `sweep_config` is required, the rule declares
     `min_params` to `max_params` params, every design point passes
     check_params (constraints included), and the code runs on every design
-    point over contributions 0-20 x rounds 0-23 without error or NaN.
+    point over random env states (dry_run_inputs) without error or NaN.
     """
     rule, code = read_rule(rule_path)
     if "sweep_config" not in rule:
@@ -347,13 +439,12 @@ def validate_rule(rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS):
         )
 
     design = sobol_design(rule, n_points)
-    c = th.arange(21).view(21, 1).expand(21, 24)
-    t = th.arange(24).view(1, 24).expand(21, 24)
+    inputs = dry_run_inputs()
     for i, point in enumerate(design):
         source = f"{rule_path}: design point s{i:03d} {point}"
         check_params(rule_path, rule, point, source)
         try:
-            run_rule(code, point, c, t)
+            run_rule(code, point, inputs)
         except Exception as e:
             raise ValueError(f"{source}: {e}") from None
     return design

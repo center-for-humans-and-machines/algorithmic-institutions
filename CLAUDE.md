@@ -189,8 +189,9 @@ evaluation suite likewise keeps one copy per game.
 - A rule-based manager is a config, not code: `type: rule_based` with `rule:`
   (a YAML in `configs/managers/rule_based/` with `params`, optional
   `constraints` and `code`) and `params:` (a JSON of the values), both
-  required. `load_rule` in `manager/api_manager.py` documents the schema and
-  the load-time checks.
+  required. `manager/rule.py` documents the schema, the load-time checks and
+  what the code sees (`RULE_INPUTS`: the player's own round, its group and
+  the other group, at the moment the manager punishes).
 - `sweep: true` in a sim config (#227; written by
   `scripts/policy_finder/generate_sim_config.py`) plays one rule's design points
   against `ah`, skips the plots and writes `sweep.json`: every point's params and

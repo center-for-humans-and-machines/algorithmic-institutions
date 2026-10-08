@@ -88,12 +88,40 @@ code: |
   punishment = a * th.clamp(c0 - c, min=0)
 ```
 
-`code` runs with `c` (each player's contribution this round, float tensor,
-0-20), `t` (the round number, 0-23), `th` (torch) and your params (0-d float
-tensors) in scope. It must assign `punishment`, which the manager clamps to
-0-30 and floors to integers. No imports and no Python builtins: do the maths
-with `th`. Do not use the example above as your rule; it only shows the
-format.
+`code` runs once per round, after the round's contributions and before any
+punishment of that round, for every player at once. It sees these inputs, each
+a float tensor with one value per player, plus `th` (torch) and your params
+(0-d float tensors):
+
+**The player**
+
+| Input | Meaning |
+|---|---|
+| `c` | Contribution this round, 0-20 (a timed-out player's is recorded as 0) |
+| `valid` | 1 if the player contributed this round, 0 if timed out |
+| `c_prev` | Own contribution last round (round 0: `c`) |
+| `p_prev` | Own punishment last round, 0-30 (round 0: 0) |
+| `t` | Round number, 0-23 |
+
+**Own group** (this round)
+
+| Input | Meaning |
+|---|---|
+| `n` | Group size, the player included |
+| `c_group` | Mean contribution of the rest of the group, timed-out players left out (0 if there is nobody to count) |
+
+**Other group** (this round)
+
+| Input | Meaning |
+|---|---|
+| `n_other` | Its size (0 if empty) |
+| `c_other` | Its mean contribution, timed-out players left out (0 if nobody) |
+| `p_prev_other` | Last round's mean punishment of the players now in it: what the other manager did (0 if empty) |
+
+The code must assign `punishment`, which the manager clamps to 0-30 and
+floors to integers; it is applied to the players of your group only. No
+imports and no Python builtins: do the maths with `th`. Do not use the example
+above as your rule; it only shows the format.
 
 The sweep that follows your work draws 256 points over your `sweep_config`
 (a Sobol design; an `int` range gives each of its integers the same share) and

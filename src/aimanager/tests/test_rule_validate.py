@@ -6,11 +6,15 @@ Runs locally: manager/rule.py has no PyG imports.
 import sys
 
 import pytest
+import torch as th
 import yaml
 
 from aimanager.manager.rule import (
+    RULE_INPUTS,
+    dry_run_inputs,
     load_rule,
     read_rule,
+    rule_inputs,
     sobol_design,
     validate_rule,
 )
@@ -118,7 +122,7 @@ def test_validate_accepts(tmp_path):
             r"design point s\d{3} .*NaN",
         ),
         (
-            {**RULE, "code": "punishment = c[c0 + 5] * p * tau"},
+            {**RULE, "code": "punishment = c[0, c0 + 5] * p * tau"},
             {},
             r"design point s\d{3}",
         ),
@@ -155,3 +159,74 @@ def test_cli(tmp_path, monkeypatch, capsys):
 def test_params_are_tensors_in_the_code(tmp_path):
     rule = {**RULE, "code": "punishment = th.exp(-tau) * th.log1p(p) * (c < c0)"}
     assert len(validate_rule(_write(tmp_path, rule))) == 256
+
+
+# -- what the rule sees ---------------------------------------------------
+
+
+def _state(groups, c, valid, c_prev, p_prev, t):
+    def column(values, dtype=th.long):
+        return th.tensor(values, dtype=dtype).view(1, -1, 1)
+
+    inputs = rule_inputs(
+        column(c),
+        column(valid, th.bool),
+        column(c_prev),
+        column(p_prev),
+        column(groups),
+        column([t] * len(c)),
+    )
+    return {k: v.view(-1).tolist() for k, v in inputs.items()}
+
+
+def test_rule_inputs():
+    # player 2 timed out (its recorded contribution 0); group 1 is players 3, 4
+    got = _state(
+        groups=[0, 0, 0, 1, 1],
+        c=[10, 4, 0, 6, 8],
+        valid=[1, 1, 0, 1, 1],
+        c_prev=[12, 5, 9, 6, 7],
+        p_prev=[0, 6, 3, 2, 4],
+        t=5,
+    )
+    assert set(got) == set(RULE_INPUTS)
+    assert got["c"] == [10, 4, 0, 6, 8] and got["valid"] == [1, 1, 0, 1, 1]
+    assert got["c_prev"] == [12, 5, 9, 6, 7] and got["p_prev"] == [0, 6, 3, 2, 4]
+    assert got["t"] == [5] * 5
+    assert got["n"] == [3, 3, 3, 2, 2] and got["n_other"] == [2, 2, 2, 3, 3]
+    # the rest of the own group, valid players only: player 0 sees player 1,
+    # player 2 (timed out) sees players 0 and 1
+    assert got["c_group"] == [4, 10, 7, 8, 6]
+    assert got["c_other"] == [7, 7, 7, 7, 7]
+    assert got["p_prev_other"] == [3, 3, 3, 3, 3]
+
+
+def test_rule_inputs_round_0_and_empty_groups():
+    got = _state(
+        groups=[0, 0],
+        c=[10, 4],
+        valid=[1, 0],
+        c_prev=[1, 1],
+        p_prev=[9, 9],
+        t=0,
+    )
+    assert got["c_prev"] == [10, 4] and got["p_prev"] == [0, 0]
+    assert got["n_other"] == [0, 0] and got["c_other"] == [0, 0]
+    assert got["p_prev_other"] == [0, 0]
+    # player 0's only group mate timed out: a mean over nobody is 0
+    assert got["c_group"] == [0, 10]
+
+
+def test_dry_run_covers_every_round_and_split():
+    inputs = dry_run_inputs()
+    assert inputs["t"].unique().tolist() == list(range(24))
+    assert inputs["n"].min() == 1 and inputs["n"].max() == 8
+    assert (inputs["n_other"] == 0).any() and (inputs["valid"] == 0).any()
+
+
+def test_validate_reads_every_input(tmp_path):
+    code = (
+        "punishment = p * th.clamp(c_group - c, min=0) * valid + c0 * (c_prev < 5)"
+        " + tau * p_prev / (1 + t) + n / (1 + n_other) + c_other + p_prev_other"
+    )
+    assert len(validate_rule(_write(tmp_path, {**RULE, "code": code}))) == 256

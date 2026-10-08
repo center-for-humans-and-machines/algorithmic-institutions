@@ -12,10 +12,19 @@ import yaml
 
 @pytest.fixture
 def grid():
-    """Every contribution 0-20 x round 0-23, shaped [groups, agents, rounds]."""
-    c = th.arange(21).view(1, 21, 1).expand(2, 21, 24).contiguous()
-    t = th.arange(24).view(1, 1, 24).expand(2, 21, 24).contiguous()
-    return {"contribution": c, "round_number": t, "punishment": th.zeros_like(c)}
+    """An env state: every round 0-23 an episode, every contribution 0-20 a
+    player, all in group 0, shaped [episodes, players, 1]."""
+    c = th.arange(21).view(1, 21, 1).expand(24, 21, 1).contiguous()
+    t = th.arange(24).view(24, 1, 1).expand(24, 21, 1).contiguous()
+    return {
+        "contribution": c,
+        "contribution_valid": th.ones_like(c, dtype=th.bool),
+        "prev_contribution": c.flip(1),
+        "prev_punishment": th.full_like(c, 3),
+        "agent_group": th.zeros_like(c),
+        "round_number": t,
+        "punishment": th.zeros_like(c),
+    }
 
 
 def _rule(tmp_path, rule, params, name="rule"):
@@ -64,6 +73,47 @@ def test_multimanager_rule_side(tmp_path):
     assert matched == [20 - c for c in contribution[:4]] + [0] * 4
 
 
+def test_episode_path_matches_batched(tmp_path):
+    """get_punishments on a round history reads what batched_punish reads in
+    the env state: the same inputs, the same punishments."""
+    from aimanager.manager.api_manager import RuleBasedManager
+
+    code = (
+        "punishment = a * (c_group - c) + (1 - valid) + 0.1 * (c_prev + p_prev)"
+        " + n + 2 * n_other + 0.1 * (c_other + p_prev_other) + 0.01 * t"
+    )
+    manager = RuleBasedManager(**_rule(tmp_path, {**BASE, "code": code}, {"a": 1}))
+    groups = [[0, 0, 0, 1, 1, 1, 1, 1], [0, 0, 1, 1, 1, 1, 1, 1]]
+    contributions = [[5, 10, 20, 0, 7, 14, 3, 18], [6, 0, 12, 20, 9, 2, 15, 4]]
+    valid = [[True] * 8, [True, False] + [True] * 6]
+    charged = [[4, 0, 0, 9, 2, 0, 6, 1], None]
+    rounds = [
+        {
+            "contribution": contributions[r],
+            "contribution_valid": valid[r],
+            "punishment": charged[r],
+            "agent_group": groups[r],
+            "round": r,
+        }
+        for r in range(2)
+    ]
+
+    def column(values):
+        return th.tensor(values).view(1, 8, 1)
+
+    for r in range(2):
+        state = {
+            "contribution": column(contributions[r]),
+            "contribution_valid": column(valid[r]),
+            "prev_contribution": column(contributions[r - 1] if r else [0] * 8),
+            "prev_punishment": column(charged[r - 1] if r else [0] * 8),
+            "agent_group": column(groups[r]),
+            "round_number": column([r] * 8),
+        }
+        batched = manager.batched_punish(state).view(-1)
+        assert th.equal(manager.get_punishments(rounds[: r + 1]), batched)
+
+
 # -- running a rule -------------------------------------------------------
 
 
@@ -71,7 +121,7 @@ def test_out_of_range_is_clamped(grid, tmp_path):
     from aimanager.manager.api_manager import RuleBasedManager
 
     rule = {**BASE, "code": "punishment = a * (100 - 10 * c)"}
-    got = RuleBasedManager(**_rule(tmp_path, rule, {"a": 1})).get_punishments(grid)
+    got = RuleBasedManager(**_rule(tmp_path, rule, {"a": 1})).batched_punish(grid)
     assert got.min() == 0 and got.max() == 30
 
 
@@ -79,7 +129,7 @@ def test_scalar_is_broadcast_and_floored(grid, tmp_path):
     from aimanager.manager.api_manager import RuleBasedManager
 
     rule = {**BASE, "code": "punishment = a * 7.9"}
-    got = RuleBasedManager(**_rule(tmp_path, rule, {"a": 1})).get_punishments(grid)
+    got = RuleBasedManager(**_rule(tmp_path, rule, {"a": 1})).batched_punish(grid)
     assert got.shape == grid["contribution"].shape
     assert got.unique().tolist() == [7]
 
@@ -87,9 +137,9 @@ def test_scalar_is_broadcast_and_floored(grid, tmp_path):
 def test_history_untouched(grid, tmp_path):
     from aimanager.manager.api_manager import RuleBasedManager
 
-    rule = {**BASE, "code": "c.add_(5)\nt.add_(5)\npunishment = a * c"}
+    rule = {**BASE, "code": "c.add_(5)\nn.add_(5)\npunishment = a * c"}
     before = {k: v.clone() for k, v in grid.items()}
-    RuleBasedManager(**_rule(tmp_path, rule, {"a": 1})).get_punishments(grid)
+    RuleBasedManager(**_rule(tmp_path, rule, {"a": 1})).batched_punish(grid)
     assert all(th.equal(grid[k], before[k]) for k in grid)
 
 
@@ -105,7 +155,7 @@ def test_run_errors(grid, tmp_path, code, match):
 
     manager = RuleBasedManager(**_rule(tmp_path, {**BASE, "code": code}, {"a": 1}))
     with pytest.raises(ValueError, match=match):
-        manager.get_punishments(grid)
+        manager.batched_punish(grid)
 
 
 # -- checks at construction -----------------------------------------------
@@ -247,13 +297,13 @@ def test_params_inline_or_best(grid, tmp_path):
     from aimanager.manager.api_manager import RuleBasedManager
 
     from_file = _rule(tmp_path, BASE, {"a": 0.5})
-    expected = RuleBasedManager(**from_file).get_punishments(grid)
+    expected = RuleBasedManager(**from_file).batched_punish(grid)
     inline = {"a": 0.5}
     sweep = {"best": {"a": 0.5}, "points": [{"name": "s000", "params": {"a": 2}}]}
     sweep_path = _rule(tmp_path, BASE, sweep, "sweep")["params"]
     for params in (inline, sweep_path):
         manager = RuleBasedManager(rule=from_file["rule"], params=params)
-        assert th.equal(manager.get_punishments(grid), expected)
+        assert th.equal(manager.batched_punish(grid), expected)
     assert inline == {"a": 0.5}
 
 

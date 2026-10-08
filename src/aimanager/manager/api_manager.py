@@ -6,7 +6,7 @@ from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
 from aimanager.generic.data import MAX_CONTRIBUTION, shift
 from aimanager.simulation.linear_ah import LinearAHAdapter
-from aimanager.manager.rule import load_rule, run_rule
+from aimanager.manager.rule import load_rule, rule_inputs, run_rule
 
 
 class Round(BaseModel):
@@ -188,36 +188,56 @@ class DummyManager:
 
 
 class RuleBasedManager:
-    # The rule YAML's code, run on this round's contribution and round number
-    # (see manager/rule.py).
+    # The rule YAML's code, run on RULE_INPUTS: the player's own round, its
+    # group and the other group (see manager/rule.py). It reads both groups,
+    # so the per-episode path hands it the raw round history.
+    needs_rounds = True
+
     def __init__(self, rule=None, params=None, n_punishments=31, **_):
         if rule is None or params is None:
             raise ValueError("rule_based: `rule` and `params` are required")
         self.code, self.params = load_rule(rule, params)
         self.n_punishments = int(n_punishments)
         self.model = None
-        self.default_values = {
-            "contribution": 0,
-            "punishment": 0,
-            "contribution_valid": False,
-            "punishment_valid": False,
-            "in_group": False,
-        }
 
-    def get_punishments(self, data):
-        raw = self._run_rule(data["contribution"], data["round_number"])
-        return raw.clamp(0, self.n_punishments - 1).to(data["punishment"].dtype)
+    def _punish(self, inputs):
+        raw = run_rule(self.code, self.params, inputs)
+        return raw.clamp(0, self.n_punishments - 1).to(th.int64)
 
     def batched_punish(self, state):
-        """Env state ([B, A, 1] tensors) -> punishment [B, A, 1] int64.
+        """Env state ([B, A, 1] tensors) -> punishment [B, A, 1] int64."""
+        return self._punish(
+            rule_inputs(
+                state["contribution"],
+                state["contribution_valid"],
+                state["prev_contribution"],
+                state["prev_punishment"],
+                state["agent_group"],
+                state["round_number"],
+            )
+        )
 
-        The rule reads only the current round's contribution and round number,
-        which the env state holds as the round history's last column does.
-        """
-        return self.get_punishments(state)
+    def get_punishments(self, rounds):
+        """Round history (simulate.make_round dicts, punishments as charged)
+        -> punishment [A] for the last round, as batched_punish reads the env
+        state of one episode."""
+        last = rounds[-1]
+        prev = rounds[-2] if len(rounds) > 1 else last  # round 0: unread
 
-    def _run_rule(self, contribution, round_number):
-        return run_rule(self.code, self.params, contribution, round_number)
+        def column(values, dtype):
+            return th.tensor(values, dtype=dtype).view(1, -1, 1)
+
+        n = len(last["contribution"])
+        return self._punish(
+            rule_inputs(
+                column(last["contribution"], th.float),
+                column(last["contribution_valid"], th.bool),
+                column(prev["contribution"], th.float),
+                column(prev["punishment"] if len(rounds) > 1 else [0] * n, th.float),
+                column(last["agent_group"], th.long),
+                column([last["round"]] * n, th.long),
+            )
+        ).view(-1)
 
 
 class LinearManager:
