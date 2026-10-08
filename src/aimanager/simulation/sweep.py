@@ -6,18 +6,24 @@ plays every design point of one rule against `ah`: pairings
 its params inline. The sim then skips its plots and writes `sweep.json`:
 every point's params and its definition 4 score (pool_scores), and under
 `best` the params of the point with the highest pool, so the file loads as a
-manager's `params:` (manager/rule.py). Pandas only, so it runs locally.
+manager's `params:` (manager/rule.py); and, with the sim's own plotting code,
+the best point's matchup against `ah` (BEST_PLOTS). PyG-free, so it runs
+locally.
 """
 
 import json
 import math
 import os
+import shutil
 
 from aimanager.simulation.pool_scores import add_pool, against_anchor
+from aimanager.simulation.sim_plots import plot_group_size, plot_pairing_side, prepare
 
 #: The manager every design point plays (definition 4 of #226).
 SWEEP_ANCHOR = "ah"
 SWEEP_FILE = "sweep.json"
+#: The plots a sweep draws of its best point against the anchor.
+BEST_PLOTS = ("comparison_pairing_side.jpg", "group_size_evolution_global.jpg")
 
 
 def check_sweep(config: dict) -> str:
@@ -92,6 +98,39 @@ def write_sweep(df, config: dict, output_dir: str) -> str:
     with open(path, "w") as f:
         json.dump(sweep_result(df, config), f, indent=2)
     return path
+
+
+def plot_best(df, output_dir: str) -> None:
+    """Draw BEST_PLOTS for the best point in output_dir's sweep.json, from the
+    sim's per-round frame (the rest of a sweep's plots are skipped)."""
+    with open(os.path.join(output_dir, SWEEP_FILE)) as f:
+        sweep = json.load(f)
+    best = sweep["best_name"]
+    pairing = {
+        "name": f"{best}_vs_{SWEEP_ANCHOR}",
+        "group_0": best,
+        "group_1": SWEEP_ANCHOR,
+    }
+    rows = df[df["run"].str.endswith(f"managed by {pairing['name']}")]
+    rows = prepare(rows.reset_index(drop=True).copy())
+    title = f"{best}: " + ", ".join(f"{k}={v:g}" for k, v in sweep["best"].items())
+    plot_pairing_side(rows, [pairing], output_dir, title)
+    plot_group_size(rows, output_dir, title)
+
+
+def copy_best_plots(part_dirs: list, best_name: str, out_dir: str) -> list:
+    """Copy BEST_PLOTS from the part whose own best is `best_name` (the
+    overall best is always its part's best); return the copied paths."""
+    copied = []
+    for part in part_dirs:
+        with open(os.path.join(part, SWEEP_FILE)) as f:
+            if json.load(f).get("best_name") != best_name:
+                continue
+        for name in BEST_PLOTS:
+            src = os.path.join(part, name)
+            if os.path.exists(src):
+                copied.append(shutil.copy(src, os.path.join(out_dir, name)))
+    return copied
 
 
 def _best(points: list) -> dict:

@@ -3,7 +3,8 @@
 A sweep generated with `--n-parts N` runs as N sims, each writing its own
 sweep.json under plots/simulation/policy_finder/<rule>_sweep_p<k>of<N>. This
 writes the sweep.json of the whole design, `best` over all points, by
-default to plots/simulation/policy_finder/<rule>_sweep/sweep.json.
+default to plots/simulation/policy_finder/<rule>_sweep/sweep.json, and copies
+next to it the plots of that best point, drawn by the part that holds it.
 
 Usage:
     python scripts/policy_finder/merge_sweeps.py <part sim dir> ... [--out <json>]
@@ -15,7 +16,7 @@ import re
 import sys
 from pathlib import Path
 
-from aimanager.simulation.sweep import SWEEP_FILE, merge_sweeps
+from aimanager.simulation.sweep import SWEEP_FILE, copy_best_plots, merge_sweeps
 
 PART = re.compile(r"^(?P<sweep>.+)_p(?P<k>\d+)of(?P<n>\d+)$")
 
@@ -48,6 +49,8 @@ def main():
         sys.exit(str(e))
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(merged, indent=2))
+    for path in copy_best_plots(dirs, merged["best_name"], out.parent):
+        print(f"Copied: {path}")
     print(
         f"Wrote {out}: {len(merged['points'])} points from {len(dirs)} parts,"
         f" best {merged['best_name']} {merged['best']}"

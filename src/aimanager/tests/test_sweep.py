@@ -139,3 +139,58 @@ def test_merge_sweeps():
         merge_sweeps([_result({"toy_s000": 1.0}), _result({"toy_s000": 2.0})])
     with pytest.raises(ValueError, match="differ in `n_episodes`"):
         merge_sweeps([_result({"toy_s000": 1.0}), _result({}, n_episodes=200)])
+
+
+def _plot_frame():
+    """Per-round rows with every column the sim's plots read: two points,
+    two episodes, two rounds, two agents per group."""
+    rows = []
+    for name in ("toy_s000", "toy_s001"):
+        for episode in range(2):
+            for round_number in range(2):
+                for agent in range(4):
+                    group = agent // 2
+                    c = 10 + agent + episode
+                    rows.append(
+                        {
+                            "episode": episode,
+                            "round_number": round_number,
+                            "participant_code": f"{agent}",
+                            "contribution": c,
+                            "punishment": 1,
+                            "common_good": 1.6 * c,
+                            "payoff": 20 - c + 1.6 * c,
+                            "agent_group": group,
+                            "group_id": group,
+                            "run": f"ah group_switching managed by {name}_vs_ah",
+                        }
+                    )
+    return pd.DataFrame(rows)
+
+
+def test_plot_best_draws_the_best_matchup(tmp_path):
+    from aimanager.simulation.sweep import BEST_PLOTS, plot_best
+
+    config = _config({"toy_s000": 0.5, "toy_s001": 1.5})
+    df = _plot_frame()
+    write_sweep(df.copy(), config, str(tmp_path))
+    plot_best(df, str(tmp_path))
+    assert all((tmp_path / name).stat().st_size > 0 for name in BEST_PLOTS)
+
+
+def test_copy_best_plots_takes_the_best_part(tmp_path):
+    from aimanager.simulation.sweep import BEST_PLOTS, copy_best_plots
+
+    parts = []
+    for k, best in ((1, "toy_s000"), (2, "toy_s001")):
+        part = tmp_path / f"toy_sweep_p{k}of2"
+        part.mkdir()
+        (part / "sweep.json").write_text(json.dumps({"best_name": best}))
+        for name in BEST_PLOTS:
+            (part / name).write_text(f"part {k}")
+        parts.append(str(part))
+    out = tmp_path / "toy_sweep"
+    out.mkdir()
+    copied = copy_best_plots(parts, "toy_s001", str(out))
+    assert len(copied) == len(BEST_PLOTS)
+    assert all((out / name).read_text() == "part 2" for name in BEST_PLOTS)
