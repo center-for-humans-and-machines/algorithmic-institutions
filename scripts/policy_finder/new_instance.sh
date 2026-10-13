@@ -15,8 +15,10 @@
 # pre-allowed: the sandbox and the guard are the boundary) on --prompt
 # (default: design your rule) and saves the agent's final report to
 # ../policy-finder-worktrees/<name>.report.md, outside the worktree; then
-# checks and commits the instance (check_instance.sh --commit) and runs its
-# sweep on Raven (run_sweep.sh, #241).
+# checks and commits the instance (check_instance.sh --commit), runs its
+# sweep on Raven (run_sweep.sh, #241) and updates the observation app's
+# Summary with a headless /policy-finder-summarizer (its report in
+# ../policy-finder-worktrees/<name>.summary.md).
 # The rule declares between --min-params (default 1) and --max-params
 # (default 4) params; equal values ask for exactly that many. --sobol-points
 # (a power of two, default 256) sets the size of the sweep's design, which
@@ -222,6 +224,17 @@ if [[ "$HEADLESS" == 1 ]]; then
     echo "report: $REPORT"
     "$MAIN/scripts/policy_finder/check_instance.sh" "$NAME" --commit
     "$MAIN/scripts/policy_finder/run_sweep.sh" "$NAME"
+    # place the rule in the observation app's Summary and republish the shared
+    # page: a headless /policy-finder-summarizer in this checkout, its report
+    # beside the instance's; a failure here leaves the run as it is
+    SUMMARY_LOG="$WT_ROOT/$NAME.summary.md"
+    if (cd "$MAIN" && claude -p "/policy-finder-summarizer" --strict-mcp-config \
+        --add-dir "$WT_ROOT" --allowedTools=Bash,Read,Artifact \
+        < /dev/null > "$SUMMARY_LOG"); then
+        echo "summary: $SUMMARY_LOG"
+    else
+        echo "summary not updated (see $SUMMARY_LOG): run /policy-finder-summarizer" >&2
+    fi
 else
     exec claude --agent policy-finder-host --strict-mcp-config
 fi

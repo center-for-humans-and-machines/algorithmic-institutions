@@ -30,7 +30,9 @@ $ARGUMENTS
    ```
 
    It runs the agent, then `check_instance.sh <name> --commit`, then
-   `run_sweep.sh <name>`, which commits the sweep on `policy-finder/<name>`.
+   `run_sweep.sh <name>`, which commits the sweep on `policy-finder/<name>`,
+   then a headless `/policy-finder-summarizer`, which places the rule in the
+   observation app's Summary (`../policy-finder-worktrees/<name>.summary.md`).
    Do not read the instance's files or its report while it runs, and never
    pass it anything about existing or earlier rules: the agent must find its
    own. Nothing of the instance is copied into this checkout.
@@ -41,7 +43,13 @@ $ARGUMENTS
    `../policy-finder-worktrees/<name>/plots/simulation/policy_finder/<name>_sweep/sweep.json`:
    the hypothesis, each parameter with its meaning and sweep range, the best
    params and their pool against `ah` (± `pool_se`), and the branch
-   `policy-finder/<name>`. The observation app shows the rest.
+   `policy-finder/<name>`; and from `<name>.summary.md`, the categories the
+   rule was placed in (or that the summary failed: then run
+   `/policy-finder-summarizer`). The observation app shows the rest.
+6. **Republish the shared page**, which the headless summary cannot: step 4
+   of `/policy-finder-summarizer` (export the fragment, publish it to the
+   shared artifact). With several instances running, do it once, after the
+   last one finishes.
 
 To try a branch before it lands on `policy-finder-base`, set `PF_BASE=<branch>`
 on the launch.
