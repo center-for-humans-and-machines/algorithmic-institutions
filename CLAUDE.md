@@ -202,7 +202,11 @@ evaluation suite likewise keeps one copy per game.
   seconds; `run_sweep.sh` runs it) fits a Gaussian process to the points and
   writes `landscapes.json` beside `sweep.json`: the surface's peak, each
   param's effect and length scale, the smoothed pool at every point and
-  profiles through the peak. The peak is a candidate, never simulated.
+  profiles through the peak. The peak is a candidate, never simulated:
+  `generate_sim_config.py --validate <sweep dir>/sweep.json [--top 5]` writes
+  the validation sim (`run_validate.sh <name>`, run by `run_sweep.sh`), the
+  peak and the top measured points at 2000 episodes on fresh seeds. Its
+  `validate/sweep.json` in the sweep dir holds the rule's final `best`.
 - `scripts/plotting/plot_winrates.py <sim_dir> [<sim_dir> ...]` tables the five
   win definitions of #226. Definitions 1-3 and 5 are head to head. Definition 4
   (Levin's) ranks managers by their group's common pool against `ah`, so it
