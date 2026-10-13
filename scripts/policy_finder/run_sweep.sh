@@ -14,7 +14,9 @@
 # jobs, fetches each part's sweep.json and best-point plots (never
 # per_round.parquet) into ../policy-finder-worktrees/<name>.sweep_parts/,
 # merges them into plots/simulation/policy_finder/<name>_sweep/ in the
-# worktree and commits that and the sim configs on policy-finder/<name>.
+# worktree, fits its Gaussian process there (fit_surrogate.py:
+# landscapes.json) and commits that and the sim configs on
+# policy-finder/<name>.
 # Needs the SSH ControlMaster to Raven (`ssh raven`).
 # PF_WORKTREE_ROOT as in new_instance.sh.
 
@@ -101,7 +103,10 @@ if (( N_PARTS > 1 )); then
         --out "$SWEEP/sweep.json"
 fi
 
-# 6. commit the sweep on the instance branch, never on policy-finder-base
+# 6. fit the Gaussian process over the sweep: landscapes.json beside sweep.json
+PYTHONPATH="$WT/src" "$PY" scripts/policy_finder/fit_surrogate.py "$SWEEP"
+
+# 7. commit the sweep on the instance branch, never on policy-finder-base
 git add -- "$SWEEP" "configs/simulation/policy_finder/${NAME}_sweep"*.yml
 git commit -q -m "policy-finder $NAME: sweep"
 git log --oneline -1

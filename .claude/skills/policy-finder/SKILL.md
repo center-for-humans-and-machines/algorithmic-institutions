@@ -42,7 +42,9 @@ $ARGUMENTS
 5. **Report** from `../policy-finder-worktrees/<name>.report.md` and
    `../policy-finder-worktrees/<name>/plots/simulation/policy_finder/<name>_sweep/sweep.json`:
    the hypothesis, each parameter with its meaning and sweep range, the best
-   params and their pool against `ah` (± `pool_se`), and the branch
+   params and their pool against `ah` (± `pool_se`); from `landscapes.json`
+   beside it, the Gaussian process's peak (`mean` ± `sd`, a candidate not
+   yet simulated) and how much each param moves the pool (`effect`); the branch
    `policy-finder/<name>`; and from `<name>.summary.md`, the categories the
    rule was placed in (or that the summary failed: then run
    `/policy-finder-summarizer`). The observation app shows the rest.
