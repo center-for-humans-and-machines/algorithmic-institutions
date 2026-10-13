@@ -123,3 +123,21 @@
 .st-key-hypothesis p, .st-key-hypothesis li { color: var(--ink); line-height: 1.65; }
 .tl-head { margin-bottom: 4px; }
 .tl-head code { font-size: 12.5px; padding: 1px 6px; word-break: break-all; }
+
+
+/* the view switcher as the reports' pill switcher */
+[data-testid="stButtonGroup"] { background: var(--sunk); padding: 4px; border-radius: 999px;
+  width: fit-content; margin-bottom: 18px; }
+[data-testid="stButtonGroup"] button { border: 0 !important; border-radius: 999px !important;
+  background: none !important; color: var(--ink-2) !important; padding: 6px 18px !important;
+  box-shadow: none !important; }
+[data-testid="stButtonGroup"] button[kind$="Active"] { background: var(--surface) !important;
+  color: var(--ink) !important; font-weight: 500; box-shadow: 0 1px 2px rgba(0,0,0,.08) !important; }
+
+/* the Sweep tab's landscape: fixed-width panels in one row that scrolls sideways */
+.st-key-landscape { overflow-x: auto; background: var(--surface);
+  border: 1px solid var(--line-soft); border-radius: 14px; padding: 8px; }
+.st-key-landscape [data-testid="stVegaLiteChart"],
+.st-key-landscape [data-testid="stArrowVegaLiteChart"] { border: 0; padding: 0;
+  width: max-content !important; }
+
