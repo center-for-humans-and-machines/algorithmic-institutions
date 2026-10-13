@@ -100,7 +100,7 @@ def summary_view(found: list, keys: dict, charts: Charts) -> str:
     if shown["best pool"].notna().any():
         ref_rows = [(r["name"], r["pool"]) for r in refs.get("rows", [])]
         out += [
-            section("Best pool against ah"),
+            section("Final best against ah"),
             caption(" ".join(filter(None, [d.SUMMARY_CAPTION, d.top_note(frame)]))),
             charts.place(d.pool_chart(shown, ref_rows)),
             d.reference_chips(refs),
@@ -222,42 +222,27 @@ def report_tab(name: str) -> str:
 
 
 def sweep_tab(wt: Path, name: str, charts: Charts, zero) -> str:
-    folder = wt / d.SWEEP_DIR.format(name=name)
-    path = folder / "sweep.json"
-    if not path.exists():
-        return empty("Not swept yet.")
-    sweep = json.loads(path.read_text())
-    points = pd.DataFrame(
-        [{**p["params"], **{k: p[k] for k in ("name", "pool", "pool_se", "members")}} for p in sweep["points"]]
-    ).sort_values("pool", ascending=False)
-    best = points.iloc[0]
-    near = int((points.pool >= best.pool - 2 * best.pool_se).sum())
-    out = [
-        stats(
-            [
-                ("Best pool vs ah", f"{best.pool:.1f}<small>± {best.pool_se:.1f}</small>"),
-                ("Median point", f"{points.pool.median():.1f}"),
-                ("Members, best point", f"{best.members:.2f}"),
-                ("Within 2 se of best", f"{near}<small>/ {len(points)}</small>"),
-            ]
-        ),
-        d.reference_html(best.pool)
-        .replace('<div class="section">', '<h3 class="section">')
-        .replace("Reference</div>", "Reference</h3>"),
-    ]
-    chips = "".join(f'<span class="chip">{esc(k)} <b>{v:g}</b></span>' for k, v in sweep["best"].items())
-    out.append(f'<div class="chips"><span class="eyebrow">Best</span>{chips}</div>')
-    plots = [(folder / f, c) for f, c in d.BEST_PLOTS.items() if (folder / f).exists()]
-    if plots:
-        out += [section("Best point"), d.figures_html(plots)]
-    params = list(sweep["best"])
-    out += [
-        section("Landscape"),
-        caption("Each dot is a design point. Ink: the best; clay: the top 10; dashed: never punishing against ah."),
-        '<div class="land">' + "".join(charts.place(d.landscape(points, p, zero)) for p in params) + "</div>",
-        section("Top 10"),
-    ]
-    out.append(d.top10_html(points, params))
+    """The app's Sweep tab (dashboard.sweep_blocks), as HTML."""
+    out = []
+    for kind, content in d.sweep_blocks(wt, name, zero):
+        if kind == "section":
+            out.append(section(content))
+        elif kind == "caption":
+            out.append(caption(content))
+        elif kind == "empty":
+            out.append(empty(content))
+        elif kind == "landscape":
+            points, land, final = content
+            out.append(
+                '<div class="land">'
+                + "".join(
+                    charts.place(d.landscape(points, land, p, final, zero))
+                    for p in land["params"]
+                )
+                + "</div>"
+            )
+        else:
+            out.append(content)
     return "".join(out)
 
 

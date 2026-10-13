@@ -31,11 +31,15 @@ WT_ROOT = Path(
     os.environ.get("PF_WORKTREE_ROOT", MAIN.parent / "policy-finder-worktrees")
 )
 BASE = os.environ.get("PF_BASE", "policy-finder-base")
-#: An instance's merged sweep, relative to its worktree (run_sweep.sh)
+#: An instance's merged sweep, relative to its worktree (run_sweep.sh), with
+#: its Gaussian process fit (landscapes.json) and, in validate/, the
+#: validation sim whose best is the rule's final result (#238)
 SWEEP_DIR = "plots/simulation/policy_finder/{name}_sweep"
-#: The best point's matchup against `ah` (simulation/sweep.py's BEST_PLOTS)
+LANDSCAPES = "landscapes.json"
+VALIDATE = "validate"
+#: The final best's matchup against `ah` (simulation/sweep.py's BEST_PLOTS)
 BEST_PLOTS = {
-    "comparison_pairing_side.jpg": "Best point vs ah, by side",
+    "comparison_pairing_side.jpg": "Final best vs ah, by side",
     "group_size_evolution_global.jpg": "Group sizes",
 }
 #: The reference sim with `zero` (never punish) against `ah`.
@@ -424,7 +428,7 @@ REFERENCES = WT_ROOT / "references.json"
 
 
 def reference_html(best_pool: float) -> str:
-    """The Reference section: each reference pool and the best point against it."""
+    """Each reference pool and the final best against it ("" without any)."""
     refs = references()
     if not refs.get("rows"):
         return ""
@@ -432,11 +436,10 @@ def reference_html(best_pool: float) -> str:
         f'<div class="stat"><div class="k">{esc(r["name"])}</div>'
         f'<div class="v">{r["pool"]:.1f}'
         + (f'<small>{r["members"]:.2f} members</small>' if "members" in r else "")
-        + f'</div><div class="k">best point {best_pool - r["pool"]:+.1f}</div></div>'
+        + f'</div><div class="k">final best {best_pool - r["pool"]:+.1f}</div></div>'
         for r in refs.get("rows", [])
     )
     return (
-        '<div class="section">Reference</div>'
         f'<div class="refs">{tiles}</div>'
         f'<div class="ref-src">{esc(refs.get("source", ""))}</div>'
     )
@@ -452,13 +455,17 @@ def zero_pool():
         return None
 
 
-def stats(tiles):
+def stats_html(tiles) -> str:
     cells = "".join(
         f'<div class="stat"><div class="k">{esc(k)}</div>'
         f'<div class="v">{v}</div></div>'
         for k, v in tiles
     )
-    st.markdown(f'<div class="stats">{cells}</div>', unsafe_allow_html=True)
+    return f'<div class="stats">{cells}</div>'
+
+
+def stats(tiles):
+    st.markdown(stats_html(tiles), unsafe_allow_html=True)
 
 
 #: Width of one landscape panel; a row of them scrolls sideways when it is wider
@@ -485,121 +492,269 @@ def landscape_axes(chart):
     )
 
 
-def landscape(points: pd.DataFrame, param: str, zero):
+def landscape(points: pd.DataFrame, land: dict, param: str, final, zero):
     """One param's panel, on its own (the export draws one per param)."""
-    return landscape_axes(landscape_layer(points, param, zero))
+    return landscape_axes(landscape_layer(points, land, param, final, zero))
 
 
-def landscape_row(points: pd.DataFrame, params: list, zero):
-    """Every param's panel side by side, each LANDSCAPE_WIDTH wide."""
+def landscape_row(points: pd.DataFrame, land: dict, final, zero):
+    """Every fitted param's panel side by side, each LANDSCAPE_WIDTH wide."""
     panels = [
-        landscape_layer(points, p, zero).properties(width=LANDSCAPE_WIDTH) for p in params
+        landscape_layer(points, land, p, final, zero).properties(width=LANDSCAPE_WIDTH)
+        for p in land["params"]
     ]
     return landscape_axes(alt.hconcat(*panels, spacing=18))
 
 
-def landscape_layer(points: pd.DataFrame, param: str, zero):
-    """Pool against one param: all points, the top 10 in clay, the best in ink."""
-    integral = bool((points[param] % 1 == 0).all())
-    rank = points["pool"].rank(ascending=False, method="first")
-    data = points.assign(
-        group=pd.cut(rank, [0, 1, 10, len(points)], labels=["best", "top 10", "other"])
+def landscape_layer(points: pd.DataFrame, land: dict, param: str, final, zero):
+    """Pool against one param: the design points, the Gaussian process's
+    profile through its peak with a band of 2 sd, the peak's value dashed and
+    the final best in ink."""
+    spec = land["params"][param]
+    prof = pd.DataFrame(land["profiles"][param]).rename(
+        columns={"x": "_x", "mean": "_mean", "sd": "_sd"}
     )
-    dots = (
-        alt.Chart(data)
-        .mark_circle(stroke="white", strokeWidth=0.6)
+    prof["_lo"], prof["_hi"] = prof._mean - 2 * prof._sd, prof._mean + 2 * prof._sd
+    # the swept range exactly: no padding out to round or log-decade ticks
+    scale = alt.Scale(
+        type="log" if spec["log"] else "linear", domain=spec["range"], nice=False
+    )
+    # whole-number ticks for an int param, not 0.5 steps
+    axis = alt.Axis(tickMinStep=1) if spec["type"] == "int" else alt.Axis()
+
+    def x(field):
+        return alt.X(f"{field}:Q", title=param, scale=scale, axis=axis)
+
+    y = alt.Y("pool:Q", title="pool vs ah", scale=alt.Scale(zero=False))
+    layers = [
+        alt.Chart(points)
+        .mark_circle(size=24, color=MUTED, opacity=0.4)
         .encode(
-            x=alt.X(
-                f"{param}:Q",
-                title=param,
-                # whole-number ticks for an int param, not 0.5 steps
-                axis=alt.Axis(tickMinStep=1) if integral else alt.Axis(),
-            ),
-            y=alt.Y("pool:Q", title="pool vs ah", scale=alt.Scale(zero=False)),
-            color=alt.Color(
-                "group:N",
-                scale=alt.Scale(
-                    domain=["best", "top 10", "other"], range=[INK, CLAY, MUTED]
-                ),
-                legend=None,
-            ),
-            size=alt.Size(
-                "group:N",
-                scale=alt.Scale(
-                    domain=["best", "top 10", "other"], range=[150, 60, 26]
-                ),
-                legend=None,
-            ),
-            opacity=alt.Opacity(
-                "group:N",
-                scale=alt.Scale(
-                    domain=["best", "top 10", "other"], range=[1, 0.9, 0.4]
-                ),
-                legend=None,
-            ),
-            order=alt.Order("pool:Q"),
+            x=x(param),
+            y=y,
             tooltip=["name", param, alt.Tooltip("pool:Q", format=".1f")],
-        )
-    )
-    layers = [dots]
+        ),
+        alt.Chart(prof)
+        .mark_area(color=CLAY, opacity=0.18)
+        .encode(x=x("_x"), y="_lo:Q", y2="_hi:Q"),
+        alt.Chart(prof)
+        .mark_line(color=CLAY, strokeWidth=2)
+        .encode(x=x("_x"), y="_mean:Q"),
+        alt.Chart(pd.DataFrame({"_x": [land["peak"]["params"][param]]}))
+        .mark_rule(color=CLAY, strokeDash=[2, 3])
+        .encode(x=x("_x")),
+    ]
     if zero is not None:
-        rule = alt.Chart(pd.DataFrame({"y": [zero]})).mark_rule(
-            strokeDash=[4, 4], color=MUTED
+        layers.append(
+            alt.Chart(pd.DataFrame({"_y": [zero]}))
+            .mark_rule(strokeDash=[4, 4], color=MUTED)
+            .encode(y="_y:Q")
         )
-        layers.append(rule.encode(y="y:Q"))
-    return alt.layer(*layers).properties(height=220)
+    if final is not None:
+        layers.append(
+            alt.Chart(
+                pd.DataFrame(
+                    {"_x": [final["params"][param]], "pool": [final["pool"]],
+                     "point": [final["name"]]}
+                )
+            )
+            .mark_circle(size=150, color=INK, opacity=1, stroke="white", strokeWidth=1)
+            .encode(
+                x=x("_x"),
+                y=y,
+                tooltip=[
+                    alt.Tooltip("point:N", title="final best"),
+                    alt.Tooltip("pool:Q", title="validated pool", format=".1f"),
+                ],
+            )
+        )
+    title = f"{param} · moves the pool {spec['effect']:.1f}"
+    if param in land["peak"]["at_edge"]:
+        title += " · peak on its edge"
+    return alt.layer(*layers).properties(
+        height=220,
+        title=alt.TitleParams(
+            title, anchor="start", font="Geist", fontSize=12, fontWeight=500,
+            color=MUTED,
+        ),
+    )
 
 
-def show_sweep(wt: Path, name: str):
+def read_json(path: Path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def sweep_files(wt: Path, name: str) -> dict:
+    """An instance's sweep, its fit and its validation, each None until written."""
     folder = wt / SWEEP_DIR.format(name=name)
-    path = folder / "sweep.json"
-    if not path.exists():
-        empty("Not swept yet.")
-        return
-    sweep = json.loads(path.read_text())
+    return {
+        "folder": folder,
+        "sweep": read_json(folder / "sweep.json"),
+        "land": read_json(folder / LANDSCAPES),
+        "validate": read_json(folder / VALIDATE / "sweep.json"),
+    }
+
+
+def final_best(validate):
+    """The validation's best point (its sweep.json's best_name), or None."""
+    if not validate:
+        return None
+    return next(p for p in validate["points"] if p["name"] == validate["best_name"])
+
+
+def point_source(name: str) -> str:
+    """Where a validated point came from: the GP's peak or a design point."""
+    return "GP peak" if name.endswith("_gp") else f"sweep {name.rsplit('_', 1)[-1]}"
+
+
+VALIDATE_CAPTION = (
+    "The Gaussian process's peak and the sweep's best measured points, rerun on"
+    " fresh seeds at {episodes} episodes each. The top of these is the final"
+    " best. Before: the point's pool in the sweep (500 episodes, read high by"
+    " luck) or, for the peak, the fit's prediction."
+)
+LANDSCAPE_CAPTION = (
+    "Grey: the design points, against each param. Clay: the Gaussian process"
+    " fitted to them, cut along the param through its peak (dashed), with a band"
+    " of 2 sd. Ink: the final best at its validated pool. Dashed line: never"
+    " punishing against ah. Each panel's title says how far the param moves the"
+    " fitted pool, and when the peak sits on the edge of its range."
+)
+
+
+def sweep_blocks(wt: Path, name: str, zero) -> list:
+    """The Sweep tab as (kind, content) blocks, which the app and the export
+    each render: "html", "section", "caption", "empty" and "landscape"
+    (points, landscapes, final best). The landscape shows once the sweep is
+    fitted, the final best once it is validated."""
+    f = sweep_files(wt, name)
+    sweep, land, validate = f["sweep"], f["land"], f["validate"]
+    if not sweep:
+        return [("empty", "Not swept yet.")]
     points = pd.DataFrame(
         [
             {**p["params"], **{k: p[k] for k in ("name", "pool", "pool_se", "members")}}
             for p in sweep["points"]
         ]
     ).sort_values("pool", ascending=False)
-    best = points.iloc[0]
-    near = int((points.pool >= best.pool - 2 * best.pool_se).sum())
-    zero = zero_pool()
-    stats(
-        [
-            ("Best pool vs ah", f"{best.pool:.1f}<small>± {best.pool_se:.1f}</small>"),
-            ("Median point", f"{points.pool.median():.1f}"),
-            ("Members, best point", f"{best.members:.2f}"),
-            ("Within 2 se of best", f"{near}<small>/ {len(points)}</small>"),
+    if land:
+        points["gp"] = points["name"].map({p["name"]: p["mean"] for p in land["points"]})
+    final = final_best(validate)
+    # the tiles are the final result only, all from the validation sim; the
+    # sweep's own figures go with the sections that show the sweep
+    if final:
+        tiles = [
+            ("Final best vs ah", f"{final['pool']:.1f}<small>± {final['pool_se']:.1f}</small>"),
+            ("Members", f"{final['members']:.2f}"),
+            ("From", esc(point_source(final["name"]))),
+            (
+                "Validated on",
+                f"{len(validate['points'])} points"
+                f"<small>× {validate['n_episodes']} episodes, fresh seeds</small>",
+            ),
         ]
+    else:
+        tiles = [
+            ("Final best vs ah", "–<small>awaiting validation</small>"),
+            ("Members", "–"),
+            ("From", "–"),
+            ("Validated on", "–"),
+        ]
+    design = (
+        f"The sweep: {len(points)} design points × {sweep['n_episodes']} episodes,"
+        f" median point {points.pool.median():.1f}."
     )
-    refs = reference_html(best.pool)
-    if refs:
-        st.markdown(refs, unsafe_allow_html=True)
-    chips = "".join(
-        f'<span class="chip">{esc(k)} <b>{v:g}</b></span>'
-        for k, v in sweep["best"].items()
+    out = [("html", stats_html(tiles))]
+    if final:
+        refs = reference_html(final["pool"])
+        if refs:
+            out += [("section", "Reference"), ("html", refs)]
+        chips = "".join(
+            f'<span class="chip">{esc(k)} <b>{v:g}</b></span>'
+            for k, v in final["params"].items()
+        )
+        out.append(
+            (
+                "html",
+                f'<div class="chips"><span class="eyebrow">Final best</span>{chips}</div>',
+            )
+        )
+        folder = f["folder"] / VALIDATE
+        plots = [(folder / p, c) for p, c in BEST_PLOTS.items() if (folder / p).exists()]
+        if plots:
+            out += [("section", "Final best"), ("html", figures_html(plots))]
+        out += [
+            ("section", "Validation"),
+            ("caption", VALIDATE_CAPTION.format(episodes=validate["n_episodes"])),
+            ("html", validation_html(validate, sweep, land)),
+        ]
+    else:
+        out += [
+            ("section", "Validation"),
+            ("empty", "The final best shows once the validation sim is done."),
+        ]
+    out.append(("section", "Landscape"))
+    if land:
+        out += [("caption", f"{design} {LANDSCAPE_CAPTION}"), ("landscape", (points, land, final))]
+    else:
+        out.append(("empty", "The landscape shows once the Gaussian process is fitted."))
+    params = [n for n in sweep["points"][0]["params"]]
+    out += [
+        ("section", "Top 10 measured"),
+        (
+            "caption",
+            f"{design} Its own ranking, one estimate of {sweep['n_episodes']}"
+            " episodes per point: its top reads high by luck."
+            + (" gp: the fitted pool at the point." if land else ""),
+        ),
+        ("html", top10_html(points, params)),
+    ]
+    return out
+
+
+def show_sweep(wt: Path, name: str):
+    zero = zero_pool()
+    for kind, content in sweep_blocks(wt, name, zero):
+        if kind == "section":
+            st.markdown(f'<div class="section">{esc(content)}</div>', unsafe_allow_html=True)
+        elif kind == "caption":
+            st.caption(content)
+        elif kind == "empty":
+            empty(content)
+        elif kind == "landscape":
+            points, land, final = content
+            # one chart, fixed-width panels; its box scrolls sideways (dashboard.css)
+            with st.container(key="landscape"):
+                st.altair_chart(landscape_row(points, land, final, zero), theme=None)
+        else:
+            st.html(content)
+
+
+def validation_html(validate: dict, sweep: dict, land) -> str:
+    """The validation's points, best first: pool, before, where from."""
+    measured = {p["name"]: p["pool"] for p in sweep["points"]}
+    predicted = land["peak"]["mean"] if land else None
+    rows = []
+    for p in sorted(validate["points"], key=lambda p: p["pool"], reverse=True):
+        before = measured.get(p["name"], predicted)
+        rows.append(
+            "<tr>"
+            f"<td>{esc(p['name'])}</td><td>{esc(point_source(p['name']))}</td>"
+            f"<td>{p['pool']:.1f}</td><td>{p['pool_se']:.1f}</td>"
+            f"<td>{'' if before is None else f'{before:.1f}'}</td>"
+            f"<td>{p['members']:.2f}</td></tr>"
+        )
+    head = "".join(
+        f"<th>{h}</th>"
+        for h in ("point", "from", "pool", "pool_se", "before", "members")
     )
-    st.markdown(
-        f'<div class="chips"><span class="eyebrow">Best</span>{chips}</div>',
-        unsafe_allow_html=True,
+    return (
+        f'<div class="table"><table><thead><tr>{head}</tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table></div>'
     )
-    plots = [(folder / f, c) for f, c in BEST_PLOTS.items() if (folder / f).exists()]
-    if plots:
-        st.markdown('<div class="section">Best point</div>', unsafe_allow_html=True)
-        st.html(figures_html(plots))
-    params = list(sweep["best"])
-    st.markdown('<div class="section">Landscape</div>', unsafe_allow_html=True)
-    st.caption(
-        "Each dot is a design point. Ink: the best; clay: the top 10; "
-        "dashed: never punishing against ah."
-    )
-    # one chart, fixed-width panels; its box scrolls sideways (dashboard.css)
-    with st.container(key="landscape"):
-        st.altair_chart(landscape_row(points, params, zero), theme=None)
-    st.markdown('<div class="section">Top 10</div>', unsafe_allow_html=True)
-    st.html(top10_html(points, params))
 
 
 def figures_html(plots: list) -> str:
@@ -615,8 +770,9 @@ def figures_html(plots: list) -> str:
 
 
 def top10_html(points: pd.DataFrame, params: list) -> str:
-    """The sweep's ten best points, in the reports' table style."""
-    cols = ["name", *params, "pool", "pool_se", "members"]
+    """The sweep's ten best measured points, in the reports' table style."""
+    cols = ["name", *params, "pool", "pool_se", *(["gp"] if "gp" in points else []),
+            "members"]
     head = "".join(f"<th>{esc(c)}</th>" for c in cols)
     rows = "".join(
         "<tr>"
@@ -669,21 +825,20 @@ def show_instance(wt: Path, key: str):
 
 
 def counts_html(found: list) -> str:
-    """One line of totals for the overview: instances, sweeps, best so far."""
+    """One line of totals for the overview: instances, validated, final best."""
     bests = []
     for wt in found:
-        path = wt / SWEEP_DIR.format(name=wt.name) / "sweep.json"
-        try:
-            sweep = json.loads(path.read_text())
-        except (OSError, ValueError):
-            continue
-        best = max(sweep["points"], key=lambda p: p["pool"])
-        bests.append((best["pool"], best.get("pool_se") or 0, wt.name))
-    line = [f"<span><b>{len(found)}</b>instances</span>", f"<span><b>{len(bests)}</b>swept</span>"]
+        best = final_best(read_json(wt / SWEEP_DIR.format(name=wt.name) / VALIDATE / "sweep.json"))
+        if best:
+            bests.append((best["pool"], best["pool_se"], wt.name))
+    line = [
+        f"<span><b>{len(found)}</b>instances</span>",
+        f"<span><b>{len(bests)}</b>validated</span>",
+    ]
     if bests:
         pool, se, name = max(bests)
         line.append(
-            f"<span><b>{pool:.1f}</b>best pool so far, ± {se:.1f}, {esc(name)}</span>"
+            f"<span><b>{pool:.1f}</b>final best so far, ± {se:.1f}, {esc(name)}</span>"
         )
     return f'<div class="ov-counts">{"".join(line)}</div>'
 
@@ -763,22 +918,19 @@ def summary_frame(found: list, keys: dict) -> pd.DataFrame:
                 )
             else:  # new, or the rule changed since it was summarized
                 row.update(bar=NOT_SUMMARIZED, mechanisms=[], idea="")
-        try:
-            sweep = json.loads((wt / SWEEP_DIR.format(name=name) / "sweep.json").read_text())
-        except (OSError, ValueError):
-            sweep = None
-        if sweep:
-            pools = pd.Series([p["pool"] for p in sweep["points"]])
-            best = max(sweep["points"], key=lambda p: p["pool"])
-            se = best.get("pool_se") or 0
+        files = sweep_files(wt, name)
+        row["stage"] = (
+            "validated" if files["validate"] else "validating" if files["sweep"]
+            else "not swept"
+        )
+        best = final_best(files["validate"])
+        if best:  # only a validated best: a sweep's own best reads high
             row.update(
                 {
                     "best pool": best["pool"],
-                    "se": se,
-                    "members": best.get("members"),
-                    "median point": float(pools.median()),
-                    "within 2 se": int((pools >= best["pool"] - 2 * se).sum()),
-                    "points": len(pools),
+                    "se": best["pool_se"],
+                    "members": best["members"],
+                    "from": point_source(best["name"]),
                 }
             )
         notes = read(wt / "notes/policy_finder" / f"{name}.md")
@@ -798,7 +950,8 @@ def summary_frame(found: list, keys: dict) -> pd.DataFrame:
 
 
 def pool_chart(frame: pd.DataFrame, refs: list):
-    """Each agent's best pool ± se against ah, the references as dashed lines."""
+    """Each agent's final best pool ± se against ah, the references as dashed
+    lines."""
     data = frame.dropna(subset=["best pool"]).assign(
         lo=lambda f: f["best pool"] - f["se"], hi=lambda f: f["best pool"] + f["se"]
     )
@@ -817,7 +970,7 @@ def pool_chart(frame: pd.DataFrame, refs: list):
             x=alt.X(
                 "lo:Q",
                 scale=scale,
-                title="best pool vs ah",
+                title="final best pool vs ah",
                 axis=alt.Axis(format="d", tickMinStep=1),
             ),
             x2="hi:Q",
@@ -833,7 +986,8 @@ def pool_chart(frame: pd.DataFrame, refs: list):
             y=y,
             tooltip=[
                 alt.Tooltip("name:N", title="agent"),
-                alt.Tooltip("best pool:Q", title="best pool vs ah", format=".1f"),
+                alt.Tooltip("best pool:Q", title="final best vs ah", format=".1f"),
+                alt.Tooltip("from:N", title="from"),
                 alt.Tooltip("se:Q", title="± se", format=".1f"),
                 alt.Tooltip("members:Q", title="members", format=".2f"),
             ],
@@ -931,22 +1085,23 @@ def mechanism_counts(frame: pd.DataFrame) -> list:
 
 
 def summary_stats(frame: pd.DataFrame) -> list:
-    swept = frame.dropna(subset=["best pool"])
-    if swept.empty:
-        return [("Instances", f"{len(frame)}"), ("Swept", "0")]
-    top = swept.iloc[0]
-    return [
-        ("Instances", f"{len(frame)}"),
-        ("Swept", f"{len(swept)}"),
-        ("Best pool", f"{top['best pool']:.1f}<small>{esc(top['name'])}</small>"),
-        ("Median of the bests", f"{swept['best pool'].median():.1f}"),
+    validated = frame.dropna(subset=["best pool"])
+    swept = int((frame["stage"] != "not swept").sum()) if "stage" in frame else 0
+    tiles = [("Instances", f"{len(frame)}"), ("Swept", f"{swept}")]
+    if validated.empty:
+        return tiles + [("Validated", "0")]
+    top = validated.iloc[0]
+    return tiles + [
+        ("Validated", f"{len(validated)}"),
+        ("Final best", f"{top['best pool']:.1f}<small>{esc(top['name'])}</small>"),
     ]
 
 
 SUMMARY_CAPTION = (
-    "Each agent's best design point against ah, ± its standard error over 500"
-    " episodes. Dashed: the references, on 1000 episodes. A best point is the top"
-    " of a noisy sweep, so it reads high by luck."
+    "Each agent's final best against ah: the top of its validation sim, which"
+    " reruns the Gaussian process's peak and the sweep's best points on fresh"
+    " seeds at 2000 episodes each, ± its standard error. Dashed: the references,"
+    " under the same conditions. An agent shows once its validation is done."
 )
 #: The colour key under the pool chart: who each kind of rule punishes
 def reference_chips(refs: dict) -> str:
@@ -987,7 +1142,7 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
     rows = []
     for _, r in frame.iterrows():
         pool = r.get("best pool")
-        if pool == pool:  # swept
+        if pool == pool:  # validated
             width = 100 * (pool - lo) / (hi - lo)
             cell = (
                 f'<div class="poolcell"><span class="pbar"><i style="width:{width:.0f}%">'
@@ -995,7 +1150,7 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
                 f'<span class="se">± {r["se"]:.1f}</span></div>'
             )
         else:
-            cell = '<span class="se">not swept</span>'
+            cell = f'<span class="se">{esc(r.get("stage", "not swept"))}</span>'
         mechs = r.get("mechanisms")
         tags = "".join(
             f'<span class="chip">{esc(m)}</span>'
@@ -1004,19 +1159,27 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
         bar = r.get("bar") if isinstance(r.get("bar"), str) else ""
         name = esc(r["name"])
         idea = r.get("idea") if isinstance(r.get("idea"), str) else ""
+        # every cell carries its own link over itself: a link stretched over
+        # the row would size to the table (a row is no containing block), and
+        # the last row's would cover every other
+        hit = (
+            f'<a class="hit" href="?agent={name}" target="_self" tabindex="-1"'
+            ' aria-hidden="true"></a>'
+        )
         rows.append(
-            f'<tr data-open="{name}"><td class="name">'
+            f'<tr data-open="{name}"><td class="name">{hit}'
             f'<a class="open" href="?agent={name}" target="_self">{name}</a>'
             + (f'<div class="idea">{esc(idea)}</div>' if idea else "")
             + "</td>"
-            f'<td class="txt">{cell}</td><td>{num(r, "members", ".2f")}</td>'
-            f'<td>{num(r, "within 2 se", ".0f")}</td><td>{num(r, "params", ".0f")}</td>'
-            f'<td class="txt">{esc(bar)}</td><td class="txt tags">{tags}</td></tr>'
+            f'<td class="txt">{hit}{cell}</td><td>{hit}{num(r, "members", ".2f")}</td>'
+            f'<td class="txt">{hit}{esc(r["from"]) if isinstance(r.get("from"), str) else ""}</td>'
+            f'<td>{hit}{num(r, "params", ".0f")}</td>'
+            f'<td class="txt">{hit}{esc(bar)}</td><td class="txt tags">{hit}{tags}</td></tr>'
         )
-    heads = ("agent", "best pool", "members", "within 2 se", "params", "punishes below",
+    heads = ("agent", "final best", "members", "from", "params", "punishes below",
              "mechanisms")
     head = "".join(
-        f'<th class="{"txt" if h in ("agent", "best pool", "punishes below", "mechanisms") else ""}">'
+        f'<th class="{"txt" if h in ("agent", "final best", "from", "punishes below", "mechanisms") else ""}">'
         f"{h}</th>"
         for h in heads
     )
@@ -1048,7 +1211,7 @@ def show_summary(found: list):
     shown = frame.head(SUMMARY_TOP)
     stats(summary_stats(frame))
     if shown["best pool"].notna().any():
-        st.markdown('<div class="section">Best pool against ah</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section">Final best against ah</div>', unsafe_allow_html=True)
         st.caption(" ".join(filter(None, [SUMMARY_CAPTION, top_note(frame)])))
         ref_rows = [(r["name"], r["pool"]) for r in refs.get("rows", [])]
         # theme=None: the chart's own axis styling, not Streamlit's
