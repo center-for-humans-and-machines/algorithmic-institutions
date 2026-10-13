@@ -5,6 +5,7 @@ of the real TEMPLATE, so rule paths resolve as they do in the repo.
 """
 
 import importlib.util
+import json
 import shutil
 import sys
 from pathlib import Path
@@ -144,4 +145,63 @@ def test_main_writes_parts(repo, monkeypatch):
     assert written == ["toy_sweep_p1of2.yml", "toy_sweep_p2of2.yml"]
     monkeypatch.setattr(sys, "argv", argv + ["--out", str(repo / "x.yml")])
     with pytest.raises(SystemExit, match="one config"):
+        gen.main()
+
+
+def _sweep(repo):
+    """A swept toy rule: sweep.json and landscapes.json in its sweep dir."""
+    points = [
+        {"name": f"toy_s{i:03d}", "params": {"c0": i, "p": 0.5}, "pool": float(p)}
+        for i, p in enumerate([60, 72, 65, 70, 61, 68, 71, 64])
+    ]
+    sweep_dir = repo / gen.OUTPUT_DIR / "toy_sweep"
+    sweep_dir.mkdir(parents=True)
+    sweep = {"rule": "configs/managers/rule_based/toy.yml", "points": points}
+    (sweep_dir / "sweep.json").write_text(json.dumps(sweep))
+    peak = {"c0": 12, "p": 1.25}
+    (sweep_dir / "landscapes.json").write_text(json.dumps({"peak": {"params": peak}}))
+    return sweep_dir / "sweep.json", sweep, peak
+
+
+def test_validation_points(repo):
+    _, sweep, peak = _sweep(repo)
+    points = gen.validation_points(sweep, {"peak": {"params": peak}}, top=3)
+    assert points == [
+        ("toy_gp", peak),
+        ("toy_s001", {"c0": 1, "p": 0.5}),
+        ("toy_s006", {"c0": 6, "p": 0.5}),
+        ("toy_s003", {"c0": 3, "p": 0.5}),
+    ]
+    # a peak on a measured point runs once, as the peak
+    on_point = gen.validation_points(sweep, {"peak": {"params": {"c0": 1, "p": 0.5}}})
+    assert [n for n, _ in on_point] == ["toy_gp"] + [
+        f"toy_s{i:03d}" for i in (6, 3, 5, 2)
+    ]
+
+
+def test_main_writes_the_validation(repo, monkeypatch, capsys):
+    sweep_file, _, peak = _sweep(repo)
+    monkeypatch.setattr(
+        sys, "argv", ["gen", "--validate", str(sweep_file), "--top", "2"]
+    )
+    gen.main()
+    out = repo / gen.CONFIG_DIR / "toy_sweep_validate.yml"
+    assert "3 points x 2000 episodes" in capsys.readouterr().out
+    config = yaml.safe_load(out.read_text())
+    assert list(config["managers"]) == ["ah", "toy_gp", "toy_s001", "toy_s006"]
+    assert config["managers"]["toy_gp"]["params"] == peak
+    assert config["managers"]["toy_gp"]["rule"] == "configs/managers/rule_based/toy.yml"
+    assert config["seed"] == gen.VALIDATE_SEED
+    assert config["n_episodes"] == gen.VALIDATE_EPISODES
+    assert config["output_dir"] == str(gen.OUTPUT_DIR / "toy_sweep/validate")
+    assert config["sweep"] is True
+    for name in ("toy_gp", "toy_s001"):  # loads like any rule-based manager
+        load_rule(config["managers"][name]["rule"], config["managers"][name]["params"])
+
+
+def test_validation_needs_the_fit(repo, monkeypatch):
+    sweep_file, _, _ = _sweep(repo)
+    sweep_file.with_name("landscapes.json").unlink()
+    monkeypatch.setattr(sys, "argv", ["gen", "--validate", str(sweep_file)])
+    with pytest.raises(SystemExit, match="fit the sweep first"):
         gen.main()

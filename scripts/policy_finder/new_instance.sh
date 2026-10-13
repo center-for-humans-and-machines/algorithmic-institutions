@@ -16,7 +16,8 @@
 # (default: design your rule) and saves the agent's final report to
 # ../policy-finder-worktrees/<name>.report.md, outside the worktree; then
 # checks and commits the instance (check_instance.sh --commit), runs its
-# sweep on Raven (run_sweep.sh, #241) and updates the observation app's
+# sweep on Raven (run_sweep.sh, #241; with its Gaussian process fit and
+# validation sim, #238) and updates the observation app's
 # Summary with a headless /policy-finder-summarizer (its report in
 # ../policy-finder-worktrees/<name>.summary.md).
 # The rule declares between --min-params (default 1) and --max-params

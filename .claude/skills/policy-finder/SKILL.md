@@ -30,19 +30,29 @@ $ARGUMENTS
    ```
 
    It runs the agent, then `check_instance.sh <name> --commit`, then
-   `run_sweep.sh <name>`, which commits the sweep on `policy-finder/<name>`,
-   then a headless `/policy-finder-summarizer`, which places the rule in the
+   `run_sweep.sh <name>`, which commits the sweep on `policy-finder/<name>`
+   with its Gaussian process fit (`landscapes.json`), then runs and commits
+   the validation sim (`run_validate.sh`), then a headless `/policy-finder-summarizer`, which places the rule in the
    observation app's Summary (`../policy-finder-worktrees/<name>.summary.md`).
    Do not read the instance's files or its report while it runs, and never
    pass it anything about existing or earlier rules: the agent must find its
    own. Nothing of the instance is copied into this checkout.
 4. **On failure**, stop and report: a check FAIL with its offending paths
    (no sweep runs), or the sweep step that failed. A sweep that failed after
-   a passing check can be rerun with `scripts/policy_finder/run_sweep.sh <name>`.
-5. **Report** from `../policy-finder-worktrees/<name>.report.md` and
-   `../policy-finder-worktrees/<name>/plots/simulation/policy_finder/<name>_sweep/sweep.json`:
-   the hypothesis, each parameter with its meaning and sweep range, the best
-   params and their pool against `ah` (± `pool_se`), and the branch
+   a passing check can be rerun with `scripts/policy_finder/run_sweep.sh <name>`,
+   a validation that failed after a committed sweep with
+   `scripts/policy_finder/run_validate.sh <name>`.
+5. **Report** from `../policy-finder-worktrees/<name>.report.md` and the
+   sweep dir
+   `../policy-finder-worktrees/<name>/plots/simulation/policy_finder/<name>_sweep/`:
+   the hypothesis, each parameter with its meaning and sweep range; from
+   `landscapes.json`, how much each param moves the pool (`effect`) and the
+   params whose peak sits on the edge of their range (`at_edge`); the rule's
+   **final best** from `validate/sweep.json` only: its params, pool against
+   `ah` (± `pool_se`) and which point it was (`<name>_gp`, the Gaussian
+   process's peak, or a measured `<name>_s<index>`). The sweep's own `best`
+   is the top of noisy estimates and reads high: never report it as the
+   result. Then the branch
    `policy-finder/<name>`; and from `<name>.summary.md`, the categories the
    rule was placed in (or that the summary failed: then run
    `/policy-finder-summarizer`). The observation app shows the rest.
