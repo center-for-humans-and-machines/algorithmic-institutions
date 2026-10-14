@@ -1,9 +1,39 @@
 from torch.nn import Sequential as Seq, Linear as Lin, Tanh, GRU
 import numpy as np
 import torch as th
-from torch_scatter import scatter_mean
+from torch_scatter import scatter_mean, scatter_add
 from torch_geometric.nn import MetaLayer
 from aimanager.generic.encoder import Encoder, IntEncoder
+
+
+def gauss_hermite_normal(n, device=None, dtype=th.float):
+    """Nodes and log-weights of an ``n``-point Gauss-Hermite rule for N(0, 1).
+
+    ``numpy.polynomial.hermite.hermgauss`` integrates against ``exp(-x^2)``;
+    the substitution ``z = sqrt(2) * x`` turns the rule into an expectation
+    under the standard normal, with weights ``w / sqrt(pi)`` summing to one.
+    Returned as ``(nodes, log_weights)`` so callers can log-sum-exp directly.
+    """
+    x, w = np.polynomial.hermite.hermgauss(int(n))
+    nodes = th.tensor(x * np.sqrt(2.0), dtype=dtype, device=device)
+    log_weights = th.tensor(np.log(w / np.sqrt(np.pi)), dtype=dtype, device=device)
+    return nodes, log_weights
+
+
+def group_latent_loading_init(y_levels, scale):
+    """Initial loading vector ``v``: a level ramp of magnitude ``scale``.
+
+    Two degeneracies dictate the shape. A constant vector is invisible to the
+    softmax, so the all-ones direction carries exactly zero gradient. And at
+    ``v == 0`` the quadrature nodes are symmetric about zero, so the marginal
+    likelihood's gradient vanishes identically (``sum_k w_k z_k == 0``) and
+    training would never leave the origin. The ramp breaks the constant
+    symmetry and starts ``z`` off as a pure location shift of the contribution
+    distribution, which is the mechanism under test; the MLE is free to move it
+    anywhere afterwards, including back to zero.
+    """
+    ramp = th.linspace(-1.0, 1.0, int(y_levels), dtype=th.float)
+    return th.nn.Parameter(ramp * float(scale))
 
 
 class EdgeModel(th.nn.Module):
@@ -132,6 +162,7 @@ class GraphNetwork(th.nn.Module):
         rnn_g=None,
         bias=None,
         b_encoding=None,
+        group_latent_loading=None,
         *,
         y_levels=21,
         y_name="contribution",
@@ -144,6 +175,7 @@ class GraphNetwork(th.nn.Module):
         add_global_model=True,
         hidden_size=None,
         default_values={},
+        group_latent=None,
         **_,
     ):
         super().__init__()
@@ -167,6 +199,41 @@ class GraphNetwork(th.nn.Module):
         self.y_levels = y_levels
         self.y_name = y_name
         self.autoregressive = autoregressive
+
+        # Shared per-(group, episode) latent. `z` is a scalar drawn from N(0, 1)
+        # once per group slot per episode and held for the whole episode; it
+        # enters *only* at the emission logits, as `logits += z * v` with `v` a
+        # learned vector over the y levels (pathway `logit_skip`). Because
+        # nothing in the data feeds z, it is integrated out at training time by
+        # Gauss-Hermite quadrature (see `group_latent_nll`) and drawn from the
+        # prior at simulation time (see `predict_independent`). Absent config —
+        # every legacy artifact — leaves `group_latent` None: no parameter, no
+        # state-dict entry, no touched code path, so logits are bit-identical.
+        self.group_latent = group_latent
+        if group_latent is not None:
+            dim = int(group_latent.get("dim", 1))
+            pathway = group_latent.get("pathway", "logit_skip")
+            assert dim == 1, f"group_latent dim must be 1, got {dim}"
+            assert (
+                pathway == "logit_skip"
+            ), f"group_latent pathway must be 'logit_skip', got {pathway!r}"
+            assert (
+                not autoregressive
+            ), "group_latent is not wired into the autoregressive sampler"
+            self.n_latent_groups = int(group_latent.get("n_groups", 2))
+            self.n_quadrature = int(group_latent.get("n_quadrature", 20))
+            if group_latent_loading is None:
+                group_latent_loading = group_latent_loading_init(
+                    y_levels, group_latent.get("loading_init", 0.1)
+                )
+            self.group_latent_loading = group_latent_loading
+        else:
+            self.n_latent_groups = 0
+            self.n_quadrature = 0
+            self.group_latent_loading = None
+        # Simulation-time prior draw, held for the duration of one episode.
+        # A plain attribute (never a buffer/parameter) so save() cannot see it.
+        self._group_z_cache = None
 
         if op1 is None:
             if add_edge_model:
@@ -283,6 +350,14 @@ class GraphNetwork(th.nn.Module):
         x, _, _ = self.op2(x, edge_index, op2_edge_attr, u, batch)
         if self.bias:
             x = x + self.bias(data["b"])
+        if self.group_latent is not None:
+            # z: (N, n_rounds) or anything broadcastable to it -- the latent
+            # value of each node's *current* group. Absent z means "no latent
+            # push", which keeps teacher-forced callers (eval_model, confusion
+            # matrices) on the base conditional.
+            z = data.get("z")
+            if z is not None:
+                x = x + z.unsqueeze(-1) * self.group_latent_loading
         return x
 
     def encode(
@@ -334,6 +409,76 @@ class GraphNetwork(th.nn.Module):
         )
         return encoded
 
+    def group_latent_cells(self, agent_group, device=None):
+        """One latent cell id per (episode, group), laid out like the logits.
+
+        Returns an int64 tensor of shape ``(n_batch * n_nodes, n_rounds)`` --
+        the row order ``encode`` produces -- so it indexes the forward output
+        directly. ``agent_group`` is time-varying: z is attached to the group
+        *slot*, so an agent that switches groups moves into the other slot's
+        cell from that round on.
+        """
+        device = self.device if device is None else device
+        ag = agent_group.to(device)
+        assert int(ag.max().item()) < self.n_latent_groups, (
+            f"agent_group exceeds group_latent n_groups="
+            f"{self.n_latent_groups}; latent cells would collide"
+        )
+        episode = th.arange(ag.shape[0], device=ag.device).view(-1, 1, 1)
+        return (episode * self.n_latent_groups + ag).flatten(0, 1)
+
+    def group_latent_gather(self, agent_group, z, device=None):
+        """Per-node, per-round latent value from a per-(episode, group) draw.
+
+        ``z``: ``(n_batch, n_groups)``. Returns ``(n_batch * n_nodes,
+        n_rounds)``, ready to be put into the forward dict as ``"z"``.
+        """
+        device = self.device if device is None else device
+        ag = agent_group.to(device)
+        z = z.to(device).unsqueeze(1).expand(-1, ag.shape[1], -1)
+        return z.gather(2, ag).flatten(0, 1)
+
+    def sample_group_latent(self, n_batch, device=None):
+        """Prior draw of one z per (episode, group). Uses the global torch RNG,
+        so simulations inherit the seed set by the sim entry point."""
+        device = self.device if device is None else device
+        return th.randn((n_batch, self.n_latent_groups), device=device)
+
+    def group_latent_nll(self, data, cells, nodes, log_weights):
+        """Mean per-observation negative marginal log-likelihood.
+
+        For every latent cell ``c`` (one (episode, group) pair) the trajectory
+        likelihood is the prior-weighted average of the conditional likelihood
+        at the quadrature nodes::
+
+            log p(cell) = logsumexp_k [ log w_k + sum_{i,t in c} log p(y|z_k) ]
+
+        Conditional on the observed (teacher-forced) history the observations
+        are independent given z, and each one depends on exactly one cell's z,
+        so the episode likelihood factorises over cells.
+
+        Only **one** forward pass is needed regardless of ``len(nodes)``: z
+        enters at the logits, so the quadrature variants are logit shifts of
+        the same base logits. Masked-out observations get weight zero; empty
+        cells contribute ``logsumexp(log w) == 0``.
+
+        Passing a single node at 0.0 with log-weight 0.0 recovers the plain
+        (non-marginal) likelihood of the base model.
+        """
+        y_logit = self(data)  # (N, T, L)
+        v = self.group_latent_loading
+        shifted = y_logit.unsqueeze(0) + nodes.view(-1, 1, 1, 1) * v
+        logp = th.log_softmax(shifted, dim=-1)  # (K, N, T, L)
+        y_true = data["y_enc"].flatten(0, 1)  # (N, T, L)
+        mask = data["mask"]  # (N, T)
+        obs = (logp * y_true).sum(-1) * mask  # (K, N, T)
+        n_cells = int(cells.max().item()) + 1
+        per_cell = scatter_add(
+            obs.flatten(1), cells.reshape(-1), dim=1, dim_size=n_cells
+        )
+        total = th.logsumexp(log_weights.view(-1, 1) + per_cell, dim=0)
+        return -total.sum() / mask.sum()
+
     def predict_encoded(self, data, sample=True, reset_rnn=True):
         self.eval()
         y_logit = self(data, reset_rnn)
@@ -348,6 +493,25 @@ class GraphNetwork(th.nn.Module):
         encoded = self.encode(
             data, y_encode=False, edge_index=edge_index, device=self.device
         )
+        if self.group_latent is not None:
+            # encode() does not carry z, so a caller-supplied one passes through
+            # untouched. Otherwise (the free-running simulation case) z comes
+            # from the prior: one draw per (group, episode), taken at the
+            # episode boundary -- reset_rnn, which the environment sets at
+            # round 0 -- and reused for every later round of that episode.
+            z = data.get("z")
+            if z is None:
+                assert "agent_group" in data, "group_latent needs agent_group"
+                if (
+                    reset_rnn
+                    or self._group_z_cache is None
+                    or self._group_z_cache.shape[0] != n_batch
+                ):
+                    self._group_z_cache = self.sample_group_latent(n_batch)
+                z = self.group_latent_gather(
+                    data["agent_group"], self._group_z_cache, device=self.device
+                )
+            encoded["z"] = z
         predict = self.predict_encoded(encoded, sample=sample, reset_rnn=reset_rnn)
         predict = tuple(t.reshape((n_batch, n_nodes, *t.shape[1:])) for t in predict)
         return predict
@@ -436,6 +600,11 @@ class GraphNetwork(th.nn.Module):
             "edge_encoding",
             "b_encoding",
             "default_values",
+            # Both keys are absent from every pre-latent checkpoint, where the
+            # __init__ defaults (group_latent=None -> no loading parameter)
+            # restore exactly the old model.
+            "group_latent",
+            "group_latent_loading",
         ]
         th.save({k: getattr(self, k) for k in to_save}, filename)
 

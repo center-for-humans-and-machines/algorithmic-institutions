@@ -13,6 +13,7 @@ from aimanager.artificial_humans.evaluation import (
     Recorder,
     create_confusion_matrix,
 )
+from aimanager.generic.graph import gauss_hermite_normal
 from aimanager.utils.utils import make_dir
 from itertools import permutations
 from tqdm import tqdm
@@ -68,6 +69,54 @@ def apply_mask_pattern(data, mask_pattern, y_name, mask_name, default_values):
         th.ones_like(data[mask_name]) & mask_pattern[:, :, np.newaxis]
     )
     return data
+
+
+def init_from_artifact(model, path, device):
+    """Copy the base weights of a finished artifact into ``model``.
+
+    Used to start a group-latent run from the reference contributor. The
+    architecture is unchanged by the latent (z enters at the logits), so the
+    only key the artifact cannot supply is the loading vector itself.
+    """
+    donor = type(model).load(path, device=device)
+    missing, unexpected = model.load_state_dict(donor.state_dict(), strict=False)
+    assert not unexpected, f"unexpected keys in {path}: {unexpected}"
+    assert set(missing) <= {"group_latent_loading"}, f"missing base weights: {missing}"
+    return model
+
+
+def group_latent_report(
+    model,
+    data,
+    pattern,
+    *,
+    y_name,
+    mask_name,
+    default_values,
+    edge_index,
+    device,
+    nodes,
+    log_weights,
+):
+    """Held-out marginal vs plain negative log-likelihood, per observation.
+
+    The gate on this experiment is exactly this comparison: the marginal
+    (z integrated out) has to beat the frozen base's plain likelihood, or the
+    latent is not carrying a persistent shared factor.
+    """
+    _d = apply_mask_pattern(data, pattern, y_name, mask_name, default_values)
+    cells = model.group_latent_cells(_d["agent_group"], device=device)
+    encoded = model.encode(_d, mask=mask_name, edge_index=edge_index, device=device)
+    was_training = model.training
+    model.eval()
+    zero = th.zeros(1, device=device)
+    with th.no_grad():
+        marginal = model.group_latent_nll(encoded, cells, nodes, log_weights).item()
+        # A single node at z = 0 with log-weight 0 is the plain likelihood.
+        plain = model.group_latent_nll(encoded, cells, zero, zero).item()
+    if was_training:
+        model.train()
+    return marginal, plain
 
 
 def create_fully_connected(
@@ -203,7 +252,34 @@ def main(config):
             )
         y_name = model_args["y_name"]
 
-        optimizer = th.optim.Adam(model.parameters(), **optimizer_args)
+        # Optional shared per-(group, episode) latent. Absent config leaves
+        # every line below inert and the training step byte-identical.
+        use_group_latent = getattr(model, "group_latent", None) is not None
+        quad_nodes = quad_log_w = None
+        if use_group_latent:
+            assert train_args["l1_entropy"] == 0, (
+                "l1_entropy is defined on a single conditional, not on a "
+                "marginalised mixture; set it to 0 for group_latent runs"
+            )
+            quad_nodes, quad_log_w = gauss_hermite_normal(
+                model.n_quadrature, device=th_device
+            )
+            init_artifact = train_args.get("init_artifact")
+            if init_artifact is not None:
+                init_from_artifact(
+                    model, os.path.join(basedir, init_artifact), th_device
+                )
+            if train_args.get("freeze_base"):
+                # Phase A: only the loading vector learns. The base logits then
+                # carry no grad, so the single forward pass per batch is also
+                # the whole backward graph.
+                for name, param in model.named_parameters():
+                    param.requires_grad = name == "group_latent_loading"
+
+        params = model.parameters()
+        if use_group_latent and train_args.get("freeze_base"):
+            params = [p for p in model.parameters() if p.requires_grad]
+        optimizer = th.optim.Adam(params, **optimizer_args)
         loss_fn = th.nn.CrossEntropyLoss(reduction="none")
         sum_loss = 0
         n_steps = 0
@@ -234,22 +310,32 @@ def main(config):
                     device=th_device,
                 )
 
-                y_logit = model(batch_data).flatten(end_dim=-2)
-                y_pred = y_logit.softmax(-1)
-                y_true = batch_data["y_enc"].flatten(end_dim=-2)
-                mask = batch_data["mask"].flatten()
+                if use_group_latent:
+                    cells = model.group_latent_cells(
+                        b_data["agent_group"], device=th_device
+                    )
+                    loss = model.group_latent_nll(
+                        batch_data, cells, quad_nodes, quad_log_w
+                    )
+                else:
+                    y_logit = model(batch_data).flatten(end_dim=-2)
+                    y_pred = y_logit.softmax(-1)
+                    y_true = batch_data["y_enc"].flatten(end_dim=-2)
+                    mask = batch_data["mask"].flatten()
 
-                loss = (
-                    loss_fn(y_logit, y_true)
-                    + (y_pred * y_pred.log()).sum(-1) * train_args["l1_entropy"]
-                )
+                    loss = (
+                        loss_fn(y_logit, y_true)
+                        + (y_pred * y_pred.log()).sum(-1) * train_args["l1_entropy"]
+                    )
 
-                loss = (loss * mask).sum() / mask.sum()
+                    loss = (loss * mask).sum() / mask.sum()
 
                 loss.backward(retain_graph=True)
 
                 if train_args.get("clamp_grad"):
                     for param in model.parameters():
+                        if param.grad is None:
+                            continue
                         param.grad.data.clamp_(
                             -train_args["clamp_grad"], train_args["clamp_grad"]
                         )
@@ -262,6 +348,29 @@ def main(config):
             if (e % train_args["eval_period"] == 0) or last_epoch:
                 avg_loss = sum_loss / n_steps
                 rec.rec(value=avg_loss, set="train")
+
+                latent_log = {}
+                if use_group_latent:
+                    latent_log["loading_norm"] = (
+                        model.group_latent_loading.detach().norm().item()
+                    )
+                    if test_data is not None:
+                        marginal, plain = group_latent_report(
+                            model,
+                            test_data,
+                            test_mask_pattern[0][np.newaxis],
+                            y_name=y_name,
+                            mask_name=mask_name,
+                            default_values=default_values,
+                            edge_index=test_edge_index,
+                            device=th_device,
+                            nodes=quad_nodes,
+                            log_weights=quad_log_w,
+                        )
+                        latent_log["marginal_log_loss"] = marginal
+                        latent_log["plain_log_loss"] = plain
+                    for name, value in latent_log.items():
+                        rec.rec(value=value, name=name, set="test")
 
                 # evalute on training data for all possible mask patterns
                 for j, mask in enumerate(test_mask_pattern):
@@ -377,9 +486,16 @@ def main(config):
                         wandb_log[f"fold_{i}/test/log_loss"] = test_log_loss
                         for key, val in perturb_log_loss.items():
                             wandb_log[f"fold_{i}/test/log_loss__{key}"] = val
+                    for key, val in latent_log.items():
+                        wandb_log[f"fold_{i}/test/{key}"] = val
                     wandb.log(wandb_log)
 
                 postfix = {"loss": f"{avg_loss:.4f}"}
+                if "loading_norm" in latent_log:
+                    postfix["|v|"] = f"{latent_log['loading_norm']:.4f}"
+                if "marginal_log_loss" in latent_log:
+                    postfix["marg"] = f"{latent_log['marginal_log_loss']:.4f}"
+                    postfix["plain"] = f"{latent_log['plain_log_loss']:.4f}"
                 if test_log_loss is not None:
                     postfix["test_loss"] = f"{test_log_loss:.4f}"
                     if early_stopping_patience is not None:
