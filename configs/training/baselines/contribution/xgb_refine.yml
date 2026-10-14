@@ -1,0 +1,43 @@
+# Refinement sweep for the xgb contribution baseline: the first sweep
+# (xgb.yml -> data/baselines/contr_xgb.csv) put every top-10 cell at the grid
+# edge (max_depth 3, learning_rate 0.05, min_child_weight 30, reg_lambda 10),
+# so this sweep extends past that edge on the winning feature sets.
+
+data:
+  data_file: experiments/baseline/2group_8agent_50ep_bline_train.csv
+  experiment_names: [ah_group_switching]
+  target: contribution
+  target_type: categorical
+  model: xgb
+  categorical_levels: 21
+  mask: contribution_valid
+  exclude_flipped: True
+  switch_every: 4
+
+cv:
+  seed: 38381
+  n_folds: 4
+  output: data/baselines/contr_xgb_refine.csv
+
+setting:
+  n_estimators: 600
+  max_depth: [2, 3]
+  learning_rate: [0.02, 0.05]
+  min_child_weight: [30, 60, 120]
+  subsample: 0.8
+  reg_lambda: [10, 30]
+
+blocks:
+  B1_self:
+    components: [prev_contribution, prev_punishment, is_first]
+    sets: [[prev_contribution, prev_punishment, is_first]]
+
+  B2_context:
+    components: [prev_contribution_mean_group, prev_contribution_mean_other,
+                 prev_punishment_mean_group, prev_common_good,
+                 prev_group_size, prev_group_size_other, round_number]
+    sets:
+      - [prev_contribution_mean_group, prev_contribution_mean_other]
+      - [prev_contribution_mean_group, prev_contribution_mean_other,
+         prev_punishment_mean_group, prev_common_good, prev_group_size,
+         prev_group_size_other, round_number]
