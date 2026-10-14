@@ -143,14 +143,22 @@ def instances() -> list:
 
 
 def versions(instance: str) -> list:
-    """An instance's versions in order: its name, then <name>-v<k> by k."""
-    later = []
-    for rule in (WT_ROOT / instance / RULE.format(name="x")).parent.glob(
+    """An instance's versions in order: its name, then <name>-v<k> by k. A
+    version counts once it has a rule or once the launcher started it (its
+    instance file names it), so a version still being designed is listed."""
+    names = [r.stem for r in (WT_ROOT / instance / RULE.format(name="x")).parent.glob(
         f"{instance}-v*.yml"
-    ):
-        m = LATER.match(rule.stem)
+    )]
+    try:
+        config = json.loads((WT_ROOT / instance / ".claude/policy_finder.json").read_text())
+        names.append(config.get("rule_name") or instance)
+    except (OSError, ValueError):
+        pass
+    later = set()
+    for name in names:
+        m = LATER.match(name)
         if m and m["instance"] == instance:
-            later.append((int(m["k"]), rule.stem))
+            later.add((int(m["k"]), name))
     return [instance] + [v for _, v in sorted(later)]
 
 

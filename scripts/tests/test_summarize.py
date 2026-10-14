@@ -75,3 +75,14 @@ def test_each_version_is_recorded_on_its_own(summ, monkeypatch, capsys):
     assert entry["mechanisms"] == ["end game"]
     summ.status(summ.load())
     assert "2 to summarize" in capsys.readouterr().out
+
+
+def test_a_started_version_counts_before_its_rule(summ):
+    """The launcher names the new version in the instance file before the
+    agent writes its rule: it is listed, and not yet to summarize."""
+    wt = summ.WT_ROOT / "pf-1"
+    (wt / ".claude/policy_finder.json").write_text(
+        json.dumps({"name": "pf-1", "version": 11, "rule_name": "pf-1-v11"})
+    )
+    assert summ.versions("pf-1") == ["pf-1", "pf-1-v2", "pf-1-v10", "pf-1-v11"]
+    assert summ.rule_sha("pf-1-v11") is None
