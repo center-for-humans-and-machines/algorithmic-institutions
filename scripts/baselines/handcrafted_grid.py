@@ -24,6 +24,7 @@ import numpy as np
 import yaml
 
 ENDOWMENT = 20.0  # per-round private endowment (reports/basics.md)
+N_CONTRIBUTION_LEVELS = 21  # contribution levels 0..20 (reports/basics.md)
 
 
 # --------------------------------------------------------------------------- #
@@ -296,6 +297,15 @@ def build_feature_pool(d, switch_every):
 
     # ---------------- prev family (contribution target) ---------------- #
     f["prev_contribution"] = npd["prev_contribution"].astype(float)
+    # one-hot of the previous own level: gives a multinomial logit
+    # per-previous-level intercepts (a 21x21 transition structure), so it can
+    # express the human tendency to repeat the previous contribution exactly --
+    # which a scalar prev_contribution cannot. rint before the int cast so the
+    # sim's integer levels and the training tensors agree exactly.
+    lvl = np.clip(np.rint(f["prev_contribution"]), 0, N_CONTRIBUTION_LEVELS - 1)
+    lvl = lvl.astype(int)
+    for k in range(N_CONTRIBUTION_LEVELS):
+        f[f"prev_contribution_onehot_{k:02d}"] = (lvl == k).astype(float)
     f["prev_punishment"] = npd["prev_punishment"].astype(float)
     own_cg = npd["prev_common_good"].astype(float)  # own EXPERIENCED t-1 cg
     f["prev_payoff"] = _payoff(f["prev_contribution"], f["prev_punishment"], own_cg)

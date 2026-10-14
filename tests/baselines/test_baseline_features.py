@@ -41,9 +41,12 @@ ROOT = HERE.parents[1]  # tests/baselines -> repo root
 DATA = HERE / "fixtures"
 RAW = ROOT / "experiments/2group_8agent_50ep.csv"
 TARGET, EPISODE_ID, EXPERIMENT, SWITCH_EVERY = 6, 70, "ah_group_switching", 4
+N_CONTRIBUTION_LEVELS = 21  # contribution levels 0..20 (reports/basics.md)
 
 # prev family (contribution target)
 B1 = ["prev_contribution", "prev_punishment", "prev_payoff"]
+# one-hot of the previous own level: rint-then-clip of prev_contribution
+B1_ONEHOT = [f"prev_contribution_onehot_{k:02d}" for k in range(N_CONTRIBUTION_LEVELS)]
 B2 = [
     "prev_contribution_mean_group",
     "prev_punishment_mean_group",
@@ -119,7 +122,7 @@ C6 = [
 # structural (shared)
 B7 = ["round_number", "rounds_since_switch", "switched_last_choice", "is_first"]
 
-PREV_FAMILY = B1 + B2 + B3 + B4 + B5 + B6
+PREV_FAMILY = B1 + B1_ONEHOT + B2 + B3 + B4 + B5 + B6
 CUR_FAMILY = C1 + C2 + C3 + C4 + C5 + C6
 ALL_FEATURES = PREV_FAMILY + CUR_FAMILY + B7
 # what the contribution adapter can compute before round t is played: the prev
@@ -177,6 +180,15 @@ def _add_self(ref, bank, c_def, p_def, cg_def):
     ref["ref_punishment"] = p
     ref["ref_payoff"] = 20.0 - c - p + percap
     ref["ref_prev_contribution"] = np.concatenate([[c_def], c[:-1]])
+    # dummies from the same shifted-own-contribution reference series: the level
+    # is rint-then-clip, so round 0 lands on the dataset default level (c_def)
+    lvl = np.clip(
+        np.rint(ref["ref_prev_contribution"].to_numpy(float)),
+        0,
+        N_CONTRIBUTION_LEVELS - 1,
+    )
+    for k, name in enumerate(B1_ONEHOT):
+        ref[f"ref_{name}"] = (lvl == k).astype(float)
     ref["ref_prev_punishment"] = np.concatenate([[p_def], p[:-1]])
     ref["ref_prev_payoff"] = (
         20.0
@@ -599,6 +611,20 @@ def test_adapter_matches_reference(adapter_compared, feature):
     ref, ada = adapter_compared[feature]
     bad = np.where(~np.isclose(ref, ada, atol=1e-4))[0]
     assert len(bad) == 0, f"adapter {feature} mismatch at rounds {bad.tolist()}"
+
+
+@pytest.mark.parametrize("side", ["pipeline", "adapter"])
+def test_prev_contribution_onehot_is_one_hot(compared, adapter_compared, side):
+    """Explicit shape check on the 21 dummies, on both src paths: round 0 sits on
+    the dataset-default level (train median 9.0 -> onehot_09) and every round is
+    exactly one-hot."""
+    bundle = compared if side == "pipeline" else adapter_compared
+    cols = np.stack([bundle[name][1] for name in B1_ONEHOT])  # [21, T]
+    assert cols[9, 0] == pytest.approx(1.0), f"{side}: onehot_09 != 1 at t=0"
+    others = np.delete(cols[:, 0], 9)
+    assert np.all(others == 0.0), f"{side}: non-default dummies set at t=0"
+    bad = np.where(~np.isclose(cols.sum(axis=0), 1.0, atol=1e-6))[0]
+    assert len(bad) == 0, f"{side}: dummies do not sum to 1 at rounds {bad.tolist()}"
 
 
 @pytest.fixture(scope="module")
