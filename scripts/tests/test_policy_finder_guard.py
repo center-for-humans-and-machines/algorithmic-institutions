@@ -219,3 +219,34 @@ def test_other_tools_pass(root, tool):
 @pytest.mark.parametrize("raw", ["", "not json", "[]"])
 def test_bad_input_fails_closed(root, raw):
     assert "guard error" in run(root, None, None, raw=raw)
+
+
+def test_version_2_writes_its_own_files(root):
+    """A later version (#244) writes its own rule and notes and the shared
+    scripts folder; version 1's rule and notes are not writable."""
+    (root / ".claude/policy_finder.json").write_text(
+        json.dumps({"name": NAME, "version": 2, "rule_name": f"{NAME}-v2"})
+    )
+    for path in (
+        f"configs/managers/rule_based/{NAME}-v2.yml",
+        f"notes/policy_finder/{NAME}-v2.md",
+        f"scripts/policy_finder/{NAME}/a.py",
+    ):
+        assert run(root, "Write", {"file_path": str(root / path)}) is None, path
+    for path in (
+        f"configs/managers/rule_based/{NAME}.yml",
+        f"notes/policy_finder/{NAME}.md",
+        f"scripts/policy_finder/{NAME}-v2/a.py",
+    ):
+        assert "writes are limited" in run(
+            root, "Write", {"file_path": str(root / path)}
+        ), path
+
+
+def test_bad_rule_name(root):
+    (root / ".claude/policy_finder.json").write_text(
+        json.dumps({"name": NAME, "rule_name": "../src"})
+    )
+    assert "bad instance name" in run(
+        root, "Write", {"file_path": str(root / f"scripts/policy_finder/{NAME}/a.py")}
+    )
