@@ -70,6 +70,29 @@ def apply_mask_pattern(data, mask_pattern, y_name, mask_name, default_values):
     return data
 
 
+def inject_posterior_mean(model, encoded):
+    """Add the posterior mean latent to an already encoded batch.
+
+    Latent models read ``encoded["z"]`` in their forward pass. Evaluation
+    therefore has to supply one, otherwise the reported log loss would not be
+    the model's conditional likelihood. We take the posterior mean (the model
+    is put in eval mode, so ``sample_posterior`` returns the mean rather than a
+    reparameterized draw) under ``no_grad``.
+
+    Models without a latent (``z_dim == 0`` or no such attribute) are returned
+    unchanged, so the non-latent path is untouched.
+    """
+    if getattr(model, "z_dim", 0) <= 0:
+        return encoded
+    was_training = model.training
+    model.eval()
+    with th.no_grad():
+        z, _ = model.sample_posterior(encoded)
+    if was_training:
+        model.train()
+    return {**encoded, "z": z}
+
+
 def create_fully_connected(
     n_nodes, n_groups=1, n_agent_groups=1, device=th.device("cpu")
 ):
@@ -104,6 +127,12 @@ def main(config):
     fraction_training = config["fraction_training"]
     model_name = config["model_name"]
     model_args = config["model_args"]
+    # ELBO knobs for the optional per-agent per-episode latent. Absent config
+    # (or z_dim == 0 on the model) leaves the plain cross-entropy path in place.
+    agent_latent = model_args.get("agent_latent") or {}
+    latent_beta = agent_latent.get("beta", 1.0)
+    latent_free_bits = agent_latent.get("free_bits", 0.02)
+    latent_anneal_epochs = agent_latent.get("anneal_epochs", 100)
     optimizer_args = config["optimizer_args"]
     train_args = config["train_args"]
     shuffle_features = config.get("shuffle_features", [])
@@ -205,8 +234,12 @@ def main(config):
 
         optimizer = th.optim.Adam(model.parameters(), **optimizer_args)
         loss_fn = th.nn.CrossEntropyLoss(reduction="none")
+        use_latent = getattr(model, "z_dim", 0) > 0
         sum_loss = 0
         n_steps = 0
+        sum_kl = 0.0
+        sum_kl_dim = None
+        last_beta = None
 
         early_stopping_patience = train_args.get("early_stopping_patience")
         best_test_loss = float("inf")
@@ -234,6 +267,10 @@ def main(config):
                     device=th_device,
                 )
 
+                if use_latent:
+                    z, kl_per_dim = model.sample_posterior(batch_data)
+                    batch_data = {**batch_data, "z": z}
+
                 y_logit = model(batch_data).flatten(end_dim=-2)
                 y_pred = y_logit.softmax(-1)
                 y_true = batch_data["y_enc"].flatten(end_dim=-2)
@@ -244,7 +281,28 @@ def main(config):
                     + (y_pred * y_pred.log()).sum(-1) * train_args["l1_entropy"]
                 )
 
-                loss = (loss * mask).sum() / mask.sum()
+                ce_loss = (loss * mask).sum() / mask.sum()
+                loss = ce_loss
+
+                if use_latent:
+                    # KL is per-dimension and already node-averaged; free bits
+                    # keep each dimension from collapsing onto the prior. The
+                    # per-round normalisation makes beta=1 comparable to the CE,
+                    # which is a per-agent-per-round mean.
+                    n_rounds = batch_data["x"].shape[1]
+                    beta_e = latent_beta * min(
+                        1.0, (e + 1) / max(latent_anneal_epochs, 1)
+                    )
+                    kl_term = th.clamp(kl_per_dim, min=latent_free_bits).sum()
+                    loss = ce_loss + beta_e * kl_term / n_rounds
+                    sum_kl += kl_term.item()
+                    kl_dim_detached = kl_per_dim.detach().cpu()
+                    sum_kl_dim = (
+                        kl_dim_detached
+                        if sum_kl_dim is None
+                        else sum_kl_dim + kl_dim_detached
+                    )
+                    last_beta = beta_e
 
                 loss.backward(retain_graph=True)
 
@@ -255,13 +313,25 @@ def main(config):
                         )
 
                 optimizer.step()
-                sum_loss += loss.item()
+                # the recorded train loss stays the cross-entropy term, so it
+                # remains comparable across latent and non-latent runs; the KL
+                # is recorded separately below
+                sum_loss += ce_loss.item()
                 n_steps += 1
 
             last_epoch = e == (train_args["epochs"] - 1)
             if (e % train_args["eval_period"] == 0) or last_epoch:
                 avg_loss = sum_loss / n_steps
                 rec.rec(value=avg_loss, set="train")
+
+                latent_log = {}
+                if use_latent and sum_kl_dim is not None:
+                    latent_log["kl"] = sum_kl / n_steps
+                    latent_log["beta"] = last_beta
+                    for d, v in enumerate((sum_kl_dim / n_steps).tolist()):
+                        latent_log[f"kl_dim_{d}"] = v
+                    for name, value in latent_log.items():
+                        rec.rec(value=value, name=name, set="train")
 
                 # evalute on training data for all possible mask patterns
                 for j, mask in enumerate(test_mask_pattern):
@@ -275,6 +345,7 @@ def main(config):
                         edge_index=train_edge_index,
                         device=th_device,
                     )
+                    _d = inject_posterior_mean(model, _d)
                     metrics = eval_model(model, _d)
                     rec.rec_many(metrics, set="train", n_pred=n_pred, mask=j)
 
@@ -297,6 +368,7 @@ def main(config):
                             edge_index=test_edge_index,
                             device=th_device,
                         )
+                        _d = inject_posterior_mean(model, _d)
                         metrics = eval_model(model, _d)
                         rec.rec_many(metrics, set="test", n_pred=n_pred, mask=j)
                         if j == 0:
@@ -322,6 +394,7 @@ def main(config):
                                     edge_index=test_edge_index,
                                     device=th_device,
                                 )
+                                _d = inject_posterior_mean(model, _d)
                                 metrics = eval_model(model, _d)
                                 rec.rec_many(
                                     metrics,
@@ -358,6 +431,7 @@ def main(config):
                                         edge_index=test_edge_index,
                                         device=th_device,
                                     )
+                                    _d = inject_posterior_mean(model, _d)
                                     metrics = eval_model(model, _d)
                                     rec.rec_many(
                                         metrics,
@@ -377,9 +451,13 @@ def main(config):
                         wandb_log[f"fold_{i}/test/log_loss"] = test_log_loss
                         for key, val in perturb_log_loss.items():
                             wandb_log[f"fold_{i}/test/log_loss__{key}"] = val
+                    for name, value in latent_log.items():
+                        wandb_log[f"fold_{i}/train/{name}"] = value
                     wandb.log(wandb_log)
 
                 postfix = {"loss": f"{avg_loss:.4f}"}
+                if "kl" in latent_log:
+                    postfix["kl"] = f"{latent_log['kl']:.4f}"
                 if test_log_loss is not None:
                     postfix["test_loss"] = f"{test_log_loss:.4f}"
                     if early_stopping_patience is not None:
@@ -399,6 +477,8 @@ def main(config):
                 pbar.set_postfix(postfix)
                 sum_loss = 0
                 n_steps = 0
+                sum_kl = 0.0
+                sum_kl_dim = None
 
             if (
                 early_stopping_patience is not None
@@ -423,6 +503,7 @@ def main(config):
                 _d = model.encode(
                     _d, mask=mask_name, edge_index=test_edge_index, device=th_device
                 )
+                _d = inject_posterior_mean(model, _d)
                 conf_m_all.append(
                     create_confusion_matrix(
                         model,
