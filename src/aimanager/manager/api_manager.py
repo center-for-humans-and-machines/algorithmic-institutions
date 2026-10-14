@@ -40,7 +40,13 @@ def parse_round(round) -> Round:
 
 
 def create_data(rounds, groups, default_values):
-    """Create data object for the algorithmic manager based on round records."""
+    """Create data object for the algorithmic manager based on round records.
+
+    The last round dict is the one being punished: `contribution[..., -1]`
+    holds that round's realised contributions (the punisher's same-round
+    input) and `prev_contribution[..., -1]` the round before; its punishments
+    are not yet known, so `punishment[..., -1]` is the default placeholder.
+    """
 
     def create_tensor(record_key, default_key):
         return th.tensor(

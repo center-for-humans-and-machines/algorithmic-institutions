@@ -24,6 +24,7 @@ from matplotlib.lines import Line2D  # noqa: E402
 from aimanager.evaluation_suite.metrics import (  # noqa: E402
     GROUP_CELL,
     RCB_LABELS,
+    RCE_LABELS,
     RPA_LABELS,
     RPB_LABELS,
     RSA_LABELS,
@@ -546,6 +547,32 @@ def rcd_scatter(ax, human, sims):
         )
     ax.set_xlabel("gap to the receiving group ($\\hat{C} - C_n$)")
     ax.set_ylabel("contribution change ($C_{n+1} - C_n$)")
+
+
+@plot("RCE_line")
+def rce_line(ax, human, sims):
+    # slope of dc on punishment per contribution band, +-1 SE bars;
+    # sources dodged on x as in band_lineplot
+    x = np.arange(len(RCE_LABELS))
+    sources = _sources(human, sims)
+    for i, (label, df, color, lw) in enumerate(sources):
+        dodge = (i - (len(sources) - 1) / 2) * 0.05
+        fit = _R._rce_fit(df)
+        ax.errorbar(
+            x + dodge,
+            fit["slope"].values,
+            yerr=fit["se"].values,
+            color=color,
+            linewidth=lw,
+            marker="o",
+            capsize=3,
+            label=label,
+        )
+    ax.axhline(0, color="gray", linewidth=0.8)
+    ax.set_xticks(x)
+    ax.set_xticklabels(RCE_LABELS)
+    ax.set_xlabel("contribution band (punished non-full contributors)")
+    ax.set_ylabel("slope of contribution change on punishment (+-1 SE)")
 
 
 @plot("RSA_line")

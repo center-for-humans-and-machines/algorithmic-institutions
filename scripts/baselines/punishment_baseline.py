@@ -1,11 +1,12 @@
 """Multinomial logistic-regression baseline for the punishment AH model.
 
 Reproduces the EXACT 5-fold CV the GNN punishment predictor used
-(artifacts/artificial_humans/punishment_rnn_edge_50ep_doubled), trains a
-simple multinomial logistic regression on each train fold, and reports
+(artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_current_contr),
+trains a simple multinomial logistic regression on each train fold, and reports
 test-fold multiclass log loss -- the interpretable baseline the GNN must beat.
 
-Faithfulness to the GNN run (config punishment/rnn_edge_50ep_doubled.yml):
+Faithfulness to the GNN run (config
+punishment/rnn_edge_50ep_doubled_current_contr.yml):
   * same data + filtering (experiment ah_group_switching, doubled = 100 eps)
   * same seed (38381) and fold logic (get_cross_validations, group_key=pair_id)
   * features pulled from the SAME tensors create_torch_data builds
@@ -16,7 +17,9 @@ Faithfulness to the GNN run (config punishment/rnn_edge_50ep_doubled.yml):
 Note: like the GNN config, the baseline has NO group feature -- the PR's point
 is that a group-relative punishment rule can't be isolated without one.
 
-GNN reference (final-epoch test log loss, this artifact): 1.2030 (mean of 5).
+GNN reference (final-epoch test log loss, mean of 5 folds): 1.1756 for
+artifacts/artificial_humans/punishment/rnn_edge_50ep_doubled_current_contr
+(the lagged punishment_rnn_edge_50ep_doubled scored 1.2030).
 
 Usage:
     .venv/bin/python scripts/baselines/punishment_baseline.py
@@ -44,8 +47,10 @@ DATA = ROOT / "experiments/2group_8agent_50ep.csv"
 EXPERIMENTS = ["ah_group_switching"]
 MASK = "punishment_valid"
 TARGET = "punishment"
-FEATS = ["prev_contribution", "prev_punishment", "is_first"]
-GNN_REF = 1.2030  # final-epoch test log loss, mean over folds (this artifact)
+# The manager punishes round t after seeing round t's contributions, so the
+# current contribution is the punisher's key input (alongside the lags).
+FEATS = ["contribution", "prev_contribution", "prev_punishment", "is_first"]
+GNN_REF = 1.1756  # rnn_edge_50ep_doubled_current_contr final-epoch test log loss
 
 
 def flatten(d, feats):
