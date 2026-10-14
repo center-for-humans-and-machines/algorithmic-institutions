@@ -1,0 +1,75 @@
+description: >-
+  Conformity-mixture arm B (autoresearch contribution-conformity-mixture):
+  identical to the arm-A conformity mixture
+  (group_switching_contribution_50ep_conformity_mixture.yml) except that the
+  mixture gate additionally sees the conformity anchor explicitly — its input
+  is concat [h, own_grp_prev_mean_contr / 20, prev_contribution / 20] instead
+  of the post-RNN hidden state alone (model_args.conform_gate_inputs: gap).
+  Motivation: arm A moved CG 9.85 -> 8.43 with the right mechanism but a
+  ~3x under-dosed peer slope (0.076 vs human 0.227); the binding constraint
+  is the gate level, set by one-step MLE from the hidden state alone. Feeding
+  the gap lets the gate concentrate conformity mass where conforming is
+  statistically defensible instead of hedging a low global level (see
+  notes/autoresearch_log/contribution-conformity-mixture.md §4 notes 5-6).
+  Identical data / CV / seed / epochs to arm A; the ONLY change is
+  model_args.conform_gate_inputs. Separate output_dir so the arm-A artifact
+  is preserved.
+exec:
+  command: python -m aimanager train-ah {job_file}
+  script_name: run_training
+  data_dir: artifacts
+  temp_dir: .log
+  cores: 4
+  memory: 8
+params_only: true
+params:
+  fraction_training: 1.0
+  seed: 38381
+  mask_name: contribution_valid
+  experiment_names: [ah_group_switching]
+  labels:
+    architecture: node+edge+rnn
+    dataset: 50ep
+    epochs: 575
+    conform_mixture: true
+    gate: gap
+  n_contributions: 21
+  n_punishments: 31
+  n_cross_val: 5
+  n_player: 8
+  n_groups: 2
+  data_file: experiments/2group_8agent_50ep.csv
+  model_name: graph
+  shuffle_features: [agent_group, prev_contribution, prev_punishment]
+  basedir: .
+  output_dir: artifacts/artificial_humans/group_switching_contribution_50ep_conformity_mixture_gap
+  model_args:
+    y_levels: 21
+    y_name: contribution
+    hidden_size: 20
+    add_rnn: True
+    add_edge_model: True
+    add_global_model: False
+    conform_mixture: True
+    conform_gate_inputs: gap
+    x_encoding:
+      - name: prev_contribution
+        n_levels: 21
+        encoding: numeric
+      - name: prev_punishment
+        n_levels: 31
+        encoding: numeric
+      - name: agent_group
+        n_levels: 2
+        encoding: onehot
+  optimizer_args:
+    lr: 3.e-4
+    weight_decay: 1.e-5
+  train_args:
+    epochs: 575
+    batch_size: 4
+    clamp_grad: 1
+    eval_period: 50
+    l1_entropy: 0
+  device: cuda
+  autoregression: False
