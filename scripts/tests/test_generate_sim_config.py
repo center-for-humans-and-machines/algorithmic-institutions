@@ -205,3 +205,57 @@ def test_validation_needs_the_fit(repo, monkeypatch):
     monkeypatch.setattr(sys, "argv", ["gen", "--validate", str(sweep_file)])
     with pytest.raises(SystemExit, match="fit the sweep first"):
         gen.main()
+
+
+def test_main_takes_no_upper_param_bound(repo, monkeypatch, capsys):
+    """--max-params none (#244): a later version may declare any number."""
+    rule = repo / "configs/managers/rule_based/toy.yml"
+    out = repo / "sweep.yml"
+    argv = [
+        "gen",
+        "--config",
+        str(rule),
+        "--sobol-points",
+        "8",
+        "--out",
+        str(out),
+        "--max-params",
+        "none",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    gen.main()
+    assert "8 design points" in capsys.readouterr().out
+
+
+def test_a_later_version_sweeps_and_validates_under_its_own_name(
+    repo, monkeypatch, capsys
+):
+    """Version 2's rule (#244) names its sweep's points, outputs and its
+    validation's peak."""
+    v2 = repo / "configs/managers/rule_based/toy-v2.yml"
+    v2.write_text(yaml.safe_dump(RULE))
+    monkeypatch.setattr(
+        sys, "argv", ["gen", "--config", str(v2), "--sobol-points", "8"]
+    )
+    gen.main()
+    config = yaml.safe_load((repo / gen.CONFIG_DIR / "toy-v2_sweep.yml").read_text())
+    assert "toy-v2_s000" in config["managers"]
+    assert config["output_dir"] == str(gen.OUTPUT_DIR / "toy-v2_sweep")
+
+    sweep_dir = repo / gen.OUTPUT_DIR / "toy-v2_sweep"
+    sweep_dir.mkdir(parents=True)
+    points = [{"name": "toy-v2_s000", "params": {"c0": 3, "p": 0.5}, "pool": 66.0}]
+    (sweep_dir / "sweep.json").write_text(
+        json.dumps({"rule": "configs/managers/rule_based/toy-v2.yml", "points": points})
+    )
+    (sweep_dir / "landscapes.json").write_text(
+        json.dumps({"peak": {"params": {"c0": 9, "p": 1.0}}})
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["gen", "--validate", str(sweep_dir / "sweep.json")]
+    )
+    gen.main()
+    out = repo / gen.CONFIG_DIR / "toy-v2_sweep_validate.yml"
+    config = yaml.safe_load(out.read_text())
+    assert list(config["managers"]) == ["ah", "toy-v2_gp", "toy-v2_s000"]
+    assert config["output_dir"] == str(gen.OUTPUT_DIR / "toy-v2_sweep/validate")

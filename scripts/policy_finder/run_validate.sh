@@ -4,6 +4,9 @@
 # Usage:
 #   scripts/policy_finder/run_validate.sh <name>
 #
+# Validates the instance's current version (#244: its rule_name, <name> for
+# version 1; the paths below say <name> for it) and, from version 2 on,
+# prints its final best against the previous version's.
 # Run once the instance's sweep is committed with its landscapes.json
 # (run_sweep.sh calls it). From the instance worktree, with this checkout's
 # scripts (an older instance's own copies predate it): writes the
@@ -27,11 +30,19 @@ MAIN="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 WT_ROOT="${PF_WORKTREE_ROOT:-$(dirname "$MAIN")/policy-finder-worktrees}"
 WT="$WT_ROOT/$NAME"
 CONF="$WT/.claude/policy_finder.json"
-SWEEP="plots/simulation/policy_finder/${NAME}_sweep"
-VALIDATE="$SWEEP/validate"
-CONFIG="configs/simulation/policy_finder/${NAME}_sweep_validate.yml"
 [[ -f "$CONF" ]] || { echo "no instance $NAME: $CONF missing" >&2; exit 1; }
-PY="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["python"])' "$CONF")"
+# the current version (#244): its rule_name names its sweep; the previous
+# version's, empty for version 1
+{ read -r PY; read -r STEM; read -r PREV; } < <(
+    python3 -c 'import json, sys
+c = json.load(open(sys.argv[1]))
+v, name = c.get("version", 1), sys.argv[2]
+prev = "" if v == 1 else (name if v == 2 else f"{name}-v{v - 1}")
+print(c["python"], c.get("rule_name") or name, prev, sep="\n")' "$CONF" "$NAME"
+)
+SWEEP="plots/simulation/policy_finder/${STEM}_sweep"
+VALIDATE="$SWEEP/validate"
+CONFIG="configs/simulation/policy_finder/${STEM}_sweep_validate.yml"
 
 cd "$WT"
 [[ -f "$SWEEP/landscapes.json" ]] \
@@ -73,10 +84,22 @@ rsync -az "raven:$REMOTE/$VALIDATE/" "$VALIDATE/" \
 
 # 5. commit on the instance branch, never on policy-finder-base
 git add -- "$VALIDATE" "$CONFIG"
-git commit -q -m "policy-finder $NAME: validation"
+git commit -q -m "policy-finder $STEM: validation"
 git log --oneline -1
-"$PY" -c 'import json, sys
-v = json.load(open(sys.argv[1]))
-b = next(p for p in v["points"] if p["name"] == v["best_name"])
-print("final best %s: %.1f +- %.1f, %s" % (b["name"], b["pool"], b["pool_se"], v["best"]))' \
-    "$VALIDATE/sweep.json"
+# the final best, and against the previous version's (higher is better)
+"$PY" -c 'import json, os, sys
+def best(path):
+    v = json.load(open(path))
+    return v, next(p for p in v["points"] if p["name"] == v["best_name"])
+v, b = best(sys.argv[1])
+print("final best %s: %.1f +- %.1f, %s" % (b["name"], b["pool"], b["pool_se"], v["best"]))
+if sys.argv[2]:
+    if not os.path.exists(sys.argv[2]):
+        print("previous version: no validation at %s" % sys.argv[2])
+    else:
+        _, p = best(sys.argv[2])
+        print("previous version %s: %.1f +- %.1f; change %+.1f (%s)" % (
+            p["name"], p["pool"], p["pool_se"], b["pool"] - p["pool"],
+            "improved" if b["pool"] > p["pool"] else "not improved"))' \
+    "$VALIDATE/sweep.json" \
+    "${PREV:+plots/simulation/policy_finder/${PREV}_sweep/validate/sweep.json}"

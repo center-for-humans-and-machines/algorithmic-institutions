@@ -4,7 +4,9 @@
 # Usage:
 #   scripts/policy_finder/run_sweep.sh <name>
 #
-# Run once the instance passed check_instance.sh, outside the agent's sandbox
+# Sweeps the instance's current version (#244: its rule_name in
+# .claude/policy_finder.json, <name> for version 1, <name>-v<k> after; the
+# paths below say <name> for it). Run once the instance passed check_instance.sh, outside the agent's sandbox
 # (new_instance.sh --headless calls it). From the instance worktree: writes
 # the sweep sim configs of its rule (generate_sim_config.py: the instance's
 # sobol_points, 256 if unset, split into parts of at most MAX_JOB_EPISODES
@@ -34,15 +36,18 @@ MAIN="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 WT_ROOT="${PF_WORKTREE_ROOT:-$(dirname "$MAIN")/policy-finder-worktrees}"
 WT="$WT_ROOT/$NAME"
 CONF="$WT/.claude/policy_finder.json"
-RULE="configs/managers/rule_based/$NAME.yml"
 OUT_DIR="plots/simulation/policy_finder"
 [[ -f "$CONF" ]] || { echo "no instance $NAME: $CONF missing" >&2; exit 1; }
-{ read -r PY; read -r MIN_PARAMS; read -r MAX_PARAMS; read -r SOBOL_POINTS; } < <(
+# the current version (#244): its rule_name names its rule and sweep
+{ read -r PY; read -r STEM; read -r MIN_PARAMS; read -r MAX_PARAMS
+  read -r SOBOL_POINTS; } < <(
     python3 -c 'import json, sys
 c = json.load(open(sys.argv[1]))
-print(c["python"], c["min_params"], c["max_params"], c.get("sobol_points", 256),
-      sep="\n")' "$CONF"
+print(c["python"], c.get("rule_name") or sys.argv[2], c["min_params"],
+      "none" if c["max_params"] is None else c["max_params"],
+      c.get("sobol_points", 256), sep="\n")' "$CONF" "$NAME"
 )
+RULE="configs/managers/rule_based/$STEM.yml"
 
 cd "$WT"
 source scripts/raven_remote_dir.sh
@@ -56,10 +61,10 @@ PYTHONPATH="$WT/src" "$PY" scripts/policy_finder/generate_sim_config.py \
     --config "$RULE" --sobol-points "$SOBOL_POINTS" --n-episodes "$N_EPISODES" \
     --n-parts "$N_PARTS" --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS"
 if (( N_PARTS == 1 )); then
-    PARTS=("${NAME}_sweep")
+    PARTS=("${STEM}_sweep")
 else
     PARTS=()
-    for (( k = 1; k <= N_PARTS; k++ )); do PARTS+=("${NAME}_sweep_p${k}of${N_PARTS}"); done
+    for (( k = 1; k <= N_PARTS; k++ )); do PARTS+=("${STEM}_sweep_p${k}of${N_PARTS}"); done
 fi
 
 # 2. sync once, submit every part
@@ -84,7 +89,7 @@ done
 
 # 4. fetch each part's results; a part without sweep.json failed. Parts go
 # beside the worktree, so only the merged sweep lands in it
-PART_ROOT="$WT_ROOT/$NAME.sweep_parts"
+PART_ROOT="$WT_ROOT/$STEM.sweep_parts"
 (( N_PARTS > 1 )) || PART_ROOT="$OUT_DIR"
 dirs=()
 for part in "${PARTS[@]}"; do
@@ -97,7 +102,7 @@ for part in "${PARTS[@]}"; do
 done
 
 # 5. merge the parts
-SWEEP="$OUT_DIR/${NAME}_sweep"
+SWEEP="$OUT_DIR/${STEM}_sweep"
 if (( N_PARTS > 1 )); then
     PYTHONPATH="$WT/src" "$PY" scripts/policy_finder/merge_sweeps.py "${dirs[@]}" \
         --out "$SWEEP/sweep.json"
@@ -113,10 +118,10 @@ fi
 PYTHONPATH="$WT/src" "$PY" scripts/policy_finder/fit_surrogate.py "$SWEEP"
 
 # 7. commit the sweep on the instance branch, never on policy-finder-base
-git add -- "$SWEEP" "configs/simulation/policy_finder/${NAME}_sweep"*.yml
-git commit -q -m "policy-finder $NAME: sweep"
+git add -- "$SWEEP" "configs/simulation/policy_finder/${STEM}_sweep"*.yml
+git commit -q -m "policy-finder $STEM: sweep"
 git log --oneline -1
-echo "sweep of $NAME: $WT/$SWEEP"
+echo "sweep of $STEM: $WT/$SWEEP"
 
 # 8. validate the GP's peak and the top measured points on fresh seeds
 "$MAIN/scripts/policy_finder/run_validate.sh" "$NAME" \
