@@ -1,0 +1,40 @@
+# auto/punisher-ar-gnn-v2: the §3-selected evaluation stack
+# (23_2g8a_self_gaussian_contr_gnn_switch, the top-ranked stack containing
+# the GNN punisher) with the punisher slot swapped to the autoregressive
+# GNN punisher (gated ar_punishment edge feature, epochs 2750 selected by
+# CV test log loss on auto/punisher-ar-gnn). Single pairing; protocol
+# byte-identical to the 23 family. Slug sits before `_self_` so
+# evaluation_sweep.py's DIR_PATTERN still parses contr/switch.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/baselines/contribution_gaussian_best.joblib
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  ar_gnn:
+    type: human
+    path: artifacts/artificial_humans/punishment_ar_gnn_50ep_doubled/model/architecture_node+edge+rnn+ar__dataset_50ep_doubled__epochs_2750.pt
+
+pairings:
+  - name: ar_gnn_self
+    group_0: ar_gnn
+    group_1: ar_gnn
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_ar_gnn_v2_self_gaussian_contr_gnn_switch
+figure_name: 2g8a_ar_gnn_v2_self_gaussian_contr_gnn_switch
+save_per_round: true
+basedir: .
