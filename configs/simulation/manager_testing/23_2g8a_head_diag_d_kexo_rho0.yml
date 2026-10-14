@@ -1,0 +1,40 @@
+# head-state-spread diagnostic, copula-off counterpart of case d: identical to
+# 23_2g8a_kexo_self_gaussian_mlp_v2_group_copula_contr_gnn_joint_exodus_k_onehot_switch_curpun
+# except that the contributor bundle is the rho-zero stamp
+# (scripts/baselines/stamp_contribution_copula_rho0.py: copula_rho_p and
+# copula_rho_t both 0.0, weights identical), which closes the group-copula
+# gate and restores the independent sampler and its RNG stream. Same seed,
+# episodes, rounds and punisher; the like-for-like of PR #186 arm B.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/baselines/contribution_gaussian_mlp_v2_group_copula_rho0.joblib
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_exodus_k_onehot/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_current_contr_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_head_diag_d_kexo_rho0
+figure_name: 2g8a_head_diag_d_kexo_rho0
+save_per_round: true
+basedir: .

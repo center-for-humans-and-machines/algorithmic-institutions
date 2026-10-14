@@ -1,0 +1,41 @@
+# copula-seed-ensemble bonus run: the PR #181 stimulus-skip stack of the
+# punisher re-baseline (case b, `..._stimulus_skip_..._curpun.yml`) with the
+# contribution slot's herding copula (rho 0.0395, phi 1) REPLACED by a seed
+# ensemble sampled one member per episode (rho = 0 on every member;
+# src/aimanager/simulation/ensemble_ah.py). Only contribution_model,
+# output_dir and figure_name differ; the protocol, the switch predictor and
+# the current-contribution severity-copula punisher are byte-identical.
+# Log: notes/autoresearch_log/copula-seed-ensemble.md.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_seed_ensemble/model/seed_ensemble.ensemble.yml
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_current_contr_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_contr_stimulus_skip_seed_ensemble_self_gnncopar1_contr_gnn_switch_curpun
+figure_name: 2g8a_contr_stimulus_skip_seed_ensemble_self_gnncopar1_contr_gnn_switch_curpun
+save_per_round: true
+basedir: .
