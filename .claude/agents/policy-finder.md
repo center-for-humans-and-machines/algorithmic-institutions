@@ -102,7 +102,7 @@ extend or rework.
   - `validate/`: the most promising values measured again on fresh seeds
     with more episodes (`sweep.json`, `per_round.parquet`, two plots of its
     best). Its `best` is that version's final result: your version is
-    compared with the previous version's.
+    compared with the highest of the earlier versions' final results.
 
 ## The rule config
 

@@ -63,8 +63,9 @@ $ARGUMENTS
    **final best** from `validate/sweep.json` only: its params, pool against
    `ah` (± `pool_se`) and which point it was (`<version name>_gp`, the
    Gaussian process's peak, or a measured `<version name>_s<index>`); for a
-   new version, against the previous version's final best (its
-   `validate/sweep.json`; higher is an improvement, whatever the margin). The sweep's own `best`
+   new version, against the lineage's best so far, the highest final best of
+   its earlier versions (each one's `validate/sweep.json`; higher is an
+   improvement, whatever the margin). The sweep's own `best`
    is the top of noisy estimates and reads high: never report it as the
    result. Then the branch
    `policy-finder/<name>`; and from `<version name>.summary.md`, the categories the
