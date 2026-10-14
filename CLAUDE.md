@@ -36,7 +36,6 @@ src/aimanager/                    # Main Python package
     manager.py                    # Base manager logic
     environment.py                # RL environment
     run.py                        # SLURM orchestrator for manager training
-    artificial_human_group.py     # Group of artificial humans for training
     api_manager.py                # API-based manager interface
   generic/                        # Generic model components and encoders
   simulation/                     # Simulation framework

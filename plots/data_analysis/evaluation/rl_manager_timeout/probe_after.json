@@ -1,0 +1,40 @@
+{
+  "config": "configs/training/rl_manager/03_2g8a_sum.yml",
+  "batch_size": 32,
+  "artifact_substitutions": [
+    "artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_1000.pt -> artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt"
+  ],
+  "manager_reads": [
+    "contribution",
+    "contribution_valid",
+    "in_group",
+    "prev_punishment",
+    "round_number"
+  ],
+  "replay_keys": [
+    "agent_group",
+    "contribution",
+    "contribution_valid",
+    "in_group",
+    "prev_punishment",
+    "punishment",
+    "round_number"
+  ],
+  "agent_rounds": 6144,
+  "timeouts": 113,
+  "timeout_rate": 0.018391927083333332,
+  "manager_served_at_timeouts": {
+    "0.0": 113
+  },
+  "env_recorded_at_timeouts": {
+    "9.0": 113
+  },
+  "replay_buffer_at_timeouts": {
+    "0.0": 113
+  },
+  "opponent_served_at_timeouts": {
+    "0.0": 113
+  },
+  "manager_action_sum": 101610,
+  "manager_action_md5": "edd6e795d9d9690bbed0c1d64b3b8095"
+}

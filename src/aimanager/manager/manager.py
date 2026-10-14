@@ -62,9 +62,6 @@ class ArtificalManager:
     def encode(self, state, edge_index, **_):
         return self.policy_model.encode(state, edge_index=edge_index)
 
-    def encode_pure(self, state, **_):
-        return self.policy_model.encode_pure(state)
-
     def get_action(self, state, first=False, edge_index=None, greedy=False):
         n_batch, n_agents, n_rounds = list(state.values())[0].shape
         exp_state = self.expand_obs_for_groups(state, self.n_groups)
@@ -88,19 +85,6 @@ class ArtificalManager:
                 return picked_action, q_values
             else:
                 return greedy_action, q_values
-
-    def get_punishment(self, **state):
-        n_batch, n_agents, n_rounds = list(state.values())[0].shape
-        first = state["round_number"].max() == 0
-        exp_state = self.expand_obs_for_groups(state, self.n_groups)
-        encoded = self.policy_model.encode_pure(exp_state)
-        q_values = self.policy_model(encoded, reset_rnn=first)
-        q_values = q_values.reshape(n_batch, self.n_groups, n_agents, n_rounds, -1)
-        greedy_actions = q_values.argmax(-1)  # (E, G, A, T)
-        agent_group = state["agent_group"].unsqueeze(1)  # (E, 1, A, T)
-        greedy_actions = greedy_actions.gather(1, agent_group)  # (E, 1, A, T)
-        greedy_actions = greedy_actions.squeeze(1)  # (E, A, T)
-        return greedy_actions
 
     def expand_obs_for_groups(self, obs, n_groups):
         exclude_keys = ["group_payoff"]

@@ -1,0 +1,29 @@
+{
+  "base_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "base_artifact_sha256": "3748e9e12461eaa70c7d5ff5c445e7ac1a54396b928624bf32f5d6b9974925c1",
+  "copula_phi": 1.0,
+  "copula_rho": 0.06958238086256316,
+  "copula_switch_every": 1,
+  "date": "2026-08-27T10:12:40+00:00",
+  "estimator": "pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only",
+  "git_head": "unavailable: Command '['git', '-C', '/raven/u/certuer/iso_contr_herdcopar1_v2', 'rev-parse', 'HEAD']' returned non-zero exit status 128.",
+  "n_tensors_verified": 10,
+  "note": "dict-level copy of the base artifact plus the three copula fields; every pre-existing key verified bit-identical after reload; teacher-forced (sample=False) probabilities unchanged",
+  "output_artifact": "artifacts/artificial_humans/group_switching_contribution_50ep_herding_copula_v2/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "output_artifact_sha256": "4a32785d88707662ac70f393b8fd6bec1c59bf9be27446426731b12b1f01614b",
+  "params_json": "artifacts/artificial_humans/group_switching_contribution_50ep_herding_copula_v2/calibration/copula_params.json",
+  "params_json_sha256": "9ee42b1f433ee3eb353adcbdbb72382e347e4d73e9d202d06234243c34bdbbc5",
+  "phi_ci": [
+    0.8256631146532615,
+    1.6415133722844082
+  ],
+  "phi_final_reason": "orchestrator ruling 2026-08-27 (log: notes/autoresearch_log/contribution-herding-copula-v2.md, plan revision): phi_hat 1.1588380212468576 saturated the AR(1) boundary with CI [0.8256631146532615, 1.6415133722844082] spanning 1; adopted the unit-root boundary phi = 1.0 (static episode latent); rho untouched",
+  "phi_lag1_diagnostic": 1.1588380212468576,
+  "phi_stamped": 1.0,
+  "rho_ci": [
+    0.04592661278794028,
+    0.0854596547235886
+  ],
+  "script": "scripts/artificial_humans/make_contribution_copula_artifact.py",
+  "teacher_forced_rows_verified": 7457
+}

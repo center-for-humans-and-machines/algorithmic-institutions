@@ -3,6 +3,7 @@
 Usage:
     python -m aimanager train-ah <config>
     python -m aimanager train-manager <config>
+    python -m aimanager train-manager-es <config>
     python -m aimanager simulate <config>
     python -m aimanager evaluate <config>
 """
@@ -29,6 +30,16 @@ REQUIRED_KEYS = {
         "env_args",
         "n_update_steps",
     ],
+    # Evolution-strategies arm of the exploration comparison: no replay
+    # buffer and no update steps, so it asks for a generation count and the
+    # population settings instead.
+    "train-manager-es": [
+        "artificial_humans",
+        "manager_args",
+        "env_args",
+        "es_args",
+        "n_generations",
+    ],
     "simulate": [
         "artificial_humans",
         "managers",
@@ -50,6 +61,7 @@ CROSS_MODE_KEYS = {
     "managers": ("simulate", {"train-ah", "train-manager"}),
     "manager_args": ("train-manager", {"train-ah", "simulate"}),
     "n_update_steps": ("train-manager", {"train-ah", "simulate"}),
+    "es_args": ("train-manager-es", {"train-ah", "train-manager", "simulate"}),
     "train_args": ("train-ah", {"train-manager", "simulate"}),
 }
 
@@ -103,6 +115,12 @@ def dispatch_train_manager(config, config_path):
     main(config)
 
 
+def dispatch_train_manager_es(config, config_path):
+    from aimanager.es_manager import main
+
+    main(config)
+
+
 def dispatch_simulate(config, config_path):
     from aimanager.simulation.simulate import run_cli
 
@@ -118,6 +136,7 @@ def dispatch_evaluate(config, config_path):
 DISPATCH = {
     "train-ah": dispatch_train_ah,
     "train-manager": dispatch_train_manager,
+    "train-manager-es": dispatch_train_manager_es,
     "simulate": dispatch_simulate,
     "evaluate": dispatch_evaluate,
 }
