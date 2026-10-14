@@ -39,16 +39,19 @@ here; its untested state is expected, not a gap in your work.
 
 ## Your instance
 
-`.claude/policy_finder.json` holds your instance `name`, `min_params` and
-`max_params` (the fewest and most parameters your rule may declare; equal
-values mean exactly that many), `sobol_points` (the size of the sweep's
-design) and `python` (the interpreter to use).
+`.claude/policy_finder.json` holds your instance `name`, its `version` and
+the version's `rule_name` (`<name>` for version 1, `<name>-v<k>` for version
+k), `min_params` and `max_params` (the fewest and most parameters your rule
+may declare; equal values mean exactly that many, a `max_params` of null no
+upper bound), `sobol_points` (the size of the sweep's design) and `python`
+(the interpreter to use).
 Run Python as `PYTHONPATH=src <python> ...`.
 
 You may write only:
-- `configs/managers/rule_based/<name>.yml`, your rule
-- `notes/policy_finder/<name>.md`, your notes (required, see below)
-- `scripts/policy_finder/<name>/`, your analysis, calculations and tests
+- `configs/managers/rule_based/<rule_name>.yml`, your rule
+- `notes/policy_finder/<rule_name>.md`, your notes (required, see below)
+- `scripts/policy_finder/<name>/`, your analysis, calculations and tests,
+  shared with your instance's earlier versions
 
 Everything else is read-only, and you have no network, no `git` and no `gh`.
 A guard rejects anything outside these limits; do not try to work around it.
@@ -66,6 +69,40 @@ A guard rejects anything outside these limits; do not try to work around it.
   rule-based manager (`manager/rule.py`: the rule schema, `load_rule`,
   `sobol_design`, `validate_rule`; `manager/api_manager.py`:
   `RuleBasedManager`).
+- From version 2 on, your instance's earlier versions (below).
+
+## Earlier versions
+
+From version 2 on, your worktree holds every earlier version of your
+instance: version 1 under `<name>`, version j under `<name>-v<j>`. You may
+build on them, change any of their ideas or start afresh; their files stay
+as they are, read-only, except the shared scripts folder, which you may
+extend or rework.
+
+- `configs/managers/rule_based/<version>.yml` and
+  `notes/policy_finder/<version>.md`: its rule and its notes.
+- `scripts/policy_finder/<name>/`: the analysis scripts so far.
+- `plots/simulation/policy_finder/<version>_sweep/`, the simulations of its
+  rule against `ah`:
+  - `sweep.json`: every design point of its sweep, with its `params` and its
+    group's pool against `ah` (`pool`, `pool_se` its standard error,
+    `members` the mean group size, `n_episodes`).
+  - `per_round_p<k>of<N>.parquet` (`per_round.parquet` for a sweep of one
+    part): every design point's games per round and player, in the format
+    of the reference sims; `run` names the point
+    (`... managed by <version>_s<index>_vs_ah`), and `episode` counts from 0
+    in each file.
+  - `landscapes.json`: a smooth surface fitted to the design points' pools.
+    Per parameter (`params`): its `range`, `effect` (how far the fitted pool
+    moves along it, in pool points) and `length_scale`; `peak`: where the
+    surface is highest, and `at_edge`, the parameters whose highest point
+    sits at an end of their range; `profiles`: the fitted pool along each
+    parameter, the others held at the peak; `points`: the fitted pool at
+    each design point.
+  - `validate/`: the most promising values measured again on fresh seeds
+    with more episodes (`sweep.json`, `per_round.parquet`, two plots of its
+    best). Its `best` is that version's final result: your version is
+    compared with the previous version's.
 
 ## The rule config
 
@@ -153,14 +190,15 @@ and write in them throughout, not once at the end.
    and why that range.
 5. Before finishing, validate the rule:
    `PYTHONPATH=src <python> -m aimanager validate-rule
-   configs/managers/rule_based/<name>.yml --min-params <min_params>
-   --max-params <max_params> --sobol-points <sobol_points>`
+   configs/managers/rule_based/<rule_name>.yml --min-params <min_params>
+   --max-params <max_params> --sobol-points <sobol_points>` (a null
+   `max_params` is passed as `none`)
    and fix it until it passes. It checks the schema, draws the sweep's
    design and runs your code on every point of it.
 
 ## Your notes
 
-`notes/policy_finder/<name>.md` is your sketchbook: the trail of how your
+`notes/policy_finder/<rule_name>.md` is your sketchbook: the trail of how your
 thinking moved, read by the researchers who review your rule. Write it as you
 go, one Explorations entry per step, in plain first person: what you looked
 at, what you found, and what you now think or want to check next. Hunches,
@@ -168,7 +206,7 @@ surprises, open questions and changes of mind belong in it; it does not need
 to be polished. It has exactly these sections, in this order:
 
 ```markdown
-# <name>
+# <rule_name>
 
 ## Explorations
 

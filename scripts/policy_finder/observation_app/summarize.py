@@ -5,10 +5,13 @@ kept in summary.json beside the instances (outside every worktree, so no agent
 reads them):
 
     {"categories": {"<name>": {"kind": "bar" | "mechanism", "meaning": "..."}},
-     "instances": {"<name>": {"rule_sha": "...", "summarized": "<date>",
+     "instances": {"<version>": {"rule_sha": "...", "summarized": "<date>",
                               "bar": "<a bar category>",
                               "mechanisms": ["<mechanism category>", ...],
                               "idea": "<one line>"}}}
+
+Each version of an instance is recorded on its own (#244), under its
+rule_name: `<name>` for version 1, `<name>-v<k>` for version k.
 
 The numbers (pool, se, members) and the inputs a rule reads are not stored:
 the app reads them from each sweep and rule on every load.
@@ -26,13 +29,13 @@ it, and these files describe earlier rules and their results.
 
 Usage:
     python scripts/policy_finder/observation_app/summarize.py status
-    python scripts/policy_finder/observation_app/summarize.py record <name> \
+    python scripts/policy_finder/observation_app/summarize.py record <version> \
         --bar <category> [--mechanism <category> ...] --idea "<one line>"
     python scripts/policy_finder/observation_app/summarize.py category <name> \
         --kind bar|mechanism --meaning "<one line>"
     python scripts/policy_finder/observation_app/summarize.py pull | push
 
-`status` lists the instances to summarize: a rule not recorded yet, or changed
+`status` lists the versions to summarize: a rule not recorded yet, or changed
 since (by its hash). `record` stores one instance against its current rule;
 categories must exist first (`category`). PF_WORKTREE_ROOT as in
 new_instance.sh.
@@ -43,6 +46,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import date
@@ -58,6 +62,8 @@ OBSERVATORY = os.environ.get(
 SYNCED = ("summary.json", "references.json")
 RULE = "configs/managers/rule_based/{name}.yml"
 SWEEP = "plots/simulation/policy_finder/{name}_sweep/sweep.json"
+#: A later version's name, <instance>-v<k> (#244)
+LATER = re.compile(r"^(?P<instance>.+)-v(?P<k>[0-9]+)$")
 
 
 def _raven_up() -> bool:
@@ -109,8 +115,24 @@ def save(data: dict):
     SUMMARY.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def rule_sha(name: str):
-    path = WT_ROOT / name / RULE.format(name=name)
+def instance_of(version: str) -> str:
+    """The instance a version belongs to: its worktree's name."""
+    m = LATER.match(version)
+    if m and (WT_ROOT / m["instance"] / ".claude/policy_finder.json").exists():
+        return m["instance"]
+    return version
+
+
+def rule_path(version: str) -> Path:
+    return WT_ROOT / instance_of(version) / RULE.format(name=version)
+
+
+def sweep_path(version: str) -> Path:
+    return WT_ROOT / instance_of(version) / SWEEP.format(name=version)
+
+
+def rule_sha(version: str):
+    path = rule_path(version)
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16] if path.exists() else None
 
 
@@ -120,9 +142,21 @@ def instances() -> list:
     )
 
 
+def versions(instance: str) -> list:
+    """An instance's versions in order: its name, then <name>-v<k> by k."""
+    later = []
+    for rule in (WT_ROOT / instance / RULE.format(name="x")).parent.glob(
+        f"{instance}-v*.yml"
+    ):
+        m = LATER.match(rule.stem)
+        if m and m["instance"] == instance:
+            later.append((int(m["k"]), rule.stem))
+    return [instance] + [v for _, v in sorted(later)]
+
+
 def status(data: dict):
     todo = []
-    for name in instances():
+    for name in (v for i in instances() for v in versions(i)):
         sha = rule_sha(name)
         if sha is None:
             continue  # no rule (yet): nothing to summarize
@@ -137,11 +171,11 @@ def status(data: dict):
     for cat, spec in data["categories"].items():
         print(f"  [{spec['kind']}] {cat}: {spec['meaning']}")
     for name, why in todo:
-        swept = (WT_ROOT / name / SWEEP.format(name=name)).exists()
+        swept = sweep_path(name).exists()
         print(f"\n{name} ({why}{'' if swept else ', not swept yet'})")
-        print(f"  rule:  {WT_ROOT / name / RULE.format(name=name)}")
+        print(f"  rule:  {rule_path(name)}")
         if swept:
-            print(f"  sweep: {WT_ROOT / name / SWEEP.format(name=name)}")
+            print(f"  sweep: {sweep_path(name)}")
 
 
 def main():
@@ -191,7 +225,9 @@ def write(args):
         unknown = [c for c in [args.bar, *args.mechanism] if c not in kinds]
         if unknown:
             sys.exit(f"unknown categories {unknown}: add them with `category` first")
-        if kinds[args.bar] != "bar" or any(kinds[m] != "mechanism" for m in args.mechanism):
+        if kinds[args.bar] != "bar" or any(
+            kinds[m] != "mechanism" for m in args.mechanism
+        ):
             sys.exit("--bar takes a bar category, --mechanism a mechanism category")
         data["instances"][args.name] = {
             "rule_sha": sha,

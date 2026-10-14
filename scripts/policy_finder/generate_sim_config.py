@@ -25,7 +25,7 @@ Usage:
     python scripts/policy_finder/generate_sim_config.py \
         --config configs/managers/rule_based/<rule>.yml \
         [--sobol-points 256] [--n-episodes 500] [--seed 42] [--n-parts 1] \
-        [--min-params 1] [--max-params 4] [--out <sim config>]
+        [--min-params 1] [--max-params 4|none] [--out <sim config>]
     python scripts/policy_finder/generate_sim_config.py \
         --validate plots/simulation/policy_finder/<rule>_sweep/sweep.json \
         [--top 5] [--n-episodes 2000] [--seed 1000] [--out <sim config>]
@@ -240,7 +240,12 @@ def main():
     ap.add_argument("--seed", type=int, help="default 42, --validate 1000")
     ap.add_argument("--n-parts", type=int, default=1, help="sims to split into")
     ap.add_argument("--min-params", type=int, default=1)
-    ap.add_argument("--max-params", type=int, default=4)
+    ap.add_argument(
+        "--max-params",
+        type=lambda v: None if v == "none" else int(v),
+        default=4,
+        help="a number, or none for no upper bound",
+    )
     ap.add_argument("--top", type=int, default=VALIDATE_TOP)
     ap.add_argument("--root", help="the repo the paths are relative to")
     ap.add_argument("--out", help="the sim config to write (one part only)")

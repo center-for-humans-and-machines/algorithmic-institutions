@@ -4,13 +4,14 @@
 # Usage:
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
 #       [--sobol-points N] [--no-start | --headless [--prompt TEXT]]
+#   scripts/policy_finder/new_instance.sh --iterate-on <name> [the same options]
 #
 # Makes branch policy-finder/<name> off policy-finder-base, checked out as its
 # own worktree in ../policy-finder-worktrees/<name> (outside this checkout;
 # override with PF_WORKTREE_ROOT), pulls the LFS data the agent reads, writes
 # the instance's gitignored .claude/policy_finder.json and
-# .claude/settings.local.json, and starts `claude --agent policy-finder-host`
-# there with no MCP servers. --no-start stops before starting the session.
+# .claude/settings.local.json (instance_settings.py), and starts
+# `claude --agent policy-finder-host` there with no MCP servers. --no-start stops before starting the session.
 # --headless runs the session non-interactively instead (`claude -p`, Bash
 # pre-allowed: the sandbox and the guard are the boundary) on --prompt
 # (default: design your rule) and saves the agent's final report to
@@ -27,28 +28,26 @@
 # PF_BASE overrides the base branch, to try a branch before it lands on
 # policy-finder-base.
 #
-# The instance settings bind only that worktree:
-#   - permissions: Edit only on the write paths; Read denied on .git, this
-#     checkout and ~/.claude; WebFetch and WebSearch denied
-#   - sandbox: Bash, and so any Python it runs, reads the worktree minus .git
-#     (plus the Python install, this checkout's .venv and the session's own
-#     temp dir, where the Bash tool collects output) and modifies nothing
-#     outside the write paths; no network; no unsandboxed escape.
-#     A sandbox write deny beats any narrower allow, so writes are denied by
-#     complement: every existing entry beside the write paths, level by
-#     level. New files can still be created at those levels;
-#     check_instance.sh flags them. Claude Code itself makes this checkout's
-#     .git writable for a worktree (it guards only .git/hooks), and a write to
-#     .git/config could run commands outside the sandbox: it is denied too.
-#   - auto memory off (a worktree shares this checkout's memory)
-#   - the guard hook (.claude/hooks/policy_finder_guard.py) on every tool call
+# --iterate-on <name> starts the next version of an existing instance (#244)
+# on its own branch and worktree instead: the worktree must be clean and its
+# current version validated (the final best the new one is compared with).
+# It merges policy-finder-base into the branch, so the version runs on the
+# latest code and agent definition, and writes the settings of version k:
+# its rule, notes, sweep, report and summary are named <name>-v<k>, earlier
+# versions' files are read-only and the scripts folder is shared. Without
+# --max-params and --min-params the rule may declare any number of params
+# from 1; --sobol-points defaults to the previous version's.
+#
+# The instance settings (instance_settings.py) bind only that worktree and the
+# version's write paths: permissions, the Bash sandbox, no network, the guard
+# hook (.claude/hooks/policy_finder_guard.py) on every tool call.
 #
 # Check and commit an instance's work with scripts/policy_finder/check_instance.sh.
 
 set -euo pipefail
 
 usage() {
-    sed -n '4,6p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '4,7p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
 }
 
@@ -58,12 +57,16 @@ MIN_PARAMS=1
 SOBOL_POINTS=256
 START=1
 HEADLESS=0
-PROMPT="Design your rule."
+PROMPT=""
+ITERATE=0
+PARAMS_GIVEN=0
+SOBOL_GIVEN=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --max-params) MAX_PARAMS="${2:-}"; shift 2 ;;
-        --min-params) MIN_PARAMS="${2:-}"; shift 2 ;;
-        --sobol-points) SOBOL_POINTS="${2:-}"; shift 2 ;;
+        --iterate-on) [[ -z "$NAME" ]] || usage; ITERATE=1; NAME="${2:-}"; shift 2 ;;
+        --max-params) MAX_PARAMS="${2:-}"; PARAMS_GIVEN=1; shift 2 ;;
+        --min-params) MIN_PARAMS="${2:-}"; PARAMS_GIVEN=1; shift 2 ;;
+        --sobol-points) SOBOL_POINTS="${2:-}"; SOBOL_GIVEN=1; shift 2 ;;
         --no-start) START=0; shift ;;
         --headless) HEADLESS=1; shift ;;
         --prompt) PROMPT="${2:-}"; shift 2 ;;
@@ -84,6 +87,7 @@ for n in "$MAX_PARAMS" "$MIN_PARAMS"; do
         exit 2
     fi
 done
+# --iterate-on without them: any number of params from 1 (set below)
 if [[ ! "$SOBOL_POINTS" =~ ^[1-9][0-9]*$ ]] || (( SOBOL_POINTS & (SOBOL_POINTS - 1) )); then
     echo "--sobol-points must be a power of two: $SOBOL_POINTS" >&2
     exit 2
@@ -107,119 +111,71 @@ UV_PYTHON_DIR="$HOME/.local/share/uv/python"
 
 git -C "$MAIN" rev-parse --verify --quiet "$BASE" >/dev/null \
     || { echo "no branch $BASE" >&2; exit 1; }
-if git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null; then
-    echo "branch $BRANCH already exists" >&2
-    exit 1
-fi
-[[ ! -e "$WT" ]] || { echo "$WT already exists" >&2; exit 1; }
 [[ -x "$PYTHON" ]] || { echo "no Python at $PYTHON (run uv sync)" >&2; exit 1; }
-
-mkdir -p "$WT_ROOT"
-git -C "$MAIN" worktree add -b "$BRANCH" "$WT" "$BASE"
-WT="$(cd "$WT" && pwd -P)"
-
 # the data the agent reads; everything else may stay an LFS pointer
-git -C "$WT" lfs pull --include \
-    "experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_*/**"
+LFS_DATA="experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_*/**"
 
-"$PYTHON" - "$WT" "$MAIN" "$NAME" "$MIN_PARAMS" "$MAX_PARAMS" "$PYTHON" "$UV_PYTHON_DIR" \
-    "$SOBOL_POINTS" <<'EOF'
-import json
-import os
-import re
-import sys
+if [[ "$ITERATE" == 1 ]]; then
+    # the next version of an existing instance, on its branch and worktree
+    git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null \
+        || { echo "no instance $NAME: no branch $BRANCH" >&2; exit 1; }
+    [[ -f "$WT/.claude/policy_finder.json" ]] \
+        || { echo "no instance $NAME: no worktree at $WT" >&2; exit 1; }
+    WT="$(cd "$WT" && pwd -P)"
+    [[ -z "$(git -C "$WT" status --porcelain)" ]] \
+        || { echo "$WT has uncommitted changes: check and commit them first" >&2; exit 1; }
+    { read -r PREV_VERSION; read -r PREV_STEM; read -r PREV_SOBOL; } < <(
+        python3 -c 'import json, sys
+c = json.load(open(sys.argv[1]))
+print(c.get("version", 1), c.get("rule_name") or sys.argv[2],
+      c.get("sobol_points", 256), sep="\n")' "$WT/.claude/policy_finder.json" "$NAME"
+    )
+    PREV_FINAL="plots/simulation/policy_finder/${PREV_STEM}_sweep/validate/sweep.json"
+    [[ -f "$WT/$PREV_FINAL" ]] || {
+        echo "$PREV_STEM is not validated ($PREV_FINAL): finish it first" \
+            "(run_sweep.sh or run_validate.sh $NAME)" >&2
+        exit 1
+    }
+    VERSION=$(( PREV_VERSION + 1 ))
+    if ! git -C "$WT" merge -q --no-edit \
+        -m "policy-finder $NAME: $BASE for version $VERSION" "$BASE"; then
+        git -C "$WT" merge --abort || true
+        echo "cannot merge $BASE into $BRANCH" >&2
+        exit 1
+    fi
+    if [[ "$PARAMS_GIVEN" == 0 ]]; then
+        MIN_PARAMS=1
+        MAX_PARAMS=none
+    fi
+    [[ "$SOBOL_GIVEN" == 1 ]] || SOBOL_POINTS="$PREV_SOBOL"
+    [[ -n "$PROMPT" ]] || PROMPT="Design version $VERSION of your rule."
+else
+    if git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null; then
+        echo "branch $BRANCH already exists" >&2
+        exit 1
+    fi
+    [[ ! -e "$WT" ]] || { echo "$WT already exists" >&2; exit 1; }
+    mkdir -p "$WT_ROOT"
+    git -C "$MAIN" worktree add -b "$BRANCH" "$WT" "$BASE"
+    WT="$(cd "$WT" && pwd -P)"
+    VERSION=1
+    [[ -n "$PROMPT" ]] || PROMPT="Design your rule."
+fi
+git -C "$WT" lfs pull --include "$LFS_DATA"
 
-wt, main, name, min_params, max_params, python, uv_python, sobol_points = sys.argv[1:]
-home = os.path.expanduser("~")
-rule = f"configs/managers/rule_based/{name}.yml"
-notes = f"notes/policy_finder/{name}.md"
-scripts = f"scripts/policy_finder/{name}"
-os.makedirs(os.path.join(wt, scripts), exist_ok=True)
-os.makedirs(os.path.join(wt, os.path.dirname(notes)), exist_ok=True)
-# the Bash tool writes command output here; Python drops stdout it cannot stat
-session_tmp = f"/private/tmp/claude-{os.getuid()}/" + re.sub(r"[^A-Za-z0-9]", "-", wt)
+"$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$MAIN" "$NAME" \
+    --version "$VERSION" --start-commit "$(git -C "$WT" rev-parse HEAD)" \
+    --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
+    --sobol-points "$SOBOL_POINTS" --python "$PYTHON" --uv-python "$UV_PYTHON_DIR"
+STEM="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["rule_name"])' \
+    "$WT/.claude/policy_finder.json")"
 
-
-def complement(path):
-    """Every existing entry beside `path`, at each level from the worktree down."""
-    denied, parent = [], wt
-    for part in path.split("/"):
-        denied += [
-            os.path.join(parent, e) for e in sorted(os.listdir(parent)) if e != part
-        ]
-        parent = os.path.join(parent, part)
-    return denied
-
-
-# at the top level each chain lists the others' first entries; keep them
-keep = {os.path.join(wt, p.split("/")[0]) for p in (rule, notes, scripts)}
-deny_write = sorted(
-    set(complement(rule) + complement(notes) + complement(scripts)) - keep
-)
-
-instance = {
-    "name": name,
-    "min_params": int(min_params),
-    "max_params": int(max_params),
-    "sobol_points": int(sobol_points),
-    "python": python,
-}
-
-settings = {
-    "autoMemoryEnabled": False,
-    "permissions": {
-        # `/x` is relative to the worktree, `//x` is an absolute path
-        "allow": [f"Edit(/{rule})", f"Edit(/{notes})", f"Edit(/{scripts}/**)"],
-        "deny": [
-            "Read(/.git)",
-            "Read(/.git/**)",
-            f"Read(/{main}/**)",
-            f"Read(/{home}/.claude/**)",
-            "WebFetch",
-            "WebSearch",
-        ],
-    },
-    "sandbox": {
-        "enabled": True,
-        "autoAllowBashIfSandboxed": True,
-        "allowUnsandboxedCommands": False,
-        "filesystem": {
-            # a narrower path wins: the worktree is readable inside the denied
-            # home, its .git is not
-            "denyRead": [home, "/private/tmp", "/Volumes", f"{wt}/.git"],
-            "allowRead": [wt, uv_python, f"{main}/.venv", session_tmp],
-            "denyWrite": deny_write + [f"{main}/.git"],
-        },
-    },
-    "hooks": {
-        "PreToolUse": [
-            {
-                "matcher": "*",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": f"python3 {wt}/.claude/hooks/policy_finder_guard.py",
-                    }
-                ],
-            }
-        ],
-    },
-}
-
-with open(os.path.join(wt, ".claude", "policy_finder.json"), "w") as f:
-    json.dump(instance, f, indent=2)
-    f.write("\n")
-with open(os.path.join(wt, ".claude", "settings.local.json"), "w") as f:
-    json.dump(settings, f, indent=2)
-    f.write("\n")
-EOF
-
-echo "instance $NAME: branch $BRANCH, worktree $WT," \
+echo "instance $NAME, version $VERSION ($STEM): branch $BRANCH, worktree $WT," \
     "params $MIN_PARAMS-$MAX_PARAMS, $SOBOL_POINTS Sobol points"
 [[ "$START" == 1 ]] || exit 0
 cd "$WT"
 if [[ "$HEADLESS" == 1 ]]; then
-    REPORT="$WT_ROOT/$NAME.report.md"
+    REPORT="$WT_ROOT/$STEM.report.md"
     claude -p "$PROMPT" --agent policy-finder-host --strict-mcp-config \
         --allowedTools=Bash < /dev/null > "$REPORT"
     echo "report: $REPORT"
@@ -228,7 +184,7 @@ if [[ "$HEADLESS" == 1 ]]; then
     # place the rule in the observation app's Summary and republish the shared
     # page: a headless /policy-finder-summarizer in this checkout, its report
     # beside the instance's; a failure here leaves the run as it is
-    SUMMARY_LOG="$WT_ROOT/$NAME.summary.md"
+    SUMMARY_LOG="$WT_ROOT/$STEM.summary.md"
     if (cd "$MAIN" && claude -p "/policy-finder-summarizer" --strict-mcp-config \
         --add-dir "$WT_ROOT" --allowedTools=Bash,Read,Artifact \
         < /dev/null > "$SUMMARY_LOG"); then

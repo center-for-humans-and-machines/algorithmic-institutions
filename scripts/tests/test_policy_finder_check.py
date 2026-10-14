@@ -267,3 +267,105 @@ def test_check_uses_the_instance_sobol_points(repo):
         json.dumps({**config, "sobol_points": 100})
     )
     assert "power of two" in check(main).stderr
+
+
+def _version_2(wt, **extra):
+    """Make the worktree's current version 2, starting from its HEAD (#244)."""
+    config = {
+        "python": sys.executable,
+        "name": NAME,
+        "version": 2,
+        "rule_name": f"{NAME}-v2",
+        "start_commit": git(wt, "rev-parse", "HEAD").strip(),
+        "min_params": 1,
+        "max_params": 4,
+        **extra,
+    }
+    (wt / ".claude/policy_finder.json").write_text(json.dumps(config))
+
+
+def _version_1_done(main, wt):
+    """Version 1 checked, committed and swept."""
+    write_rule(wt)
+    (wt / f"scripts/policy_finder/{NAME}").mkdir(parents=True)
+    (wt / f"scripts/policy_finder/{NAME}/a.py").write_text("x = 1\n")
+    assert check(main, "--commit").returncode == 0
+    sweep = wt / f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json"
+    sweep.parent.mkdir(parents=True)
+    sweep.write_text("{}\n")
+    git(wt, "add", "-A")
+    git(wt, "commit", "-q", "-m", "sweep")
+
+
+def write_v2(wt):
+    (wt / f"configs/managers/rule_based/{NAME}-v2.yml").write_text(RULE_TEXT)
+    (wt / f"notes/policy_finder/{NAME}-v2.md").write_text(NOTES_TEXT)
+
+
+def test_version_2_checks_its_own_files(repo):
+    """A later version writes its own rule and notes and the shared scripts;
+    its check covers only the changes since it started."""
+    main, wt = repo
+    _version_1_done(main, wt)
+    _version_2(wt)
+    write_v2(wt)
+    (wt / f"scripts/policy_finder/{NAME}/a.py").write_text("x = 2\n")  # shared
+    result = check(main, "--commit")
+    assert result.returncode == 0, result.stderr
+    assert git(wt, "log", "-1", "--format=%s") == (
+        f"policy-finder {NAME}-v2: rule, notes and analysis\n"
+    )
+    for path in (
+        f"configs/simulation/policy_finder/{NAME}-v2_sweep.yml",
+        f"plots/simulation/policy_finder/{NAME}-v2_sweep/sweep.json",
+    ):
+        (wt / path).parent.mkdir(parents=True, exist_ok=True)
+        (wt / path).write_text("{}\n")
+    assert check(main).returncode == 0  # its own sweep is allowed
+
+
+def test_version_2_needs_its_own_rule(repo):
+    main, wt = repo
+    _version_1_done(main, wt)
+    _version_2(wt)
+    result = check(main)
+    assert result.returncode == 1
+    assert f"no configs/managers/rule_based/{NAME}-v2.yml" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "path",
+    [RULE, NOTES, f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json"],
+)
+@pytest.mark.parametrize("committed", [False, True])
+def test_version_2_cannot_change_version_1(repo, path, committed):
+    """An earlier version's rule, notes and results are read-only."""
+    main, wt = repo
+    _version_1_done(main, wt)
+    _version_2(wt)
+    write_v2(wt)
+    (wt / path).write_text((wt / path).read_text() + "\n# changed\n")
+    if committed:
+        git(wt, "commit", "-q", "-am", "sneak")
+    result = check(main)
+    assert result.returncode == 1
+    assert f"outside the write paths: {path}" in result.stderr
+
+
+def test_no_upper_param_bound(repo):
+    """max_params null: any number of params from min_params up (#244)."""
+    main, wt = repo
+    _version_1_done(main, wt)
+    _version_2(wt, max_params=None)
+    write_v2(wt)
+    many = "\n".join(
+        f"  p{i}: {{definition: weight {i}, type: float}}" for i in range(6)
+    )
+    rule = (
+        f"params:\n{many}\nsweep_config:\n"
+        + "\n".join(f"  p{i}: [0, 1]" for i in range(6))
+        + "\ncode: |\n  punishment = (p0 + p1 + p2 + p3 + p4 + p5) * (20 - c)\n"
+    )
+    (wt / f"configs/managers/rule_based/{NAME}-v2.yml").write_text(rule)
+    result = check(main)
+    assert result.returncode == 0, result.stderr

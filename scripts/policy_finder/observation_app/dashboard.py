@@ -21,7 +21,7 @@ import subprocess
 from pathlib import Path
 
 import altair as alt
-from summarize import OBSERVATORY
+from summarize import OBSERVATORY, versions
 import pandas as pd
 import streamlit as st
 import yaml
@@ -115,30 +115,28 @@ def running_names():
     return names
 
 
-def committed(name: str) -> int:
-    """Commits on the instance's branch since the base (the check commits)."""
+def committed(wt: Path, version: str) -> bool:
+    """Whether the version's rule is committed on the branch (the check commits)."""
+    rule = f"configs/managers/rule_based/{version}.yml"
     out = subprocess.run(
-        [
-            "git",
-            "-C",
-            str(MAIN),
-            "rev-list",
-            "--count",
-            f"{BASE}..policy-finder/{name}",
-        ],
+        ["git", "-C", str(wt), "ls-files", "--error-unmatch", rule],
         capture_output=True,
-        text=True,
     )
-    return int(out.stdout.strip()) if out.returncode == 0 else 0
+    return out.returncode == 0
 
 
-def status(name: str, running: set) -> str:
-    if name in running:
+def status(wt: Path, version: str, running: set) -> str:
+    """A version's status; a running launcher runs the instance's latest."""
+    if wt.name in running and version == versions(wt.name)[-1]:
         return "running"
-    report = WT_ROOT / f"{name}.report.md"
+    report = WT_ROOT / f"{version}.report.md"
     if report.exists() and report.stat().st_size > 0:  # the launcher makes it empty
-        return "checked" if committed(name) else "done"
+        return "checked" if committed(wt, version) else "done"
     return "stopped"
+
+
+def version_label(version: str, all_versions: list) -> str:
+    return f"v{all_versions.index(version) + 1}"
 
 
 def pill(key: str) -> str:
@@ -200,12 +198,18 @@ def entries(section: str) -> list:
     return out
 
 
-def activity(wt: Path, name: str) -> pd.DataFrame:
-    """The agent's writes to its notes, scripts and rule, from its session log."""
+def activity(wt: Path, version: str) -> pd.DataFrame:
+    """The agent's writes to the version's notes and rule and the instance's
+    scripts, from the session logs that wrote the version's notes or rule
+    (every version of an instance runs in the same worktree)."""
     folder = SESSIONS / re.sub(r"[^A-Za-z0-9]", "-", str(wt))
+    notes = f"notes/policy_finder/{version}.md"
+    rule = f"configs/managers/rule_based/{version}.yml"
+    scripts = f"scripts/policy_finder/{wt.name}/"
     rows = []
     # the agent runs as a subagent, logged under subagents/
     for log in folder.rglob("*.jsonl") if folder.is_dir() else []:
+        log_rows = []
         for line in log.read_text().splitlines():
             try:
                 event = json.loads(line)
@@ -223,19 +227,15 @@ def activity(wt: Path, name: str) -> pd.DataFrame:
                 path = call["input"].get("file_path", "")
                 kind = (
                     "notes"
-                    if f"notes/policy_finder/{name}" in path
+                    if path.endswith(notes)
                     else (
                         "rule"
-                        if "rule_based/" in path
-                        else (
-                            "scripts"
-                            if f"scripts/policy_finder/{name}/" in path
-                            else None
-                        )
+                        if path.endswith(rule)
+                        else ("scripts" if scripts in path else None)
                     )
                 )
                 if kind:
-                    rows.append(
+                    log_rows.append(
                         {
                             "time": event["timestamp"],
                             "kind": kind,
@@ -243,6 +243,8 @@ def activity(wt: Path, name: str) -> pd.DataFrame:
                             "action": call["name"],
                         }
                     )
+        if any(r["kind"] != "scripts" for r in log_rows):  # this version's session
+            rows += log_rows
     frame = pd.DataFrame(rows, columns=["time", "kind", "file", "action"])
     frame["time"] = pd.to_datetime(frame["time"], utc=True).dt.tz_convert(None)
     return frame.sort_values("time")
@@ -287,12 +289,12 @@ def activity_chart(frame: pd.DataFrame):
     )
 
 
-def show_notes(wt: Path, name: str, text: str):
+def show_notes(wt: Path, version: str, text: str):
     sections = parse_notes(text)
     trail = entries(sections.get("Explorations", ""))
     findings = items(sections.get("Key findings", ""))
-    log = activity(wt, name)
-    scripts_dir = wt / "scripts/policy_finder" / name
+    log = activity(wt, version)
+    scripts_dir = wt / "scripts/policy_finder" / wt.name
     n_scripts = (
         len([p for p in scripts_dir.glob("*") if p.is_file()])
         if scripts_dir.is_dir()
@@ -789,50 +791,76 @@ def top10_html(points: pd.DataFrame, params: list) -> str:
     )
 
 
-def show_instance(wt: Path, key: str):
-    name = wt.name
+def version_meta(wt: Path, version: str) -> str:
+    """The version's param limits, branch and worktree, under its title. The
+    instance file holds the latest version's; an earlier version shows none."""
     config = json.loads(read(wt / ".claude/policy_finder.json") or "{}")
+    latest = config.get("rule_name", wt.name) == version
+    limits = (
+        f"params {config.get('min_params', '?')}–"
+        f"{'any' if config.get('max_params', '?') is None else config.get('max_params', '?')}  ·  "
+        if latest
+        else ""
+    )
+    return f"{limits}policy-finder/{esc(wt.name)}  ·  {esc(wt)}"
+
+
+def show_version(wt: Path, version: str, key: str):
+    """One version of an instance: its own notes, rule, report and sweep; the
+    scripts folder is the instance's, shared by every version."""
+    all_versions = versions(wt.name)
+    title = esc(wt.name) + (
+        f' <span class="ver">{version_label(version, all_versions)}</span>'
+        if len(all_versions) > 1
+        else ""
+    )
     st.markdown(
-        f'<div class="inst"><h2>{esc(name)}</h2>{pill(key)}</div>'
-        f'<div class="meta">params {config.get("min_params", "?")}–'
-        f'{config.get("max_params", "?")}  ·  policy-finder/{esc(name)}  ·  '
-        f"{esc(wt)}</div>",
+        f'<div class="inst"><h2>{title}</h2>{pill(key)}</div>'
+        f'<div class="meta">{version_meta(wt, version)}</div>',
         unsafe_allow_html=True,
     )
     tabs = st.tabs(["Notes", "Rule", "Scripts", "Report", "Sweep"])
     with tabs[0]:
-        notes = read(wt / "notes/policy_finder" / f"{name}.md")
+        notes = read(wt / "notes/policy_finder" / f"{version}.md")
         if notes:
-            show_notes(wt, name, notes)
+            show_notes(wt, version, notes)
         else:
             empty("No notes yet.")
     with tabs[1]:
-        rule = read(wt / "configs/managers/rule_based" / f"{name}.yml")
+        rule = read(wt / "configs/managers/rule_based" / f"{version}.yml")
         if rule:
             show_rule(rule)
         else:
             empty("No rule yet.")
     with tabs[2]:
-        show_scripts(wt, name)
+        show_scripts(wt, wt.name)
     with tabs[3]:
-        report = read(WT_ROOT / f"{name}.report.md")
+        report = read(WT_ROOT / f"{version}.report.md")
         if report:
             doc(report, "report")
         else:
             empty("No report yet: still running, or stopped.")
     with tabs[4]:
-        show_sweep(wt, name)
+        show_sweep(wt, version)
 
 
 def counts_html(found: list) -> str:
-    """One line of totals for the overview: instances, validated, final best."""
-    bests = []
+    """One line of totals for the overview: lineages, versions, validated
+    versions and the final best of any version."""
+    bests, n_versions = [], 0
     for wt in found:
-        best = final_best(read_json(wt / SWEEP_DIR.format(name=wt.name) / VALIDATE / "sweep.json"))
-        if best:
-            bests.append((best["pool"], best["pool_se"], wt.name))
+        all_versions = versions(wt.name)
+        n_versions += len(all_versions)
+        for v in all_versions:
+            best = final_best(sweep_files(wt, v)["validate"])
+            if best:
+                label = v if len(all_versions) == 1 else (
+                    f"{wt.name} {version_label(v, all_versions)}"
+                )
+                bests.append((best["pool"], best["pool_se"], label))
     line = [
-        f"<span><b>{len(found)}</b>instances</span>",
+        f"<span><b>{len(found)}</b>lineages</span>",
+        f"<span><b>{n_versions}</b>versions</span>",
         f"<span><b>{len(bests)}</b>validated</span>",
     ]
     if bests:
@@ -892,61 +920,81 @@ MECHANISM_CAPTION = (
 )
 
 
-def summary_frame(found: list, keys: dict) -> pd.DataFrame:
-    """One row per instance: its rule's make-up, its sweep and its notes."""
-    from aimanager.manager.rule import RULE_INPUTS
-
+def summary_frame(found: list, running: set) -> pd.DataFrame:
+    """One row per lineage (#244): its best validated version, or its latest
+    while none is validated, with the version's rule, sweep and notes."""
     summary = load_summary()
     rows = []
     for wt in found:
-        name = wt.name
-        row = {"name": name, "status": STATUS[keys[name]]}
-        rule_path = wt / "configs/managers/rule_based" / f"{name}.yml"
-        text = read(rule_path)
-        try:
-            rule = yaml.safe_load(text) if text else None
-            code = rule["code"] if isinstance(rule, dict) else None
-        except (KeyError, yaml.YAMLError):  # a rule still being written
-            rule, code = None, None
-        if code:
-            row["params"] = len(rule.get("params") or {})
-            row["inputs"] = [i for i in RULE_INPUTS if re.search(rf"\b{i}\b", code)]
-            entry = summary["instances"].get(name)
-            if entry and entry.get("rule_sha") == rule_sha(rule_path):
-                row.update(
-                    bar=entry["bar"], mechanisms=entry["mechanisms"], idea=entry["idea"]
-                )
-            else:  # new, or the rule changed since it was summarized
-                row.update(bar=NOT_SUMMARIZED, mechanisms=[], idea="")
-        files = sweep_files(wt, name)
-        row["stage"] = (
-            "validated" if files["validate"] else "validating" if files["sweep"]
-            else "not swept"
+        all_versions = versions(wt.name)
+        candidates = [
+            version_row(wt, v, status(wt, v, running), summary) for v in all_versions
+        ]
+        validated = [r for r in candidates if "best pool" in r]
+        row = (
+            max(validated, key=lambda r: r["best pool"]) if validated else candidates[-1]
         )
-        best = final_best(files["validate"])
-        if best:  # only a validated best: a sweep's own best reads high
-            row.update(
-                {
-                    "best pool": best["pool"],
-                    "se": best["pool_se"],
-                    "members": best["members"],
-                    "from": point_source(best["name"]),
-                }
-            )
-        notes = read(wt / "notes/policy_finder" / f"{name}.md")
-        if notes:
-            sections = parse_notes(notes)
-            row["explorations"] = len(entries(sections.get("Explorations", "")))
-            row["findings"] = len(items(sections.get("Key findings", "")))
-        scripts = wt / "scripts/policy_finder" / name
-        row["scripts"] = (
-            len([p for p in scripts.glob("*") if p.is_file()]) if scripts.is_dir() else 0
-        )
-        rows.append(row)
+        rows.append({**row, "versions": len(all_versions)})
     frame = pd.DataFrame(rows)
     if "best pool" not in frame:
         frame["best pool"] = float("nan")
     return frame.sort_values("best pool", ascending=False, na_position="last")
+
+
+def version_row(wt: Path, version: str, key: str, summary: dict) -> dict:
+    """One version's rule make-up, final best and notes, for the Summary."""
+    from aimanager.manager.rule import RULE_INPUTS
+
+    name = wt.name
+    all_versions = versions(name)
+    row = {
+        "name": name,
+        "version": version,
+        "version label": version_label(version, all_versions),
+        "status": STATUS[key],
+    }
+    rule_path = wt / "configs/managers/rule_based" / f"{version}.yml"
+    text = read(rule_path)
+    try:
+        rule = yaml.safe_load(text) if text else None
+        code = rule["code"] if isinstance(rule, dict) else None
+    except (KeyError, yaml.YAMLError):  # a rule still being written
+        rule, code = None, None
+    if code:
+        row["params"] = len(rule.get("params") or {})
+        row["inputs"] = [i for i in RULE_INPUTS if re.search(rf"\b{i}\b", code)]
+        entry = summary["instances"].get(version)
+        if entry and entry.get("rule_sha") == rule_sha(rule_path):
+            row.update(
+                bar=entry["bar"], mechanisms=entry["mechanisms"], idea=entry["idea"]
+            )
+        else:  # new, or the rule changed since it was summarized
+            row.update(bar=NOT_SUMMARIZED, mechanisms=[], idea="")
+    files = sweep_files(wt, version)
+    row["stage"] = (
+        "validated" if files["validate"] else "validating" if files["sweep"]
+        else "not swept"
+    )
+    best = final_best(files["validate"])
+    if best:  # only a validated best: a sweep's own best reads high
+        row.update(
+            {
+                "best pool": best["pool"],
+                "se": best["pool_se"],
+                "members": best["members"],
+                "from": point_source(best["name"]),
+            }
+        )
+    notes = read(wt / "notes/policy_finder" / f"{version}.md")
+    if notes:
+        sections = parse_notes(notes)
+        row["explorations"] = len(entries(sections.get("Explorations", "")))
+        row["findings"] = len(items(sections.get("Key findings", "")))
+    scripts = wt / "scripts/policy_finder" / name
+    row["scripts"] = (
+        len([p for p in scripts.glob("*") if p.is_file()]) if scripts.is_dir() else 0
+    )
+    return row
 
 
 def pool_chart(frame: pd.DataFrame, refs: list):
@@ -1087,7 +1135,7 @@ def mechanism_counts(frame: pd.DataFrame) -> list:
 def summary_stats(frame: pd.DataFrame) -> list:
     validated = frame.dropna(subset=["best pool"])
     swept = int((frame["stage"] != "not swept").sum()) if "stage" in frame else 0
-    tiles = [("Instances", f"{len(frame)}"), ("Swept", f"{swept}")]
+    tiles = [("Lineages", f"{len(frame)}"), ("Swept", f"{swept}")]
     if validated.empty:
         return tiles + [("Validated", "0")]
     top = validated.iloc[0]
@@ -1158,28 +1206,32 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
         )
         bar = r.get("bar") if isinstance(r.get("bar"), str) else ""
         name = esc(r["name"])
+        href = f"?agent={name}&version={esc(r['version'])}"
         idea = r.get("idea") if isinstance(r.get("idea"), str) else ""
         # every cell carries its own link over itself: a link stretched over
         # the row would size to the table (a row is no containing block), and
         # the last row's would cover every other
         hit = (
-            f'<a class="hit" href="?agent={name}" target="_self" tabindex="-1"'
+            f'<a class="hit" href="{href}" target="_self" tabindex="-1"'
             ' aria-hidden="true"></a>'
         )
         rows.append(
-            f'<tr data-open="{name}"><td class="name">{hit}'
-            f'<a class="open" href="?agent={name}" target="_self">{name}</a>'
+            f'<tr data-open="{name}" data-version="{esc(r["version"])}">'
+            f'<td class="name">{hit}'
+            f'<a class="open" href="{href}" target="_self">{name}</a>'
             + (f'<div class="idea">{esc(idea)}</div>' if idea else "")
             + "</td>"
             f'<td class="txt">{hit}{cell}</td><td>{hit}{num(r, "members", ".2f")}</td>'
+            f'<td class="txt">{hit}{esc(r["version label"])}'
+            f'<span class="se"> of {r["versions"]}</span></td>'
             f'<td class="txt">{hit}{esc(r["from"]) if isinstance(r.get("from"), str) else ""}</td>'
             f'<td>{hit}{num(r, "params", ".0f")}</td>'
             f'<td class="txt">{hit}{esc(bar)}</td><td class="txt tags">{hit}{tags}</td></tr>'
         )
-    heads = ("agent", "final best", "members", "from", "params", "punishes below",
-             "mechanisms")
+    heads = ("agent", "final best", "members", "version", "from", "params",
+             "punishes below", "mechanisms")
     head = "".join(
-        f'<th class="{"txt" if h in ("agent", "final best", "from", "punishes below", "mechanisms") else ""}">'
+        f'<th class="{"txt" if h in ("agent", "final best", "version", "from", "punishes below", "mechanisms") else ""}">'
         f"{h}</th>"
         for h in heads
     )
@@ -1204,9 +1256,7 @@ def top_note(frame: pd.DataFrame) -> str:
 
 
 def show_summary(found: list):
-    running = running_names()
-    keys = {w.name: status(w.name, running) for w in found}
-    frame = summary_frame(found, keys)
+    frame = summary_frame(found, running_names())
     refs = references()
     shown = frame.head(SUMMARY_TOP)
     stats(summary_stats(frame))
@@ -1230,20 +1280,32 @@ def show_summary(found: list):
 
 @st.fragment(run_every=REFRESH_S)
 def board():
+    """A lineage (an instance and its versions, #244), then one of its versions."""
     found = instances()
     st.caption(f"{len(found)} under {WT_ROOT} · refreshes every {REFRESH_S} s")
     if not found:
         empty("No instances yet. Start one with the policy-finder skill.")
         return
     running = running_names()
-    keys = {d.name: status(d.name, running) for d in found}
-    pick = st.selectbox(
-        "Instance",
-        [d.name for d in found],
-        format_func=lambda n: f"{n}   ·   {STATUS[keys[n]]}",
-        key="instance",
-    )
-    show_instance(WT_ROOT / pick, keys[pick])
+    lineage = {d.name: versions(d.name) for d in found}
+    latest = {d.name: status(d, lineage[d.name][-1], running) for d in found}
+
+    def label(n):
+        count = len(lineage[n])
+        return f"{n}   ·   {count} version{'s' * (count > 1)}   ·   {STATUS[latest[n]]}"
+
+    pick = st.selectbox("Lineage", list(lineage), format_func=label, key="instance")
+    wt, all_versions = WT_ROOT / pick, lineage[pick]
+    version = all_versions[-1]
+    if len(all_versions) > 1:
+        version = st.segmented_control(
+            "Version",
+            all_versions,
+            default=all_versions[-1],
+            format_func=lambda v: version_label(v, all_versions),
+            key=f"version-{pick}",
+        ) or all_versions[-1]
+    show_version(wt, version, status(wt, version, running))
 
 
 # `streamlit run` runs this file as __main__; export_html.py imports it for
@@ -1258,11 +1320,14 @@ if __name__ == "__main__":
         f' manager</p><p class="data-note">{esc(DATA_NOTE)}</p></div>',
         unsafe_allow_html=True,
     )
-    # a Summary row links here with ?agent=<name>: open that agent
+    # a Summary row links here with ?agent=<name>&version=<version>: open it
     agent = st.query_params.get("agent")
     if agent:
         st.session_state["view"] = "Agent browser"
         st.session_state["instance"] = agent
+        version = st.query_params.get("version")
+        if version:
+            st.session_state[f"version-{agent}"] = version
         st.query_params.clear()
     view = st.segmented_control(
         "View",

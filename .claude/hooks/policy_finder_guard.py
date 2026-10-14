@@ -7,13 +7,16 @@ wrapper and the policy-finder subagent alike). Reads the hook input JSON on
 stdin and prints a PreToolUse deny decision, or nothing to let the call
 through to the permission rules and the sandbox.
 
-- Write/Edit/NotebookEdit: only configs/managers/rule_based/<name>.yml,
-  notes/policy_finder/<name>.md and scripts/policy_finder/<name>/**
+- Write/Edit/NotebookEdit: only the version's rule and notes,
+  configs/managers/rule_based/<rule_name>.yml and
+  notes/policy_finder/<rule_name>.md, and scripts/policy_finder/<name>/**
+  (shared by every version); an earlier version's files are not writable
 - Read/Grep/Glob: only inside the worktree, never its .git
 - Bash: no `git` or `gh` anywhere in the command
 - WebFetch, WebSearch and MCP tools: never
 
-<name> comes from .claude/policy_finder.json, written by the launcher. The
+<name> and <rule_name> come from .claude/policy_finder.json, written by the
+launcher (instance_settings.py; <rule_name> is <name> for version 1). The
 worktree root is two levels above this file. Anything the guard cannot
 check (bad input, missing instance file) is denied.
 """
@@ -52,13 +55,20 @@ def _inside(path, base):
 def write_paths():
     try:
         with open(INSTANCE_FILE) as f:
-            name = json.load(f)["name"]
-    except (OSError, ValueError, KeyError, TypeError):
+            instance = json.load(f)
+        name = instance["name"]
+        # the version's rule and notes (#244); an instance from before
+        # versions has only its name
+        stem = instance.get("rule_name", name)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
         raise Denied(f"no instance file at {INSTANCE_FILE}: writes are disabled")
-    if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name):
-        raise Denied(f"bad instance name {name!r} in {INSTANCE_FILE}")
-    rule = os.path.join(ROOT, "configs", "managers", "rule_based", f"{name}.yml")
-    notes = os.path.join(ROOT, "notes", "policy_finder", f"{name}.md")
+    for value in (name, stem):
+        if not isinstance(value, str) or not re.fullmatch(
+            r"[a-z0-9][a-z0-9_-]*", value
+        ):
+            raise Denied(f"bad instance name {value!r} in {INSTANCE_FILE}")
+    rule = os.path.join(ROOT, "configs", "managers", "rule_based", f"{stem}.yml")
+    notes = os.path.join(ROOT, "notes", "policy_finder", f"{stem}.md")
     scripts = os.path.join(ROOT, "scripts", "policy_finder", name)
     return rule, notes, scripts
 

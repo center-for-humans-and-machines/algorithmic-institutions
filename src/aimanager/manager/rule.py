@@ -424,7 +424,8 @@ def validate_rule(rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS):
     """Check a rule for a sweep; return its design (see sobol_design).
 
     On top of read_rule: `sweep_config` is required, the rule declares
-    `min_params` to `max_params` params, every design point passes
+    `min_params` to `max_params` params (None: no upper bound, #244), every
+    design point passes
     check_params (constraints included), and the code runs on every design
     point over random env states (dry_run_inputs) without error or NaN.
     """
@@ -432,11 +433,13 @@ def validate_rule(rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS):
     if "sweep_config" not in rule:
         raise ValueError(f"{rule_path}: needs a `sweep_config` for a sweep")
     n_params = len(rule["params"])
-    if not min_params <= n_params <= max_params:
-        raise ValueError(
-            f"{rule_path}: declares {n_params} params, allowed {min_params}"
-            f" to {max_params}"
+    if n_params < min_params or (max_params is not None and n_params > max_params):
+        allowed = (
+            f"at least {min_params}"
+            if max_params is None
+            else f"{min_params} to {max_params}"
         )
+        raise ValueError(f"{rule_path}: declares {n_params} params, allowed {allowed}")
 
     design = sobol_design(rule, n_points)
     inputs = dry_run_inputs()
