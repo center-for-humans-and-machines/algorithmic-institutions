@@ -1,0 +1,67 @@
+{
+  "config": "configs/simulation/manager_testing/23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_timeout.yml",
+  "episodes": 20,
+  "agent_rounds": 3840,
+  "timeouts": 86,
+  "timeout_rate": 0.022395833333333334,
+  "env_recorded_contribution_at_timeouts": {
+    "9.0": 86
+  },
+  "punisher_served_at_timeouts": {
+    "9.0": 86
+  },
+  "models": [
+    {
+      "label": "contribution",
+      "reads": [
+        "agent_group",
+        "prev_contribution",
+        "prev_punishment"
+      ],
+      "calls": 481,
+      "served_at_timeout_cells": {
+        "contribution": {
+          "0.0": 168,
+          "9.0": 81
+        },
+        "prev_contribution": {
+          "9.0": 249
+        }
+      }
+    },
+    {
+      "label": "valid",
+      "reads": [
+        "prev_contribution_valid"
+      ],
+      "calls": 481,
+      "served_at_timeout_cells": {
+        "contribution": {
+          "0.0": 168,
+          "9.0": 81
+        },
+        "prev_contribution": {
+          "9.0": 249
+        }
+      }
+    },
+    {
+      "label": "switch",
+      "reads": [
+        "agent_group",
+        "common_good",
+        "punishment",
+        "round_number"
+      ],
+      "calls": 480,
+      "served_at_timeout_cells": {
+        "prev_contribution": {
+          "9.0": 241
+        },
+        "contribution": {
+          "9.0": 86
+        }
+      }
+    }
+  ]
+}

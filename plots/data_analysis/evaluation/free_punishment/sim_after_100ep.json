@@ -1,0 +1,76 @@
+{
+  "mode": "sim",
+  "config": "configs/simulation/manager_testing/23_2g8a_contr_stimulus_skip_self_gnncopar1_contr_gnn_switch_freepun.yml",
+  "episodes": 100,
+  "agent_rounds": 19200,
+  "timeouts": 357,
+  "timeout_rate": 0.01859375,
+  "punisher_spend_at_timeout_cells": {
+    "0": 355,
+    "15": 1,
+    "24": 1
+  },
+  "free_punishments": 2,
+  "free_punishment_rate_of_timeouts": 0.0056022408963585435,
+  "free_punishment_rate_of_agent_rounds": 0.00010416666666666667,
+  "env_recorded_punishment_at_timeouts": {
+    "0": 357
+  },
+  "punisher_served_prev_punishment_at_timeouts": {
+    "0": 346
+  },
+  "max_common_good_change_if_zeroed": 0.0,
+  "max_group_payoff_change_if_zeroed": 0.0,
+  "models": [
+    {
+      "label": "contribution",
+      "reads": [
+        "agent_group",
+        "prev_contribution",
+        "prev_punishment"
+      ],
+      "calls": 2401,
+      "served_at_timeout_cells": {
+        "punishment": {
+          "0.0": 1154
+        },
+        "prev_punishment": {
+          "0.0": 1154
+        }
+      }
+    },
+    {
+      "label": "valid",
+      "reads": [
+        "prev_contribution_valid"
+      ],
+      "calls": 2401,
+      "served_at_timeout_cells": {
+        "punishment": {
+          "0.0": 1154
+        },
+        "prev_punishment": {
+          "0.0": 1154
+        }
+      }
+    },
+    {
+      "label": "switch",
+      "reads": [
+        "agent_group",
+        "common_good",
+        "punishment",
+        "round_number"
+      ],
+      "calls": 2400,
+      "served_at_timeout_cells": {
+        "prev_punishment": {
+          "0.0": 1146
+        },
+        "punishment": {
+          "0.0": 357
+        }
+      }
+    }
+  ]
+}

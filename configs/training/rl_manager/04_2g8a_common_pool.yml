@@ -1,0 +1,76 @@
+# The manager is paid on the COMMON POOL, which is what the real manager in
+# the experiment was paid on: reports/basics.md, "The manager is receiving a
+# payout proportionally to the common pool", i.e. 1.6 * sum(contributions)
+# minus the punishments it dealt. That is the `common_good` column of
+# experiments/2group_8agent_50ep.csv and the identity holds there to 2.8e-14.
+#
+# Identical to 03_2g8a_sum_d_lr1e3_freq500.yml in every other respect, so the
+# reward is the only difference when the two are compared. `reward_mode: sum`
+# pays 20 * n_valid + 0.6 * sum(c) - 2 * sum(p) instead: it prices a
+# punishment point at 3.33 contribution points against the pool's 0.62 and
+# spends 63% of its variance on headcount rather than on managing.
+#
+# Known, deliberately inherited from config D and NOT addressed here (review
+# findings D3/D5, notes/reviews/rl-manager-review.md): the opponent is the
+# pre-fix lagged punisher, and the RL call sites are served the raw state.
+# Those are other branches' changes; fixing them here would confound the
+# reward comparison.
+
+artificial_humans: artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+artificial_humans_valid: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+switch_model: artifacts/artificial_humans/switch_pred_opt_50ep_doubled_reanchored/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+opponent_manager: artifacts/artificial_humans/punishment_rnn_edge_50ep_doubled/model/architecture_node+edge+rnn__dataset_50ep_doubled.pt
+artificial_humans_model: "graph"
+job_id: 04_2g8a_common_pool
+seed: 42
+
+manager_args:
+  opt_args:
+      lr: 1.e-3
+  gamma: 0.98
+  eps: 0.1
+  target_update_freq: 500
+  model_args:
+      hidden_size: 100
+      add_rnn: true
+      add_edge_model: true
+      add_global_model: False
+      x_encoding:
+        - name: contribution
+          n_levels: 21
+          encoding: numeric
+        - name: prev_punishment
+          n_levels: 31
+          encoding: numeric
+        - etype: bool
+          name: contribution_valid
+        - etype: bool
+          name: in_group
+      b_encoding:
+        - name: round_number
+          n_levels: 24
+          encoding: onehot
+
+replay_memory_args:
+  n_episodes: 100
+
+n_update_steps: 15000
+eval_period: 20
+training_batch_size: 1
+
+env_args:
+  n_groups: 2
+  n_agents: 8
+  agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+  rl_group_id: 0
+  switch_every: 4
+  n_contributions: 21
+  n_punishments: 31
+  n_rounds: 24
+  batch_size: 1000
+  # avg | sum | common_pool -- see REWARD_MODES in manager/environment.py
+  reward_mode: common_pool
+
+device: "cuda"
+output_dir: "artifacts/manager/04_2g8a_common_pool"
+basedir: "."

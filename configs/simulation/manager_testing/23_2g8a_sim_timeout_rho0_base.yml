@@ -1,0 +1,44 @@
+# sim-timeout-imputation, the BEFORE half of the noise-off arm: exactly
+# 23_2g8a_sim_timeout_rho0.yml (same artifacts, same seed, same protocol) but
+# run from a remote copy of this branch whose two changed source files
+# (src/aimanager/manager/environment.py, src/aimanager/simulation/linear_ah.py)
+# are restored to the parent's versions at 7d86efd. Only output_dir and
+# figure_name differ from the candidate's noise-off config, so the pair is a
+# clean before/after of the serving fix on the state-spread diagnostic -- the
+# models, the seed and the episode count are identical and only the served
+# value of a timed-out player's contribution differs.
+# This run is a diagnostic; it is NOT scored and NOT gated.
+# See notes/autoresearch_log/sim-timeout-imputation.md.
+
+seed: 42
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  lin_multinomial_copula:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+
+pairings:
+  - name: lin_multinomial_copula_self
+    group_0: lin_multinomial_copula
+    group_1: lin_multinomial_copula
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 100
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+output_dir: plots/simulation/23_2g8a_sim_timeout_rho0_base
+figure_name: 2g8a_sim_timeout_rho0_base
+save_per_round: true
+basedir: .

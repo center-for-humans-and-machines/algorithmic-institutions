@@ -1,0 +1,52 @@
+{
+  "cell_key": "episode_round_agent_group",
+  "copula_switch_every": 1,
+  "data_file": "experiments/baseline/2group_8agent_50ep_bline_train.csv",
+  "data_file_holdout": "experiments/baseline/2group_8agent_50ep_bline_test.csv",
+  "data_note": "create_torch_data on the full human file (training defaults), restricted to the 40 single-copy train episodes; teacher-forced marginals from the source model; rows where contribution_valid",
+  "date": "2026-08-27T09:40:34+00:00",
+  "diag_pit": "randomized",
+  "diag_pit_rho": 0.045726003288415626,
+  "estimator": "pairwise-likelihood MLE of an exchangeable Gaussian copula (rectangle probabilities of each observation's own predicted discrete marginal, Phi_2 by Gauss-Legendre quadrature); rho over within-(episode, round, agent_group) pairs, rho_lag1 over CROSS-PLAYER pairs of consecutive rounds of the same (episode, agent_group); phi = rho_lag1_cross / rho; all-pairs refit is a diagnostic only",
+  "git_head": "unavailable: Command '['git', '-C', '/raven/u/certuer/iso_contr_herdcopar1_v2', 'rev-parse', 'HEAD']' returned non-zero exit status 128.",
+  "holdout_rho": 0.13423231991344123,
+  "lag_step": 1,
+  "n_bootstrap": 200,
+  "n_bootstrap_phi": 200,
+  "n_cells": 1608,
+  "n_cross_pairs": 35317,
+  "n_cross_pairs_cross_player": 28714,
+  "n_cross_pairs_self": 6603,
+  "n_episodes": 40,
+  "n_pairs": 15090,
+  "n_rows": 7457,
+  "phi": 1.1588380212468576,
+  "phi_allpairs": 1.1114407681084841,
+  "phi_ci": [
+    0.8256631146532615,
+    1.6415133722844082
+  ],
+  "phi_drop_reason": null,
+  "phi_final": 1.0,
+  "phi_final_reason": "orchestrator ruling 2026-08-27 (log: notes/autoresearch_log/contribution-herding-copula-v2.md, plan revision): phi_hat 1.1588380212468576 saturated the AR(1) boundary with CI [0.8256631146532615, 1.6415133722844082] spanning 1; adopted the unit-root boundary phi = 1.0 (static episode latent); rho untouched",
+  "phi_kept": true,
+  "phi_verdict": "PHI KEPT",
+  "preflight": {
+    "copula": 0.7928150641319318,
+    "human": 0.8472681041593946,
+    "independent": 0.7837119164031583
+  },
+  "rho": 0.06958238086256316,
+  "rho_ci": [
+    0.04592661278794028,
+    0.0854596547235886
+  ],
+  "rho_lag1_all": 0.07733669483270429,
+  "rho_lag1_cross": 0.0806347085524179,
+  "rho_se": 0.010418260898762315,
+  "roundtrip_max_bias": 0.009462259703284237,
+  "script": "scripts/artificial_humans/contribution_copula_rho.py",
+  "seed": 38381,
+  "source_model": "artifacts/artificial_humans/group_switching_contribution_50ep/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+  "source_model_sha256": "3748e9e12461eaa70c7d5ff5c445e7ac1a54396b928624bf32f5d6b9974925c1"
+}
