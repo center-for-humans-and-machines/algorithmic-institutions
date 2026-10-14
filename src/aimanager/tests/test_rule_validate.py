@@ -107,6 +107,7 @@ def test_validate_accepts(tmp_path):
         ({k: v for k, v in RULE.items() if k != "sweep_config"}, {}, "sweep_config"),
         (RULE, {"max_params": 2}, "declares 3 params, allowed 1 to 2"),
         (RULE, {"min_params": 4}, "declares 3 params, allowed 4 to 4"),
+        (RULE, {"min_params": 4, "max_params": None}, "allowed at least 4"),
         (
             _with(p=[-1, 3]),
             {},
@@ -130,10 +131,15 @@ def test_validate_accepts(tmp_path):
     ],
 )
 def test_validate_rejects(tmp_path, rule, kwargs, match):
-    if "min_params" in kwargs:
+    if "min_params" in kwargs and "max_params" not in kwargs:
         kwargs = {**kwargs, "max_params": 4}
     with pytest.raises(ValueError, match=match):
         validate_rule(_write(tmp_path, rule), **kwargs)
+
+
+def test_validate_without_upper_bound(tmp_path):
+    """max_params None takes any number of params from min_params (#244)."""
+    assert len(validate_rule(_write(tmp_path, RULE), 1, None, 16)) == 16
 
 
 # -- the CLI --------------------------------------------------------------
@@ -154,6 +160,11 @@ def test_cli(tmp_path, monkeypatch, capsys):
         main()
     assert exit_info.value.code == 1
     assert "declares 3 params" in capsys.readouterr().err
+
+    argv = ["aimanager", "validate-rule", bad, "--max-params", "none"]
+    monkeypatch.setattr(sys, "argv", argv)
+    main()
+    assert "Valid" in capsys.readouterr().out
 
 
 def test_params_are_tensors_in_the_code(tmp_path):

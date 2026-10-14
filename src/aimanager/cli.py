@@ -6,7 +6,7 @@ Usage:
     python -m aimanager simulate <config>
     python -m aimanager evaluate <config>
     python -m aimanager validate-rule <rule.yml> [--min-params N]
-        [--max-params N] [--sobol-points N]
+        [--max-params N|none] [--sobol-points N]
 """
 
 import argparse
@@ -164,7 +164,12 @@ def main():
     p = sub.add_parser("validate-rule", help="Check a rule config for a sweep")
     p.add_argument("rule", help="Path to the rule YAML")
     p.add_argument("--min-params", type=int, default=1)
-    p.add_argument("--max-params", type=int, default=4)
+    p.add_argument(
+        "--max-params",
+        type=lambda v: None if v == "none" else int(v),
+        default=4,
+        help="a number, or none for no upper bound",
+    )
     p.add_argument("--sobol-points", type=int, default=256)
 
     args = parser.parse_args()
