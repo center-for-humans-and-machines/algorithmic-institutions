@@ -9,8 +9,8 @@
 # own worktree in ../policy-finder-worktrees/<name> (outside this checkout;
 # override with PF_WORKTREE_ROOT), pulls the LFS data the agent reads, writes
 # the instance's gitignored .claude/policy_finder.json and
-# .claude/settings.local.json, and starts `claude --agent policy-finder-host`
-# there with no MCP servers. --no-start stops before starting the session.
+# .claude/settings.local.json (instance_settings.py), and starts
+# `claude --agent policy-finder-host` there with no MCP servers. --no-start stops before starting the session.
 # --headless runs the session non-interactively instead (`claude -p`, Bash
 # pre-allowed: the sandbox and the guard are the boundary) on --prompt
 # (default: design your rule) and saves the agent's final report to
@@ -27,21 +27,9 @@
 # PF_BASE overrides the base branch, to try a branch before it lands on
 # policy-finder-base.
 #
-# The instance settings bind only that worktree:
-#   - permissions: Edit only on the write paths; Read denied on .git, this
-#     checkout and ~/.claude; WebFetch and WebSearch denied
-#   - sandbox: Bash, and so any Python it runs, reads the worktree minus .git
-#     (plus the Python install, this checkout's .venv and the session's own
-#     temp dir, where the Bash tool collects output) and modifies nothing
-#     outside the write paths; no network; no unsandboxed escape.
-#     A sandbox write deny beats any narrower allow, so writes are denied by
-#     complement: every existing entry beside the write paths, level by
-#     level. New files can still be created at those levels;
-#     check_instance.sh flags them. Claude Code itself makes this checkout's
-#     .git writable for a worktree (it guards only .git/hooks), and a write to
-#     .git/config could run commands outside the sandbox: it is denied too.
-#   - auto memory off (a worktree shares this checkout's memory)
-#   - the guard hook (.claude/hooks/policy_finder_guard.py) on every tool call
+# The instance settings (instance_settings.py) bind only that worktree and the
+# version's write paths: permissions, the Bash sandbox, no network, the guard
+# hook (.claude/hooks/policy_finder_guard.py) on every tool call.
 #
 # Check and commit an instance's work with scripts/policy_finder/check_instance.sh.
 
@@ -122,97 +110,10 @@ WT="$(cd "$WT" && pwd -P)"
 git -C "$WT" lfs pull --include \
     "experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_*/**"
 
-"$PYTHON" - "$WT" "$MAIN" "$NAME" "$MIN_PARAMS" "$MAX_PARAMS" "$PYTHON" "$UV_PYTHON_DIR" \
-    "$SOBOL_POINTS" <<'EOF'
-import json
-import os
-import re
-import sys
-
-wt, main, name, min_params, max_params, python, uv_python, sobol_points = sys.argv[1:]
-home = os.path.expanduser("~")
-rule = f"configs/managers/rule_based/{name}.yml"
-notes = f"notes/policy_finder/{name}.md"
-scripts = f"scripts/policy_finder/{name}"
-os.makedirs(os.path.join(wt, scripts), exist_ok=True)
-os.makedirs(os.path.join(wt, os.path.dirname(notes)), exist_ok=True)
-# the Bash tool writes command output here; Python drops stdout it cannot stat
-session_tmp = f"/private/tmp/claude-{os.getuid()}/" + re.sub(r"[^A-Za-z0-9]", "-", wt)
-
-
-def complement(path):
-    """Every existing entry beside `path`, at each level from the worktree down."""
-    denied, parent = [], wt
-    for part in path.split("/"):
-        denied += [
-            os.path.join(parent, e) for e in sorted(os.listdir(parent)) if e != part
-        ]
-        parent = os.path.join(parent, part)
-    return denied
-
-
-# at the top level each chain lists the others' first entries; keep them
-keep = {os.path.join(wt, p.split("/")[0]) for p in (rule, notes, scripts)}
-deny_write = sorted(
-    set(complement(rule) + complement(notes) + complement(scripts)) - keep
-)
-
-instance = {
-    "name": name,
-    "min_params": int(min_params),
-    "max_params": int(max_params),
-    "sobol_points": int(sobol_points),
-    "python": python,
-}
-
-settings = {
-    "autoMemoryEnabled": False,
-    "permissions": {
-        # `/x` is relative to the worktree, `//x` is an absolute path
-        "allow": [f"Edit(/{rule})", f"Edit(/{notes})", f"Edit(/{scripts}/**)"],
-        "deny": [
-            "Read(/.git)",
-            "Read(/.git/**)",
-            f"Read(/{main}/**)",
-            f"Read(/{home}/.claude/**)",
-            "WebFetch",
-            "WebSearch",
-        ],
-    },
-    "sandbox": {
-        "enabled": True,
-        "autoAllowBashIfSandboxed": True,
-        "allowUnsandboxedCommands": False,
-        "filesystem": {
-            # a narrower path wins: the worktree is readable inside the denied
-            # home, its .git is not
-            "denyRead": [home, "/private/tmp", "/Volumes", f"{wt}/.git"],
-            "allowRead": [wt, uv_python, f"{main}/.venv", session_tmp],
-            "denyWrite": deny_write + [f"{main}/.git"],
-        },
-    },
-    "hooks": {
-        "PreToolUse": [
-            {
-                "matcher": "*",
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": f"python3 {wt}/.claude/hooks/policy_finder_guard.py",
-                    }
-                ],
-            }
-        ],
-    },
-}
-
-with open(os.path.join(wt, ".claude", "policy_finder.json"), "w") as f:
-    json.dump(instance, f, indent=2)
-    f.write("\n")
-with open(os.path.join(wt, ".claude", "settings.local.json"), "w") as f:
-    json.dump(settings, f, indent=2)
-    f.write("\n")
-EOF
+"$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$MAIN" "$NAME" \
+    --version 1 --start-commit "$(git -C "$WT" rev-parse HEAD)" \
+    --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
+    --sobol-points "$SOBOL_POINTS" --python "$PYTHON" --uv-python "$UV_PYTHON_DIR"
 
 echo "instance $NAME: branch $BRANCH, worktree $WT," \
     "params $MIN_PARAMS-$MAX_PARAMS, $SOBOL_POINTS Sobol points"
