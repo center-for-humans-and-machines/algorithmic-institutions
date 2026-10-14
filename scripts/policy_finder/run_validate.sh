@@ -10,7 +10,7 @@
 # validation sim config (generate_sim_config.py --validate: the Gaussian
 # process's peak and the top measured points, fresh seeds, more episodes),
 # syncs the worktree to its own Raven dir, submits the sim, waits for it,
-# fetches its sweep.json and best-point plots (never per_round.parquet) into
+# fetches its sweep.json, best-point plots and per-round data into
 # plots/simulation/policy_finder/<name>_sweep/validate/ and commits that and
 # the config on policy-finder/<name>. Its sweep.json's `best` is the rule's
 # final result. Needs the SSH ControlMaster to Raven (`ssh raven`).
@@ -66,7 +66,7 @@ done
 
 # 4. fetch; no sweep.json means the sim failed
 mkdir -p "$VALIDATE"
-rsync -az --exclude=per_round.parquet "raven:$REMOTE/$VALIDATE/" "$VALIDATE/" \
+rsync -az "raven:$REMOTE/$VALIDATE/" "$VALIDATE/" \
     || { echo "FAIL: cannot fetch $VALIDATE (see .log/ in $REMOTE)" >&2; exit 1; }
 [[ -f "$VALIDATE/sweep.json" ]] \
     || { echo "FAIL: the validation wrote no sweep.json (see .log/ in $REMOTE)" >&2; exit 1; }

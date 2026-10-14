@@ -11,10 +11,10 @@
 # episodes, what one 16 GB job holds), syncs the
 # worktree to its own Raven dir (its .raven_remote_dir:
 # ~/ai-isolated/policy-finder--<name>), submits every part, waits for the
-# jobs, fetches each part's sweep.json and best-point plots (never
-# per_round.parquet) into ../policy-finder-worktrees/<name>.sweep_parts/,
-# merges them into plots/simulation/policy_finder/<name>_sweep/ in the
-# worktree, fits its Gaussian process there (fit_surrogate.py:
+# jobs, fetches each part's sweep.json, best-point plots and per-round data
+# into ../policy-finder-worktrees/<name>.sweep_parts/, merges them into
+# plots/simulation/policy_finder/<name>_sweep/ in the worktree, the parts'
+# per-round data beside it (per_round_p<k>of<N>.parquet, #244), fits its Gaussian process there (fit_surrogate.py:
 # landscapes.json), commits that and the sim configs on
 # policy-finder/<name>, then runs the validation sim (run_validate.sh),
 # whose best is the rule's final result.
@@ -89,8 +89,7 @@ PART_ROOT="$WT_ROOT/$NAME.sweep_parts"
 dirs=()
 for part in "${PARTS[@]}"; do
     mkdir -p "$PART_ROOT/$part"
-    rsync -az --exclude=per_round.parquet \
-        "raven:$REMOTE/$OUT_DIR/$part/" "$PART_ROOT/$part/" \
+    rsync -az "raven:$REMOTE/$OUT_DIR/$part/" "$PART_ROOT/$part/" \
         || { echo "FAIL: cannot fetch $part (see .log/ in $REMOTE)" >&2; exit 1; }
     [[ -f "$PART_ROOT/$part/sweep.json" ]] \
         || { echo "FAIL: $part wrote no sweep.json (see .log/ in $REMOTE)" >&2; exit 1; }
@@ -102,6 +101,12 @@ SWEEP="$OUT_DIR/${NAME}_sweep"
 if (( N_PARTS > 1 )); then
     PYTHONPATH="$WT/src" "$PY" scripts/policy_finder/merge_sweeps.py "${dirs[@]}" \
         --out "$SWEEP/sweep.json"
+    # the parts' per-round data goes with the sweep, one file per part: each
+    # part numbers its episodes from 0
+    for part in "${PARTS[@]}"; do
+        mv "$PART_ROOT/$part/per_round.parquet" \
+            "$SWEEP/per_round_${part##*_sweep_}.parquet"
+    done
 fi
 
 # 6. fit the Gaussian process over the sweep: landscapes.json beside sweep.json
