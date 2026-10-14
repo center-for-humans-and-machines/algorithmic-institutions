@@ -1,6 +1,6 @@
 ---
 name: policy-finder-summarizer
-description: Bring the policy-finder observation app's Summary up to date (new_instance.sh runs it headless after every sweep). Reads the rule config and sweep of every instance not yet summarized, places each rule in the Summary's categories (adding one only when a rule needs it), records it in summary.json beside the instances, and republishes the shared artifact. Use when the user asks to update, refresh or redo the policy-finder summary.
+description: Bring the policy-finder observation app's Summary up to date (new_instance.sh runs it headless after every sweep). Reads the rule config and sweep of every instance version not yet summarized, places each rule in the Summary's categories (adding one only when a rule needs it), records it in summary.json beside the instances, and republishes the shared artifact. Use when the user asks to update, refresh or redo the policy-finder summary.
 argument-hint: "[artifact url]"
 ---
 
@@ -30,14 +30,16 @@ is up again.
    uv run --no-sync python scripts/policy_finder/observation_app/summarize.py status
    ```
 
-   It prints the categories with their meanings, then only the instances to
+   It prints the categories with their meanings, then only the versions to
    summarize: a rule never recorded, or changed since (by its hash), with the
    paths of its rule and sweep. If nothing is listed, skip to step 4: the
    summary already covers every rule.
 
-2. **Read each listed instance.** Its rule config (`params`, `sweep_config`,
-   `code`) and, if swept, its `sweep.json` (`best`, the best point's pool).
-   Do not change any instance's files.
+2. **Read each listed version.** Each version of an instance is summarized
+   on its own (`<name>`, then `<name>-v2`, ...): its rule config (`params`,
+   `sweep_config`, `code`) and, if validated, its final best
+   (`validate/sweep.json` in its sweep dir). Do not change any instance's
+   files.
 
 3. **Place and record it.** Decide, from the rule's code:
    - its **bar**, who it punishes: one `bar` category
@@ -53,11 +55,11 @@ is up again.
        category "<name>" --kind bar|mechanism --meaning "<one line>"
    ```
 
-   Then record the instance:
+   Then record the version:
 
    ```bash
    uv run --no-sync python scripts/policy_finder/observation_app/summarize.py \
-       record <name> --bar "<category>" --mechanism "<category>" ... --idea "<one line>"
+       record <version> --bar "<category>" --mechanism "<category>" ... --idea "<one line>"
    ```
 
 4. **Republish the artifact**, when this session has the Artifact tool.
@@ -75,6 +77,6 @@ is up again.
        scripts/policy_finder/observation_app/export_html.py --fragment --out <tmp>/policy-finder-instances.html
    ```
 
-5. **Report** in a few lines: which instances were added (or none), any new
+5. **Report** in a few lines: which versions were added (or none), any new
    category and why, and how the category counts changed. The live app needs
    only a reload.
