@@ -1,0 +1,369 @@
+# 50ep Training Data Audit — Step 0
+
+Tracks issue #97. Builds on PR #96 (sustained-`p` sweep showed the 50ep
+contribution AH has no decay at `p=0` and wrong-direction elasticity at
+`p=5,10`) and PR #84 (showed `prev_contribution` dominates the model
+with `prev_punishment` effectively unused).
+
+**Question:** is the `prev_punishment → contribution` signal actually
+present in the 50ep training data, or is the model faithfully reflecting
+data that already lacks the signal?
+
+## Step 0 — existing scripts
+
+Two scripts moved from `scripts/data_analysis/` to `experiment_analysis/`
+and run before any new diagnostic angles:
+
+- `experiment_analysis/compare_datasets.py` — marginal stats across
+  pilot CSVs. Extended to include `2group_8agent_50ep.csv`.
+- `experiment_analysis/feature_data_correlation.py` — mutual info / RF
+  importance / Spearman of training features against the target,
+  computed on the raw CSV.
+
+## Dataset-level comparison
+
+`uv run python experiment_analysis/compare_datasets.py`:
+
+| Metric                       | Legacy | GS 50 ep |
+|------------------------------|-------:|---------:|
+| Episodes                     | 135    | 50       |
+| Players / episode            | 4      | 8        |
+| Rounds                       | 16     | 24       |
+| Mean contribution            | 13.00  | 9.18     |
+| `contribution=20` share      | 32%    | 13%      |
+| Contribution entropy (bits)  | 3.67   | 4.08     |
+| First-round mean             | 11.29  | 8.75     |
+| Last-round mean              | 14.49  | 9.18     |
+| Mean common_good             | 71.42  | 67.74    |
+
+**Read.** Legacy trajectory climbs (11.3 → 14.5) over 16 rounds with full-cooperation (`c=20`) hit on 32% of rows. The 50ep dataset stays flat at ~9 across 24 rounds and only reaches `c=20` on 13% of rows. The behavioural regime the legacy AHs learned from is structurally absent in the GS data.
+
+**Episode-length caveat.** The protocols differ in horizon too (16 vs 24 rounds). When comparing this report's tables back to simulation outputs (e.g. PR #96), the v4 BC stack is in-distribution only through round 15 — rounds 16–23 of any sim using v4 BC AHs are extrapolation. Most of the contribution decay at `p=0` already happens in-distribution (11.5 → 5.7 by r15), so the qualitative reads hold, but quote r15 numbers when matching the legacy training horizon.
+
+## Bucket coverage — contribution and punishment
+
+`uv run python experiment_analysis/compare_datasets.py` now also prints
+bucketed shares for both feature targets.
+
+### Contribution buckets
+
+| bucket   | Legacy | 50ep |
+|----------|-------:|-----:|
+| `c=0`    | 7.5%   | 12.0% |
+| `c=1-5`  | 12.3%  | 21.6% |
+| `c=6-10` | 16.9%  | 28.5% |
+| `c=11-15`| 19.6%  | 19.4% |
+| `c=16-19`| 11.3%  | 5.4%  |
+| `c=20`   | 32.5%  | 13.1% |
+
+50ep mass is shifted left: more zero / low / mid-low contributions
+(`c≤10`) accounts for 62% of rows vs 37% in legacy. Perfect
+cooperation `c=20` shrinks from 32.5% to 13.1%. Players in 50ep
+simply contribute less on average.
+
+### Punishment buckets
+
+| bucket   | Legacy | 50ep |
+|----------|-------:|-----:|
+| `p=0`    | 59.6%  | **70.7%** |
+| `p=1-3`  | 14.7%  | 14.7% |
+| `p=4-7`  | 11.4%  | 7.5%  |
+| `p=8-15` | 9.5%   | 4.7%  |
+| `p=16+`  | 4.8%   | 2.5%  |
+
+**Read.** The "model never saw `p=0` in training" version of the
+coverage hypothesis is dead — 70.7% of 50ep rows are at `p=0`. But the
+dominance flips the question: when the punishment feature is a constant
+zero on most rows, it carries no within-row variance to learn from on
+most rows. Combined with PR #84's finding that `prev_contribution` is a
+near-perfect predictor on its own, the loss-minimizing strategy is to
+treat `prev_punishment` as low-information and rely on the
+autoregressive signal.
+
+**Caveat for PR #96 sim regimes.** `p≥8` is only ~7% of 50ep training
+rows. The wrong-direction elasticity we saw at `p=10/20/30` in the
+sustained-`p` sweep is largely extrapolation. `p=5` (in or near the
+`p=4-7` bucket, 7.5% of rows) is closer to in-distribution and is
+arguably the more trustworthy signal that the model has the elasticity
+direction wrong.
+
+## Joint `(prev_c, prev_p)` coverage
+
+`uv run python experiment_analysis/joint_coverage.py` derives per-player
+lag-1 `prev_contribution` and `prev_punishment`, then buckets both and
+prints the joint distribution.
+
+### Joint shares (% of all rows)
+
+| prev_c \ prev_p | p=0 (Leg) | p=0 (50ep) | Δ |
+|---|---:|---:|---:|
+| 0       | 3.15  | 7.85  | +4.70 |
+| 1-5     | 3.88  | 12.02 | +8.14 |
+| 6-10    | 5.81  | 18.79 | +12.99 |
+| 11-15   | 7.60  | 14.91 | +7.32 |
+| 16-19   | 6.83  | 4.27  | −2.55 |
+| **20**  | **31.24** | **12.33** | **−18.91** |
+
+**Read.** In legacy data, **31% of all rows are `(c=20, p=0)`** — the
+cooperative steady state where perfect cooperators are left
+unpunished. In 50ep that cell collapses to 12%; the freed mass
+migrates down to `(c=6-10, p=0)` (+13pp) and `(c=11-15, p=0)` (+7pp).
+The 50ep `p=0` rows live overwhelmingly at *mid-range* contribution,
+not at the cooperative ceiling.
+
+This is consistent with PR #96's finding that the 50ep AH starts at
+~8.5 (matching first-round mean 8.75) and stays there under sustained
+`p=0`. The model is faithful: at `(prev_c≈8, prev_p=0)` the empirical
+conditional behaviour in training is "stay around 8".
+
+**Takeaway.** `p=0` is more uniformly distributed across contribution
+buckets in 50ep, meaning it lost its incentive role of driving
+contribution higher — mediocre contribution is OK now.
+
+## Manager-as-confound — conditional `P(prev_p | prev_c)`
+
+The joint distribution above mixes the contribution prior with the
+manager's response policy. Conditioning on `prev_c` isolates the
+policy.
+
+### Legacy manager (% of `prev_c` row)
+
+| prev_c | p=0 | p=1-3 | p=4-7 | p=8-15 | p=16+ |
+|---|---:|---:|---:|---:|---:|
+| 0     | 44 | 12 |  7 | 14 | **24** |
+| 1-5   | 31 | 14 | 17 | 20 | 17 |
+| 6-10  | 34 | 16 | 21 | 24 |  4 |
+| 11-15 | 38 | 30 | 22 |  9 |  1 |
+| 16-19 | 60 | 31 |  8 |  1 |  0 |
+| 20    | **98** |  1 |  0 |  1 |  0 |
+
+### 50ep manager (% of `prev_c` row)
+
+| prev_c | p=0 | p=1-3 | p=4-7 | p=8-15 | p=16+ |
+|---|---:|---:|---:|---:|---:|
+| 0     | **66** | 10 |  7 |  9 |  8 |
+| 1-5   | 56 | 19 | 13 |  7 |  4 |
+| 6-10  | 65 | 20 |  9 |  5 |  1 |
+| 11-15 | 76 | 15 |  5 |  3 |  1 |
+| 16-19 | 79 | 15 |  3 |  2 |  1 |
+| 20    | 96 |  1 |  1 |  1 |  0 |
+
+**Read.** Both managers reward `c=20` with virtually no punishment
+(96–98%) — that's the only cell where the policies agree.
+
+- **50ep managers are dramatically more lenient on free-riders.** At
+  `prev_c=0`, heavy punishment (`p=16+`) drops from 24% (legacy) to
+  8% (50ep). Choosing `p=0` for the same free-rider jumps from 44% to
+  **66%**.
+- **Conditional elasticity weakened.** Legacy
+  `P(p=0 | c=20) − P(p=0 | c=0)` ≈ 98% − 44% = **54pp gradient** — a
+  sharp manager response. 50ep is 96% − 66% = **30pp** — markedly
+  flatter. The 50ep human managers themselves were less elastic to
+  prior contribution.
+
+The contribution AH can't learn punishment-elasticity that wasn't
+demonstrated to it in training. PR #96's no-decay-at-`p=0` and
+wrong-direction-at-`p=5,10` both follow from this: the model is
+faithfully reproducing a regime where punishment doesn't correlate
+strongly with contribution shifts.
+
+**Takeaway.** What counts as "good contribution" has shifted left in
+50ep, leading to underutilization of both the contribution and
+punishment spectrums — general leniency on both sides. The result is
+a more constricted contribution regime than legacy, which likely
+contributes to training difficulty.
+
+## What did the best episodes do?
+
+The conditional policy above averages all episodes together. A natural
+follow-up: are there *subpopulations* of episodes in 50ep where the
+manager used a more elastic policy and outperformed laissez-faire?
+Both metrics are computed on the **focus group (`group_id == 0`)** to
+match the per-side framing PR #96's fixed-aggregation plots use:
+
+- **avg**: mean per-agent payoff within group 0
+- **sum**: mean per-round group-0 payoff sum (captures group size — a
+  manager who attracts agents from the other side can score higher
+  even at modest per-agent welfare)
+
+Compared to PR #96's `p0_vs_p0` dummy baseline (avg=25.18, sum=122.87):
+
+| Dataset | Episodes | Mean avg | Above avg baseline | Above sum baseline |
+|---|---:|---:|---:|---:|
+| Legacy | 135 | 22.52 | **43%** (58/135) | 43% (58/135) — same set, 1g4a |
+| GS 50ep | 50 | 21.83 | **18%** (9/50) | **22%** (11/50) |
+
+In legacy (1g4a, no switching) `sum = 4 × avg` trivially, so both
+criteria pick the same episodes. In 50ep the criteria identify
+**largely disjoint sets**: only 2 episodes (`ep 7`, `ep 31`) clear
+both bars. Eight episodes excel on per-agent welfare without growing
+their group; eight others bulk their group at lower per-agent payoff.
+Union: **18 episodes** with some form of "good management" signal
+(full per-episode breakdown in `reports/50ep_top_episodes.md` and
+`reports/legacy_top_episodes.md`).
+
+Legacy still demonstrates "good management" at roughly twice the rate
+of 50ep across either metric.
+
+**Takeaway.** It's harder to beat the no-punishment baseline in 50ep
+than in legacy — or equivalently, human managers (50ep) are worse at
+it than rule-based ones (legacy includes `random_1`, the rule-based
+protocol). The gap reflects how the experiments were performed, not
+just manager skill.
+
+### Top-quartile policy fingerprint
+
+`uv run python experiment_analysis/top_episode_policy.py` splits each
+dataset by per-episode mean payoff and computes the conditional
+policy `P(prev_p | prev_c)` separately on the top and bottom
+quartiles, **filtering out `player_no_input` rows** (imputed-zero
+contributions where there was no decision for the manager to respond
+to).
+
+**Real-free-rider response — `prev_c=0` row of the conditional table:**
+
+| | P(p=0) | P(p=16+) |
+|---|---:|---:|
+| **Legacy top** | **0%** | **100%** |
+| Legacy bottom | 12% | 43% |
+| **50ep top** | **74%** | **14.5%** |
+| 50ep bottom | 61% | 7.6% |
+
+Top-quartile legacy managers punish **100% of real free-riders with
+heavy strikes** — literally no exceptions. The same managers used 0%
+punishment for `prev_c=20` (99.6% `p=0`). That is a textbook
+strict-but-targeted policy.
+
+Top-quartile 50ep managers, by contrast, leave **74% of real
+free-riders unpunished** and only hit 14.5% with heavy strikes. Same
+pattern at `prev_c=1-5`: legacy top hits 87% with `p≥8`, 50ep top
+hits 26%.
+
+**Mid-contribution response (`prev_c=6-10`):**
+
+| | P(p=0) | P(p≥8) |
+|---|---:|---:|
+| Legacy top | 30% | 45% |
+| 50ep top | 70% | 5% |
+
+Top legacy managers punish mid-contributors 70% of the time. Top
+50ep managers punish them 30% of the time — and almost never with
+heavy strikes (5% vs legacy's 45%).
+
+### Implication
+
+Even the **best** 50ep managers — the top 13 episodes by payoff — do
+not demonstrate strict-but-targeted punishment. The signal isn't just
+*rarer* in 50ep; it's *absent at every subpopulation level*, including
+the high-performing tail. Legacy's top quartile alone could plausibly
+teach an AH the strict policy via loss reweighting. 50ep has no
+analogous teacher subset — neither the full dataset, nor the
+high-performing slice, nor any other split demonstrates strong
+contribution-conditional severity.
+
+This pushes the verdict beyond "retrain on 50ep with better loss":
+the data itself doesn't contain the policy regime that produces
+punishment-elastic AHs. Recovering it requires either mixing in
+legacy data, collecting new pilot data with stricter human-manager
+policies, or imposing the structure architecturally.
+
+## Feature-target signal strength
+
+`uv run python experiment_analysis/feature_data_correlation.py <config>`
+for legacy (`script_21_no_grid.yml`) and 50ep
+(`group_switching_contribution_50ep.yml`):
+
+| Feature → contribution     | Metric         | Legacy  | 50ep    | Δ (×)   |
+|----------------------------|----------------|--------:|--------:|--------:|
+| **`prev_contribution`**    | Mutual info    | 0.6305  | 0.8028  | +27% stronger |
+|                            | RF importance  | 0.6690  | 0.7638  | +14% stronger |
+|                            | Spearman ρ     | +0.7333 | +0.7638 | similar |
+| **`prev_punishment`**      | Mutual info    | 0.0801  | 0.0418  | −48% weaker |
+|                            | RF importance  | 0.1620  | 0.1120  | −31% weaker |
+|                            | Spearman ρ     | −0.3282 | −0.1676 | −49% weaker |
+| RF train accuracy          |                | 0.5847  | 0.5071  | drops |
+
+**Read.** The 50ep dataset has roughly **half the punishment signal** for
+predicting next-round contribution (mutual info, Spearman both ~−50%)
+and a **stronger autoregressive structure** (mutual info on
+`prev_contribution` climbed 0.63 → 0.80). RF train accuracy drops
+from 0.58 to 0.51, consistent with less learnable structure overall.
+
+So the model's behaviour in PR #96 isn't an architecture failure: the
+training data itself has substantially less of the punishment-elasticity
+signal that the legacy AH learned, plus more "stay where you are"
+structure. The model is faithfully reflecting the data.
+
+## Decay under sustained low punishment
+
+`uv run python experiment_analysis/decay_sequences.py` extracts per-player
+runs of ≥3 consecutive rounds with `prev_punishment ≤ 2`, records Δc
+across each run, and buckets by starting contribution.
+
+| Start c | Legacy n / Δc / mean_len / end_c | 50ep n / Δc / mean_len / end_c |
+|---|---|---|
+| 0     | 16 / +5.31 / 5.8 / 5.31  | 62  / +2.94 / 10.4 / 2.94 |
+| 1-5   | 33 / +0.33 / 6.0 / 4.33  | 101 / -0.49 / 10.4 / 3.12 |
+| 6-10  | 59 / -1.59 / 5.9 / 7.41  | **192 / -1.45 / 10.8 / 7.02** |
+| 11-15 | 87 / -2.18 / 6.6 / 11.66 | 151 / -3.16 / 12.5 / 10.01 |
+| 16-19 | 69 / -2.33 / 6.8 / 15.35 | 29  / -4.00 / 13.7 / 13.48 |
+| 20    | **202 / -2.22 / 7.4 / 17.78** | 77 / -7.22 / 11.9 / 12.78 |
+
+**Where sustained low-p sequences actually live, by dataset.** The two
+datasets differ sharply in *which* contributors end up in
+sustained-low-punishment runs:
+
+- **Legacy is dominated by `c=20` starts** — 202 of 466 runs (43%)
+  begin at perfect cooperation. The legacy human manager rewarded
+  perfect cooperators with sustained no-punishment, and players in
+  that state mostly *stayed* there (mean end_c = 17.78). The training
+  signal is "if you're already at the top and nobody's punishing
+  you, drift down only slightly".
+- **50ep is dominated by `c=6-10` starts** — 192 of 612 runs (31%)
+  begin at mid-range contribution. The 50ep manager extended the same
+  no-punishment treatment to half-cooperators, who then stayed in the
+  mid-range (mean end_c = 7.02). The training signal becomes "if
+  you're at mid-`c` and nobody's punishing you, stay around mid-`c`".
+
+This explains the PR #96 operating point cleanly: the AH inherits the
+modal "anchor" of its training data. Legacy data anchors at the
+cooperative ceiling under no-punishment; 50ep data anchors at the
+mid-level plateau under no-punishment. The 50ep AH in PR #96 starts
+~8.5 and stays there because that *is* what its training data
+overwhelmingly demonstrates is what happens in that regime.
+
+50ep does also contain `c=20`-start decay sequences (77 of them, Δc =
+-7.22), but they're a 12.5% minority and at a contribution level the
+AH can't reach from its own dynamics. Asking the model "what would
+happen if we forced you to c=20 first" tests in-vitro behaviour
+decoupled from operational use.
+
+## Verdict so far
+
+PR #96 documented two failure modes for the 50ep contribution AH: no
+decay at `p=0` and wrong-direction elasticity at `p=5,10`. The audit
+refines this:
+
+- **No-decay-at-`p=0` is mostly faithful behaviour** in the regime
+  the AH actually operates in. At c=6-10 starting state, data shows
+  Δc ≈ -1.45 over ~11 rounds; the model shows ≈ 0. A mild
+  underestimate, not a structural failure. The much stronger decay
+  the data contains (Δc = -7.22 from c=20) sits at contribution
+  levels the AH can't reach on its own, so it doesn't surface in
+  practice.
+- **Wrong-direction elasticity at `p=5,10` is the more telling
+  divergence** — the data shows contribution drift down or flat with
+  moderate punishment; the model has it rising. That's not faithful.
+
+Two structural properties of the training data make these failures
+predictable:
+
+- **Cooperative ceiling collapsed.** Legacy data anchors on the
+  `(c=20, p=0)` cell (31% of rows). 50ep has 12%. The AH has no dense
+  stay-at-top steady state to draw on, and naturally settles at
+  mid-`c` where decay is shallow.
+- **Manager elasticity weakened.** 50ep human managers were ~2× more
+  lenient on free-riders and showed half the conditional-policy
+  gradient (54pp → 30pp from `c=0` to `c=20`). The
+  contribution-punishment relationship wasn't strongly demonstrated.
+
