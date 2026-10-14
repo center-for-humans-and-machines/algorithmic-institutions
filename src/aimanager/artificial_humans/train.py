@@ -36,6 +36,25 @@ def ablate_feature(data, feature_name):
     return data
 
 
+def dropout_input_features(data, dropout_rates, default_values):
+    # Training-time input dropout: per (episode, agent, round) cell, the
+    # feature is replaced by its round-0 default -- the same "no history"
+    # value shift() writes -- so the model must fall back on the remaining
+    # context instead of the masked signal. prev_-features inherit the base
+    # feature's default, matching how shift() fills their round 0.
+    data = {**data}
+    for feature, rate in dropout_rates.items():
+        base = feature[len("prev_") :] if feature.startswith("prev_") else feature
+        default = (
+            default_values[base] if base in default_values else default_values[feature]
+        )
+        val = data[feature].clone()
+        drop = th.rand(val.shape) < rate
+        val[drop] = int(default) if not val.is_floating_point() else float(default)
+        data[feature] = val
+    return data
+
+
 def batch_loader(data, batch_size):
     n = len(data["contribution"])
     all_idx = np.arange(n)
@@ -108,6 +127,7 @@ def main(config):
     train_args = config["train_args"]
     shuffle_features = config.get("shuffle_features", [])
     ablate_features = config.get("ablate_features", [])
+    input_dropout = train_args.get("input_dropout") or {}
     mask_name = config["mask_name"]
     job_id = config["job_id"]
     data_file = config["data_file"]
@@ -180,8 +200,11 @@ def main(config):
     conf_m_all = []
 
     for i, train_data, test_data in get_cross_validations(
-        data, n_cross_val, fraction_training,
-        holdout_fold=holdout_fold, group_key=pair_id,
+        data,
+        n_cross_val,
+        fraction_training,
+        holdout_fold=holdout_fold,
+        group_key=pair_id,
     ):
         model = AH_MODELS[model_name](
             default_values=default_values, autoregressive=autoregression, **model_args
@@ -227,6 +250,10 @@ def main(config):
                     mask_name,
                     default_values,
                 )
+                if input_dropout:
+                    b_data = dropout_input_features(
+                        b_data, input_dropout, default_values
+                    )
                 batch_data = model.encode(
                     b_data,
                     mask=mask_name,
