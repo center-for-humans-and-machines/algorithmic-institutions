@@ -25,8 +25,7 @@ group's pool, which is multiplied by 1.6 and shared equally among the group's
 members. The manager then deals each member a punishment of 0-30 points,
 deducted from both that player's account and the pool. After rounds 4, 8, 12,
 16 and 20 players may switch groups. A manager's goal is a large common pool
-in its group over the episode: punishment can raise contributions, but it
-costs the pool, and a harsh manager can drive players to the other group.
+in its group over the episode.
 `reports/basics.md` has the payoff mechanics (it describes an earlier
 one-group pilot of 16 rounds); `reports/human_behavior_analysis_50ep.md`
 describes this game and how humans played it.
@@ -72,21 +71,18 @@ A guard rejects anything outside these limits; do not try to work around it.
 
 ```yaml
 params:            # every parameter: what it means, and int or float
-  a:
-    definition: punishment per point of shortfall below c0
+  k:
+    definition: the punishment every player gets
     type: float
-  c0:
-    definition: contribution from which no one is punished
-    type: int
 sweep_config:      # every parameter: the range the sweep draws it from
-  a: [0.1, 5, log] #   [low, high, log]: log-uniform (low > 0), for scales
-  c0: [0, 20]      #   [low, high]: uniform; a number fixes the parameter;
+  k: [0.1, 5, log] #   [low, high, log]: log-uniform (low > 0);
+                   #   [low, high]: uniform; a number fixes the parameter;
                    #   an int range takes each integer low..high, equally
                    #   often, and needs integer bounds
 constraints:       # optional comparisons over params only
-  - a >= 0
+  - k > 0
 code: |
-  punishment = a * th.clamp(c0 - c, min=0)
+  punishment = k * th.ones_like(c)
 ```
 
 `code` runs once per round, after the round's contributions and before any
@@ -121,15 +117,21 @@ a float tensor with one value per player, plus `th` (torch) and your params
 
 The code must assign `punishment`, which the manager clamps to 0-30 and
 floors to integers; it is applied to the players of your group only. No
-imports and no Python builtins: do the maths with `th`. Do not use the example
-above as your rule; it only shows the format.
+imports and no Python builtins: do the maths with `th`. The example above only
+shows the format; every declared parameter must be read by the code.
 
-The sweep that follows your work draws `sobol_points` points over your
+After you finish, a sweep plays `sobol_points` points drawn over your
 `sweep_config` (a Sobol design; an `int` range gives each of its integers the
-same share) and plays each against `ah`. The best point's values become the rule's values, so
-a range decides what the rule can become: wide enough to hold the values your
-reasoning allows, no wider than it can defend. Every point must satisfy the
-`constraints`.
+same share) against `ah`, and the most promising values are checked again on
+fresh seeds before they become the rule's values.
+
+The rule can only take values inside your ranges, so the ranges matter as much
+as the code. For each parameter, think about where its best values likely lie
+and set the range around them. Where you cannot estimate that, choose a wider
+range the sweep can explore over a narrow one that may cut the best values
+off: a best point at the edge of a range means the range stopped short. The
+design has a fixed number of points, so a wider range is sampled more thinly.
+Every point must satisfy the `constraints`.
 
 ## How to work
 
@@ -144,13 +146,11 @@ and write in them throughout, not once at the end.
    your notes as it takes shape; drafting and revising the rule along the
    way is fine, but say in the next entry what changed and why.
 3. Write the rule with `min_params` to `max_params` parameters. Each
-   parameter must have a logical, generalisable reading (a threshold, a rate,
-   a horizon), grounded in what you found in the data and in plain intuition
-   about incentives. Do not fit quirks of the artificial humans: a parameter
-   that only makes sense for this simulator is a flaw. Where the range
-   allows, fewer, clearer parameters beat more.
+   parameter must have a logical, generalisable reading grounded in
+   what you found in the data and in plain intuition about incentives.
 4. Leave the values to the sweep: give each parameter its range in
-   `sweep_config` and say in your notes why that range.
+   `sweep_config`, and say in your notes where you expect its best values
+   and why that range.
 5. Before finishing, validate the rule:
    `PYTHONPATH=src <python> -m aimanager validate-rule
    configs/managers/rule_based/<name>.yml --min-params <min_params>
