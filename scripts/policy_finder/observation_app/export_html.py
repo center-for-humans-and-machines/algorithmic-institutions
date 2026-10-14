@@ -90,10 +90,10 @@ def details(summary: str, body: str) -> str:
 # -- the summary ----------------------------------------------------------
 
 
-def summary_view(found: list, keys: dict, charts: Charts) -> str:
+def summary_view(found: list, running: set, charts: Charts) -> str:
     """The Summary: the best agents side by side, each row opening its agent;
     "What the rules do" counts every agent."""
-    frame = d.summary_frame(found, keys)
+    frame = d.summary_frame(found, running)
     refs = d.references()
     shown = frame.head(d.SUMMARY_TOP)
     out = [stats(d.summary_stats(frame))]
@@ -120,15 +120,15 @@ def summary_view(found: list, keys: dict, charts: Charts) -> str:
 # -- one instance ---------------------------------------------------------
 
 
-def notes_tab(wt: Path, name: str, charts: Charts) -> str:
-    text = d.read(wt / "notes/policy_finder" / f"{name}.md")
+def notes_tab(wt: Path, version: str, charts: Charts) -> str:
+    text = d.read(wt / "notes/policy_finder" / f"{version}.md")
     if not text:
         return empty("No notes yet.")
     sections = d.parse_notes(text)
     trail = d.entries(sections.get("Explorations", ""))
     findings = d.items(sections.get("Key findings", ""))
-    log = d.activity(wt, name)
-    scripts = wt / "scripts/policy_finder" / name
+    log = d.activity(wt, version)
+    scripts = wt / "scripts/policy_finder" / wt.name
     n_scripts = len([p for p in scripts.glob("*") if p.is_file()]) if scripts.is_dir() else 0
     out = [
         stats(
@@ -171,8 +171,8 @@ def notes_tab(wt: Path, name: str, charts: Charts) -> str:
     return "".join(out)
 
 
-def rule_tab(wt: Path, name: str) -> str:
-    text = d.read(wt / "configs/managers/rule_based" / f"{name}.yml")
+def rule_tab(wt: Path, version: str) -> str:
+    text = d.read(wt / "configs/managers/rule_based" / f"{version}.yml")
     if not text:
         return empty("No rule yet.")
     try:
@@ -216,15 +216,15 @@ def scripts_tab(wt: Path, name: str) -> str:
     )
 
 
-def report_tab(name: str) -> str:
-    report = d.read(d.WT_ROOT / f"{name}.report.md")
+def report_tab(version: str) -> str:
+    report = d.read(d.WT_ROOT / f"{version}.report.md")
     return f'<div class="doc">{md(report)}</div>' if report else empty("No report yet: still running, or stopped.")
 
 
-def sweep_tab(wt: Path, name: str, charts: Charts, zero) -> str:
+def sweep_tab(wt: Path, version: str, charts: Charts, zero) -> str:
     """The app's Sweep tab (dashboard.sweep_blocks), as HTML."""
     out = []
-    for kind, content in d.sweep_blocks(wt, name, zero):
+    for kind, content in d.sweep_blocks(wt, version, zero):
         if kind == "section":
             out.append(section(content))
         elif kind == "caption":
@@ -249,43 +249,74 @@ def sweep_tab(wt: Path, name: str, charts: Charts, zero) -> str:
 TABS = ("Notes", "Rule", "Scripts", "Report", "Sweep")
 
 
-def instance(wt: Path, key: str, charts: Charts, zero, first: bool) -> str:
-    name = wt.name
-    config = json.loads(d.read(wt / ".claude/policy_finder.json") or "{}")
+def version_html(wt: Path, version: str, key: str, charts: Charts, zero, shown: bool) -> str:
+    """One version of a lineage: its status, meta and tabs."""
+    all_versions = d.versions(wt.name)
+    label = d.version_label(version, all_versions)
     tabs = "".join(
         f'<button class="tab" data-tab="{t}"{" aria-selected=true" if t == "Notes" else ""}>{t}</button>'
         for t in TABS
     )
     panels = [
-        notes_tab(wt, name, charts),
-        rule_tab(wt, name),
-        scripts_tab(wt, name),
-        report_tab(name),
-        sweep_tab(wt, name, charts, zero),
+        notes_tab(wt, version, charts),
+        rule_tab(wt, version),
+        scripts_tab(wt, wt.name),
+        report_tab(version),
+        sweep_tab(wt, version, charts, zero),
     ]
     body = "".join(
         f'<section class="panel" data-panel="{t}"{"" if t == "Notes" else " hidden"}>{p}</section>'
         for t, p in zip(TABS, panels)
     )
+    ver = f' <span class="ver">{label}</span>' if len(all_versions) > 1 else ""
+    meta = d.version_meta(wt, version).replace(f"  ·  {esc(wt)}", "")
     return (
-        f'<article class="instance" data-instance="{esc(name)}"{"" if first else " hidden"}>'
-        f'<div class="inst"><h2>{esc(name)}</h2><span class="pill {key}"><i></i>{d.STATUS[key]}</span></div>'
-        f'<div class="meta">params {config.get("min_params", "?")}–{config.get("max_params", "?")}'
-        f" · policy-finder/{esc(name)}</div>"
-        f'<nav class="tabs">{tabs}</nav>{body}</article>'
+        f'<div class="version" data-version="{esc(version)}"{"" if shown else " hidden"}>'
+        f'<div class="inst"><h2>{esc(wt.name)}{ver}</h2>'
+        f'<span class="pill {key}"><i></i>{d.STATUS[key]}</span></div>'
+        f'<div class="meta">{meta}</div>'
+        f'<nav class="tabs">{tabs}</nav>{body}</div>'
+    )
+
+
+def instance(wt: Path, running: set, charts: Charts, zero, first: bool) -> str:
+    """A lineage: its versions, the latest shown, with a picker when several."""
+    all_versions = d.versions(wt.name)
+    picker = ""
+    if len(all_versions) > 1:
+        picker = '<nav class="tabs versions">' + "".join(
+            f'<button class="tab vtab" data-version="{esc(v)}"'
+            f'{" aria-selected=true" if v == all_versions[-1] else ""}>'
+            f"{d.version_label(v, all_versions)}</button>"
+            for v in all_versions
+        ) + "</nav>"
+    body = "".join(
+        version_html(wt, v, d.status(wt, v, running), charts, zero, v == all_versions[-1])
+        for v in all_versions
+    )
+    return (
+        f'<article class="instance" data-instance="{esc(wt.name)}"{"" if first else " hidden"}>'
+        f"{picker}{body}</article>"
     )
 
 
 def build() -> str:
     found = d.instances()
     running = d.running_names()
-    keys = {w.name: d.status(w.name, running) for w in found}
     charts, zero = Charts(), d.zero_pool()
-    summary = summary_view(found, keys, charts)
-    options = "".join(
-        f'<option value="{esc(w.name)}">{esc(w.name)}  ·  {d.STATUS[keys[w.name]]}</option>' for w in found
-    )
-    articles = "".join(instance(w, keys[w.name], charts, zero, i == 0) for i, w in enumerate(found))
+    summary = summary_view(found, running, charts)
+
+    def option(w):
+        all_versions = d.versions(w.name)
+        count = len(all_versions)
+        key = d.status(w, all_versions[-1], running)
+        return (
+            f'<option value="{esc(w.name)}">{esc(w.name)}  ·  {count} version'
+            f'{"s" * (count > 1)}  ·  {d.STATUS[key]}</option>'
+        )
+
+    options = "".join(option(w) for w in found)
+    articles = "".join(instance(w, running, charts, zero, i == 0) for i, w in enumerate(found))
     style = STYLE + (HERE / "overview.css").read_text() + (HERE / "summary.css").read_text()
     return (
         PAGE.replace("__STYLE__", style)
@@ -454,7 +485,7 @@ PAGE = """<title>Policy Finder Instances</title>
   <section class="view-panel" data-view-panel="overview">__OVERVIEW__</section>
   <section class="view-panel" data-view-panel="summary" hidden>__SUMMARY__</section>
   <section class="view-panel" data-view-panel="browser" hidden>
-    <label class="pick"><span class="eyebrow">Instance · __COUNT__</span>
+    <label class="pick"><span class="eyebrow">Lineage · __COUNT__</span>
       <select id="instance">__OPTIONS__</select></label>
     __ARTICLES__
   </section>
@@ -521,6 +552,16 @@ PAGE = """<title>Policy Finder Instances</title>
     });
     render(current());
   }
+  // a lineage's version (#244)
+  function version(art, name) {
+    art.querySelectorAll(".vtab").forEach(function (t) {
+      t.setAttribute("aria-selected", t.dataset.version === name ? "true" : "false");
+    });
+    art.querySelectorAll(".version").forEach(function (v) {
+      v.hidden = v.dataset.version !== name;
+    });
+    render(art);
+  }
   function view(name) {
     document.querySelectorAll(".tab.view").forEach(function (t) {
       t.setAttribute("aria-selected", t.dataset.view === name ? "true" : "false");
@@ -541,13 +582,16 @@ PAGE = """<title>Policy Finder Instances</title>
       view("browser");
       pick.value = row.dataset.open;
       show(row.dataset.open);
+      if (row.dataset.version) version(current(), row.dataset.version);
       window.scrollTo(0, 0);
       return;
     }
     const tab = e.target.closest(".tab");
     if (!tab) return;
     if (tab.classList.contains("view")) { view(tab.dataset.view); return; }
-    const art = tab.closest(".instance");
+    if (tab.classList.contains("vtab")) { version(tab.closest(".instance"), tab.dataset.version); return; }
+    // a version's own tabs
+    const art = tab.closest(".version");
     art.querySelectorAll(".tab").forEach(function (t) {
       t.setAttribute("aria-selected", t === tab ? "true" : "false");
     });
