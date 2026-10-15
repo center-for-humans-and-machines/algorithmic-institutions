@@ -513,10 +513,15 @@ def landscape_layer(points: pd.DataFrame, land: dict, param: str, final, zero):
     profile through its peak with a band of 2 sd, the peak's value dashed and
     the final best in ink."""
     spec = land["params"][param]
+    # only what the panel draws, rounded: every panel embeds its own data, and
+    # the full design (every param, se, members, fit) per panel made the
+    # exported page tens of MB
+    points = points[["name", param, "pool"]].round({param: 4, "pool": 2})
     prof = pd.DataFrame(land["profiles"][param]).rename(
         columns={"x": "_x", "mean": "_mean", "sd": "_sd"}
     )
     prof["_lo"], prof["_hi"] = prof._mean - 2 * prof._sd, prof._mean + 2 * prof._sd
+    prof = prof.round(4)
     # the swept range exactly: no padding out to round or log-decade ticks
     scale = alt.Scale(
         type="log" if spec["log"] else "linear", domain=spec["range"], nice=False
