@@ -31,8 +31,9 @@ is up again.
    ```
 
    It prints the categories with their meanings, then only the versions to
-   summarize: a rule never recorded, or changed since (by its hash), with the
-   paths of its rule and sweep. If nothing is listed, skip to step 4: the
+   summarize: a rule never recorded, changed since (by its hash), or
+   recorded before policy categories existed ("no policy category yet":
+   record it again with its policy category), with the paths of its rule and sweep. If nothing is listed, skip to step 4: the
    summary already covers every rule.
 
 2. **Read each listed version.** Each version of an instance is summarized
@@ -42,8 +43,14 @@ is up again.
    files.
 
 3. **Place and record it.** Decide, from the rule's code:
-   - its **bar**, who it punishes: one `bar` category
-   - its **mechanisms**: every `mechanism` category it uses
+   - its **rules included**: every `rule` it is built from, who it punishes
+     first (`fixed norm` or `group mean`), then when it holds back, what it
+     caps, spares or forgives
+   - its **policy category**, its overall strategy: one `policy category`.
+     Policy categories are few and broad (a handful in all), so the
+     Summary's evolution chart shows policies converging on, or leaving, a
+     strategy; they are read from the whole rule and its validated values,
+     not from one of its rules
    - its **idea**: one plain sentence a colleague can read without the code,
      like the existing ones in `summary.json`
 
@@ -52,14 +59,15 @@ is up again.
 
    ```bash
    uv run --no-sync python scripts/policy_finder/observation_app/summarize.py \
-       category "<name>" --kind bar|mechanism --meaning "<one line>"
+       category "<name>" --kind rule|policy-category --meaning "<one line>"
    ```
 
    Then record the version:
 
    ```bash
    uv run --no-sync python scripts/policy_finder/observation_app/summarize.py \
-       record <version> --bar "<category>" --mechanism "<category>" ... --idea "<one line>"
+       record <version> --rule "<rule>" --rule "<rule>" ... \
+       --policy-category "<category>" --idea "<one line>"
    ```
 
 4. **Republish the artifact**, when this session has the Artifact tool.

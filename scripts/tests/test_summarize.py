@@ -32,8 +32,9 @@ def summ(tmp_path, monkeypatch):
         json.dumps(
             {
                 "categories": {
-                    "fixed norm": {"kind": "bar", "meaning": "m"},
-                    "end game": {"kind": "mechanism", "meaning": "m"},
+                    "fixed norm": {"kind": "rule", "meaning": "m"},
+                    "end game": {"kind": "rule", "meaning": "m"},
+                    "harsh": {"kind": "policy category", "meaning": "m"},
                 },
                 "instances": {},
             }
@@ -61,10 +62,12 @@ def test_each_version_is_recorded_on_its_own(summ, monkeypatch, capsys):
         "summarize",
         "record",
         "pf-1-v2",
-        "--bar",
+        "--rule",
         "fixed norm",
-        "--mechanism",
+        "--rule",
         "end game",
+        "--policy-category",
+        "harsh",
         "--idea",
         "an idea",
     ]
@@ -72,7 +75,8 @@ def test_each_version_is_recorded_on_its_own(summ, monkeypatch, capsys):
     summ.main()
     entry = summ.load()["instances"]["pf-1-v2"]
     assert entry["rule_sha"] == summ.rule_sha("pf-1-v2")
-    assert entry["mechanisms"] == ["end game"]
+    assert entry["rules_included"] == ["fixed norm", "end game"]
+    assert entry["policy_category"] == "harsh"
     summ.status(summ.load())
     assert "2 to summarize" in capsys.readouterr().out
 
@@ -86,3 +90,32 @@ def test_a_started_version_counts_before_its_rule(summ):
     )
     assert summ.versions("pf-1") == ["pf-1", "pf-1-v2", "pf-1-v10", "pf-1-v11"]
     assert summ.rule_sha("pf-1-v11") is None
+
+
+def test_a_version_without_a_policy_category_is_listed(summ, capsys):
+    """Versions recorded before policy categories get one on the next run."""
+    data = summ.load()
+    data["instances"]["pf-1"] = {
+        "rule_sha": summ.rule_sha("pf-1"),
+        "rules_included": ["fixed norm"],
+        "idea": "x",
+    }
+    summ.status(data)
+    assert "\npf-1 (no policy category yet, not swept yet)" in capsys.readouterr().out
+
+
+def test_a_rule_must_be_a_rule(summ, monkeypatch):
+    argv = [
+        "summarize",
+        "record",
+        "pf-1",
+        "--rule",
+        "harsh",
+        "--policy-category",
+        "harsh",
+        "--idea",
+        "x",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    with pytest.raises(SystemExit, match="--rule takes a rule"):
+        summ.main()

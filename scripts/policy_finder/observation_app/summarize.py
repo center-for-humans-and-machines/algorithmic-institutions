@@ -4,11 +4,16 @@ The Summary's categories come from Claude reading the rule configs. They are
 kept in summary.json beside the instances (outside every worktree, so no agent
 reads them):
 
-    {"categories": {"<name>": {"kind": "bar" | "mechanism", "meaning": "..."}},
+    {"categories": {"<name>": {"kind": "rule" | "policy category",
+                               "meaning": "..."}},
      "instances": {"<version>": {"rule_sha": "...", "summarized": "<date>",
-                              "bar": "<a bar category>",
-                              "mechanisms": ["<mechanism category>", ...],
-                              "idea": "<one line>"}}}
+                                 "rules_included": ["<rule>", ...],
+                                 "policy_category": "<policy category>",
+                                 "idea": "<one line>"}}}
+
+A rule is one part a policy is built from (who it punishes, when it holds
+back, what it caps or forgives); a policy category is a policy's overall
+strategy, one per version, a few in all.
 
 Each version of an instance is recorded on its own (#244), under its
 rule_name: `<name>` for version 1, `<name>-v<k>` for version k.
@@ -30,9 +35,10 @@ it, and these files describe earlier rules and their results.
 Usage:
     python scripts/policy_finder/observation_app/summarize.py status
     python scripts/policy_finder/observation_app/summarize.py record <version> \
-        --bar <category> [--mechanism <category> ...] --idea "<one line>"
+        --rule <rule> [--rule <rule> ...] --policy-category <category> \
+        --idea "<one line>"
     python scripts/policy_finder/observation_app/summarize.py category <name> \
-        --kind bar|mechanism --meaning "<one line>"
+        --kind rule|policy-category --meaning "<one line>"
     python scripts/policy_finder/observation_app/summarize.py pull | push
 
 `status` lists the versions to summarize: a rule not recorded yet, or changed
@@ -60,6 +66,8 @@ OBSERVATORY = os.environ.get(
     "PF_OBSERVATORY", "raven:/u/certuer/policy-finder-observatory"
 )
 SYNCED = ("summary.json", "references.json")
+#: The category kinds, as the command line names them and as stored
+KINDS = {"rule": "rule", "policy-category": "policy category"}
 RULE = "configs/managers/rule_based/{name}.yml"
 SWEEP = "plots/simulation/policy_finder/{name}_sweep/sweep.json"
 #: A later version's name, <instance>-v<k> (#244)
@@ -173,6 +181,8 @@ def status(data: dict):
             todo.append((name, "new"))
         elif entry.get("rule_sha") != sha:
             todo.append((name, "rule changed"))
+        elif not entry.get("policy_category"):
+            todo.append((name, "no policy category yet"))
     done = len(data["instances"])
     print(f"{SUMMARY}: {done} recorded, {len(todo)} to summarize")
     print("categories:")
@@ -194,12 +204,12 @@ def main():
     sub.add_parser("push")
     rec = sub.add_parser("record")
     rec.add_argument("name")
-    rec.add_argument("--bar", required=True)
-    rec.add_argument("--mechanism", action="append", default=[])
+    rec.add_argument("--rule", action="append", required=True)
+    rec.add_argument("--policy-category", required=True)
     rec.add_argument("--idea", required=True)
     cat = sub.add_parser("category")
     cat.add_argument("name")
-    cat.add_argument("--kind", choices=("bar", "mechanism"), required=True)
+    cat.add_argument("--kind", choices=KINDS, required=True)
     cat.add_argument("--meaning", required=True)
     args = ap.parse_args()
 
@@ -221,27 +231,29 @@ def write(args):
     pull()
     data = load()
     if args.command == "category":
-        data["categories"][args.name] = {"kind": args.kind, "meaning": args.meaning}
+        kind = KINDS[args.kind]
+        data["categories"][args.name] = {"kind": kind, "meaning": args.meaning}
         save(data)
-        print(f"category {args.name} ({args.kind})")
+        print(f"category {args.name} ({kind})")
         push()
     else:
         sha = rule_sha(args.name)
         if sha is None:
             sys.exit(f"no rule for {args.name}")
         kinds = {c: s["kind"] for c, s in data["categories"].items()}
-        unknown = [c for c in [args.bar, *args.mechanism] if c not in kinds]
+        named = [*args.rule, args.policy_category]
+        unknown = [c for c in named if c not in kinds]
         if unknown:
             sys.exit(f"unknown categories {unknown}: add them with `category` first")
-        if kinds[args.bar] != "bar" or any(
-            kinds[m] != "mechanism" for m in args.mechanism
+        if any(kinds[r] != "rule" for r in args.rule) or (
+            kinds[args.policy_category] != "policy category"
         ):
-            sys.exit("--bar takes a bar category, --mechanism a mechanism category")
+            sys.exit("--rule takes a rule, --policy-category a policy category")
         data["instances"][args.name] = {
             "rule_sha": sha,
             "summarized": date.today().isoformat(),
-            "bar": args.bar,
-            "mechanisms": args.mechanism,
+            "rules_included": args.rule,
+            "policy_category": args.policy_category,
             "idea": args.idea,
         }
         save(data)
