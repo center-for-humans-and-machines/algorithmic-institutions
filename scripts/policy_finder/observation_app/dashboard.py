@@ -845,8 +845,8 @@ def show_version(wt: Path, version: str, key: str):
 
 
 def counts_html(found: list) -> str:
-    """One line of totals for the overview: lineages, versions, validated
-    versions and the final best of any version."""
+    """One line of totals, atop the Overview and the Summary alike: lineages,
+    versions, validated versions and the final best of any version."""
     bests, n_versions = [], 0
     for wt in found:
         all_versions = versions(wt.name)
@@ -913,10 +913,11 @@ def rule_sha(path: Path):
         return None
 
 
-MECHANISM_CAPTION = (
-    "Categories Claude drew up by reading across the rule configs and grouping"
-    " their strategies (the policy-finder-summarizer skill); a rule changed or"
-    " added since shows as not summarized."
+RULES_CAPTION = (
+    "The rules the policies are built from, each lineage counted once by its"
+    " best version: Claude drew them up by reading across the rule configs"
+    " (the policy-finder-summarizer skill); a rule changed or added since shows"
+    " as not summarized."
 )
 
 
@@ -966,10 +967,14 @@ def version_row(wt: Path, version: str, key: str, summary: dict) -> dict:
         entry = summary["instances"].get(version)
         if entry and entry.get("rule_sha") == rule_sha(rule_path):
             row.update(
-                bar=entry["bar"], mechanisms=entry["mechanisms"], idea=entry["idea"]
+                **{
+                    "policy category": entry.get("policy_category") or NOT_SUMMARIZED,
+                    "rules included": entry.get("rules_included", []),
+                },
+                idea=entry["idea"],
             )
         else:  # new, or the rule changed since it was summarized
-            row.update(bar=NOT_SUMMARIZED, mechanisms=[], idea="")
+            row.update({"policy category": NOT_SUMMARIZED, "rules included": [], "idea": ""})
     files = sweep_files(wt, version)
     row["stage"] = (
         "validated" if files["validate"] else "validating" if files["sweep"]
@@ -997,75 +1002,234 @@ def version_row(wt: Path, version: str, key: str, summary: dict) -> dict:
     return row
 
 
-def pool_chart(frame: pd.DataFrame, refs: list):
-    """Each agent's final best pool ± se against ah, the references as dashed
-    lines."""
-    data = frame.dropna(subset=["best pool"]).assign(
-        lo=lambda f: f["best pool"] - f["se"], hi=lambda f: f["best pool"] + f["se"]
+#: Colours of the policy categories (summary.json, kind "policy category"); a
+#: category added later takes the next of POLICY_SPARE, an unknown one grey
+POLICY_COLOURS = {
+    "front-loaded": CLAY,
+    "switch-timed": "#4f7aa8",
+    "context-adaptive": "#2f6b3f",
+}
+POLICY_SPARE = ["#b08968", "#8c6bb1", "#c45a8c", "#2b9c9c"]
+#: Line colours of the lineages that iterated
+#: (mid tones: they read on both the light and the dark theme)
+LINEAGE_COLOURS = ["#e6a23c", "#8c6bb1", "#2b9c9c", "#c45a8c", "#7f8c3a", "#a8a39a"]
+
+
+def made(wt: Path, version: str) -> int:
+    """When a version was made: its rule's first commit (0 if uncommitted)."""
+    rule = f"configs/managers/rule_based/{version}.yml"
+    out = subprocess.run(
+        ["git", "-C", str(wt), "log", "--diff-filter=A", "--format=%ct", "--", rule],
+        capture_output=True,
+        text=True,
     )
-    ref = pd.DataFrame(refs, columns=["name", "pool"]) if refs else None
-    values = list(data.lo) + list(data.hi) + (list(ref.pool) if ref is not None else [])
-    scale = alt.Scale(
-        domain=[math.floor(min(values)) - 1, math.ceil(max(values)) + 1], zero=False
+    stamps = out.stdout.split()
+    return int(stamps[-1]) if stamps else 0
+
+
+def short(lineage: str, k: int) -> str:
+    """A node's label: the lineage without its year and month, and its version."""
+    name = re.sub(r"^pf-\d{6}(\d\d)-", r"\1-", lineage)
+    return name if k == 1 else f"{name} v{k}"
+
+
+def evolution_frame(found: list) -> pd.DataFrame:
+    """Every validated version in the order the versions were made: its
+    lineage, version number, final best, policy category and whether it beat
+    its lineage's best so far, for the Summary's evolution chart."""
+    entries = load_summary()["instances"]
+    rows = []
+    for wt in found:
+        all_versions = versions(wt.name)
+        lineage_best = None
+        for k, v in enumerate(all_versions, 1):
+            best = final_best(sweep_files(wt, v)["validate"])
+            if not best:
+                continue
+            entry = entries.get(v) or {}
+            rows.append(
+                {
+                    "lineage": wt.name,
+                    "version": f"v{k}",
+                    "k": k,
+                    "label": short(wt.name, k),
+                    "made": made(wt, v),
+                    "pool": best["pool"],
+                    "se": best["pool_se"],
+                    "policy category": entry.get("policy_category") or NOT_SUMMARIZED,
+                    "idea": entry.get("idea", ""),
+                    "versions": len(all_versions),
+                    "improved": lineage_best is None or best["pool"] > lineage_best,
+                }
+            )
+            lineage_best = max(lineage_best or best["pool"], best["pool"])
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        return frame
+    frame = frame.sort_values(["made", "lineage", "k"]).reset_index(drop=True)
+    frame["order"] = range(1, len(frame) + 1)
+    frame["lo"], frame["hi"] = frame["pool"] - frame["se"], frame["pool"] + frame["se"]
+    return frame
+
+
+def root_reference(refs: dict):
+    """The tree's root: the reference row marked `root` (ah against ah)."""
+    return next((r for r in refs.get("rows", []) if r.get("root")), None)
+
+
+def evolution_chart(frame: pd.DataFrame, refs: dict):
+    """The policies as a tree in the order they were made, after the Atlas's
+    progress tree: the root is ah against ah; each v1 branches from it and
+    each later version from the one before, in its lineage's colour when the
+    lineage iterated (grey otherwise), dashed when the version did not beat
+    its lineage's best; nodes in their policy category's colour; the best so
+    far as a dotted step; the other references dashed across."""
+    root = root_reference(refs)
+    others = pd.DataFrame(
+        [(r["name"], r["pool"]) for r in refs.get("rows", []) if not r.get("root")],
+        columns=["name", "pool"],
     )
-    y = alt.Y(
-        "name:N", sort=alt.EncodingSortField("best pool", order="descending"), title=None
+    by_version = {(r.lineage, r.k): r for r in frame.itertuples()}
+    edges = []
+    for r in frame.itertuples():
+        parent = next(
+            (by_version[(r.lineage, j)] for j in range(r.k - 1, 0, -1)
+             if (r.lineage, j) in by_version),
+            None,
+        )
+        if parent is not None:
+            x1, y1 = parent.order, parent.pool
+        elif root is not None:
+            x1, y1 = 0, root["pool"]
+        else:
+            continue
+        edges.append(
+            {
+                "x1": x1, "y1": y1, "x2": r.order, "y2": r.pool,
+                "lineage": r.lineage, "iterated": r.versions > 1,
+                "improved": bool(r.improved),
+            }
+        )
+    edges = pd.DataFrame(
+        edges, columns=["x1", "y1", "x2", "y2", "lineage", "iterated", "improved"]
     )
-    bars = (
-        alt.Chart(data)
-        .mark_rule(strokeWidth=2.5, color=LINE)
+    # the best so far, from the root on
+    start = [(0, root["pool"])] if root is not None else []
+    best, steps = None, []
+    for o, pool in start + list(zip(frame["order"], frame["pool"])):
+        best = pool if best is None else max(best, pool)
+        steps.append({"order": o, "best": best})
+    steps = pd.DataFrame(steps)
+
+    policies = list(
+        dict.fromkeys(list(POLICY_COLOURS) + sorted(frame["policy category"].unique()))
+    )
+    spare = iter(POLICY_SPARE)
+    colours = [
+        POLICY_COLOURS.get(c) or (MUTED if c == NOT_SUMMARIZED else next(spare, MUTED))
+        for c in policies
+    ]
+    lineages = sorted(frame.loc[frame["versions"] > 1, "lineage"].unique())
+    values = list(frame["lo"]) + list(frame["hi"]) + list(others["pool"])
+    values += [root["pool"]] if root is not None else []
+    y_scale = alt.Scale(domain=[math.floor(min(values)) - 1, math.ceil(max(values)) + 1])
+    n = int(frame["order"].max())
+    # room right of the last node for the references' labels
+    x_scale = alt.Scale(domain=[-0.6, n + 2.6], nice=False)
+    x = alt.X("order:Q", title="experiment order", scale=x_scale,
+              axis=alt.Axis(labels=False, ticks=False, grid=False))
+    y = alt.Y("pool:Q", title="final best pool vs ah", scale=y_scale)
+    tooltip = [
+        alt.Tooltip("lineage:N"),
+        alt.Tooltip("version:N"),
+        alt.Tooltip("pool:Q", title="final best", format=".1f"),
+        alt.Tooltip("se:Q", title="± se", format=".1f"),
+        alt.Tooltip("policy category:N"),
+        alt.Tooltip("idea:N"),
+    ]
+    edge_x = alt.X("x1:Q", scale=x_scale)
+    edge_y = alt.Y("y1:Q", scale=y_scale)
+    dash = alt.StrokeDash(
+        "improved:N",
+        scale=alt.Scale(domain=[True, False], range=[[1, 0], [6, 4]]),
+        legend=None,
+    )
+    layers = []
+    if len(others):
+        layers += [
+            alt.Chart(others).mark_rule(strokeDash=[5, 4], color=MUTED, opacity=0.7)
+            .encode(y=alt.Y("pool:Q", scale=y_scale)),
+            alt.Chart(others).transform_calculate(order=f"{n + 2.5}")
+            .mark_text(align="right", dy=-6, color=MUTED, fontSize=11)
+            .encode(x=x, y=alt.Y("pool:Q", scale=y_scale), text="name:N"),
+        ]
+    layers += [
+        alt.Chart(steps)
+        .mark_line(interpolate="step-after", strokeDash=[2, 4], color=MUTED, strokeWidth=1.2)
+        .encode(x=x, y=alt.Y("best:Q", scale=y_scale)),
+        alt.Chart(frame)
+        .mark_rule(color=MUTED, strokeWidth=4, opacity=0.18, strokeCap="round")
+        .encode(x=x, y=alt.Y("lo:Q", scale=y_scale), y2="hi:Q"),
+        alt.Chart(edges[~edges["iterated"]])
+        .mark_rule(color=MUTED, strokeWidth=1, opacity=0.55)
+        .encode(x=edge_x, y=edge_y, x2="x2:Q", y2="y2:Q", strokeDash=dash),
+        alt.Chart(edges[edges["iterated"]])
+        .mark_rule(strokeWidth=2.4, opacity=0.9)
         .encode(
-            x=alt.X(
-                "lo:Q",
-                scale=scale,
-                title="final best pool vs ah",
-                axis=alt.Axis(format="d", tickMinStep=1),
+            x=edge_x, y=edge_y, x2="x2:Q", y2="y2:Q", strokeDash=dash,
+            color=alt.Color(
+                "lineage:N",
+                scale=alt.Scale(domain=lineages, range=LINEAGE_COLOURS[: max(len(lineages), 1)]),
+                legend=alt.Legend(title="lineage", orient="right"),
             ),
-            x2="hi:Q",
-            y=y,
-            detail="best pool:Q",
-        )
-    )
-    dots = (
-        alt.Chart(data)
-        .mark_circle(size=140, opacity=1, stroke="white", strokeWidth=1, color=INK)
+        ),
+        alt.Chart(frame)
+        .mark_circle(size=130, opacity=1, stroke="white", strokeWidth=1.2)
         .encode(
-            x=alt.X("best pool:Q", scale=scale),
-            y=y,
-            tooltip=[
-                alt.Tooltip("name:N", title="agent"),
-                alt.Tooltip("best pool:Q", title="final best vs ah", format=".1f"),
-                alt.Tooltip("from:N", title="from"),
-                alt.Tooltip("se:Q", title="± se", format=".1f"),
-                alt.Tooltip("members:Q", title="members", format=".2f"),
-            ],
+            x=x, y=y, tooltip=tooltip,
+            color=alt.Color(
+                "policy category:N",
+                scale=alt.Scale(domain=policies, range=colours),
+                legend=alt.Legend(title="policy category", orient="right"),
+            ),
+        ),
+        alt.Chart(frame)
+        .mark_text(dy=-13, fontSize=9.5, color=MUTED)
+        .encode(x=x, y=y, text="label:N"),
+    ]
+    if root is not None:
+        root_row = pd.DataFrame(
+            [{"order": 0, "pool": root["pool"], "name": "ah vs ah",
+              "se": root.get("se", float("nan"))}]
         )
-    )
-    layers = [bars, dots]
-    if ref is not None:
-        rules = alt.Chart(ref).mark_rule(strokeDash=[5, 4], color=MUTED).encode(x=alt.X("pool:Q", scale=scale))
-        labels = (
-            alt.Chart(ref)
-            .mark_text(align="left", dx=4, dy=-6, baseline="bottom", color=MUTED, fontSize=11)
-            .encode(x=alt.X("pool:Q", scale=scale), y=alt.value(0), text="name:N")
-        )
-        layers += [rules, labels]
+        layers += [
+            alt.Chart(root_row)
+            .mark_point(shape="diamond", size=190, filled=True, color=INK, opacity=1,
+                        stroke="white", strokeWidth=1.2)
+            .encode(x=x, y=y, tooltip=[alt.Tooltip("name:N"),
+                                       alt.Tooltip("pool:Q", title="pool", format=".1f")]),
+            alt.Chart(root_row)
+            .mark_text(dy=-14, fontSize=10, color=INK)
+            .encode(x=x, y=y, text="name:N"),
+        ]
     return (
         alt.layer(*layers)
-        .properties(height={"step": 30}, padding={"top": 18})
+        .resolve_scale(color="independent", strokeDash="independent")
+        .properties(height=360, padding={"top": 10, "right": 10})
         .configure_view(stroke=None)
         .properties(background="transparent")
         .configure_axis(
             labelColor=MUTED,
             titleColor=MUTED,
             gridColor=LINE,
-            gridOpacity=0.35,
+            gridOpacity=0.12,
             domain=False,
             tickColor=LINE,
             labelFont="Geist Mono",
             titleFont="Geist",
             titleFontWeight=500,
         )
+        .configure_legend(labelColor=MUTED, titleColor=MUTED, labelFont="Geist", titleFont="Geist")
         .configure_text(font="Geist")
     )
 
@@ -1114,42 +1278,27 @@ def inputs_chart(frame: pd.DataFrame):
     )
 
 
-def mechanism_counts(frame: pd.DataFrame) -> list:
-    """(label, rules in it, rules summarized, meaning) for every category."""
+def rule_counts(frame: pd.DataFrame) -> list:
+    """(rule, policies including it, policies summarized, meaning) per rule."""
     summary = load_summary()
     ruled = frame.dropna(subset=["inputs"])
-    ruled = ruled[ruled.bar != NOT_SUMMARIZED]
+    ruled = ruled[ruled["policy category"] != NOT_SUMMARIZED]
     n = len(ruled)
     meaning = {c: spec["meaning"] for c, spec in summary["categories"].items()}
-    out = [
-        (f"below {b}", int((ruled.bar == b).sum()), n, meaning[b])
-        for b in categories(summary, "bar")
-    ]
-    out += [
-        (m, int(ruled.mechanisms.apply(lambda ms: m in ms).sum()), n, meaning[m])
-        for m in categories(summary, "mechanism")
-    ]
-    return out
-
-
-def summary_stats(frame: pd.DataFrame) -> list:
-    validated = frame.dropna(subset=["best pool"])
-    swept = int((frame["stage"] != "not swept").sum()) if "stage" in frame else 0
-    tiles = [("Lineages", f"{len(frame)}"), ("Swept", f"{swept}")]
-    if validated.empty:
-        return tiles + [("Validated", "0")]
-    top = validated.iloc[0]
-    return tiles + [
-        ("Validated", f"{len(validated)}"),
-        ("Final best", f"{top['best pool']:.1f}<small>{esc(top['name'])}</small>"),
+    return [
+        (r, int(ruled["rules included"].apply(lambda rs: r in rs).sum()), n, meaning[r])
+        for r in categories(summary, "rule")
     ]
 
 
-SUMMARY_CAPTION = (
-    "Each agent's final best against ah: the top of its validation sim, which"
-    " reruns the Gaussian process's peak and the sweep's best points on fresh"
-    " seeds at 2000 episodes each, ± its standard error. Dashed: the references,"
-    " under the same conditions. An agent shows once its validation is done."
+EVOLUTION_CAPTION = (
+    "Every validated version's final best against ah (± se), in the order the"
+    " versions were made. The tree starts at ah against ah; each v1 branches"
+    " from it and each later version from the one before, in its lineage's"
+    " colour when the lineage iterated (grey otherwise), dashed when it did not"
+    " beat its lineage's best. A node's colour is its policy category. Dotted:"
+    " the best so far; dashed across: the references, under the same"
+    " conditions. Hover a node for its idea."
 )
 #: The colour key under the pool chart: who each kind of rule punishes
 def reference_chips(refs: dict) -> str:
@@ -1165,13 +1314,13 @@ def reference_chips(refs: dict) -> str:
     )
 
 
-def mechanism_html(frame: pd.DataFrame) -> str:
+def rules_html(frame: pd.DataFrame) -> str:
     rows = "".join(
         f'<div class="mech"><span>{esc(label)}</span>'
         f'<span class="mech-bar"><i style="width:{100 * k / max(n, 1):.0f}%"></i></span>'
         f'<span class="mech-n">{k}/{n}</span>'
         f'<span class="mech-def">{esc(meaning)}</span></div>'
-        for label, k, n, meaning in mechanism_counts(frame)
+        for label, k, n, meaning in rule_counts(frame)
     )
     return f'<div class="mechs">{rows}</div>'
 
@@ -1199,12 +1348,14 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
             )
         else:
             cell = f'<span class="se">{esc(r.get("stage", "not swept"))}</span>'
-        mechs = r.get("mechanisms")
+        rules = r.get("rules included")
         tags = "".join(
-            f'<span class="chip">{esc(m)}</span>'
-            for m in (mechs if isinstance(mechs, list) else [])
+            f'<span class="chip">{esc(x)}</span>'
+            for x in (rules if isinstance(rules, list) else [])
         )
-        bar = r.get("bar") if isinstance(r.get("bar"), str) else ""
+        category = r.get("policy category")
+        category = category if isinstance(category, str) else ""
+        dot = POLICY_COLOURS.get(category, MUTED)
         name = esc(r["name"])
         href = f"?agent={name}&version={esc(r['version'])}"
         idea = r.get("idea") if isinstance(r.get("idea"), str) else ""
@@ -1226,12 +1377,14 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
             f'<span class="se"> of {r["versions"]}</span></td>'
             f'<td class="txt">{hit}{esc(r["from"]) if isinstance(r.get("from"), str) else ""}</td>'
             f'<td>{hit}{num(r, "params", ".0f")}</td>'
-            f'<td class="txt">{hit}{esc(bar)}</td><td class="txt tags">{hit}{tags}</td></tr>'
+            f'<td class="txt">{hit}<span class="pcat"><i style="background:{dot}"></i>'
+            f"{esc(category)}</span></td>"
+            f'<td class="txt tags">{hit}{tags}</td></tr>'
         )
     heads = ("agent", "final best", "members", "version", "from", "params",
-             "punishes below", "mechanisms")
+             "policy category", "rules included")
     head = "".join(
-        f'<th class="{"txt" if h in ("agent", "final best", "version", "from", "punishes below", "mechanisms") else ""}">'
+        f'<th class="{"txt" if h in ("agent", "final best", "version", "from", "policy category", "rules included") else ""}">'
         f"{h}</th>"
         for h in heads
     )
@@ -1259,21 +1412,21 @@ def show_summary(found: list):
     frame = summary_frame(found, running_names())
     refs = references()
     shown = frame.head(SUMMARY_TOP)
-    stats(summary_stats(frame))
-    if shown["best pool"].notna().any():
-        st.markdown('<div class="section">Final best against ah</div>', unsafe_allow_html=True)
-        st.caption(" ".join(filter(None, [SUMMARY_CAPTION, top_note(frame)])))
-        ref_rows = [(r["name"], r["pool"]) for r in refs.get("rows", [])]
+    st.html(counts_html(found))  # the overview's counts, from the same files
+    evolution = evolution_frame(found)
+    if len(evolution):
+        st.markdown('<div class="section">Evolution</div>', unsafe_allow_html=True)
+        st.caption(EVOLUTION_CAPTION)
         # theme=None: the chart's own axis styling, not Streamlit's
-        st.altair_chart(pool_chart(shown, ref_rows), use_container_width=True, theme=None)
+        st.altair_chart(evolution_chart(evolution, refs), use_container_width=True, theme=None)
         st.html(reference_chips(refs))
     st.markdown('<div class="section">Agents</div>', unsafe_allow_html=True)
-    st.caption("Tap a row to open the agent.")
+    st.caption(" ".join(filter(None, ["Tap a row to open the agent.", top_note(frame)])))
     st.html(agents_table_html(shown, refs))
     if "inputs" in frame:
-        st.markdown('<div class="section">What the rules do</div>', unsafe_allow_html=True)
-        st.caption(MECHANISM_CAPTION)
-        st.html(mechanism_html(frame))  # every agent
+        st.markdown('<div class="section">Rules included</div>', unsafe_allow_html=True)
+        st.caption(RULES_CAPTION)
+        st.html(rules_html(frame))  # every lineage
         st.markdown('<div class="section">What the rules read</div>', unsafe_allow_html=True)
         st.altair_chart(inputs_chart(shown), use_container_width=True, theme=None)
 

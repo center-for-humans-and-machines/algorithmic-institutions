@@ -92,25 +92,29 @@ def details(summary: str, body: str) -> str:
 
 def summary_view(found: list, running: set, charts: Charts) -> str:
     """The Summary: the best agents side by side, each row opening its agent;
-    "What the rules do" counts every agent."""
+    "Rules included" counts every lineage."""
     frame = d.summary_frame(found, running)
     refs = d.references()
     shown = frame.head(d.SUMMARY_TOP)
-    out = [stats(d.summary_stats(frame))]
-    if shown["best pool"].notna().any():
-        ref_rows = [(r["name"], r["pool"]) for r in refs.get("rows", [])]
+    out = [d.counts_html(found)]  # the overview's counts, from the same files
+    evolution = d.evolution_frame(found)
+    if len(evolution):
         out += [
-            section("Final best against ah"),
-            caption(" ".join(filter(None, [d.SUMMARY_CAPTION, d.top_note(frame)]))),
-            charts.place(d.pool_chart(shown, ref_rows)),
+            section("Evolution"),
+            caption(d.EVOLUTION_CAPTION),
+            charts.place(d.evolution_chart(evolution, refs)),
             d.reference_chips(refs),
         ]
-    out += [section("Agents"), caption("Tap a row to open the agent."), d.agents_table_html(shown, refs)]
+    out += [
+        section("Agents"),
+        caption(" ".join(filter(None, ["Tap a row to open the agent.", d.top_note(frame)]))),
+        d.agents_table_html(shown, refs),
+    ]
     if "inputs" in frame:
         out += [
-            section("What the rules do"),
-            caption(d.MECHANISM_CAPTION),
-            d.mechanism_html(frame),
+            section("Rules included"),
+            caption(d.RULES_CAPTION),
+            d.rules_html(frame),
             section("What the rules read"),
             charts.place(d.inputs_chart(shown)),
         ]
