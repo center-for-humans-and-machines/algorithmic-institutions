@@ -102,7 +102,9 @@ def summary_view(found: list, running: set, charts: Charts) -> str:
         out += [
             section("Evolution"),
             caption(d.EVOLUTION_CAPTION),
-            charts.place(d.evolution_chart(evolution, refs)),
+            # no node links (they would leave the page): the script opens a
+            # tapped node's version
+            charts.place(d.evolution_chart(evolution, refs, links=False)),
             d.reference_chips(refs),
         ]
     out += [
@@ -544,7 +546,20 @@ PAGE = """<title>Policy Finder Instances</title>
       const i = el.dataset.chart;
       if (drawn.has(i) || el.offsetParent === null) return;
       drawn.add(i);
-      vegaEmbed(el, themed(specs[i]), { actions: false, renderer: "svg" }).catch(function () {});
+      vegaEmbed(el, themed(specs[i]), { actions: false, renderer: "svg" })
+        .then(function (res) {
+          // a tapped evolution node opens its version in the Agent browser
+          res.view.addEventListener("click", function (event, item) {
+            const datum = item && item.datum;
+            if (!datum || !datum.rule_name || !datum.lineage) return;
+            view("browser");
+            pick.value = datum.lineage;
+            show(datum.lineage);
+            version(current(), datum.rule_name);
+            window.scrollTo(0, 0);
+          });
+        })
+        .catch(function () {});
     });
   }
   function current() {

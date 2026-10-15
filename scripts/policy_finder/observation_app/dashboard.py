@@ -1010,6 +1010,8 @@ POLICY_COLOURS = {
     "context-adaptive": "#2f6b3f",
 }
 POLICY_SPARE = ["#b08968", "#8c6bb1", "#c45a8c", "#2b9c9c"]
+#: How much of a lineage stays when another is picked in the evolution chart
+DIMMED = 0.18
 #: Line colours of the lineages that iterated
 #: (mid tones: they read on both the light and the dark theme)
 LINEAGE_COLOURS = ["#e6a23c", "#8c6bb1", "#2b9c9c", "#c45a8c", "#7f8c3a", "#a8a39a"]
@@ -1051,6 +1053,7 @@ def evolution_frame(found: list) -> pd.DataFrame:
                 {
                     "lineage": wt.name,
                     "version": f"v{k}",
+                    "rule_name": v,
                     "k": k,
                     "label": short(wt.name, k),
                     "made": made(wt, v),
@@ -1077,7 +1080,7 @@ def root_reference(refs: dict):
     return next((r for r in refs.get("rows", []) if r.get("root")), None)
 
 
-def evolution_chart(frame: pd.DataFrame, refs: dict):
+def evolution_chart(frame: pd.DataFrame, refs: dict, links: bool = True):
     """The policies as a tree in the order they were made, after the Atlas's
     progress tree: the root is ah against ah; each v1 branches from it and
     each later version from the one before, in its lineage's colour when the
@@ -1149,6 +1152,15 @@ def evolution_chart(frame: pd.DataFrame, refs: dict):
     ]
     edge_x = alt.X("x1:Q", scale=x_scale)
     edge_y = alt.Y("y1:Q", scale=y_scale)
+    # tapping an edge keeps its lineage and dims the rest, within the chart;
+    # tapping empty space shows all again. A node links to its version
+    # (`links`); the export opens it from a click listener instead
+    lineage_pick = alt.selection_point(name="lineage", fields=["lineage"], on="click")
+    frame = frame.assign(href="?agent=" + frame["lineage"] + "&version=" + frame["rule_name"])
+
+    def lit(full):
+        return alt.condition(lineage_pick, alt.value(full), alt.value(DIMMED))
+
     dash = alt.StrokeDash(
         "improved:N",
         scale=alt.Scale(domain=[True, False], range=[[1, 0], [6, 4]]),
@@ -1168,15 +1180,20 @@ def evolution_chart(frame: pd.DataFrame, refs: dict):
         .mark_line(interpolate="step-after", strokeDash=[2, 4], color=MUTED, strokeWidth=1.2)
         .encode(x=x, y=alt.Y("best:Q", scale=y_scale)),
         alt.Chart(frame)
-        .mark_rule(color=MUTED, strokeWidth=4, opacity=0.18, strokeCap="round")
-        .encode(x=x, y=alt.Y("lo:Q", scale=y_scale), y2="hi:Q"),
+        .mark_rule(color=MUTED, strokeWidth=4, strokeCap="round")
+        .encode(x=x, y=alt.Y("lo:Q", scale=y_scale), y2="hi:Q", opacity=lit(0.18)),
+        # each edge's wide, near-invisible twin catches the tap
+        alt.Chart(edges)
+        .mark_rule(strokeWidth=12, color=MUTED, opacity=0.01, cursor="pointer")
+        .encode(x=edge_x, y=edge_y, x2="x2:Q", y2="y2:Q")
+        .add_params(lineage_pick),
         alt.Chart(edges[~edges["iterated"]])
-        .mark_rule(color=MUTED, strokeWidth=1, opacity=0.55)
-        .encode(x=edge_x, y=edge_y, x2="x2:Q", y2="y2:Q", strokeDash=dash),
+        .mark_rule(color=MUTED, strokeWidth=1)
+        .encode(x=edge_x, y=edge_y, x2="x2:Q", y2="y2:Q", strokeDash=dash, opacity=lit(0.55)),
         alt.Chart(edges[edges["iterated"]])
-        .mark_rule(strokeWidth=2.4, opacity=0.9)
+        .mark_rule(strokeWidth=2.4)
         .encode(
-            x=edge_x, y=edge_y, x2="x2:Q", y2="y2:Q", strokeDash=dash,
+            x=edge_x, y=edge_y, x2="x2:Q", y2="y2:Q", strokeDash=dash, opacity=lit(0.9),
             color=alt.Color(
                 "lineage:N",
                 scale=alt.Scale(domain=lineages, range=LINEAGE_COLOURS[: max(len(lineages), 1)]),
@@ -1184,9 +1201,10 @@ def evolution_chart(frame: pd.DataFrame, refs: dict):
             ),
         ),
         alt.Chart(frame)
-        .mark_circle(size=130, opacity=1, stroke="white", strokeWidth=1.2)
+        .mark_circle(size=130, stroke="white", strokeWidth=1.2, cursor="pointer")
         .encode(
-            x=x, y=y, tooltip=tooltip,
+            x=x, y=y, tooltip=tooltip, opacity=lit(1.0),
+            **({"href": "href:N"} if links else {}),
             color=alt.Color(
                 "policy category:N",
                 scale=alt.Scale(domain=policies, range=colours),
@@ -1195,7 +1213,7 @@ def evolution_chart(frame: pd.DataFrame, refs: dict):
         ),
         alt.Chart(frame)
         .mark_text(dy=-13, fontSize=9.5, color=MUTED)
-        .encode(x=x, y=y, text="label:N"),
+        .encode(x=x, y=y, text="label:N", opacity=lit(1.0)),
     ]
     if root is not None:
         root_row = pd.DataFrame(
@@ -1298,7 +1316,8 @@ EVOLUTION_CAPTION = (
     " colour when the lineage iterated (grey otherwise), dashed when it did not"
     " beat its lineage's best. A node's colour is its policy category. Dotted:"
     " the best so far; dashed across: the references, under the same"
-    " conditions. Hover a node for its idea."
+    " conditions. Hover a node for its idea, tap it to open that version; tap"
+    " a branch to pick out its lineage, tap empty space to show all again."
 )
 #: The colour key under the pool chart: who each kind of rule punishes
 def reference_chips(refs: dict) -> str:
@@ -1417,7 +1436,9 @@ def show_summary(found: list):
     if len(evolution):
         st.markdown('<div class="section">Evolution</div>', unsafe_allow_html=True)
         st.caption(EVOLUTION_CAPTION)
-        # theme=None: the chart's own axis styling, not Streamlit's
+        # theme=None: the chart's own axis styling, not Streamlit's; a node
+        # links to its version through the ?agent=&version= route of a table
+        # row (Streamlit takes no selections from a layered chart)
         st.altair_chart(evolution_chart(evolution, refs), use_container_width=True, theme=None)
         st.html(reference_chips(refs))
     st.markdown('<div class="section">Agents</div>', unsafe_allow_html=True)
