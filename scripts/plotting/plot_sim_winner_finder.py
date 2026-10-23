@@ -8,7 +8,7 @@ Usage:
     python scripts/plotting/plot_sim_winner_finder.py <sim_dir>
 
 Example:
-    python scripts/plotting/plot_sim_winner_finder.py plots/simulation/19_2g8a_rule_based_vs_zero
+    python scripts/plotting/plot_sim_winner_finder.py plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched
 """
 import argparse
 import os

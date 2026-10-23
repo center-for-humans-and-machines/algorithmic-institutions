@@ -1,0 +1,87 @@
+/* Shared by the app and the export: the Summary view, tables, reference tiles and plots. */
+.agents { overflow-x: auto; background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: 14px; margin-bottom: 8px; }
+.agents table { border-collapse: collapse; width: 100%; font-size: 13.5px; margin: 0;
+  font-variant-numeric: tabular-nums; }
+.agents th, .agents td { padding: 9px 12px; text-align: right; white-space: nowrap;
+  border: 0; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); }
+.agents th { color: var(--muted); font-weight: 500; font-size: 12.5px; background: none; }
+.agents th.txt, .agents td.txt { text-align: left; }
+.agents td.name { text-align: left; font-family: var(--mono); color: var(--ink); }
+.agents tbody tr:last-child td { border-bottom: 0; }
+.agents tr[data-open] { cursor: pointer; }
+.agents tr[data-open]:hover td, .agents tr[data-open]:focus-within td { background: var(--sunk); }
+/* the agent's name links to it, and each cell carries a link over itself, so
+   the whole row opens it (a link stretched over a row would size to the table) */
+.agents tr[data-open] td { position: relative; }
+.agents a.hit { position: absolute; inset: 0; }
+.agents a.open { color: inherit; text-decoration: none; }
+.agents a.open:focus-visible { outline: none; }
+.agents tr:focus-within { outline: 2px solid var(--clay); outline-offset: -2px; }
+.agents td.tags { white-space: normal; min-width: 150px; }
+.agents td.tags .chip { margin: 2px 4px 2px 0; display: inline-block; }
+.poolcell { display: flex; align-items: center; gap: 8px; min-width: 170px; }
+.pbar { flex: 1; height: 8px; background: var(--sunk); border-radius: 999px; overflow: hidden;
+  min-width: 70px; }
+.pbar i { display: block; height: 100%; background: var(--clay); border-radius: 999px; }
+.pv { font-family: var(--mono); color: var(--ink); }
+.se { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+.mechs { display: grid; gap: 8px; max-width: 1000px; margin-bottom: 8px; }
+.mech { display: grid; grid-template-columns: 150px minmax(120px, 280px) 44px 1fr; gap: 12px;
+  align-items: center; font-size: 13.5px; color: var(--ink-2); }
+.mech-def { font-size: 12.5px; color: var(--muted); }
+@media (max-width: 720px) { .mech { grid-template-columns: 120px 1fr 40px; }
+  .mech-def { grid-column: 1 / -1; margin-top: -4px; } }
+.mech-bar { height: 10px; background: var(--sunk); border-radius: 999px; overflow: hidden; }
+.mech-bar i { display: block; height: 100%; background: var(--clay); border-radius: 999px; }
+.mech-n { font-family: var(--mono); font-size: 12.5px; color: var(--muted); text-align: right; }
+.stat .v small { white-space: nowrap; }
+/* each rule's idea, in one line under its name */
+.agents td.name { white-space: normal; min-width: 200px; max-width: 260px; }
+.agents .idea { font-family: var(--sans); font-size: 12.5px; color: var(--muted);
+  line-height: 1.4; margin-top: 3px; }
+/* chart tooltips (vega-tooltip) in the page's colours, readable in both themes */
+#vg-tooltip-element { background: var(--surface) !important; color: var(--ink) !important;
+  border: 1px solid var(--line) !important; border-radius: 10px !important;
+  box-shadow: 0 6px 20px rgba(0,0,0,.18) !important; padding: 10px 12px !important;
+  font-family: var(--sans) !important; font-size: 13px !important; max-width: 340px; }
+#vg-tooltip-element table { border-spacing: 0 3px; }
+#vg-tooltip-element td.key { color: var(--muted) !important; font-size: 12px !important;
+  padding-right: 10px !important; text-align: left !important; white-space: nowrap; }
+#vg-tooltip-element td.value { color: var(--ink) !important; font-family: var(--mono);
+  font-size: 12.5px; text-align: left !important; }
+
+/* plain data tables (the Sweep tab's Top 10) */
+.table { overflow-x: auto; background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: 14px; }
+.table table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 0;
+  font-variant-numeric: tabular-nums; }
+.table th, .table td { padding: 8px 12px; text-align: right; border: 0;
+  border-bottom: 1px solid var(--line-soft); white-space: nowrap; color: var(--ink-2); }
+.table th:first-child, .table td:first-child { text-align: left; font-family: var(--mono); }
+.table th { color: var(--muted); font-weight: 500; background: none; }
+.table tbody tr:last-child td { border-bottom: 0; }
+
+/* the Sweep tab's reference pools and best-point plots */
+.refs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px;
+  background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: 16px;
+  overflow: hidden; }
+.ref-src { font-size: 12.5px; color: var(--muted); margin: 8px 0 18px; }
+.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.figs figure { margin: 0; background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: 14px; padding: 10px; display: grid; gap: 6px; min-width: 0; }
+.figs img { width: 100%; height: auto; border-radius: 6px; background: #fff; }
+.figs figcaption { font-size: 13px; color: var(--muted); text-align: center; }
+
+/* under the page title: where the data outside the repo lives */
+.data-note { font-size: 12px !important; line-height: 1.5; color: var(--muted) !important;
+  max-width: 92ch; margin-top: 4px !important; }
+
+/* a lineage's version (#244): after its name, and the picker of the export */
+.ver { font-family: var(--mono); font-size: 15px; color: var(--clay);
+  vertical-align: middle; margin-left: 6px; }
+.versions { margin: -8px 0 16px; }
+
+/* a policy category in the Summary's table: its chart colour, then its name */
+.pcat { display: inline-flex; align-items: center; gap: 7px; }
+.pcat i { width: 9px; height: 9px; border-radius: 50%; flex: none; }

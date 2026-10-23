@@ -6,9 +6,9 @@ Usage:
     python scripts/plotting/plot_sim_pairings.py <sim_dir> [--pairings P1 P2 ...] [--out-dir DIR]
 
 Examples:
-    python scripts/plotting/plot_sim_pairings.py plots/simulation/19_2g8a_rule_based_vs_zero
-    python scripts/plotting/plot_sim_pairings.py plots/simulation/19_2g8a_rule_based_vs_zero \\
-        --pairings rule_k1_vs_zero zero_vs_rule_k1
+    python scripts/plotting/plot_sim_pairings.py plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched
+    python scripts/plotting/plot_sim_pairings.py plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched \\
+        --pairings ah_vs_zero zero_vs_ah
 
 For each chosen pairing, emits:
     <out_dir>/pairing_<name>.jpg          5-panel variable trend (punishment,

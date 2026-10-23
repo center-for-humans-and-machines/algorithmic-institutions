@@ -15,8 +15,8 @@ Episode selection defaults to the episode with the most switch events in
 each pairing. Examples:
 
     python scripts/plotting/plot_sim_individual_heatmaps.py \\
-        plots/simulation/19_2g8a_rule_based_vs_zero \\
-        --pairing rule_k1_vs_zero --episode 0
+        plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched \\
+        --pairing ah_vs_zero --episode 0
 """
 
 import argparse

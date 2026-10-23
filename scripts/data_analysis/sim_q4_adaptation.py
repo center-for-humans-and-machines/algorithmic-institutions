@@ -19,7 +19,7 @@ flipped copies dropped): own pre-switch +0.46, new-group peers +0.28.
 
 Pools all switches across runs/episodes in each sim dir, unless --per-matchup
 is given, in which case Q4 is reported separately for each run (matchup) -- e.g.
-rule_k1_vs_zero / rule_k4_vs_zero / rule_k8_vs_zero against zero.
+ah_vs_zero / zero_vs_zero against zero.
 
 Usage:
     python scripts/data_analysis/sim_q4_adaptation.py <sim_dir> [<sim_dir> ...]
@@ -27,8 +27,7 @@ Usage:
 
 Example:
     python scripts/data_analysis/sim_q4_adaptation.py \\
-        plots/simulation/19_2g8a_rule_based_vs_zero \\
-        plots/simulation/19_2g8a_rule_based_vs_zero_same_group
+        plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched
 """
 
 import argparse

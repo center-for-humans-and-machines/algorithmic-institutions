@@ -22,9 +22,11 @@ set -euo pipefail
 
 # ── Configuration ────────────────────────────────────────────────────
 REMOTE_HOST="raven"
-# Set AI_REMOTE_DIR to fetch from an isolated experiment dir instead.
-REMOTE_PROJECT_DIR="${AI_REMOTE_DIR:-~/algorithmic-institutions}"
+# Set AI_REMOTE_DIR to fetch from an isolated experiment dir instead; a
+# checkout with .raven_remote_dir does so by default (raven_remote_dir.sh).
 LOCAL_PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+source "${LOCAL_PROJECT_DIR}/scripts/raven_remote_dir.sh"
+REMOTE_PROJECT_DIR="$(raven_remote_dir "${LOCAL_PROJECT_DIR}" "~/algorithmic-institutions")"
 
 # ── Validate arguments ───────────────────────────────────────────────
 if [[ $# -eq 0 ]]; then

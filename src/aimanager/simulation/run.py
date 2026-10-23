@@ -67,7 +67,11 @@ def run(config_path):
     # Submit
     start_command = f"sbatch {script_file}"
     print(start_command)
-    subprocess.run(start_command, stdout=subprocess.PIPE, shell=True, check=True)
+    result = subprocess.run(
+        start_command, stdout=subprocess.PIPE, shell=True, check=True, text=True
+    )
+    # "Submitted batch job <id>": scripts/policy_finder/run_sweep.sh waits on it
+    print(result.stdout.strip())
 
 
 if __name__ == "__main__":

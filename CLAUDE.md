@@ -176,10 +176,9 @@ evaluation suite likewise keeps one copy per game.
 - Experimental stack for manager sims and RL runs: Levin's stack,
   `configs/simulation/manager_testing/24_LEVIN_vnode_skip_timeoutpun_self_gnncopar1_contr_gnn_switch.yml`
   (its `artificial_humans` block names the three models).
-- The #226 sims on it, `configs/simulation/manager_testing/25_LEVIN_run{1,2,3}_*`:
-  Run 1 AH and zero, Run 2 the decay rules (k1-k8), Run 3 Levin's sigmoid
-  rules. Results and the five win definitions: `docs/reports/zero_punisher_test.html`,
-  published for the organization at <https://claude.ai/artifact/UowH31jRbmLjX6orNQkWKb>.
+- The #226 reference sims on it, `configs/simulation/manager_testing/25_LEVIN_run1_*`:
+  the AH manager and the zero punisher, with outputs in
+  `plots/simulation/25_LEVIN_run1_*`.
 - At 100 episodes per pairing a manager's win rates and margins move with the
   seed by more than most gaps between managers. Compare managers on the
   `*_batched.yml` runs: 1000 episodes per pairing, cheap with
@@ -194,8 +193,25 @@ evaluation suite likewise keeps one copy per game.
   and `human` need `episode_batch_size: 1`.
 - A rule-based manager is a config, not code: `type: rule_based` with `rule:`
   (a YAML in `configs/managers/rule_based/` with `params`, optional
-  `constraints` and `code`) and `params:` (a JSON of the values). The YAML's
-  header lists the load-time checks. The old `k:` form still runs the decay rule.
+  `constraints` and `code`) and `params:` (a JSON of the values), both
+  required. `manager/rule.py` documents the schema, the load-time checks and
+  what the code sees (`RULE_INPUTS`: the player's own round, its group and
+  the other group, at the moment the manager punishes).
+- `sweep: true` in a sim config (#227; written by
+  `scripts/policy_finder/generate_sim_config.py`) plays one rule's design points
+  against `ah`, skips the plots and writes `sweep.json`: every point's params and
+  definition-4 pool, and `best`, which loads as a manager's `params:`. Definition 4
+  lives in `simulation/pool_scores.py`, shared with `plot_winrates.py`.
+- A sweep's best measured point reads high by luck (one 500-episode estimate
+  each, #238). `scripts/policy_finder/fit_surrogate.py <sweep sim dir>` (local,
+  seconds; `run_sweep.sh` runs it) fits a Gaussian process to the points and
+  writes `landscapes.json` beside `sweep.json`: the surface's peak, each
+  param's effect and length scale, the smoothed pool at every point and
+  profiles through the peak. The peak is a candidate, never simulated:
+  `generate_sim_config.py --validate <sweep dir>/sweep.json [--top 5]` writes
+  the validation sim (`run_validate.sh <name>`, run by `run_sweep.sh`), the
+  peak and the top measured points at 2000 episodes on fresh seeds. Its
+  `validate/sweep.json` in the sweep dir holds the rule's final `best`.
 - `scripts/plotting/plot_winrates.py <sim_dir> [<sim_dir> ...]` tables the five
   win definitions of #226. Definitions 1-3 and 5 are head to head. Definition 4
   (Levin's) ranks managers by their group's common pool against `ah`, so it
@@ -216,6 +232,13 @@ evaluation suite likewise keeps one copy per game.
 - Work on the optimized stack (Levin's stack, the rule-based managers, RL
   training on them) goes on `autoresearch-optimized-stack`: branch off it and
   open PRs into it, not into `main`.
+- `policy-finder-base` is cut from `autoresearch-optimized-stack` with the
+  existing rule-based managers removed (#235). It never merges back: #227 and
+  the agent core land on it, and every policy-finder instance branches off it.
+  It carries `.raven_remote_dir`, so the cluster scripts (`/simulate`,
+  `remote_test.sh`, `fetch_cluster.sh`) sync, run and fetch in
+  `~/ai-isolated/<branch>` (`/` as `--`) on Raven, never in the shared
+  checkout; `AI_REMOTE_DIR` still overrides (`scripts/raven_remote_dir.sh`).
 
 ### Environment
 
@@ -279,6 +302,8 @@ scripts/remote_test.sh -- -k test_encoder -v
   fixture in `src/aimanager/tests/fixtures/`)
 - `src/aimanager/tests/test_linear_opponent.py` - RL linear opponent parity with the
   sim path (local)
+- `src/aimanager/tests/test_rule_validate.py` - Rule sweep design and `validate-rule`
+  (local; `test_rule_config.py`, the rule-based manager, runs on Raven)
 - `scripts/tests/test_remote_test.py` - Remote test script tests (local)
 
 ### Claude proxy (command server)
@@ -306,6 +331,8 @@ The proxy in `claude_proxies/algoinst` submits Raven jobs through `CC_command_se
 - **Train AH models**: `python -m aimanager train-ah <config>`
 - **Train RL manager**: `python -m aimanager train-manager <config>`
 - **Run simulation**: `python -m aimanager simulate <config>` (set `save_per_round: true` if the run will be evaluated; `episode_batch_size` to batch episodes, see Manager Comparison)
+- **Validate a rule config**: `python -m aimanager validate-rule <rule.yml> [--max-params N]` (local; the checks and the Sobol design are in `manager/rule.py`)
+- **Generate a rule's sweep sim config**: `python scripts/policy_finder/generate_sim_config.py --config <rule.yml>` (local; 256 Sobol points x 500 episodes against `ah` by default, written to `configs/simulation/policy_finder/<rule>_sweep.yml`)
 - **Evaluate sim vs human**: `python -m aimanager evaluate <config>` (needs the simulation's `per_round.parquet`)
 - **Plot confusion matrix**: `python scripts/plotting/plot_confusion_matrix.py <artifact_dir>`
 
