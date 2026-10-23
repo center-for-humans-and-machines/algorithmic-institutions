@@ -1,6 +1,6 @@
 """Expressiveness probe: own-group vs other-group contribution disentanglement.
 
-Supports the report `reports/expressiveness_group_switching_contribution_50ep.md`.
+Supports the report `docs/reports/expressiveness_group_switching_contribution_50ep.md`.
 
 Two empirical questions about the contribution AH trained by
 `configs/training/artificial_humans/contribution/group_switching_contribution_50ep.yml`:

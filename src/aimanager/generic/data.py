@@ -123,7 +123,7 @@ def parse_agent_rounds(df, switch_every=None):
     return df
 
 
-MAX_CONTRIBUTION = 20  # the per-round endowment (reports/basics.md)
+MAX_CONTRIBUTION = 20  # the per-round endowment (docs/reports/basics.md)
 
 
 def shift(tensor, default):

@@ -1,7 +1,7 @@
 """Expressiveness probe for the switch and punishment AHs.
 
 Companion to `expressiveness_group_disentanglement.py` (contribution AH) and the
-report `reports/expressiveness_switch_and_punishment_50ep.md`. Same perspective —
+report `docs/reports/expressiveness_switch_and_punishment_50ep.md`. Same perspective —
 group-average influence and own-vs-other disentanglement — applied to:
 
   - switch_predictor/opt_50ep_doubled.yml      (target does_switch)

@@ -16,7 +16,7 @@ the current punishment / payoff / common-good features (they contain p_t)
 are not. Only create_torch_data + get_cross_validations are used from src/;
 every derived feature is computed here from the raw [G, A, T] tensors.
 payoff = 20 - contribution - punishment + common_good (per-capita,
-reports/basics.md).
+docs/reports/basics.md).
 
 Runs locally (CPU torch, no PyG).
 """
@@ -27,7 +27,7 @@ os.environ.setdefault("DISABLE_PANDERA_IMPORT_WARNING", "True")
 import numpy as np
 import yaml
 
-ENDOWMENT = 20.0  # per-round private endowment (reports/basics.md)
+ENDOWMENT = 20.0  # per-round private endowment (docs/reports/basics.md)
 
 
 # --------------------------------------------------------------------------- #

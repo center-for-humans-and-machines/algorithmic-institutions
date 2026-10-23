@@ -57,6 +57,32 @@ CROSS_MODE_KEYS = {
 # -- Helpers ---------------------------------------------------------
 
 
+def unwrap_orchestrator_config(config, mode):
+    """Return the dict the CLI trains.
+
+    Orchestrator YAMLs keep training keys under ``params`` and SLURM
+    fields under ``exec``. The SSH path flattens that before sbatch.
+    ``python -m aimanager`` accepts either shape so a command-server
+    ``program_call`` can point at the repo config. A top-level ``grid``
+    or ``include`` is still the SSH orchestrator's job.
+    """
+    required = REQUIRED_KEYS[mode]
+    if all(key in config for key in required):
+        return config
+    if "grid" in config or "include" in config:
+        print(
+            f"Error: config for '{mode}' has 'grid' or 'include'. "
+            "The SSH orchestrator expands those "
+            "(src/aimanager/artificial_humans/run.py).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    params = config.get("params")
+    if isinstance(params, dict):
+        return params
+    return config
+
+
 def load_and_validate(config_path, mode):
     """Load YAML config, check required keys, warn on cross-mode keys.
 
@@ -64,6 +90,8 @@ def load_and_validate(config_path, mode):
     """
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
+
+    config = unwrap_orchestrator_config(config, mode)
 
     # Check required keys
     missing = [k for k in REQUIRED_KEYS[mode] if k not in config]

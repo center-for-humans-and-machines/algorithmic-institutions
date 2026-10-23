@@ -106,10 +106,16 @@ scripts/fetch_cluster.sh <remote_path>      # bring results back (no trailing sl
 
 ## Skill-based workflow
 
-In Claude Code the same operations are exposed as skills -- `/train`,
-`/simulate`, `/test`, `/fetch-cluster`, plus `/commit` and `/pr` (see
-`.claude/skills/`). Issue labels steering the agent workflow are documented
-in `CLAUDE.md`.
+On a machine that can `ssh raven`, Claude Code exposes the same operations
+as skills -- `/train`, `/simulate`, `/test`, `/fetch-cluster`, plus `/commit`
+and `/pr` (see `.claude/skills/`). Those skills call the scripts above and
+need the ControlMaster session. Issue labels are documented in `CLAUDE.md`.
+
+The Claude proxy (`claude_proxies/algoinst`) does not SSH to Raven. Its
+`run_on_cluster` skill submits `python -m aimanager ...` through the command
+server, into `/u/ykeller/algorithmic-institutions` and
+`/raven/ptmp/ykeller/cc/containers/apptainer/algoinst.sif`. Plans, tasks, and
+reports for that workflow live under `docs/`.
 
 ## Directly on the cluster
 

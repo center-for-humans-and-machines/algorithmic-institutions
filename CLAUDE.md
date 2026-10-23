@@ -75,16 +75,17 @@ plots/                            # Generated plots and figures
 experiments/                      # Human experiment data
 artifacts/                        # Trained model artifacts (GNN dirs with .pt files;
                                   #   linear .joblib bundles under baselines/)
-reports/                          # Research documentation and reports
+docs/tasks/                       # Task writeups; finished tasks move to archive/
+docs/plans/                       # Implementation plans (status in the title)
+  archive/                        # Completed plans (DONE, ABANDONED)
+docs/reports/                     # Research documentation and reports
 notes/                            # Normative definitions (evaluation metrics, scoring schema)
 run/                              # Legacy DJX run definitions (djx no longer used)
-doc/plans/                        # Implementation plans (status in title)
-  archive/                        # Completed plans (DONE, ABANDONED)
 ```
 
-### Plan Workflow
+### Tasks, plans, reports
 
-Implementation plans live in `doc/plans/` as flat files. Status is tracked in the first heading:
+A real feature starts as a task in `docs/tasks/`, then a plan in `docs/plans/`, then the implementation. An analysis finishes with a report in `docs/reports/`. Status is the first heading of a plan:
 
 - `# [DRAFT] Title` -- plan is being written
 - `# [ACTIVE] Title` -- plan is approved and in progress
@@ -92,7 +93,11 @@ Implementation plans live in `doc/plans/` as flat files. Status is tracked in th
 - `# [PAUSED] Title` -- plan is on hold
 - `# [ABANDONED] Title` -- plan was dropped, kept for reference
 
-Completed plans (`[DONE]`, `[ABANDONED]`) are moved to `doc/plans/archive/`.
+Completed plans (`[DONE]`, `[ABANDONED]`) move to `docs/plans/archive/`. Finished tasks move to `docs/tasks/archive/`.
+
+### Plan Workflow
+
+Implementation plans live in `docs/plans/` as flat files. The status heading above is the tracker.
 
 ### Issue Labels
 
@@ -124,7 +129,7 @@ Labels control the workflow for GitHub issues:
 - `notes/eval_scoring_schema.md` -- The noise-ceiling scoring schema
 - `scripts/plotting/plot_confusion_matrix.py` -- Reusable confusion matrix plot
 - `scripts/data_creation/group_switching_preprocess.py` -- Group switching data preprocessing
-- `reports/basics.md` -- Game rules and experimental setup reference
+- `docs/reports/basics.md` -- Game rules and experimental setup reference
 
 ### Evaluation Suite
 
@@ -173,7 +178,7 @@ evaluation suite likewise keeps one copy per game.
   (its `artificial_humans` block names the three models).
 - The #226 sims on it, `configs/simulation/manager_testing/25_LEVIN_run{1,2,3}_*`:
   Run 1 AH and zero, Run 2 the decay rules (k1-k8), Run 3 Levin's sigmoid
-  rules. Results and the five win definitions: `reports/zero_punisher_test.html`,
+  rules. Results and the five win definitions: `docs/reports/zero_punisher_test.html`,
   published for the organization at <https://claude.ai/artifact/UowH31jRbmLjX6orNQkWKb>.
 - At 100 episodes per pairing a manager's win rates and margins move with the
   seed by more than most gaps between managers. Compare managers on the
@@ -216,7 +221,8 @@ evaluation suite likewise keeps one copy per game.
 
 - PyG/CUDA packages are Linux-only (see `sys_platform` markers in `pyproject.toml`)
 - Local macOS has CPU-only `torch==1.11.0` without PyG subpackages
-- Full environment (torch + CUDA + PyG) only available on Raven cluster
+- Raven jobs use the frozen stack: Python 3.9, `torch==1.11.0+cu113`, PyG 2.5, in `algoinst.sif` when launched from the Claude proxy, or the remote `.venv` on the manual SSH path
+- The Claude proxy's own image is a different stack (torch 2.5 CPU, or cu124 on an RTX 4090). Checkpoints do not move between that image and Raven
 - `*.csv`, `*.parquet`, `*.pt` are Git LFS-tracked (`.gitattributes`): data and
   artifact files are pointers until `git lfs pull`
 
@@ -224,12 +230,12 @@ evaluation suite likewise keeps one copy per game.
 
 | Stage | Where |
 |---|---|
-| `train-ah`, `train-manager`, `simulate` | Raven (SLURM; `train_cluster.sh` / `simulate_cluster.sh`) |
+| `train-ah`, `train-manager`, `simulate` | Raven. Manual path: `train_cluster.sh` / `simulate_cluster.sh`. Proxy path: `POST /submit_slurm_job` with `python -m aimanager ...` |
 | `evaluate`, plotting/analysis scripts | Local macOS |
 | PyG-dependent tests (encoder, environment, edge encoder, linear manager) | Raven (`remote_test.sh`) |
 | Evaluation-suite tests, `scripts/tests/` | Local |
 
-Results come back from the cluster via `scripts/fetch_cluster.sh`.
+On the manual path, results come back with `scripts/fetch_cluster.sh`. On the proxy path they come back through `cluster_transfer` (`POST /sync_from_cluster`).
 
 ### Testing
 
@@ -275,6 +281,10 @@ scripts/remote_test.sh -- -k test_encoder -v
   sim path (local)
 - `scripts/tests/test_remote_test.py` - Remote test script tests (local)
 
+### Claude proxy (command server)
+
+The proxy in `claude_proxies/algoinst` submits Raven jobs through `CC_command_server` (`CC_PROJECT=algoinst`). That container has no Raven SSH keys. The checkout it syncs is `/u/ykeller/algorithmic-institutions`. A job is `python -m aimanager <train-ah|train-manager|simulate> <config>` inside `/raven/ptmp/ykeller/cc/containers/apptainer/algoinst.sif`. `WANDB_ENTITY=chm-ml` and `WANDB_PROJECT=algorithmic-institutions` are set on the container; the API key comes from the cluster secrets file. The `run_on_cluster` skill in the proxy is the agent path. The SSH scripts below stay the manual path.
+
 ### Remote Cluster (Raven)
 
 - Host: raven.mpcdf.mpg.de (via ProxyJump through gate.mpcdf.mpg.de)
@@ -309,6 +319,6 @@ scripts/remote_test.sh -- -k test_encoder -v
 - Trained artifacts: `artifacts/` (GNN dirs; linear joblib bundles in `artifacts/baselines/`)
 - Human reference data: `experiments/2group_8agent_50ep.csv`
 - Metric and scoring definitions: `notes/`
-- Research docs: `reports/`
-- Game rules: `reports/basics.md`
+- Research docs: `docs/reports/`
+- Game rules: `docs/reports/basics.md`
 - Cluster setup: `README.md`

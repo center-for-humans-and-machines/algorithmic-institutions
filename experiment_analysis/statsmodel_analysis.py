@@ -5,6 +5,8 @@ import fire
 import numpy as np
 from scipy.stats import norm
 from util import prepare_df
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 def wald_test(cov, params, keys):
@@ -37,13 +39,15 @@ def simple_model(df: pd.DataFrame, y_col: str):
     # df["ai_condition_revealed"] = (
     #    df["manager_identity_transparent"] & (df["manager"] == "pgh, γ=0.9")
     # ).astype(int)
-    df["transparent"] = (df["manager_identity_transparent"]).astype(int)
+    # df["transparent"] = (df["manager_identity_transparent"]).astype(int)
     df["is_human_governor"] = (df["manager"] == "human").astype(int)
-    df["interaction"] = df["is_human_governor"] * df["transparent"]
+    df["is_ai_governor"] = (~(df["is_human_governor"].astype(bool))).astype(int)
+    # df["interaction"] = df["is_human_governor"] * df["transparent"]
     independent_vars = [
-        "is_human_governor",
-        "transparent",
-        "interaction",
+        # "is_human_governor",
+        "is_ai_governor",
+        #    "transparent",
+        #    "interaction",
     ]
     X = df[independent_vars]
     y = df[y_col]
@@ -62,9 +66,9 @@ def simple_model(df: pd.DataFrame, y_col: str):
     p_values = est.pvalues.to_dict()
 
     cov = est.cov_params()
-    p_values["any_transparency_effect"] = wald_test(
-        cov, coefficients, ["transparent", "interaction"]
-    )
+    # p_values["any_transparency_effect"] = wald_test(
+    #    cov, coefficients, ["transparent", "interaction"]
+    # )
 
     return p_values, coefficients
 
