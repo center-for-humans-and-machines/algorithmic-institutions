@@ -188,9 +188,9 @@ class DummyManager:
 
 
 class RuleBasedManager:
-    # The rule YAML's code, run on RULE_INPUTS: the player's own round, its
-    # group and the other group (see manager/rule.py). It reads both groups,
-    # so the per-episode path hands it the raw round history.
+    # The rule YAML's code, run on RULE_INPUTS: the round history of every
+    # player of both groups (see manager/rule.py, #245). The per-episode path
+    # hands it the raw round history; the batched path keeps its own.
     needs_rounds = True
 
     def __init__(self, rule=None, params=None, n_punishments=31, **_):
@@ -199,23 +199,49 @@ class RuleBasedManager:
         self.code, self.params = load_rule(rule, params)
         self.n_punishments = int(n_punishments)
         self.model = None
+        self.history = None
 
-    def _punish(self, inputs):
-        raw = run_rule(self.code, self.params, inputs)
-        return raw.clamp(0, self.n_punishments - 1).to(th.int64)
+    def _punish(self, contribution, valid, punishment, agent_group):
+        """The rule on the history ([B, A, t+1], punishment [B, A, t]), run
+        once for each group's manager; each player gets the punishment of its
+        own group's run, as [B, A, 1] int64."""
+        now = agent_group[..., -1:]
+        out = th.zeros(now.shape, dtype=th.float, device=now.device)
+        for group in (0, 1):
+            inputs = rule_inputs(contribution, valid, punishment, agent_group, group)
+            raw = run_rule(self.code, self.params, inputs).unsqueeze(-1)
+            out = th.where(now == group, raw, out)
+        return out.clamp(0, self.n_punishments - 1).to(th.int64)
 
     def batched_punish(self, state):
-        """Env state ([B, A, 1] tensors) -> punishment [B, A, 1] int64."""
-        return self._punish(
-            rule_inputs(
-                state["contribution"],
-                state["contribution_valid"],
-                state["prev_contribution"],
-                state["prev_punishment"],
-                state["agent_group"],
-                state["round_number"],
+        """Env state ([B, A, 1] tensors) -> punishment [B, A, 1] int64.
+
+        Called once a round from round 0 (simulate.run_batched), it keeps the
+        round history: reset at round 0, then each round's contributions,
+        timeouts and groups, and the last round's punishments as charged
+        (`prev_punishment`).
+        """
+        t = int(state["round_number"].max())
+        if t == 0:
+            self.history = {
+                "contribution": state["contribution"][..., :0],
+                "valid": state["contribution_valid"][..., :0],
+                "punishment": state["punishment"][..., :0],
+                "agent_group": state["agent_group"][..., :0],
+            }
+        elif self.history is None or self.history["contribution"].shape[-1] != t:
+            raise ValueError(f"rule_based: round {t} without every earlier round")
+        else:
+            self.history["punishment"] = th.cat(
+                [self.history["punishment"], state["prev_punishment"]], -1
             )
-        )
+        for key, name in (
+            ("contribution", "contribution"),
+            ("valid", "contribution_valid"),
+            ("agent_group", "agent_group"),
+        ):
+            self.history[key] = th.cat([self.history[key], state[name]], -1)
+        return self._punish(**self.history)
 
     def get_punishments(self, rounds):
         """Round history (simulate.make_round dicts, punishments as charged)
