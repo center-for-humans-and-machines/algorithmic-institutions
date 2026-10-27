@@ -245,24 +245,20 @@ class RuleBasedManager:
 
     def get_punishments(self, rounds):
         """Round history (simulate.make_round dicts, punishments as charged)
-        -> punishment [A] for the last round, as batched_punish reads the env
-        state of one episode."""
-        last = rounds[-1]
-        prev = rounds[-2] if len(rounds) > 1 else last  # round 0: unread
+        -> punishment [A] for the last round, as batched_punish gives it for
+        the same episode."""
+        n = len(rounds[-1]["contribution"])
 
-        def column(values, dtype):
-            return th.tensor(values, dtype=dtype).view(1, -1, 1)
+        def history(key, dtype, rounds):  # [1, A, len(rounds)]
+            if not rounds:
+                return th.zeros((1, n, 0), dtype=dtype)
+            return th.tensor([r[key] for r in rounds], dtype=dtype).T.unsqueeze(0)
 
-        n = len(last["contribution"])
         return self._punish(
-            rule_inputs(
-                column(last["contribution"], th.float),
-                column(last["contribution_valid"], th.bool),
-                column(prev["contribution"], th.float),
-                column(prev["punishment"] if len(rounds) > 1 else [0] * n, th.float),
-                column(last["agent_group"], th.long),
-                column([last["round"]] * n, th.long),
-            )
+            history("contribution", th.float, rounds),
+            history("contribution_valid", th.bool, rounds),
+            history("punishment", th.float, rounds[:-1]),  # the last is unset
+            history("agent_group", th.long, rounds),
         ).view(-1)
 
 
