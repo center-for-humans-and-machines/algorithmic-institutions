@@ -26,9 +26,8 @@ members. The manager then deals each member a punishment of 0-30 points,
 deducted from both that player's account and the pool. After rounds 4, 8, 12,
 16 and 20 players may switch groups. A manager's goal is a large common pool
 in its group over the episode.
-`reports/basics.md` has the payoff mechanics (it describes an earlier
-one-group pilot of 16 rounds); `reports/human_behavior_analysis_50ep.md`
-describes this game and how humans played it.
+`reports/basics.md` has the rules in full, the human data's columns and the
+simulation setup.
 
 Your rule is tested in simulation against artificial humans (models trained on
 the human experiments) while the other group is run by `ah`, an artificial
@@ -63,8 +62,7 @@ A guard rejects anything outside these limits; do not try to work around it.
 - `plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/`: the reference
   sims on the stack your rule will face: `ah` and `zero` (never punishes)
   against each other, with `per_round.parquet` per round and player.
-- `reports/`, `notes/`: the game rules, the human behaviour analyses and the
-  evaluation metrics.
+- `reports/basics.md`: the game's rules, the data's columns, the simulation.
 - `src/aimanager/`: the simulation, the artificial humans and the
   rule-based manager (`manager/rule.py`: the rule schema, `load_rule`,
   `sobol_design`, `validate_rule`; `manager/api_manager.py`:

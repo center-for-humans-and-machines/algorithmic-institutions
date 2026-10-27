@@ -1,0 +1,29 @@
+# What a policy-finder instance's worktree holds: its sparse checkout
+# (new_instance.sh, non-cone patterns in .gitignore syntax, later lines win).
+# The agent learns the game from reports/basics.md and arrives at everything
+# about human and simulated behaviour itself, from the raw data and the
+# reference sims: no reports, notes, plans or analyses of earlier work.
+
+# the top-level files, but no folder, README.md or CLAUDE.md
+/*
+!/*/
+!/README.md
+!/CLAUDE.md
+
+# the code, configs, models and data the agent and its sweep use
+/.claude/
+/src/
+/configs/
+/scripts/
+!/scripts/data_analysis/
+/artifacts/
+/data/
+/experiments/
+
+# the game rules, and the reference sims the rule faces
+/reports/basics.md
+/plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/
+
+# what the instance writes: its notes and its sweeps
+/notes/policy_finder/
+/plots/simulation/policy_finder/

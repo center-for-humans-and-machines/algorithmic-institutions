@@ -234,6 +234,10 @@ evaluation suite likewise keeps one copy per game.
   `remote_test.sh`, `fetch_cluster.sh`) sync, run and fetch in
   `~/ai-isolated/<branch>` (`/` as `--`) on Raven, never in the shared
   checkout; `AI_REMOTE_DIR` still overrides (`scripts/raven_remote_dir.sh`).
+  An instance's worktree is a sparse checkout of
+  `scripts/policy_finder/instance_paths`: the code, data, reference sims and
+  `reports/basics.md`, but no other reports, notes, plans or analyses, so the
+  agent works out human and simulated behaviour itself.
 
 ### Environment
 

@@ -8,7 +8,10 @@
 #
 # Makes branch policy-finder/<name> off policy-finder-base, checked out as its
 # own worktree in ../policy-finder-worktrees/<name> (outside this checkout;
-# override with PF_WORKTREE_ROOT), pulls the LFS data the agent reads, writes
+# override with PF_WORKTREE_ROOT), checks out there only the paths of
+# scripts/policy_finder/instance_paths (the game rules, code, data and
+# reference sims; no reports or analyses of earlier work), pulls the LFS data
+# the agent reads, writes
 # the instance's gitignored .claude/policy_finder.json and
 # .claude/settings.local.json (instance_settings.py), and starts
 # `claude --agent policy-finder-host` there with no MCP servers. --no-start stops before starting the session.
@@ -161,6 +164,9 @@ else
     VERSION=1
     [[ -n "$PROMPT" ]] || PROMPT="Design your rule."
 fi
+# only what the agent may see (an earlier version's worktree is stripped too)
+grep -v '^#' "$MAIN/scripts/policy_finder/instance_paths" \
+    | git -C "$WT" sparse-checkout set --no-cone --stdin
 git -C "$WT" lfs pull --include "$LFS_DATA"
 
 "$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$MAIN" "$NAME" \
