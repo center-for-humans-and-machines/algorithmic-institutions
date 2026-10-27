@@ -99,10 +99,10 @@ extend or rework.
     sits at an end of their range; `profiles`: the fitted pool along each
     parameter, the others held at the peak; `points`: the fitted pool at
     each design point.
-  - `validate/`: the most promising values measured again on fresh seeds
-    with more episodes (`sweep.json`, `per_round.parquet`, two plots of its
-    best). Its `best` is that version's final result: your version is
-    compared with the highest of the earlier versions' final results.
+  - `final/`: the surface's peak simulated on fresh seeds with more
+    episodes (`sweep.json`, `per_round.parquet`, two plots of it). It is
+    that version's final result: your version is compared with the highest
+    of the earlier versions' final results.
 
 ## The rule config
 

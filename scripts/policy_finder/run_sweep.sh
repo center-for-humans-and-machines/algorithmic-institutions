@@ -18,8 +18,8 @@
 # plots/simulation/policy_finder/<name>_sweep/ in the worktree, the parts'
 # per-round data beside it (per_round_p<k>of<N>.parquet, #244), fits its Gaussian process there (fit_surrogate.py:
 # landscapes.json), commits that and the sim configs on
-# policy-finder/<name>, then runs the validation sim (run_validate.sh),
-# whose best is the rule's final result.
+# policy-finder/<name>, then the final run of the GP's peak (run_final.sh),
+# whose result is the rule's final result.
 # Needs the SSH ControlMaster to Raven (`ssh raven`).
 # PF_WORKTREE_ROOT as in new_instance.sh.
 
@@ -123,6 +123,6 @@ git commit -q -m "policy-finder $STEM: sweep"
 git log --oneline -1
 echo "sweep of $STEM: $WT/$SWEEP"
 
-# 8. validate the GP's peak and the top measured points on fresh seeds
-"$MAIN/scripts/policy_finder/run_validate.sh" "$NAME" \
-    || { echo "FAIL: validation of $NAME; rerun run_validate.sh $NAME" >&2; exit 1; }
+# 8. the final run: the GP's peak on fresh seeds
+"$MAIN/scripts/policy_finder/run_final.sh" "$NAME" \
+    || { echo "FAIL: final run of $NAME; rerun run_final.sh $NAME" >&2; exit 1; }

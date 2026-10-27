@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# Run a policy-finder instance's validation sim on Raven (#238).
+# Run a policy-finder instance's final run on Raven: its sweep's GP peak.
 #
 # Usage:
-#   scripts/policy_finder/run_validate.sh <name>
+#   scripts/policy_finder/run_final.sh <name>
 #
-# Validates the instance's current version (#244: its rule_name, <name> for
+# Runs the instance's current version (#244: its rule_name, <name> for
 # version 1; the paths below say <name> for it) and, from version 2 on,
 # prints its final best against the lineage's best so far, the highest final
 # best of its earlier versions.
 # Run once the instance's sweep is committed with its landscapes.json
 # (run_sweep.sh calls it). From the instance worktree, with this checkout's
 # scripts (an older instance's own copies predate it): writes the
-# validation sim config (generate_sim_config.py --validate: the Gaussian
-# process's peak and the top measured points, fresh seeds, more episodes),
+# final run's config (generate_sim_config.py --final: the Gaussian
+# process's peak, fresh seeds, more episodes),
 # syncs the worktree to its own Raven dir, submits the sim, waits for it,
 # fetches its sweep.json, best-point plots and per-round data into
-# plots/simulation/policy_finder/<name>_sweep/validate/ and commits that and
+# plots/simulation/policy_finder/<name>_sweep/final/ and commits that and
 # the config on policy-finder/<name>. Its sweep.json's `best` is the rule's
 # final result. Needs the SSH ControlMaster to Raven (`ssh raven`).
 # PF_WORKTREE_ROOT as in new_instance.sh.
@@ -42,8 +42,8 @@ earlier = [name] + [f"{name}-v{k}" for k in range(2, v)] if v > 1 else []
 print(c["python"], c.get("rule_name") or name, " ".join(earlier), sep="\n")' "$CONF" "$NAME"
 )
 SWEEP="plots/simulation/policy_finder/${STEM}_sweep"
-VALIDATE="$SWEEP/validate"
-CONFIG="configs/simulation/policy_finder/${STEM}_sweep_validate.yml"
+FINAL="$SWEEP/final"
+CONFIG="configs/simulation/policy_finder/${STEM}_sweep_final.yml"
 
 cd "$WT"
 [[ -f "$SWEEP/landscapes.json" ]] \
@@ -55,7 +55,7 @@ ssh -O check raven 2>/dev/null \
 
 # 1. the sim config
 PYTHONPATH="$WT/src" "$PY" "$MAIN/scripts/policy_finder/generate_sim_config.py" \
-    --validate "$SWEEP/sweep.json" --root "$WT"
+    --final "$SWEEP/sweep.json" --root "$WT"
 
 # 2. sync, submit
 scripts/simulate_cluster.sh --sync-only
@@ -77,21 +77,21 @@ while ssh raven 'squeue -h -u $USER -o %i' | grep -qxF "$job"; do
 done
 
 # 4. fetch; no sweep.json means the sim failed
-mkdir -p "$VALIDATE"
-rsync -az "raven:$REMOTE/$VALIDATE/" "$VALIDATE/" \
-    || { echo "FAIL: cannot fetch $VALIDATE (see .log/ in $REMOTE)" >&2; exit 1; }
-[[ -f "$VALIDATE/sweep.json" ]] \
-    || { echo "FAIL: the validation wrote no sweep.json (see .log/ in $REMOTE)" >&2; exit 1; }
+mkdir -p "$FINAL"
+rsync -az "raven:$REMOTE/$FINAL/" "$FINAL/" \
+    || { echo "FAIL: cannot fetch $FINAL (see .log/ in $REMOTE)" >&2; exit 1; }
+[[ -f "$FINAL/sweep.json" ]] \
+    || { echo "FAIL: the final run wrote no sweep.json (see .log/ in $REMOTE)" >&2; exit 1; }
 
 # 5. commit on the instance branch, never on policy-finder-base
-git add -- "$VALIDATE" "$CONFIG"
-git commit -q -m "policy-finder $STEM: validation"
+git add -- "$FINAL" "$CONFIG"
+git commit -q -m "policy-finder $STEM: final run"
 git log --oneline -1
 # the final best, and against the lineage's best so far: the highest final
 # best of the earlier versions (higher is better, whatever the margin)
 earlier_finals=()
 for v in $EARLIER; do
-    earlier_finals+=("plots/simulation/policy_finder/${v}_sweep/validate/sweep.json")
+    earlier_finals+=("plots/simulation/policy_finder/${v}_sweep/final/sweep.json")
 done
 "$PY" -c 'import json, os, sys
 def best(path):
@@ -102,10 +102,10 @@ print("final best %s: %.1f +- %.1f, %s" % (b["name"], b["pool"], b["pool_se"], v
 earlier = [best(f)[1] for f in sys.argv[2:] if os.path.exists(f)]
 missing = [f for f in sys.argv[2:] if not os.path.exists(f)]
 if missing:
-    print("earlier versions without a validation: %s" % ", ".join(missing))
+    print("earlier versions without a final run: %s" % ", ".join(missing))
 if earlier:
     p = max(earlier, key=lambda p: p["pool"])
     print("lineage best so far %s: %.1f +- %.1f; change %+.1f (%s)" % (
         p["name"], p["pool"], p["pool_se"], b["pool"] - p["pool"],
         "improved" if b["pool"] > p["pool"] else "not improved"))' \
-    "$VALIDATE/sweep.json" ${earlier_finals[@]+"${earlier_finals[@]}"}
+    "$FINAL/sweep.json" ${earlier_finals[@]+"${earlier_finals[@]}"}

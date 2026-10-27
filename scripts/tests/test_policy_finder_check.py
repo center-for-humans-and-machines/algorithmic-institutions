@@ -231,7 +231,7 @@ def test_commit_rule_only(repo):
 
 def test_committed_sweep_passes(repo):
     """run_sweep.sh (#241) commits the sweep configs and the merged sweep, its
-    landscapes.json and its validation (#238)."""
+    landscapes.json and its final run."""
     main, wt = repo
     write_rule(wt)
     assert check(main, "--commit").returncode == 0
@@ -239,8 +239,8 @@ def test_committed_sweep_passes(repo):
         f"configs/simulation/policy_finder/{NAME}_sweep_p1of2.yml",
         f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json",
         f"plots/simulation/policy_finder/{NAME}_sweep/landscapes.json",
-        f"configs/simulation/policy_finder/{NAME}_sweep_validate.yml",
-        f"plots/simulation/policy_finder/{NAME}_sweep/validate/sweep.json",
+        f"configs/simulation/policy_finder/{NAME}_sweep_final.yml",
+        f"plots/simulation/policy_finder/{NAME}_sweep/final/sweep.json",
     ):
         (wt / path).parent.mkdir(parents=True, exist_ok=True)
         (wt / path).write_text("{}\n")

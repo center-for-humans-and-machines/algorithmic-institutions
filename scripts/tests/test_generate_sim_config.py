@@ -163,46 +163,28 @@ def _sweep(repo):
     return sweep_dir / "sweep.json", sweep, peak
 
 
-def test_validation_points(repo):
-    _, sweep, peak = _sweep(repo)
-    points = gen.validation_points(sweep, {"peak": {"params": peak}}, top=3)
-    assert points == [
-        ("toy_gp", peak),
-        ("toy_s001", {"c0": 1, "p": 0.5}),
-        ("toy_s006", {"c0": 6, "p": 0.5}),
-        ("toy_s003", {"c0": 3, "p": 0.5}),
-    ]
-    # a peak on a measured point runs once, as the peak
-    on_point = gen.validation_points(sweep, {"peak": {"params": {"c0": 1, "p": 0.5}}})
-    assert [n for n, _ in on_point] == ["toy_gp"] + [
-        f"toy_s{i:03d}" for i in (6, 3, 5, 2)
-    ]
-
-
-def test_main_writes_the_validation(repo, monkeypatch, capsys):
+def test_main_writes_the_final_run(repo, monkeypatch, capsys):
     sweep_file, _, peak = _sweep(repo)
-    monkeypatch.setattr(
-        sys, "argv", ["gen", "--validate", str(sweep_file), "--top", "2"]
-    )
+    monkeypatch.setattr(sys, "argv", ["gen", "--final", str(sweep_file)])
     gen.main()
-    out = repo / gen.CONFIG_DIR / "toy_sweep_validate.yml"
-    assert "3 points x 2000 episodes" in capsys.readouterr().out
+    out = repo / gen.CONFIG_DIR / "toy_sweep_final.yml"
+    assert "the peak x 2000 episodes" in capsys.readouterr().out
     config = yaml.safe_load(out.read_text())
-    assert list(config["managers"]) == ["ah", "toy_gp", "toy_s001", "toy_s006"]
+    assert list(config["managers"]) == ["ah", "toy_gp"]
     assert config["managers"]["toy_gp"]["params"] == peak
     assert config["managers"]["toy_gp"]["rule"] == "configs/managers/rule_based/toy.yml"
-    assert config["seed"] == gen.VALIDATE_SEED
-    assert config["n_episodes"] == gen.VALIDATE_EPISODES
-    assert config["output_dir"] == str(gen.OUTPUT_DIR / "toy_sweep/validate")
+    assert config["seed"] == gen.FINAL_SEED
+    assert config["n_episodes"] == gen.FINAL_EPISODES
+    assert config["output_dir"] == str(gen.OUTPUT_DIR / "toy_sweep/final")
     assert config["sweep"] is True
-    for name in ("toy_gp", "toy_s001"):  # loads like any rule-based manager
-        load_rule(config["managers"][name]["rule"], config["managers"][name]["params"])
+    # loads like any rule-based manager
+    load_rule(config["managers"]["toy_gp"]["rule"], config["managers"]["toy_gp"]["params"])
 
 
-def test_validation_needs_the_fit(repo, monkeypatch):
+def test_final_run_needs_the_fit(repo, monkeypatch):
     sweep_file, _, _ = _sweep(repo)
     sweep_file.with_name("landscapes.json").unlink()
-    monkeypatch.setattr(sys, "argv", ["gen", "--validate", str(sweep_file)])
+    monkeypatch.setattr(sys, "argv", ["gen", "--final", str(sweep_file)])
     with pytest.raises(SystemExit, match="fit the sweep first"):
         gen.main()
 
@@ -227,11 +209,11 @@ def test_main_takes_no_upper_param_bound(repo, monkeypatch, capsys):
     assert "8 design points" in capsys.readouterr().out
 
 
-def test_a_later_version_sweeps_and_validates_under_its_own_name(
+def test_a_later_version_sweeps_and_runs_its_peak_under_its_own_name(
     repo, monkeypatch, capsys
 ):
     """Version 2's rule (#244) names its sweep's points, outputs and its
-    validation's peak."""
+    final run's peak."""
     v2 = repo / "configs/managers/rule_based/toy-v2.yml"
     v2.write_text(yaml.safe_dump(RULE))
     monkeypatch.setattr(
@@ -252,10 +234,10 @@ def test_a_later_version_sweeps_and_validates_under_its_own_name(
         json.dumps({"peak": {"params": {"c0": 9, "p": 1.0}}})
     )
     monkeypatch.setattr(
-        sys, "argv", ["gen", "--validate", str(sweep_dir / "sweep.json")]
+        sys, "argv", ["gen", "--final", str(sweep_dir / "sweep.json")]
     )
     gen.main()
-    out = repo / gen.CONFIG_DIR / "toy-v2_sweep_validate.yml"
+    out = repo / gen.CONFIG_DIR / "toy-v2_sweep_final.yml"
     config = yaml.safe_load(out.read_text())
-    assert list(config["managers"]) == ["ah", "toy-v2_gp", "toy-v2_s000"]
-    assert config["output_dir"] == str(gen.OUTPUT_DIR / "toy-v2_sweep/validate")
+    assert list(config["managers"]) == ["ah", "toy-v2_gp"]
+    assert config["output_dir"] == str(gen.OUTPUT_DIR / "toy-v2_sweep/final")
