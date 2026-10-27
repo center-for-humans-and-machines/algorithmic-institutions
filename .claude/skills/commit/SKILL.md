@@ -20,8 +20,11 @@ argument-hint: [message]
 
 - If `$ARGUMENTS` is provided, use it as the commit message
 - Otherwise, draft a concise message based on the staged changes
-- Follow the project's existing commit message style (see `git log --oneline -5`)
-- Add `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>` trailer
+- Follow the project's existing commit message style (see `git log -5`, bodies
+  included): a short subject, with the issue as `(#N)` at its end when there
+  is one; a body of `- ` bullets, lowercase, on what changed
+- End with the Co-Authored-By trailer the session's attribution instructions
+  give (the running model), not a fixed model name
 
 ## After committing
 
