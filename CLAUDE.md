@@ -190,8 +190,11 @@ evaluation suite likewise keeps one copy per game.
   (a YAML in `configs/managers/rule_based/` with `params`, optional
   `constraints` and `code`) and `params:` (a JSON of the values), both
   required. `manager/rule.py` documents the schema, the load-time checks and
-  what the code sees (`RULE_INPUTS`: the player's own round, its group and
-  the other group, at the moment the manager punishes).
+  what the code sees (`RULE_INPUTS`, #245: the raw round history of every
+  player of both groups, as the RL manager sees it, at the moment the manager
+  punishes: `c`, `valid`, `in_group` over rounds 0..t, `p` over 0..t-1, and
+  `t`). The code sets one punishment per player; the manager keeps the
+  history in batched sims and runs the rule once per group.
 - `sweep: true` in a sim config (#227; written by
   `scripts/policy_finder/generate_sim_config.py`) plays one rule's design points
   against `ah`, skips the plots and writes `sweep.json`: every point's params and
