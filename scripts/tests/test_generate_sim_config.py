@@ -27,10 +27,10 @@ RULE = {
             "definition": "contribution below which players are punished",
             "type": "int",
         },
-        "p": {"definition": "punishment per point of shortfall", "type": "float"},
+        "w": {"definition": "punishment per point of shortfall", "type": "float"},
     },
-    "sweep_config": {"c0": [0, 20], "p": [0, 3]},
-    "code": "punishment = p * th.clamp(c0 - c, min=0)",
+    "sweep_config": {"c0": [0, 20], "w": [0, 3]},
+    "code": "punishment = w * th.clamp(c0 - c[..., -1], min=0)",
 }
 
 
@@ -71,7 +71,7 @@ def test_build(repo):
 
 
 def test_rejects(repo, tmp_path):
-    design = [{"c0": 1, "p": 1.0}]
+    design = [{"c0": 1, "w": 1.0}]
     bad = repo / "configs/managers/rule_based/a_vs_b.yml"
     bad.write_text(yaml.safe_dump(RULE))
     with pytest.raises(ValueError, match="contains `_vs_`"):
@@ -151,14 +151,14 @@ def test_main_writes_parts(repo, monkeypatch):
 def _sweep(repo):
     """A swept toy rule: sweep.json and landscapes.json in its sweep dir."""
     points = [
-        {"name": f"toy_s{i:03d}", "params": {"c0": i, "p": 0.5}, "pool": float(p)}
+        {"name": f"toy_s{i:03d}", "params": {"c0": i, "w": 0.5}, "pool": float(p)}
         for i, p in enumerate([60, 72, 65, 70, 61, 68, 71, 64])
     ]
     sweep_dir = repo / gen.OUTPUT_DIR / "toy_sweep"
     sweep_dir.mkdir(parents=True)
     sweep = {"rule": "configs/managers/rule_based/toy.yml", "points": points}
     (sweep_dir / "sweep.json").write_text(json.dumps(sweep))
-    peak = {"c0": 12, "p": 1.25}
+    peak = {"c0": 12, "w": 1.25}
     (sweep_dir / "landscapes.json").write_text(json.dumps({"peak": {"params": peak}}))
     return sweep_dir / "sweep.json", sweep, peak
 
@@ -226,12 +226,12 @@ def test_a_later_version_sweeps_and_runs_its_peak_under_its_own_name(
 
     sweep_dir = repo / gen.OUTPUT_DIR / "toy-v2_sweep"
     sweep_dir.mkdir(parents=True)
-    points = [{"name": "toy-v2_s000", "params": {"c0": 3, "p": 0.5}, "pool": 66.0}]
+    points = [{"name": "toy-v2_s000", "params": {"c0": 3, "w": 0.5}, "pool": 66.0}]
     (sweep_dir / "sweep.json").write_text(
         json.dumps({"rule": "configs/managers/rule_based/toy-v2.yml", "points": points})
     )
     (sweep_dir / "landscapes.json").write_text(
-        json.dumps({"peak": {"params": {"c0": 9, "p": 1.0}}})
+        json.dumps({"peak": {"params": {"c0": 9, "w": 1.0}}})
     )
     monkeypatch.setattr(
         sys, "argv", ["gen", "--final", str(sweep_dir / "sweep.json")]

@@ -39,7 +39,7 @@ RULE_TEXT = """params:
 sweep_config:
   a: [0, 2]
 code: |
-  punishment = a * (20 - c)
+  punishment = a * (20 - c[..., -1])
 """
 
 
@@ -140,7 +140,7 @@ def test_notes_sections_in_order(repo, notes, missing):
         ("params: {a: x}\ncode: punishment = a\n", "must declare exactly"),
         (RULE_TEXT.replace("sweep_config:\n  a: [0, 2]\n", ""), "sweep_config"),
         (
-            RULE_TEXT.replace("[0, 2]", "[-1, 2]").replace("(20 - c)", "th.log(a)"),
+            RULE_TEXT.replace("[0, 2]", "[-1, 2]").replace("(20 - c[..., -1])", "th.log(a)"),
             "NaN",
         ),
     ],
@@ -364,7 +364,7 @@ def test_no_upper_param_bound(repo):
     rule = (
         f"params:\n{many}\nsweep_config:\n"
         + "\n".join(f"  p{i}: [0, 1]" for i in range(6))
-        + "\ncode: |\n  punishment = (p0 + p1 + p2 + p3 + p4 + p5) * (20 - c)\n"
+        + "\ncode: |\n  punishment = (p0 + p1 + p2 + p3 + p4 + p5) * (20 - c[..., -1])\n"
     )
     (wt / f"configs/managers/rule_based/{NAME}-v2.yml").write_text(rule)
     result = check(main)

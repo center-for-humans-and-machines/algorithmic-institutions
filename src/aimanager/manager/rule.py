@@ -15,18 +15,20 @@ A rule YAML:
     constraints:           # optional comparisons over params only
       - c0 >= 0
     code: |
-      punishment = 5 * (c < c0)
+      punishment = 5 * (c[..., -1] < c0)
 
 `code` runs with these names in scope (rule_inputs computes them):
-  RULE_INPUTS, each a float tensor with one value per player:
-    the player:  c, valid, c_prev, p_prev, t
-    own group:   n, c_group
-    other group: n_other, c_other, p_prev_other
+  RULE_INPUTS, the raw history of every player of both groups (#245):
+    c, valid, in_group   [B, A, t+1] float, rounds 0..t
+    p                    [B, A, t] float, rounds 0..t-1
+    t                    the round, 0-d float
   th        torch
   each name declared under `params`, from the params (0-d float tensor)
-It must set `punishment`; the manager then clamps it to [0, 30] and casts to
-integers. Python builtins are not available: use `th` for the maths. The code
-is checked against the declaration, never used to discover it.
+It must set `punishment`, one value per player ([B, A], or anything that
+broadcasts to it); the manager then clamps it to [0, 30], casts to integers
+and punishes only its own group. Python builtins are not available: use `th`
+for the maths. The code is checked against the declaration, never used to
+discover it.
 """
 
 import ast
@@ -37,21 +39,17 @@ import numpy as np
 import torch as th
 import yaml
 
-#: What the rule code sees, one value per player, at the moment the manager
-#: punishes round t: after round t's contributions, before any of its
-#: punishments (rule_inputs; the agent prompt lists the same).
+#: What the rule code sees at the moment the manager punishes round t: after
+#: round t's contributions, before any of its punishments. Every player of
+#: both groups (axis 1, a player keeps its index for the game) over the rounds
+#: so far (last axis), as the RL manager sees them (rule_inputs; the agent
+#: prompt lists the same).
 RULE_INPUTS = (
-    "c",  # own contribution this round, 0-20 (the timeout value if timed out)
-    "valid",  # 1 if the player contributed this round, 0 if timed out
-    "c_prev",  # own contribution last round (round 0: c)
-    "p_prev",  # own punishment last round (round 0: 0)
-    "t",  # round number, 0-23
-    "n",  # own group's size, the player included
-    "c_group",  # mean contribution of the rest of the own group, valid only
-    "n_other",  # the other group's size
-    "c_other",  # the other group's mean contribution, valid only
-    "p_prev_other",  # last round's mean punishment of the players now in the
-    # other group
+    "c",  # contribution in rounds 0..t, 0-20 (the timeout value if timed out)
+    "valid",  # 1 where the player contributed, 0 where timed out, rounds 0..t
+    "p",  # punishment charged in rounds 0..t-1, by either manager
+    "in_group",  # 1 where the player was in this manager's group, rounds 0..t
+    "t",  # the round, 0-23
 )
 #: Besides the inputs and the params.
 RULE_MODULES = ("th",)
@@ -266,63 +264,34 @@ def load_rule(rule_path, params):
     return code, check_params(rule_path, rule, params, source)
 
 
-def _mean(total, count):
-    """total / count, 0 where count is 0 (an empty group, no valid player)."""
-    return th.where(count > 0, total / count.clamp(min=1), th.zeros_like(total))
-
-
-def rule_inputs(
-    contribution, valid, prev_contribution, prev_punishment, agent_group, round_number
-):
-    """RULE_INPUTS from the env state's tensors, all [B, A, 1] over episodes B
-    and players A of both groups; `agent_group` holds each player's group
-    (0 or 1). Returns float tensors of the same shape.
-
-    Group means count only players who contributed this round (`valid`);
-    `c_group` leaves the player out. A mean over nobody is 0: `n` and
-    `n_other` tell the empty cases apart. In round 0, which has no last round,
-    `c_prev` is `c` and `p_prev` is 0.
+def rule_inputs(contribution, valid, punishment, agent_group, group):
+    """RULE_INPUTS from the round history: `contribution`, `valid` and
+    `agent_group` (each player's group, 0 or 1) are [B, A, t+1] over episodes
+    B, players A of both groups and rounds 0..t; `punishment` is [B, A, t],
+    the punishments charged in rounds 0..t-1. `group` is the group the manager
+    runs, which `in_group` is relative to. Returns float tensors; `t` is 0-d.
     """
-    c = contribution.to(th.float)
-    t = round_number.to(th.float)
-    v = valid.to(th.float)
-    first = t == 0
-    c_prev = th.where(first, c, prev_contribution.to(th.float))
-    p_prev = th.where(first, th.zeros_like(c), prev_punishment.to(th.float))
-
-    group = agent_group.to(th.long)  # [B, A, 1]
-    # [B, 2, A, 1]: 1 where player a is in group k
-    member = th.stack([(group == k).to(th.float) for k in (0, 1)], 1)
-
-    def per_group(x):  # [B, A, 1] -> [B, 2, 1] sums over each group
-        return (member * x.unsqueeze(1)).sum(2)
-
-    def own(x):  # [B, 2, 1] -> [B, A, 1], each player's own group's value
-        return x.gather(1, group)
-
-    def other(x):
-        return x.gather(1, 1 - group)
-
-    size, n_valid = per_group(th.ones_like(c)), per_group(v)
-    c_sum, p_sum = per_group(v * c), per_group(p_prev)
+    contribution = contribution.to(th.float)
+    if punishment.shape[-1] != contribution.shape[-1] - 1:
+        raise ValueError(
+            f"rule_inputs: punishment covers {punishment.shape[-1]} rounds,"
+            f" contribution {contribution.shape[-1]}: expected one fewer"
+        )
     return {
-        "c": c,
-        "valid": v,
-        "c_prev": c_prev,
-        "p_prev": p_prev,
-        "t": t,
-        "n": own(size),
-        "c_group": _mean(own(c_sum) - v * c, own(n_valid) - v),
-        "n_other": other(size),
-        "c_other": _mean(other(c_sum), other(n_valid)),
-        "p_prev_other": _mean(other(p_sum), other(size)),
+        "c": contribution,
+        "valid": valid.to(th.float),
+        "p": punishment.to(th.float),
+        "in_group": (agent_group == group).to(th.float),
+        "t": th.tensor(
+            contribution.shape[-1] - 1, dtype=th.float, device=contribution.device
+        ),
     }
 
 
 def run_rule(code, params, inputs):
     """Run compiled rule code on `inputs` (rule_inputs); return the raw float
-    punishment, broadcast to the inputs' shape (before the manager's clamp and
-    integer cast)."""
+    punishment, one per player [B, A] (before the manager's clamp and integer
+    cast)."""
     # the inputs go in as copies, so in-place ops in the rule cannot touch
     # them; no builtins, so the maths goes through th. Params are 0-d float
     # tensors on the inputs' device, so th functions take them alone too
@@ -337,29 +306,46 @@ def run_rule(code, params, inputs):
     exec(code, scope)
     if RULE_OUTPUT not in scope:
         raise ValueError("rule_based: the rule code did not set `punishment`")
-    # a scalar rule (e.g. a constant) is broadcast to every player and round;
-    # the manager's cast floors non-integer values after the clamp
+    # a scalar rule (e.g. a constant) is broadcast to every player; the
+    # manager's cast floors non-integer values after the clamp
     raw = th.as_tensor(scope[RULE_OUTPUT], dtype=th.float, device=c.device)
     if th.isnan(raw).any():
         raise ValueError("rule_based: the rule code produced NaN punishments")
-    return raw.broadcast_to(c.shape)
+    players = c.shape[:-1]
+    try:
+        return raw.broadcast_to(players)
+    except RuntimeError:
+        raise ValueError(
+            f"rule_based: `punishment` has shape {list(raw.shape)}, expected one"
+            f" value per player {list(players)}"
+        ) from None
 
 
-def dry_run_inputs(n_states=2048, n_players=8, seed=0):
-    """rule_inputs over random env states, for validate_rule: every round,
-    contributions 0-20 with timeouts, punishments 0-30, and group splits from
-    all players in one group to an even split."""
+#: The rounds validate_rule runs a rule at: the first (no punishment yet), a
+#: middle one and the last.
+DRY_RUN_ROUNDS = (0, 11, 23)
+
+
+def dry_run_inputs(n_states=2048, n_players=8, rounds=DRY_RUN_ROUNDS, seed=0):
+    """rule_inputs over random histories, one set per round in `rounds`, for
+    validate_rule: contributions 0-20 with timeouts, punishments 0-30, each
+    round's group split anywhere from all players in one group to an even
+    split, and each state's manager running group 0 or 1."""
     g = th.Generator().manual_seed(seed)
-    shape = (n_states, n_players, 1)
-    in_group_1 = th.rand(n_states, 1, 1, generator=g)  # each state its own split
-    return rule_inputs(
-        contribution=th.randint(0, 21, shape, generator=g),
-        valid=th.rand(shape, generator=g) > 0.1,
-        prev_contribution=th.randint(0, 21, shape, generator=g),
-        prev_punishment=th.randint(0, 31, shape, generator=g),
-        agent_group=(th.rand(shape, generator=g) < in_group_1).to(th.long),
-        round_number=th.randint(0, 24, (n_states, 1, 1), generator=g).expand(shape),
-    )
+    out = []
+    for t in rounds:
+        shape = (n_states, n_players, t + 1)
+        split = th.rand(n_states, 1, t + 1, generator=g)  # per state and round
+        out.append(
+            rule_inputs(
+                contribution=th.randint(0, 21, shape, generator=g),
+                valid=th.rand(shape, generator=g) > 0.1,
+                punishment=th.randint(0, 31, (n_states, n_players, t), generator=g),
+                agent_group=(th.rand(shape, generator=g) < split).to(th.long),
+                group=th.randint(0, 2, (n_states, 1, 1), generator=g),
+            )
+        )
+    return out
 
 
 #: Sweep design defaults: Sobol points (a power of two keeps the design
@@ -427,7 +413,8 @@ def validate_rule(rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS):
     `min_params` to `max_params` params (None: no upper bound, #244), every
     design point passes
     check_params (constraints included), and the code runs on every design
-    point over random env states (dry_run_inputs) without error or NaN.
+    point over random histories at the first, a middle and the last round
+    (dry_run_inputs) without error or NaN, giving one punishment per player.
     """
     rule, code = read_rule(rule_path)
     if "sweep_config" not in rule:
@@ -442,12 +429,13 @@ def validate_rule(rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS):
         raise ValueError(f"{rule_path}: declares {n_params} params, allowed {allowed}")
 
     design = sobol_design(rule, n_points)
-    inputs = dry_run_inputs()
+    histories = dry_run_inputs()
     for i, point in enumerate(design):
         source = f"{rule_path}: design point s{i:03d} {point}"
         check_params(rule_path, rule, point, source)
-        try:
-            run_rule(code, point, inputs)
-        except Exception as e:
-            raise ValueError(f"{source}: {e}") from None
+        for inputs in histories:
+            try:
+                run_rule(code, point, inputs)
+            except Exception as e:
+                raise ValueError(f"{source}, round {int(inputs['t'])}: {e}") from None
     return design
