@@ -116,7 +116,7 @@ git -C "$MAIN" rev-parse --verify --quiet "$BASE" >/dev/null \
     || { echo "no branch $BASE" >&2; exit 1; }
 [[ -x "$PYTHON" ]] || { echo "no Python at $PYTHON (run uv sync)" >&2; exit 1; }
 # the data the agent reads; everything else may stay an LFS pointer
-LFS_DATA="experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_*/**"
+LFS_DATA="experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/**"
 
 if [[ "$ITERATE" == 1 ]]; then
     # the next version of an existing instance, on its branch and worktree
