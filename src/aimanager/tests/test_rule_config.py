@@ -1,4 +1,4 @@
-"""Config-defined rules for RuleBasedManager (#230).
+"""Config-defined rules for RuleBasedManager (#230), on the round history (#245).
 
 Runs on Raven (api_manager imports GraphNetwork -> torch_scatter).
 """
@@ -10,21 +10,27 @@ import torch as th
 import yaml
 
 
+def _state(contribution, valid, groups, t, prev_punishment=None):
+    """One round's env state for one episode, [1, players, 1] each."""
+
+    def column(values, dtype=th.long):
+        return th.tensor(values, dtype=dtype).view(1, -1, 1)
+
+    n = len(contribution)
+    return {
+        "contribution": column(contribution),
+        "contribution_valid": column(valid, th.bool),
+        "prev_punishment": column(prev_punishment or [0] * n),
+        "agent_group": column(groups),
+        "round_number": column([t] * n),
+        "punishment": column([0] * n),
+    }
+
+
 @pytest.fixture
 def grid():
-    """An env state: every round 0-23 an episode, every contribution 0-20 a
-    player, all in group 0, shaped [episodes, players, 1]."""
-    c = th.arange(21).view(1, 21, 1).expand(24, 21, 1).contiguous()
-    t = th.arange(24).view(24, 1, 1).expand(24, 21, 1).contiguous()
-    return {
-        "contribution": c,
-        "contribution_valid": th.ones_like(c, dtype=th.bool),
-        "prev_contribution": c.flip(1),
-        "prev_punishment": th.full_like(c, 3),
-        "agent_group": th.zeros_like(c),
-        "round_number": t,
-        "punishment": th.zeros_like(c),
-    }
+    """Round 0's env state: every contribution 0-20 a player, all in group 0."""
+    return _state(list(range(21)), [True] * 21, [0] * 21, 0)
 
 
 def _rule(tmp_path, rule, params, name="rule"):
@@ -41,7 +47,7 @@ BASE = {
     "params": {"a": A},
     "sweep_config": {"a": [0.5, 2]},
     "constraints": ["a > 0"],
-    "code": "punishment = a * (20 - c)",
+    "code": "punishment = a * (20 - c[..., -1])",
 }
 
 
@@ -66,52 +72,105 @@ def test_multimanager_rule_side(tmp_path):
             "punishment_valid": [False] * 8,
             "agent_group": [0, 0, 0, 0, 1, 1, 1, 1],
             "group": ["rule"] * 4 + ["zero"] * 4,
-            "round": 2,
+            "round": 0,
         }
     ]
     matched, _ = mm.get_punishments(rounds)
     assert matched == [20 - c for c in contribution[:4]] + [0] * 4
 
 
+#: Three rounds of eight players: player 1 times out in round 1, players 2-3
+#: switch to group 1 before round 2.
+GROUPS = [[0, 0, 0, 0, 1, 1, 1, 1]] * 2 + [[0, 0, 1, 1, 1, 1, 1, 1]]
+CONTRIBUTIONS = [
+    [5, 10, 20, 0, 7, 14, 3, 18],
+    [6, 0, 12, 20, 9, 2, 15, 4],
+    [8, 11, 3, 16, 0, 20, 5, 9],
+]
+VALID = [[True] * 8, [True, False] + [True] * 6, [True] * 8]
+#: Reads every input: the gap to the own group's mean over the game so far,
+#: this round's timeouts, all punishments so far and the round
+EVERY_INPUT = (
+    "mine = valid * in_group\n"
+    "mean = (c * mine).sum((1, 2), keepdim=True) / mine.sum((1, 2), keepdim=True)\n"
+    "gap = (mean[..., 0] - c[..., -1]) * in_group[..., -1]\n"
+    "punishment = a * gap + (1 - valid[..., -1]) + 0.1 * p.sum(-1) + 0.01 * t"
+)
+
+
+def _play(manager):
+    """The three rounds through batched_punish, punishments charged as the
+    env does (none on a timed-out player); returns (punishments, rounds)."""
+    punished, rounds, charged = [], [], None
+    for t in range(3):
+        state = _state(CONTRIBUTIONS[t], VALID[t], GROUPS[t], t, charged)
+        got = manager.batched_punish(state).view(-1)
+        charged = [p if v else 0 for p, v in zip(got.tolist(), VALID[t])]
+        punished.append(got)
+        rounds.append(
+            {
+                "contribution": CONTRIBUTIONS[t],
+                "contribution_valid": VALID[t],
+                "punishment": charged,
+                "agent_group": GROUPS[t],
+                "round": t,
+            }
+        )
+    return punished, rounds
+
+
 def test_episode_path_matches_batched(tmp_path):
-    """get_punishments on a round history reads what batched_punish reads in
-    the env state: the same inputs, the same punishments."""
+    """get_punishments on a round history gives what batched_punish gives
+    from the env states of the same game."""
     from aimanager.manager.api_manager import RuleBasedManager
 
-    code = (
-        "punishment = a * (c_group - c) + (1 - valid) + 0.1 * (c_prev + p_prev)"
-        " + n + 2 * n_other + 0.1 * (c_other + p_prev_other) + 0.01 * t"
-    )
-    manager = RuleBasedManager(**_rule(tmp_path, {**BASE, "code": code}, {"a": 1}))
-    groups = [[0, 0, 0, 1, 1, 1, 1, 1], [0, 0, 1, 1, 1, 1, 1, 1]]
-    contributions = [[5, 10, 20, 0, 7, 14, 3, 18], [6, 0, 12, 20, 9, 2, 15, 4]]
-    valid = [[True] * 8, [True, False] + [True] * 6]
-    charged = [[4, 0, 0, 9, 2, 0, 6, 1], None]
-    rounds = [
-        {
-            "contribution": contributions[r],
-            "contribution_valid": valid[r],
-            "punishment": charged[r],
-            "agent_group": groups[r],
-            "round": r,
-        }
-        for r in range(2)
-    ]
+    rule = {**BASE, "code": EVERY_INPUT}
+    manager = RuleBasedManager(**_rule(tmp_path, rule, {"a": 1}))
+    punished, rounds = _play(manager)
+    for t in range(3):
+        # the round's own punishments are not known yet when it is punished
+        now = {**rounds[t], "punishment": [None] * 8}
+        assert th.equal(manager.get_punishments(rounds[:t] + [now]), punished[t])
 
-    def column(values):
-        return th.tensor(values).view(1, 8, 1)
 
-    for r in range(2):
-        state = {
-            "contribution": column(contributions[r]),
-            "contribution_valid": column(valid[r]),
-            "prev_contribution": column(contributions[r - 1] if r else [0] * 8),
-            "prev_punishment": column(charged[r - 1] if r else [0] * 8),
-            "agent_group": column(groups[r]),
-            "round_number": column([r] * 8),
-        }
-        batched = manager.batched_punish(state).view(-1)
-        assert th.equal(manager.get_punishments(rounds[: r + 1]), batched)
+def test_history_matches_the_game(tmp_path):
+    """After round 2 the manager holds every round's contributions, timeouts
+    and groups, and the punishments charged in rounds 0 and 1."""
+    from aimanager.manager.api_manager import RuleBasedManager
+
+    manager = RuleBasedManager(**_rule(tmp_path, BASE, {"a": 1}))
+    _, rounds = _play(manager)
+    history = {k: v.view(8, -1).T.tolist() for k, v in manager.history.items()}
+    assert history["contribution"] == CONTRIBUTIONS
+    assert history["valid"] == VALID
+    assert history["agent_group"] == GROUPS
+    assert history["punishment"] == [r["punishment"] for r in rounds[:2]]
+
+
+@pytest.mark.parametrize(
+    "code, expected",
+    [("10 * in_group[..., -1]", 10), ("10 * (1 - in_group[..., -1])", 0)],
+)
+def test_each_player_sees_its_own_managers_view(tmp_path, code, expected):
+    """The rule runs once per group: every player is in the group of the run
+    that punishes it, whichever group that is."""
+    from aimanager.manager.api_manager import RuleBasedManager
+
+    rule = {**BASE, "code": f"punishment = a * {code}"}
+    manager = RuleBasedManager(**_rule(tmp_path, rule, {"a": 1}))
+    punished, _ = _play(manager)
+    assert all(p.tolist() == [expected] * 8 for p in punished)
+
+
+def test_batches_restart_and_rounds_cannot_be_skipped(tmp_path):
+    from aimanager.manager.api_manager import RuleBasedManager
+
+    manager = RuleBasedManager(**_rule(tmp_path, BASE, {"a": 1}))
+    _play(manager)
+    manager.batched_punish(_state(CONTRIBUTIONS[0], VALID[0], GROUPS[0], 0))
+    assert manager.history["contribution"].shape[-1] == 1
+    with pytest.raises(ValueError, match="round 2 without every earlier round"):
+        manager.batched_punish(_state(CONTRIBUTIONS[2], VALID[2], GROUPS[2], 2))
 
 
 # -- running a rule -------------------------------------------------------
@@ -120,7 +179,7 @@ def test_episode_path_matches_batched(tmp_path):
 def test_out_of_range_is_clamped(grid, tmp_path):
     from aimanager.manager.api_manager import RuleBasedManager
 
-    rule = {**BASE, "code": "punishment = a * (100 - 10 * c)"}
+    rule = {**BASE, "code": "punishment = a * (100 - 10 * c[..., -1])"}
     got = RuleBasedManager(**_rule(tmp_path, rule, {"a": 1})).batched_punish(grid)
     assert got.min() == 0 and got.max() == 30
 
@@ -137,7 +196,10 @@ def test_scalar_is_broadcast_and_floored(grid, tmp_path):
 def test_history_untouched(grid, tmp_path):
     from aimanager.manager.api_manager import RuleBasedManager
 
-    rule = {**BASE, "code": "c.add_(5)\nn.add_(5)\npunishment = a * c"}
+    rule = {
+        **BASE,
+        "code": "c.add_(5)\nin_group.add_(5)\npunishment = a * c[..., -1]",
+    }
     before = {k: v.clone() for k, v in grid.items()}
     RuleBasedManager(**_rule(tmp_path, rule, {"a": 1})).batched_punish(grid)
     assert all(th.equal(grid[k], before[k]) for k in grid)
@@ -146,8 +208,9 @@ def test_history_untouched(grid, tmp_path):
 @pytest.mark.parametrize(
     "code, match",
     [
-        ("if a > 5:\n    punishment = a * c", "did not set `punishment`"),
-        ("punishment = (c - c) / (c - c) * a", "NaN"),
+        ("if a > 5:\n    punishment = a * c[..., -1]", "did not set `punishment`"),
+        ("punishment = (c - c)[..., -1] / (c - c)[..., -1] * a", "NaN"),
+        ("punishment = a * c", "one value per player"),
     ],
 )
 def test_run_errors(grid, tmp_path, code, match):
@@ -239,7 +302,7 @@ def test_rule_and_params_required(tmp_path):
             {"a": 1},
             "not an integer",
         ),
-        ({**BASE, "code": "p = a * c"}, {"a": 1}, "never assigns `punishment`"),
+        ({**BASE, "code": "q = a * c"}, {"a": 1}, "never assigns `punishment`"),
         (
             {**BASE, "code": "import os\npunishment = a * c"},
             {"a": 1},
