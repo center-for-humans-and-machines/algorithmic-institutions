@@ -1,0 +1,71 @@
+# pf-20261008-3 v6, the policy finder's final best (snapshot of 2026-10-15:
+# validated 73.2 +- 1.1 against `ah`, point s201). Recovered verbatim from the
+# observatory page; the instance branch policy-finder/pf-20261008-3 is not in
+# this clone. Fitted params: params/pf-20261008-3-v6_best.json (s201 of this
+# sweep_config's Sobol design, regenerated with manager/rule.py:sobol_design).
+
+params:
+  a:
+    definition: >-
+      fine per point a player contributes below the group standard
+      (rest-of-group mean minus tol, at most 20), in the first round of a
+      block (right after a switch opportunity); sets how hard free-riding
+      is punished
+    type: float
+  tol:
+    definition: >-
+      tolerance in contribution points below the mean of the rest of the
+      group within which a player is not punished; negative values ask for
+      more than the group mean (the standard is capped at 20, so full
+      contributors are never punished)
+    type: float
+  L:
+    definition: >-
+      free-rider line, only players contributing at most L points are
+      punished; players above it are left alone even when they sit below
+      the group standard, since fines on mid-level contributors buy little
+      lift and drive members out (L = 20 fines anyone below the standard;
+      L = 16 is close to that in practice)
+    type: int
+  h:
+    definition: >-
+      deterrence horizon, no punishment once fewer than h rounds remain
+      (23 - t < h), since a fine pays back only through future
+      contributions; large h concentrates enforcement in the early rounds
+    type: int
+  w:
+    definition: >-
+      follow-up, the share of the block-start fine rate applied in the
+      block's second round to players still short of the standard; a
+      second fine one round after the first is far from the next switch
+      decision and still lifts, w > 1 escalates on those who did not respond
+    type: float
+  v:
+    definition: >-
+      run-up fade, the share of the second round's fine rate kept per
+      further round as the switch decision approaches (third round w*v,
+      decision round w*v^2); fines in the run-up drive members out, v = 0
+      keeps the two rounds before each decision quiet
+    type: float
+sweep_config:
+  a: [2, 20, log]
+  tol: [-2, 4.5]
+  L: [5, 16]
+  h: [10, 20]
+  w: [0.1, 1.2]
+  v: [0, 0.6]
+constraints:
+  - a > 0
+  - L >= 0
+  - h >= 0
+  - w >= 0
+  - v >= 0
+code: |
+  standard = th.clamp(c_group - tol, max=20)
+  shortfall = th.clamp(standard - c, min=0)
+  free_rider = (c <= L + 0.5).float()
+  in_horizon = ((23 - t) >= h).float()
+  k = th.remainder(t, 4)
+  later = w * th.pow(v, th.clamp(k - 1, min=0))
+  fade = th.where(k < 0.5, th.ones_like(k), later)
+  punishment = a * shortfall * free_rider * fade * valid * in_horizon

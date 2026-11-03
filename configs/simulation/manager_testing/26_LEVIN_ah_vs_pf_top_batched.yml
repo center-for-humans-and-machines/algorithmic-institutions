@@ -1,0 +1,57 @@
+# Levin's stack (24_LEVIN): the AH punisher clone `ah` against the policy
+# finder's final best, pf-20261008-3 v6 (point s201; validated 73.2 +- 1.1
+# against `ah` in the 2026-10-15 snapshot). Both group assignments, plus
+# ah_vs_ah as the reference, 1000 episodes each on a seed no sweep used.
+#
+# The stack and `ah` are the ones every policy-finder sweep played
+# (scripts/policy_finder/generate_sim_config.py TEMPLATE). Win tables:
+#   python scripts/plotting/plot_winrates.py plots/simulation/26_LEVIN_ah_vs_pf_top_batched
+
+seed: 2000
+
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf_top:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261008-3-v6.yml
+    params: configs/managers/rule_based/params/pf-20261008-3-v6_best.json
+
+pairings:
+  - name: pf_top_vs_ah
+    group_0: pf_top
+    group_1: ah
+  - name: ah_vs_pf_top
+    group_0: ah
+    group_1: pf_top
+  - name: ah_vs_ah
+    group_0: ah
+    group_1: ah
+
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 1000
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+
+# Contribution recorded for a timed-out player: 0-20, or "default" (dataset
+# median, also when absent). Training data records 0.
+timeout_contribution: 0
+
+episode_batch_size: 1000
+
+output_dir: plots/simulation/26_LEVIN_ah_vs_pf_top_batched
+figure_name: LEVIN_ah_vs_pf_top_batched
+save_per_round: true
+basedir: .
