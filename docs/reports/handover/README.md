@@ -18,6 +18,30 @@ the summary. Details, with `path:line` references, are in the sub-reports:
 | 05 | [Policy finder: rule, sweep, surrogate](05_rule_manager_sweep.md) | rule schema, sweep sim, definition-4 score, GP fit, validation |
 | 06 | [Raven integration check](06_raven_integration_check.md) | what ran on Raven today, and where it broke |
 
+## Update 2026-11-03: what this branch now holds
+
+Two of Cem's branches are merged in. The sections below describe the state of
+2026-10-23, and the sub-reports carry a dated note where this changes them.
+
+- **`origin/policy-finder-base` up to `cc6903cf` (2026-10-29).**
+  - Rules read the raw round history of both groups (#245; 05).
+  - `run_validate.sh` became `run_final.sh`: only the GP peak reruns (04).
+  - An instance worktree is a sparse checkout of `scripts/policy_finder/instance_paths`.
+  - The game description is Cem's rewrite of `docs/reports/basics.md`.
+- **`origin/autoresearch` (`cd227b01`).** The atlas pipeline is on this branch now:
+  `scripts/data_analysis/autoresearch_summary/regenerate.sh` rebuilds
+  `report_bundle.html` from the committed caches. The code review documents are
+  `docs/reports/autoresearch_review_{gnn,gmlp,cross}.md`.
+- **`pf-20261008-3-v6.yml` is ported to the #245 inputs.** It gives the same
+  integer punishments as the original on 75.8M random player-rounds, over its
+  best params and all 256 design points. It passes `validate-rule` here and in
+  `algoinst.sif` (torch 1.11). A rerun of `26_LEVIN_ah_vs_pf_top_batched` on the
+  merged code (Raven job 31843959) reproduces both `pf_top` pairings of job
+  31448591 bit for bit. The rule-free `ah_vs_ah` reference differs in 2 of
+  1000 episodes.
+- **Not merged on purpose:** the `policy-finder/*` instance branches and Levin's
+  LLM/RL manager line (`origin/dev`, `auto/llm-manager-*`, `auto/rl-manager-*`).
+
 ## 1. The new human clones (Autoresearch Atlas)
 
 **What produced them.** A campaign of 36 Claude-written experiments, PRs #146–#181,
@@ -50,7 +74,7 @@ experiments/2group_8agent_50ep.csv (50 games, flip-doubled)
  │     (local sklearn) → artifacts/baselines/punishment_*_severity_copula.joblib
  ├─ simulate (Raven)  configs/simulation/manager_testing/23_2g8a_<...>.yml → plots/simulation/<name>/per_round.parquet
  ├─ evaluate (local)  → evaluation/{metrics,scores}.csv   → results row in the log → PR verdict
- └─ atlas: origin/autoresearch:scripts/data_analysis/autoresearch_summary/regenerate.sh → report_bundle.html
+ └─ atlas: scripts/data_analysis/autoresearch_summary/regenerate.sh → report_bundle.html (from origin/autoresearch)
 ```
 
 **What the models are, and where the code lives on this branch** (02 §1):

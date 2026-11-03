@@ -2,7 +2,7 @@
 
 ## Why
 
-`scripts/policy_finder/{new_instance,run_sweep,run_validate}.sh` reach Raven only over an
+`scripts/policy_finder/{new_instance,run_sweep,run_final}.sh` reach Raven only over an
 SSH ControlMaster: rsync to `~/ai-isolated/<branch>`, `ssh … run.py` → `sbatch`, and
 `squeue` polling. The Claude proxy has no Raven keys. It reaches one fixed checkout,
 `/u/ykeller/algorithmic-institutions`, through the command server. The numerics already
@@ -13,7 +13,7 @@ orchestration is missing. The failure points are in `04_policy_finder_orchestrat
 ## Scope
 
 In: running one instance (or a version, `--iterate-on`) from this container, through
-check, sweep, fit, validation and commit, with the agent sandboxed on Linux.
+check, sweep, fit, final run and commit, with the agent sandboxed on Linux.
 Out: the observatory store on `/u/certuer`, and the streamlit dashboard. The HTML export
 already runs from the worktrees.
 
@@ -33,7 +33,7 @@ already runs from the worktrees.
    - `fetch(remote_dir, local_dir)` runs `POST /run_in_container` to `cp -r` into
      `/opt/cluster_transfer/pf/<stem>/`, then `POST /sync_from_cluster`, then copies
      from `/var/cluster_transfer`. It checks the size against the ~1 GB guideline.
-2. **Scripts.** `run_sweep.sh` and `run_validate.sh` call the adapter in place of
+2. **Scripts.** `run_sweep.sh` and `run_final.sh` call the adapter in place of
    `simulate_cluster.sh`, `ssh` and `rsync`, when `PF_CLUSTER=proxy`. The staged copies
    are removed from the main checkout and from Raven once the instance has fetched.
 3. **Host settings.** `new_instance.sh` and `check_instance.sh` take three overrides:

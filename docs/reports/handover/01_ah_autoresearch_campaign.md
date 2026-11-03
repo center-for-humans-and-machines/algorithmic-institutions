@@ -178,7 +178,9 @@ open except #146. I could not check their current state.
 
 ## 4. How the atlas page was produced
 
-**Entry point** (on `origin/autoresearch`, local, stdlib only):
+**Entry point** (on `origin/autoresearch`, local, stdlib only; since 2026-11-03
+merged into `yannik/handover`, where it rebuilds the bundle with every tracked
+cache unchanged, and the review documents are in `docs/reports/`):
 
 ```bash
 scripts/data_analysis/autoresearch_summary/regenerate.sh   # steps 3-8, prints the step-9 publish call

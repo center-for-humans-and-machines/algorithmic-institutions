@@ -7,6 +7,17 @@ matches `origin/policy-finder-base` except `src/aimanager/cli.py`, which
 adds `unwrap_orchestrator_config` (cli.py:62-85). A sweep config passes
 through it unchanged. None of these files has uncommitted changes.
 
+> **Update 2026-11-03.** `rule.py` and `RuleBasedManager` changed with #245 (merged
+> from `policy-finder-base`, `cc6903cf`). The rule now sees the raw round history
+> of every player of both groups: `c`, `valid`, `in_group` `[B, A, t+1]`, `p`
+> `[B, A, t]` and a 0-d `t`. It runs once per group, and each player takes its own
+> group's result. The per-player inputs in §1 (`c_prev`, `c_group`, `n_other`, …)
+> are the pre-#245 schema, and line refs are to that state. The validation step is
+> now the final run (`run_final.sh`, sub-report 04). `pf-20261008-3-v6.yml` was
+> ported to the new inputs. On the same states it gives the same integer
+> punishments as before, and its `26_LEVIN_ah_vs_pf_top_batched` pairings
+> rerun bit for bit (Raven job 31843959).
+
 ## TL;DR
 
 - A rule is a YAML file with `params` (each with `definition` and `type`), `sweep_config` ranges, optional `constraints`, and `code`. The code is a torch snippet that is `exec`'d once per round over a whole batch of episodes. `manager/rule.py` checks the names the code uses at load time. That check is not a security sandbox: `th.os` can be reached.

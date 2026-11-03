@@ -6,6 +6,15 @@ and the validation are covered elsewhere. All refs are to
 `origin/policy-finder-base` (794a25c5, 2026-10-15). `yannik/handover` contains
 it, and its copies of these files match.
 
+> **Update 2026-11-03.** `yannik/handover` now also has Cem's commits up to
+> `cc6903cf` (2026-10-29), so the line refs below are to the 2026-10-15 state.
+> What changed: `run_validate.sh` is `run_final.sh` (only the GP peak reruns, on
+> fresh seeds at 2000 episodes, into `final/`; `generate_sim_config.py --final`),
+> an instance worktree is a sparse checkout of `scripts/policy_finder/instance_paths`
+> (code, data, the batched reference sim and `docs/reports/basics.md` only), the
+> rule reads the raw round history (#245, sub-report 05), and the export holds
+> the shared scripts folder once per lineage.
+
 ## TL;DR
 
 - One instance is one git branch `policy-finder/<name>` (not `pf-*`). It is
