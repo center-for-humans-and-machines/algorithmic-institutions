@@ -10,11 +10,11 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 import warnings
 
 import yaml
-
 
 # -- Config validation tables ----------------------------------------
 
@@ -81,8 +81,33 @@ def unwrap_orchestrator_config(config, mode):
         sys.exit(1)
     params = config.get("params")
     if isinstance(params, dict):
+        # The orchestrator names the job from the job's own labels before
+        # the params' labels (run.py:add_job_ids)
+        if "labels" in config and not params.get("job_id"):
+            params = {**params, "job_id": _job_id_from_labels(config["labels"])}
         return params
     return config
+
+
+def _job_id_from_labels(labels):
+    """``<k>_<v>__<k>_<v>``, the id artificial_humans/run.py gives a job."""
+    return "__".join(f"{k}_{v}" for k, v in (labels or {}).items())
+
+
+def default_job_id(config, config_path):
+    """Return the config with a ``job_id``, as the SSH orchestrator sets it.
+
+    train-ah names its outputs ``<output_dir>/model/<job_id>.pt``. The
+    orchestrator (``artificial_humans/run.py:add_job_ids``) joins the
+    labels into the id; a config without labels is named after its file.
+    A ``job_id`` already in the config is kept.
+    """
+    if config.get("job_id"):
+        return config
+    job_id = _job_id_from_labels(config.get("labels"))
+    if not job_id:
+        job_id = os.path.splitext(os.path.basename(config_path))[0]
+    return {**config, "job_id": job_id}
 
 
 def load_and_validate(config_path, mode):
@@ -94,6 +119,8 @@ def load_and_validate(config_path, mode):
         config = yaml.safe_load(f)
 
     config = unwrap_orchestrator_config(config, mode)
+    if mode == "train-ah":
+        config = default_job_id(config, config_path)
 
     # Check required keys
     missing = [k for k in REQUIRED_KEYS[mode] if k not in config]
