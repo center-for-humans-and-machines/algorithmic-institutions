@@ -3,6 +3,12 @@
 # observatory page; the instance branch policy-finder/pf-20261008-3 is not in
 # this clone. Fitted params: params/pf-20261008-3-v6_best.json (s201 of this
 # sweep_config's Sobol design, regenerated with manager/rule.py:sobol_design).
+#
+# Ported to the round-history inputs of #245: the first five lines of `code`
+# rebuild the per-player inputs the rule was written for (this round's `c`
+# and `valid`, and `c_group`, the mean of the valid rest of the own group,
+# 0 if there is nobody), the rest is the rule as found. The punishments are
+# the same as the original's on the same states.
 
 params:
   a:
@@ -61,11 +67,16 @@ constraints:
   - w >= 0
   - v >= 0
 code: |
+  now, ok = c[..., -1], valid[..., -1]
+  member = in_group[..., -1] * ok
+  others = member.sum(-1, keepdim=True) - member
+  total = (member * now).sum(-1, keepdim=True) - member * now
+  c_group = th.where(others > 0, total / th.clamp(others, min=1), th.zeros_like(now))
   standard = th.clamp(c_group - tol, max=20)
-  shortfall = th.clamp(standard - c, min=0)
-  free_rider = (c <= L + 0.5).float()
+  shortfall = th.clamp(standard - now, min=0)
+  free_rider = (now <= L + 0.5).float()
   in_horizon = ((23 - t) >= h).float()
   k = th.remainder(t, 4)
   later = w * th.pow(v, th.clamp(k - 1, min=0))
   fade = th.where(k < 0.5, th.ones_like(k), later)
-  punishment = a * shortfall * free_rider * fade * valid * in_horizon
+  punishment = a * shortfall * free_rider * fade * ok * in_horizon
