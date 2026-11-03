@@ -1,0 +1,243 @@
+{
+  "severity-copula": {
+    "prs": [
+      160
+    ],
+    "title": "The severity copula: one punishment mood per group",
+    "category": "correlated-sampling",
+    "where": "punisher bay of both machines",
+    "problem": "In the human games, everything a group is punished in a round comes from one manager making one decision: when the manager is harsh, everyone feels it. The simulation instead drew each member's punishment separately, like eight independent dice, so simulated managers never had moods. The spread between group punishment averages (row PD) was pinned far below the human level, and no retraining could fix it -- it is a property of how the dice are thrown, not of the model.",
+    "change": "Keep each member's predicted punishment probabilities exactly as they are, but couple the dice. Every group-round gets one shared 'severity' random number, mixed with a little per-member noise (mixing weight rho = 0.35, estimated from the human data), and each member's mixed number is translated back through their own predicted distribution. Individual histograms are untouched by construction -- only the togetherness of the draws changes.",
+    "maths": [
+      "Start from what the model already outputs: for each group member, 31 probabilities -- one for every punishment level 0 to 30. None of these numbers are changed.",
+      "Normally a member's punishment is drawn by rolling one random number u between 0 and 1 and walking up their probabilities until the running total passes u. Independent rolls for everyone is what kept the groups too uniform -- so the only thing this unit changes is where u comes from.",
+      "Each round, draw one shared bell-curve number g for the whole group (the manager's 'mood' that round) and one private bell-curve number e for each member. Blend them: w = sqrt(0.35) x g + sqrt(0.65) x e. Because 0.35 + 0.65 = 1, the blend w behaves exactly like a single fresh bell-curve draw -- that is the whole trick.",
+      "Convert each member's w back into a 0-to-1 number u (the standard bell-curve-to-uniform conversion) and use it as their roll. Each member still lands on every punishment level exactly as often as their own probabilities say. What changed: when the shared g is high, everyone's roll is high together -- harsh rounds are harsh for the whole group.",
+      "The strength 0.35 is not a guess. In the training games, count how often two groupmates were BOTH punished harder than their individual probabilities can explain. Independent rolls predict a certain number of such coincidences; the human data has clearly more. Slide the dial (called rho) from 0 upward and keep the value that makes the observed coincidences most plausible -- a maximum-likelihood fit. It lands at rho = 0.3508.",
+      "Where it plugs in: after the model, at the last step of the simulation loop. The model is not retrained; setting rho = 0 gives back the old independent sampling, byte for byte."
+    ],
+    "code": [
+      {
+        "path": "scripts/baselines/punishment_copula_rho.py",
+        "role": "estimates rho from the training games (pairwise MLE)"
+      },
+      {
+        "path": "src/aimanager/simulation/linear_ah.py",
+        "role": "the sampler: reads copula_rho off the .joblib bundle and couples the draws; rho = 0 restores independent sampling bit-for-bit"
+      }
+    ],
+    "bought": "PD 2.93 -> 1.53, a full band closer to the human data, with the stack mean falling 1.76 -> 1.69. This change first landed as PR #146, was unmerged for process reasons, and was redone cleanly as PR #160 -- one method, counted once. It sits unchanged in both machines' punisher bays."
+  },
+  "herding-copula": {
+    "prs": [
+      165
+    ],
+    "title": "The herding copula: groups that drift together",
+    "category": "correlated-sampling",
+    "where": "contribution bay of the gnn machine",
+    "problem": "Real groups talk themselves into generosity or into collapse: over an episode, the two groups' average contributions drift apart. With every member sampled independently, simulated groups stayed glued to the grand average. The group-spread row (CG) was the stack's worst score at 9.81 -- almost ten times the human-vs-human noise ceiling.",
+    "change": "The punisher's shared-dice trick, moved to the contribution draw and given memory: the shared group number follows an AR(1) chain with full persistence (phi = 1.0), so it is effectively drawn once and carried through the whole episode. A group that starts lucky stays lucky -- which is what herding looks like from outside. Member histograms are again preserved; the mixing weight was re-estimated for the newer trunk (rho = 0.044) after PR #166 showed calibrations do not transfer between stacks.",
+    "maths": [
+      "Same shared-dice trick as the punisher's severity copula, applied where the contribution (0 to 20) is drawn: each member's roll is a blend of one shared group number and their own private number, and each member's own predicted probabilities stay exactly as the network computed them.",
+      "The new ingredient is memory. Instead of a fresh group number every round, next round's number is phi x (last round's number) + sqrt(1 - phi^2) x (a fresh draw). With phi between 0 and 1 the group's mood fades gradually; at the fitted phi = 1.0 it never fades -- one mood per group, drawn at the start of the episode and held for all 24 rounds. That is what makes a lucky group stay lucky.",
+      "Fitting uses the real games, replayed with the model watching (the model is always shown the true history, never its own outputs). At every decision, note where the member's actual contribution landed inside the model's predicted distribution for them -- 'you gave more than 80% of what I expected of you' -- a percentile.",
+      "Convert each percentile to a bell-curve number z (the standard uniform-to-bell-curve conversion). If members were truly independent, groupmates' z values would be uncorrelated. How strongly they correlate within the same round fixes rho; how much of that correlation survives from one round to the next fixes phi. Both by maximum likelihood on the training half of the data only.",
+      "Where it plugs in: between the network's probability output and the dice. The trained network file just carries two extra numbers (rho, phi); a file without them samples independently, exactly as before. When the trunk changed in #179 the dial was re-fitted (rho = 0.044), because #166 showed a dial fitted on one model does not transfer to another."
+    ],
+    "code": [
+      {
+        "path": "src/aimanager/generic/copula.py",
+        "role": "the sampler (sample_correlated_levels): shared latent per (episode, round, group) cell, AR(1) carry-over, inverse-CDF lookup"
+      },
+      {
+        "path": "scripts/artificial_humans/contribution_copula_rho.py",
+        "role": "estimates rho and phi from teacher-forced quantiles"
+      },
+      {
+        "path": "scripts/artificial_humans/make_contribution_copula_artifact.py",
+        "role": "stamps copula_rho / copula_phi onto the model artifact; unstamped artifacts sample independently as before"
+      }
+    ],
+    "bought": "CG 9.81 -> 4.16, plus band upgrades on RCD (how a switcher's contribution converges to the new group) and RCA (round-to-round contribution change); the stack mean fell 1.69 -> 1.29, the largest single mean drop of the campaign."
+  },
+  "group-copula": {
+    "prs": [
+      170
+    ],
+    "title": "The group copula: herding for the Gaussian sampler",
+    "category": "correlated-sampling",
+    "where": "contribution bay of the gaussian-MLP machine",
+    "problem": "The same herding gap as on the gnn machine: independent per-member draws kept the group averages huddled together, and on this stack the group-spread row (CG) also sat in the worst band, above 5.",
+    "change": "A cousin of the gnn machine's herding copula (PR #165), rebuilt for this trunk's continuous sampler rather than ported: each member's Gaussian noise is mixed from three parts -- their own noise, a group component drawn once per episode, and a group component drawn fresh each round. The blend is scaled so each member's own distribution is exactly preserved. It earns its own page because the persistence mechanics differ: episode-level plus round-level shared components here, an AR(1) chain there.",
+    "maths": [
+      "This stack's contribution model outputs a bell curve per member -- a centre mu and a spread sigma -- and samples 'mu + sigma x z', where z is a fresh standard bell-curve draw. So here the coupling goes directly into z, no percentile conversion needed.",
+      "Build each member's z from three ingredients: u = one draw per group per EPISODE (the lasting mood), v = one draw per group per ROUND (the momentary one), and e = the member's private draw. Blend: z = sqrt(rho_p) x u + sqrt(rho_t) x v + sqrt(1 - rho_p - rho_t) x e. The three weights squared sum to 1, so z is again a perfect single bell-curve draw and every member's own curve N(mu, sigma) is untouched.",
+      "Fitting: replay the real games with the model watching and turn every actual contribution into a z-score against the model's own prediction -- (actual - mu) / sigma.",
+      "Two questions, two dials. How strongly do groupmates' z-scores agree within one round? That pins the TOTAL shared part, rho_p + rho_t. How much of that agreement is still there when you compare different rounds of the same episode? Only the episode mood survives across rounds, so that pins rho_p by itself. Both answers by maximum likelihood on training data.",
+      "Where it plugs in: at the sampling step of the simulation, gated by two numbers stored on the model file (rho_p, rho_t). Both at 0 reproduces the old independent draws exactly, down to the random-number stream."
+    ],
+    "code": [
+      {
+        "path": "src/aimanager/simulation/linear_ah.py",
+        "role": "the three-part blend, gated by copula_rho_p / copula_rho_t on the bundle; both 0 restores the independent path and its exact RNG stream"
+      },
+      {
+        "path": "scripts/baselines/contribution_gmlp_copula_rho.py",
+        "role": "estimates rho_p and rho_t from teacher-forced z-scores"
+      },
+      {
+        "path": "scripts/baselines/stamp_contribution_group_copula.py",
+        "role": "stamps the two fields onto the .joblib bundle"
+      }
+    ],
+    "bought": "CG 5.91 -> 2.83 and a band upgrade on CA (each participant's average contribution); the stack mean fell 1.61 -> 1.31."
+  },
+  "gaussian-trunk": {
+    "prs": [
+      167
+    ],
+    "title": "The Gaussian-MLP trunk: bending the response curves",
+    "category": "nonlinear-emission",
+    "where": "contribution bay of the gaussian-MLP machine (trunk plus the feature plate)",
+    "problem": "A linear model can only move contributions up and down in straight lines, but human reactions bend -- the response to punishment flattens near the extremes, and the reaction-by-round-type row (RCA) sat beyond 5. An earlier plain MLP attempt (PR #151) fit individuals better but wrecked the group dynamics, because nothing forced it to look at the group.",
+    "change": "A small 2-layer network predicts both the mean and the spread of each member's next contribution, and its inputs are hand-forced to include the member's own-group context (the green 'group core forced' plate on the intake) -- so the extra flexibility works with the group signal instead of around it.",
+    "maths": [
+      "The model's claim: given what a member currently sees (their features x), their next contribution is a bell curve -- centre mu(x), spread sigma(x) -- and BOTH depend on the situation. A calm regular gets a narrow curve; an unpredictable member in a chaotic round gets a wide one.",
+      "The network computing mu and sigma is deliberately tiny: the features pass through one hidden layer of 8 units with a tanh squashing function, then a plain linear layer outputs two numbers -- mu directly, and log(sigma) (predicting the log is the standard way to guarantee sigma stays positive without any constraints).",
+      "Training maximises the likelihood of the real next contributions under those curves (the Gaussian negative-log-likelihood loss). This rewards two things at once: putting the centre in the right place, and being honestly wide when people genuinely are unpredictable -- a model that pretends to be sure gets punished by the same loss.",
+      "In the simulation, a member's contribution is one draw from their curve, rounded to the nearest whole number in 0..20, with anything beyond the ends clipped to 0 or 20.",
+      "The 'forced core' is a rule imposed on feature selection, not on the network. Feature sets are normally chosen freely by cross-validation -- and an earlier attempt (#151) showed a flexible network then buys individual accuracy by ignoring the group. Here every candidate feature set MUST contain the member's own-group signals (like the group's average contribution last round), so the extra flexibility has to work with the group context.",
+      "Where it plugs in: this IS the trunk of the second stack -- the group copula (#170), the exodus head (#172, #174) and the inflated emission (#177) all attach to it."
+    ],
+    "code": [
+      {
+        "path": "scripts/baselines/gaussian_regressor.py",
+        "role": "GaussianMLPRegressor: the 2-layer heteroscedastic Gaussian model and its likelihood fit"
+      },
+      {
+        "path": "scripts/baselines/run_baseline_cv.py",
+        "role": "the cross-validation with the forced group core"
+      },
+      {
+        "path": "src/aimanager/simulation/linear_ah.py",
+        "role": "the simulation adapter that samples from N(mu, sigma) and rounds onto the grid"
+      }
+    ],
+    "bought": "RCA moved out of the worst band (> 5 down to 2-5) with the mean easing 1.631 -> 1.615. Modest on its own -- but this trunk is what the whole second machine is built on: the group copula (#170), the joint exodus head (#172, #174) and the inflated emission (#177) all bolt onto it."
+  },
+  "inflated-emission": {
+    "prs": [
+      177
+    ],
+    "title": "The inflated emission: habits and extremes get their own dials",
+    "category": "structured-head",
+    "where": "contribution bay of the gaussian-MLP machine",
+    "problem": "People are creatures of habit and of extremes: they very often repeat exactly what they gave last round, or sit hard at 0 or at the maximum of 20. A smooth bell curve rounded into bins smears that probability around -- it cannot place a spike precisely on 'same as last time', so the round-to-round change row (RCA) stayed stuck.",
+    "change": "The output becomes a four-part mixture: the Gaussian body, plus three explicit probability atoms -- repeat last value, exactly 0, exactly 20 -- with weights the network learns for each situation.",
+    "maths": [
+      "The problem in one sentence: a bell curve, however well placed, spreads its probability over neighbouring values -- it cannot put a concentrated spike exactly on 'the same as last round', and humans produce that spike constantly.",
+      "So the output becomes a mixture of four parts. Part 1 is the bell-curve body, made discrete honestly: level k gets the area of the curve between k - 0.5 and k + 0.5, and the areas beyond the ends are folded into levels 0 and 20.",
+      "Parts 2-4 are 'atoms': mini-distributions that put ALL of their probability on one single level -- the member's previous contribution, exactly 0, and exactly 20.",
+      "The same network that outputs mu and sigma also outputs four mixing weights, turned into positive numbers summing to 1 by a softmax (the standard trick for producing proportions). Final probability of level k = w_body x body(k) + w_repeat x [k = previous] + w_0 x [k = 0] + w_20 x [k = 20]. The weights depend on the situation, so the model itself decides, member by member and round by round, how much is habit and how much is drift.",
+      "Because this is a genuine probability distribution over the 21 levels, training needs no tricks: minimise the ordinary 21-way cross-entropy against what members actually gave. The atoms only earn the probability mass the bell curve fails to explain -- if the body already predicts a repeat well, the repeat weight learns to stay small.",
+      "Where it plugs in: it replaces the final output layer of the Gaussian-MLP trunk; everything upstream (features, hidden layer) and downstream (the group copula on the draws) is unchanged."
+    ],
+    "code": [
+      {
+        "path": "scripts/baselines/gaussian_regressor.py",
+        "role": "InflatedGaussianMLPRegressor (the mixture head) and binned_probs / binned_log_probs (the shared discretisation convention)"
+      },
+      {
+        "path": "src/aimanager/simulation/linear_ah.py",
+        "role": "the simulation adapter samples the 21-way distribution directly"
+      }
+    ],
+    "bought": "RCA 3.51 -> 1.86 and CG 2.08 -> 1.84; the stack mean fell 1.223 -> 1.125, making this the gaussian-MLP machine's tip."
+  },
+  "joint-exodus": {
+    "prs": [
+      171,
+      172
+    ],
+    "title": "The joint exodus head: switching as waves, not coin flips",
+    "category": "structured-head",
+    "where": "switch bay of both machines (head plus the conditional-Bernoulli picker)",
+    "problem": "Every fourth round, players may switch groups. The stock predictor gave each player an independent stay-or-leave coin, but real regroup rounds come in waves: several players abandon a group at once, and a busy exodus from one group coincides with quiet in the other (the groups' leaver counts are anti-correlated at -0.47). Independent coins cannot produce lopsided groups, so the group-size row (SC) sat above 2 -- and an oracle test (PR #169) had proved that no fix inside a single group could ever close it.",
+    "change": "On decision rounds the per-player coins are bypassed (the dashed box on the drawing). One round-level head predicts the pair of leaver counts for the two groups jointly, capturing the opposition between them; a conditional-Bernoulli step then picks which members actually leave, weighted by each player's own predicted probability -- so individual tendencies are respected within the drawn counts.",
+    "maths": [
+      "The baseline: every fourth round, each player gets a probability p of leaving their group, and a coin is flipped per player, independently. Independent coins cannot produce coordinated waves -- that is a mathematical limit, not a fitting problem.",
+      "Step A predicts HOW MANY leave, jointly for both groups. Take the per-player internal representations the network already computes, average them within each group, and append two plain numbers per group: its size and the round number.",
+      "A small extra network maps that summary to a 9 x 9 table of probabilities -- one cell for every combination of 'm0 players leave group 0 AND m1 players leave group 1' (each count 0..8) -- normalised by a softmax over the 81 cells. It is trained by cross-entropy: each real decision round says which cell actually happened, and the table learns to give that cell probability.",
+      "Because the table is over the PAIR of counts, it can put extra probability on lopsided combinations -- a big exodus from one group in the same round as calm in the other -- which is exactly the anti-correlation (-0.47) that independent coins can never express.",
+      "One safety detail: the gradient from this new head is blocked from flowing back into the shared network (the input is 'detached'). The head is a pure add-on reader -- the per-player predictions everyone else relies on cannot be bent by it.",
+      "Step B decides WHO leaves, given the drawn counts. If m of a group's k members must leave, the probability that a particular set of m members is the one that leaves is proportional to the product of those members' individual odds p/(1-p). So the players the per-player head already considered restless are the likeliest picks -- individual character survives the group-level draw. This is the textbook 'conditional Bernoulli' distribution.",
+      "With at most 8 members per group there are at most 70 possible sets for any count, so the sampler simply lists all of them and computes each one exactly -- no approximation. (Products of odds are computed as sums of log-odds so probabilities near 0 or 1 don't overflow.)"
+    ],
+    "code": [
+      {
+        "path": "src/aimanager/generic/joint_exodus.py",
+        "role": "the 9 x 9 count-pair head and pool_by_group (the per-group averaging)"
+      },
+      {
+        "path": "src/aimanager/generic/conditional_bernoulli.py",
+        "role": "the exact who-leaves sampler (subset enumeration in log space)"
+      },
+      {
+        "path": "src/aimanager/generic/graph.py",
+        "role": "wiring into the GraphNetwork's forward pass on decision rounds"
+      }
+    ],
+    "bought": "SC 2.19 -> 1.15 on the gnn machine (PR #171). The identical head, re-implemented on the gaussian-MLP machine as PR #172, took SC 2.67 -> 1.30 there -- one method, two installations, one page. The one-hot sizes plate (#174) later re-tuned its inputs."
+  },
+  "onehot-sizes": {
+    "prs": [
+      174
+    ],
+    "title": "One-hot group sizes: every size gets its own dial",
+    "category": "feature-engineering",
+    "where": "plate on the joint exodus head, gaussian-MLP machine",
+    "problem": "The joint head read the two group sizes as raw numbers, which forces a straight-line effect: a group of 6 must matter exactly twice a group of 3. A sibling experiment on the contribution slot (PR #173) showed numeric size coding only travels half the distance -- size effects are not linear.",
+    "change": "The two size inputs are re-encoded as one-hot codes, so each possible size level gets its own learned weight. Everything else in the head is byte-identical.",
+    "maths": [
+      "Before: each group's size entered the exodus head as one scaled number (size / 8). A single number times a single learned weight forces a straight-line effect -- going from 2 to 4 members must matter exactly as much as going from 4 to 6.",
+      "After: the size becomes a 9-position indicator ('one-hot'): size 3 is encoded as 0,0,0,1,0,0,0,0,0. Each position has its own learned weight, so the head can express, say, that the step from 2 to 3 members changes everything while the step from 5 to 6 changes almost nothing.",
+      "The two size inputs become 18 inputs; the head, its training procedure, and every other feature stay byte-identical -- which is also why the improvement is attributable to the encoding change alone."
+    ],
+    "code": [
+      {
+        "path": "src/aimanager/generic/joint_exodus.py",
+        "role": "the size encoding at the head's input (the only changed lines)"
+      }
+    ],
+    "bought": "SC 1.30 -> 0.98 -- under the human noise ceiling -- with two more rows joining the <= 1 club and the mean falling 1.262 -> 1.223."
+  },
+  "virtual-node": {
+    "prs": [
+      179
+    ],
+    "title": "The per-group virtual node: the group becomes a member",
+    "category": "architecture",
+    "where": "contribution bay of the gnn machine",
+    "problem": "Even with the herding copula bolted on at the sampling step, the network itself had nowhere to store 'how this group is doing': information between members passed through a single averaging step per round, and slowly-building group identity had no carrier. The group-spread row (CG) still read 4.27 and the switching-pull row (RCD) 2.76.",
+    "change": "A textbook remedy from the graph-network literature (Gilmer et al. 2017's 'master node'): each group gets a virtual member that aggregates everyone after message passing, keeps its own GRU memory from round to round, and broadcasts its state back to all members at the next round. Group state is now computed inside the network instead of imitated by correlated dice -- the copula remains only as a final light touch, recalibrated to rho = 0.044.",
+    "maths": [
+      "Background in one sentence: the contribution network computes a representation (a vector of numbers) per player each round, lets players exchange information along connections, and gives each player a small recurrent memory -- but no object in the network IS a group.",
+      "Each round, after the players have exchanged their messages: average the representations of each group's current members into one vector, and append the group's share of the population (members / 8) -- without that number, an average over 2 members and an average over 6 would look like the same state of the world.",
+      "Feed that vector into a GRU -- a small recurrent memory unit that keeps a hidden state and updates it each time it sees a new input. There is one hidden state per group per episode (the learned update rule itself is shared), so the state becomes the group's running summary of everything its members have been doing.",
+      "Broadcast: each member's own representation gets the group state attached to it just before the final layer that scores the 21 contribution levels. Every member of a group reads the SAME state -- which is what lets the whole group move coherently.",
+      "Membership is looked up fresh every round, so a player who switches groups starts reading the new group's memory from the switch round on. That is the mechanism behind a pattern measured in the human data: new arrivals weight the receiving group's recent history at 0.28.",
+      "No new training objective: the ordinary per-player prediction loss simply flows backwards through the broadcast and the averaging, so the group state learns to contain exactly whatever helps predict its members. (Edge case handled: an emptied group keeps its state ticking on zero input; nobody reads it until someone moves in.)"
+    ],
+    "code": [
+      {
+        "path": "src/aimanager/generic/group_vnode.py",
+        "role": "GroupVirtualNode: the pool -> GRU -> broadcast cycle (reuses pool_by_group from joint_exodus)"
+      },
+      {
+        "path": "src/aimanager/generic/graph.py",
+        "role": "wiring: pooled after op1, state concatenated at the op2 readout"
+      }
+    ],
+    "bought": "CG 4.27 -> 0.90, through two whole bands down to the human noise ceiling; RCD 2.76 -> 1.34 and SC under 1; the stack mean fell 1.304 -> 1.099 -- the frontier of the whole campaign."
+  }
+}

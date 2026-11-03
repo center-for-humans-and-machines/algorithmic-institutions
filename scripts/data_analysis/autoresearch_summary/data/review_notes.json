@@ -1,0 +1,66 @@
+{
+  "flag_label": "Spoon-feeding detected",
+  "flag_intro": "A setting inside this method was chosen by the analyst rather than measured from the data, and the value chosen is the one that makes the result look best. Nothing here broke a rule and no result is wrong — every choice below is written down openly in the experiment's own log. It is flagged because the same choice was made three times across both stacks, always in the same direction.",
+  "flag_footer": "Why the number is so hard to measure at all is a separate story: see “Why the dial cannot be learned”.",
+  "flags": {
+    "herding-copula": [
+      "The copula needs one number: how long a group's mood lasts. The scale runs from 0 (a brand-new mood every round) to 1 (one mood for the entire game). The estimate came back at 1.16 — off the end of the scale, which is not a possible answer.",
+      "The experiment rounded it down to 1, the most persistent setting the scale allows. On its own that is a fair call: when an estimate lands outside the legal range, the nearest legal value is the honest fallback. It only becomes a pattern once you see what happened the next two times the same number came up."
+    ],
+    "group-copula": [
+      "Same question, a different model. The data can say how much of a group's behaviour is shared, but not whether the shared part lasts the whole episode or is re-rolled each round. The measurement that separates those two came back at 0.006 with an error range straddling zero — which means: cannot tell.",
+      "The experiment's own advance prediction was that the two answers land on opposite sides of the pass line — mood-lasts-all-game would pass, mood-resets-each-round would fail. Mood-lasts-all-game was chosen, and the experiment passed. To its credit the run was set up beforehand as a test of exactly that choice, and the result came back on the predicted number, which is genuine evidence. But the other option was never actually simulated, so nobody has seen it fail."
+    ],
+    "virtual-node": [
+      "The third time this number came up, the estimate was 0.618 — a perfectly usable value, meaning a group's mood fades noticeably from one round to the next. It was set to 1.0 anyway, under a rule written back when the estimate had been off the scale. The log is candid about it: “a rule written for a saturating estimate is now being applied to one that is not.”",
+      "The campaign later ran both settings and published the comparison. At 1.0 the target row scores 0.90; at the measured 0.618 it scores 1.22 — a whole grade worse. So the setting that was kept is the setting that wins, and the reason given for keeping it is that an earlier experiment had scored better with it — not that anyone measured real groups behaving that way."
+    ]
+  },
+  "notes": {
+    "teacher-forcing": {
+      "title": "Why the dial cannot be learned",
+      "kicker": "The persistence setting flagged on three of the copula pages is not just unmeasured — it is unmeasurable from the data these models train on. Here is why.",
+      "sections": [
+        {
+          "heading": "During training",
+          "paras": [
+            "The model is asked: “here is round 9's real data — predict what agent 1 does in round 10.” What it gets handed includes agent 1's own round-9 contribution (say 17) and their three group-mates' round-9 contributions (16, 18, 17).",
+            "Those four numbers already tell it this is a high-contributing group. It does not need to infer a hidden “this group has a generous culture” — the evidence is sitting in the inputs, for free, every single round.",
+            "So the only thing a shared group mood can earn its keep on is whatever co-movement is left after you already know all that. And that leftover is genuinely small — measured at about 0.04 of the variance. The training is not being stupid when it assigns a tiny dose. Given the real history, group-mates' surprises really are only slightly correlated. That is a true fact about the data."
+          ]
+        },
+        {
+          "heading": "During simulation",
+          "paras": [
+            "Nothing is handed over. Round 0, the model invents 8 contributions. Round 1, it feeds its own round-0 outputs back in as “last round's contribution.” Repeat 24 times.",
+            "Now the model has to create the difference between a generous group and a stingy one, from nothing, and then hold onto it for 24 rounds. With independent sampling it cannot. On round 0, both groups are drawn from nearly the same distribution — any gap between them is just the luck of four draws versus four draws. Next round, every agent drifts back toward the typical response the model was trained to produce. Random gaps get averaged away instead of building up.",
+            "The two groups end up hugging each other, while real human groups visibly split — one settles high, the other collapses. That gap is the CG row."
+          ]
+        },
+        {
+          "heading": "Two different questions",
+          "paras": [
+            "Training asks: given that I can already see this group is high, how much extra correlation is left? — very little.",
+            "Simulation asks: with nothing to see, how much shared push do I need to invent a group difference and sustain it for 24 rounds? — a lot more.",
+            "The estimator answers the first. The simulator needs the second. They are different numbers, and the first is systematically smaller.",
+            "Real history is fed in fresh every round during training, which wipes out any accumulated drift before it can be observed. So the one thing you most need to know — how badly does this thing drift when left alone — is exactly the thing the training data cannot show you."
+          ]
+        },
+        {
+          "heading": "Why persistence in particular",
+          "paras": [
+            "If the shared push is re-rolled every round, it is just noise: group A gets nudged up, then down, then up, and over 24 rounds it nets out to nothing. If the push is fixed for the whole episode, group A gets nudged the same direction every single round — and it compounds, because each nudged contribution becomes next round's input, which lifts the group-mates' inputs too, which lifts them further.",
+            "A small constant push becomes a large gap. A shuffling push becomes nothing. That is why a setting of 1 is worth a full grade and the measured 0.618 is not."
+          ]
+        },
+        {
+          "heading": "What this means for the flag",
+          "paras": [
+            "Hand-setting the dial to 1 is compensating for a real structural problem, not merely grabbing the winning number. But it does not make 1 correct — it means the correct value is genuinely unknown and cannot be recovered from teacher-forced data at all.",
+            "Which is a better reason to go and get it properly than any of the ones on offer."
+          ]
+        }
+      ]
+    }
+  }
+}
