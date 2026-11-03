@@ -26,9 +26,8 @@ members. The manager then deals each member a punishment of 0-30 points,
 deducted from both that player's account and the pool. After rounds 4, 8, 12,
 16 and 20 players may switch groups. A manager's goal is a large common pool
 in its group over the episode.
-`reports/basics.md` has the payoff mechanics (it describes an earlier
-one-group pilot of 16 rounds); `reports/human_behavior_analysis_50ep.md`
-describes this game and how humans played it.
+`docs/reports/basics.md` has the rules in full, the human data's columns and the
+simulation setup.
 
 Your rule is tested in simulation against artificial humans (models trained on
 the human experiments) while the other group is run by `ah`, an artificial
@@ -63,8 +62,7 @@ A guard rejects anything outside these limits; do not try to work around it.
 - `plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/`: the reference
   sims on the stack your rule will face: `ah` and `zero` (never punishes)
   against each other, with `per_round.parquet` per round and player.
-- `reports/`, `notes/`: the game rules, the human behaviour analyses and the
-  evaluation metrics.
+- `docs/reports/basics.md`: the game's rules, the data's columns, the simulation.
 - `src/aimanager/`: the simulation, the artificial humans and the
   rule-based manager (`manager/rule.py`: the rule schema, `load_rule`,
   `sobol_design`, `validate_rule`; `manager/api_manager.py`:
@@ -99,10 +97,10 @@ extend or rework.
     sits at an end of their range; `profiles`: the fitted pool along each
     parameter, the others held at the peak; `points`: the fitted pool at
     each design point.
-  - `validate/`: the most promising values measured again on fresh seeds
-    with more episodes (`sweep.json`, `per_round.parquet`, two plots of its
-    best). Its `best` is that version's final result: your version is
-    compared with the highest of the earlier versions' final results.
+  - `final/`: the surface's peak simulated on fresh seeds with more
+    episodes (`sweep.json`, `per_round.parquet`, two plots of it). It is
+    that version's final result: your version is compared with the highest
+    of the earlier versions' final results.
 
 ## The rule config
 
@@ -119,43 +117,32 @@ sweep_config:      # every parameter: the range the sweep draws it from
 constraints:       # optional comparisons over params only
   - k > 0
 code: |
-  punishment = k * th.ones_like(c)
+  punishment = k * th.ones_like(c[..., -1])
 ```
 
 `code` runs once per round, after the round's contributions and before any
-punishment of that round, for every player at once. It sees these inputs, each
-a float tensor with one value per player, plus `th` (torch) and your params
-(0-d float tensors):
+punishment of that round. It sees the game so far: every player of both
+groups, every round up to now. Each input is a float tensor whose middle axis
+is the player (8; a player keeps its index for the whole game) and whose last
+axis is the round. The first axis runs over games played at once; treat it as
+given. It also sees `th` (torch) and your params (0-d float tensors).
 
-**The player**
+| Input | Shape | Meaning |
+|---|---|---|
+| `c` | [games, 8, t+1] | Contribution in rounds 0..t, 0-20 (a timed-out player's is recorded as 0) |
+| `valid` | [games, 8, t+1] | 1 where the player contributed, 0 where it timed out, rounds 0..t |
+| `p` | [games, 8, t] | Punishment charged in rounds 0..t-1, 0-30, by either manager; empty in round 0 |
+| `in_group` | [games, 8, t+1] | 1 where the player was in your group, rounds 0..t |
+| `t` | 0-d | The current round, 0-23 |
 
-| Input | Meaning |
-|---|---|
-| `c` | Contribution this round, 0-20 (a timed-out player's is recorded as 0) |
-| `valid` | 1 if the player contributed this round, 0 if timed out |
-| `c_prev` | Own contribution last round (round 0: `c`) |
-| `p_prev` | Own punishment last round, 0-30 (round 0: 0) |
-| `t` | Round number, 0-23 |
+`c[..., -1]` is this round's contributions, one per player.
 
-**Own group** (this round)
-
-| Input | Meaning |
-|---|---|
-| `n` | Group size, the player included |
-| `c_group` | Mean contribution of the rest of the group, timed-out players left out (0 if there is nobody to count) |
-
-**Other group** (this round)
-
-| Input | Meaning |
-|---|---|
-| `n_other` | Its size (0 if empty) |
-| `c_other` | Its mean contribution, timed-out players left out (0 if nobody) |
-| `p_prev_other` | Last round's mean punishment of the players now in it: what the other manager did (0 if empty) |
-
-The code must assign `punishment`, which the manager clamps to 0-30 and
-floors to integers; it is applied to the players of your group only. No
-imports and no Python builtins: do the maths with `th`. The example above only
-shows the format; every declared parameter must be read by the code.
+The code must assign `punishment`, one value per player ([games, 8]), which
+the manager clamps to 0-30 and floors to integers; it is applied to the
+players of your group only. Before the sweep, the code must run without error
+at rounds 0, 11 and 23 on every point of the design. No imports and no Python
+builtins: do the maths with `th`. The example above only shows the format;
+every declared parameter must be read by the code.
 
 After you finish, a sweep plays `sobol_points` points drawn over your
 `sweep_config` (a Sobol design; an `int` range gives each of its integers the

@@ -13,13 +13,11 @@ for its per-round frame. Point names stay global; part k's seed starts after
 the batches of the parts before it, so no batch seed repeats across parts.
 scripts/policy_finder/merge_sweeps.py then joins the parts' sweep.json.
 
-`--validate <sweep dir>/sweep.json` writes the sweep's validation sim
-instead (#238): the Gaussian process's peak (landscapes.json beside it,
-scripts/policy_finder/fit_surrogate.py), named `<rule>_gp`, and the `--top`
-best measured points under their sweep names, each on fresh seeds at more
-episodes. It is a sweep sim too, so its own sweep.json (in `validate/` inside
-the sweep's dir) holds the rule's final `best`: the one result that is a
-fresh measurement rather than the top of the noisy design.
+`--final <sweep dir>/sweep.json` writes the sweep's final run instead: the
+Gaussian process's peak (landscapes.json beside it,
+scripts/policy_finder/fit_surrogate.py), named `<rule>_gp`, on fresh seeds
+at more episodes. It is a sweep sim too, so its own sweep.json (in `final/`
+inside the sweep's dir) holds the rule's final result.
 
 Usage:
     python scripts/policy_finder/generate_sim_config.py \
@@ -27,15 +25,15 @@ Usage:
         [--sobol-points 256] [--n-episodes 500] [--seed 42] [--n-parts 1] \
         [--min-params 1] [--max-params 4|none] [--out <sim config>]
     python scripts/policy_finder/generate_sim_config.py \
-        --validate plots/simulation/policy_finder/<rule>_sweep/sweep.json \
-        [--top 5] [--n-episodes 2000] [--seed 1000] [--out <sim config>]
+        --final plots/simulation/policy_finder/<rule>_sweep/sweep.json \
+        [--n-episodes 2000] [--seed 1000] [--out <sim config>]
 
 Writes configs/simulation/policy_finder/<rule>_sweep[_p<k>of<N>].yml by
 default; each sim writes to plots/simulation/policy_finder/ under the same
-name. The validation sim's config is <rule>_sweep_validate.yml, its output
-plots/simulation/policy_finder/<rule>_sweep/validate/. `--root` sets the
+name. The final run's config is <rule>_sweep_final.yml, its output
+plots/simulation/policy_finder/<rule>_sweep/final/. `--root` sets the
 repo the paths are relative to (default: this script's), for a worktree
-whose own copy of this script predates `--validate`.
+whose own copy of this script predates `--final`.
 """
 
 import argparse
@@ -57,13 +55,11 @@ TEMPLATE = Path(
 ANCHOR = "ah"
 N_EPISODES = 500
 SEED = 42
-#: The validation sim (#238): the top measured points it reruns besides the
-#: Gaussian process's peak, its episodes per point (se about half the
-#: sweep's) and its seed, past every seed a sweep's batches take
-VALIDATE_TOP = 5
-VALIDATE_EPISODES = 2000
-VALIDATE_SEED = 1000
-VALIDATE_DIR = "validate"
+#: The final run of the Gaussian process's peak: its episodes (se about half
+#: a sweep point's) and its seed, past every seed a sweep's batches take
+FINAL_EPISODES = 2000
+FINAL_SEED = 1000
+FINAL_DIR = "final"
 CONFIG_DIR = Path("configs/simulation/policy_finder")
 OUTPUT_DIR = Path("plots/simulation/policy_finder")
 
@@ -175,56 +171,41 @@ def build_sim_configs(rule_path, design, n_episodes=N_EPISODES, seed=SEED, n_par
     return configs
 
 
-def validation_points(sweep, landscapes, top=VALIDATE_TOP):
-    """The validation sim's points: [(name, params)], the Gaussian process's
-    peak first (`<rule>_gp`), then the `top` best measured points under
-    their sweep names; a measured point the peak repeats is left out."""
-    peak = landscapes["peak"]["params"]
-    points = [(f"{Path(sweep['rule']).stem}_gp", peak)]
-    for p in sorted(sweep["points"], key=lambda p: p["pool"], reverse=True)[:top]:
-        if p["params"] != peak:
-            points.append((p["name"], p["params"]))
-    return points
-
-
-def write_validate(args):
-    """--validate: the sweep's validation sim config."""
-    sweep_file = Path(args.validate)
+def write_final(args):
+    """--final: the sweep's final run config, the Gaussian process's peak."""
+    sweep_file = Path(args.final)
     sweep = json.loads(sweep_file.read_text())
     landscapes = sweep_file.with_name("landscapes.json")
     if not landscapes.exists():
         sys.exit(f"no {landscapes}: fit the sweep first (fit_surrogate.py)")
-    points = validation_points(sweep, json.loads(landscapes.read_text()), args.top)
-    n_episodes = args.n_episodes or VALIDATE_EPISODES
+    peak = json.loads(landscapes.read_text())["peak"]["params"]
+    n_episodes = args.n_episodes or FINAL_EPISODES
     stem = Path(sweep["rule"]).stem
     try:
         config = build_sim_config(
             ROOT / sweep["rule"],
-            [params for _, params in points],
+            [peak],
             n_episodes,
-            VALIDATE_SEED if args.seed is None else args.seed,
-            names=[name for name, _ in points],
-            output=f"{stem}_sweep/{VALIDATE_DIR}",
+            FINAL_SEED if args.seed is None else args.seed,
+            names=[f"{stem}_gp"],
+            output=f"{stem}_sweep/{FINAL_DIR}",
         )
     except ValueError as e:
         sys.exit(f"Invalid: {e}")
-    config["figure_name"] = f"{stem}_sweep_{VALIDATE_DIR}"
-    out = Path(args.out or ROOT / CONFIG_DIR / f"{stem}_sweep_{VALIDATE_DIR}.yml")
+    config["figure_name"] = f"{stem}_sweep_{FINAL_DIR}"
+    out = Path(args.out or ROOT / CONFIG_DIR / f"{stem}_sweep_{FINAL_DIR}.yml")
     out.parent.mkdir(parents=True, exist_ok=True)
     header = (
-        f"# Validation of {sweep_file} (#238), written by"
+        f"# Final run of {sweep_file}, written by"
         f" scripts/policy_finder/generate_sim_config.py:\n"
-        f"# the Gaussian process's peak and the {args.top} best measured points,"
-        f" each against `{ANCHOR}` on fresh seeds;\n# its sweep.json holds the"
-        f" rule's final best. Stack and sim parameters from {TEMPLATE}.\n\n"
+        f"# the Gaussian process's peak against `{ANCHOR}` on fresh seeds;"
+        f" its sweep.json holds the\n# rule's final result. Stack and sim"
+        f" parameters from {TEMPLATE}.\n\n"
     )
     with open(out, "w") as f:
         f.write(header)
         yaml.safe_dump(config, f, sort_keys=False, width=1000)
-    print(
-        f"Wrote {out}: {len(points)} points x {n_episodes} episodes"
-        f" = {len(points) * n_episodes} episodes"
-    )
+    print(f"Wrote {out}: the peak x {n_episodes} episodes")
 
 
 def main():
@@ -232,12 +213,12 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     what = ap.add_mutually_exclusive_group(required=True)
     what.add_argument("--config", help="the rule config (YAML)")
-    what.add_argument("--validate", help="a sweep's sweep.json, to validate")
+    what.add_argument("--final", help="a sweep's sweep.json, to run its GP peak")
     ap.add_argument("--sobol-points", type=int, default=SOBOL_POINTS)
     ap.add_argument(
-        "--n-episodes", type=int, help="per point (default 500, --validate 2000)"
+        "--n-episodes", type=int, help="per point (default 500, --final 2000)"
     )
-    ap.add_argument("--seed", type=int, help="default 42, --validate 1000")
+    ap.add_argument("--seed", type=int, help="default 42, --final 1000")
     ap.add_argument("--n-parts", type=int, default=1, help="sims to split into")
     ap.add_argument("--min-params", type=int, default=1)
     ap.add_argument(
@@ -246,14 +227,13 @@ def main():
         default=4,
         help="a number, or none for no upper bound",
     )
-    ap.add_argument("--top", type=int, default=VALIDATE_TOP)
     ap.add_argument("--root", help="the repo the paths are relative to")
     ap.add_argument("--out", help="the sim config to write (one part only)")
     args = ap.parse_args()
     if args.root:
         ROOT = Path(args.root).resolve()
-    if args.validate:
-        write_validate(args)
+    if args.final:
+        write_final(args)
         return
     args.n_episodes = args.n_episodes or N_EPISODES
     args.seed = SEED if args.seed is None else args.seed

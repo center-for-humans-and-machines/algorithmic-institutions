@@ -42,7 +42,7 @@ sweep_config:
 constraints:
 {constraints}
 code: |
-  punishment = x * a * k * z * b * (c < c_group)
+  punishment = x * a * k * z * b * (c[..., -1] < 10)
 """
 
 

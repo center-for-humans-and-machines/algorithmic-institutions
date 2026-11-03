@@ -8,7 +8,10 @@
 #
 # Makes branch policy-finder/<name> off policy-finder-base, checked out as its
 # own worktree in ../policy-finder-worktrees/<name> (outside this checkout;
-# override with PF_WORKTREE_ROOT), pulls the LFS data the agent reads, writes
+# override with PF_WORKTREE_ROOT), checks out there only the paths of
+# scripts/policy_finder/instance_paths (the game rules, code, data and
+# reference sims; no reports or analyses of earlier work), pulls the LFS data
+# the agent reads, writes
 # the instance's gitignored .claude/policy_finder.json and
 # .claude/settings.local.json (instance_settings.py), and starts
 # `claude --agent policy-finder-host` there with no MCP servers. --no-start stops before starting the session.
@@ -18,7 +21,7 @@
 # ../policy-finder-worktrees/<name>.report.md, outside the worktree; then
 # checks and commits the instance (check_instance.sh --commit), runs its
 # sweep on Raven (run_sweep.sh, #241; with its Gaussian process fit and
-# validation sim, #238) and updates the observation app's
+# the final run of its peak) and updates the observation app's
 # Summary with a headless /policy-finder-summarizer (its report in
 # ../policy-finder-worktrees/<name>.summary.md).
 # The rule declares between --min-params (default 1) and --max-params
@@ -30,7 +33,7 @@
 #
 # --iterate-on <name> starts the next version of an existing instance (#244)
 # on its own branch and worktree instead: the worktree must be clean and its
-# current version validated (the final best the new one is compared with).
+# current version's final run done (the final best the new one is compared with).
 # It merges policy-finder-base into the branch, so the version runs on the
 # latest code and agent definition, and writes the settings of version k:
 # its rule, notes, sweep, report and summary are named <name>-v<k>, earlier
@@ -113,7 +116,7 @@ git -C "$MAIN" rev-parse --verify --quiet "$BASE" >/dev/null \
     || { echo "no branch $BASE" >&2; exit 1; }
 [[ -x "$PYTHON" ]] || { echo "no Python at $PYTHON (run uv sync)" >&2; exit 1; }
 # the data the agent reads; everything else may stay an LFS pointer
-LFS_DATA="experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_*/**"
+LFS_DATA="experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/**"
 
 if [[ "$ITERATE" == 1 ]]; then
     # the next version of an existing instance, on its branch and worktree
@@ -130,10 +133,10 @@ c = json.load(open(sys.argv[1]))
 print(c.get("version", 1), c.get("rule_name") or sys.argv[2],
       c.get("sobol_points", 256), sep="\n")' "$WT/.claude/policy_finder.json" "$NAME"
     )
-    PREV_FINAL="plots/simulation/policy_finder/${PREV_STEM}_sweep/validate/sweep.json"
+    PREV_FINAL="plots/simulation/policy_finder/${PREV_STEM}_sweep/final/sweep.json"
     [[ -f "$WT/$PREV_FINAL" ]] || {
-        echo "$PREV_STEM is not validated ($PREV_FINAL): finish it first" \
-            "(run_sweep.sh or run_validate.sh $NAME)" >&2
+        echo "$PREV_STEM has no final run ($PREV_FINAL): finish it first" \
+            "(run_sweep.sh or run_final.sh $NAME)" >&2
         exit 1
     }
     VERSION=$(( PREV_VERSION + 1 ))
@@ -161,6 +164,9 @@ else
     VERSION=1
     [[ -n "$PROMPT" ]] || PROMPT="Design your rule."
 fi
+# only what the agent may see (an earlier version's worktree is stripped too)
+grep -v '^#' "$MAIN/scripts/policy_finder/instance_paths" \
+    | git -C "$WT" sparse-checkout set --no-cone --stdin
 git -C "$WT" lfs pull --include "$LFS_DATA"
 
 "$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$MAIN" "$NAME" \

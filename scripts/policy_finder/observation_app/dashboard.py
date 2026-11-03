@@ -32,11 +32,11 @@ WT_ROOT = Path(
 )
 BASE = os.environ.get("PF_BASE", "policy-finder-base")
 #: An instance's merged sweep, relative to its worktree (run_sweep.sh), with
-#: its Gaussian process fit (landscapes.json) and, in validate/, the
-#: validation sim whose best is the rule's final result (#238)
+#: its Gaussian process fit (landscapes.json) and, in final/, the final run
+#: of the fit's peak, the rule's final result
 SWEEP_DIR = "plots/simulation/policy_finder/{name}_sweep"
 LANDSCAPES = "landscapes.json"
-VALIDATE = "validate"
+FINAL = "final"
 #: The final best's matchup against `ah` (simulation/sweep.py's BEST_PLOTS)
 BEST_PLOTS = {
     "comparison_pairing_side.jpg": "Final best vs ah, by side",
@@ -571,7 +571,7 @@ def landscape_layer(points: pd.DataFrame, land: dict, param: str, final, zero):
                 y=y,
                 tooltip=[
                     alt.Tooltip("point:N", title="final best"),
-                    alt.Tooltip("pool:Q", title="validated pool", format=".1f"),
+                    alt.Tooltip("pool:Q", title="final-run pool", format=".1f"),
                 ],
             )
         )
@@ -595,38 +595,27 @@ def read_json(path: Path):
 
 
 def sweep_files(wt: Path, name: str) -> dict:
-    """An instance's sweep, its fit and its validation, each None until written."""
+    """An instance's sweep, its fit and its final run, each None until written."""
     folder = wt / SWEEP_DIR.format(name=name)
     return {
         "folder": folder,
         "sweep": read_json(folder / "sweep.json"),
         "land": read_json(folder / LANDSCAPES),
-        "validate": read_json(folder / VALIDATE / "sweep.json"),
+        "final": read_json(folder / FINAL / "sweep.json"),
     }
 
 
-def final_best(validate):
-    """The validation's best point (its sweep.json's best_name), or None."""
-    if not validate:
+def final_best(final):
+    """The final run's point (its sweep.json's best_name), or None."""
+    if not final:
         return None
-    return next(p for p in validate["points"] if p["name"] == validate["best_name"])
+    return next(p for p in final["points"] if p["name"] == final["best_name"])
 
 
-def point_source(name: str) -> str:
-    """Where a validated point came from: the GP's peak or a design point."""
-    return "GP peak" if name.endswith("_gp") else f"sweep {name.rsplit('_', 1)[-1]}"
-
-
-VALIDATE_CAPTION = (
-    "The Gaussian process's peak and the sweep's best measured points, rerun on"
-    " fresh seeds at {episodes} episodes each. The top of these is the final"
-    " best. Before: the point's pool in the sweep (500 episodes, read high by"
-    " luck) or, for the peak, the fit's prediction."
-)
 LANDSCAPE_CAPTION = (
     "Grey: the design points, against each param. Clay: the Gaussian process"
     " fitted to them, cut along the param through its peak (dashed), with a band"
-    " of 2 sd. Ink: the final best at its validated pool. Dashed line: never"
+    " of 2 sd. Ink: the final best at its final-run pool. Dashed line: never"
     " punishing against ah. Each panel's title says how far the param moves the"
     " fitted pool, and when the peak sits on the edge of its range."
 )
@@ -636,9 +625,9 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
     """The Sweep tab as (kind, content) blocks, which the app and the export
     each render: "html", "section", "caption", "empty" and "landscape"
     (points, landscapes, final best). The landscape shows once the sweep is
-    fitted, the final best once it is validated."""
+    fitted, the final best once its final run is done."""
     f = sweep_files(wt, name)
-    sweep, land, validate = f["sweep"], f["land"], f["validate"]
+    sweep, land, final_run = f["sweep"], f["land"], f["final"]
     if not sweep:
         return [("empty", "Not swept yet.")]
     points = pd.DataFrame(
@@ -649,26 +638,26 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
     ).sort_values("pool", ascending=False)
     if land:
         points["gp"] = points["name"].map({p["name"]: p["mean"] for p in land["points"]})
-    final = final_best(validate)
-    # the tiles are the final result only, all from the validation sim; the
-    # sweep's own figures go with the sections that show the sweep
+    final = final_best(final_run)
+    # the tiles are the final result only, from the final run; the sweep's own
+    # figures go with the sections that show the sweep
     if final:
+        predicted = f"{land['peak']['mean']:.1f}" if land else "–"
         tiles = [
             ("Final best vs ah", f"{final['pool']:.1f}<small>± {final['pool_se']:.1f}</small>"),
             ("Members", f"{final['members']:.2f}"),
-            ("From", esc(point_source(final["name"]))),
+            ("Fit predicted", predicted),
             (
-                "Validated on",
-                f"{len(validate['points'])} points"
-                f"<small>× {validate['n_episodes']} episodes, fresh seeds</small>",
+                "Final run",
+                f"{final_run['n_episodes']} episodes<small>fresh seeds</small>",
             ),
         ]
     else:
         tiles = [
-            ("Final best vs ah", "–<small>awaiting validation</small>"),
+            ("Final best vs ah", "–<small>awaiting the final run</small>"),
             ("Members", "–"),
-            ("From", "–"),
-            ("Validated on", "–"),
+            ("Fit predicted", "–"),
+            ("Final run", "–"),
         ]
     design = (
         f"The sweep: {len(points)} design points × {sweep['n_episodes']} episodes,"
@@ -689,19 +678,14 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
                 f'<div class="chips"><span class="eyebrow">Final best</span>{chips}</div>',
             )
         )
-        folder = f["folder"] / VALIDATE
+        folder = f["folder"] / FINAL
         plots = [(folder / p, c) for p, c in BEST_PLOTS.items() if (folder / p).exists()]
         if plots:
             out += [("section", "Final best"), ("html", figures_html(plots))]
-        out += [
-            ("section", "Validation"),
-            ("caption", VALIDATE_CAPTION.format(episodes=validate["n_episodes"])),
-            ("html", validation_html(validate, sweep, land)),
-        ]
     else:
         out += [
-            ("section", "Validation"),
-            ("empty", "The final best shows once the validation sim is done."),
+            ("section", "Final best"),
+            ("empty", "The final best shows once the final run is done."),
         ]
     out.append(("section", "Landscape"))
     if land:
@@ -738,30 +722,6 @@ def show_sweep(wt: Path, name: str):
                 st.altair_chart(landscape_row(points, land, final, zero), theme=None)
         else:
             st.html(content)
-
-
-def validation_html(validate: dict, sweep: dict, land) -> str:
-    """The validation's points, best first: pool, before, where from."""
-    measured = {p["name"]: p["pool"] for p in sweep["points"]}
-    predicted = land["peak"]["mean"] if land else None
-    rows = []
-    for p in sorted(validate["points"], key=lambda p: p["pool"], reverse=True):
-        before = measured.get(p["name"], predicted)
-        rows.append(
-            "<tr>"
-            f"<td>{esc(p['name'])}</td><td>{esc(point_source(p['name']))}</td>"
-            f"<td>{p['pool']:.1f}</td><td>{p['pool_se']:.1f}</td>"
-            f"<td>{'' if before is None else f'{before:.1f}'}</td>"
-            f"<td>{p['members']:.2f}</td></tr>"
-        )
-    head = "".join(
-        f"<th>{h}</th>"
-        for h in ("point", "from", "pool", "pool_se", "before", "members")
-    )
-    return (
-        f'<div class="table"><table><thead><tr>{head}</tr></thead>'
-        f'<tbody>{"".join(rows)}</tbody></table></div>'
-    )
 
 
 def figures_html(plots: list) -> str:
@@ -851,13 +811,13 @@ def show_version(wt: Path, version: str, key: str):
 
 def counts_html(found: list) -> str:
     """One line of totals, atop the Overview and the Summary alike: lineages,
-    versions, validated versions and the final best of any version."""
+    versions, versions with a final run and the final best of any version."""
     bests, n_versions = [], 0
     for wt in found:
         all_versions = versions(wt.name)
         n_versions += len(all_versions)
         for v in all_versions:
-            best = final_best(sweep_files(wt, v)["validate"])
+            best = final_best(sweep_files(wt, v)["final"])
             if best:
                 label = v if len(all_versions) == 1 else (
                     f"{wt.name} {version_label(v, all_versions)}"
@@ -866,7 +826,7 @@ def counts_html(found: list) -> str:
     line = [
         f"<span><b>{len(found)}</b>lineages</span>",
         f"<span><b>{n_versions}</b>versions</span>",
-        f"<span><b>{len(bests)}</b>validated</span>",
+        f"<span><b>{len(bests)}</b>final runs</span>",
     ]
     if bests:
         pool, se, name = max(bests)
@@ -927,8 +887,8 @@ RULES_CAPTION = (
 
 
 def summary_frame(found: list, running: set) -> pd.DataFrame:
-    """One row per lineage (#244): its best validated version, or its latest
-    while none is validated, with the version's rule, sweep and notes."""
+    """One row per lineage (#244): its best finished version, or its latest
+    while none has its final run, with the version's rule, sweep and notes."""
     summary = load_summary()
     rows = []
     for wt in found:
@@ -936,9 +896,9 @@ def summary_frame(found: list, running: set) -> pd.DataFrame:
         candidates = [
             version_row(wt, v, status(wt, v, running), summary) for v in all_versions
         ]
-        validated = [r for r in candidates if "best pool" in r]
+        finished = [r for r in candidates if "best pool" in r]
         row = (
-            max(validated, key=lambda r: r["best pool"]) if validated else candidates[-1]
+            max(finished, key=lambda r: r["best pool"]) if finished else candidates[-1]
         )
         rows.append({**row, "versions": len(all_versions)})
     frame = pd.DataFrame(rows)
@@ -982,18 +942,13 @@ def version_row(wt: Path, version: str, key: str, summary: dict) -> dict:
             row.update({"policy category": NOT_SUMMARIZED, "rules included": [], "idea": ""})
     files = sweep_files(wt, version)
     row["stage"] = (
-        "validated" if files["validate"] else "validating" if files["sweep"]
+        "final" if files["final"] else "final run pending" if files["sweep"]
         else "not swept"
     )
-    best = final_best(files["validate"])
-    if best:  # only a validated best: a sweep's own best reads high
+    best = final_best(files["final"])
+    if best:  # only the final run's: a sweep's own best reads high
         row.update(
-            {
-                "best pool": best["pool"],
-                "se": best["pool_se"],
-                "members": best["members"],
-                "from": point_source(best["name"]),
-            }
+            {"best pool": best["pool"], "se": best["pool_se"], "members": best["members"]}
         )
     notes = read(wt / "notes/policy_finder" / f"{version}.md")
     if notes:
@@ -1041,7 +996,7 @@ def short(lineage: str, k: int) -> str:
 
 
 def evolution_frame(found: list) -> pd.DataFrame:
-    """Every validated version in the order the versions were made: its
+    """Every version with a final run, in the order the versions were made: its
     lineage, version number, final best, policy category and whether it beat
     its lineage's best so far, for the Summary's evolution chart."""
     entries = load_summary()["instances"]
@@ -1050,7 +1005,7 @@ def evolution_frame(found: list) -> pd.DataFrame:
         all_versions = versions(wt.name)
         lineage_best = None
         for k, v in enumerate(all_versions, 1):
-            best = final_best(sweep_files(wt, v)["validate"])
+            best = final_best(sweep_files(wt, v)["final"])
             if not best:
                 continue
             entry = entries.get(v) or {}
@@ -1315,7 +1270,7 @@ def rule_counts(frame: pd.DataFrame) -> list:
 
 
 EVOLUTION_CAPTION = (
-    "Every validated version's final best against ah (± se), in the order the"
+    "Every finished version's final best against ah (± se), in the order the"
     " versions were made. The tree starts at ah against ah; each v1 branches"
     " from it and each later version from the one before, in its lineage's"
     " colour when the lineage iterated (grey otherwise), dashed when it did not"
@@ -1363,7 +1318,7 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
     rows = []
     for _, r in frame.iterrows():
         pool = r.get("best pool")
-        if pool == pool:  # validated
+        if pool == pool:  # its final run is done
             width = 100 * (pool - lo) / (hi - lo)
             cell = (
                 f'<div class="poolcell"><span class="pbar"><i style="width:{width:.0f}%">'
@@ -1399,16 +1354,15 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
             f'<td class="txt">{hit}{cell}</td><td>{hit}{num(r, "members", ".2f")}</td>'
             f'<td class="txt">{hit}{esc(r["version label"])}'
             f'<span class="se"> of {r["versions"]}</span></td>'
-            f'<td class="txt">{hit}{esc(r["from"]) if isinstance(r.get("from"), str) else ""}</td>'
             f'<td>{hit}{num(r, "params", ".0f")}</td>'
             f'<td class="txt">{hit}<span class="pcat"><i style="background:{dot}"></i>'
             f"{esc(category)}</span></td>"
             f'<td class="txt tags">{hit}{tags}</td></tr>'
         )
-    heads = ("agent", "final best", "members", "version", "from", "params",
+    heads = ("agent", "final best", "members", "version", "params",
              "policy category", "rules included")
     head = "".join(
-        f'<th class="{"txt" if h in ("agent", "final best", "version", "from", "policy category", "rules included") else ""}">'
+        f'<th class="{"txt" if h in ("agent", "final best", "version", "policy category", "rules included") else ""}">'
         f"{h}</th>"
         for h in heads
     )

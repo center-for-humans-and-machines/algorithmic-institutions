@@ -199,8 +199,11 @@ evaluation suite likewise keeps one copy per game.
   (a YAML in `configs/managers/rule_based/` with `params`, optional
   `constraints` and `code`) and `params:` (a JSON of the values), both
   required. `manager/rule.py` documents the schema, the load-time checks and
-  what the code sees (`RULE_INPUTS`: the player's own round, its group and
-  the other group, at the moment the manager punishes).
+  what the code sees (`RULE_INPUTS`, #245: the raw round history of every
+  player of both groups, as the RL manager sees it, at the moment the manager
+  punishes: `c`, `valid`, `in_group` over rounds 0..t, `p` over 0..t-1, and
+  `t`). The code sets one punishment per player; the manager keeps the
+  history in batched sims and runs the rule once per group.
 - `sweep: true` in a sim config (#227; written by
   `scripts/policy_finder/generate_sim_config.py`) plays one rule's design points
   against `ah`, skips the plots and writes `sweep.json`: every point's params and
@@ -211,11 +214,11 @@ evaluation suite likewise keeps one copy per game.
   seconds; `run_sweep.sh` runs it) fits a Gaussian process to the points and
   writes `landscapes.json` beside `sweep.json`: the surface's peak, each
   param's effect and length scale, the smoothed pool at every point and
-  profiles through the peak. The peak is a candidate, never simulated:
-  `generate_sim_config.py --validate <sweep dir>/sweep.json [--top 5]` writes
-  the validation sim (`run_validate.sh <name>`, run by `run_sweep.sh`), the
-  peak and the top measured points at 2000 episodes on fresh seeds. Its
-  `validate/sweep.json` in the sweep dir holds the rule's final `best`.
+  profiles through the peak. The final run simulates the peak:
+  `generate_sim_config.py --final <sweep dir>/sweep.json` writes it
+  (`run_final.sh <name>`, run by `run_sweep.sh`), the peak alone at 2000
+  episodes on fresh seeds. Its `final/sweep.json` in the sweep dir holds the
+  rule's final result.
 - `scripts/plotting/plot_winrates.py <sim_dir> [<sim_dir> ...]` tables the five
   win definitions of #226. Definitions 1-3 and 5 are head to head. Definition 4
   (Levin's) ranks managers by their group's common pool against `ah`, so it
@@ -243,6 +246,10 @@ evaluation suite likewise keeps one copy per game.
   `remote_test.sh`, `fetch_cluster.sh`) sync, run and fetch in
   `~/ai-isolated/<branch>` (`/` as `--`) on Raven, never in the shared
   checkout; `AI_REMOTE_DIR` still overrides (`scripts/raven_remote_dir.sh`).
+  An instance's worktree is a sparse checkout of
+  `scripts/policy_finder/instance_paths`: the code, data, reference sims and
+  `docs/reports/basics.md`, but no other reports, notes, plans or analyses,
+  so the agent works out human and simulated behaviour itself.
 
 ### Environment
 

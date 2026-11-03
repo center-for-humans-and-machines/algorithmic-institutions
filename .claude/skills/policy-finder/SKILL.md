@@ -26,7 +26,7 @@ $ARGUMENTS
    neither branch `policy-finder/<name>` nor
    `../policy-finder-worktrees/<name>` exists. With `--iterate-on`, the
    given name: the launcher refuses an instance with uncommitted changes or
-   whose current version is not validated yet. Its new version `k` names its
+   whose current version has no final run yet. Its new version `k` names its
    files `<name>-v<k>`, the `<version name>` below; for a new instance it is
    `<name>`.
 3. **Launch** in the background (Bash `run_in_background`). The sweep needs
@@ -43,7 +43,7 @@ $ARGUMENTS
    It runs the agent, then `check_instance.sh <name> --commit`, then
    `run_sweep.sh <name>`, which commits the sweep on `policy-finder/<name>`
    with its Gaussian process fit (`landscapes.json`), then runs and commits
-   the validation sim (`run_validate.sh`), then a headless `/policy-finder-summarizer`, which places the rule in the
+   the final run of the fit's peak (`run_final.sh`), then a headless `/policy-finder-summarizer`, which places the rule in the
    observation app's Summary (`../policy-finder-worktrees/<version name>.summary.md`).
    Do not read the instance's files or its report while it runs, and never
    pass it anything about other instances' rules: the agent must find its
@@ -52,20 +52,19 @@ $ARGUMENTS
 4. **On failure**, stop and report: a check FAIL with its offending paths
    (no sweep runs), or the sweep step that failed. A sweep that failed after
    a passing check can be rerun with `scripts/policy_finder/run_sweep.sh <name>`,
-   a validation that failed after a committed sweep with
-   `scripts/policy_finder/run_validate.sh <name>`.
+   a final run that failed after a committed sweep with
+   `scripts/policy_finder/run_final.sh <name>`.
 5. **Report** from `../policy-finder-worktrees/<version name>.report.md` and
    the sweep dir
    `../policy-finder-worktrees/<name>/plots/simulation/policy_finder/<version name>_sweep/`:
    the hypothesis, each parameter with its meaning and sweep range; from
    `landscapes.json`, how much each param moves the pool (`effect`) and the
    params whose peak sits on the edge of their range (`at_edge`); the rule's
-   **final best** from `validate/sweep.json` only: its params, pool against
-   `ah` (± `pool_se`) and which point it was (`<version name>_gp`, the
-   Gaussian process's peak, or a measured `<version name>_s<index>`); for a
-   new version, against the lineage's best so far, the highest final best of
-   its earlier versions (each one's `validate/sweep.json`; higher is an
-   improvement, whatever the margin). The sweep's own `best`
+   **final best** from `final/sweep.json` only: its params, pool against
+   `ah` (± `pool_se`) and the fit's prediction there (`peak.mean` in
+   `landscapes.json`); for a new version, against the lineage's best so far,
+   the highest final best of its earlier versions (each one's
+   `final/sweep.json`; higher is an improvement, whatever the margin). The sweep's own `best`
    is the top of noisy estimates and reads high: never report it as the
    result. Then the branch
    `policy-finder/<name>`; and from `<version name>.summary.md`, the categories the

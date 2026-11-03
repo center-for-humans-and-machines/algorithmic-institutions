@@ -25,12 +25,12 @@ RULE = {
             "definition": "contribution below which players are punished",
             "type": "int",
         },
-        "p": {"definition": "punishment per point of shortfall", "type": "float"},
+        "k": {"definition": "punishment per point of shortfall", "type": "float"},
         "tau": {"definition": "softness of the cutoff", "type": "float"},
     },
-    "sweep_config": {"c0": [0, 20], "p": [0, 3], "tau": [0.1, 10, "log"]},
-    "constraints": ["p >= 0"],
-    "code": "punishment = p * th.clamp(c0 - c, min=0) / (1 + tau)",
+    "sweep_config": {"c0": [0, 20], "k": [0, 3], "tau": [0.1, 10, "log"]},
+    "constraints": ["k >= 0"],
+    "code": "punishment = k * th.clamp(c0 - c[..., -1], min=0) / (1 + tau)",
 }
 
 
@@ -54,7 +54,7 @@ def test_design_ranges_types_and_determinism(tmp_path):
     assert design == sobol_design(rule, 256)
     for point in design:
         assert isinstance(point["c0"], int) and 0 <= point["c0"] <= 20
-        assert isinstance(point["p"], float) and 0 <= point["p"] <= 3
+        assert isinstance(point["k"], float) and 0 <= point["k"] <= 3
         assert 0.1 <= point["tau"] <= 10
     # log-uniform: half the points below the geometric mean of the range
     below = sum(point["tau"] < 1 for point in design) / len(design)
@@ -63,18 +63,18 @@ def test_design_ranges_types_and_determinism(tmp_path):
 
 
 def test_design_fixed_and_merged(tmp_path):
-    rule, _ = read_rule(_write(tmp_path, _with(c0=[1, 8], p=2, tau=1.5)))
+    rule, _ = read_rule(_write(tmp_path, _with(c0=[1, 8], k=2, tau=1.5)))
     design = sobol_design(rule, 256)
     assert sorted(point["c0"] for point in design) == list(range(1, 9))
-    assert all(point["p"] == 2.0 and point["tau"] == 1.5 for point in design)
+    assert all(point["k"] == 2.0 and point["tau"] == 1.5 for point in design)
 
-    rule, _ = read_rule(_write(tmp_path, _with(c0=5, p=2, tau=1.5), "fixed"))
-    assert sobol_design(rule, 256) == [{"c0": 5, "p": 2.0, "tau": 1.5}]
+    rule, _ = read_rule(_write(tmp_path, _with(c0=5, k=2, tau=1.5), "fixed"))
+    assert sobol_design(rule, 256) == [{"c0": 5, "k": 2.0, "tau": 1.5}]
 
 
 def test_int_range_gives_each_integer_an_equal_share(tmp_path):
-    rule, _ = read_rule(_write(tmp_path, _with(c0=[0, 3], p=2, tau=1.5)))
-    rule["sweep_config"]["p"] = [0, 3]  # keep points distinct, so none merge
+    rule, _ = read_rule(_write(tmp_path, _with(c0=[0, 3], k=2, tau=1.5)))
+    rule["sweep_config"]["k"] = [0, 3]  # keep points distinct, so none merge
     design = sobol_design(rule, 256)
     counts = [sum(point["c0"] == k for point in design) for k in range(4)]
     assert counts == [64, 64, 64, 64]  # the ends too, not half as often
@@ -109,23 +109,46 @@ def test_validate_accepts(tmp_path):
         (RULE, {"min_params": 4}, "declares 3 params, allowed 4 to 4"),
         (RULE, {"min_params": 4, "max_params": None}, "allowed at least 4"),
         (
-            _with(p=[-1, 3]),
+            _with(k=[-1, 3]),
             {},
-            r"design point s\d{3} .*constraint `p >= 0` failed",
+            r"design point s\d{3} .*constraint `k >= 0` failed",
         ),
         (
             {
-                **_with(p=[-1, 3]),
+                **_with(k=[-1, 3]),
                 "constraints": [],
-                "code": "punishment = th.log(p) * c0 * tau",
+                "code": "punishment = th.log(k) * c0 * tau",
             },
             {},
             r"design point s\d{3} .*NaN",
         ),
         (
-            {**RULE, "code": "punishment = c[0, c0 + 5] * p * tau"},
+            {**RULE, "code": "punishment = c[0, c0 + 5] * k * tau"},
             {},
             r"design point s\d{3}",
+        ),
+        # one value per round, not per player
+        (
+            {**RULE, "code": "punishment = k * c * c0 * tau"},
+            {},
+            r"design point s\d{3}.*one value per player",
+        ),
+        # round 0 has no punishment yet to read
+        (
+            {**RULE, "code": "punishment = k * p[..., -1] * c0 * tau"},
+            {},
+            r"design point s\d{3}.*, round 0:",
+        ),
+        (
+            {
+                **RULE,
+                "params": {
+                    **RULE["params"],
+                    "in_group": {"definition": "x", "type": "int"},
+                },
+            },
+            {},
+            r"reserved names \['in_group'\]",
         ),
         (RULE, {"n_points": 100}, "power of two"),
     ],
@@ -168,76 +191,72 @@ def test_cli(tmp_path, monkeypatch, capsys):
 
 
 def test_params_are_tensors_in_the_code(tmp_path):
-    rule = {**RULE, "code": "punishment = th.exp(-tau) * th.log1p(p) * (c < c0)"}
+    rule = {
+        **RULE,
+        "code": "punishment = th.exp(-tau) * th.log1p(k) * (c[..., -1] < c0)",
+    }
     assert len(validate_rule(_write(tmp_path, rule))) == 256
 
 
 # -- what the rule sees ---------------------------------------------------
 
 
-def _state(groups, c, valid, c_prev, p_prev, t):
-    def column(values, dtype=th.long):
-        return th.tensor(values, dtype=dtype).view(1, -1, 1)
-
-    inputs = rule_inputs(
-        column(c),
-        column(valid, th.bool),
-        column(c_prev),
-        column(p_prev),
-        column(groups),
-        column([t] * len(c)),
-    )
-    return {k: v.view(-1).tolist() for k, v in inputs.items()}
-
-
 def test_rule_inputs():
-    # player 2 timed out (its recorded contribution 0); group 1 is players 3, 4
-    got = _state(
-        groups=[0, 0, 0, 1, 1],
-        c=[10, 4, 0, 6, 8],
-        valid=[1, 1, 0, 1, 1],
-        c_prev=[12, 5, 9, 6, 7],
-        p_prev=[0, 6, 3, 2, 4],
-        t=5,
+    """Rounds 0..1 of three players; player 2 timed out in round 1 and moved
+    to group 1 in it."""
+    got = rule_inputs(
+        contribution=th.tensor([[[10, 12], [4, 5], [6, 0]]]),
+        valid=th.tensor([[[1, 1], [1, 1], [1, 0]]], dtype=th.bool),
+        punishment=th.tensor([[[0], [6], [3]]]),
+        agent_group=th.tensor([[[0, 0], [0, 0], [0, 1]]]),
+        group=0,
     )
     assert set(got) == set(RULE_INPUTS)
-    assert got["c"] == [10, 4, 0, 6, 8] and got["valid"] == [1, 1, 0, 1, 1]
-    assert got["c_prev"] == [12, 5, 9, 6, 7] and got["p_prev"] == [0, 6, 3, 2, 4]
-    assert got["t"] == [5] * 5
-    assert got["n"] == [3, 3, 3, 2, 2] and got["n_other"] == [2, 2, 2, 3, 3]
-    # the rest of the own group, valid players only: player 0 sees player 1,
-    # player 2 (timed out) sees players 0 and 1
-    assert got["c_group"] == [4, 10, 7, 8, 6]
-    assert got["c_other"] == [7, 7, 7, 7, 7]
-    assert got["p_prev_other"] == [3, 3, 3, 3, 3]
-
-
-def test_rule_inputs_round_0_and_empty_groups():
-    got = _state(
-        groups=[0, 0],
-        c=[10, 4],
-        valid=[1, 0],
-        c_prev=[1, 1],
-        p_prev=[9, 9],
-        t=0,
+    assert all(v.dtype == th.float for v in got.values())
+    assert got["c"].tolist() == [[[10, 12], [4, 5], [6, 0]]]
+    assert got["valid"].tolist() == [[[1, 1], [1, 1], [1, 0]]]
+    assert got["p"].tolist() == [[[0], [6], [3]]]
+    assert got["in_group"].tolist() == [[[1, 1], [1, 1], [1, 0]]]
+    assert got["t"].shape == () and got["t"] == 1
+    # relative to the manager's group
+    other = rule_inputs(
+        th.zeros(1, 3, 2),
+        th.ones(1, 3, 2),
+        th.zeros(1, 3, 1),
+        th.tensor([[[0, 0], [0, 0], [0, 1]]]),
+        group=1,
     )
-    assert got["c_prev"] == [10, 4] and got["p_prev"] == [0, 0]
-    assert got["n_other"] == [0, 0] and got["c_other"] == [0, 0]
-    assert got["p_prev_other"] == [0, 0]
-    # player 0's only group mate timed out: a mean over nobody is 0
-    assert got["c_group"] == [0, 10]
+    assert other["in_group"].tolist() == [[[0, 0], [0, 0], [0, 1]]]
 
 
-def test_dry_run_covers_every_round_and_split():
-    inputs = dry_run_inputs()
-    assert inputs["t"].unique().tolist() == list(range(24))
-    assert inputs["n"].min() == 1 and inputs["n"].max() == 8
-    assert (inputs["n_other"] == 0).any() and (inputs["valid"] == 0).any()
+def test_rule_inputs_round_0_and_mismatch():
+    got = rule_inputs(
+        th.ones(2, 8, 1), th.ones(2, 8, 1), th.zeros(2, 8, 0), th.zeros(2, 8, 1), 0
+    )
+    assert got["t"] == 0 and got["p"].shape == (2, 8, 0)
+    with pytest.raises(ValueError, match="expected one fewer"):
+        rule_inputs(
+            th.ones(2, 8, 3), th.ones(2, 8, 3), th.zeros(2, 8, 3), th.zeros(2, 8, 3), 0
+        )
+
+
+def test_dry_run_covers_rounds_splits_and_timeouts():
+    histories = dry_run_inputs()
+    assert [int(h["t"]) for h in histories] == [0, 11, 23]
+    for h in histories:
+        t = int(h["t"])
+        assert h["c"].shape == (2048, 8, t + 1) and h["p"].shape == (2048, 8, t)
+        now = h["in_group"][..., -1].sum(1)  # the group's size this round
+        assert now.min() == 0 and now.max() == 8
+        assert (h["valid"] == 0).any()
 
 
 def test_validate_reads_every_input(tmp_path):
     code = (
-        "punishment = p * th.clamp(c_group - c, min=0) * valid + c0 * (c_prev < 5)"
-        " + tau * p_prev / (1 + t) + n / (1 + n_other) + c_other + p_prev_other"
+        "now = in_group[..., -1]\n"
+        "mean = (c * valid * in_group).sum(-1) / (valid * in_group).sum(-1)"
+        ".clamp(min=1)\n"
+        "punishment = k * th.clamp(mean - c[..., -1], min=0) * now"
+        " + c0 * p.sum(-1) / (1 + t) / tau"
     )
     assert len(validate_rule(_write(tmp_path, {**RULE, "code": code}))) == 256

@@ -38,8 +38,8 @@ is up again.
 
 2. **Read each listed version.** Each version of an instance is summarized
    on its own (`<name>`, then `<name>-v2`, ...): its rule config (`params`,
-   `sweep_config`, `code`) and, if validated, its final best
-   (`validate/sweep.json` in its sweep dir). Do not change any instance's
+   `sweep_config`, `code`) and, once its final run is done, its final best
+   (`final/sweep.json` in its sweep dir). Do not change any instance's
    files.
 
 3. **Place and record it.** Decide, from the rule's code:
@@ -49,7 +49,7 @@ is up again.
    - its **policy category**, its overall strategy: one `policy category`.
      Policy categories are few and broad (a handful in all), so the
      Summary's evolution chart shows policies converging on, or leaving, a
-     strategy; they are read from the whole rule and its validated values,
+     strategy; they are read from the whole rule and its final values,
      not from one of its rules
    - its **idea**: one plain sentence a colleague can read without the code,
      like the existing ones in `summary.json`

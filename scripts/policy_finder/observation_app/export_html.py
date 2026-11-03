@@ -266,7 +266,10 @@ def version_html(wt: Path, version: str, key: str, charts: Charts, zero, shown: 
     panels = [
         notes_tab(wt, version, charts),
         rule_tab(wt, version),
-        scripts_tab(wt, wt.name),
+        # one scripts folder serves every version: shown once, on the latest
+        scripts_tab(wt, wt.name)
+        if version == all_versions[-1]
+        else empty("The scripts are shared by every version: see the latest."),
         report_tab(version),
         sweep_tab(wt, version, charts, zero),
     ]
