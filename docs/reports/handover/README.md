@@ -180,7 +180,8 @@ ported to the proxy.
 
 - **The modified files are not edits.** The ~260 files `git status` shows as modified are LFS
   content: this container has no git-lfs, and every one hashes to its committed pointer (02, 03).
-  Install git-lfs before committing data or artifacts from here.
+  Install git-lfs before committing data or artifacts from here. (Since 2026-11-03 this
+  branch has no LFS files: they are untracked, see `docs/large_files.md`.)
 - **Rule code is not sandboxed.** `rule.py`'s load-time check looks only at names. `th.os` is
   reachable, and agent-written rule code runs on Raven as `ykeller` (05). The agent-side sandbox
   (`instance_settings.py`) is written for macOS paths (04).

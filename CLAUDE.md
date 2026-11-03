@@ -257,8 +257,9 @@ evaluation suite likewise keeps one copy per game.
 - Local macOS has CPU-only `torch==1.11.0` without PyG subpackages
 - Raven jobs use the frozen stack: Python 3.9, `torch==1.11.0+cu113`, PyG 2.5, in `algoinst.sif` when launched from the Claude proxy, or the remote `.venv` on the manual SSH path
 - The Claude proxy's own image is a different stack (torch 2.5 CPU, or cu124 on an RTX 4090). Checkpoints do not move between that image and Raven
-- `*.csv`, `*.parquet`, `*.pt` are Git LFS-tracked (`.gitattributes`): data and
-  artifact files are pointers until `git lfs pull`
+- No Git LFS on this branch: `*.csv`, `*.parquet`, `*.pt` are gitignored and not in a
+  clone. `python scripts/fetch_large_files.py <glob>` gets them from S3 (or with `--lfs`
+  from the LFS history). See `docs/large_files.md`
 
 ### Where Things Run
 
