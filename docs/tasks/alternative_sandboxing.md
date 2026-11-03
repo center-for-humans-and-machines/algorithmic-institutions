@@ -1,0 +1,5 @@
+So the point of the policy-finder pipeline is to keep diversity in the exploration of approaches. This means that we need to avoid having agents from one policy-finder instance branch from being able to see the work of other policy-finder instance branches.
+
+Right now, there is a Mac-specific sandboxing approach that won't really work with what we have here. We want to look for alternative approaches to achieve the same. I am considering individual docker containers for each agent for a cross-platform approach. I know you can't implement this from you container, but do you think that is a good idea? How would you conceptually implement it? Or can you come up with lighter sandboxing that would be more easy to do?
+
+The whole indended pipeline has multiple agents being spawned that search for a policy which is then automatically and independently evaluated on raven. Then based on the scores achieved there is iteration. How can we reproduce this?

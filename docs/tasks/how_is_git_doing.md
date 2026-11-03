@@ -1,0 +1,3 @@
+So I create this yannik/handover branch to have the newest work that happened on this repo integrated with into my setup so I can take over the responsibility for the future work on this project.
+
+What is the state of yannik/handover? Are we up to date on the newest policy finder work? How about the autoresearch on human clones? If there is new work on other branches that we don't have here, merge it in.
