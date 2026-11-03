@@ -143,7 +143,12 @@ Measured today through `run_on_cluster`; full log in 06.
 | script path as `program_call` (copula calibrate/stamp) | accepted. The `.slurm` wrappers are not needed |
 | **④ `new_instance.sh` / `run_sweep.sh` / `run_validate.sh`** | not run. They are SSH/rsync/sbatch only, and the first failures are at `new_instance.sh:112` and `run_sweep.sh:55`. They need a proxy adapter and a Linux sandbox rewrite first (04 §6) |
 
-**First failing step today.** On Raven, the code and the image work once ① and ② are dealt with.
+**Update (same evening).** ①–③ are fixed. The Raven checkout is a clean mirror,
+artifacts go up through the sync's new `includes`, and `cli.py` sets `job_id`. The tests in the
+image give 670 passed and 0 failed. `ah` against the top policy-finder rule runs from repo configs
+(`26_LEVIN_ah_vs_pf_top_batched.yml`: pool 72.7 against `ah`). See 06 §10. ④ remains.
+
+**First failing step at the time of the check.** On Raven, the code and the image work once ① and ② are dealt with.
 What fails next is ③, in the branch's own code, then ④, the orchestration that was never
 ported to the proxy.
 

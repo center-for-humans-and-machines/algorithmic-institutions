@@ -191,6 +191,10 @@ evaluation suite likewise keeps one copy per game.
   depend on N and never match a per-episode run bit for bit. Only managers
   with `batched_punish` (`dummy`, `rule_based`, `linear`) run batched; `rl`
   and `human` need `episode_batch_size: 1`.
+- The policy finder's final best (snapshot 2026-10-15), recovered from the
+  observatory page: `configs/managers/rule_based/pf-20261008-3-v6.yml` with
+  `params/pf-20261008-3-v6_best.json`. Head to head against `ah` on Levin's stack:
+  `configs/simulation/manager_testing/26_LEVIN_ah_vs_pf_top_batched.yml`.
 - A rule-based manager is a config, not code: `type: rule_based` with `rule:`
   (a YAML in `configs/managers/rule_based/` with `params`, optional
   `constraints` and `code`) and `params:` (a JSON of the values), both
@@ -309,6 +313,11 @@ scripts/remote_test.sh -- -k test_encoder -v
 ### Claude proxy (command server)
 
 The proxy in `claude_proxies/algoinst` submits Raven jobs through `CC_command_server` (`CC_PROJECT=algoinst`). That container has no Raven SSH keys. The checkout it syncs is `/u/ykeller/algorithmic-institutions`. A job is `python -m aimanager <train-ah|train-manager|simulate> <config>` inside `/raven/ptmp/ykeller/cc/containers/apptainer/algoinst.sif`. `WANDB_ENTITY=chm-ml` and `WANDB_PROJECT=algorithmic-institutions` are set on the container; the API key comes from the cluster secrets file. The `run_on_cluster` skill in the proxy is the agent path. The SSH scripts below stay the manual path.
+
+- `/sync_to_cluster` excludes `artifacts/` and `plots/`; send what a job reads with `"includes": ["artifacts"]`. The sync never deletes remote files, so the Raven checkout must be kept a mirror of the local tree by hand (a stray top-level `aimanager/` there shadows `src/`).
+- `train-ah` on an orchestrator YAML takes its `job_id` from the labels, as `run.py` does (`cli.py:default_job_id`), so a repo config writes the shipped artifact's path.
+- The image runs torch 1.11: validate a new rule there (`validate-rule` via `/run_in_container`), since torch 2.5 accepts code 1.11 rejects.
+- Handover status and the Raven checks: `docs/reports/handover/06_raven_integration_check.md`.
 
 ### Remote Cluster (Raven)
 

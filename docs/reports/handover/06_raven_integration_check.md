@@ -27,6 +27,10 @@ static analysis of the parts not run is in sub-reports 02, 04 and 05.
   not made. With `job_id` set by hand, `train-ah` trains and saves in the image (§6).
 - The server also accepts a script path as `program_call`, so the copula calibration and
   stamping steps can run as batch jobs (§7).
+- **Update, later the same day (§10):** all of the above except item 4 is fixed. The Raven
+  checkout is now a clean mirror of the local tree. Artifacts reach Raven through the new
+  `includes` option, and `cli.py` sets `job_id`. The tests in the image give 670 passed and 0 failed.
+  `ah` against the policy finder's top rule runs from repo configs.
 
 ## 1. What the Raven checkout looked like
 
@@ -196,3 +200,35 @@ They are `sbatch` wrappers. One check:
    `run_sweep.sh` and `run_validate.sh` (sub-report 04 §6), and rewrite the sandbox for
    Linux. `rule.py`'s name check is not a sandbox (`th.os` is reachable; sub-report 05), and
    rule code runs on Raven as `ykeller`.
+
+## 10. Update: fixes applied (2026-10-23, evening)
+
+| item | what was done | verified |
+|---|---|---|
+| legacy checkout (§1, §2) | The Raven checkout is cleaned to a mirror of the local tree: a manifest of the local files was synced, and everything else was deleted. That came to 784 files, 438 MB: the stale `.git`, `04_all`, `05_all`, `models*`, `setup.py`, old notebooks and artifacts, and the `temp/` backups | the top level now matches the local repo |
+| artifacts (§3) | The command server's new `includes` option: `{"cluster": "raven", "includes": ["artifacts", "plots"]}` | `python -m pytest src/aimanager/tests` in the image: **670 passed, 4 skipped, 0 failed** (3:33) |
+| `job_id` (§6) | `src/aimanager/cli.py`: `default_job_id` names a `train-ah` job from the job's labels, then the params' labels, then the file name, as `run.py:add_job_ids` did. Tests are in `test_cli_orchestrator_config.py`, including one that checks every repo AH config | job 31448590: `joint_exodus.yml` (10 epochs, no `job_id`) trains and saves `architecture_mlp+rnn+edge__dataset_50ep_doubled.pt` |
+| sklearn (§4) | `container/CC_env/requirements.raven.txt` in the proxy: `scikit-learn==1.6.1`. The py3.9 wheels resolve with numpy 1.23.5 and scipy 1.13.1 | the image needs a rebuild on the host |
+| proxy skill | `run_on_cluster/SKILL.md`: `includes` for artifacts, the mirror rule, script `program_call`s, validating rules in the image, test scope, `train-ah` memory | — |
+
+**`ah` against the policy finder's best.** The rule was missing from the repo. It is now
+`configs/managers/rule_based/pf-20261008-3-v6.yml`, recovered verbatim from the
+observatory page. Its params are `params/pf-20261008-3-v6_best.json`: point s201 of the
+rule's Sobol design, regenerated with `manager/rule.py:sobol_design`. The values match the
+page's rounded table. The sim is
+`configs/simulation/manager_testing/26_LEVIN_ah_vs_pf_top_batched.yml`: Levin's stack,
+`pf_top_vs_ah`, `ah_vs_pf_top`, `ah_vs_ah`, 1000 episodes each, seed 2000. Job 31448591
+ran in 2:08, and the output is in `plots/simulation/26_LEVIN_ah_vs_pf_top_batched/`.
+From `plot_winrates.py`:
+
+| | pool | margin |
+|---|---|---|
+| `pf_top` against `ah` (definition 4) | 72.7 | +18.0 [+15.1, +20.9] over `ah` against `ah` (54.6) |
+| head to head, `pf_top` − `ah` | 72.7 vs 57.7 | +15.0 [+11.6, +18.2]; `pf_top` wins 58.4% of episodes |
+
+This is consistent with the snapshot's validated 73.2 ± 1.1.
+
+**Still open:** the policy-finder orchestration on the proxy (§5, item 4; plan:
+`docs/plans/policy-finder-proxy-adapter.md`). The two `data/baselines/*.csv` files are
+deleted in the working tree; `inspect_best_model.py --save-best` needs a fresh
+`run_baseline_cv.py` without them.
