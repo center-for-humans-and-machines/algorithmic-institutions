@@ -12,7 +12,8 @@
 # (run_sweep.sh calls it). From the instance worktree, with this checkout's
 # scripts (an older instance's own copies predate it): writes the
 # final run's config (generate_sim_config.py --final: the Gaussian
-# process's peak, fresh seeds, more episodes),
+# process's peak and the sweep's 5 best measured points, fresh seeds, more
+# episodes; generate_sim_config.py --score-final marks the peak as `best`),
 # syncs the worktree to its own Raven dir, submits the sim, waits for it,
 # fetches its sweep.json, best-point plots and per-round data into
 # plots/simulation/policy_finder/<name>_sweep/final/ and commits that and
@@ -82,6 +83,9 @@ rsync -az "raven:$REMOTE/$FINAL/" "$FINAL/" \
     || { echo "FAIL: cannot fetch $FINAL (see .log/ in $REMOTE)" >&2; exit 1; }
 [[ -f "$FINAL/sweep.json" ]] \
     || { echo "FAIL: the final run wrote no sweep.json (see .log/ in $REMOTE)" >&2; exit 1; }
+# best: the GP peak's result; best_of_n: the best of the peak and the top 5
+PYTHONPATH="$WT/src" "$PY" "$MAIN/scripts/policy_finder/generate_sim_config.py" \
+    --score-final "$FINAL/sweep.json"
 
 # 5. commit on the instance branch, never on policy-finder-base
 git add -- "$FINAL" "$CONFIG"

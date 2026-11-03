@@ -1,51 +1,45 @@
 #!/usr/bin/env bash
-# Create and start a policy-finder instance (#236).
+# Create and run a policy-finder instance (#236), or its next version (#244).
 #
 # Usage:
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
-#       [--sobol-points N] [--no-start | --headless [--prompt TEXT]]
+#       [--sobol-points N] [--prompt TEXT]
 #   scripts/policy_finder/new_instance.sh --iterate-on <name> [the same options]
 #
-# Makes branch policy-finder/<name> off policy-finder-base, checked out as its
-# own worktree in ../policy-finder-worktrees/<name> (outside this checkout;
-# override with PF_WORKTREE_ROOT), checks out there only the paths of
-# scripts/policy_finder/instance_paths (the game rules, code, data and
-# reference sims; no reports or analyses of earlier work), pulls the LFS data
-# the agent reads, writes
-# the instance's gitignored .claude/policy_finder.json and
-# .claude/settings.local.json (instance_settings.py), and starts
-# `claude --agent policy-finder-host` there with no MCP servers. --no-start stops before starting the session.
-# --headless runs the session non-interactively instead (`claude -p`, Bash
-# pre-allowed: the sandbox and the guard are the boundary) on --prompt
-# (default: design your rule) and saves the agent's final report to
-# ../policy-finder-worktrees/<name>.report.md, outside the worktree; then
-# checks and commits the instance (check_instance.sh --commit), runs its
-# sweep on Raven (run_sweep.sh, #241; with its Gaussian process fit and
-# the final run of its peak) and updates the observation app's
-# Summary with a headless /policy-finder-summarizer (its report in
-# ../policy-finder-worktrees/<name>.summary.md).
+# Makes branch policy-finder/<name> off policy-finder-proxy (PF_BASE
+# overrides), checked out as its own worktree in $PF_RUNS/worktrees/<name>
+# (PF_WORKTREE_ROOT overrides) with only the paths of
+# scripts/policy_finder/instance_paths (the game rules, code, configs and
+# reference sims; no reports or analyses of earlier work), writes the
+# instance's gitignored .claude/policy_finder.json (instance_settings.py),
+# and runs the version: scripts/policy_finder/pipeline.py run <name>. That
+# runs the agent in its own container through the container spawner on a copy
+# of the worktree (export_instance.py, agent_runner.py), checks and commits
+# its work (check_instance.sh --commit), sweeps the rule on Raven through the
+# command server, fits the Gaussian process and runs the final run of its
+# peak and the sweep's 5 best points (the rule's final result). A version
+# that stopped resumes with `pipeline.py run <name>`.
+#
 # The rule declares between --min-params (default 1) and --max-params
 # (default 4) params; equal values ask for exactly that many. --sobol-points
 # (a power of two, default 256) sets the size of the sweep's design, which
-# validate-rule, check_instance.sh and run_sweep.sh read from the instance.
-# PF_BASE overrides the base branch, to try a branch before it lands on
-# policy-finder-base.
+# validate-rule, check_instance.sh and the pipeline read from the instance.
+# --prompt replaces the agent's prompt (default: design your rule).
 #
-# --iterate-on <name> starts the next version of an existing instance (#244)
-# on its own branch and worktree instead: the worktree must be clean and its
-# current version's final run done (the final best the new one is compared with).
-# It merges policy-finder-base into the branch, so the version runs on the
-# latest code and agent definition, and writes the settings of version k:
-# its rule, notes, sweep, report and summary are named <name>-v<k>, earlier
-# versions' files are read-only and the scripts folder is shared. Without
-# --max-params and --min-params the rule may declare any number of params
-# from 1; --sobol-points defaults to the previous version's.
+# --iterate-on <name> starts the next version of an existing instance on its
+# own branch and worktree instead: the worktree must be clean and its current
+# version's final run done (the final best the new one is compared with). It
+# merges the base into the branch, so the version runs on the latest code and
+# agent definition, and writes the settings of version k: its rule, notes,
+# sweep and report are named <name>-v<k>, earlier versions' files stay as they
+# are and the scripts folder is shared. Without --max-params and --min-params
+# the rule may declare any number of params from 1; --sobol-points defaults
+# to the previous version's.
 #
-# The instance settings (instance_settings.py) bind only that worktree and the
-# version's write paths: permissions, the Bash sandbox, no network, the guard
-# hook (.claude/hooks/policy_finder_guard.py) on every tool call.
-#
-# Check and commit an instance's work with scripts/policy_finder/check_instance.sh.
+# The agent's container is its only sandbox: it sees its copy of the instance
+# (read-only but for the version's rule, notes and scripts folder) and has no
+# network but the Anthropic API. PF_RUNS must be the folder whose exports/ is
+# the container spawner's pf_exports root.
 
 set -euo pipefail
 
@@ -58,8 +52,6 @@ NAME=""
 MAX_PARAMS=4
 MIN_PARAMS=1
 SOBOL_POINTS=256
-START=1
-HEADLESS=0
 PROMPT=""
 ITERATE=0
 PARAMS_GIVEN=0
@@ -70,8 +62,6 @@ while [[ $# -gt 0 ]]; do
         --max-params) MAX_PARAMS="${2:-}"; PARAMS_GIVEN=1; shift 2 ;;
         --min-params) MIN_PARAMS="${2:-}"; PARAMS_GIVEN=1; shift 2 ;;
         --sobol-points) SOBOL_POINTS="${2:-}"; SOBOL_GIVEN=1; shift 2 ;;
-        --no-start) START=0; shift ;;
-        --headless) HEADLESS=1; shift ;;
         --prompt) PROMPT="${2:-}"; shift 2 ;;
         -h|--help) usage ;;
         -*) echo "unknown option: $1" >&2; usage ;;
@@ -99,24 +89,19 @@ if (( MIN_PARAMS > MAX_PARAMS )); then
     echo "--min-params $MIN_PARAMS is above --max-params $MAX_PARAMS" >&2
     exit 2
 fi
-if [[ "$HEADLESS" == 1 && "$START" == 0 ]]; then
-    echo "--headless and --no-start exclude each other" >&2
-    exit 2
-fi
 
 MAIN="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-BASE="${PF_BASE:-policy-finder-base}"
+BASE="${PF_BASE:-policy-finder-proxy}"
 BRANCH="policy-finder/$NAME"
-WT_ROOT="${PF_WORKTREE_ROOT:-$(dirname "$MAIN")/policy-finder-worktrees}"
+[[ -n "${PF_RUNS:-}" ]] || { echo "set PF_RUNS (see the header)" >&2; exit 2; }
+export PF_RUNS
+WT_ROOT="${PF_WORKTREE_ROOT:-$PF_RUNS/worktrees}"
+export PF_WORKTREE_ROOT="$WT_ROOT"
 WT="$WT_ROOT/$NAME"
-PYTHON="$MAIN/.venv/bin/python"
-UV_PYTHON_DIR="$HOME/.local/share/uv/python"
+PYTHON="${PF_PYTHON:-python3}"
 
 git -C "$MAIN" rev-parse --verify --quiet "$BASE" >/dev/null \
     || { echo "no branch $BASE" >&2; exit 1; }
-[[ -x "$PYTHON" ]] || { echo "no Python at $PYTHON (run uv sync)" >&2; exit 1; }
-# the data the agent reads; everything else may stay an LFS pointer
-LFS_DATA="experiments/2group_8agent_50ep.csv,plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/**"
 
 if [[ "$ITERATE" == 1 ]]; then
     # the next version of an existing instance, on its branch and worktree
@@ -125,6 +110,7 @@ if [[ "$ITERATE" == 1 ]]; then
     [[ -f "$WT/.claude/policy_finder.json" ]] \
         || { echo "no instance $NAME: no worktree at $WT" >&2; exit 1; }
     WT="$(cd "$WT" && pwd -P)"
+    git -C "$MAIN" worktree lock --reason "policy finder: outside the command server's view" "$WT" 2>/dev/null || true
     [[ -z "$(git -C "$WT" status --porcelain)" ]] \
         || { echo "$WT has uncommitted changes: check and commit them first" >&2; exit 1; }
     { read -r PREV_VERSION; read -r PREV_STEM; read -r PREV_SOBOL; } < <(
@@ -136,7 +122,7 @@ print(c.get("version", 1), c.get("rule_name") or sys.argv[2],
     PREV_FINAL="plots/simulation/policy_finder/${PREV_STEM}_sweep/final/sweep.json"
     [[ -f "$WT/$PREV_FINAL" ]] || {
         echo "$PREV_STEM has no final run ($PREV_FINAL): finish it first" \
-            "(run_sweep.sh or run_final.sh $NAME)" >&2
+            "(pipeline.py run $NAME)" >&2
         exit 1
     }
     VERSION=$(( PREV_VERSION + 1 ))
@@ -151,7 +137,6 @@ print(c.get("version", 1), c.get("rule_name") or sys.argv[2],
         MAX_PARAMS=none
     fi
     [[ "$SOBOL_GIVEN" == 1 ]] || SOBOL_POINTS="$PREV_SOBOL"
-    [[ -n "$PROMPT" ]] || PROMPT="Design version $VERSION of your rule."
 else
     if git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null; then
         echo "branch $BRANCH already exists" >&2
@@ -159,45 +144,25 @@ else
     fi
     [[ ! -e "$WT" ]] || { echo "$WT already exists" >&2; exit 1; }
     mkdir -p "$WT_ROOT"
-    git -C "$MAIN" worktree add -b "$BRANCH" "$WT" "$BASE"
+    git -C "$MAIN" worktree add -q -b "$BRANCH" "$WT" "$BASE"
     WT="$(cd "$WT" && pwd -P)"
+    # the command server mounts this repo without $WT_ROOT and runs
+    # `git worktree prune` after each snapshot: a locked worktree is kept
+    git -C "$MAIN" worktree lock --reason "policy finder: outside the command server's view" "$WT"
     VERSION=1
-    [[ -n "$PROMPT" ]] || PROMPT="Design your rule."
 fi
 # only what the agent may see (an earlier version's worktree is stripped too)
 grep -v '^#' "$MAIN/scripts/policy_finder/instance_paths" \
     | git -C "$WT" sparse-checkout set --no-cone --stdin
-git -C "$WT" lfs pull --include "$LFS_DATA"
 
-"$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$MAIN" "$NAME" \
+"$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$NAME" \
     --version "$VERSION" --start-commit "$(git -C "$WT" rev-parse HEAD)" \
     --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
-    --sobol-points "$SOBOL_POINTS" --python "$PYTHON" --uv-python "$UV_PYTHON_DIR"
+    --sobol-points "$SOBOL_POINTS" --python "$PYTHON"
 STEM="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["rule_name"])' \
     "$WT/.claude/policy_finder.json")"
 
 echo "instance $NAME, version $VERSION ($STEM): branch $BRANCH, worktree $WT," \
     "params $MIN_PARAMS-$MAX_PARAMS, $SOBOL_POINTS Sobol points"
-[[ "$START" == 1 ]] || exit 0
-cd "$WT"
-if [[ "$HEADLESS" == 1 ]]; then
-    REPORT="$WT_ROOT/$STEM.report.md"
-    claude -p "$PROMPT" --agent policy-finder-host --strict-mcp-config \
-        --allowedTools=Bash < /dev/null > "$REPORT"
-    echo "report: $REPORT"
-    "$MAIN/scripts/policy_finder/check_instance.sh" "$NAME" --commit
-    "$MAIN/scripts/policy_finder/run_sweep.sh" "$NAME"
-    # place the rule in the observation app's Summary and republish the shared
-    # page: a headless /policy-finder-summarizer in this checkout, its report
-    # beside the instance's; a failure here leaves the run as it is
-    SUMMARY_LOG="$WT_ROOT/$STEM.summary.md"
-    if (cd "$MAIN" && claude -p "/policy-finder-summarizer" --strict-mcp-config \
-        --add-dir "$WT_ROOT" --allowedTools=Bash,Read,Artifact \
-        < /dev/null > "$SUMMARY_LOG"); then
-        echo "summary: $SUMMARY_LOG"
-    else
-        echo "summary not updated (see $SUMMARY_LOG): run /policy-finder-summarizer" >&2
-    fi
-else
-    exec claude --agent policy-finder-host --strict-mcp-config
-fi
+exec "$PYTHON" "$MAIN/scripts/policy_finder/pipeline.py" run "$NAME" \
+    ${PROMPT:+--prompt "$PROMPT"}

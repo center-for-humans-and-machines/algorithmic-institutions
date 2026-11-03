@@ -19,7 +19,8 @@
 # max_params (null: no upper bound) on its sobol_points design, run with the
 # instance's python. Prints what is wrong otherwise.
 # --commit then commits the write paths on the instance's branch, since the
-# agent has no git. PF_BASE and PF_WORKTREE_ROOT as in new_instance.sh.
+# agent has no git. PF_BASE, PF_RUNS and PF_WORKTREE_ROOT as in
+# new_instance.sh; PF_PYTHON overrides the instance's python.
 
 set -euo pipefail
 
@@ -41,9 +42,10 @@ done
 [[ -n "$NAME" ]] || usage
 
 MAIN="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-BASE="${PF_BASE:-policy-finder-base}"
+BASE="${PF_BASE:-policy-finder-proxy}"
 BRANCH="policy-finder/$NAME"
-WT="${PF_WORKTREE_ROOT:-$(dirname "$MAIN")/policy-finder-worktrees}/$NAME"
+WT_ROOT="${PF_WORKTREE_ROOT:-${PF_RUNS:+$PF_RUNS/worktrees}}"
+WT="${WT_ROOT:-$(dirname "$MAIN")/policy-finder-worktrees}/$NAME"
 
 git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null \
     || { echo "no branch $BRANCH" >&2; exit 1; }
@@ -59,6 +61,7 @@ print(c["python"], c.get("rule_name") or sys.argv[2], c.get("start_commit") or "
       c["min_params"], "none" if c["max_params"] is None else c["max_params"],
       c.get("sobol_points", 256), sep="\n")' "$CONF" "$NAME"
 ) || { echo "FAIL: cannot read the instance from $CONF" >&2; exit 1; }
+PY="${PF_PYTHON:-$PY}"
 RULE="configs/managers/rule_based/$STEM.yml"
 NOTES="notes/policy_finder/$STEM.md"
 SCRIPTS="scripts/policy_finder/$NAME/"
@@ -70,13 +73,14 @@ SWEEP="plots/simulation/policy_finder/${STEM}_sweep"
 SINCE="${START:+$START $BRANCH}"
 SINCE="${SINCE:-$BASE...$BRANCH}"
 
-changed="$(
-    {
-        git -C "$MAIN" diff --name-only --no-renames $SINCE
-        git -C "$WT" diff --name-only --no-renames HEAD
-        git -C "$WT" ls-files --others --exclude-standard
-    } | sort -u
-)"
+# a diff that fails (an unknown base, say) must not read as "no changes"
+committed="$(git -C "$MAIN" diff --name-only --no-renames $SINCE)" \
+    || { echo "FAIL: cannot diff $SINCE" >&2; exit 1; }
+uncommitted="$(git -C "$WT" diff --name-only --no-renames HEAD)" \
+    || { echo "FAIL: cannot diff $WT" >&2; exit 1; }
+untracked="$(git -C "$WT" ls-files --others --exclude-standard)" \
+    || { echo "FAIL: cannot list $WT" >&2; exit 1; }
+changed="$(printf '%s\n%s\n%s\n' "$committed" "$uncommitted" "$untracked" | sort -u)"
 
 bad=0
 while IFS= read -r path; do
@@ -109,7 +113,7 @@ for heading in "## Explorations" "## Key findings" "## Hypothesis" \
 done
 
 # the rule passes validate-rule (#227) within the instance's limits
-if ! (cd "$WT" && PYTHONPATH="$WT/src" "$PY" -m aimanager validate-rule "$RULE" \
+if ! (cd "$WT" && PYTHONPATH="$WT/src${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m aimanager validate-rule "$RULE" \
     --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
     --sobol-points "$SOBOL_POINTS"); then
     echo "FAIL: $RULE does not pass validate-rule" >&2

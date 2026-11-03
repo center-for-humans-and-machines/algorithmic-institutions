@@ -15,9 +15,14 @@ scripts/policy_finder/merge_sweeps.py then joins the parts' sweep.json.
 
 `--final <sweep dir>/sweep.json` writes the sweep's final run instead: the
 Gaussian process's peak (landscapes.json beside it,
-scripts/policy_finder/fit_surrogate.py), named `<rule>_gp`, on fresh seeds
-at more episodes. It is a sweep sim too, so its own sweep.json (in `final/`
-inside the sweep's dir) holds the rule's final result.
+scripts/policy_finder/fit_surrogate.py), named `<rule>_gp`, and the `--top`
+(default 5) best measured points under their sweep names, on fresh seeds at
+more episodes. It is a sweep sim too, so its own sweep.json (in `final/`
+inside the sweep's dir) holds the rule's final result once
+`--score-final <sweep dir>/final/sweep.json` has marked it: `best` is the GP
+peak's result, the rule's score; `best_of_n` the best of all the final run's
+points, the score of Cem's policy finder (the old validation), which reads
+high because it picks the best of several noisy estimates.
 
 Usage:
     python scripts/policy_finder/generate_sim_config.py \
@@ -26,7 +31,9 @@ Usage:
         [--min-params 1] [--max-params 4|none] [--out <sim config>]
     python scripts/policy_finder/generate_sim_config.py \
         --final plots/simulation/policy_finder/<rule>_sweep/sweep.json \
-        [--n-episodes 2000] [--seed 1000] [--out <sim config>]
+        [--top 5] [--n-episodes 2000] [--seed 1000] [--out <sim config>]
+    python scripts/policy_finder/generate_sim_config.py \
+        --score-final plots/simulation/policy_finder/<rule>_sweep/final/sweep.json
 
 Writes configs/simulation/policy_finder/<rule>_sweep[_p<k>of<N>].yml by
 default; each sim writes to plots/simulation/policy_finder/ under the same
@@ -60,6 +67,8 @@ SEED = 42
 FINAL_EPISODES = 2000
 FINAL_SEED = 1000
 FINAL_DIR = "final"
+#: The measured sweep points the final run plays beside the GP peak
+FINAL_TOP = 5
 CONFIG_DIR = Path("configs/simulation/policy_finder")
 OUTPUT_DIR = Path("plots/simulation/policy_finder")
 
@@ -181,13 +190,17 @@ def write_final(args):
     peak = json.loads(landscapes.read_text())["peak"]["params"]
     n_episodes = args.n_episodes or FINAL_EPISODES
     stem = Path(sweep["rule"]).stem
+    top = FINAL_TOP if args.top is None else args.top
+    if top < 0:
+        sys.exit("--top must be 0 or more")
+    measured = sorted(sweep["points"], key=lambda p: p["pool"], reverse=True)[:top]
     try:
         config = build_sim_config(
             ROOT / sweep["rule"],
-            [peak],
+            [peak] + [p["params"] for p in measured],
             n_episodes,
             FINAL_SEED if args.seed is None else args.seed,
-            names=[f"{stem}_gp"],
+            names=[f"{stem}_gp"] + [p["name"] for p in measured],
             output=f"{stem}_sweep/{FINAL_DIR}",
         )
     except ValueError as e:
@@ -205,7 +218,37 @@ def write_final(args):
     with open(out, "w") as f:
         f.write(header)
         yaml.safe_dump(config, f, sort_keys=False, width=1000)
-    print(f"Wrote {out}: the peak x {n_episodes} episodes")
+    extra = f" and the {len(measured)} best measured points" if measured else ""
+    print(f"Wrote {out}: the peak{extra} x {n_episodes} episodes")
+
+
+def score_final(path):
+    """Mark a final run's sweep.json: `best` the GP peak, `best_of_n` the best.
+
+    The sim writes `best` as its best point; for a final run that is the best
+    of the GP peak and the top measured points, kept here as `best_of_n`
+    (`best_of_n_name`, `n_points`). `best` and `best_name` become the GP
+    peak's (`<rule>_gp`), the rule's final result. Idempotent.
+    """
+    path = Path(path)
+    final = json.loads(path.read_text())
+    stem = Path(final["rule"]).stem
+    by_name = {p["name"]: p for p in final["points"]}
+    gp = by_name.get(f"{stem}_gp")
+    if gp is None:
+        raise ValueError(f"{path}: no point {stem}_gp")
+    top = max(final["points"], key=lambda p: p["pool"])
+    final.update(
+        {
+            "best": gp["params"],
+            "best_name": gp["name"],
+            "best_of_n": top["params"],
+            "best_of_n_name": top["name"],
+            "n_points": len(final["points"]),
+        }
+    )
+    path.write_text(json.dumps(final, indent=2) + "\n")
+    return final
 
 
 def main():
@@ -214,6 +257,12 @@ def main():
     what = ap.add_mutually_exclusive_group(required=True)
     what.add_argument("--config", help="the rule config (YAML)")
     what.add_argument("--final", help="a sweep's sweep.json, to run its GP peak")
+    what.add_argument(
+        "--score-final", help="a final run's sweep.json, to mark its GP peak as best"
+    )
+    ap.add_argument(
+        "--top", type=int, help=f"--final: measured points beside the peak ({FINAL_TOP})"
+    )
     ap.add_argument("--sobol-points", type=int, default=SOBOL_POINTS)
     ap.add_argument(
         "--n-episodes", type=int, help="per point (default 500, --final 2000)"
@@ -234,6 +283,18 @@ def main():
         ROOT = Path(args.root).resolve()
     if args.final:
         write_final(args)
+        return
+    if args.score_final:
+        try:
+            final = score_final(args.score_final)
+        except (ValueError, KeyError) as e:
+            sys.exit(f"Invalid: {e}")
+        gp = next(p for p in final["points"] if p["name"] == final["best_name"])
+        top = next(p for p in final["points"] if p["name"] == final["best_of_n_name"])
+        print(
+            f"final {final['best_name']}: {gp['pool']:.1f} +- {gp['pool_se'] or 0:.1f};"
+            f" best of {final['n_points']} {top['name']}: {top['pool']:.1f}"
+        )
         return
     args.n_episodes = args.n_episodes or N_EPISODES
     args.seed = SEED if args.seed is None else args.seed

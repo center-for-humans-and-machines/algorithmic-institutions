@@ -58,7 +58,7 @@ def repo(tmp_path):
     (main / "src.py").write_text("x = 1\n")
     (main / ".gitignore").write_text(".claude/policy_finder.json\n")
     shutil.copy(CHECK, main / "scripts/policy_finder/check_instance.sh")
-    git(tmp_path, "init", "-q", "-b", "policy-finder-base", str(main))
+    git(tmp_path, "init", "-q", "-b", "policy-finder-proxy", str(main))
     git(main, "config", "user.email", "t@t")
     git(main, "config", "user.name", "t")
     git(main, "add", "-A")
@@ -211,7 +211,7 @@ def test_commit_commits_only_write_paths(repo):
     result = check(main, "--commit")
     assert result.returncode == 0, result.stderr
     files = git(
-        main, "diff", "--name-only", f"policy-finder-base...policy-finder/{NAME}"
+        main, "diff", "--name-only", f"policy-finder-proxy...policy-finder/{NAME}"
     )
     assert files.split() == [RULE, NOTES, f"scripts/policy_finder/{NAME}/a.py"]
     assert git(wt, "status", "--porcelain") == ""

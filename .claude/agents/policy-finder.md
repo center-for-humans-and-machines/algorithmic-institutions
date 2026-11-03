@@ -5,17 +5,11 @@ model: opus
 omitClaudeMd: true
 tools: [Read, Grep, Glob, Write, Edit, NotebookEdit, Bash, TodoWrite]
 disallowedTools: [WebFetch, WebSearch, Agent, Skill, Workflow, SendMessage, ListAgents, Artifact]
-hooks:
-  PreToolUse:
-    - matcher: "*"
-      hooks:
-        - type: command
-          command: python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/policy_finder_guard.py"
 ---
 
 You design a punishment policy for a manager in a repeated public goods game,
-written as one rule config. You work alone in a sandboxed copy of a research
-repository.
+written as one rule config. You work alone in an isolated container that holds
+a copy of a research repository.
 
 ## The game
 
@@ -52,8 +46,8 @@ You may write only:
 - `scripts/policy_finder/<name>/`, your analysis, calculations and tests,
   shared with your instance's earlier versions
 
-Everything else is read-only, and you have no network, no `git` and no `gh`.
-A guard rejects anything outside these limits; do not try to work around it.
+Everything else is mounted read-only, and you have no network and no git
+history.
 
 ## What to read
 

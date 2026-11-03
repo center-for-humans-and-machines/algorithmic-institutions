@@ -168,10 +168,17 @@ def test_main_writes_the_final_run(repo, monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["gen", "--final", str(sweep_file)])
     gen.main()
     out = repo / gen.CONFIG_DIR / "toy_sweep_final.yml"
-    assert "the peak x 2000 episodes" in capsys.readouterr().out
+    assert "the peak and the 5 best measured points x 2000 episodes" in (
+        capsys.readouterr().out
+    )
     config = yaml.safe_load(out.read_text())
-    assert list(config["managers"]) == ["ah", "toy_gp"]
+    # the GP peak, then the 5 best measured points (pools 72, 71, 70, 68, 65)
+    assert list(config["managers"]) == [
+        "ah", "toy_gp", "toy_s001", "toy_s006", "toy_s003", "toy_s005", "toy_s002"
+    ]
     assert config["managers"]["toy_gp"]["params"] == peak
+    assert config["managers"]["toy_s006"]["params"] == {"c0": 6, "w": 0.5}
+    assert len(config["pairings"]) == 6
     assert config["managers"]["toy_gp"]["rule"] == "configs/managers/rule_based/toy.yml"
     assert config["seed"] == gen.FINAL_SEED
     assert config["n_episodes"] == gen.FINAL_EPISODES
@@ -179,6 +186,49 @@ def test_main_writes_the_final_run(repo, monkeypatch, capsys):
     assert config["sweep"] is True
     # loads like any rule-based manager
     load_rule(config["managers"]["toy_gp"]["rule"], config["managers"]["toy_gp"]["params"])
+
+
+def test_final_run_top_0_is_the_peak_only(repo, monkeypatch, capsys):
+    sweep_file, _, _ = _sweep(repo)
+    monkeypatch.setattr(sys, "argv", ["gen", "--final", str(sweep_file), "--top", "0"])
+    gen.main()
+    assert "the peak x 2000 episodes" in capsys.readouterr().out
+    config = yaml.safe_load((repo / gen.CONFIG_DIR / "toy_sweep_final.yml").read_text())
+    assert list(config["managers"]) == ["ah", "toy_gp"]
+
+
+def test_score_final(tmp_path, monkeypatch, capsys):
+    """best is the GP peak; best_of_n the best of the final run's points."""
+    final = {
+        "rule": "configs/managers/rule_based/toy.yml",
+        "best": {"c0": 1},
+        "best_name": "toy_s001",
+        "points": [
+            {"name": "toy_gp", "params": {"c0": 9}, "pool": 70.0, "pool_se": 1.1},
+            {"name": "toy_s001", "params": {"c0": 1}, "pool": 72.5, "pool_se": 1.0},
+            {"name": "toy_s006", "params": {"c0": 6}, "pool": 69.0, "pool_se": 1.2},
+        ],
+    }
+    path = tmp_path / "sweep.json"
+    path.write_text(json.dumps(final))
+    monkeypatch.setattr(sys, "argv", ["gen", "--score-final", str(path)])
+    gen.main()
+    assert "final toy_gp: 70.0 +- 1.1; best of 3 toy_s001: 72.5" in capsys.readouterr().out
+    marked = json.loads(path.read_text())
+    assert (marked["best"], marked["best_name"]) == ({"c0": 9}, "toy_gp")
+    assert (marked["best_of_n"], marked["best_of_n_name"]) == ({"c0": 1}, "toy_s001")
+    assert marked["n_points"] == 3
+    # idempotent
+    assert gen.score_final(path) == marked
+
+
+def test_score_final_needs_the_gp_point(tmp_path, monkeypatch):
+    path = tmp_path / "sweep.json"
+    path.write_text(json.dumps({"rule": "x/toy.yml", "points": [
+        {"name": "toy_s001", "params": {}, "pool": 1.0}]}))
+    monkeypatch.setattr(sys, "argv", ["gen", "--score-final", str(path)])
+    with pytest.raises(SystemExit, match="no point toy_gp"):
+        gen.main()
 
 
 def test_final_run_needs_the_fit(repo, monkeypatch):
@@ -239,5 +289,5 @@ def test_a_later_version_sweeps_and_runs_its_peak_under_its_own_name(
     gen.main()
     out = repo / gen.CONFIG_DIR / "toy-v2_sweep_final.yml"
     config = yaml.safe_load(out.read_text())
-    assert list(config["managers"]) == ["ah", "toy-v2_gp"]
+    assert list(config["managers"]) == ["ah", "toy-v2_gp", "toy-v2_s000"]
     assert config["output_dir"] == str(gen.OUTPUT_DIR / "toy-v2_sweep/final")

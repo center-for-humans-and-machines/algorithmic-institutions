@@ -378,3 +378,54 @@ def test_inline_params_errors_name_their_source(tmp_path):
         RuleBasedManager(rule=rule, params={"a": "x"})
     with pytest.raises(ValueError, match=r"^inline params `best` does not match"):
         RuleBasedManager(rule=rule, params={"best": {}})
+
+
+# --- the attribute check (read_rule): rule code runs as the cluster user, so it
+# --- must not reach modules, builtins, frames, files or the sim's global state
+
+_ALLOWED_CODE = [
+    "punishment = th.clamp(a * (20 - c[..., -1]), 0, 30)",
+    "punishment = a * th.where(c[..., -1] < 10, th.ones_like(t), th.zeros_like(t))",
+    "x = c.sum(dim=-1).float()\npunishment = a * th.linalg.norm(x) * 0",
+    "punishment = a * th.special.expit(c[..., -1])",
+    "s = [c[..., -k] for k in [1, 2]]\npunishment = a * (s[0] - s[1])",
+]
+_DENIED_CODE = [
+    ("punishment = a * th.os.getpid()", "th.os is not allowed"),
+    ("punishment = a * th.builtins.len([])", "th.builtins is not allowed"),
+    ("m = th\npunishment = a * m.ones(1)", "can only be used as th.<function>"),
+    ("th = 1\npunishment = a", "cannot be assigned"),
+    ("punishment = a * c.__class__", "attribute `__class__`"),
+    ("th.save(c, 'x')\npunishment = a", "attribute `save`"),
+    ("th.manual_seed(0)\npunishment = a", "attribute `manual_seed`"),
+    ("th.set_default_dtype(th.float64)\npunishment = a", "attribute `set_default_dtype`"),
+    ("g = (x for x in [])\npunishment = a + g.gi_frame", "`GeneratorExp`"),
+    ("f = lambda: 0\npunishment = a", "`Lambda`"),
+    ("punishment = a * '{0}'.format(c)", "attribute `format`"),
+    ("punishment = a * th.linalg", "th.linalg can only be used as"),
+    ("punishment = a * th.nope(c)", "th.nope does not exist"),
+]
+
+
+def _code_rule(tmp_path, code):
+    path = tmp_path / "r.yml"
+    path.write_text(yaml.safe_dump({
+        "params": {"a": {"definition": "a scale", "type": "float"}},
+        "code": code + "\n",
+    }))
+    return path
+
+
+@pytest.mark.parametrize("code", _ALLOWED_CODE)
+def test_attribute_check_allows_maths(tmp_path, code):
+    from aimanager.manager.rule import read_rule
+
+    read_rule(_code_rule(tmp_path, code))
+
+
+@pytest.mark.parametrize("code,reason", _DENIED_CODE)
+def test_attribute_check_rejects_escapes(tmp_path, code, reason):
+    from aimanager.manager.rule import read_rule
+
+    with pytest.raises(ValueError, match=__import__("re").escape(reason)):
+        read_rule(_code_rule(tmp_path, code))

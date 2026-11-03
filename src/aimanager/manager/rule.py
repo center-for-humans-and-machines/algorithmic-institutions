@@ -32,6 +32,7 @@ discover it.
 """
 
 import ast
+import inspect
 import json
 import math
 
@@ -76,6 +77,79 @@ def _names(tree):
         elif isinstance(node, ast.arg):
             bound.add(node.arg)
     return read, bound
+
+
+#: torch submodules a rule may call into, as th.<submodule>.<function>; every
+#: other submodule (th.os, th.builtins, th.nn, ...) is out of reach
+TH_SUBMODULES = ("linalg", "special", "fft")
+#: Attribute names a rule may not reach on th or on any value: file and pickle
+#: I/O, global state of the sim (seeds, defaults, threads), compilation, and
+#: string formatting (which reads attributes by name). With _DENIED_PREFIXES
+#: and the ban on `_` names, this closes the ways from `th` or a value to
+#: builtins, modules and frames. It raises the bar for rule code run on the
+#: cluster; it is not a full sandbox.
+_DENIED_ATTRIBUTES = {
+    "load", "save", "from_file", "compile", "hub", "manual_seed", "seed",
+    "initial_seed", "get_rng_state", "use_deterministic_algorithms",
+    "format", "format_map", "mro",
+}
+#: set_* (global defaults, rng state, threads) and the frame, code and
+#: traceback attributes of generators, coroutines and functions
+_DENIED_PREFIXES = ("set_", "gi_", "cr_", "ag_", "f_", "co_", "tb_", "func_")
+#: Statements and expressions a rule has no use for, which hand out functions,
+#: frames or scopes
+_DENIED_NODES = (
+    ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef,
+    ast.GeneratorExp, ast.Yield, ast.YieldFrom, ast.Await, ast.Global,
+    ast.Nonlocal, ast.With, ast.AsyncWith, ast.AsyncFor, ast.Try, ast.Raise,
+    ast.Delete,
+)
+
+
+def _check_attributes(tree, module=th):
+    """Reject attribute access and constructs that leave the rule's maths.
+
+    `th` may only be read as `th.<name>`: a torch function or constant, or
+    `th.<submodule>.<function>` for TH_SUBMODULES. Any attribute (on th or on
+    a value, e.g. a tensor method) must not start with `_`, be in
+    _DENIED_ATTRIBUTES or start with _DENIED_PREFIXES.
+    """
+    parents = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+    for node in ast.walk(tree):
+        if isinstance(node, _DENIED_NODES):
+            raise ValueError(f"`{type(node).__name__}` is not allowed")
+        if isinstance(node, ast.Attribute):
+            attr = node.attr
+            if (
+                attr.startswith("_")
+                or attr in _DENIED_ATTRIBUTES
+                or attr.startswith(_DENIED_PREFIXES)
+            ):
+                raise ValueError(f"attribute `{attr}` is not allowed")
+        if isinstance(node, ast.Name) and node.id in RULE_MODULES:
+            if not isinstance(node.ctx, ast.Load):
+                raise ValueError(f"`{node.id}` cannot be assigned")
+            parent = parents.get(node)
+            if not (isinstance(parent, ast.Attribute) and parent.value is node):
+                raise ValueError(f"`{node.id}` can only be used as {node.id}.<function>")
+            value = getattr(module, parent.attr, None)
+            if value is None:
+                raise ValueError(f"{node.id}.{parent.attr} does not exist")
+            if inspect.ismodule(value):
+                if parent.attr not in TH_SUBMODULES:
+                    raise ValueError(f"{node.id}.{parent.attr} is not allowed")
+                grand = parents.get(parent)
+                if not (isinstance(grand, ast.Attribute) and grand.value is parent):
+                    raise ValueError(
+                        f"{node.id}.{parent.attr} can only be used as"
+                        f" {node.id}.{parent.attr}.<function>"
+                    )
+                inner = getattr(value, grand.attr, None)
+                if inner is None or inspect.ismodule(inner):
+                    raise ValueError(f"{node.id}.{parent.attr}.{grand.attr} is not allowed")
 
 
 def _is_number(value):
@@ -179,7 +253,9 @@ def read_rule(rule_path):
     if not isinstance(code, str):
         raise ValueError(f"{rule_path}: needs a `code` block")
     try:
-        read, bound = _names(ast.parse(code, rule_path, "exec"))
+        tree = ast.parse(code, rule_path, "exec")
+        read, bound = _names(tree)
+        _check_attributes(tree)
     except ValueError as e:
         raise ValueError(f"{rule_path}: code: {e}") from None
     undefined = sorted(
