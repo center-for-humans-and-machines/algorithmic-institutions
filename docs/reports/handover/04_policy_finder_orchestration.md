@@ -5,7 +5,7 @@
 > `policy-finder-proxy` (merged into `yannik/handover`): each agent runs in its own container from the
 > container spawner, and sweeps run on Raven snapshots through the command
 > server (`scripts/policy_finder/pipeline.py`). See
-> `docs/plans/policy-finder-proxy-adapter.md`. This report stays as the record
+> `docs/plans/archive/policy-finder-proxy-adapter.md`. This report stays as the record
 > of Cem's setup.
 
 Handover sub-report 4. Scope: how instances are launched, sandboxed, swept on

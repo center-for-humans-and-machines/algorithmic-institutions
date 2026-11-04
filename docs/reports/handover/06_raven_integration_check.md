@@ -229,6 +229,6 @@ From `plot_winrates.py`:
 This is consistent with the snapshot's validated 73.2 ± 1.1.
 
 **Still open:** the policy-finder orchestration on the proxy (§5, item 4; plan:
-`docs/plans/policy-finder-proxy-adapter.md`). The two `data/baselines/*.csv` files are
+`docs/plans/archive/policy-finder-proxy-adapter.md`). The two `data/baselines/*.csv` files are
 deleted in the working tree; `inspect_best_model.py --save-best` needs a fresh
 `run_baseline_cv.py` without them.

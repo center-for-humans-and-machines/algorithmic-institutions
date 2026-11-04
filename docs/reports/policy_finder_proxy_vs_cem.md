@@ -4,7 +4,7 @@ The policy finder was rerun from scratch through the Claude proxy on 2026-11-04.
 ran in its own locked container, started by the container spawner, and every simulation ran
 on Raven through the command server. The campaign is compared here with Cem's hand-run
 campaign of 2026-10-07 to 10-29, from his observatory snapshot of 2026-10-29. The plan is
-`docs/plans/policy-finder-proxy-adapter.md`. The observation page is the artifact
+`docs/plans/archive/policy-finder-proxy-adapter.md`. The observation page is the artifact
 "Policy Finder Proxy Campaign".
 
 ## Summary
