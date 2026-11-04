@@ -1,0 +1,33 @@
+params:
+  k:
+    definition: punishment points per contribution point a member gives below the threshold
+    type: float
+  thr:
+    definition: contribution threshold; members giving at least this much are never punished
+    type: float
+  cap:
+    definition: largest punishment any member gets in one round
+    type: float
+  quiet:
+    definition: factor on punishments in the rounds right before a switch decision (rounds 3, 7, 11, 15, 19)
+    type: float
+  t_stop:
+    definition: last round in which the manager punishes; later rounds go unpunished
+    type: int
+sweep_config:
+  k: [0.05, 3.0, log]
+  thr: [1.0, 15.0]
+  cap: [1.0, 20.0, log]
+  quiet: [0.0, 1.0]
+  t_stop: [0, 23]
+constraints:
+  - k > 0
+  - cap >= 1
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  shortfall = th.relu(thr - now)
+  base = th.minimum(k * shortfall, cap * th.ones_like(now))
+  decision = ((t - 4 * th.floor(t / 4)) == 3) * (t < 20)
+  timing = th.where(decision, quiet, th.ones_like(quiet)) * (t <= t_stop)
+  punishment = base * timing * member
