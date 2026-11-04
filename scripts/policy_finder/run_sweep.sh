@@ -6,8 +6,9 @@
 #
 # Sweeps the instance's current version (#244: its rule_name in
 # .claude/policy_finder.json, <name> for version 1, <name>-v<k> after; the
-# paths below say <name> for it). Run once the instance passed check_instance.sh, outside the agent's sandbox
-# (new_instance.sh --headless calls it). From the instance worktree: writes
+# paths below say <name> for it). Run once the instance passed check_instance.sh.
+# This is the manual SSH path (a ControlMaster to Raven); through the Claude
+# proxy, pipeline.py sweeps on command-server snapshots. From the instance worktree: writes
 # the sweep sim configs of its rule (generate_sim_config.py: the instance's
 # sobol_points, 256 if unset, split into parts of at most MAX_JOB_EPISODES
 # episodes, what one 16 GB job holds), syncs the

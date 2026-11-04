@@ -1,11 +1,14 @@
 ---
 name: policy-finder
-description: Run a policy-finder instance (#236) that designs one rule-based manager config in its own sandboxed worktree, then sweeps it on Raven and keeps the result on its own branch (#241). Also runs the next version of an existing instance (--iterate-on, #244). Use when the user asks to run the policy finder, e.g. "run the policy finder with up to 5 params", "with exactly 3 params and 512 sobol points" or "iterate on pf-20261008-1".
+description: Run a policy-finder instance (#236) that designs one rule-based manager config, with the agent in its own container from the container spawner, then sweeps it on Raven through the command server and keeps the result on its own branch (#241). Also runs the next version of an existing instance (--iterate-on, #244). Use when the user asks to run the policy finder, e.g. "run the policy finder with up to 5 params", "with exactly 3 params and 512 sobol points" or "iterate on pf-20261008-1".
 argument-hint: "[--iterate-on <name>] [--num-params \"up to N\"|\"exactly N\"] [--sobol-points N]"
 ---
 
 Run a policy-finder instance, or the next version of one: it designs its
-rule, is checked, and sweeps it.
+rule, is checked, and sweeps it. This runs in the Claude proxy: the agent in
+a container from the container spawner (its only sandbox), the sims on Raven
+snapshots through the command server. For a whole campaign use
+`scripts/policy_finder/campaign.py` instead.
 
 $ARGUMENTS
 
@@ -23,57 +26,49 @@ $ARGUMENTS
      the previous version's.
    Anything else, or N not a positive integer: stop and ask.
 2. **Name.** `pf-<YYYYMMDD>-<n>`, with `<n>` the first number for which
-   neither branch `policy-finder/<name>` nor
-   `../policy-finder-worktrees/<name>` exists. With `--iterate-on`, the
-   given name: the launcher refuses an instance with uncommitted changes or
-   whose current version has no final run yet. Its new version `k` names its
-   files `<name>-v<k>`, the `<version name>` below; for a new instance it is
-   `<name>`.
-3. **Launch** in the background (Bash `run_in_background`). The sweep needs
-   the SSH ControlMaster to Raven: check `ssh -O check raven` first, and if
-   it fails ask the user to run `ssh raven`. Tell the user the name and that
-   a run takes a while (the agent tens of minutes, then the sweep's queue
-   and jobs):
+   neither branch `policy-finder/<name>` nor `$PF_RUNS/worktrees/<name>`
+   exists. With `--iterate-on`, the given name: the launcher refuses an
+   instance with uncommitted changes or whose current version has no final
+   run yet (`--after-failure` iterates on a failed one). Its new version `k`
+   names its files `<name>-v<k>`, the `<version name>` below; for a new
+   instance it is `<name>`.
+3. **Launch** in the background (Bash `run_in_background`), with `PF_RUNS`
+   the folder whose `exports/` is the spawner's `pf_exports` root. Tell the
+   user the name and that a run takes a while (the agent tens of minutes,
+   then the sweep's queue and jobs):
 
    ```bash
-   scripts/policy_finder/new_instance.sh <name> <param flags> [--sobol-points N] --headless
-   scripts/policy_finder/new_instance.sh --iterate-on <name> [<param flags>] [--sobol-points N] --headless
+   PF_RUNS=<pf_runs> scripts/policy_finder/new_instance.sh <name> <param flags> [--sobol-points N]
+   PF_RUNS=<pf_runs> scripts/policy_finder/new_instance.sh --iterate-on <name> [<param flags>] [--sobol-points N]
    ```
 
-   It runs the agent, then `check_instance.sh <name> --commit`, then
-   `run_sweep.sh <name>`, which commits the sweep on `policy-finder/<name>`
-   with its Gaussian process fit (`landscapes.json`), then runs and commits
-   the final run of the fit's peak (`run_final.sh`), then a headless `/policy-finder-summarizer`, which places the rule in the
-   observation app's Summary (`../policy-finder-worktrees/<version name>.summary.md`).
-   Do not read the instance's files or its report while it runs, and never
-   pass it anything about other instances' rules: the agent must find its
-   own. A new version sees only its own instance's earlier versions, in its
-   worktree. Nothing of the instance is copied into this checkout.
-4. **On failure**, stop and report: a check FAIL with its offending paths
-   (no sweep runs), or the sweep step that failed. A sweep that failed after
-   a passing check can be rerun with `scripts/policy_finder/run_sweep.sh <name>`,
-   a final run that failed after a committed sweep with
-   `scripts/policy_finder/run_final.sh <name>`.
-5. **Report** from `../policy-finder-worktrees/<version name>.report.md` and
-   the sweep dir
-   `../policy-finder-worktrees/<name>/plots/simulation/policy_finder/<version name>_sweep/`:
+   It makes the branch and worktree, then `pipeline.py run <name>`: the
+   export of what the agent may see, the agent's run, the copy-back,
+   `check_instance.sh --commit`, the sweep on a Raven snapshot of the
+   commit, the Gaussian process fit, and the final run of the fit's peak and
+   the sweep's 5 best points. Each step is recorded in
+   `$PF_RUNS/worktrees/<version name>.state.json`
+   (`pipeline.py status <name>`). Do not read the instance's files or its
+   report while it runs, and never pass it anything about other instances'
+   rules: the agent must find its own.
+4. **On failure**, report the state's `status` and `error`. `failed` is a
+   verdict (a check FAIL with its offending paths, a rule the Raven image
+   rejects, a sweep without results). `error` is the environment (network,
+   command server, spawner): `pipeline.py run <name>` resumes where it
+   stopped, without resubmitting jobs.
+5. **Report** from `$PF_RUNS/worktrees/<version name>.report.md`, the state's
+   `data.score`, and the sweep dir
+   `$PF_RUNS/worktrees/<name>/plots/simulation/policy_finder/<version name>_sweep/`:
    the hypothesis, each parameter with its meaning and sweep range; from
    `landscapes.json`, how much each param moves the pool (`effect`) and the
    params whose peak sits on the edge of their range (`at_edge`); the rule's
-   **final best** from `final/sweep.json` only: its params, pool against
-   `ah` (± `pool_se`) and the fit's prediction there (`peak.mean` in
-   `landscapes.json`); for a new version, against the lineage's best so far,
-   the highest final best of its earlier versions (each one's
-   `final/sweep.json`; higher is an improvement, whatever the margin). The sweep's own `best`
-   is the top of noisy estimates and reads high: never report it as the
-   result. Then the branch
-   `policy-finder/<name>`; and from `<version name>.summary.md`, the categories the
-   rule was placed in (or that the summary failed: then run
-   `/policy-finder-summarizer`). The observation app shows the rest.
-6. **Republish the shared page**, which the headless summary cannot: step 4
-   of `/policy-finder-summarizer` (export the fragment, publish it to the
-   shared artifact). With several instances running, do it once, after the
-   last one finishes.
+   **final best** from `final/sweep.json`: the GP peak (`best`) with its
+   params, pool against `ah` (± `pool_se`) and the fit's prediction there
+   (`peak.mean` in `landscapes.json`), and next to it the best of the final
+   run's points (`best_of_n`); for a new version, against the lineage's best
+   so far, the highest GP-peak final of its earlier versions. The sweep's
+   own `best` is the top of noisy estimates and reads high: never report it
+   as the result. Then the branch `policy-finder/<name>`.
 
-To try a branch before it lands on `policy-finder-base`, set `PF_BASE=<branch>`
-on the launch.
+To try a branch other than `policy-finder-proxy`, set `PF_BASE=<branch>` on
+the launch.

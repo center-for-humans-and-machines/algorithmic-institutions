@@ -250,6 +250,15 @@ evaluation suite likewise keeps one copy per game.
   `scripts/policy_finder/instance_paths`: the code, data, reference sims and
   `docs/reports/basics.md`, but no other reports, notes, plans or analyses,
   so the agent works out human and simulated behaviour itself.
+- In the Claude proxy the policy finder branches off `policy-finder-proxy`
+  instead (`docs/plans/policy-finder-proxy-adapter.md`). Each agent runs in its
+  own container from the container spawner, with
+  `--dangerously-skip-permissions`: the container is the only sandbox (no
+  guard hook, no Claude Code sandbox), and it sees an export of its own
+  lineage only (`export_instance.py`). `pipeline.py` runs a version end to
+  end on Raven snapshots through the command server, `campaign.py` a whole
+  campaign; worktrees live in `$PF_RUNS/worktrees`. `run_sweep.sh` and
+  `run_final.sh` remain the SSH path.
 
 ### Environment
 

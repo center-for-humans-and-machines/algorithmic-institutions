@@ -1,4 +1,4 @@
-# [DRAFT] Policy finder through the proxy: a from-scratch campaign, compared with Cem's
+# [ACTIVE] Policy finder through the proxy: a from-scratch campaign, compared with Cem's
 
 ## Why
 
@@ -74,6 +74,8 @@ Decided 2026-11-03.
 
 - **Done (2026-11-03).** The spawner has root `pf_exports` = `${HOME}/pf_runs/exports`,
   mounted at the same path in the spawner and in the claude containers. `max_concurrent` is 8.
+  On the campaign machine (2026-11-04: 6 CPUs, 15 GB RAM) that is
+  `PF_RUNS=/home/kappablanca/pf_runs`.
 - **Done (2026-11-03).** `exports/` exists, and a test run mounted it.
 - **To do.** Use a `claude setup-token` token file for `CLAUDE_TOKEN_FILE`. The access token in
   `.credentials.json` lasts hours, and a single-file bind mount can stay on the old file after
@@ -95,8 +97,8 @@ Decided 2026-11-03.
   checkout (`instance_paths`) includes `/configs/` and `/.claude/`, so an export of today's
   branch would show Cem's best rule. The export (step 3) drops these paths, and its leak
   check fails the run if any of them gets through.
-- Freeze the main checkout for the campaign. `/sync_to_cluster` sends its working tree, so its
-  `src/` is the code every sim runs. Record its HEAD and dirty state with each sync.
+- No freeze of the main checkout: every sim runs on a snapshot of its instance's commit
+  (step 5), so the code a sim runs is the commit recorded in the version's state.
 
 ### 2. Agent definition and instance settings
 
@@ -144,34 +146,43 @@ About 165 MB per export, of which 143 MB is `artifacts/`. Plain copies are fine.
 - **Mounts.** `exports/<stem>` read-only at `/opt/algorithmic-institutions`, and the three
   write directories read-write below it.
 - **Command.** `claude -p "Design your rule." --agent policy-finder-host --strict-mcp-config`.
-- **Limits.** 2 CPUs, 8 GB, 2 h timeout.
-- **Outputs.** Poll `/runs/{id}` every minute. The report is `stdout` from `/logs`, saved to
-  `${PF_RUNS}/side/<stem>.report.md`. Record `home_host_path` (the transcripts) and the
-  model ID.
+- **Limits.** 2 CPUs, 4 GB, 2 h timeout. At most 4 agents at once (`PF_AGENT_SLOTS`, file
+  locks in `${PF_RUNS}/locks`): the machine has 15 GB.
+- **Outputs.** Poll `/runs/{id}` every minute. The report is the JSON result's `result`, saved
+  to `${PF_RUNS}/worktrees/<stem>.report.md`. The state records cost, tokens and the model IDs
+  from the run home's transcripts.
 - **Retry.** A run that is `failed`, `expired` or `error`, or whose report is empty, is
   retried once with a fresh export.
 
-### 5. Cluster adapter
+### 5. Cluster adapter and pipeline
 
-`scripts/policy_finder/cluster.py`, selected by `PF_CLUSTER=ssh|proxy` (default `ssh`). Four
-functions, all on the endpoints in the `run_on_cluster` skill:
+Built as `scripts/policy_finder/cluster_proxy.py` and `scripts/policy_finder/pipeline.py`
+(2026-11-04). The command server's snapshots (`/sync_to_cluster` with `ref`) replaced the
+staging into the shared checkout this step first planned:
 
-- **`sync(stage)`** copies the rule and sweep configs into the main checkout, untracked. Their
-  names are unique per stem. Then it calls `POST /sync_to_cluster`. That sync is
-  `rsync --archive` without `--delete` (`CC_command_server/commands.py:1709`, checked
-  2026-11-03), so a sync never removes another instance's staged files on Raven. After a
-  version's final run has been fetched, the adapter removes its staged copies locally, and on
-  Raven with `/run_in_container`. Otherwise they pile up in the shared checkout.
-- **`submit(config) -> jobid`.** `-m aimanager simulate <config>`, 1 GPU, 2 CPUs, 16G,
+- **`snapshot(ref)`** publishes the instance branch's commit at
+  `/u/ykeller/cc-snapshots/<sha>/`. Jobs and login-node commands pass `checkout: <sha>`.
+  Their `plots/` and `.log/` go to `/u/ykeller/cc-snapshot-outputs/<sha>/`, so instances never
+  share a tree and nothing is staged or cleaned up in the live checkout. `artifacts/` (the AH
+  models) is bound read-only from the live checkout.
+- **`submit(config, sha) -> jobid`.** `-m aimanager simulate <config>`, 1 GPU, 2 CPUs, 16G,
   01:00:00. On HTTP 409 (the cap of 16 jobs), retry with backoff.
-- **`wait(jobids)`** polls `GET /jobs` every 60 s.
-- **`fetch(remote_dir, local_dir)`.** `POST /run_in_container` copies into
-  `/opt/cluster_transfer/pf/<stem>/`, then `POST /sync_from_cluster`, then copy from
-  `/var/cluster_transfer`. Check the size against about 1 GB.
+- **`wait(jobids)`** polls `GET /jobs` (`PF_POLL_SECONDS`, default 120 s). A reply without the
+  `squeue` header is an error, never an empty queue.
+- **`fetch(sha, remote_dir, local_dir)`.** `/run_in_container` copies into
+  `/opt/cluster_transfer/pf/<key>/`, then `/sync_from_cluster`, then a local copy; the
+  transfer copies are removed on both ends. Above 1 GB it refuses.
+- **`validate_rule`** runs `validate-rule` once in the Raven image on the snapshot, because
+  torch 1.11 rejects code that torch 2.5 accepts.
 
-`run_sweep.sh` and `run_final.sh` call these in place of `simulate_cluster.sh`, `ssh` and
-`rsync`. `check_instance.sh` also runs `validate-rule` once through `/run_in_container`,
-because torch 1.11 rejects code that torch 2.5 accepts.
+`pipeline.py run <name>` runs one version through its steps (export, agent, collect, check,
+sweep config, snapshot, image check, sweep jobs, fetch, fit, final config, snapshot, final
+job, fetch) and records each in `${PF_RUNS}/worktrees/<stem>.state.json`, so it resumes where
+it stopped. Status `failed` is a verdict on the version; `error` (network, a crash) is
+resumable. `run_sweep.sh` and `run_final.sh` stay as the SSH path.
+
+The command server's snapshot script runs `git worktree prune`, and it does not mount
+`${PF_RUNS}`: every instance worktree is locked (`git worktree lock`) by `new_instance.sh`.
 
 **Final run.** A new `--top N` option, `generate_sim_config.py --final --top 5`, puts the GP peak and the 5 best
 measured points in one job (6 × 2000 episodes, seed 1000). `final/sweep.json` keeps the GP
@@ -179,7 +190,8 @@ peak as `best`, which is the campaign's score. A `best_of_6` field holds Cem's m
 
 ### 6. Rule code on Raven
 
-Rule code runs as `ykeller` in the shared checkout, next to every instance's staged files.
+Rule code runs as `ykeller` on the snapshot (whose `src/` is writable; files there are hard
+links shared with older snapshots).
 `rule.py`'s name check lets `th.os` through.
 
 - Reject attribute chains on `th` that are not a torch function or constant (an allowlist of
@@ -188,24 +200,28 @@ Rule code runs as `ykeller` in the shared checkout, next to every instance's sta
 
 ### 7. Campaign driver
 
-`scripts/policy_finder/campaign.py <campaign.yml>` runs in the claude container in the
-background.
+`scripts/policy_finder/campaign.py run scripts/policy_finder/campaigns/proxy-2026-11.yml` runs
+in the claude container in the background (built 2026-11-04).
 
-- **State.** It is resumable from `${PF_RUNS}/state/<stem>.json`. Each version moves through
-  `EXPORT → AGENT → COLLECT → CHECK+COMMIT → SWEEP → FIT → FINAL → SCORED` (or `FAILED` with
-  the step and the log).
-- **Parallelism.** At most 8 agents (the spawner's cap) and at most 16 Raven jobs (the
-  command server's cap). Final runs go before new sweeps, so versions finish.
-- **Generation 1.** 12 fresh lineages, `--max-params 5`, 256 Sobol points.
+- **State.** `${PF_RUNS}/campaign/<campaign>.json` holds each generation's members, saved
+  when the generation starts. Each version's own progress is its pipeline state (step 5). A
+  rerun of the driver skips scored and failed versions and resumes the rest.
+- **Parallelism.** All members of a generation run at once (`parallel: 12`). Agents are capped
+  by the agent slots (4), Raven jobs by the command server (16, retried on 409).
+- **Generation 1.** 12 fresh lineages `pf-20261104-1` … `-12`, `--max-params 5`, 256 Sobol
+  points.
 - **Generations 2–7.** `--iterate-on` the 4 lineages with the highest lineage best, which is
-  the highest GP-peak final of any of their versions. A version that fails its check or its
-  sweep counts as no improvement, and the slot is not given to another lineage.
+  the highest GP-peak final of any of their versions, chosen when the generation starts. A
+  version that fails its check or its sweep counts as no improvement, and the slot is not
+  given to another lineage. The next version of a failed one gets `--after-failure`.
+- **Errors.** A version whose pipeline hits an error is resumed up to 3 times, 10 min apart;
+  after that the driver stops after the generation's other members, for a human to look.
 - **No information across lineages.** The driver reads every score but passes an agent
-  nothing except "another version".
-- **Summarizer.** `/policy-finder-summarizer` runs in the claude container after each
-  generation, never inside an agent's container.
-- **Settings.** `campaign.yml` holds `n_fresh`, `generations`, `top_k`, the param flags, the
-  Sobol points, the agent timeout and `PF_RUNS`.
+  nothing except "another version". `campaign.py` and `campaigns/` are not in any export.
+- **Summarizer.** `/policy-finder-summarizer` keeps its state on Raven through `ssh raven`,
+  which the proxy may not use. The campaign's `summarize` hook stays empty; the driver writes
+  `${PF_RUNS}/campaign/<campaign>.summary.md` (per version and per lineage) after each
+  generation, and the policy categories for the report are assigned at step 11.
 
 ### 8. Tests
 
@@ -263,5 +279,10 @@ artifact. The old URL is Cem's.
 
 ## Open questions
 
-None as of 2026-11-03. Inputs, score, budget and the full switch from the sandbox are decided
-(see Decisions and Settings). `/sync_to_cluster` was checked: it does not delete (step 5).
+None as of 2026-11-04. Inputs, score, budget and the full switch from the sandbox are decided
+(see Decisions and Settings).
+
+## Progress
+
+- 2026-11-04: steps 1–8 built (0c3dc45e, da67a6ce, 067d1f5c). Snapshot sync, a snapshot slurm
+  job and the `/jobs` format checked against the command server. Smoke (step 9) running.
