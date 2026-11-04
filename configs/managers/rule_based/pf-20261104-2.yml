@@ -1,0 +1,38 @@
+params:
+  k:
+    definition: punishment points per contribution point a member falls short of his group's mean this round, beyond the tolerance
+    type: float
+  tol:
+    definition: shortfall below the group's mean contribution (points) that goes unpunished
+    type: float
+  cap:
+    definition: the most punishment any member gets in a round
+    type: float
+  w_dec:
+    definition: factor on the punishment at the switch-decision rounds (3, 7, 11, 15, 19), where punishment drives players out most
+    type: float
+  t_stop:
+    definition: first round from which the manager stops punishing altogether (24 never stops)
+    type: int
+sweep_config:
+  k: [0, 1.5]
+  tol: [0, 8]
+  cap: [1, 20, log]
+  w_dec: [0, 1]
+  t_stop: [8, 24]
+constraints:
+  - k >= 0
+  - tol >= 0
+  - cap >= 1
+  - w_dec >= 0
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  n = member.sum(dim=-1).unsqueeze(-1)
+  mean_c = (now * member).sum(dim=-1).unsqueeze(-1) / th.clamp(n, min=1)
+  shortfall = th.clamp(mean_c - now - tol, min=0)
+  raw = th.minimum(k * shortfall, cap * th.ones_like(shortfall))
+  is_decision = (t - 4 * th.floor(t / 4) == 3).float() * (t < 20).float()
+  weight = 1 - is_decision * (1 - w_dec)
+  active = (t < t_stop).float()
+  punishment = raw * weight * active * member
