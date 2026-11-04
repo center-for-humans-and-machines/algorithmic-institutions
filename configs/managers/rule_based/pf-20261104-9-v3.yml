@@ -1,0 +1,66 @@
+params:
+  rel:
+    definition: >-
+      laggard threshold as a fraction of the mean contribution of the other
+      valid members of the group this round; a member contributing less is
+      punished in proportion to the gap
+    type: float
+  slope:
+    definition: punishment points per contribution point of shortfall below the threshold
+    type: float
+  cap:
+    definition: largest punishment dealt to one member in one round (before the fresh-round multiplier)
+    type: float
+  fresh:
+    definition: >-
+      multiplier on the punishment in the first round after a switch
+      decision (rounds 0, 4, 8, 12, 16, 20), when newcomers arrive and the
+      next decision is furthest away; the round just before a decision
+      (3, 7, 11, 15, 19) is never punished
+    type: float
+  last_round:
+    definition: >-
+      last round (0-23) in which the manager punishes all laggards; once the
+      group's norm is set, later rounds are left alone, except for newcomers
+    type: int
+  newcomer:
+    definition: >-
+      after last_round, multiplier on the fresh-round punishment of members
+      who have just joined the group (switch rounds 4, 8, 12, 16 only), so
+      that late arrivals, who come in below the group's norm, get the dose
+      the incumbents got early; incumbents are not punished
+    type: float
+sweep_config:
+  rel: [0.75, 1.1]
+  slope: [1, 8, log]
+  cap: [10, 30]
+  fresh: [1, 6, log]
+  last_round: [2, 14]
+  newcomer: [0, 1.5]
+constraints:
+  - rel > 0
+  - slope > 0
+  - cap >= 1
+  - fresh > 0
+  - newcomer >= 0
+code: |
+  mine = in_group[..., -1] * valid[..., -1]
+  cnow = c[..., -1]
+  zero = th.zeros_like(cnow)
+  one = th.ones_like(cnow)
+  n_mine = mine.sum(-1).unsqueeze(-1)
+  tot = (cnow * mine).sum(-1).unsqueeze(-1)
+  n_others = n_mine - mine
+  ref = (tot - cnow * mine) / th.maximum(n_others, one)
+  short = th.maximum(rel * ref - cnow, zero)
+  pun = th.minimum(slope * short, cap * one)
+  pun = pun * th.gt(n_others, 0.5 * one) * mine
+  pos = th.remainder(t + 0.0, 4.0)
+  is_fresh = 1.0 * th.eq(pos, 0.0)
+  is_pre = 1.0 * th.eq(pos, 3.0) * th.lt(t, 20.0)
+  mult = fresh * is_fresh + (1.0 - is_fresh - is_pre)
+  active = 1.0 * th.le(t, last_round)
+  padded = th.cat([in_group[..., :1], in_group], -1)
+  is_new = in_group[..., -1] * (1.0 - padded[..., -2])
+  late_new = (1.0 - active) * is_fresh * th.lt(t, 19.5) * newcomer * fresh * is_new
+  punishment = pun * (mult * active + late_new)
