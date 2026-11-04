@@ -1,0 +1,61 @@
+# Final run of /home/kappablanca/pf_runs/worktrees/pf-20261104-7/plots/simulation/policy_finder/pf-20261104-7-v5_sweep/sweep.json, written by scripts/policy_finder/generate_sim_config.py:
+# the Gaussian process's peak against `ah` on fresh seeds; its sweep.json holds the
+# rule's final result. Stack and sim parameters from configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 1000
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261104-7-v5_gp:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.56709049564876, rate: 8.464612208158574, t_end: 10, cooldown: 3, repeat_factor: 0.9762054746666452}
+  pf-20261104-7-v5_s011:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.592934506945312, rate: 5.037203100753378, t_end: 11, cooldown: 2, repeat_factor: 0.8985378220677376}
+  pf-20261104-7-v5_s147:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.620327365584671, rate: 2.8130195301060277, t_end: 19, cooldown: 1, repeat_factor: 0.8239619275555015}
+  pf-20261104-7-v5_s242:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.08598897792399, rate: 12.667319480038126, t_end: 9, cooldown: 3, repeat_factor: 0.8150679897516966}
+  pf-20261104-7-v5_s049:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.60176173504442, rate: 6.998731752607893, t_end: 6, cooldown: 2, repeat_factor: 0.8191894609481096}
+  pf-20261104-7-v5_s107:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.785931514576077, rate: 7.705426088291745, t_end: 8, cooldown: 3, repeat_factor: 0.4924737485125661}
+pairings:
+- {name: pf-20261104-7-v5_gp_vs_ah, group_0: pf-20261104-7-v5_gp, group_1: ah}
+- {name: pf-20261104-7-v5_s011_vs_ah, group_0: pf-20261104-7-v5_s011, group_1: ah}
+- {name: pf-20261104-7-v5_s147_vs_ah, group_0: pf-20261104-7-v5_s147, group_1: ah}
+- {name: pf-20261104-7-v5_s242_vs_ah, group_0: pf-20261104-7-v5_s242, group_1: ah}
+- {name: pf-20261104-7-v5_s049_vs_ah, group_0: pf-20261104-7-v5_s049, group_1: ah}
+- {name: pf-20261104-7-v5_s107_vs_ah, group_0: pf-20261104-7-v5_s107, group_1: ah}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261104-7-v5_sweep/final
+figure_name: pf-20261104-7-v5_sweep_final
+save_per_round: true
+basedir: .
+sweep: true
