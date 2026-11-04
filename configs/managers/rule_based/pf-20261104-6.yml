@@ -1,0 +1,48 @@
+params:
+  margin:
+    definition: >-
+      how far (in contribution points) below the mean contribution of the
+      other members of the group a member may fall before being punished;
+      negative values also punish members slightly above that mean
+    type: float
+  floor:
+    definition: >-
+      absolute contribution every member is expected to reach whatever the
+      group does; the target is the larger of (others' mean - margin) and floor
+    type: float
+  rate:
+    definition: punishment points per contribution point a member falls short of the target
+    type: float
+  cap:
+    definition: the largest punishment dealt to any member in a round
+    type: float
+  decision_mult:
+    definition: >-
+      factor applied to the punishment in the rounds right before a switch
+      decision (rounds 3, 7, 11, 15, 19), where punishment drives members out
+      most; 0 means no punishment in those rounds, 1 no special treatment
+    type: float
+sweep_config:
+  margin: [-2, 6]
+  floor: [0, 14]
+  rate: [0.1, 3, log]
+  cap: [1, 15, log]
+  decision_mult: [0, 1]
+constraints:
+  - rate > 0
+  - cap >= 1
+code: |
+  ig = in_group[..., -1] * valid[..., -1]
+  cnow = c[..., -1]
+  n_all = th.sum(ig, dim=-1).unsqueeze(-1)
+  s_all = th.sum(cnow * ig, dim=-1).unsqueeze(-1)
+  n_oth = n_all - ig
+  others = (s_all - cnow * ig) / th.clamp(n_oth, min=1)
+  target = th.maximum(others - margin, floor + 0 * others)
+  target = th.where(n_oth > 0, target, floor + 0 * others)
+  shortfall = th.clamp(target - cnow, min=0)
+  pun = th.clamp(rate * shortfall, max=cap)
+  is_decision = ((t - 4 * th.floor(t / 4)) == 3).float() * (t < 20).float()
+  pun = pun * (1 - is_decision * (1 - decision_mult))
+  pun = pun * (t < 23).float()
+  punishment = pun * ig
