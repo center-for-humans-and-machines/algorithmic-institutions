@@ -1,0 +1,33 @@
+params:
+  k:
+    definition: punishment points per contribution point a member gives below the threshold, at full strength
+    type: float
+  thr:
+    definition: contribution threshold; members giving at least this much are never punished
+    type: float
+  cap:
+    definition: largest punishment any member gets in one round, at full strength
+    type: float
+  decay:
+    definition: factor by which the punishment's strength changes from one round to the next during the punishing phase (1 keeps it constant, below 1 front-loads it)
+    type: float
+  t_stop:
+    definition: last round of the punishing phase; from the next round on the manager never punishes
+    type: int
+sweep_config:
+  k: [0.5, 5.0, log]
+  thr: [7.0, 16.0]
+  cap: [4.0, 30.0]
+  decay: [0.75, 1.15]
+  t_stop: [2, 19]
+constraints:
+  - k > 0
+  - cap >= 1
+  - decay > 0
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  shortfall = th.relu(thr - now)
+  base = th.minimum(k * shortfall, cap * th.ones_like(now))
+  strength = th.exp(t * th.log(decay)) * (t <= t_stop)
+  punishment = base * strength * member
