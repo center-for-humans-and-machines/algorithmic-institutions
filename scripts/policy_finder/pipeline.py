@@ -41,8 +41,10 @@ Usage:
 """
 
 import argparse
+import fcntl
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -56,6 +58,7 @@ sys.path.insert(0, str(HERE))
 import agent_runner  # noqa: E402
 import cluster_proxy  # noqa: E402
 import export_instance  # noqa: E402
+import usage  # noqa: E402
 
 MAIN = HERE.parents[1]
 STEPS = (
@@ -72,6 +75,11 @@ OUT_DIR = "plots/simulation/policy_finder"
 CONFIG_DIR = "configs/simulation/policy_finder"
 #: Agent runs and sim parts tried this many times
 AGENT_ATTEMPTS = 2
+#: validate-rule on the Raven login node: at most this many at once, tries
+#: when it does not run (not a verdict), seconds between them (times the try)
+IMAGE_CHECK_SLOTS = 2
+IMAGE_CHECK_TRIES = 4
+IMAGE_CHECK_RETRY = int(os.environ.get("PF_IMAGE_CHECK_RETRY", "120"))
 JOB_ATTEMPTS = 2
 
 
@@ -165,6 +173,21 @@ class Version:
     # -- the run -------------------------------------------------------------
 
     def run(self, prompt=None):
+        # one pipeline per version: a second one waits, then sees its state
+        self.lock_path = self.wt_root / f"{self.stem}.lock"
+        self._lock = open(self.lock_path, "w")
+        try:
+            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.log("another pipeline runs this version: waiting for it")
+            fcntl.flock(self._lock, fcntl.LOCK_EX)
+            self.state = json.loads(self.state_path.read_text())
+        if self.state["status"] in ("scored", "failed"):
+            self.log(f"already {self.state['status']}")
+            return self.state
+        return self._run(prompt)
+
+    def _run(self, prompt=None):
         if self.state["status"] == "scored":
             self.log("already scored")
             return self.state
@@ -215,25 +238,37 @@ class Version:
                 if run_id:
                     self.log(f"attaching to agent run {run_id}")
                 else:
-                    if attempts:
+                    if attempts or self.data.get("limited_runs"):
                         # a fresh copy for the retry: the failed run may have written
                         export_instance.build(self.wt, MAIN, self.exports)
+                    # the plan's usage: wait while a window is over its ceiling
+                    self.log(f"usage: {usage.describe(usage.gate(log=self.log))}")
                     run_id = agent_runner.start(self.stem, write_dirs, self.data["prompt"])
                     self.data["agent_current"] = run_id
                     self.save()
                     self.log(f"agent run {run_id} started")
                 record = agent_runner.finish(run_id, log=self.log)
             report = record.pop("report")
+            rule_written = (self.exports / self.stem / self.rule).exists()
+            ok = record["status"] == "succeeded" and report.strip() and rule_written
+            home = os.path.join(agent_runner.SPAWNER_STATE, "runs", run_id, "home")
+            hits = [] if ok else usage.limited({**record, "report": report}, home)
+            if hits:
+                # the account's limit, not the agent: not one of its attempts
+                self.data.setdefault("limited_runs", []).append(record)
+                self.data.pop("agent_current", None)
+                self.save()
+                usage.wait_after_limit(hits, log=self.log)
+                continue
             attempts.append(record)
             self.data.pop("agent_current", None)
             self.save()
-            rule_written = (self.exports / self.stem / self.rule).exists()
             self.log(
                 f"agent run {run_id}: {record['status']}, models {record['models']},"
-                f" cost {record['result'].get('total_cost_usd')},"
+                f" API-equivalent cost $ {record['result'].get('total_cost_usd')} (plan, not billed),"
                 f" rule {'written' if rule_written else 'missing'}"
             )
-            if record["status"] == "succeeded" and report.strip() and rule_written:
+            if ok:
                 (self.wt_root / f"{self.stem}.report.md").write_text(report + "\n")
                 return
         raise Failed(f"the agent failed {AGENT_ATTEMPTS} times: {attempts[-1]}")
@@ -280,13 +315,28 @@ class Version:
         self.log(f"snapshot {self.data['sweep_sha'][:12]}")
 
     def step_image_check(self):
+        """validate-rule in the Raven image. Only its own "Invalid:" is a
+        verdict on the rule; anything else (the login node out of threads or
+        processes, a container that did not start) is retried, then left as a
+        resumable error. At most IMAGE_CHECK_SLOTS run on the login node."""
         upper = self.conf["max_params"]
-        ok, log = cluster_proxy.validate_rule(
-            self.data["sweep_sha"], self.rule, self.conf["min_params"], upper,
-            self.conf.get("sobol_points", 256),
-        )
-        if not ok:
-            raise Failed(f"{self.rule} fails validate-rule in the Raven image:\n{log[-3000:]}")
+        for attempt in range(1, IMAGE_CHECK_TRIES + 1):
+            with agent_runner.slot(self.locks / "image_check", slots=IMAGE_CHECK_SLOTS):
+                ok, log = cluster_proxy.validate_rule(
+                    self.data["sweep_sha"], self.rule, self.conf["min_params"], upper,
+                    self.conf.get("sobol_points", 256),
+                )
+            if ok:
+                return
+            if re.search(r"^Invalid: ", log, flags=re.M):
+                raise Failed(f"{self.rule} fails validate-rule in the Raven image:\n{log[-3000:]}")
+            tail = log.strip().splitlines()[-1:] or ["(no output)"]
+            self.log(f"image check {attempt}/{IMAGE_CHECK_TRIES} did not run: {tail[0][:200]}")
+            if attempt < IMAGE_CHECK_TRIES:
+                time.sleep(IMAGE_CHECK_RETRY * attempt)
+        raise cluster_proxy.ClusterError(
+            f"validate-rule did not run in the Raven image ({IMAGE_CHECK_TRIES} tries):"
+            f"\n{log[-2000:]}")
 
     def _jobs(self, key, sha, configs):
         """Submit each config not yet submitted (ids kept in data[key]), wait."""
