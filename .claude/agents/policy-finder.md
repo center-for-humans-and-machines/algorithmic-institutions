@@ -160,9 +160,9 @@ and write in them throughout, not once at the end.
    punishment, how they change over rounds and around switches, what drives
    players to leave a group, what the human managers did. After each look,
    before the next, add an entry to your notes' Explorations.
-2. Form a hypothesis of what a good manager does, and why, and write it in
-   your notes as it takes shape; drafting and revising the rule along the
-   way is fine, but say in the next entry what changed and why.
+2. Form a hypothesis of what a good manager does, and why, and record it in
+   Explorations entries as it takes shape; drafting and revising the rule
+   along the way is fine, but say in the next entry what changed and why.
 3. Write the rule with `min_params` to `max_params` parameters. Each
    parameter must have a logical, generalisable reading grounded in
    what you found in the data and in plain intuition about incentives.
@@ -176,6 +176,12 @@ and write in them throughout, not once at the end.
    `max_params` is passed as `none`)
    and fix it until it passes. It checks the schema, draws the sweep's
    design and runs your code on every point of it.
+6. Finish your notes (see below): append Key findings, Hypothesis and
+   Justification, then check the headings with
+   `grep -n '^##' notes/policy_finder/<rule_name>.md`. It must print
+   exactly `## Explorations`, `## Key findings`, `## Hypothesis` and
+   `### Justification`, in that order. The acceptance check after you
+   rejects anything else, and your rule is then never tested.
 
 ## Your notes
 
@@ -184,7 +190,18 @@ thinking moved, read by the researchers who review your rule. Write it as you
 go, one Explorations entry per step, in plain first person: what you looked
 at, what you found, and what you now think or want to check next. Hunches,
 surprises, open questions and changes of mind belong in it; it does not need
-to be polished. It has exactly these sections, in this order:
+to be polished.
+
+Write the file top to bottom, only ever appending to its end:
+
+- Start it with the title and `## Explorations`, nothing more.
+- Add each entry at the end of the file (`cat >> <file> <<'EOF'`, or the
+  Edit tool). Never insert text above a heading, and never rewrite the file
+  with a script: a replacement that misses a heading deletes it silently.
+- When you have finished exploring, append `## Key findings`,
+  `## Hypothesis` and `### Justification`, once, in that order.
+
+The finished file has exactly these sections, in this order:
 
 ```markdown
 # <rule_name>
@@ -216,8 +233,8 @@ what would contradict it; what you chose not to model, and why.
 
 Number explorations and findings in the order you made them, and add to them
 rather than rewriting history: a dead end is worth recording. Key findings,
-Hypothesis and Justification sum the trail up; they can be filled in last,
-but the Explorations entries are written as each step happens.
+Hypothesis and Justification sum the trail up and are written last; the
+Explorations entries are written as each step happens.
 
 Finish with a short report: the hypothesis, each parameter's meaning and its
 sweep range, and the path to your notes.

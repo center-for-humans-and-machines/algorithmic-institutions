@@ -65,13 +65,24 @@ STYLE = (
 )
 #: Under the page title: where the data outside the repo lives, and why
 DATA_NOTE = (
-    "Part of this page's data is kept outside the repo. The Summary's categories"
-    " and the reference pools (summary.json, references.json) are kept on Raven in"
-    f" {OBSERVATORY.split(':', 1)[1]}/, with working copies beside the instances in"
-    " ../policy-finder-worktrees/; the overview text, the agent reports and their"
-    " session logs stay on the machine that ran them. None of it is on"
-    " policy-finder-base: every policy-finder agent starts from that branch and"
-    " can read all of it, and this data describes earlier rules and their results."
+    (
+        "Part of this page's data is kept outside the repo. The Summary's categories"
+        " and the reference pools (summary.json, references.json) are kept on Raven in"
+        f" {OBSERVATORY.split(':', 1)[1]}/, with working copies beside the instances in"
+        " ../policy-finder-worktrees/; the overview text, the agent reports and their"
+        " session logs stay on the machine that ran them."
+    )
+    if ":" in OBSERVATORY
+    else (
+        "Part of this page's data is kept outside the repo, beside the instances in"
+        f" {WT_ROOT}/: the Summary's categories and the reference pools"
+        " (summary.json, references.json), the pipeline states, the agent reports,"
+        " and, in the container spawner's run homes, the agents' session logs."
+    )
+) + (
+    " None of it is in an agent's view: every policy-finder agent starts from the"
+    " base branch and sees only its own lineage, and this data describes earlier"
+    " rules and their results."
 )
 #: The landing page's text, an HTML fragment in overview.css's classes. Kept
 #: beside the instances, outside every worktree, as it describes earlier rules.
@@ -82,7 +93,28 @@ STATUS = {
     "checked": "checked",
     "done": "done, not checked",
     "stopped": "stopped, no report",
+    # from pipeline.py's state (<version>.state.json), when there is one
+    "agent": "running: agent",
+    "check": "running: check",
+    "sweep": "running: sweep",
+    "final": "running: final run",
+    "scored": "scored",
+    "failed": "failed",
+    "error": "stopped, resumable",
 }
+#: The pill style of each status (dashboard.css has the first four)
+STATUS_CLASS = {"agent": "running", "check": "running", "sweep": "running",
+                "final": "running", "scored": "checked", "failed": "stopped",
+                "error": "done"}
+#: pipeline.py's steps, by the stage the dashboard shows
+STAGE = {"export": "agent", "agent": "agent", "collect": "agent", "check": "check",
+         "sweep_config": "sweep", "sweep_snap": "sweep", "image_check": "sweep",
+         "sweep_jobs": "sweep", "sweep_fetch": "sweep", "fit": "sweep",
+         "final_config": "final", "final_snap": "final", "final_jobs": "final",
+         "final_fetch": "final"}
+PIPELINE_STEPS = list(STAGE)
+#: The container spawner's state (the agents' run homes, with their transcripts)
+SPAWNER_STATE = Path(os.environ.get("PF_SPAWNER_STATE", "/var/spawner"))
 
 
 def esc(text) -> str:
@@ -106,13 +138,41 @@ def instances():
 
 
 def running_names():
-    """Instances whose launcher is still running."""
+    """Instances whose launcher (new_instance.sh) or pipeline (pipeline.py run
+    <name>) is still running."""
     out = subprocess.run(["ps", "-eo", "command"], capture_output=True, text=True)
     names = set()
     for line in out.stdout.splitlines():
+        words = line.split()
         if "new_instance.sh" in line:
-            names.update(w for w in line.split() if w.startswith("pf-"))
+            names.update(w for w in words if w.startswith("pf-"))
+        elif any(w.endswith("pipeline.py") for w in words) and "run" in words:
+            names.add(words[-1])
     return names
+
+
+def pipeline_state(version: str):
+    """pipeline.py's state of a version, or None (an instance run without it)."""
+    try:
+        return json.loads((WT_ROOT / f"{version}.state.json").read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def locked(version: str) -> bool:
+    """Whether a pipeline holds the version's lock (it is running)."""
+    import fcntl
+
+    path = WT_ROOT / f"{version}.lock"
+    if not path.exists():
+        return False
+    with open(path) as f:
+        try:
+            fcntl.flock(f, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(f, fcntl.LOCK_UN)
+    return False
 
 
 def committed(wt: Path, version: str) -> bool:
@@ -127,6 +187,15 @@ def committed(wt: Path, version: str) -> bool:
 
 def status(wt: Path, version: str, running: set) -> str:
     """A version's status; a running launcher runs the instance's latest."""
+    state = pipeline_state(version)
+    if state is not None:
+        live = locked(version) or (wt.name in running and version == versions(wt.name)[-1])
+        if state.get("status") in ("scored", "failed"):
+            return state["status"]
+        if live or state.get("status") == "running":
+            step = next((s for s in PIPELINE_STEPS if s not in state.get("done", [])), "final")
+            return STAGE[step] if live else "error"
+        return "error"
     if wt.name in running and version == versions(wt.name)[-1]:
         return "running"
     report = WT_ROOT / f"{version}.report.md"
@@ -140,7 +209,7 @@ def version_label(version: str, all_versions: list) -> str:
 
 
 def pill(key: str) -> str:
-    return f'<span class="pill {key}"><i></i>{STATUS[key]}</span>'
+    return f'<span class="pill {STATUS_CLASS.get(key, key)}"><i></i>{STATUS[key]}</span>'
 
 
 def empty(text: str):
@@ -198,17 +267,54 @@ def entries(section: str) -> list:
     return out
 
 
+#: A Bash command that writes a file: a redirect, or a write from Python
+WRITES = re.compile(r">|write_text|\.write\(|open\([^)]*['\"][wa]|\btee\b|\bcp\b|\bmv\b")
+
+
+def session_logs(wt: Path, version: str) -> list:
+    """The session logs of the version's agent: from its runs in the container
+    spawner (pipeline.py's state names them), else Claude Code's own logs of
+    the worktree (an instance run on this machine)."""
+    state = pipeline_state(version)
+    if state is not None:
+        data = state.get("data", {})
+        runs = [r.get("run_id") for r in data.get("agent_runs", []) + data.get("limited_runs", [])]
+        runs.append(data.get("agent_current"))
+        logs = []
+        for run in filter(None, runs):
+            home = SPAWNER_STATE / "runs" / run / "home/.claude/projects"
+            logs += sorted(home.rglob("*.jsonl")) if home.is_dir() else []
+        return logs
+    folder = SESSIONS / re.sub(r"[^A-Za-z0-9]", "-", str(wt))
+    return sorted(folder.rglob("*.jsonl")) if folder.is_dir() else []
+
+
+def _writes(call: dict, paths: list) -> list:
+    """The files among `paths` a tool call writes: [(path, action)]."""
+    name, args = call.get("name"), call.get("input") or {}
+    if name in ("Write", "Edit"):
+        target = args.get("file_path", "")
+        return [(target, name)] if any(p in target for p in paths) else []
+    if name == "Bash":
+        command = args.get("command", "")
+        if not WRITES.search(command):
+            return []
+        found = re.findall(r"[\w./-]*(?:%s)[\w./-]*" % "|".join(map(re.escape, paths)), command)
+        return [(f, "Bash") for f in dict.fromkeys(found) if not f.endswith("/")]
+    return []
+
+
 def activity(wt: Path, version: str) -> pd.DataFrame:
     """The agent's writes to the version's notes and rule and the instance's
     scripts, from the session logs that wrote the version's notes or rule
-    (every version of an instance runs in the same worktree)."""
-    folder = SESSIONS / re.sub(r"[^A-Za-z0-9]", "-", str(wt))
+    (every version of an instance runs in the same worktree). Writes through
+    Bash count too: the agents mostly write with heredocs and scripts."""
     notes = f"notes/policy_finder/{version}.md"
     rule = f"configs/managers/rule_based/{version}.yml"
     scripts = f"scripts/policy_finder/{wt.name}/"
     rows = []
     # the agent runs as a subagent, logged under subagents/
-    for log in folder.rglob("*.jsonl") if folder.is_dir() else []:
+    for log in session_logs(wt, version):
         log_rows = []
         for line in log.read_text().splitlines():
             try:
@@ -219,30 +325,27 @@ def activity(wt: Path, version: str) -> pd.DataFrame:
             if event.get("type") != "assistant" or not isinstance(content, list):
                 continue
             for call in content:
-                if call.get("type") != "tool_use" or call.get("name") not in (
-                    "Write",
-                    "Edit",
-                ):
+                if call.get("type") != "tool_use":
                     continue
-                path = call["input"].get("file_path", "")
-                kind = (
-                    "notes"
-                    if path.endswith(notes)
-                    else (
-                        "rule"
-                        if path.endswith(rule)
-                        else ("scripts" if scripts in path else None)
+                for path, action in _writes(call, [notes, rule, scripts]):
+                    kind = (
+                        "notes"
+                        if path.endswith(notes)
+                        else (
+                            "rule"
+                            if path.endswith(rule)
+                            else ("scripts" if scripts in path else None)
+                        )
                     )
-                )
-                if kind:
-                    log_rows.append(
-                        {
-                            "time": event["timestamp"],
-                            "kind": kind,
-                            "file": Path(path).name,
-                            "action": call["name"],
-                        }
-                    )
+                    if kind:
+                        log_rows.append(
+                            {
+                                "time": event["timestamp"],
+                                "kind": kind,
+                                "file": Path(path).name,
+                                "action": action,
+                            }
+                        )
         if any(r["kind"] != "scripts" for r in log_rows):  # this version's session
             rows += log_rows
     frame = pd.DataFrame(rows, columns=["time", "kind", "file", "action"])

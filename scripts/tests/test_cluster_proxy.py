@@ -151,3 +151,16 @@ def test_fetch(stub, tmp_path):
 def test_fetch_refuses_unsafe_paths(stub, tmp_path):
     with pytest.raises(cp.ClusterError, match="unsafe"):
         cp.fetch(SHA, "plots/../x", tmp_path, key="k")
+
+
+def test_fetch_skips_rsync_temp_files(stub, tmp_path):
+    def with_temp(method, path, body):
+        code, answer = Stub.handle(stub, method, path, body)
+        if path == "/sync_from_cluster":
+            (stub.transfer / "pf/r/r_sweep/.per_round.parquet.2Xadbj").write_text("partial")
+        return code, answer
+
+    stub.handle = with_temp
+    local = tmp_path / "out"
+    cp.fetch(SHA, "plots/simulation/policy_finder/r_sweep", local, key="r/r_sweep")
+    assert sorted(p.name for p in local.iterdir()) == ["sweep.json"]
