@@ -282,7 +282,7 @@ def version_html(wt: Path, version: str, key: str, charts: Charts, zero, shown: 
     return (
         f'<div class="version" data-version="{esc(version)}"{"" if shown else " hidden"}>'
         f'<div class="inst"><h2>{esc(wt.name)}{ver}</h2>'
-        f'<span class="pill {key}"><i></i>{d.STATUS[key]}</span></div>'
+        f'<span class="pill {d.STATUS_CLASS.get(key, key)}"><i></i>{d.STATUS[key]}</span></div>'
         f'<div class="meta">{meta}</div>'
         f'<nav class="tabs">{tabs}</nav>{body}</div>'
     )

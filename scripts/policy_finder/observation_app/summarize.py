@@ -28,7 +28,9 @@ ssh alias): the one copy that is kept and updated. The files beside the instance
 working copies, which the app and the export read. `status` pulls them first;
 `record` and `category` pull, write and push back. Without the SSH
 ControlMaster (`ssh raven`) they warn and work on the local copies; `push`
-sends them once Raven is reachable again. None of this is on
+sends them once Raven is reachable again. With PF_OBSERVATORY=local (the
+default when PF_RUNS is set, as in the Claude proxy) the local copies are the
+only ones and nothing is ever sent. None of this is on
 policy-finder-base: every agent starts from that branch and can read all of
 it, and these files describe earlier rules and their results.
 
@@ -61,10 +63,14 @@ from pathlib import Path
 MAIN = Path(__file__).resolve().parents[3]
 WT_ROOT = Path(os.environ.get("PF_WORKTREE_ROOT", MAIN.parent / "policy-finder-worktrees"))
 SUMMARY = WT_ROOT / "summary.json"
-#: Where summary.json and references.json are kept (see the module docstring)
+#: Where summary.json and references.json are kept (see the module docstring).
+#: "local": only the copies beside the instances, never ssh. That is the
+#: default in the Claude proxy (PF_RUNS set), which has no Raven SSH keys.
 OBSERVATORY = os.environ.get(
-    "PF_OBSERVATORY", "raven:/u/certuer/policy-finder-observatory"
+    "PF_OBSERVATORY",
+    "local" if os.environ.get("PF_RUNS") else "raven:/u/certuer/policy-finder-observatory",
 )
+LOCAL = OBSERVATORY in ("", "local")
 SYNCED = ("summary.json", "references.json")
 #: The category kinds, as the command line names them and as stored
 KINDS = {"rule": "rule", "policy-category": "policy category"}
@@ -75,6 +81,8 @@ LATER = re.compile(r"^(?P<instance>.+)-v(?P<k>[0-9]+)$")
 
 
 def _raven_up() -> bool:
+    if LOCAL:
+        return False
     host = OBSERVATORY.split(":", 1)[0]
     ok = subprocess.run(["ssh", "-O", "check", host], capture_output=True).returncode == 0
     if not ok:
