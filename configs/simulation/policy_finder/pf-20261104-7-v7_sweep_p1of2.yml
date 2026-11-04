@@ -1,0 +1,671 @@
+# Sweep of /home/kappablanca/pf_runs/worktrees/pf-20261104-7/configs/managers/rule_based/pf-20261104-7-v7.yml (#227), written by scripts/policy_finder/generate_sim_config.py:
+# 128 of 256 distinct design points (256 Sobol points), each against `ah`; stack and sim parameters from
+# configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 42
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261104-7-v7_s000:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.954098270274699, rate: 24.911588022629868, t_end: 8, late_rate: 1.077176686511785, slack: 1.1195637360215187, window: 3, incumbent_factor: 0.4225346138700843}
+  pf-20261104-7-v7_s001:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.805853926576674, rate: 6.83219778144574, t_end: 12, late_rate: 5.410626709913156, slack: 6.331993140280247, window: 1, incumbent_factor: 0.9366370551288128}
+  pf-20261104-7-v7_s002:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.512833662331104, rate: 8.927660198853815, t_end: 4, late_rate: 0.5795900828565811, slack: 4.063208036124706, window: 2, incumbent_factor: 0.20316795073449612}
+  pf-20261104-7-v7_s003:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.351344376802444, rate: 2.5543074324539257, t_end: 16, late_rate: 4.072056761179244, slack: 3.3526666685938835, window: 4, incumbent_factor: 0.7184844510629773}
+  pf-20261104-7-v7_s004:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.885782822966576, rate: 10.87975196799763, t_end: 12, late_rate: 2.446725150982337, slack: 2.792788751423359, window: 3, incumbent_factor: 0.045287685468792915}
+  pf-20261104-7-v7_s005:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.237805299460888, rate: 3.7064037590238215, t_end: 9, late_rate: 0.41258018857072765, slack: 5.5022286251187325, window: 1, incumbent_factor: 0.5331373820081353}
+  pf-20261104-7-v7_s006:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.338587769307196, rate: 15.75609187162888, t_end: 13, late_rate: 8.53930463365998, slack: 7.766630671918392, window: 2, incumbent_factor: 0.32711909245699644}
+  pf-20261104-7-v7_s007:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.677365721203387, rate: 5.145242869739219, t_end: 6, late_rate: 1.5956955947205218, slack: 0.5552951321005821, window: 4, incumbent_factor: 0.8137566968798637}
+  pf-20261104-7-v7_s008:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.241767792962492, rate: 9.552082438988647, t_end: 15, late_rate: 0.3543097748154736, slack: 6.878735668957233, window: 4, incumbent_factor: 0.06374076474457979}
+  pf-20261104-7-v7_s009:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.888930878601968, rate: 2.2140059989050416, t_end: 6, late_rate: 1.7892197232175968, slack: 1.6663041189312935, window: 2, incumbent_factor: 0.5771041419357061}
+  pf-20261104-7-v7_s010:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.792381728067994, rate: 25.549734254977025, t_end: 10, late_rate: 1.138951242028004, slack: 3.930680178105831, window: 1, incumbent_factor: 0.2830921672284603}
+  pf-20261104-7-v7_s011:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.452789338305593, rate: 6.177936958221105, t_end: 10, late_rate: 7.9354065367627635, slack: 4.641223214566708, window: 3, incumbent_factor: 0.7952414890751243}
+  pf-20261104-7-v7_s012:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.919218109920621, rate: 20.857674922835123, t_end: 5, late_rate: 4.663349151723954, slack: 5.20549563318491, window: 4, incumbent_factor: 0.46846888214349747}
+  pf-20261104-7-v7_s013:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.066541204228997, rate: 4.280651726571931, t_end: 15, late_rate: 0.784850491188222, slack: 2.4960540905594826, window: 2, incumbent_factor: 0.9531533671543002}
+  pf-20261104-7-v7_s014:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.357065505348146, rate: 15.024937066649628, t_end: 7, late_rate: 2.87737033175505, slack: 0.22727208584547043, window: 1, incumbent_factor: 0.1865917006507516}
+  pf-20261104-7-v7_s015:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.517633541487157, rate: 2.9558348713044764, t_end: 13, late_rate: 0.5440488082140744, slack: 7.438609771430492, window: 3, incumbent_factor: 0.6724882740527391}
+  pf-20261104-7-v7_s016:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.439054342918098, rate: 13.747486556481958, t_end: 5, late_rate: 9.368014260144227, slack: 3.2063756808638573, window: 2, incumbent_factor: 0.8789424737915397}
+  pf-20261104-7-v7_s017:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.0596681935712695, rate: 3.2011995511032283, t_end: 14, late_rate: 1.494940820001453, slack: 4.494921885430813, window: 4, incumbent_factor: 0.3864455185830593}
+  pf-20261104-7-v7_s018:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.878587266430259, rate: 19.081146435017242, t_end: 10, late_rate: 2.3566591884135204, slack: 6.228040046989918, window: 3, incumbent_factor: 0.7233231868594885}
+  pf-20261104-7-v7_s019:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.512445433065295, rate: 4.635220535869115, t_end: 11, late_rate: 0.4167741608249913, slack: 1.437605805695057, window: 1, incumbent_factor: 0.22961408365517855}
+  pf-20261104-7-v7_s020:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.756969390437007, rate: 27.64865841523109, t_end: 15, late_rate: 0.7141164392380046, slack: 0.8778462335467339, window: 2, incumbent_factor: 0.5263459999114275}
+  pf-20261104-7-v7_s021:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.877850061282516, rate: 5.640812674161874, t_end: 4, late_rate: 3.3967355253554548, slack: 7.667430751025677, window: 4, incumbent_factor: 0.02079515252262354}
+  pf-20261104-7-v7_s022:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.3024858785793185, rate: 10.338519959775406, t_end: 13, late_rate: 0.9231954349685476, slack: 5.929921843111515, window: 3, incumbent_factor: 0.8694986356422305}
+  pf-20261104-7-v7_s023:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.436611282639205, rate: 2.021853254015738, t_end: 8, late_rate: 6.142453593732602, slack: 2.6422329917550087, window: 1, incumbent_factor: 0.36516178399324417}
+  pf-20261104-7-v7_s024:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.86533306259662, rate: 17.219842650529188, t_end: 12, late_rate: 3.091747079081217, slack: 4.791906468570232, window: 1, incumbent_factor: 0.6151154832914472}
+  pf-20261104-7-v7_s025:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.7453469382599, rate: 4.750776689453727, t_end: 8, late_rate: 0.4926444392473183, slack: 3.5033624097704887, window: 3, incumbent_factor: 0.11945325694978237}
+  pf-20261104-7-v7_s026:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.316397797316313, rate: 11.892445301689634, t_end: 16, late_rate: 4.583940001044959, slack: 1.765865184366703, window: 4, incumbent_factor: 0.7707805447280407}
+  pf-20261104-7-v7_s027:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.183166939765215, rate: 3.422811313301861, t_end: 4, late_rate: 0.8206251877163648, slack: 6.55629775673151, window: 2, incumbent_factor: 0.2763304701074958}
+  pf-20261104-7-v7_s028:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.937802884727716, rate: 8.25041975994416, t_end: 9, late_rate: 1.3563557822157053, slack: 7.120451889932156, window: 1, incumbent_factor: 0.9795679077506065}
+  pf-20261104-7-v7_s029:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.317976769059896, rate: 2.797699276455703, t_end: 11, late_rate: 6.483384762336204, slack: 0.33086904138326645, window: 3, incumbent_factor: 0.47327793668955564}
+  pf-20261104-7-v7_s030:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.501687069423497, rate: 23.01806823133106, t_end: 6, late_rate: 0.31430693822463185, slack: 2.063967891037464, window: 4, incumbent_factor: 0.6364305326715112}
+  pf-20261104-7-v7_s031:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.868616637773812, rate: 7.481994084828653, t_end: 14, late_rate: 2.0729504867737063, slack: 5.351654596626759, window: 2, incumbent_factor: 0.12892656214535236}
+  pf-20261104-7-v7_s032:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.710380652919412, rate: 8.467465925092686, t_end: 10, late_rate: 5.981153735104295, slack: 0.6955724135041237, window: 2, incumbent_factor: 0.7347419317811728}
+  pf-20261104-7-v7_s033:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.548736469820142, rate: 2.423441549510841, t_end: 9, late_rate: 0.9480826740813759, slack: 7.970568813383579, window: 4, incumbent_factor: 0.2498209672048688}
+  pf-20261104-7-v7_s034:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.257148995064199, rate: 24.128708459410607, t_end: 15, late_rate: 3.690729391756828, slack: 5.736890129745007, window: 3, incumbent_factor: 0.891386448405683}
+  pf-20261104-7-v7_s035:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.109603620134294, rate: 6.6196750952223695, t_end: 6, late_rate: 0.6572427777163679, slack: 2.9639119431376457, window: 1, incumbent_factor: 0.4057263545691967}
+  pf-20261104-7-v7_s036:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.134626558981836, rate: 16.25958705801063, t_end: 7, late_rate: 0.45287552450217483, slack: 3.4003681018948555, window: 2, incumbent_factor: 0.8579835398122668}
+  pf-20261104-7-v7_s037:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.472715138457716, rate: 5.311417410508694, t_end: 13, late_rate: 2.1687598020736707, slack: 4.172252424061298, window: 4, incumbent_factor: 0.34485670179128647}
+  pf-20261104-7-v7_s038:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.575464429333806, rate: 11.46939240883141, t_end: 5, late_rate: 1.4558932487131737, slack: 6.409352920949459, window: 3, incumbent_factor: 0.5138724911957979}
+  pf-20261104-7-v7_s039:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.927652234211564, rate: 3.9085681301057322, t_end: 16, late_rate: 9.619364216534438, slack: 1.1354580149054527, window: 1, incumbent_factor: 0.0014866301789879799}
+  pf-20261104-7-v7_s040:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.485272608697414, rate: 26.941080939298775, t_end: 4, late_rate: 2.0150620179947936, slack: 7.298803336918354, window: 1, incumbent_factor: 0.7515014968812466}
+  pf-20261104-7-v7_s041:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.146262779831886, rate: 6.512211918683413, t_end: 16, late_rate: 0.3233330678181503, slack: 0.023809082806110382, window: 3, incumbent_factor: 0.2638882836326957}
+  pf-20261104-7-v7_s042:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.047851950861514, rate: 9.863037691217732, t_end: 8, late_rate: 7.032482706216666, slack: 2.260921262204647, window: 4, incumbent_factor: 0.5949027584865689}
+  pf-20261104-7-v7_s043:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.694742896594107, rate: 2.2853243282803586, t_end: 12, late_rate: 1.2504721044166236, slack: 5.033897779881954, window: 2, incumbent_factor: 0.10802867077291012}
+  pf-20261104-7-v7_s044:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.670588844455779, rate: 14.558757892780585, t_end: 14, late_rate: 0.8901830363235492, slack: 4.594023622572422, window: 1, incumbent_factor: 0.6557410815730691}
+  pf-20261104-7-v7_s045:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.8314185896888375, rate: 2.863177579625061, t_end: 6, late_rate: 4.225685699633025, slack: 3.822140969336033, window: 3, incumbent_factor: 0.1414020974189043}
+  pf-20261104-7-v7_s046:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.120401620864868, rate: 19.784176169958183, t_end: 11, late_rate: 0.47895589547553585, slack: 1.588442973792553, window: 4, incumbent_factor: 0.9998673871159554}
+  pf-20261104-7-v7_s047:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.267132557928562, rate: 4.05899418824914, t_end: 9, late_rate: 3.1801410132242256, slack: 6.862335734069347, window: 2, incumbent_factor: 0.48478742968291044}
+  pf-20261104-7-v7_s048:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.67384984716773, rate: 18.101689621081093, t_end: 16, late_rate: 1.6413663881199345, slack: 2.5952107533812523, window: 3, incumbent_factor: 0.19216023944318295}
+  pf-20261104-7-v7_s049:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.308410946279764, rate: 4.395836287604292, t_end: 4, late_rate: 8.30183847014694, slack: 5.82118996232748, window: 1, incumbent_factor: 0.6986866937950253}
+  pf-20261104-7-v7_s050:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.128761139698327, rate: 13.318475523447013, t_end: 12, late_rate: 0.38032639850737093, slack: 7.5895142033696175, window: 2, incumbent_factor: 0.4105302831158042}
+  pf-20261104-7-v7_s051:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.749222804792225, rate: 3.100276400616063, t_end: 8, late_rate: 2.6541943994248345, slack: 0.8615167811512947, window: 4, incumbent_factor: 0.9177977703511715}
+  pf-20261104-7-v7_s052:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.499951248057187, rate: 10.673085572834793, t_end: 7, late_rate: 3.7542602413538697, slack: 1.2976106330752373, window: 3, incumbent_factor: 0.3380991769954562}
+  pf-20261104-7-v7_s053:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.63424510974437, rate: 2.0865926395494685, t_end: 14, late_rate: 0.6286584417616087, slack: 6.024750702083111, window: 1, incumbent_factor: 0.8335248604416847}
+  pf-20261104-7-v7_s054:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.060846079140902, rate: 29.158543492513793, t_end: 9, late_rate: 5.565839210642109, slack: 4.259855844080448, window: 2, incumbent_factor: 0.057193757966160774}
+  pf-20261104-7-v7_s055:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.181040924042463, rate: 5.946889436449639, t_end: 11, late_rate: 1.0471203498224644, slack: 3.034726358950138, window: 4, incumbent_factor: 0.551880375482142}
+  pf-20261104-7-v7_s056:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.630323087796569, rate: 12.534629953517777, t_end: 10, late_rate: 0.5586628077963082, slack: 5.399182550609112, window: 4, incumbent_factor: 0.3019258491694927}
+  pf-20261104-7-v7_s057:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.496816961094737, rate: 3.608833579919716, t_end: 11, late_rate: 2.802148367559319, slack: 2.173201195895672, window: 2, incumbent_factor: 0.8072402169927955}
+  pf-20261104-7-v7_s058:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.066011148504913, rate: 17.772692733288434, t_end: 6, late_rate: 0.7222564719676877, slack: 0.4082803502678871, window: 1, incumbent_factor: 0.08354054857045412}
+  pf-20261104-7-v7_s059:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.946604038588703, rate: 4.904923258149251, t_end: 14, late_rate: 5.067445285511986, slack: 7.136279441416264, window: 3, incumbent_factor: 0.5881138797849417}
+  pf-20261104-7-v7_s060:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.195033828727901, rate: 22.297902997119362, t_end: 13, late_rate: 7.303585854783412, slack: 6.696767650544643, window: 4, incumbent_factor: 0.16784286592155695}
+  pf-20261104-7-v7_s061:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.561367276124656, rate: 7.250301893055717, t_end: 7, late_rate: 1.2374923748316997, slack: 1.9696259126067162, window: 2, incumbent_factor: 0.6605763603001833}
+  pf-20261104-7-v7_s062:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.7435413133352995, rate: 7.823684864501066, t_end: 15, late_rate: 1.837397696941257, slack: 3.7379532530903816, window: 1, incumbent_factor: 0.44870250672101974}
+  pf-20261104-7-v7_s063:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.12397419475019, rate: 2.6538716267296483, t_end: 5, late_rate: 0.3450137325014486, slack: 4.963084883987904, window: 3, incumbent_factor: 0.9421750707551837}
+  pf-20261104-7-v7_s064:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.032450161874294, rate: 11.720685925130201, t_end: 15, late_rate: 2.6908693113843793, slack: 7.8773671463131905, window: 4, incumbent_factor: 0.8595344992354512}
+  pf-20261104-7-v7_s065:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.6659563928842545, rate: 3.829979164436501, t_end: 5, late_rate: 0.5658233563709011, slack: 0.6679244115948677, window: 2, incumbent_factor: 0.3746068309992552}
+  pf-20261104-7-v7_s066:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.591634900309145, rate: 15.927463086064886, t_end: 13, late_rate: 5.001024601915495, slack: 2.9304045662283897, window: 1, incumbent_factor: 0.5161681808531284}
+  pf-20261104-7-v7_s067:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.211041905917227, rate: 5.4295813413366245, t_end: 7, late_rate: 0.7518206216639124, slack: 5.641735337674618, window: 3, incumbent_factor: 0.030514798127114773}
+  pf-20261104-7-v7_s068:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.018902414478362, rate: 23.60362083077142, t_end: 6, late_rate: 1.1845356607297501, slack: 4.206858433783054, window: 4, incumbent_factor: 0.733256384730339}
+  pf-20261104-7-v7_s069:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.152568654157221, rate: 6.757719298000392, t_end: 15, late_rate: 7.4210614071736805, slack: 3.4944242611527443, window: 2, incumbent_factor: 0.2201381055638194}
+  pf-20261104-7-v7_s070:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.472103118896484, rate: 8.641203509094689, t_end: 9, late_rate: 0.3393989022802151, slack: 1.2275610491633415, window: 1, incumbent_factor: 0.8891502702608705}
+  pf-20261104-7-v7_s071:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.59167055040598, rate: 2.371478862757711, t_end: 10, late_rate: 1.9187780204567686, slack: 6.438099555671215, window: 3, incumbent_factor: 0.3767558578401804}
+  pf-20261104-7-v7_s072:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.163376668468118, rate: 20.19755935502752, t_end: 9, late_rate: 8.184312040551509, slack: 0.12091509252786636, window: 3, incumbent_factor: 0.6267104810103774}
+  pf-20261104-7-v7_s073:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.028815882280469, rate: 3.970821749785864, t_end: 12, late_rate: 1.7117901690786843, slack: 7.330359496176243, window: 1, incumbent_factor: 0.1391039676964283}
+  pf-20261104-7-v7_s074:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.713593020103872, rate: 14.24720195987666, t_end: 6, late_rate: 2.546012704428249, slack: 5.063500814139843, window: 2, incumbent_factor: 0.9701225738972425}
+  pf-20261104-7-v7_s075:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.593131042085588, rate: 2.922049561378181, t_end: 13, late_rate: 0.3859620799187167, slack: 2.352167896926403, window: 4, incumbent_factor: 0.48324177879840136}
+  pf-20261104-7-v7_s076:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.786112717352808, rate: 9.66433641358544, t_end: 12, late_rate: 0.6217580653928942, slack: 3.791439302265644, window: 3, incumbent_factor: 0.7804695460945368}
+  pf-20261104-7-v7_s077:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.151818751357496, rate: 2.3353023734177314, t_end: 8, late_rate: 3.9027748288732056, slack: 4.503875620663166, window: 1, incumbent_factor: 0.2661220068112016}
+  pf-20261104-7-v7_s078:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.223509253934026, rate: 27.53927161891863, t_end: 16, late_rate: 1.0076813329459449, slack: 6.766328357160091, window: 2, incumbent_factor: 0.624590921215713}
+  pf-20261104-7-v7_s079:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.603314513340592, rate: 6.378920255372333, t_end: 4, late_rate: 5.630188718510929, slack: 1.5557881817221642, window: 4, incumbent_factor: 0.10951951146125793}
+  pf-20261104-7-v7_s080:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.353770172223449, rate: 29.824543402567095, t_end: 11, late_rate: 0.32683402367345, slack: 5.792321316897869, window: 1, incumbent_factor: 0.31694163102656603}
+  pf-20261104-7-v7_s081:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.192780105397105, rate: 5.836481007266303, t_end: 9, late_rate: 1.938692846189679, slack: 2.5027415677905083, window: 3, incumbent_factor: 0.8234767001122236}
+  pf-20261104-7-v7_s082:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.792899566702545, rate: 10.464568827541267, t_end: 14, late_rate: 1.2992049973839144, slack: 0.7670944705605507, window: 4, incumbent_factor: 0.03532390668988228}
+  pf-20261104-7-v7_s083:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.646008516661823, rate: 2.1363626166044534, t_end: 6, late_rate: 6.953966001740269, slack: 7.554786182940006, window: 2, incumbent_factor: 0.542582786642015}
+  pf-20261104-7-v7_s084:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.617077867500484, rate: 13.00818121857374, t_end: 8, late_rate: 4.287054487837706, slack: 6.120027504861355, window: 1, incumbent_factor: 0.21337634325027466}
+  pf-20261104-7-v7_s085:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.95624780934304, rate: 3.16204854141657, t_end: 12, late_rate: 0.853332203049982, slack: 1.3314841613173485, window: 3, incumbent_factor: 0.7087953863665462}
+  pf-20261104-7-v7_s086:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.162137342616916, rate: 18.444144086512985, t_end: 4, late_rate: 3.316154271578871, slack: 3.0627405121922493, window: 4, incumbent_factor: 0.4324684077873826}
+  pf-20261104-7-v7_s087:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.515406718477607, rate: 4.297678880428142, t_end: 16, late_rate: 0.4718865992210026, slack: 4.353179521858692, window: 2, incumbent_factor: 0.9271616730839014}
+  pf-20261104-7-v7_s088:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.950576331466436, rate: 7.978591542572513, t_end: 4, late_rate: 0.9907333633123638, slack: 2.205977998673916, window: 2, incumbent_factor: 0.17714672442525625}
+  pf-20261104-7-v7_s089:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.612220827490091, rate: 2.5917237437893483, t_end: 15, late_rate: 5.8855271445048105, slack: 5.495556078851223, window: 4, incumbent_factor: 0.6824524737894535}
+  pf-20261104-7-v7_s090:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.402099695988, rate: 21.797271804918307, t_end: 7, late_rate: 0.6682230964383775, slack: 7.226793594658375, window: 3, incumbent_factor: 0.45874918811023235}
+  pf-20261104-7-v7_s091:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.04964475799352, rate: 7.386540931689076, t_end: 13, late_rate: 3.533250667564752, slack: 0.43910402804613113, window: 1, incumbent_factor: 0.9633311303332448}
+  pf-20261104-7-v7_s092:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.077706937678158, rate: 17.44487049703834, t_end: 14, late_rate: 2.2580848861286906, slack: 1.878257267177105, window: 2, incumbent_factor: 0.2925682011991739}
+  pf-20261104-7-v7_s093:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.23961825389415, rate: 5.017571031917774, t_end: 5, late_rate: 0.44726398166158526, slack: 6.666798464953899, window: 4, incumbent_factor: 0.7853083396330476}
+  pf-20261104-7-v7_s094:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.641996372491121, rate: 12.835217149253419, t_end: 11, late_rate: 9.74451569494713, slack: 4.93116257339716, window: 3, incumbent_factor: 0.07343036215752363}
+  pf-20261104-7-v7_s095:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.789808671921492, rate: 3.5387725229272213, t_end: 10, late_rate: 1.3988670878371439, slack: 3.6407252326607704, window: 1, incumbent_factor: 0.5668962746858597}
+  pf-20261104-7-v7_s096:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.850311904214323, rate: 15.427868249920868, t_end: 6, late_rate: 0.5118504257307118, slack: 6.297142989933491, window: 1, incumbent_factor: 0.04774889722466469}
+  pf-20261104-7-v7_s097:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.47029813285917, rate: 5.2610110362663995, t_end: 14, late_rate: 3.057269042320797, slack: 1.02526343613863, window: 3, incumbent_factor: 0.5618446981534362}
+  pf-20261104-7-v7_s098:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.397537911310792, rate: 11.113541624700527, t_end: 9, late_rate: 0.8294995813051942, slack: 3.2603194937109947, window: 4, incumbent_factor: 0.32837959844619036}
+  pf-20261104-7-v7_s099:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.030768664553761, rate: 3.6327826424822733, t_end: 11, late_rate: 4.4101535011011785, slack: 4.03421726077795, window: 2, incumbent_factor: 0.8437027465552092}
+  pf-20261104-7-v7_s100:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.219843672588468, rate: 9.108575947710484, t_end: 16, late_rate: 6.760766764419156, slack: 5.595674432814121, window: 1, incumbent_factor: 0.42000619415193796}
+  pf-20261104-7-v7_s101:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.339669475331903, rate: 2.5005704469349386, t_end: 4, late_rate: 1.3363541091284483, slack: 2.820680893957615, window: 3, incumbent_factor: 0.9078645054250956}
+  pf-20261104-7-v7_s102:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.661085671745241, rate: 24.363439336437008, t_end: 12, late_rate: 2.103027400823376, slack: 0.5890466496348381, window: 4, incumbent_factor: 0.20184971392154694}
+  pf-20261104-7-v7_s103:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.79415641631931, rate: 6.977562017790989, t_end: 8, late_rate: 0.3012915697483556, slack: 7.862029604613781, window: 2, incumbent_factor: 0.6884787110611796}
+  pf-20261104-7-v7_s104:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.345300481654704, rate: 14.707039900225045, t_end: 13, late_rate: 1.5199365898833868, slack: 1.6972499266266823, window: 2, incumbent_factor: 0.4385251682251692}
+  pf-20261104-7-v7_s105:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.224686943925917, rate: 3.0153637736463637, t_end: 7, late_rate: 8.968412983596979, slack: 6.969127811491489, window: 4, incumbent_factor: 0.9518951894715428}
+  pf-20261104-7-v7_s106:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.907477207481861, rate: 21.29877904726684, t_end: 15, late_rate: 0.4355174439111291, slack: 4.737474732100964, window: 3, incumbent_factor: 0.15787921007722616}
+  pf-20261104-7-v7_s107:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.77361872792244, rate: 4.1859367004146435, t_end: 5, late_rate: 2.3189499393243524, slack: 3.96357911080122, window: 1, incumbent_factor: 0.6700218804180622}
+  pf-20261104-7-v7_s108:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.585384234786034, rate: 26.127807555924868, t_end: 9, late_rate: 3.4409743358173652, slack: 2.3987039402127266, window: 2, incumbent_factor: 0.09374882560223341}
+  pf-20261104-7-v7_s109:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.964503459632397, rate: 6.049982334149513, t_end: 10, late_rate: 0.6861542542151784, slack: 5.173695333302021, window: 4, incumbent_factor: 0.5784246921539307}
+  pf-20261104-7-v7_s110:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.034741171635687, rate: 9.3635199375474, t_end: 6, late_rate: 6.3953583415959, slack: 7.408762596547604, window: 3, incumbent_factor: 0.3118595276027918}
+  pf-20261104-7-v7_s111:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.400615871883929, rate: 2.2618647433168735, t_end: 15, late_rate: 0.9117440013704384, slack: 0.13578131049871445, window: 1, incumbent_factor: 0.7977647120133042}
+  pf-20261104-7-v7_s112:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.54077170509845, rate: 10.140723487836894, t_end: 7, late_rate: 1.7657442081914905, slack: 4.399889223277569, window: 4, incumbent_factor: 0.5041523166000843}
+  pf-20261104-7-v7_s113:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.393608723767102, rate: 2.0695645748431795, t_end: 13, late_rate: 0.36880781597675116, slack: 3.172746293246746, window: 2, incumbent_factor: 0.011663920246064663}
+  pf-20261104-7-v7_s114:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.995284449309111, rate: 28.291881922275177, t_end: 5, late_rate: 7.620377208300411, slack: 1.4098357930779457, window: 1, incumbent_factor: 0.848538083024323}
+  pf-20261104-7-v7_s115:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.834876734763384, rate: 5.534718335784426, t_end: 15, late_rate: 1.1535649518184954, slack: 6.134960509836674, window: 3, incumbent_factor: 0.3548204284161329}
+  pf-20261104-7-v7_s116:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.421533916145563, rate: 19.446940023548503, t_end: 10, late_rate: 0.7720673321325205, slack: 7.696055255830288, window: 4, incumbent_factor: 0.9010755652561784}
+  pf-20261104-7-v7_s117:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.774210508912802, rate: 4.529843314479033, t_end: 10, late_rate: 4.869828768216928, slack: 0.9700712785124779, window: 2, incumbent_factor: 0.39551801420748234}
+  pf-20261104-7-v7_s118:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.9819767670705914, rate: 13.430535557469788, t_end: 14, late_rate: 0.5207739846041313, slack: 2.7364111617207527, window: 1, incumbent_factor: 0.7442174851894379}
+  pf-20261104-7-v7_s119:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.321409043855965, rate: 3.26363611417378, t_end: 5, late_rate: 2.9236909073150734, slack: 5.964405722916126, window: 3, incumbent_factor: 0.2398873446509242}
+  pf-20261104-7-v7_s120:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 12.763362023048103, rate: 22.49567208275599, t_end: 14, late_rate: 5.190026803940466, slack: 3.5944869145751, window: 3, incumbent_factor: 0.9899031352251768}
+  pf-20261104-7-v7_s121:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 7.411606679670513, rate: 7.625731883689191, t_end: 7, late_rate: 1.0931236821361212, slack: 4.821631513535976, window: 1, incumbent_factor: 0.4942323537543416}
+  pf-20261104-7-v7_s122:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 9.199500342831016, rate: 8.411694525515927, t_end: 11, late_rate: 4.0144636757394965, slack: 6.587975926697254, window: 2, incumbent_factor: 0.6455631470307708}
+  pf-20261104-7-v7_s123:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.86098931543529, rate: 2.7333141738273308, t_end: 8, late_rate: 0.6044658185227394, slack: 1.8628490641713142, window: 4, incumbent_factor: 0.1511216200888157}
+  pf-20261104-7-v7_s124:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 10.273465333506465, rate: 12.17259357015658, t_end: 4, late_rate: 0.3970353486305896, slack: 0.29833637923002243, window: 3, incumbent_factor: 0.6048360792919993}
+  pf-20261104-7-v7_s125:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 8.421442752704024, rate: 3.3571913701014346, t_end: 16, late_rate: 2.474979882556534, slack: 7.024322502315044, window: 1, incumbent_factor: 0.09855280816555023}
+  pf-20261104-7-v7_s126:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 6.82236974965781, rate: 16.895244869132338, t_end: 8, late_rate: 1.5782017887335686, slack: 5.261384584009647, window: 2, incumbent_factor: 0.7617094162851572}
+  pf-20261104-7-v7_s127:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v7.yml
+    params: {threshold: 11.983591902069747, rate: 4.861091826174167, t_end: 12, late_rate: 8.877229290914318, slack: 2.03338835388422, window: 4, incumbent_factor: 0.254198738373816}
+pairings:
+- {name: pf-20261104-7-v7_s000_vs_ah, group_0: pf-20261104-7-v7_s000, group_1: ah}
+- {name: pf-20261104-7-v7_s001_vs_ah, group_0: pf-20261104-7-v7_s001, group_1: ah}
+- {name: pf-20261104-7-v7_s002_vs_ah, group_0: pf-20261104-7-v7_s002, group_1: ah}
+- {name: pf-20261104-7-v7_s003_vs_ah, group_0: pf-20261104-7-v7_s003, group_1: ah}
+- {name: pf-20261104-7-v7_s004_vs_ah, group_0: pf-20261104-7-v7_s004, group_1: ah}
+- {name: pf-20261104-7-v7_s005_vs_ah, group_0: pf-20261104-7-v7_s005, group_1: ah}
+- {name: pf-20261104-7-v7_s006_vs_ah, group_0: pf-20261104-7-v7_s006, group_1: ah}
+- {name: pf-20261104-7-v7_s007_vs_ah, group_0: pf-20261104-7-v7_s007, group_1: ah}
+- {name: pf-20261104-7-v7_s008_vs_ah, group_0: pf-20261104-7-v7_s008, group_1: ah}
+- {name: pf-20261104-7-v7_s009_vs_ah, group_0: pf-20261104-7-v7_s009, group_1: ah}
+- {name: pf-20261104-7-v7_s010_vs_ah, group_0: pf-20261104-7-v7_s010, group_1: ah}
+- {name: pf-20261104-7-v7_s011_vs_ah, group_0: pf-20261104-7-v7_s011, group_1: ah}
+- {name: pf-20261104-7-v7_s012_vs_ah, group_0: pf-20261104-7-v7_s012, group_1: ah}
+- {name: pf-20261104-7-v7_s013_vs_ah, group_0: pf-20261104-7-v7_s013, group_1: ah}
+- {name: pf-20261104-7-v7_s014_vs_ah, group_0: pf-20261104-7-v7_s014, group_1: ah}
+- {name: pf-20261104-7-v7_s015_vs_ah, group_0: pf-20261104-7-v7_s015, group_1: ah}
+- {name: pf-20261104-7-v7_s016_vs_ah, group_0: pf-20261104-7-v7_s016, group_1: ah}
+- {name: pf-20261104-7-v7_s017_vs_ah, group_0: pf-20261104-7-v7_s017, group_1: ah}
+- {name: pf-20261104-7-v7_s018_vs_ah, group_0: pf-20261104-7-v7_s018, group_1: ah}
+- {name: pf-20261104-7-v7_s019_vs_ah, group_0: pf-20261104-7-v7_s019, group_1: ah}
+- {name: pf-20261104-7-v7_s020_vs_ah, group_0: pf-20261104-7-v7_s020, group_1: ah}
+- {name: pf-20261104-7-v7_s021_vs_ah, group_0: pf-20261104-7-v7_s021, group_1: ah}
+- {name: pf-20261104-7-v7_s022_vs_ah, group_0: pf-20261104-7-v7_s022, group_1: ah}
+- {name: pf-20261104-7-v7_s023_vs_ah, group_0: pf-20261104-7-v7_s023, group_1: ah}
+- {name: pf-20261104-7-v7_s024_vs_ah, group_0: pf-20261104-7-v7_s024, group_1: ah}
+- {name: pf-20261104-7-v7_s025_vs_ah, group_0: pf-20261104-7-v7_s025, group_1: ah}
+- {name: pf-20261104-7-v7_s026_vs_ah, group_0: pf-20261104-7-v7_s026, group_1: ah}
+- {name: pf-20261104-7-v7_s027_vs_ah, group_0: pf-20261104-7-v7_s027, group_1: ah}
+- {name: pf-20261104-7-v7_s028_vs_ah, group_0: pf-20261104-7-v7_s028, group_1: ah}
+- {name: pf-20261104-7-v7_s029_vs_ah, group_0: pf-20261104-7-v7_s029, group_1: ah}
+- {name: pf-20261104-7-v7_s030_vs_ah, group_0: pf-20261104-7-v7_s030, group_1: ah}
+- {name: pf-20261104-7-v7_s031_vs_ah, group_0: pf-20261104-7-v7_s031, group_1: ah}
+- {name: pf-20261104-7-v7_s032_vs_ah, group_0: pf-20261104-7-v7_s032, group_1: ah}
+- {name: pf-20261104-7-v7_s033_vs_ah, group_0: pf-20261104-7-v7_s033, group_1: ah}
+- {name: pf-20261104-7-v7_s034_vs_ah, group_0: pf-20261104-7-v7_s034, group_1: ah}
+- {name: pf-20261104-7-v7_s035_vs_ah, group_0: pf-20261104-7-v7_s035, group_1: ah}
+- {name: pf-20261104-7-v7_s036_vs_ah, group_0: pf-20261104-7-v7_s036, group_1: ah}
+- {name: pf-20261104-7-v7_s037_vs_ah, group_0: pf-20261104-7-v7_s037, group_1: ah}
+- {name: pf-20261104-7-v7_s038_vs_ah, group_0: pf-20261104-7-v7_s038, group_1: ah}
+- {name: pf-20261104-7-v7_s039_vs_ah, group_0: pf-20261104-7-v7_s039, group_1: ah}
+- {name: pf-20261104-7-v7_s040_vs_ah, group_0: pf-20261104-7-v7_s040, group_1: ah}
+- {name: pf-20261104-7-v7_s041_vs_ah, group_0: pf-20261104-7-v7_s041, group_1: ah}
+- {name: pf-20261104-7-v7_s042_vs_ah, group_0: pf-20261104-7-v7_s042, group_1: ah}
+- {name: pf-20261104-7-v7_s043_vs_ah, group_0: pf-20261104-7-v7_s043, group_1: ah}
+- {name: pf-20261104-7-v7_s044_vs_ah, group_0: pf-20261104-7-v7_s044, group_1: ah}
+- {name: pf-20261104-7-v7_s045_vs_ah, group_0: pf-20261104-7-v7_s045, group_1: ah}
+- {name: pf-20261104-7-v7_s046_vs_ah, group_0: pf-20261104-7-v7_s046, group_1: ah}
+- {name: pf-20261104-7-v7_s047_vs_ah, group_0: pf-20261104-7-v7_s047, group_1: ah}
+- {name: pf-20261104-7-v7_s048_vs_ah, group_0: pf-20261104-7-v7_s048, group_1: ah}
+- {name: pf-20261104-7-v7_s049_vs_ah, group_0: pf-20261104-7-v7_s049, group_1: ah}
+- {name: pf-20261104-7-v7_s050_vs_ah, group_0: pf-20261104-7-v7_s050, group_1: ah}
+- {name: pf-20261104-7-v7_s051_vs_ah, group_0: pf-20261104-7-v7_s051, group_1: ah}
+- {name: pf-20261104-7-v7_s052_vs_ah, group_0: pf-20261104-7-v7_s052, group_1: ah}
+- {name: pf-20261104-7-v7_s053_vs_ah, group_0: pf-20261104-7-v7_s053, group_1: ah}
+- {name: pf-20261104-7-v7_s054_vs_ah, group_0: pf-20261104-7-v7_s054, group_1: ah}
+- {name: pf-20261104-7-v7_s055_vs_ah, group_0: pf-20261104-7-v7_s055, group_1: ah}
+- {name: pf-20261104-7-v7_s056_vs_ah, group_0: pf-20261104-7-v7_s056, group_1: ah}
+- {name: pf-20261104-7-v7_s057_vs_ah, group_0: pf-20261104-7-v7_s057, group_1: ah}
+- {name: pf-20261104-7-v7_s058_vs_ah, group_0: pf-20261104-7-v7_s058, group_1: ah}
+- {name: pf-20261104-7-v7_s059_vs_ah, group_0: pf-20261104-7-v7_s059, group_1: ah}
+- {name: pf-20261104-7-v7_s060_vs_ah, group_0: pf-20261104-7-v7_s060, group_1: ah}
+- {name: pf-20261104-7-v7_s061_vs_ah, group_0: pf-20261104-7-v7_s061, group_1: ah}
+- {name: pf-20261104-7-v7_s062_vs_ah, group_0: pf-20261104-7-v7_s062, group_1: ah}
+- {name: pf-20261104-7-v7_s063_vs_ah, group_0: pf-20261104-7-v7_s063, group_1: ah}
+- {name: pf-20261104-7-v7_s064_vs_ah, group_0: pf-20261104-7-v7_s064, group_1: ah}
+- {name: pf-20261104-7-v7_s065_vs_ah, group_0: pf-20261104-7-v7_s065, group_1: ah}
+- {name: pf-20261104-7-v7_s066_vs_ah, group_0: pf-20261104-7-v7_s066, group_1: ah}
+- {name: pf-20261104-7-v7_s067_vs_ah, group_0: pf-20261104-7-v7_s067, group_1: ah}
+- {name: pf-20261104-7-v7_s068_vs_ah, group_0: pf-20261104-7-v7_s068, group_1: ah}
+- {name: pf-20261104-7-v7_s069_vs_ah, group_0: pf-20261104-7-v7_s069, group_1: ah}
+- {name: pf-20261104-7-v7_s070_vs_ah, group_0: pf-20261104-7-v7_s070, group_1: ah}
+- {name: pf-20261104-7-v7_s071_vs_ah, group_0: pf-20261104-7-v7_s071, group_1: ah}
+- {name: pf-20261104-7-v7_s072_vs_ah, group_0: pf-20261104-7-v7_s072, group_1: ah}
+- {name: pf-20261104-7-v7_s073_vs_ah, group_0: pf-20261104-7-v7_s073, group_1: ah}
+- {name: pf-20261104-7-v7_s074_vs_ah, group_0: pf-20261104-7-v7_s074, group_1: ah}
+- {name: pf-20261104-7-v7_s075_vs_ah, group_0: pf-20261104-7-v7_s075, group_1: ah}
+- {name: pf-20261104-7-v7_s076_vs_ah, group_0: pf-20261104-7-v7_s076, group_1: ah}
+- {name: pf-20261104-7-v7_s077_vs_ah, group_0: pf-20261104-7-v7_s077, group_1: ah}
+- {name: pf-20261104-7-v7_s078_vs_ah, group_0: pf-20261104-7-v7_s078, group_1: ah}
+- {name: pf-20261104-7-v7_s079_vs_ah, group_0: pf-20261104-7-v7_s079, group_1: ah}
+- {name: pf-20261104-7-v7_s080_vs_ah, group_0: pf-20261104-7-v7_s080, group_1: ah}
+- {name: pf-20261104-7-v7_s081_vs_ah, group_0: pf-20261104-7-v7_s081, group_1: ah}
+- {name: pf-20261104-7-v7_s082_vs_ah, group_0: pf-20261104-7-v7_s082, group_1: ah}
+- {name: pf-20261104-7-v7_s083_vs_ah, group_0: pf-20261104-7-v7_s083, group_1: ah}
+- {name: pf-20261104-7-v7_s084_vs_ah, group_0: pf-20261104-7-v7_s084, group_1: ah}
+- {name: pf-20261104-7-v7_s085_vs_ah, group_0: pf-20261104-7-v7_s085, group_1: ah}
+- {name: pf-20261104-7-v7_s086_vs_ah, group_0: pf-20261104-7-v7_s086, group_1: ah}
+- {name: pf-20261104-7-v7_s087_vs_ah, group_0: pf-20261104-7-v7_s087, group_1: ah}
+- {name: pf-20261104-7-v7_s088_vs_ah, group_0: pf-20261104-7-v7_s088, group_1: ah}
+- {name: pf-20261104-7-v7_s089_vs_ah, group_0: pf-20261104-7-v7_s089, group_1: ah}
+- {name: pf-20261104-7-v7_s090_vs_ah, group_0: pf-20261104-7-v7_s090, group_1: ah}
+- {name: pf-20261104-7-v7_s091_vs_ah, group_0: pf-20261104-7-v7_s091, group_1: ah}
+- {name: pf-20261104-7-v7_s092_vs_ah, group_0: pf-20261104-7-v7_s092, group_1: ah}
+- {name: pf-20261104-7-v7_s093_vs_ah, group_0: pf-20261104-7-v7_s093, group_1: ah}
+- {name: pf-20261104-7-v7_s094_vs_ah, group_0: pf-20261104-7-v7_s094, group_1: ah}
+- {name: pf-20261104-7-v7_s095_vs_ah, group_0: pf-20261104-7-v7_s095, group_1: ah}
+- {name: pf-20261104-7-v7_s096_vs_ah, group_0: pf-20261104-7-v7_s096, group_1: ah}
+- {name: pf-20261104-7-v7_s097_vs_ah, group_0: pf-20261104-7-v7_s097, group_1: ah}
+- {name: pf-20261104-7-v7_s098_vs_ah, group_0: pf-20261104-7-v7_s098, group_1: ah}
+- {name: pf-20261104-7-v7_s099_vs_ah, group_0: pf-20261104-7-v7_s099, group_1: ah}
+- {name: pf-20261104-7-v7_s100_vs_ah, group_0: pf-20261104-7-v7_s100, group_1: ah}
+- {name: pf-20261104-7-v7_s101_vs_ah, group_0: pf-20261104-7-v7_s101, group_1: ah}
+- {name: pf-20261104-7-v7_s102_vs_ah, group_0: pf-20261104-7-v7_s102, group_1: ah}
+- {name: pf-20261104-7-v7_s103_vs_ah, group_0: pf-20261104-7-v7_s103, group_1: ah}
+- {name: pf-20261104-7-v7_s104_vs_ah, group_0: pf-20261104-7-v7_s104, group_1: ah}
+- {name: pf-20261104-7-v7_s105_vs_ah, group_0: pf-20261104-7-v7_s105, group_1: ah}
+- {name: pf-20261104-7-v7_s106_vs_ah, group_0: pf-20261104-7-v7_s106, group_1: ah}
+- {name: pf-20261104-7-v7_s107_vs_ah, group_0: pf-20261104-7-v7_s107, group_1: ah}
+- {name: pf-20261104-7-v7_s108_vs_ah, group_0: pf-20261104-7-v7_s108, group_1: ah}
+- {name: pf-20261104-7-v7_s109_vs_ah, group_0: pf-20261104-7-v7_s109, group_1: ah}
+- {name: pf-20261104-7-v7_s110_vs_ah, group_0: pf-20261104-7-v7_s110, group_1: ah}
+- {name: pf-20261104-7-v7_s111_vs_ah, group_0: pf-20261104-7-v7_s111, group_1: ah}
+- {name: pf-20261104-7-v7_s112_vs_ah, group_0: pf-20261104-7-v7_s112, group_1: ah}
+- {name: pf-20261104-7-v7_s113_vs_ah, group_0: pf-20261104-7-v7_s113, group_1: ah}
+- {name: pf-20261104-7-v7_s114_vs_ah, group_0: pf-20261104-7-v7_s114, group_1: ah}
+- {name: pf-20261104-7-v7_s115_vs_ah, group_0: pf-20261104-7-v7_s115, group_1: ah}
+- {name: pf-20261104-7-v7_s116_vs_ah, group_0: pf-20261104-7-v7_s116, group_1: ah}
+- {name: pf-20261104-7-v7_s117_vs_ah, group_0: pf-20261104-7-v7_s117, group_1: ah}
+- {name: pf-20261104-7-v7_s118_vs_ah, group_0: pf-20261104-7-v7_s118, group_1: ah}
+- {name: pf-20261104-7-v7_s119_vs_ah, group_0: pf-20261104-7-v7_s119, group_1: ah}
+- {name: pf-20261104-7-v7_s120_vs_ah, group_0: pf-20261104-7-v7_s120, group_1: ah}
+- {name: pf-20261104-7-v7_s121_vs_ah, group_0: pf-20261104-7-v7_s121, group_1: ah}
+- {name: pf-20261104-7-v7_s122_vs_ah, group_0: pf-20261104-7-v7_s122, group_1: ah}
+- {name: pf-20261104-7-v7_s123_vs_ah, group_0: pf-20261104-7-v7_s123, group_1: ah}
+- {name: pf-20261104-7-v7_s124_vs_ah, group_0: pf-20261104-7-v7_s124, group_1: ah}
+- {name: pf-20261104-7-v7_s125_vs_ah, group_0: pf-20261104-7-v7_s125, group_1: ah}
+- {name: pf-20261104-7-v7_s126_vs_ah, group_0: pf-20261104-7-v7_s126, group_1: ah}
+- {name: pf-20261104-7-v7_s127_vs_ah, group_0: pf-20261104-7-v7_s127, group_1: ah}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 500
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261104-7-v7_sweep_p1of2
+figure_name: pf-20261104-7-v7_sweep_p1of2
+save_per_round: true
+basedir: .
+sweep: true
