@@ -1,0 +1,50 @@
+params:
+  margin:
+    definition: >-
+      points a member may give below the mean contribution of the other valid
+      members of the group this round before being punished (negative: members
+      somewhat above the mean are punished too)
+    type: float
+  slope:
+    definition: >-
+      punishment points per point of contribution below that tolerance (before
+      the round-0 factor and the cap)
+    type: float
+  cap:
+    definition: most points of punishment any one member gets in a round
+    type: float
+  first:
+    definition: >-
+      multiplier on the punishment in round 0, the first impression, dealt
+      before anything is known about the players
+    type: float
+  stop:
+    definition: >-
+      first round with no punishment: the norm-setting campaign covers rounds
+      0 .. stop-1, after which the manager never punishes again
+    type: int
+sweep_config:
+  margin: [-3, 3]
+  slope: [0.5, 5, log]
+  cap: [4, 25, log]
+  first: [0, 1.5]
+  stop: [2, 10]
+constraints:
+  - slope > 0
+  - cap > 0
+  - first >= 0
+  - stop >= 1
+code: |
+  cn = c[..., -1]
+  m = in_group[..., -1] * valid[..., -1]
+  zero = th.zeros_like(cn)
+  one = th.ones_like(cn)
+  n_others = m.sum(-1).unsqueeze(-1) - m
+  sum_others = (cn * m).sum(-1).unsqueeze(-1) - cn * m
+  others_mean = sum_others / th.maximum(n_others, one)
+  has_others = (n_others > 0).to(cn.dtype)
+  shortfall = th.maximum(others_mean - margin - cn, zero) * has_others
+  active = (t < stop).to(cn.dtype)
+  w = active * (first * (t == 0).to(cn.dtype) + (t > 0).to(cn.dtype))
+  raw = slope * shortfall * w
+  punishment = th.round(th.minimum(raw, cap + zero)) * m
