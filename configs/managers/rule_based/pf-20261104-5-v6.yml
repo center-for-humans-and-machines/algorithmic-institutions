@@ -1,0 +1,55 @@
+params:
+  k:
+    definition: punishment points per contribution point a valid member gives below the threshold, before the cap of 30; this is the dose the rule wants before timing and the share guard
+    type: float
+  thr:
+    definition: contribution threshold; members giving at least this much are never punished
+    type: float
+  w:
+    definition: within-block timing weight; the dose in a round is multiplied by w to the power of the round's position in its 4-round switching block (0 at rounds 0, 4, 8, ... right after a switch opportunity, 3 at the decision rounds 3, 7, 11, ...)
+    type: float
+  t_stop:
+    definition: last round in which the manager punishes; later rounds go unpunished
+    type: int
+  m:
+    definition: share margin of the guard, in pool points per member; the round's total punishment is cut so that our group's per-member pool share (1.6 * sum c - sum p) / n, averaged over the current block's rounds so far including this one, stays at least m above the other group's (their punishment this round estimated by their last round's); m very negative switches the guard off, positive m keeps a safety lead
+    type: float
+sweep_config:
+  k: [2.0, 30.0, log]
+  thr: [6.5, 13.5]
+  w: [0.0, 1.0]
+  t_stop: [3, 23]
+  m: [-15.0, 5.0]
+constraints:
+  - k > 0
+  - w >= 0
+code: |
+  ig = in_group
+  og = 1.0 - in_group
+  now = c[..., -1]
+  member = ig[..., -1] * valid[..., -1]
+  # the dose the rule wants: graded shortfall below thr, capped at 30, timed by block position
+  raw = k * th.relu(thr - now)
+  base = raw - th.relu(raw - 30.0)
+  block = th.floor(t / 4)
+  pos = t - 4 * block
+  want = base * th.pow(w, pos) * (t <= t_stop) * member
+  # share guard: per-member pool share of each group, rounds 0..t
+  zero_col = th.zeros_like(c[..., :1])
+  p_ours = th.cat([p, zero_col], -1)
+  p_lag = th.cat([zero_col, p], -1)
+  p_theirs = th.cat([p, p_lag[..., -1:]], -1)
+  n0 = ig.sum(1)
+  n1 = og.sum(1)
+  s0 = (1.6 * (c * ig).sum(1) - (p_ours * ig).sum(1)) / th.maximum(n0, th.ones_like(n0))
+  s1 = (1.6 * (c * og).sum(1) - (p_theirs * og).sum(1)) / th.maximum(n1, th.ones_like(n1))
+  rounds = th.cumsum(th.ones_like(c[0, 0]), 0) - 1.0
+  in_block = (rounds >= 4 * block).float()
+  gap_sum = ((s0 - s1) * in_block).sum(-1)
+  n_rounds = in_block.sum()
+  n_now = n0[..., -1]
+  allowed = th.relu(n_now * (gap_sum - m * n_rounds))
+  total = want.sum(-1)
+  ratio = allowed / (total + 1e-6)
+  scale = ratio - th.relu(ratio - 1.0)
+  punishment = want * scale.unsqueeze(-1)
