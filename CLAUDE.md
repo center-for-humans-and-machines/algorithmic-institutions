@@ -230,36 +230,6 @@ evaluation suite likewise keeps one copy per game.
   (`manager/linear_opponent.py`, batched) or a `.pt` GNN; set
   `env_args.timeout_contribution` as in the sims.
 
-### Git Workflow
-
-**IMPORTANT**: All commits must be made using the `/commit` skill. This ensures staged files are reviewed before committing.
-
-- `main` is frozen for now: do not commit, push or merge to it (a team
-  convention; GitHub does not enforce it).
-- Work on the optimized stack (Levin's stack, the rule-based managers, RL
-  training on them) goes on `autoresearch-optimized-stack`: branch off it and
-  open PRs into it, not into `main`.
-- `policy-finder-base` is cut from `autoresearch-optimized-stack` with the
-  existing rule-based managers removed (#235). It never merges back: #227 and
-  the agent core land on it, and every policy-finder instance branches off it.
-  It carries `.raven_remote_dir`, so the cluster scripts (`/simulate`,
-  `remote_test.sh`, `fetch_cluster.sh`) sync, run and fetch in
-  `~/ai-isolated/<branch>` (`/` as `--`) on Raven, never in the shared
-  checkout; `AI_REMOTE_DIR` still overrides (`scripts/raven_remote_dir.sh`).
-  An instance's worktree is a sparse checkout of
-  `scripts/policy_finder/instance_paths`: the code, data, reference sims and
-  `docs/reports/basics.md`, but no other reports, notes, plans or analyses,
-  so the agent works out human and simulated behaviour itself.
-- In the Claude proxy the policy finder branches off `policy-finder-proxy`
-  instead (`docs/plans/policy-finder-proxy-adapter.md`). Each agent runs in its
-  own container from the container spawner, with
-  `--dangerously-skip-permissions`: the container is the only sandbox (no
-  guard hook, no Claude Code sandbox), and it sees an export of its own
-  lineage only (`export_instance.py`). `pipeline.py` runs a version end to
-  end on Raven snapshots through the command server, `campaign.py` a whole
-  campaign; worktrees live in `$PF_RUNS/worktrees`. `run_sweep.sh` and
-  `run_final.sh` remain the SSH path.
-
 ### Environment
 
 - PyG/CUDA packages are Linux-only (see `sys_platform` markers in `pyproject.toml`)
@@ -331,7 +301,8 @@ scripts/remote_test.sh -- -k test_encoder -v
 
 The proxy in `claude_proxies/algoinst` submits Raven jobs through `CC_command_server` (`CC_PROJECT=algoinst`). That container has no Raven SSH keys. The checkout it syncs is `/u/ykeller/algorithmic-institutions`. A job is `python -m aimanager <train-ah|train-manager|simulate> <config>` inside `/raven/ptmp/ykeller/cc/containers/apptainer/algoinst.sif`. `WANDB_ENTITY=chm-ml` and `WANDB_PROJECT=algorithmic-institutions` are set on the container; the API key comes from the cluster secrets file. The `run_on_cluster` skill in the proxy is the agent path. The SSH scripts below stay the manual path.
 
-- `/sync_to_cluster` excludes `artifacts/` and `plots/`; send what a job reads with `"includes": ["artifacts"]`. The sync never deletes remote files, so the Raven checkout must be kept a mirror of the local tree by hand (a stray top-level `aimanager/` there shadows `src/`).
+- `/sync_to_cluster` with `{"ref": "<sha or branch>"}` publishes that commit to `/u/ykeller/cc-snapshots/<sha>/` and returns the sha. Pass it as `checkout` on `/submit_slurm_job` and `/run_in_container`. The snapshot is not written again. Artifacts stay in the live tree, read-only; `plots/` and `.log/` for that job are `/u/ykeller/cc-snapshot-outputs/<sha>/`.
+- Without `ref`, `/sync_to_cluster` still rsyncs the working tree. It excludes `artifacts/` and `plots/`; send what a job reads with `"includes": ["artifacts"]`. That sync never deletes remote files, so the Raven checkout must be kept a mirror of the local tree by hand (a stray top-level `aimanager/` there shadows `src/`). It can also change files under a running job.
 - `train-ah` on an orchestrator YAML takes its `job_id` from the labels, as `run.py` does (`cli.py:default_job_id`), so a repo config writes the shipped artifact's path.
 - The image runs torch 1.11: validate a new rule there (`validate-rule` via `/run_in_container`), since torch 2.5 accepts code 1.11 rejects.
 - Handover status and the Raven checks: `docs/reports/handover/06_raven_integration_check.md`.
