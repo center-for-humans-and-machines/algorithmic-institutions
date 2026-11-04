@@ -27,8 +27,10 @@ lineage only.
 State is `$PF_RUNS/campaign/<campaign>.json`: the members of each generation,
 written before the generation runs. `run` resumes a killed campaign: scored and
 failed versions stay as they are, a version that stopped resumes where it
-stopped. A version that still has an error after error_retries stops the
-campaign (that is the environment, not the agent): fix it and `run` again.
+stopped. Before resuming a version after an error the campaign waits until
+Raven answers; an error while Raven was down is not counted. A version that
+still has an error after error_retries stops the campaign (that is the
+environment, not the agent): fix it and `run` again.
 
 Usage:
     python scripts/policy_finder/campaign.py run <campaign.yml>
@@ -47,6 +49,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import cluster_proxy  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 DEFAULTS = {
@@ -173,13 +178,18 @@ class Campaign:
                     f" at {self._failed_step(state)}"))
                 return status
             if state and status == "error":
-                if retries >= self.settings["error_retries"]:
-                    raise CampaignError(
-                        f"{stem}: error after {retries} retries: {state.get('error', '')[-800:]}")
-                retries += 1
-                self.log(f"{stem}: error, resuming ({retries}/{self.settings['error_retries']})")
                 if ran:  # an error this run hit: give the environment time
                     time.sleep(self.settings["retry_wait"])
+                if self.wait_for_cluster(stem):
+                    # Raven was down: the error says nothing about the version
+                    self.log(f"{stem}: error while Raven was down, resuming")
+                else:
+                    if retries >= self.settings["error_retries"]:
+                        raise CampaignError(f"{stem}: error after {retries} retries: "
+                                            f"{state.get('error', '')[-800:]}")
+                    retries += 1
+                    self.log(f"{stem}: error, resuming "
+                             f"({retries}/{self.settings['error_retries']})")
             elif state and status == "running":
                 self.log(f"{stem}: resuming")
             else:
@@ -190,6 +200,24 @@ class Campaign:
             if after is None or after == state and after.get("status") != "error":
                 # the command failed before the pipeline wrote anything new
                 raise CampaignError(f"{stem}: start failed (exit {code}), see {out}")
+
+    @staticmethod
+    def cluster_up():
+        try:
+            cluster_proxy.queue()
+            return True
+        except Exception:  # noqa: BLE001 - any failure to reach Raven
+            return False
+
+    def wait_for_cluster(self, stem):
+        """Until Raven answers squeue; True if it did not at first."""
+        waited = False
+        while not self.cluster_up():
+            if not waited:
+                self.log(f"{stem}: Raven does not answer, waiting for it")
+            waited = True
+            time.sleep(max(self.settings["retry_wait"], 60))
+        return waited
 
     @staticmethod
     def _failed_step(state):
