@@ -1,0 +1,671 @@
+# Sweep of /home/kappablanca/pf_runs/worktrees/pf-20261104-6/configs/managers/rule_based/pf-20261104-6.yml (#227), written by scripts/policy_finder/generate_sim_config.py:
+# 128 of 256 distinct design points (256 Sobol points), each against `ah`; stack and sim parameters from
+# configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 42
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261104-6_s000:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.8046837374567986, floor: 13.039124069735408, rate: 0.34338226588021853, cap: 2.6837635920205987, decision_mult: 0.13994546700268984}
+  pf-20261104-6_s001:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.732643835246563, floor: 3.9915587697178125, rate: 0.8467458138682272, cap: 7.526218821486463, decision_mult: 0.7246135780587792}
+  pf-20261104-6_s002:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.2863089442253113, floor: 9.115403264760971, rate: 0.1787855385911205, cap: 1.2621916968220808, decision_mult: 0.9830146851018071}
+  pf-20261104-6_s003:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.753009781241417, floor: 0.013150673359632492, rate: 1.755393985169651, cap: 13.439633145446768, decision_mult: 0.38265850488096476}
+  pf-20261104-6_s004:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.858825698494911, floor: 7.762829255312681, rate: 0.579100251424904, cap: 7.975751338867207, decision_mult: 0.2712408974766731}
+  pf-20261104-6_s005:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.32157447934150696, floor: 2.372477114200592, rate: 0.49340390228334524, cap: 1.5241674695478329, decision_mult: 0.871631320565939}
+  pf-20261104-6_s006:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.6273148283362389, floor: 10.784205684438348, rate: 2.5347920957281858, cap: 4.543817939359275, decision_mult: 0.613367423415184}
+  pf-20261104-6_s007:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.8394622430205345, floor: 5.448541251942515, rate: 0.12248360925924691, cap: 3.152001490788988, decision_mult: 0.028664831072092056}
+  pf-20261104-6_s008:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.0860956609249115, floor: 10.1175134498626, rate: 1.999580048233352, cap: 1.8286274894322478, decision_mult: 0.6411140002310276}
+  pf-20261104-6_s009:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.37687818706035614, floor: 1.7266155388206244, rate: 0.14778294482071955, cap: 10.094983122541498, decision_mult: 0.24394594132900238}
+  pf-20261104-6_s010:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.5732130035758018, floor: 13.220922980457544, rate: 0.7345608397996701, cap: 3.352955106568666, decision_mult: 0.4856817089021206}
+  pf-20261104-6_s011:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.1062108650803566, floor: 4.775337360799313, rate: 0.40902174320053014, cap: 4.673021908379501, decision_mult: 0.8985378220677376}
+  pf-20261104-6_s012:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.000634975731373, floor: 11.955506913363934, rate: 0.21499889590225837, cap: 5.437774910042569, decision_mult: 0.7598181003704667}
+  pf-20261104-6_s013:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.5377069637179375, floor: 6.784322265535593, rate: 1.380157208222441, cap: 2.0431147439369086, decision_mult: 0.34692774433642626}
+  pf-20261104-6_s014:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.481966570019722, floor: 8.004440924152732, rate: 0.2856039278435719, cap: 12.046016364371795, decision_mult: 0.1053294250741601}
+  pf-20261104-6_s015:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.0510770082473755, floor: 2.8879435677081347, rate: 1.0776297569139874, cap: 1.0981879077153613, decision_mult: 0.5025319652631879}
+  pf-20261104-6_s016:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.325497083365917, floor: 8.557600632309914, rate: 0.1335835062846622, cap: 3.9888014310427398, decision_mult: 0.4160310495644808}
+  pf-20261104-6_s017:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.1450585052371025, floor: 3.2215087972581387, rate: 2.2352014994782676, cap: 2.800290761640866, decision_mult: 0.940707391127944}
+  pf-20261104-6_s018:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.8433769345283508, floor: 11.633877767249942, rate: 0.3709504527841446, cap: 8.43653859041983, decision_mult: 0.6990459058433771}
+  pf-20261104-6_s019:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.3687931150197983, floor: 6.243098640814424, rate: 0.8238582389245455, cap: 1.5598955016991032, decision_mult: 0.15880763344466686}
+  pf-20261104-6_s020:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.27124060690403, floor: 13.994807058945298, rate: 1.5261609887332226, cap: 1.3422773809406072, decision_mult: 0.047401352785527706}
+  pf-20261104-6_s021:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.8007613718509674, floor: 4.892126960679889, rate: 0.19226374907157012, cap: 13.826767351077136, decision_mult: 0.5876664770767093}
+  pf-20261104-6_s022:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.2430984005331993, floor: 10.016184713691473, rate: 1.1876671750078975, cap: 2.3436670086953995, decision_mult: 0.82946493383497}
+  pf-20261104-6_s023:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.282394014298916, floor: 0.9681923240423203, rate: 0.25455647287971633, cap: 6.650738494791045, decision_mult: 0.3047619787976146}
+  pf-20261104-6_s024:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.533788412809372, floor: 11.106021750718355, rate: 0.9368953786506965, cap: 11.463383459437832, decision_mult: 0.9275279967114329}
+  pf-20261104-6_s025:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.9954691380262375, floor: 5.9899517968297005, rate: 0.3071359113615016, cap: 1.0547683977214057, decision_mult: 0.46535160299390554}
+  pf-20261104-6_s026:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.0471506342291832, floor: 7.209429221227765, rate: 1.9358623516031828, cap: 6.285030282723916, decision_mult: 0.20715090166777372}
+  pf-20261104-6_s027:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.521921433508396, floor: 2.0386715587228537, rate: 0.15938267413229595, cap: 2.290666934968724, decision_mult: 0.6848892411217093}
+  pf-20261104-6_s028:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.6192261651158333, floor: 9.2165984865278, rate: 0.4460872960789914, cap: 3.854855758098319, decision_mult: 0.546158192679286}
+  pf-20261104-6_s029:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.0900144502520561, floor: 0.7714403737336397, rate: 0.6477483694648639, cap: 5.2116974672580305, decision_mult: 0.06839300133287907}
+  pf-20261104-6_s030:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.8976773768663406, floor: 12.265533722937107, rate: 0.11110639207260387, cap: 1.749375208217779, decision_mult: 0.32673138938844204}
+  pf-20261104-6_s031:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.577139139175415, floor: 3.8750629015266895, rate: 2.8446792824208513, cap: 9.747479867875928, decision_mult: 0.7889343965798616}
+  pf-20261104-6_s032:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.653020791709423, floor: 8.910499008372426, rate: 0.7030401457536835, cap: 6.827882187741711, decision_mult: 0.01060693059116602}
+  pf-20261104-6_s033:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.817826621234417, floor: 0.24531911872327328, rate: 0.4360995903633716, cap: 2.484455425525978, decision_mult: 0.5972301410511136}
+  pf-20261104-6_s034:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.1390393376350403, floor: 12.807089243084192, rate: 2.1142911132733544, cap: 14.808688345591651, decision_mult: 0.8545310581102967}
+  pf-20261104-6_s035:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.6644078344106674, floor: 4.196596644818783, rate: 0.14073987037011235, cap: 1.363954952427777, decision_mult: 0.2522238465026021}
+  pf-20261104-6_s036:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.691644564270973, floor: 10.579408161342144, rate: 0.26773498570226295, cap: 1.6014115642078748, decision_mult: 0.39093581959605217}
+  pf-20261104-6_s037:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.22072091698646545, floor: 5.680816534906626, rate: 1.1253462945138606, cap: 8.94352763758634, decision_mult: 0.9932775124907494}
+  pf-20261104-6_s038:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.7901026234030724, floor: 7.530473968014121, rate: 0.22564391811684692, cap: 2.999096037513701, decision_mult: 0.7358694262802601}
+  pf-20261104-6_s039:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.7351895198225975, floor: 2.577194632962346, rate: 1.3045824496360061, cap: 4.053306315987293, decision_mult: 0.14921197295188904}
+  pf-20261104-6_s040:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.487697809934616, floor: 13.425961194559932, rate: 0.1877154872930566, cap: 9.198122897965114, decision_mult: 0.5205741822719574}
+  pf-20261104-6_s041:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.041634127497673035, floor: 4.543302873149514, rate: 1.6599610399580558, cap: 1.7034204335247847, decision_mult: 0.12145091965794563}
+  pf-20261104-6_s042:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.9704213365912437, floor: 10.349681347608566, rate: 0.3220320684019724, cap: 5.130572740330147, decision_mult: 0.3640436753630638}
+  pf-20261104-6_s043:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.444873608648777, floor: 1.5217107348144054, rate: 0.8846061986089283, cap: 3.598068852099362, decision_mult: 0.7788509540259838}
+  pf-20261104-6_s044:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.41787738353014, floor: 8.209158729761839, rate: 2.6813199762195135, cap: 2.1615242668226347, decision_mult: 0.8902457924559712}
+  pf-20261104-6_s045:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.888499729335308, floor: 2.6555885672569275, rate: 0.11669469562997725, cap: 6.120057646161533, decision_mult: 0.4754040325060487}
+  pf-20261104-6_s046:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.0691179782152176, floor: 12.187781700864434, rate: 0.5544806848361652, cap: 1.0383292028315327, decision_mult: 0.23270482290536165}
+  pf-20261104-6_s047:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.405288457870483, floor: 6.5795242469757795, rate: 0.526286438093546, cap: 10.699990964339033, decision_mult: 0.6318623283877969}
+  pf-20261104-6_s048:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.224614672362804, floor: 11.428413141518831, rate: 1.8558662644474144, cap: 3.06927211505199, decision_mult: 0.2964682187885046}
+  pf-20261104-6_s049:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.3122723028063774, floor: 6.475561209022999, rate: 0.16965151041825474, cap: 4.287655972116106, decision_mult: 0.8191894609481096}
+  pf-20261104-6_s050:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.7390758395195007, floor: 8.32500465400517, rate: 0.9922925653438672, cap: 1.4226624767432272, decision_mult: 0.5764309000223875}
+  pf-20261104-6_s051:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.205973133444786, floor: 3.4268400128930807, rate: 0.29201394382624, cap: 7.851419148520699, decision_mult: 0.03814365901052952}
+  pf-20261104-6_s052:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.1860900074243546, floor: 9.811040496453643, rate: 0.10432842634184543, cap: 13.086626309205256, decision_mult: 0.17685193847864866}
+  pf-20261104-6_s053:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.649126797914505, floor: 1.2009754050523043, rate: 2.9657194795313133, cap: 1.1910598416080134, decision_mult: 0.7151657929643989}
+  pf-20261104-6_s054:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.3316676840186119, floor: 13.76210419088602, rate: 0.46895060137041356, cap: 7.0248545633790815, decision_mult: 0.9578174231573939}
+  pf-20261104-6_s055:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.135153256356716, floor: 5.097351390868425, rate: 0.6112609486928426, cap: 2.641983296790461, decision_mult: 0.4350693291053176}
+  pf-20261104-6_s056:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.884609550237656, floor: 7.414761558175087, rate: 0.3901247085327673, cap: 1.1641851480609533, decision_mult: 0.7972133224830031}
+  pf-20261104-6_s057:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.5781945437192917, floor: 1.8060767017304897, rate: 0.7777734638843229, cap: 12.366640747743585, decision_mult: 0.3369921324774623}
+  pf-20261104-6_s058:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.4013909325003624, floor: 11.338482988998294, rate: 0.12548643042116717, cap: 2.0761482627761754, decision_mult: 0.0796434273943305}
+  pf-20261104-6_s059:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.9348026886582375, floor: 5.784485841169953, rate: 2.331276336468188, cap: 5.8238082850187105, decision_mult: 0.5554306013509631}
+  pf-20261104-6_s060:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.9544375613331795, floor: 12.470759326592088, rate: 1.258414488003414, cap: 4.953754979072379, decision_mult: 0.6668291334062815}
+  pf-20261104-6_s061:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.4915877506136894, floor: 3.642361206933856, rate: 0.24212378329962833, cap: 3.4422728201741637, decision_mult: 0.19101534597575665}
+  pf-20261104-6_s062:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.559046819806099, floor: 9.449380185455084, rate: 1.46370265795325, cap: 10.25799566480161, decision_mult: 0.4482573587447405}
+  pf-20261104-6_s063:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.974319100379944, floor: 0.5662947744131088, rate: 0.20473605838719117, cap: 1.9584854110809378, decision_mult: 0.9085054006427526}
+  pf-20261104-6_s064:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.936450690031052, floor: 7.559768136590719, rate: 1.4205889742878661, cap: 12.472063476620757, decision_mult: 0.6040565706789494}
+  pf-20261104-6_s065:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.6007452458143234, floor: 2.4437048584222794, rate: 0.22099061712691367, cap: 1.1483360454882732, decision_mult: 0.0036660581827163696}
+  pf-20261104-6_s066:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.4182043299078941, floor: 10.663390899077058, rate: 1.0483051319735588, cap: 5.781038250136442, decision_mult: 0.26109107956290245}
+  pf-20261104-6_s067:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.8847926035523415, floor: 5.492639912292361, rate: 0.27744595419446283, cap: 2.102802208547184, decision_mult: 0.8457935228943825}
+  pf-20261104-6_s068:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.974990554153919, floor: 12.776517195627093, rate: 0.15164150365103998, cap: 3.543351080474391, decision_mult: 0.9843759471550584}
+  pf-20261104-6_s069:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.43784045428037643, floor: 4.331365758553147, rate: 2.048035239720689, cap: 4.7873874211286855, decision_mult: 0.39970768708735704}
+  pf-20261104-6_s070:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.511036828160286, floor: 8.825237140059471, rate: 0.399302360773182, cap: 1.902063524472023, decision_mult: 0.1424198755994439}
+  pf-20261104-6_s071:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.955597162246704, floor: 0.4347729943692684, rate: 0.7157967741699288, cap: 10.61930530785286, decision_mult: 0.7427759664133191}
+  pf-20261104-6_s072:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.204325132071972, floor: 12.103852577507496, rate: 0.5061806447123911, cap: 4.3423315371851015, decision_mult: 0.11450247932225466}
+  pf-20261104-6_s073:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.25878798216581345, floor: 6.767754066735506, rate: 0.5932575625027199, cap: 3.0464717387295233, decision_mult: 0.5273929247632623}
+  pf-20261104-6_s074:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.6913288235664368, floor: 8.179917758330703, rate: 0.11954845185836988, cap: 7.743910690829914, decision_mult: 0.7701057316735387}
+  pf-20261104-6_s075:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.2244316190481186, floor: 2.7891319561749697, rate: 2.470550425653843, cap: 1.4346754771537413, decision_mult: 0.37290334049612284}
+  pf-20261104-6_s076:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.134481802582741, floor: 10.43489001877606, rate: 0.871733552557109, cap: 1.2329065640762793, decision_mult: 0.48418358713388443}
+  pf-20261104-6_s077:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.6714450418949127, floor: 1.3322032447904348, rate: 0.35287797854007424, cap: 12.708531350989189, decision_mult: 0.8813517950475216}
+  pf-20261104-6_s078:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.3482486233115196, floor: 13.456479627639055, rate: 1.7079778456913548, cap: 2.553050175952459, decision_mult: 0.6387764364480972}
+  pf-20261104-6_s079:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.18493040651083, floor: 4.408480562269688, rate: 0.17364296981568397, cap: 7.2305521841035745, decision_mult: 0.2259204126894474}
+  pf-20261104-6_s080:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.441760867834091, floor: 13.571261504665017, rate: 0.665618835946859, cap: 1.680876923519984, decision_mult: 0.8278964785858989}
+  pf-20261104-6_s081:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.028907224535942, floor: 5.180370269343257, rate: 0.4592805639935731, cap: 9.273205247862474, decision_mult: 0.28763150330632925}
+  pf-20261104-6_s082:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.9595254883170128, floor: 9.674882989376783, rate: 2.762671197574379, cap: 3.645569930045554, decision_mult: 0.04499297868460417}
+  pf-20261104-6_s083:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.485073246061802, floor: 1.2293040454387665, rate: 0.10811240088888949, cap: 5.090934421085356, decision_mult: 0.5696960231289268}
+  pf-20261104-6_s084:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.4031522944569588, floor: 8.515423953533173, rate: 0.3146317029926101, cap: 5.916308251292097, decision_mult: 0.7082897704094648}
+  pf-20261104-6_s085:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.9325300380587578, floor: 3.344245981425047, rate: 0.9611952380275736, cap: 2.2243800986378504, decision_mult: 0.1836135182529688}
+  pf-20261104-6_s086:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.1113172322511673, floor: 11.56414601020515, rate: 0.15533750527878235, cap: 11.079930056860707, decision_mult: 0.4263890143483877}
+  pf-20261104-6_s087:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.4142762422561646, floor: 6.447655329480767, rate: 1.8895426729198175, cap: 1.0081113792847844, decision_mult: 0.9666274357587099}
+  pf-20261104-6_s088:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.667520575225353, floor: 9.585377683863044, rate: 0.19691548777888293, cap: 2.4650633959327806, decision_mult: 0.32816298492252827}
+  pf-20261104-6_s089:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.8616321012377739, floor: 0.5378057081252337, rate: 1.566067090551952, cap: 6.917468860049792, decision_mult: 0.8059280272573233}
+  pf-20261104-6_s090:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.18101376295089722, floor: 12.661441586911678, rate: 0.24804384938211083, cap: 1.3749714429689541, decision_mult: 0.5487034115940332}
+  pf-20261104-6_s091:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.6556453555822372, floor: 3.559182319790125, rate: 1.1594921032510015, cap: 14.611460978703365, decision_mult: 0.08650031499564648}
+  pf-20261104-6_s092:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.737325683236122, floor: 11.202910546213388, rate: 2.297340439520476, cap: 8.682554776612031, decision_mult: 0.1977692386135459}
+  pf-20261104-6_s093:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.2082493603229523, floor: 5.812551729381084, rate: 0.13750597186463392, cap: 1.6581422996804271, decision_mult: 0.6599455429241061}
+  pf-20261104-6_s094:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.7794621214270592, floor: 7.224502267315984, rate: 0.8002750726354557, cap: 4.1708185611823865, decision_mult: 0.9173078453168273}
+  pf-20261104-6_s095:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.695245705544949, floor: 1.8888311590999365, rate: 0.36087894980394136, cap: 2.899002838547962, decision_mult: 0.43956935685127974}
+  pf-20261104-6_s096:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.52112802863121, floor: 10.868509717285633, rate: 0.1137195925392334, cap: 1.0686960263011067, decision_mult: 0.733507513999939}
+  pf-20261104-6_s097:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.9496144503355026, floor: 5.259831536561251, rate: 2.618014093659273, cap: 11.374847820768883, decision_mult: 0.13116597011685371}
+  pf-20261104-6_s098:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.0072773918509483, floor: 7.792443102225661, rate: 0.5390677127969308, cap: 2.2603458141291712, decision_mult: 0.38944297283887863}
+  pf-20261104-6_s099:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.5325066223740578, floor: 2.2384526301175356, rate: 0.5690467153512961, cap: 6.336317303813724, decision_mult: 0.9761005155742168}
+  pf-20261104-6_s100:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.5753691866993904, floor: 9.030676471069455, rate: 1.6126309480331786, cap: 5.39677021598705, decision_mult: 0.8648125203326344}
+  pf-20261104-6_s101:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.10458099097013474, floor: 0.20228502713143826, rate: 0.1826356739179604, cap: 3.7426800488241003, decision_mult: 0.278189399279654}
+  pf-20261104-6_s102:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.9062624722719193, floor: 13.00908537581563, rate: 0.9093061718842974, cap: 9.422941738448067, decision_mult: 0.019805227406322956}
+  pf-20261104-6_s103:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.618920922279358, floor: 4.12600664049387, rate: 0.3315175436278755, cap: 1.8002413428109734, decision_mult: 0.6221125880256295}
+  pf-20261104-6_s104:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.369586519896984, floor: 7.974666651338339, rate: 1.093034270345771, cap: 2.8229156441372227, decision_mult: 0.23517401609569788}
+  pf-20261104-6_s105:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.15985798090696335, floor: 3.0218080431222916, rate: 0.260543381377736, cap: 3.935687322270689, decision_mult: 0.6500156270340085}
+  pf-20261104-6_s106:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.8521949648857117, floor: 11.871042871847749, rate: 1.340728623117168, cap: 1.5477159833548682, decision_mult: 0.8916313434019685}
+  pf-20261104-6_s107:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.3267788738012314, floor: 6.972871555015445, rate: 0.23233889836346117, cap: 8.547209905247177, decision_mult: 0.4924737485125661}
+  pf-20261104-6_s108:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.2841639667749405, floor: 13.251121683046222, rate: 0.4250689170576892, cap: 14.227665601643018, decision_mult: 0.353868555277586}
+  pf-20261104-6_s109:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.7546432316303253, floor: 4.641049915924668, rate: 0.6863000953750374, cap: 1.2974829543237252, decision_mult: 0.7529917284846306}
+  pf-20261104-6_s110:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.2029617056250572, floor: 10.202400669455528, rate: 0.14418799764658893, cap: 6.45665273178143, decision_mult: 0.5112695582211018}
+  pf-20261104-6_s111:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.271545849740505, floor: 1.5376411937177181, rate: 2.169378705365176, cap: 2.4266862148572494, decision_mult: 0.09646213054656982}
+  pf-20261104-6_s112:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.108469218015671, floor: 9.879707684740424, rate: 0.23634284418886617, cap: 10.020819709524524, decision_mult: 0.9475910430774093}
+  pf-20261104-6_s113:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.428556963801384, floor: 0.9970560390502214, rate: 1.2266656927733002, cap: 1.8520989380332047, decision_mult: 0.4092770991846919}
+  pf-20261104-6_s114:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.6228165850043297, floor: 13.803643129765987, rate: 0.21005716816955916, cap: 4.712870501985974, decision_mult: 0.167495577596128}
+  pf-20261104-6_s115:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.0898187533020973, floor: 4.975679192692041, rate: 1.4996583624822295, cap: 3.307316845631513, decision_mult: 0.6902435226365924}
+  pf-20261104-6_s116:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.054311938583851, floor: 11.76907754316926, rate: 0.7568535984672882, cap: 1.9842496515201606, decision_mult: 0.5789518300443888}
+  pf-20261104-6_s117:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.5172400400042534, floor: 6.2155140563845634, rate: 0.378937251012628, cap: 5.629291015429972, decision_mult: 0.056230438873171806}
+  pf-20261104-6_s118:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.4635748416185379, floor: 8.747485222294927, rate: 2.4003490607880473, cap: 1.1304378131065578, decision_mult: 0.2979050297290087}
+  pf-20261104-6_s119:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.0033814907073975, floor: 3.139234444126487, rate: 0.1289685075655717, cap: 11.64149143367572, decision_mult: 0.8361921813338995}
+  pf-20261104-6_s120:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 5.750751428306103, floor: 12.45675084926188, rate: 2.885346194577642, cap: 7.423144118409633, decision_mult: 0.45859008096158504}
+  pf-20261104-6_s121:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -0.7119210883975029, floor: 3.7915642838925123, rate: 0.10135783158503807, cap: 2.7064183747386386, decision_mult: 0.934403957799077}
+  pf-20261104-6_s122:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 0.2676613926887512, floor: 9.353129129856825, rate: 0.6292422626413953, cap: 13.611048543566248, decision_mult: 0.6760791670531034}
+  pf-20261104-6_s123:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 2.8009606450796127, floor: 0.7426298558712006, rate: 0.48206267596916363, cap: 1.2528186227182014, decision_mult: 0.21583127416670322}
+  pf-20261104-6_s124:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 3.836227312684059, floor: 7.019491016864777, rate: 0.1656355854128415, cap: 1.4728579024132715, decision_mult: 0.07722977828234434}
+  pf-20261104-6_s125:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 1.3734785616397858, floor: 2.1208927147090435, rate: 1.8086659586006495, cap: 8.209271353157144, decision_mult: 0.5374511172994971}
+  pf-20261104-6_s126:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: -1.6771437153220177, floor: 10.970768777653575, rate: 0.29966509595456187, cap: 3.26275240632109, decision_mult: 0.7956692157313228}
+  pf-20261104-6_s127:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-6.yml
+    params: {margin: 4.856079183518887, floor: 6.017482766881585, rate: 1.0164586571317882, cap: 4.4125506837372, decision_mult: 0.3198821311816573}
+pairings:
+- {name: pf-20261104-6_s000_vs_ah, group_0: pf-20261104-6_s000, group_1: ah}
+- {name: pf-20261104-6_s001_vs_ah, group_0: pf-20261104-6_s001, group_1: ah}
+- {name: pf-20261104-6_s002_vs_ah, group_0: pf-20261104-6_s002, group_1: ah}
+- {name: pf-20261104-6_s003_vs_ah, group_0: pf-20261104-6_s003, group_1: ah}
+- {name: pf-20261104-6_s004_vs_ah, group_0: pf-20261104-6_s004, group_1: ah}
+- {name: pf-20261104-6_s005_vs_ah, group_0: pf-20261104-6_s005, group_1: ah}
+- {name: pf-20261104-6_s006_vs_ah, group_0: pf-20261104-6_s006, group_1: ah}
+- {name: pf-20261104-6_s007_vs_ah, group_0: pf-20261104-6_s007, group_1: ah}
+- {name: pf-20261104-6_s008_vs_ah, group_0: pf-20261104-6_s008, group_1: ah}
+- {name: pf-20261104-6_s009_vs_ah, group_0: pf-20261104-6_s009, group_1: ah}
+- {name: pf-20261104-6_s010_vs_ah, group_0: pf-20261104-6_s010, group_1: ah}
+- {name: pf-20261104-6_s011_vs_ah, group_0: pf-20261104-6_s011, group_1: ah}
+- {name: pf-20261104-6_s012_vs_ah, group_0: pf-20261104-6_s012, group_1: ah}
+- {name: pf-20261104-6_s013_vs_ah, group_0: pf-20261104-6_s013, group_1: ah}
+- {name: pf-20261104-6_s014_vs_ah, group_0: pf-20261104-6_s014, group_1: ah}
+- {name: pf-20261104-6_s015_vs_ah, group_0: pf-20261104-6_s015, group_1: ah}
+- {name: pf-20261104-6_s016_vs_ah, group_0: pf-20261104-6_s016, group_1: ah}
+- {name: pf-20261104-6_s017_vs_ah, group_0: pf-20261104-6_s017, group_1: ah}
+- {name: pf-20261104-6_s018_vs_ah, group_0: pf-20261104-6_s018, group_1: ah}
+- {name: pf-20261104-6_s019_vs_ah, group_0: pf-20261104-6_s019, group_1: ah}
+- {name: pf-20261104-6_s020_vs_ah, group_0: pf-20261104-6_s020, group_1: ah}
+- {name: pf-20261104-6_s021_vs_ah, group_0: pf-20261104-6_s021, group_1: ah}
+- {name: pf-20261104-6_s022_vs_ah, group_0: pf-20261104-6_s022, group_1: ah}
+- {name: pf-20261104-6_s023_vs_ah, group_0: pf-20261104-6_s023, group_1: ah}
+- {name: pf-20261104-6_s024_vs_ah, group_0: pf-20261104-6_s024, group_1: ah}
+- {name: pf-20261104-6_s025_vs_ah, group_0: pf-20261104-6_s025, group_1: ah}
+- {name: pf-20261104-6_s026_vs_ah, group_0: pf-20261104-6_s026, group_1: ah}
+- {name: pf-20261104-6_s027_vs_ah, group_0: pf-20261104-6_s027, group_1: ah}
+- {name: pf-20261104-6_s028_vs_ah, group_0: pf-20261104-6_s028, group_1: ah}
+- {name: pf-20261104-6_s029_vs_ah, group_0: pf-20261104-6_s029, group_1: ah}
+- {name: pf-20261104-6_s030_vs_ah, group_0: pf-20261104-6_s030, group_1: ah}
+- {name: pf-20261104-6_s031_vs_ah, group_0: pf-20261104-6_s031, group_1: ah}
+- {name: pf-20261104-6_s032_vs_ah, group_0: pf-20261104-6_s032, group_1: ah}
+- {name: pf-20261104-6_s033_vs_ah, group_0: pf-20261104-6_s033, group_1: ah}
+- {name: pf-20261104-6_s034_vs_ah, group_0: pf-20261104-6_s034, group_1: ah}
+- {name: pf-20261104-6_s035_vs_ah, group_0: pf-20261104-6_s035, group_1: ah}
+- {name: pf-20261104-6_s036_vs_ah, group_0: pf-20261104-6_s036, group_1: ah}
+- {name: pf-20261104-6_s037_vs_ah, group_0: pf-20261104-6_s037, group_1: ah}
+- {name: pf-20261104-6_s038_vs_ah, group_0: pf-20261104-6_s038, group_1: ah}
+- {name: pf-20261104-6_s039_vs_ah, group_0: pf-20261104-6_s039, group_1: ah}
+- {name: pf-20261104-6_s040_vs_ah, group_0: pf-20261104-6_s040, group_1: ah}
+- {name: pf-20261104-6_s041_vs_ah, group_0: pf-20261104-6_s041, group_1: ah}
+- {name: pf-20261104-6_s042_vs_ah, group_0: pf-20261104-6_s042, group_1: ah}
+- {name: pf-20261104-6_s043_vs_ah, group_0: pf-20261104-6_s043, group_1: ah}
+- {name: pf-20261104-6_s044_vs_ah, group_0: pf-20261104-6_s044, group_1: ah}
+- {name: pf-20261104-6_s045_vs_ah, group_0: pf-20261104-6_s045, group_1: ah}
+- {name: pf-20261104-6_s046_vs_ah, group_0: pf-20261104-6_s046, group_1: ah}
+- {name: pf-20261104-6_s047_vs_ah, group_0: pf-20261104-6_s047, group_1: ah}
+- {name: pf-20261104-6_s048_vs_ah, group_0: pf-20261104-6_s048, group_1: ah}
+- {name: pf-20261104-6_s049_vs_ah, group_0: pf-20261104-6_s049, group_1: ah}
+- {name: pf-20261104-6_s050_vs_ah, group_0: pf-20261104-6_s050, group_1: ah}
+- {name: pf-20261104-6_s051_vs_ah, group_0: pf-20261104-6_s051, group_1: ah}
+- {name: pf-20261104-6_s052_vs_ah, group_0: pf-20261104-6_s052, group_1: ah}
+- {name: pf-20261104-6_s053_vs_ah, group_0: pf-20261104-6_s053, group_1: ah}
+- {name: pf-20261104-6_s054_vs_ah, group_0: pf-20261104-6_s054, group_1: ah}
+- {name: pf-20261104-6_s055_vs_ah, group_0: pf-20261104-6_s055, group_1: ah}
+- {name: pf-20261104-6_s056_vs_ah, group_0: pf-20261104-6_s056, group_1: ah}
+- {name: pf-20261104-6_s057_vs_ah, group_0: pf-20261104-6_s057, group_1: ah}
+- {name: pf-20261104-6_s058_vs_ah, group_0: pf-20261104-6_s058, group_1: ah}
+- {name: pf-20261104-6_s059_vs_ah, group_0: pf-20261104-6_s059, group_1: ah}
+- {name: pf-20261104-6_s060_vs_ah, group_0: pf-20261104-6_s060, group_1: ah}
+- {name: pf-20261104-6_s061_vs_ah, group_0: pf-20261104-6_s061, group_1: ah}
+- {name: pf-20261104-6_s062_vs_ah, group_0: pf-20261104-6_s062, group_1: ah}
+- {name: pf-20261104-6_s063_vs_ah, group_0: pf-20261104-6_s063, group_1: ah}
+- {name: pf-20261104-6_s064_vs_ah, group_0: pf-20261104-6_s064, group_1: ah}
+- {name: pf-20261104-6_s065_vs_ah, group_0: pf-20261104-6_s065, group_1: ah}
+- {name: pf-20261104-6_s066_vs_ah, group_0: pf-20261104-6_s066, group_1: ah}
+- {name: pf-20261104-6_s067_vs_ah, group_0: pf-20261104-6_s067, group_1: ah}
+- {name: pf-20261104-6_s068_vs_ah, group_0: pf-20261104-6_s068, group_1: ah}
+- {name: pf-20261104-6_s069_vs_ah, group_0: pf-20261104-6_s069, group_1: ah}
+- {name: pf-20261104-6_s070_vs_ah, group_0: pf-20261104-6_s070, group_1: ah}
+- {name: pf-20261104-6_s071_vs_ah, group_0: pf-20261104-6_s071, group_1: ah}
+- {name: pf-20261104-6_s072_vs_ah, group_0: pf-20261104-6_s072, group_1: ah}
+- {name: pf-20261104-6_s073_vs_ah, group_0: pf-20261104-6_s073, group_1: ah}
+- {name: pf-20261104-6_s074_vs_ah, group_0: pf-20261104-6_s074, group_1: ah}
+- {name: pf-20261104-6_s075_vs_ah, group_0: pf-20261104-6_s075, group_1: ah}
+- {name: pf-20261104-6_s076_vs_ah, group_0: pf-20261104-6_s076, group_1: ah}
+- {name: pf-20261104-6_s077_vs_ah, group_0: pf-20261104-6_s077, group_1: ah}
+- {name: pf-20261104-6_s078_vs_ah, group_0: pf-20261104-6_s078, group_1: ah}
+- {name: pf-20261104-6_s079_vs_ah, group_0: pf-20261104-6_s079, group_1: ah}
+- {name: pf-20261104-6_s080_vs_ah, group_0: pf-20261104-6_s080, group_1: ah}
+- {name: pf-20261104-6_s081_vs_ah, group_0: pf-20261104-6_s081, group_1: ah}
+- {name: pf-20261104-6_s082_vs_ah, group_0: pf-20261104-6_s082, group_1: ah}
+- {name: pf-20261104-6_s083_vs_ah, group_0: pf-20261104-6_s083, group_1: ah}
+- {name: pf-20261104-6_s084_vs_ah, group_0: pf-20261104-6_s084, group_1: ah}
+- {name: pf-20261104-6_s085_vs_ah, group_0: pf-20261104-6_s085, group_1: ah}
+- {name: pf-20261104-6_s086_vs_ah, group_0: pf-20261104-6_s086, group_1: ah}
+- {name: pf-20261104-6_s087_vs_ah, group_0: pf-20261104-6_s087, group_1: ah}
+- {name: pf-20261104-6_s088_vs_ah, group_0: pf-20261104-6_s088, group_1: ah}
+- {name: pf-20261104-6_s089_vs_ah, group_0: pf-20261104-6_s089, group_1: ah}
+- {name: pf-20261104-6_s090_vs_ah, group_0: pf-20261104-6_s090, group_1: ah}
+- {name: pf-20261104-6_s091_vs_ah, group_0: pf-20261104-6_s091, group_1: ah}
+- {name: pf-20261104-6_s092_vs_ah, group_0: pf-20261104-6_s092, group_1: ah}
+- {name: pf-20261104-6_s093_vs_ah, group_0: pf-20261104-6_s093, group_1: ah}
+- {name: pf-20261104-6_s094_vs_ah, group_0: pf-20261104-6_s094, group_1: ah}
+- {name: pf-20261104-6_s095_vs_ah, group_0: pf-20261104-6_s095, group_1: ah}
+- {name: pf-20261104-6_s096_vs_ah, group_0: pf-20261104-6_s096, group_1: ah}
+- {name: pf-20261104-6_s097_vs_ah, group_0: pf-20261104-6_s097, group_1: ah}
+- {name: pf-20261104-6_s098_vs_ah, group_0: pf-20261104-6_s098, group_1: ah}
+- {name: pf-20261104-6_s099_vs_ah, group_0: pf-20261104-6_s099, group_1: ah}
+- {name: pf-20261104-6_s100_vs_ah, group_0: pf-20261104-6_s100, group_1: ah}
+- {name: pf-20261104-6_s101_vs_ah, group_0: pf-20261104-6_s101, group_1: ah}
+- {name: pf-20261104-6_s102_vs_ah, group_0: pf-20261104-6_s102, group_1: ah}
+- {name: pf-20261104-6_s103_vs_ah, group_0: pf-20261104-6_s103, group_1: ah}
+- {name: pf-20261104-6_s104_vs_ah, group_0: pf-20261104-6_s104, group_1: ah}
+- {name: pf-20261104-6_s105_vs_ah, group_0: pf-20261104-6_s105, group_1: ah}
+- {name: pf-20261104-6_s106_vs_ah, group_0: pf-20261104-6_s106, group_1: ah}
+- {name: pf-20261104-6_s107_vs_ah, group_0: pf-20261104-6_s107, group_1: ah}
+- {name: pf-20261104-6_s108_vs_ah, group_0: pf-20261104-6_s108, group_1: ah}
+- {name: pf-20261104-6_s109_vs_ah, group_0: pf-20261104-6_s109, group_1: ah}
+- {name: pf-20261104-6_s110_vs_ah, group_0: pf-20261104-6_s110, group_1: ah}
+- {name: pf-20261104-6_s111_vs_ah, group_0: pf-20261104-6_s111, group_1: ah}
+- {name: pf-20261104-6_s112_vs_ah, group_0: pf-20261104-6_s112, group_1: ah}
+- {name: pf-20261104-6_s113_vs_ah, group_0: pf-20261104-6_s113, group_1: ah}
+- {name: pf-20261104-6_s114_vs_ah, group_0: pf-20261104-6_s114, group_1: ah}
+- {name: pf-20261104-6_s115_vs_ah, group_0: pf-20261104-6_s115, group_1: ah}
+- {name: pf-20261104-6_s116_vs_ah, group_0: pf-20261104-6_s116, group_1: ah}
+- {name: pf-20261104-6_s117_vs_ah, group_0: pf-20261104-6_s117, group_1: ah}
+- {name: pf-20261104-6_s118_vs_ah, group_0: pf-20261104-6_s118, group_1: ah}
+- {name: pf-20261104-6_s119_vs_ah, group_0: pf-20261104-6_s119, group_1: ah}
+- {name: pf-20261104-6_s120_vs_ah, group_0: pf-20261104-6_s120, group_1: ah}
+- {name: pf-20261104-6_s121_vs_ah, group_0: pf-20261104-6_s121, group_1: ah}
+- {name: pf-20261104-6_s122_vs_ah, group_0: pf-20261104-6_s122, group_1: ah}
+- {name: pf-20261104-6_s123_vs_ah, group_0: pf-20261104-6_s123, group_1: ah}
+- {name: pf-20261104-6_s124_vs_ah, group_0: pf-20261104-6_s124, group_1: ah}
+- {name: pf-20261104-6_s125_vs_ah, group_0: pf-20261104-6_s125, group_1: ah}
+- {name: pf-20261104-6_s126_vs_ah, group_0: pf-20261104-6_s126, group_1: ah}
+- {name: pf-20261104-6_s127_vs_ah, group_0: pf-20261104-6_s127, group_1: ah}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 500
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261104-6_sweep_p1of2
+figure_name: pf-20261104-6_sweep_p1of2
+save_per_round: true
+basedir: .
+sweep: true
