@@ -20,6 +20,8 @@ checkout's `artifacts/`, read-only.
     /opt/cluster_transfer and /sync_from_cluster
 """
 
+import contextlib
+import fcntl
 import json
 import os
 import random
@@ -46,6 +48,22 @@ POLL_SECONDS = int(os.environ.get("PF_POLL_SECONDS", "120"))
 RETRY_SECONDS = int(os.environ.get("PF_RETRY_SECONDS", "120"))
 #: A fetch above this many bytes is refused (the transfer guideline is ~1 GB)
 FETCH_LIMIT = 1_000_000_000
+#: One /sync_from_cluster at a time across pipelines: it mirrors the whole
+#: transfer area, so a fetch running beside another can copy the other's
+#: half-written files
+FETCH_LOCK = os.environ.get(
+    "PF_FETCH_LOCK", os.path.join(os.environ.get("PF_RUNS", "/tmp"), "locks", "fetch.lock")
+)
+#: rsync's temporary files (".<name>.<random>") are never part of a fetch
+TEMP_FILES = shutil.ignore_patterns(".*")
+
+
+@contextlib.contextmanager
+def _fetch_lock():
+    os.makedirs(os.path.dirname(FETCH_LOCK), exist_ok=True)
+    with open(FETCH_LOCK, "w") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        yield
 
 
 class ClusterError(Exception):
@@ -216,18 +234,24 @@ def fetch(sha, remote_dir, local_dir, key):
     if size and int(size[-1]) > FETCH_LIMIT:
         run(f"rm -rf {remote}")
         raise ClusterError(f"{remote_dir} is {int(size[-1]) / 1e9:.1f} GB, above the limit")
-    response = _start("/sync_from_cluster", {"cluster": CLUSTER})
-    code, log = wait_run(response["run_id"], timeout=7200)
-    if code != 0:
-        raise ClusterError(f"sync_from_cluster failed ({code}): {log[-1500:]}")
     local_copy = os.path.join(TRANSFER_LOCAL, "pf", key)
-    if not os.path.isdir(local_copy):
-        raise ClusterError(f"{local_copy} missing after sync_from_cluster")
-    os.makedirs(local_dir, exist_ok=True)
-    shutil.copytree(local_copy, local_dir, dirs_exist_ok=True)
+    with _fetch_lock():
+        response = _start("/sync_from_cluster", {"cluster": CLUSTER})
+        code, log = wait_run(response["run_id"], timeout=7200)
+        if code != 0:
+            raise ClusterError(f"sync_from_cluster failed ({code}): {log[-1500:]}")
+        if not os.path.isdir(local_copy):
+            raise ClusterError(f"{local_copy} missing after sync_from_cluster")
+        os.makedirs(local_dir, exist_ok=True)
+        shutil.copytree(local_copy, local_dir, dirs_exist_ok=True, ignore=TEMP_FILES)
     fetched = sum(
-        os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(local_copy) for f in fs
+        os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(local_dir)
+        for f in fs if not f.startswith(".")
     )
+    # du -sb also counts directories (~4 kB each): a margin, not equality
+    if size and fetched < int(size[-1]) * 0.98 - 65536:
+        raise ClusterError(
+            f"{remote_dir}: fetched {fetched} of {size[-1]} bytes (a sync was cut short)")
     shutil.rmtree(local_copy, ignore_errors=True)
     run(f"rm -rf {remote}")
     return fetched
