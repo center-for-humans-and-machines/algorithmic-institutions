@@ -1,0 +1,52 @@
+params:
+  margin:
+    definition: >-
+      points a member may give below the mean contribution of the other valid
+      members of the group this round before being punished (the free-riding
+      tolerance)
+    type: float
+  slope:
+    definition: >-
+      punishment points per point of contribution below that tolerance (before
+      taper, pre-switch damping and cap)
+    type: float
+  horizon:
+    definition: >-
+      round at which punishment has tapered linearly to zero (factor 1 - t /
+      horizon); beyond it the remaining rounds are too few for the lift to pay
+      back the pool cost
+    type: float
+  pre_switch:
+    definition: >-
+      multiplier on punishment in the round just before a switch decision
+      (rounds 3, 7, 11, 15, 19), where a point of punishment drives members out
+      most
+    type: float
+  cap:
+    definition: most points of punishment any one member gets in a round
+    type: float
+sweep_config:
+  margin: [-2, 8]
+  slope: [0.05, 3, log]
+  horizon: [6, 40]
+  pre_switch: [0, 1]
+  cap: [1, 30, log]
+constraints:
+  - slope > 0
+  - horizon > 0
+  - cap >= 1
+code: |
+  cn = c[..., -1]
+  m = in_group[..., -1] * valid[..., -1]
+  zero = th.zeros_like(cn)
+  n_others = m.sum(-1).unsqueeze(-1) - m
+  sum_others = (cn * m).sum(-1).unsqueeze(-1) - cn * m
+  others_mean = sum_others / th.maximum(n_others, th.ones_like(n_others))
+  has_others = (n_others > 0).to(cn.dtype)
+  shortfall = th.maximum(others_mean - margin - cn, zero) * has_others
+  taper = th.maximum(1.0 - t / horizon, zero)
+  block_pos = t - 4.0 * th.floor(t / 4.0)
+  is_pre = th.logical_and(block_pos == 3.0, t < 20.0).to(cn.dtype)
+  damp = 1.0 - is_pre * (1.0 - pre_switch)
+  raw = slope * shortfall * taper * damp
+  punishment = th.round(th.minimum(raw, cap + zero)) * m
