@@ -1,0 +1,43 @@
+params:
+  c0:
+    definition: >-
+      contribution threshold; a member contributing less than c0 this round is
+      punished in proportion to the shortfall c0 - c (free riders respond to
+      punishment by raising their contribution, high contributors cut theirs)
+    type: float
+  slope:
+    definition: punishment points per point of contribution below c0
+    type: float
+  cap:
+    definition: >-
+      the largest punishment dealt to one member in a round (response to
+      punishment is concave, leaving rises with every point)
+    type: float
+  t_stop:
+    definition: >-
+      the last round (0-23) in which anyone is punished; later raises in
+      contribution have too few rounds left to repay the punishment
+    type: int
+  w_dec:
+    definition: >-
+      weight on punishment in the rounds just before a switch decision
+      (rounds 3, 7, 11, 15, 19), where a punishment drives the most leaving;
+      0 spares them, 1 treats them like any other round
+    type: float
+sweep_config:
+  c0: [3, 14]
+  slope: [0.1, 3, log]
+  cap: [1, 12]
+  t_stop: [4, 23]
+  w_dec: [0, 1]
+constraints:
+  - cap >= 1
+  - c0 > 0
+code: |
+  now = c[..., -1]
+  shortfall = th.clamp(c0 - now, min=0.0)
+  base = th.minimum(slope * shortfall, cap * th.ones_like(now))
+  decision = th.remainder(t, 4.0) == 3.0
+  weight = th.where(decision, w_dec, th.ones_like(w_dec))
+  active = (t <= t_stop).to(now.dtype)
+  punishment = base * weight * active * in_group[..., -1] * valid[..., -1]
