@@ -131,6 +131,11 @@ given. It also sees `th` (torch) and your params (0-d float tensors).
 
 `c[..., -1]` is this round's contributions, one per player.
 
+The sweep runs the code on a GPU, with every input and param on `c.device`.
+A tensor you make yourself must be made there too: `th.arange(n,
+device=c.device)`, or `th.zeros_like(c[..., -1])` and the like; `validate-rule`
+rejects a constructor without `device=`.
+
 The code must assign `punishment`, one value per player ([games, 8]), which
 the manager clamps to 0-30 and floors to integers; it is applied to the
 players of your group only. Before the sweep, the code must run without error

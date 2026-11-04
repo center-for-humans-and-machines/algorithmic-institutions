@@ -389,6 +389,7 @@ _ALLOWED_CODE = [
     "x = c.sum(dim=-1).float()\npunishment = a * th.linalg.norm(x) * 0",
     "punishment = a * th.special.expit(c[..., -1])",
     "s = [c[..., -k] for k in [1, 2]]\npunishment = a * (s[0] - s[1])",
+    "r = th.arange(c.shape[-1], dtype=c.dtype, device=c.device)\npunishment = a * r[-1]",
 ]
 _DENIED_CODE = [
     ("punishment = a * th.os.getpid()", "th.os is not allowed"),
@@ -404,6 +405,10 @@ _DENIED_CODE = [
     ("punishment = a * '{0}'.format(c)", "attribute `format`"),
     ("punishment = a * th.linalg", "th.linalg can only be used as"),
     ("punishment = a * th.nope(c)", "th.nope does not exist"),
+    # a CPU tensor fails every point of the GPU sweep, while CPU checks pass
+    ("r = th.arange(c.shape[-1], dtype=c.dtype)\npunishment = a * r[-1]",
+     "th.arange(...) needs device=c.device"),
+    ("punishment = a * th.zeros(8)", "th.zeros(...) needs device=c.device"),
 ]
 
 

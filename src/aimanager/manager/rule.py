@@ -152,6 +152,31 @@ def _check_attributes(tree, module=th):
                     raise ValueError(f"{node.id}.{parent.attr}.{grand.attr} is not allowed")
 
 
+#: th functions that make a new tensor on the CPU unless given `device=`. The
+#: sweep runs rules on the GPU (inputs and params on c.device), where such a
+#: tensor fails every point, while CPU checks pass: rejected up front.
+_CONSTRUCTORS = {
+    "arange", "zeros", "ones", "full", "empty", "tensor", "as_tensor",
+    "linspace", "logspace", "eye", "rand", "randn", "randint", "range",
+}
+
+
+def _check_devices(tree):
+    """Reject th.<constructor>(...) without `device=` (see _CONSTRUCTORS)."""
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        func = node.func
+        if (isinstance(func.value, ast.Name) and func.value.id == "th"
+                and func.attr in _CONSTRUCTORS
+                and not any(k.arg == "device" for k in node.keywords)):
+            raise ValueError(
+                f"th.{func.attr}(...) needs device=c.device: the sweep runs the rule"
+                f" on the GPU, where a tensor made on the CPU cannot meet the inputs"
+                f" (or use th.zeros_like, th.ones_like, th.full_like on an input)"
+            )
+
+
 def _is_number(value):
     """A finite int or float; bools are not numbers here."""
     is_number = isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -256,6 +281,7 @@ def read_rule(rule_path):
         tree = ast.parse(code, rule_path, "exec")
         read, bound = _names(tree)
         _check_attributes(tree)
+        _check_devices(tree)
     except ValueError as e:
         raise ValueError(f"{rule_path}: code: {e}") from None
     undefined = sorted(
