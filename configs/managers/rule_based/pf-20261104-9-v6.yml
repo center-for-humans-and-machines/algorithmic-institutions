@@ -1,0 +1,60 @@
+params:
+  rel:
+    definition: >-
+      laggard threshold as a fraction of the mean contribution of the other
+      valid members of my group this round; only members below it are
+      punished, in proportion to how far below they are
+    type: float
+  slope:
+    definition: >-
+      punishment per point of shortfall below the threshold in the fresh
+      round of the first phase (round 0); the manager clamps each dose to 30
+    type: float
+  mid:
+    definition: >-
+      the within-phase dose (rounds 1-2, 5-6, 9-10, ...) as a share of the
+      same phase's fresh-round dose (rounds 0, 4, 8, ..., right after a
+      switch decision); the round just before a switch decision (3, 7, 11,
+      ...) is never punished
+    type: float
+  decay:
+    definition: >-
+      intensity of each later phase relative to the one before: the dose in
+      phase k (rounds 4k..4k+3) is multiplied by decay^k, so below 1 the
+      manager front-loads its punishment and eases off as the group's norm
+      settles, above 1 it escalates against those still lagging
+    type: float
+  last_round:
+    definition: >-
+      last round (0-23) in which the manager punishes at all
+    type: int
+sweep_config:
+  rel: [0.68, 1.0]
+  slope: [3, 30, log]
+  mid: [0, 1.1]
+  decay: [0.25, 1.6, log]
+  last_round: [6, 18]
+constraints:
+  - rel > 0
+  - slope > 0
+  - mid >= 0
+  - decay > 0
+code: |
+  one = th.ones_like(c[..., -1])
+  cnow = c[..., -1]
+  vnow = valid[..., -1]
+  mine = in_group[..., -1] * vnow
+  n_mine = mine.sum(-1).unsqueeze(-1)
+  tot_mine = (cnow * mine).sum(-1).unsqueeze(-1)
+  n_rest = n_mine - mine
+  ref = (tot_mine - cnow * mine) / th.maximum(n_rest, one)
+  short = th.clamp(rel * ref - cnow, min=0.0)
+  dose = slope * short * mine * th.gt(n_rest, 0.5 * one)
+  tf = t + 0.0
+  pos = th.remainder(tf, 4.0)
+  phase = th.floor(tf / 4.0)
+  is_fresh = 1.0 * th.eq(pos, 0.0)
+  is_pre = 1.0 * th.eq(pos, 3.0)
+  mult = (is_fresh + mid * (1.0 - is_fresh - is_pre)) * th.pow(decay, phase)
+  dose = dose * mult * th.le(tf, last_round)
+  punishment = th.clamp(dose, min=0.0, max=30.0)
