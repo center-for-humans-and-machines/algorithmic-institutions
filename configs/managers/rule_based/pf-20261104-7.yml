@@ -1,0 +1,28 @@
+params:
+  threshold:
+    definition: contribution (0-20) below which a member is punished; a member giving at least this is never punished
+    type: float
+  rate:
+    definition: punishment points per point of contribution shortfall below the threshold
+    type: float
+  t_stop:
+    definition: first round (0-23) from which the manager no longer punishes, because a late punishment has too few rounds left to pay back its cost to the pool
+    type: int
+  switch_factor:
+    definition: multiplier on the punishment in the rounds that precede a switch decision (rounds 3, 7, 11, 15, 19), where punishment drives members out the most
+    type: float
+sweep_config:
+  threshold: [2, 14]
+  rate: [0.05, 3, log]
+  t_stop: [4, 23]
+  switch_factor: [0, 1]
+constraints:
+  - threshold > 0
+  - rate > 0
+code: |
+  now = c[..., -1]
+  shortfall = th.clamp(threshold - now, min=0.0)
+  in_switch_round = th.remainder(t, 4) == 3
+  timing = th.where(in_switch_round & (t < 20), switch_factor, th.ones_like(switch_factor))
+  active = (t < t_stop).float()
+  punishment = rate * shortfall * timing * active * valid[..., -1] * in_group[..., -1]
