@@ -1,0 +1,35 @@
+params:
+  k:
+    definition: punishment points per contribution point a member gives below the threshold, capped at 30 before the timing factors, so the capped dose is what round 0 charges
+    type: float
+  thr:
+    definition: contribution threshold; members giving at least this much are never punished
+    type: float
+  w:
+    definition: within-block timing weight; punishment in a round is multiplied by w to the power of the round's position in its 4-round switching block (0 for rounds 0, 4, 8, ... right after a switch opportunity, 3 for the decision rounds 3, 7, 11, ...), so w=0 punishes only at block starts and w=1 punishes every round of a block alike
+    type: float
+  d:
+    definition: per-block decay; punishment in block b (rounds 4b..4b+3) is multiplied by d to the power b, so round 0 gets the full dose, round 4 d times it, round 8 d squared times it; d=1 keeps the dose constant, d<1 front-loads it, d>1 escalates it
+    type: float
+  t_stop:
+    definition: last round in which the manager punishes; later rounds go unpunished
+    type: int
+sweep_config:
+  k: [2.0, 30.0, log]
+  thr: [6.0, 14.0]
+  w: [0.0, 1.0]
+  d: [0.15, 1.3]
+  t_stop: [3, 23]
+constraints:
+  - k > 0
+  - w >= 0
+  - d > 0
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  raw = k * th.relu(thr - now)
+  base = raw - th.relu(raw - 30.0)
+  block = th.floor(t / 4)
+  pos = t - 4 * block
+  timing = th.pow(w, pos) * th.pow(d, block) * (t <= t_stop)
+  punishment = base * timing * member
