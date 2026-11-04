@@ -127,6 +127,25 @@ class EdgeEncoder(th.nn.Module):
         return th.cat(encoding, dim=-1)
 
 
+class EmptyEncoder(th.nn.Module):
+    """The edge encoder of models saved before #112 (no edge features).
+
+    Kept so their pickles load: experiment 1's RL managers (e.g.
+    artifacts/manager/17_exp2_group_payoff_heavy_optimize) hold one. It takes
+    EdgeEncoder's call and returns the same empty (E, n_rounds, 0) tensor.
+    """
+
+    def __init__(self, refrence):
+        super().__init__()
+        self.size = 0
+        self.refrence = refrence
+
+    def forward(self, *, edge_index, n_rounds, **state):
+        return th.empty(
+            (edge_index.shape[1], n_rounds, 0), dtype=th.float, device=edge_index.device
+        )
+
+
 class GraphNetwork(th.nn.Module):
     def __init__(
         self,
@@ -860,6 +879,33 @@ class GraphNetwork(th.nn.Module):
             return self.predict_autoreg(*args, **kwargs)
         else:
             return self.predict_independent(*args, **kwargs)
+
+    #: Attributes added since the oldest pickled models, at the values that
+    #: switch their feature off. A GraphNetwork unpickled whole (experiment
+    #: 1's RL managers, saved inside ArtificalManager) predates them; it gets
+    #: these, so it runs as it did when saved.
+    _LEGACY_DEFAULTS = {
+        "edge_encoding": [],
+        "copula_rho": 0.0,
+        "copula_phi": 0.0,
+        "copula_switch_every": None,
+        "_copula_z": None,
+        "joint_exodus": False,
+        "joint_exodus_head": None,
+        "joint_exodus_switch_every": None,
+        "group_vnode": False,
+        "group_vnode_module": None,
+        "group_vnode_hidden": None,
+        "stimulus_skip": False,
+        "rnn_g_h0": None,
+        "vnode_h0": None,
+    }
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        for name, value in self._LEGACY_DEFAULTS.items():
+            if name not in self.__dict__ and name not in self._modules:
+                self.__dict__[name] = value
 
     def save(self, filename):
         to_save = [
