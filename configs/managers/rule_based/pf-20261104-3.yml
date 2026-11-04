@@ -1,0 +1,38 @@
+params:
+  ref_frac:
+    definition: >-
+      the bar a member must reach, as a fraction of the mean contribution of the
+      other valid members of the group this round; only the shortfall below it
+      is punished
+    type: float
+  k:
+    definition: punishment points per contribution point of shortfall below the bar
+    type: float
+  pmax:
+    definition: the most points any one member is punished in a round
+    type: int
+  t_stop:
+    definition: the first round with no punishment; rounds t_stop..23 are never punished
+    type: int
+sweep_config:
+  ref_frac: [0.3, 1.2]
+  k: [0.05, 2.0, log]
+  pmax: [1, 12]
+  t_stop: [12, 23]
+code: |
+  # plain elementwise ops and a matmul for the sums over players: no keyword
+  # or dim arguments
+  cur = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  ones = th.ones_like(cur[0])
+  everyone = th.outer(ones, ones)
+  n_mem = th.matmul(member, everyone)
+  tot = th.matmul(cur * member, everyone)
+  n_oth = n_mem - member
+  others_mean = (tot - cur * member) / th.maximum(n_oth, th.ones_like(n_oth))
+  bar = ref_frac * others_mean
+  shortfall = th.relu(bar - cur) * (n_oth > 0).float() * member
+  raw = th.minimum(k * shortfall, pmax * th.ones_like(shortfall))
+  # round to the nearest point (the manager floors), so a shortfall worth half
+  # a point already earns one point
+  punishment = th.floor(raw + 0.5) * (t < t_stop).float()
