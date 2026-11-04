@@ -1,0 +1,43 @@
+params:
+  k:
+    definition: >-
+      punishment points per point of contribution shortfall, the shortfall being
+      how far a member's contribution this round lies below the mean contribution
+      of the other members of the group, beyond the tolerance
+    type: float
+  tol:
+    definition: >-
+      tolerated shortfall, in contribution points below the other members' mean,
+      before any punishment
+    type: float
+  cap:
+    definition: the most punishment any member gets in a round
+    type: float
+  quiet:
+    definition: >-
+      number of rounds right before each switch decision (the last rounds of each
+      of the first five 4-round blocks) in which nobody is punished
+    type: int
+  t_end:
+    definition: first round from which nobody is punished any more (0-based round index)
+    type: int
+sweep_config:
+  k: [0.25, 6.0, log]
+  tol: [0.0, 5.0]
+  cap: [1.0, 15.0, log]
+  quiet: [0, 3]
+  t_end: [8, 23]
+code: |
+  cur = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  total = (cur * member).sum(-1, keepdim=True)
+  n = member.sum(-1, keepdim=True)
+  others = th.clamp(n - member, min=1.0)
+  others_mean = (total - cur * member) / others
+  others_mean = th.where(n - member > 0, others_mean, cur)
+  shortfall = th.clamp(others_mean - cur - tol, min=0.0)
+  amount = th.clamp(th.round(k * shortfall), max=cap)
+  pos = th.remainder(t, 4.0)
+  in_window = (pos < 4.0 - quiet) | (t >= 20.0)
+  active = (in_window & (t < t_end)).to(cur.dtype)
+  punishment = amount * member * active
