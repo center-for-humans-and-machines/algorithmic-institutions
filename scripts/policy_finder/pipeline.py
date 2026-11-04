@@ -65,7 +65,7 @@ STEPS = (
 )
 #: Episodes per sweep point, and per final-run point (smoke runs lower them)
 N_EPISODES = int(os.environ.get("PF_SWEEP_EPISODES", "500"))
-FINAL_EPISODES = os.environ.get("PF_FINAL_EPISODES")
+FINAL_EPISODES = int(os.environ.get("PF_FINAL_EPISODES", "2000"))
 #: One sim job holds this many episodes (16 GB): 256 points x 500 = 2 parts
 MAX_JOB_EPISODES = 125000
 OUT_DIR = "plots/simulation/policy_finder"
@@ -174,7 +174,7 @@ class Version:
             "Design your rule." if self.version == 1
             else f"Design version {self.version} of your rule."
         ))
-        self.data.setdefault("episodes", {"sweep": N_EPISODES, "final": FINAL_EPISODES or 2000})
+        self.data.setdefault("episodes", {"sweep": N_EPISODES, "final": FINAL_EPISODES})
         self.save()
         try:
             for step in STEPS:

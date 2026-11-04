@@ -4,7 +4,8 @@
 # Usage:
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
 #       [--sobol-points N] [--prompt TEXT]
-#   scripts/policy_finder/new_instance.sh --iterate-on <name> [the same options]
+#   scripts/policy_finder/new_instance.sh --iterate-on <name> [--after-failure]
+#       [the same options]
 #
 # Makes branch policy-finder/<name> off policy-finder-proxy (PF_BASE
 # overrides), checked out as its own worktree in $PF_RUNS/worktrees/<name>
@@ -34,7 +35,10 @@
 # sweep and report are named <name>-v<k>, earlier versions' files stay as they
 # are and the scripts folder is shared. Without --max-params and --min-params
 # the rule may declare any number of params from 1; --sobol-points defaults
-# to the previous version's.
+# to the previous version's. --after-failure also iterates on a version whose
+# pipeline failed (its state file says so): its uncommitted files are
+# discarded, and what it committed stays as an earlier version without a
+# final run.
 #
 # The agent's container is its only sandbox: it sees its copy of the instance
 # (read-only but for the version's rule, notes and scripts folder) and has no
@@ -56,6 +60,7 @@ PROMPT=""
 ITERATE=0
 PARAMS_GIVEN=0
 SOBOL_GIVEN=0
+AFTER_FAILURE=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --iterate-on) [[ -z "$NAME" ]] || usage; ITERATE=1; NAME="${2:-}"; shift 2 ;;
@@ -63,6 +68,7 @@ while [[ $# -gt 0 ]]; do
         --min-params) MIN_PARAMS="${2:-}"; PARAMS_GIVEN=1; shift 2 ;;
         --sobol-points) SOBOL_POINTS="${2:-}"; SOBOL_GIVEN=1; shift 2 ;;
         --prompt) PROMPT="${2:-}"; shift 2 ;;
+        --after-failure) AFTER_FAILURE=1; shift ;;
         -h|--help) usage ;;
         -*) echo "unknown option: $1" >&2; usage ;;
         *) [[ -z "$NAME" ]] || usage; NAME="$1"; shift ;;
@@ -111,8 +117,6 @@ if [[ "$ITERATE" == 1 ]]; then
         || { echo "no instance $NAME: no worktree at $WT" >&2; exit 1; }
     WT="$(cd "$WT" && pwd -P)"
     git -C "$MAIN" worktree lock --reason "policy finder: outside the command server's view" "$WT" 2>/dev/null || true
-    [[ -z "$(git -C "$WT" status --porcelain)" ]] \
-        || { echo "$WT has uncommitted changes: check and commit them first" >&2; exit 1; }
     { read -r PREV_VERSION; read -r PREV_STEM; read -r PREV_SOBOL; } < <(
         python3 -c 'import json, sys
 c = json.load(open(sys.argv[1]))
@@ -120,11 +124,21 @@ print(c.get("version", 1), c.get("rule_name") or sys.argv[2],
       c.get("sobol_points", 256), sep="\n")' "$WT/.claude/policy_finder.json" "$NAME"
     )
     PREV_FINAL="plots/simulation/policy_finder/${PREV_STEM}_sweep/final/sweep.json"
-    [[ -f "$WT/$PREV_FINAL" ]] || {
-        echo "$PREV_STEM has no final run ($PREV_FINAL): finish it first" \
-            "(pipeline.py run $NAME)" >&2
-        exit 1
-    }
+    PREV_STATE="$WT_ROOT/$PREV_STEM.state.json"
+    if [[ ! -f "$WT/$PREV_FINAL" && "$AFTER_FAILURE" == 1 ]] \
+        && grep -q '"status": "failed"' "$PREV_STATE" 2>/dev/null; then
+        echo "$PREV_STEM failed: discarding its uncommitted files" >&2
+        git -C "$WT" reset -q --hard HEAD
+        git -C "$WT" clean -q -fd
+    else
+        [[ -f "$WT/$PREV_FINAL" ]] || {
+            echo "$PREV_STEM has no final run ($PREV_FINAL): finish it first" \
+                "(pipeline.py run $NAME), or pass --after-failure if it failed" >&2
+            exit 1
+        }
+    fi
+    [[ -z "$(git -C "$WT" status --porcelain)" ]] \
+        || { echo "$WT has uncommitted changes: check and commit them first" >&2; exit 1; }
     VERSION=$(( PREV_VERSION + 1 ))
     if ! git -C "$WT" merge -q --no-edit \
         -m "policy-finder $NAME: $BASE for version $VERSION" "$BASE"; then
