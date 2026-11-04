@@ -70,5 +70,5 @@ $ARGUMENTS
    own `best` is the top of noisy estimates and reads high: never report it
    as the result. Then the branch `policy-finder/<name>`.
 
-To try a branch other than `policy-finder-proxy`, set `PF_BASE=<branch>` on
+To try a branch other than `yannik/handover`, set `PF_BASE=<branch>` on
 the launch.

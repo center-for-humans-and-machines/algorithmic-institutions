@@ -2,7 +2,7 @@
 
 > **Superseded in part (2026-11-04).** The macOS sandbox, the guard hook, the
 > host-side `claude -p` launch and `--headless` described here are gone on
-> `policy-finder-proxy`: each agent runs in its own container from the
+> `policy-finder-proxy` (merged into `yannik/handover`): each agent runs in its own container from the
 > container spawner, and sweeps run on Raven snapshots through the command
 > server (`scripts/policy_finder/pipeline.py`). See
 > `docs/plans/policy-finder-proxy-adapter.md`. This report stays as the record

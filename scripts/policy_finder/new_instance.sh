@@ -7,7 +7,7 @@
 #   scripts/policy_finder/new_instance.sh --iterate-on <name> [--after-failure]
 #       [the same options]
 #
-# Makes branch policy-finder/<name> off policy-finder-proxy (PF_BASE
+# Makes branch policy-finder/<name> off yannik/handover (PF_BASE
 # overrides), checked out as its own worktree in $PF_RUNS/worktrees/<name>
 # (PF_WORKTREE_ROOT overrides) with only the paths of
 # scripts/policy_finder/instance_paths (the game rules, code, configs and
@@ -97,7 +97,7 @@ if (( MIN_PARAMS > MAX_PARAMS )); then
 fi
 
 MAIN="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-BASE="${PF_BASE:-policy-finder-proxy}"
+BASE="${PF_BASE:-yannik/handover}"
 BRANCH="policy-finder/$NAME"
 [[ -n "${PF_RUNS:-}" ]] || { echo "set PF_RUNS (see the header)" >&2; exit 2; }
 export PF_RUNS

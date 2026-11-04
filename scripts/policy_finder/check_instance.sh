@@ -42,7 +42,7 @@ done
 [[ -n "$NAME" ]] || usage
 
 MAIN="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-BASE="${PF_BASE:-policy-finder-proxy}"
+BASE="${PF_BASE:-yannik/handover}"
 BRANCH="policy-finder/$NAME"
 WT_ROOT="${PF_WORKTREE_ROOT:-${PF_RUNS:+$PF_RUNS/worktrees}}"
 WT="${WT_ROOT:-$(dirname "$MAIN")/policy-finder-worktrees}/$NAME"
