@@ -1,0 +1,39 @@
+params:
+  threshold:
+    definition: contribution (0-20) below which a member is punished; a member giving at least this is never punished
+    type: float
+  rate:
+    definition: punishment points per point of contribution shortfall below the threshold, capped at 30
+    type: float
+  t_end:
+    definition: first round (4-20) from which the manager no longer punishes, because a contribution level bought later has too few rounds left to repay it
+    type: int
+  cooldown:
+    definition: number of rounds (1-3) after a player was punished (by either manager) during which a new punishment of that player is reduced, because the response to the last punishment is still under way and a back-to-back punishment buys much less of it
+    type: int
+  repeat_factor:
+    definition: fraction (0-1) of the normal punishment dealt to a player punished within the last `cooldown` rounds; 1 punishes as if there were no earlier punishment, 0 pauses completely
+    type: float
+sweep_config:
+  threshold: [6, 13]
+  rate: [2, 30, log]
+  t_end: [4, 20]
+  cooldown: [1, 3]
+  repeat_factor: [0, 1]
+constraints:
+  - threshold > 0
+  - rate > 0
+  - t_end > 3
+  - cooldown > 0
+  - repeat_factor >= 0
+  - repeat_factor <= 1
+code: |
+  now = c[..., -1]
+  mine = valid[..., -1] * in_group[..., -1]
+  age = th.flip(th.cumsum(th.ones_like(p), dim=-1), dims=[-1])
+  window = (age <= cooldown).to(now.dtype)
+  recent = ((p * window).sum(-1) > 0).to(now.dtype)
+  factor = 1.0 - (1.0 - repeat_factor) * recent
+  on = (t < t_end).to(now.dtype)
+  raw = th.clamp(rate * th.clamp(threshold - now, min=0.0), max=30.0)
+  punishment = raw * factor * mine * on
