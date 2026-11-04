@@ -351,14 +351,19 @@ class Version:
         cluster_proxy.wait(pending)
 
     def _fetch(self, key, sha, config, remote, local):
-        """Fetch one sim's output; rerun its job once if it has no sweep.json."""
+        """Fetch one sim's output; rerun its job once if it has no sweep.json.
+
+        Only a job that left no output (or no sweep.json) is rerun; a fetch
+        that could not run (Raven unreachable) raises ClusterError, resumable,
+        and costs no job attempt.
+        """
         jobs = self.data[key]
         while True:
             try:
                 size = cluster_proxy.fetch(sha, remote, local, key=f"{self.stem}/{Path(remote).name}")
                 self.log(f"fetched {remote}: {size / 1e6:.1f} MB")
-            except cluster_proxy.ClusterError as e:
-                self.log(f"fetch of {remote} failed: {e}")
+            except cluster_proxy.NoOutput as e:
+                self.log(f"{e}")
             if (Path(local) / "sweep.json").exists():
                 return
             if len(jobs[config]) >= JOB_ATTEMPTS:

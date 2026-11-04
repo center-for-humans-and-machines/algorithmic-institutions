@@ -74,3 +74,26 @@ def test_a_second_pipeline_waits_and_sees_the_state(version, monkeypatch):
     fcntl.flock(holder, fcntl.LOCK_UN)
     t.join(5)
     assert result["state"]["status"] == "scored"
+
+
+def test_a_fetch_during_an_outage_costs_no_job(version, monkeypatch):
+    version.data["sweep_jobs"] = {"c.yml": ["1"]}
+    submitted = []
+    monkeypatch.setattr(pl.cluster_proxy, "submit", lambda *a, **k: submitted.append(a) or "2")
+
+    def down(*a, **k):
+        raise pl.cluster_proxy.ClusterError("could not look: Connection closed")
+
+    monkeypatch.setattr(pl.cluster_proxy, "fetch", down)
+    with pytest.raises(pl.cluster_proxy.ClusterError):
+        version._fetch("sweep_jobs", "a" * 40, "c.yml", "plots/x", version.wt_root / "x")
+    assert submitted == []
+
+    def missing(*a, **k):
+        raise pl.cluster_proxy.NoOutput("no plots/x on snapshot")
+
+    monkeypatch.setattr(pl.cluster_proxy, "fetch", missing)
+    monkeypatch.setattr(pl.cluster_proxy, "wait", lambda jobs: None)
+    with pytest.raises(pl.Failed):
+        version._fetch("sweep_jobs", "a" * 40, "c.yml", "plots/x", version.wt_root / "x")
+    assert len(submitted) == pl.JOB_ATTEMPTS - 1

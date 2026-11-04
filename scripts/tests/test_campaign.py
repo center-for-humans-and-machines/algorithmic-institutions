@@ -67,6 +67,7 @@ def make(tmp_path, monkeypatch, outcomes=None, pools=None, **settings):
     fake = Fake(campaign.wt_root, outcomes or {},
                 default_pool=lambda stem: pools.get(stem, 60.0))
     monkeypatch.setattr(campaign, "execute", fake)
+    monkeypatch.setattr(campaign, "cluster_up", lambda: True)
     monkeypatch.setattr(cm.time, "sleep", lambda s: None)
     return campaign, fake
 
@@ -120,6 +121,18 @@ def test_errors_are_resumed_then_stop_the_campaign(tmp_path, monkeypatch):
     # the other members finished, and the generation is not marked finished
     assert len([r for r in campaign.rows() if r["status"] == "scored"]) == 3
     assert "finished" not in campaign.state["generations"][0]
+
+
+def test_errors_while_raven_is_down_are_not_counted(tmp_path, monkeypatch):
+    campaign, fake = make(tmp_path, monkeypatch, error_retries=1, outcomes={
+        "pf-20990101-2": [("error",), ("error",), ("error",), ("scored", 61)]})
+    answers = iter([True, False, False, True, False, True])  # Raven down twice
+    monkeypatch.setattr(campaign, "cluster_up", lambda: next(answers, True))
+    campaign.run()
+    log = campaign.log_path.read_text()
+    assert "pf-20990101-2: Raven does not answer, waiting for it" in log
+    assert log.count("pf-20990101-2: error while Raven was down, resuming") == 2
+    assert "pf-20990101-2: error, resuming (1/1)" in log
 
 
 def test_resume_after_a_kill(tmp_path, monkeypatch):
