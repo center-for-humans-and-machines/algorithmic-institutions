@@ -180,3 +180,14 @@ def test_fetch_tells_missing_output_from_an_outage(stub, tmp_path):
     with pytest.raises(cp.ClusterError) as e:
         cp.fetch(SHA, "plots/simulation/policy_finder/r_sweep", tmp_path, key="r/r_sweep")
     assert not isinstance(e.value, cp.NoOutput)
+
+
+def test_fetch_accepts_files_vanishing_elsewhere(stub, tmp_path):
+    def vanished(method, path, body):
+        if path == "/sync_from_cluster":
+            return 200, stub.start("pull", "rsync warning: some files vanished (code 24)\n", 24)
+        return Stub.handle(stub, method, path, body)
+
+    stub.handle = vanished
+    local = tmp_path / "out"
+    assert cp.fetch(SHA, "plots/simulation/policy_finder/r_sweep", local, key="r/r_sweep") == 2

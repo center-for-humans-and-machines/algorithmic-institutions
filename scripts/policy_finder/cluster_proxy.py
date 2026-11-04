@@ -217,6 +217,7 @@ def wait(jobs, poll=None):
 
 
 NO_OUTPUT = "__PF_NO_OUTPUT__"
+VANISHED = 24  # rsync: some source files vanished
 
 
 def fetch(sha, remote_dir, local_dir, key):
@@ -252,7 +253,10 @@ def fetch(sha, remote_dir, local_dir, key):
     with _fetch_lock():
         response = _start("/sync_from_cluster", {"cluster": CLUSTER})
         code, log = wait_run(response["run_id"], timeout=7200)
-        if code != 0:
+        # 24: files vanished mid-sync. The sync mirrors the whole transfer
+        # tree, where other pipelines stage and remove their own keys; ours
+        # was complete before the sync and the size check below covers it.
+        if code not in (0, VANISHED):
             raise ClusterError(f"sync_from_cluster failed ({code}): {log[-1500:]}")
         if not os.path.isdir(local_copy):
             raise ClusterError(f"{local_copy} missing after sync_from_cluster")
