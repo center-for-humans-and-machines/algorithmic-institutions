@@ -1,0 +1,38 @@
+params:
+  threshold:
+    definition: contribution (0-20) below which a member is punished; a member giving at least this is never punished
+    type: float
+  rate:
+    definition: punishment points per point of contribution shortfall below the threshold, capped at 30
+    type: float
+  t_end:
+    definition: first round (4-16) from which the manager stops punishing in a group smaller than n_big members (a small or contested group, where every point of common-good gap moves members)
+    type: int
+  t_end_big:
+    definition: first round (6-20) from which the manager stops punishing in a group of at least n_big members (a group that won the switches, loses few members per point spent and multiplies a bought contribution level by many members)
+    type: int
+  n_big:
+    definition: group size (3-8 members, counted this round) from which the group counts as big and is punished until t_end_big instead of t_end
+    type: int
+sweep_config:
+  threshold: [6, 13]
+  rate: [2, 30, log]
+  t_end: [4, 16]
+  t_end_big: [6, 20]
+  n_big: [3, 8]
+constraints:
+  - threshold > 0
+  - rate > 0
+  - t_end > 3
+  - t_end_big > 3
+  - n_big > 0
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1]
+  mine = valid[..., -1] * member
+  size = member.sum(-1, keepdim=True)
+  big = (size >= n_big).to(now.dtype)
+  stop = big * t_end_big + (1.0 - big) * t_end
+  on = (t < stop).to(now.dtype)
+  raw = th.clamp(rate * th.clamp(threshold - now, min=0.0), max=30.0)
+  punishment = raw * mine * on
