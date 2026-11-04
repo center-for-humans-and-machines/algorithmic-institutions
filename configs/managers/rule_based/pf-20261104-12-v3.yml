@@ -1,0 +1,54 @@
+params:
+  thr:
+    definition: >-
+      fixed part of the contribution bar; a member contributing less than the
+      bar in a punished round is punished in proportion to the shortfall
+    type: float
+  peer:
+    definition: >-
+      weight of the peers' norm in the bar: the bar is (1 - peer) * thr plus
+      peer times the mean contribution this round of the member's current
+      group-mates (thr alone when the member is alone), so that free riding
+      is judged against what the rest of the group gives
+    type: float
+  slope:
+    definition: >-
+      punishment points per point of shortfall at the first round of the
+      first block (round 0), before the manager's cap of 30
+    type: float
+  decay:
+    definition: >-
+      factor by which the punishment per point of shortfall changes from one
+      4-round block to the next (block b uses slope * decay^b), because a
+      punishment buys less contribution, and has fewer rounds to pay back,
+      the later in the game it is dealt
+    type: float
+  follow:
+    definition: >-
+      size of the follow-up punishment in the second round of each block
+      (rounds 1, 5, 9, 13, 17) relative to the first (0 punishes only at a
+      block's first round, 1 punishes both alike); the last two rounds of
+      each block and rounds 20-23 are never punished, since punishment close
+      to a switch decision drives members out
+    type: float
+sweep_config:
+  thr: [6, 15]
+  peer: [0, 1]
+  slope: [1.5, 12, log]
+  decay: [0.35, 1.2, log]
+  follow: [0, 1.5]
+code: |
+  cur = c[..., -1]
+  mine = in_group[..., -1]
+  n_mates = mine.sum(-1, keepdim=True) - mine
+  mates_sum = (cur * mine).sum(-1, keepdim=True) - cur * mine
+  mates_mean = mates_sum / th.clamp(n_mates, min=1.0)
+  has_mates = (n_mates > 0).float()
+  bar = thr + has_mates * peer * (mates_mean - thr)
+  shortfall = th.clamp(bar - cur, min=0.0)
+  block = th.floor(t / 4.0)
+  pos = th.remainder(t, 4.0)
+  weight = (pos == 0).float() + (pos == 1).float() * follow
+  live = (t < 20).float()
+  scale = slope * th.pow(decay, block) * weight * live
+  punishment = scale * shortfall * valid[..., -1]
