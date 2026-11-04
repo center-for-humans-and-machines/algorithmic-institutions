@@ -1,0 +1,38 @@
+params:
+  slope:
+    definition: punishment points per contribution point a member falls below the reference (the mates' mean moved toward full contribution by aspiration)
+    type: float
+  aspiration:
+    definition: share of the way from the mean of a member's valid group-mates toward full contribution (20) at which the reference sits; 0 is the mates' mean, negative values leave a tolerance that scales with the headroom
+    type: float
+  cap:
+    definition: largest punishment dealt to any one member in a round
+    type: int
+  t_stop:
+    definition: last round (0-23) of the disciplining phase; after it punishment drops to the maintenance level
+    type: int
+  late:
+    definition: factor on the punishment after round t_stop (maintenance phase); 0 stops punishing, 1 keeps the disciplining dose
+    type: float
+sweep_config:
+  slope: [0.5, 10.0, log]
+  aspiration: [-0.3, 0.4]
+  cap: [3, 30]
+  t_stop: [2, 23]
+  late: [0.0, 0.6]
+code: |
+  # only tensor-tensor comparisons and no scalar-argument calls (clamp,
+  # keepdim=...), which make a cold torch process look up __import__
+  cur = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  one = th.ones_like(cur)
+  n_mates = member.sum(-1).unsqueeze(-1) - member
+  mates_total = (cur * member).sum(-1).unsqueeze(-1) - cur * member
+  mates_mean = mates_total / th.maximum(n_mates, one)
+  ref = mates_mean + aspiration * (20.0 * one - mates_mean)
+  gap = th.relu(ref - cur)
+  raw = th.minimum(slope * gap, cap * one)
+  early = (t <= t_stop).float()
+  factor = early + (1.0 - early) * late
+  has_mates = th.minimum(n_mates, one)
+  punishment = raw * factor * has_mates * member
