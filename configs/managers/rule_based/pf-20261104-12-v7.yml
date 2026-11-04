@@ -1,0 +1,66 @@
+params:
+  thr:
+    definition: >-
+      fixed part of the contribution bar; a member contributing less than the
+      bar in a punished round is punished in proportion to the shortfall
+    type: float
+  peer:
+    definition: >-
+      weight of the peers' norm in the bar: the bar is (1 - peer) * thr plus
+      peer times the mean contribution this round of the member's current
+      group-mates (thr alone when the member is alone), so that free riding
+      is judged against what the rest of the group gives
+    type: float
+  ceil:
+    definition: >-
+      ceiling of the bar: a member contributing ceil or more is never
+      punished, however much the group-mates give, because punishing
+      already generous members buys no contribution and lowers the common
+      good every player weighs when switching
+    type: float
+  slope:
+    definition: >-
+      punishment points per point of shortfall in the first block (rounds 0
+      and 1), before the manager's cap of 30; at high values the rule
+      becomes a step that caps anyone clearly below the bar
+    type: float
+  decay:
+    definition: >-
+      factor by which the punishment per point of shortfall changes from one
+      punished 4-round block to the next (block b uses slope * decay^b),
+      because a punishment buys less contribution, and has fewer rounds to
+      pay back, the later in the game it is dealt
+    type: float
+  stop:
+    definition: >-
+      last block that is punished at all (block b holds rounds 4b..4b+3);
+      later blocks are left unpunished, since late punishment has too few
+      rounds left to repay its cost but still lowers the common good seen at
+      the remaining switch decisions. Within a punished block only its first
+      two rounds are punished, both alike; the last two rounds before each
+      switch and rounds 20-23 never are
+    type: int
+sweep_config:
+  thr: [6, 11]
+  peer: [0.1, 0.9]
+  ceil: [8, 15]
+  slope: [5, 50, log]
+  decay: [0.25, 1.0, log]
+  stop: [1, 4]
+code: |
+  cur = c[..., -1]
+  mine = in_group[..., -1]
+  n_group = mine.sum(-1, keepdim=True)
+  n_mates = n_group - mine
+  mates_sum = (cur * mine).sum(-1, keepdim=True) - cur * mine
+  mates_mean = mates_sum / th.clamp(n_mates, min=1.0)
+  has_mates = (n_mates > 0).float()
+  bar = thr + has_mates * peer * (mates_mean - thr)
+  bar = th.minimum(bar, ceil * th.ones_like(bar))
+  shortfall = th.clamp(bar - cur, min=0.0)
+  block = th.floor(t / 4.0)
+  pos = th.remainder(t, 4.0)
+  weight = (pos < 2).float()
+  live = ((t < 20) & (block <= stop)).float()
+  scale = slope * th.pow(decay, block) * weight * live
+  punishment = scale * shortfall * valid[..., -1]

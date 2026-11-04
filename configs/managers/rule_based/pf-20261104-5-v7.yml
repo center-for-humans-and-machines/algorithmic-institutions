@@ -1,0 +1,36 @@
+params:
+  k:
+    definition: punishment points per contribution point a valid member gives below the threshold, before the cap of 30, in a group of the starting size 4 (always the case in rounds 0-3)
+    type: float
+  thr:
+    definition: contribution threshold; members giving at least this much are never punished
+    type: float
+  w:
+    definition: within-block timing weight; the dose in a round is multiplied by w to the power of the round's position in its 4-round switching block (0 at rounds 0, 4, 8, ... right after a switch opportunity, 3 at the decision rounds 3, 7, 11, ...)
+    type: float
+  t_stop:
+    definition: last round in which the manager punishes; later rounds go unpunished
+    type: int
+  s:
+    definition: size elasticity of the dose; the points per contribution point are k * (n / 4) ** s, with n our group's current size, so s > 0 pushes harder when the group holds more than its starting 4 members (many low givers to lift, a weak pull from the small other group) and softer when it holds fewer; s = 0 is a size-blind dose
+    type: float
+sweep_config:
+  k: [2.0, 20.0, log]
+  thr: [7.5, 13.0]
+  w: [0.0, 1.0]
+  t_stop: [3, 23]
+  s: [-0.5, 3.0]
+constraints:
+  - k > 0
+  - w >= 0
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  n = in_group[..., -1].sum(-1).unsqueeze(-1)
+  size = th.maximum(n, th.ones_like(n)) / 4.0
+  k_eff = k * th.pow(size, s)
+  raw = k_eff * th.relu(thr - now)
+  base = raw - th.relu(raw - 30.0)
+  block = th.floor(t / 4)
+  pos = t - 4 * block
+  punishment = base * th.pow(w, pos) * (t <= t_stop) * member

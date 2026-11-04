@@ -1,0 +1,118 @@
+# Levin's stack (24_LEVIN), the policy-finder proxy campaign (2026-11-04) against
+# Cem's top rule, head to head on one seed no sweep or final run used (5000):
+# 2000 episodes per pairing, every manager against `ah` on both group sides,
+# plus zero against ah and ah against ah. This removes the seed differences and
+# the best-of-6 selection between the campaigns' own scores.
+#
+# The proxy's lineage bests (one rule per lineage), at their GP peak:
+#   proxy_12: pf-20261104-12-v7, GP peak, final 73.43 +- 1.12
+#   proxy_9: pf-20261104-9-v3, GP peak, final 72.91 +- 1.13
+#   proxy_5: pf-20261104-5-v7, GP peak, final 71.38 +- 1.13
+#   cem_3_v6: pf-20261008-3-v6 (Cem's top, ported to #245 inputs in 5c84b57c),
+#     point s201; 73.2 +- 1.1 best of 6 in his snapshot, 72.7 in 26_LEVIN
+#
+# Report: docs/reports/policy_finder_proxy_vs_cem.md
+
+seed: 5000
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  zero:
+    type: dummy
+    constant_punishment: 0
+  cem_3_v6:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261008-3-v6.yml
+    params: configs/managers/rule_based/params/pf-20261008-3-v6_best.json
+  proxy_12:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 8.593831124672404
+      peer: 0.6021230646847561
+      ceil: 15.0
+      slope: 9.18944166018839
+      decay: 0.5553923088191522
+      stop: 3
+  proxy_9:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9-v3.yml
+    params:
+      rel: 0.843557057464249
+      slope: 3.6112721033982895
+      cap: 30.0
+      fresh: 2.689879880662373
+      last_round: 10
+      newcomer: 0.0
+  proxy_5:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v7.yml
+    params:
+      k: 5.351048709895516
+      thr: 10.35448020291837
+      w: 0.5691998207959754
+      t_stop: 10
+      s: 3.0
+pairings:
+- name: proxy_12_vs_ah
+  group_0: proxy_12
+  group_1: ah
+- name: ah_vs_proxy_12
+  group_0: ah
+  group_1: proxy_12
+- name: proxy_9_vs_ah
+  group_0: proxy_9
+  group_1: ah
+- name: ah_vs_proxy_9
+  group_0: ah
+  group_1: proxy_9
+- name: proxy_5_vs_ah
+  group_0: proxy_5
+  group_1: ah
+- name: ah_vs_proxy_5
+  group_0: ah
+  group_1: proxy_5
+- name: cem_3_v6_vs_ah
+  group_0: cem_3_v6
+  group_1: ah
+- name: ah_vs_cem_3_v6
+  group_0: ah
+  group_1: cem_3_v6
+- name: zero_vs_ah
+  group_0: zero
+  group_1: ah
+- name: ah_vs_zero
+  group_0: ah
+  group_1: zero
+- name: ah_vs_ah
+  group_0: ah
+  group_1: ah
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 2
+n_agents: 8
+agent_groups:
+- 0
+- 0
+- 0
+- 0
+- 1
+- 1
+- 1
+- 1
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/27_LEVIN_pf_proxy_vs_cem_batched
+figure_name: LEVIN_pf_proxy_vs_cem_batched
+save_per_round: true
+basedir: .
