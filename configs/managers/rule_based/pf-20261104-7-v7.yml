@@ -1,0 +1,55 @@
+params:
+  threshold:
+    definition: contribution (0-20) below which a member is punished in the early phase (rounds before t_end); a member giving at least this is not punished by the early rule
+    type: float
+  rate:
+    definition: early-phase punishment points per point of contribution shortfall below the threshold, capped at 30
+    type: float
+  t_end:
+    definition: first round (4-16) from which the early absolute-threshold punishment stops and only the group-norm clause remains
+    type: int
+  late_rate:
+    definition: group-norm clause, punishment points per point a member's contribution falls below the norm bar (the mean contribution of the other valid members of my group this round minus slack), capped at 30
+    type: float
+  slack:
+    definition: how many contribution points below the other members' current mean a member may fall before the group-norm clause punishes it
+    type: float
+  window:
+    definition: rounds (1-4) after joining my group during which a member counts as a newcomer and gets the full group-norm punishment (a player who was outside my group in any of the last window rounds)
+    type: int
+  incumbent_factor:
+    definition: share (0-1) of the group-norm punishment dealt to members who are not newcomers (0 enforces the norm on newcomers only, 1 on everyone)
+    type: float
+sweep_config:
+  threshold: [6, 13]
+  rate: [2, 30, log]
+  t_end: [4, 16]
+  late_rate: [0.3, 10, log]
+  slack: [0, 8]
+  window: [1, 4]
+  incumbent_factor: [0, 1]
+constraints:
+  - threshold > 0
+  - rate > 0
+  - t_end > 3
+  - late_rate > 0
+  - slack >= 0
+  - window > 0
+  - incumbent_factor >= 0
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1]
+  mine = valid[..., -1] * member
+  early = (t < t_end).to(now.dtype)
+  core = th.clamp(rate * th.clamp(threshold - now, min=0.0), max=30.0) * early
+  n = mine.sum(-1, keepdim=True)
+  others = ((now * mine).sum(-1, keepdim=True) - now * mine) / th.clamp(n - 1.0, min=1.0)
+  has_others = (n > 1.5).to(now.dtype)
+  bar = others - slack
+  norm = th.clamp(late_rate * th.clamp(bar - now, min=0.0), max=30.0) * has_others
+  rounds = th.arange(c.shape[-1], dtype=now.dtype)
+  recent = ((rounds >= t - window) & (rounds < t)).to(now.dtype)
+  outside = ((1.0 - in_group) * recent).sum(-1)
+  newcomer = (outside > 0.5).to(now.dtype)
+  share = newcomer + (1.0 - newcomer) * incumbent_factor
+  punishment = th.maximum(core, norm * share) * mine
