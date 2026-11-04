@@ -1,0 +1,36 @@
+params:
+  threshold:
+    definition: contribution (0-20) below which a member is punished; a member giving at least this is never punished
+    type: float
+  rate:
+    definition: punishment points per point of contribution shortfall below the threshold, capped at 30 before the time weighting
+    type: float
+  early_factor:
+    definition: multiplier on the punishment in rounds 0-3, before the first switch decision, where punishment empties the group the most (0 waits for the first switch, 1 punishes from round 0 at full strength)
+    type: float
+  t_end:
+    definition: first round (5-23) from which the manager no longer punishes, because a contribution level bought later has too few rounds left to repay its cost
+    type: int
+  shape:
+    definition: how the punishment fades from round 4 to t_end; weight (1 - (t - 4) / (t_end - 4)) ** shape (0 keeps it at full strength up to t_end, 1 fades it linearly, above 1 concentrates it right after the first switch)
+    type: float
+sweep_config:
+  threshold: [6, 14]
+  rate: [1, 30, log]
+  early_factor: [0, 1]
+  t_end: [5, 20]
+  shape: [0, 3]
+constraints:
+  - threshold > 0
+  - rate > 0
+  - t_end > 4
+  - early_factor >= 0
+  - shape >= 0
+code: |
+  now = c[..., -1]
+  shortfall = th.clamp(threshold - now, min=0.0)
+  size = th.clamp(rate * shortfall, max=30.0)
+  fade = th.clamp(1.0 - (t - 4.0) / (t_end - 4.0), min=0.0, max=1.0) ** shape
+  later = th.where(t < t_end, fade, th.zeros_like(fade))
+  weight = th.where(t < 4, early_factor, later)
+  punishment = size * weight * valid[..., -1] * in_group[..., -1]
