@@ -1,0 +1,61 @@
+params:
+  rel:
+    definition: >-
+      laggard threshold as a fraction of the mean contribution of the other
+      valid members of the group this round; only members below it are
+      punished
+    type: float
+  top:
+    definition: >-
+      punishment in a fresh round (0, 4, 8, ...) for a member who contributes
+      nothing, i.e. whose relative shortfall is 1; the manager clamps
+      anything above 30, so values over 30 make the dose saturate for deep
+      laggards
+    type: float
+  power:
+    definition: >-
+      convexity of the dose in the relative shortfall s = (threshold - c) /
+      threshold (0..1): dose = top * s^power; above 1 mild laggards get
+      little and deep laggards much, below 1 the reverse
+    type: float
+  mid:
+    definition: >-
+      multiplier on the dose in the two within-phase rounds after a fresh
+      round (1-2, 5-6, 9-10, ...), relative to the fresh round; the round
+      just before a switch decision (3, 7, 11, 15, 19) is never punished
+    type: float
+  last_round:
+    definition: >-
+      last round (0-23) in which the manager punishes; once the group's norm
+      is set the group is left alone
+    type: int
+sweep_config:
+  rel: [0.6, 1.05]
+  top: [10, 100, log]
+  power: [0.4, 3, log]
+  mid: [0, 1]
+  last_round: [4, 14]
+constraints:
+  - rel > 0
+  - top > 0
+  - power > 0
+  - mid >= 0
+code: |
+  mine = in_group[..., -1] * valid[..., -1]
+  cnow = c[..., -1]
+  zero = th.zeros_like(cnow)
+  one = th.ones_like(cnow)
+  n_mine = mine.sum(-1).unsqueeze(-1)
+  tot = (cnow * mine).sum(-1).unsqueeze(-1)
+  n_others = n_mine - mine
+  ref = (tot - cnow * mine) / th.maximum(n_others, one)
+  thr = rel * ref
+  s = th.clamp((thr - cnow) / th.maximum(thr, 0.5 * one), 0.0, 1.0)
+  dose = top * th.pow(s, power)
+  dose = dose * th.gt(s, zero) * th.gt(n_others, 0.5 * one) * mine
+  pos = th.remainder(t + 0.0, 4.0)
+  is_fresh = 1.0 * th.eq(pos, 0.0)
+  is_pre = 1.0 * th.eq(pos, 3.0)
+  mult = is_fresh + mid * (1.0 - is_fresh - is_pre)
+  active = 1.0 * th.le(t, last_round)
+  punishment = dose * mult * active
