@@ -1,0 +1,33 @@
+params:
+  thr:
+    definition: >-
+      contribution threshold; a member contributing less than this in the
+      current round is punished in proportion to the shortfall
+    type: float
+  slope:
+    definition: punishment points per point of contribution below thr
+    type: float
+  quiet:
+    definition: >-
+      number of rounds before each switch decision (rounds 3, 7, 11, 15, 19,
+      counted back from and including the decision round) in which nobody is
+      punished, so that punishment does not drive members out of the group
+    type: int
+  stop:
+    definition: >-
+      number of final rounds of the game in which nobody is punished, because
+      too few rounds remain for a punishment to pay back in contributions
+    type: int
+sweep_config:
+  thr: [3, 16]
+  slope: [0.2, 3, log]
+  quiet: [0, 3]
+  stop: [1, 6]
+code: |
+  cur = c[..., -1]
+  shortfall = th.clamp(thr - cur, min=0.0)
+  pos = th.remainder(t, 4.0)
+  before_switch = (t <= 19) & ((3.0 - pos) < quiet)
+  near_end = (23.0 - t) < stop
+  active = th.logical_not(before_switch | near_end)
+  punishment = slope * shortfall * valid[..., -1] * active.float()
