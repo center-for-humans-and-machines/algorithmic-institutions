@@ -1,0 +1,44 @@
+params:
+  threshold:
+    definition: contribution (0-20) below which a member is punished; a member giving at least this is never punished
+    type: float
+  rate:
+    definition: punishment points per point of contribution shortfall below the threshold, capped at 30
+    type: float
+  t_end:
+    definition: first round (4-23) from which the manager no longer punishes, because a contribution level bought later has too few rounds left to repay it
+    type: int
+  margin:
+    definition: common-good lead (pool per contributing member, in points) that the manager keeps over the other group; punishments are scaled down so that its group's common good after punishment stays at least the other group's estimated common good plus margin (negative values allow falling behind by that much), because players leave the group whose common good is behind
+    type: float
+sweep_config:
+  threshold: [6, 14]
+  rate: [2, 30, log]
+  t_end: [4, 23]
+  margin: [-20, 6]
+constraints:
+  - threshold > 0
+  - rate > 0
+  - t_end > 3
+code: |
+  now = c[..., -1]
+  ig = in_group[..., -1]
+  v = valid[..., -1]
+  mine = v * ig
+  other = v * (1.0 - ig)
+  n_mine = mine.sum(-1)
+  n_other = other.sum(-1)
+  pre_cg = 1.6 * (now * mine).sum(-1) / th.clamp(n_mine, min=1.0)
+  p_last = th.cat([th.zeros_like(c[..., :1]), p], dim=-1)[..., -1]
+  ig_last = th.cat([in_group[..., :1], in_group], dim=-1)[..., -2]
+  v_last = th.cat([th.zeros_like(c[..., :1]), valid], dim=-1)[..., -2]
+  other_last = v_last * (1.0 - ig_last)
+  other_p = (p_last * other_last).sum(-1) / th.clamp(other_last.sum(-1), min=1.0)
+  other_cg = 1.6 * (now * other).sum(-1) / th.clamp(n_other, min=1.0) - other_p
+  other_cg = th.where(n_other > 0, other_cg, th.zeros_like(other_cg))
+  budget = th.clamp(pre_cg - other_cg - margin, min=0.0) * n_mine
+  on = (t < t_end).to(now.dtype)
+  raw = th.clamp(rate * th.clamp(threshold - now, min=0.0), max=30.0) * mine * on
+  total = raw.sum(-1)
+  scale = th.clamp(budget / th.clamp(total, min=1e-6), max=1.0)
+  punishment = raw * scale.unsqueeze(-1)
