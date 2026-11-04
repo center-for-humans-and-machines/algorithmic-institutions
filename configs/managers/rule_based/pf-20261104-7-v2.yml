@@ -1,0 +1,32 @@
+params:
+  threshold:
+    definition: contribution (0-20) below which a member is punished; a member giving at least this is never punished
+    type: float
+  base:
+    definition: flat punishment points for any contribution below the threshold, the cheap first points that buy the most contribution per point
+    type: float
+  rate:
+    definition: additional punishment points per point of contribution shortfall below the threshold
+    type: float
+  t_end:
+    definition: first round (0-23) from which the manager no longer punishes, because a gain bought later has too few rounds left to repay its cost
+    type: int
+  taper:
+    definition: how much the punishment shrinks with the round before t_end; the punishment is scaled by 1 - taper * t / t_end (0 keeps it constant up to t_end, 1 ramps it linearly to zero at t_end)
+    type: float
+sweep_config:
+  threshold: [6, 18]
+  base: [0, 8]
+  rate: [0.2, 6, log]
+  t_end: [6, 22]
+  taper: [0, 1]
+constraints:
+  - threshold > 0
+  - rate > 0
+  - t_end > 0
+code: |
+  now = c[..., -1]
+  below = (now < threshold).float()
+  shortfall = th.clamp(threshold - now, min=0.0)
+  time_weight = th.clamp(1.0 - taper * t / t_end, min=0.0) * (t < t_end).float()
+  punishment = (base + rate * shortfall) * below * time_weight * valid[..., -1] * in_group[..., -1]
