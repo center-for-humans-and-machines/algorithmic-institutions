@@ -70,6 +70,10 @@ class ClusterError(Exception):
     pass
 
 
+class NoOutput(ClusterError):
+    """The snapshot has no such output: its job wrote nothing (not an outage)."""
+
+
 class Busy(ClusterError):
     """HTTP 409: the command server's job cap is reached."""
 
@@ -212,6 +216,9 @@ def wait(jobs, poll=None):
         time.sleep(poll * (0.75 + random.random() / 2))
 
 
+NO_OUTPUT = "__PF_NO_OUTPUT__"
+
+
 def fetch(sha, remote_dir, local_dir, key):
     """Copy snapshot `sha`'s output `remote_dir` (repo-relative, under plots/)
     into `local_dir`, through /opt/cluster_transfer/pf/<key>.
@@ -224,12 +231,19 @@ def fetch(sha, remote_dir, local_dir, key):
         raise ClusterError(f"unsafe path {remote_dir!r} or key {key!r}")
     remote = f"{TRANSFER_REMOTE}/pf/{key}"
     code, log = run(
-        f"rm -rf {remote} && mkdir -p {remote} && test -d {REPO}/{remote_dir}"
+        f"rm -rf {remote} && mkdir -p {remote}"
+        f" && {{ test -d {REPO}/{remote_dir} || {{ echo {NO_OUTPUT[:-2]}\"\"__; exit 3; }}; }}"
         f" && cp -r {REPO}/{remote_dir}/. {remote}/ && du -sb {remote}",
         sha,
     )
     if code != 0:
-        raise ClusterError(f"no {remote_dir} on snapshot {sha[:12]}: {log[-1500:]}")
+        # only the marker (printed, not echoed with the command: the shell
+        # drops the "") means the output is missing; anything else (Raven
+        # unreachable, the login node failing) says nothing about the job
+        if NO_OUTPUT in log:
+            raise NoOutput(f"no {remote_dir} on snapshot {sha[:12]}")
+        raise ClusterError(f"could not look for {remote_dir} on snapshot {sha[:12]}"
+                           f" ({code}): {log[-1500:]}")
     size = re.findall(rf"^(\d+)\s+{re.escape(remote)}\s*$", log, flags=re.M)
     if size and int(size[-1]) > FETCH_LIMIT:
         run(f"rm -rf {remote}")
