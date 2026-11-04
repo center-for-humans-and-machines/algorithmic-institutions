@@ -4,6 +4,7 @@ Now for experiment 2 we ended up developing a policy finder pipeline for a rule-
 
 Your tasks are:
 1. Identify the policy model and human clone model used in experiment 1
-2. Run the policy finder pipeline to optimize a policy against experiment 1 human clones. The target metric to optimize should be payoffs of the clone models.
-3. Compare performance with the old RL policy.
-4. Create a policy finder artifact for this run and make sure to include a comparison with the RL GNN policy.
+2. Adapt the policy finder to experiment 1 and select the correct possible input features
+3. Run the policy finder pipeline to optimize a policy against experiment 1 human clones. The target metric to optimize should be payoffs of the clone models.
+4. Compare performance with the old RL policy.
+5. Create a policy finder artifact for this run and make sure to include a comparison with the RL GNN policy.
