@@ -1,0 +1,74 @@
+params:
+  rel:
+    definition: >-
+      laggard threshold as a fraction of the mean contribution of the other
+      valid members of my group this round; only members below it are
+      punished, in proportion to how far below they are
+    type: float
+  slope:
+    definition: >-
+      punishment per point of shortfall below the threshold in a fresh round
+      (0, 4, 8, ..., the round right after a switch decision); the manager
+      clamps each dose to 30
+    type: float
+  mid:
+    definition: >-
+      the within-phase dose (rounds 1-2, 5-6, 9-10, ...) as a share of the
+      fresh-round dose; the round just before a switch decision (3, 7, 11,
+      ...) is never punished
+    type: float
+  last_round:
+    definition: >-
+      last round (0-23) in which the manager punishes at all
+    type: int
+  margin:
+    definition: >-
+      the punishment budget: in every round my total punishment is capped
+      so that my group's per-capita pool after punishing (1.6 x mean
+      contribution - mean punishment) stays at least `margin` above the
+      other group's (estimated as 1.6 x its mean contribution this round
+      minus its mean punishment last round); negative values allow my group
+      to fall that far behind. When the laggards' doses exceed the budget,
+      all are scaled down in proportion
+    type: float
+sweep_config:
+  rel: [0.65, 1.0]
+  slope: [3, 30, log]
+  mid: [0, 1.2]
+  last_round: [6, 20]
+  margin: [-20, 4]
+constraints:
+  - rel > 0
+  - slope > 0
+  - mid >= 0
+code: |
+  one = th.ones_like(c[..., -1])
+  zero = th.zeros_like(one)
+  cnow = c[..., -1]
+  vnow = valid[..., -1]
+  mine = in_group[..., -1] * vnow
+  other = (1.0 - in_group[..., -1]) * vnow
+  n_mine = mine.sum(-1).unsqueeze(-1)
+  n_other = other.sum(-1).unsqueeze(-1)
+  tot_mine = (cnow * mine).sum(-1).unsqueeze(-1)
+  n_rest = n_mine - mine
+  ref = (tot_mine - cnow * mine) / th.maximum(n_rest, one)
+  short = th.clamp(rel * ref - cnow, min=0.0)
+  dose = slope * short * mine * th.gt(n_rest, 0.5 * one)
+  pos = th.remainder(t + 0.0, 4.0)
+  is_fresh = 1.0 * th.eq(pos, 0.0)
+  is_pre = 1.0 * th.eq(pos, 3.0)
+  mult = is_fresh + mid * (1.0 - is_fresh - is_pre)
+  dose = dose * mult * th.le(t, last_round)
+  dose = th.clamp(dose, max=30.0)
+  p_pad = th.cat([th.zeros_like(c[..., :1]), p], -1)
+  g_pad = th.cat([in_group[..., :1], in_group], -1)
+  v_pad = th.cat([valid[..., :1], valid], -1)
+  other_last = (1.0 - g_pad[..., -2]) * v_pad[..., -2]
+  p_other_last = (p_pad[..., -1] * other_last).sum(-1).unsqueeze(-1) / th.maximum(other_last.sum(-1).unsqueeze(-1), one)
+  cg_mine = 1.6 * tot_mine / th.maximum(n_mine, one)
+  cg_other = (1.6 * (cnow * other).sum(-1).unsqueeze(-1) / th.maximum(n_other, one) - p_other_last) * th.gt(n_other, 0.5 * one)
+  budget = n_mine * th.clamp(cg_mine - cg_other - margin, min=0.0)
+  total = dose.sum(-1).unsqueeze(-1)
+  scale = th.clamp(budget / th.maximum(total, 1e-6 * one), max=1.0)
+  punishment = dose * scale
