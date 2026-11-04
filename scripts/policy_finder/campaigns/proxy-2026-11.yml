@@ -1,0 +1,14 @@
+# The from-scratch campaign through the proxy, compared with Cem's
+# (docs/plans/policy-finder-proxy-adapter.md, "Settings for the campaign").
+# Run: PF_RUNS=... python scripts/policy_finder/campaign.py run <this file>
+prefix: pf-20261104
+n_fresh: 12
+generations: 6
+top_k: 4
+min_params: 1
+max_params: 5
+sobol_points: 256
+parallel: 12
+error_retries: 3
+retry_wait: 600
+summarize: null

@@ -52,6 +52,8 @@ AGENT_DATA = (
 DENY = (
     "configs/simulation/manager_testing/26_LEVIN_ah_vs_pf_top_batched.yml",
     "scripts/policy_finder/observation_app",
+    "scripts/policy_finder/campaign.py",
+    "scripts/policy_finder/campaigns",
     "scripts/tests",
 )
 #: Folders that hold one entry per instance or version; only the lineage's own
