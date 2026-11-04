@@ -1,0 +1,671 @@
+# Sweep of /home/kappablanca/pf_runs/worktrees/pf-20261104-9/configs/managers/rule_based/pf-20261104-9.yml (#227), written by scripts/policy_finder/generate_sim_config.py:
+# 128 of 256 distinct design points (256 Sobol points), each against `ah`; stack and sim parameters from
+# configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 106
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261104-9_s128:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.882935144007206, slope: 2.1391517359840635, cap: 3.7757832352072, last_round: 17, pre_switch: 1.7000657990574837}
+  pf-20261104-9_s129:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.236668136715889, slope: 0.28055448892523543, cap: 14.053952677175403, last_round: 18, pre_switch: 0.5295696556568146}
+  pf-20261104-9_s130:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5315981604158879, slope: 4.339059156010955, cap: 6.763137221336365, last_round: 14, pre_switch: 0.015088967978954315}
+  pf-20261104-9_s131:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7849283181130886, slope: 0.5619666191914308, cap: 11.353720974177122, last_round: 22, pre_switch: 1.2167166024446487}
+  pf-20261104-9_s132:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6759576849639416, slope: 3.3393044569334545, cap: 15.59387257322669, last_round: 22, pre_switch: 1.4939191211014986}
+  pf-20261104-9_s133:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.4296830423176289, slope: 0.921079380691154, cap: 2.2461301535367966, last_round: 12, pre_switch: 0.29234459437429905}
+  pf-20261104-9_s134:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.327648800611496, slope: 1.3378285387284508, cap: 9.872116832062602, last_round: 19, pre_switch: 0.8070396203547716}
+  pf-20261104-9_s135:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9809713348746301, slope: 0.37368203837777775, cap: 8.33701361157, last_round: 15, pre_switch: 1.9774821791797876}
+  pf-20261104-9_s136:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9061126537621023, slope: 3.843899670625815, cap: 10.631332606077194, last_round: 13, pre_switch: 0.7375710997730494}
+  pf-20261104-9_s137:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.35240980312228204, slope: 0.5300882581513111, cap: 7.347084920853376, last_round: 23, pre_switch: 1.5330671090632677}
+  pf-20261104-9_s138:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.45432390421628954, slope: 1.5693063146541346, cap: 14.835511291399598, last_round: 16, pre_switch: 1.047762418165803}
+  pf-20261104-9_s139:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6010238766670227, slope: 0.2137091608576826, cap: 3.238622320815921, last_round: 20, pre_switch: 0.22113488800823689}
+  pf-20261104-9_s140:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7099704593420029, slope: 1.1133820854941836, cap: 5.786880431696773, last_round: 18, pre_switch: 0.443718746304512}
+  pf-20261104-9_s141:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5562630251049996, slope: 0.35708482745711656, cap: 12.126608649268746, last_round: 17, pre_switch: 1.2702931687235832}
+  pf-20261104-9_s142:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.2614051245152951, slope: 2.244231811217589, cap: 4.754603501409292, last_round: 21, pre_switch: 1.7558107674121857}
+  pf-20261104-9_s143:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8081005252897739, slope: 0.7288792128671093, cap: 13.281919494271278, last_round: 13, pre_switch: 0.9603683426976204}
+  pf-20261104-9_s144:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8292913809418678, slope: 2.680709019751623, cap: 7.764601439237595, last_round: 20, pre_switch: 1.1311554964631796}
+  pf-20261104-9_s145:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.27634707987308504, slope: 0.7488486970313885, cap: 10.174522798508406, last_round: 15, pre_switch: 0.08284066431224346}
+  pf-20261104-9_s146:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5805788852274418, slope: 1.087510674752739, cap: 3.6424814108759165, last_round: 22, pre_switch: 0.5682405140250921}
+  pf-20261104-9_s147:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7280374132096767, slope: 0.2999972330379471, cap: 14.364988459274173, last_round: 12, pre_switch: 1.647923855111003}
+  pf-20261104-9_s148:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6362787656486035, slope: 1.7818045435527374, cap: 11.707566676661372, last_round: 14, pre_switch: 1.9251337610185146}
+  pf-20261104-9_s149:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.48332682922482495, slope: 0.2307903556137864, cap: 6.241797724738717, last_round: 22, pre_switch: 0.8455192632973194}
+  pf-20261104-9_s150:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.38453968167304997, slope: 3.5692314501670457, cap: 12.876588460057974, last_round: 17, pre_switch: 0.36033327504992485}
+  pf-20261104-9_s151:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9319905862212181, slope: 0.46815862552463894, cap: 5.223180308938026, last_round: 19, pre_switch: 1.4085797406733036}
+  pf-20261104-9_s152:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9566558547317983, slope: 1.369562407570404, cap: 13.635805303230882, last_round: 21, pre_switch: 0.1814822293817997}
+  pf-20261104-9_s153:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.3095814697444439, slope: 0.4447613518896534, cap: 4.233250601217151, last_round: 14, pre_switch: 1.1047971956431866}
+  pf-20261104-9_s154:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.40849256962537767, slope: 2.795679535144158, cap: 10.949204325675964, last_round: 18, pre_switch: 1.6196100302040577}
+  pf-20261104-9_s155:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6610153436660766, slope: 0.8965445569510233, cap: 7.234290909022093, last_round: 16, pre_switch: 0.6649265848100185}
+  pf-20261104-9_s156:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.752798816561699, slope: 4.673227254417788, cap: 2.6662235520780087, last_round: 15, pre_switch: 0.8875030558556318}
+  pf-20261104-9_s157:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5057198479771614, slope: 0.636340656209967, cap: 15.137877151370049, last_round: 20, pre_switch: 1.8421176578849554}
+  pf-20261104-9_s158:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.20141363367438317, slope: 1.8839552692017787, cap: 8.743422774598002, last_round: 13, pre_switch: 1.3275182079523802}
+  pf-20261104-9_s159:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8539318360388279, slope: 0.2597789996314454, cap: 9.40248859860003, last_round: 23, pre_switch: 0.4042716082185507}
+  pf-20261104-9_s160:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8744201555848121, slope: 4.139049172991649, cap: 15.038259603083134, last_round: 19, pre_switch: 1.9452996253967285}
+  pf-20261104-9_s161:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.22150465548038484, slope: 0.592848637869323, cap: 3.010653216391802, last_round: 17, pre_switch: 0.7708937898278236}
+  pf-20261104-9_s162:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5227412559092045, slope: 2.027659201800147, cap: 10.369250597432256, last_round: 21, pre_switch: 0.2542184442281723}
+  pf-20261104-9_s163:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.770204170793295, slope: 0.2941026147158823, cap: 7.529285391792655, last_round: 14, pre_switch: 1.4597486481070518}
+  pf-20261104-9_s164:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.665869515389204, slope: 1.276129676100348, cap: 4.981237566098571, last_round: 12, pre_switch: 1.237210327759385}
+  pf-20261104-9_s165:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.4129616387188435, slope: 0.3942074768252208, cap: 13.07794295437634, last_round: 22, pre_switch: 0.03173370845615864}
+  pf-20261104-9_s166:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.3172187149524689, slope: 3.1654932569873773, cap: 5.603344921022654, last_round: 15, pre_switch: 0.5481346342712641}
+  pf-20261104-9_s167:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9646892651915551, slope: 0.9656299284933576, cap: 12.387462429702282, last_round: 19, pre_switch: 1.722487362101674}
+  pf-20261104-9_s168:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.939633769541979, slope: 1.6450887655412778, cap: 6.581310721114278, last_round: 23, pre_switch: 0.9925822336226702}
+  pf-20261104-9_s169:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.3925672046840191, slope: 0.20257062174190102, cap: 11.61628376506269, last_round: 13, pre_switch: 1.7919882033020258}
+  pf-20261104-9_s170:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.48818688839673996, slope: 4.055135583337943, cap: 4.004126258194447, last_round: 20, pre_switch: 1.308387951925397}
+  pf-20261104-9_s171:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6407418966293335, slope: 0.5056537448162546, cap: 13.851685095578432, last_round: 16, pre_switch: 0.477857643738389}
+  pf-20261104-9_s172:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7450525492429734, slope: 2.3527799839654895, cap: 9.611743781715631, last_round: 16, pre_switch: 0.20067062228918076}
+  pf-20261104-9_s173:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5979905560612679, slope: 0.690940874886543, cap: 8.520923040807247, last_round: 18, pre_switch: 1.0311473459005356}
+  pf-20261104-9_s174:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.29682908281683923, slope: 1.1745375260206015, cap: 15.798329895362258, last_round: 14, pre_switch: 1.5144727006554604}
+  pf-20261104-9_s175:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8493886746466159, slope: 0.34061657942649, cap: 2.0198700595647097, last_round: 21, pre_switch: 0.7151198387145996}
+  pf-20261104-9_s176:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8125731959939004, slope: 1.037515259094967, cap: 11.158802004531026, last_round: 15, pre_switch: 1.3881189357489347}
+  pf-20261104-9_s177:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.2662617474794388, slope: 0.3164617184200502, cap: 6.999499192461371, last_round: 19, pre_switch: 0.3437137957662344}
+  pf-20261104-9_s178:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5643000818789006, slope: 2.541318423450136, cap: 13.380545802414417, last_round: 12, pre_switch: 0.8269137721508741}
+  pf-20261104-9_s179:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7176102124154569, slope: 0.784958066020288, cap: 4.408601809293032, last_round: 23, pre_switch: 1.9026945438235998}
+  pf-20261104-9_s180:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6211123995482921, slope: 3.40489471049371, cap: 8.976879451423883, last_round: 22, pre_switch: 1.6801335699856281}
+  pf-20261104-9_s181:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.4748085744678974, slope: 0.49381577952901934, cap: 9.191662691533566, last_round: 14, pre_switch: 0.6044211648404598}
+  pf-20261104-9_s182:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.3698126971721649, slope: 1.6891963696488477, cap: 2.4895373042672873, last_round: 19, pre_switch: 0.12094724550843239}
+  pf-20261104-9_s183:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9231304630637169, slope: 0.24192496784999704, cap: 15.39190842397511, last_round: 17, pre_switch: 1.1652835421264172}
+  pf-20261104-9_s184:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9983801193535329, slope: 2.930485841104709, cap: 3.467504121363163, last_round: 13, pre_switch: 0.4247621111571789}
+  pf-20261104-9_s185:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.34466067478060725, slope: 0.8499260677797966, cap: 14.620728690177202, last_round: 21, pre_switch: 1.3441671170294285}
+  pf-20261104-9_s186:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.44977750033140185, slope: 1.4447272914176001, cap: 7.999767126515508, last_round: 17, pre_switch: 1.8606934808194637}
+  pf-20261104-9_s187:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6964364647865295, slope: 0.4243147441710227, cap: 9.965405901893973, last_round: 18, pre_switch: 0.9099128134548664}
+  pf-20261104-9_s188:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7929590553045274, slope: 1.9748471609859553, cap: 12.623037969693542, last_round: 20, pre_switch: 0.6327484454959631}
+  pf-20261104-9_s189:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.539244182407856, slope: 0.24627707370934548, cap: 5.4002405274659395, last_round: 16, pre_switch: 1.583460746333003}
+  pf-20261104-9_s190:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.2411345385015011, slope: 4.929341955253488, cap: 11.918873313814402, last_round: 23, pre_switch: 1.0666590090841055}
+  pf-20261104-9_s191:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.887798086553812, slope: 0.6070420266228317, cap: 6.008714966475964, last_round: 12, pre_switch: 0.14732284657657146}
+  pf-20261104-9_s192:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8961251921951772, slope: 3.030192862127023, cap: 12.233344940468669, last_round: 21, pre_switch: 0.7571951542049646}
+  pf-20261104-9_s193:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.24984464570879938, slope: 0.9840446830471349, cap: 5.885649928823113, last_round: 13, pre_switch: 1.9587693829089403}
+  pf-20261104-9_s194:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5447766348719597, slope: 1.2370426205027933, cap: 13.183569576591253, last_round: 18, pre_switch: 1.4423346165567636}
+  pf-20261104-9_s195:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7981176614761354, slope: 0.3967057425245565, cap: 4.648302122950554, last_round: 16, pre_switch: 0.2718918789178133}
+  pf-20261104-9_s196:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6875844687223435, slope: 2.118821097982635, cap: 7.466575384140015, last_round: 16, pre_switch: 0.04909433424472809}
+  pf-20261104-9_s197:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.4412993386387825, slope: 0.28851366839540915, cap: 10.744690846651793, last_round: 20, pre_switch: 1.2195902988314629}
+  pf-20261104-9_s198:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.33926248773932455, slope: 4.271094136673917, cap: 3.125699097290635, last_round: 12, pre_switch: 1.7362394034862518}
+  pf-20261104-9_s199:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9925989426672459, slope: 0.5889411905289658, cap: 14.716440303251147, last_round: 23, pre_switch: 0.5346114709973335}
+  pf-20261104-9_s200:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9179214850068094, slope: 1.2116050223025405, cap: 2.3664822541177273, last_round: 19, pre_switch: 1.8054425790905952}
+  pf-20261104-9_s201:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.364232936501503, slope: 0.3384590525095156, cap: 15.706370010972023, last_round: 15, pre_switch: 0.9788684546947479}
+  pf-20261104-9_s202:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.4661457873880863, slope: 2.457742727616912, cap: 8.224937735125422, last_round: 23, pre_switch: 0.49551593512296677}
+  pf-20261104-9_s203:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6128356538712978, slope: 0.6779861261261033, cap: 9.752197662368417, last_round: 12, pre_switch: 1.2909585386514664}
+  pf-20261104-9_s204:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7233440808951854, slope: 3.9299121374876966, cap: 14.159827435389161, last_round: 14, pre_switch: 1.0135424602776766}
+  pf-20261104-9_s205:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5696478970348835, slope: 0.5090273313864054, cap: 3.875413430854678, last_round: 22, pre_switch: 0.21804662980139256}
+  pf-20261104-9_s206:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.27479026913642884, slope: 1.574367036204627, cap: 11.254523605108261, last_round: 17, pre_switch: 0.7016120571643114}
+  pf-20261104-9_s207:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8214725121855737, slope: 0.20650233791804798, cap: 6.657684128731489, last_round: 18, pre_switch: 1.5282398853451014}
+  pf-20261104-9_s208:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.840906698256731, slope: 1.7009464847685134, cap: 15.237768169492483, last_round: 13, pre_switch: 0.3259793259203434}
+  pf-20261104-9_s209:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.28797327205538753, slope: 0.23456657370219844, cap: 2.7718383222818375, last_round: 23, pre_switch: 1.405594002455473}
+  pf-20261104-9_s210:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5922070905566216, slope: 3.4719609785969117, cap: 9.297308741137385, last_round: 15, pre_switch: 1.889041680842638}
+  pf-20261104-9_s211:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7396520733833314, slope: 0.472813192347255, cap: 8.643951335921884, last_round: 20, pre_switch: 0.8407955132424831}
+  pf-20261104-9_s212:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6494558185338974, slope: 2.5240122288229774, cap: 4.345914566889405, last_round: 18, pre_switch: 0.6180053632706404}
+  pf-20261104-9_s213:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.49651780873537066, slope: 0.8095020564873783, cap: 13.755990041419864, last_round: 16, pre_switch: 1.6663204934448004}
+  pf-20261104-9_s214:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.3977280996739865, slope: 1.017575009874896, cap: 7.114525645971298, last_round: 21, pre_switch: 1.1830866765230894}
+  pf-20261104-9_s215:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9451685108244419, slope: 0.3304864186135915, cap: 10.836975377053022, last_round: 14, pre_switch: 0.10340351425111294}
+  pf-20261104-9_s216:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9700393691658975, slope: 4.834183721950059, cap: 6.355309871956706, last_round: 17, pre_switch: 1.361657565459609}
+  pf-20261104-9_s217:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.32295487225055697, slope: 0.6340148771837916, cap: 11.826904067769647, last_round: 19, pre_switch: 0.4070427846163511}
+  pf-20261104-9_s218:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.4218647696077824, slope: 1.9612289315155924, cap: 5.104275848716497, last_round: 14, pre_switch: 0.9238096978515387}
+  pf-20261104-9_s219:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6744018517434598, slope: 0.2540059593884292, cap: 12.76349787414074, last_round: 21, pre_switch: 1.8470559995621443}
+  pf-20261104-9_s220:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7646221213042736, slope: 1.473019936775059, cap: 10.273565530776978, last_round: 22, pre_switch: 1.569632526487112}
+  pf-20261104-9_s221:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5175299890339375, slope: 0.4063032859345845, cap: 7.871063660830259, last_round: 12, pre_switch: 0.6463172622025013}
+  pf-20261104-9_s222:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.2132240951061249, slope: 2.9505426995677637, cap: 14.258947903290391, last_round: 19, pre_switch: 0.12976373359560966}
+  pf-20261104-9_s223:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8657535538077354, slope: 0.8241463466227372, cap: 3.5438715051859617, last_round: 15, pre_switch: 1.0844470001757145}
+  pf-20261104-9_s224:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8612411804497242, slope: 1.2967559345331603, cap: 8.401637438684702, last_round: 13, pre_switch: 0.5121937710791826}
+  pf-20261104-9_s225:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.2083155743777752, slope: 0.3760963336479595, cap: 9.498179845511913, last_round: 21, pre_switch: 1.7176705691963434}
+  pf-20261104-9_s226:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5095509454607964, slope: 3.196340226234604, cap: 2.133012330159545, last_round: 16, pre_switch: 1.2029493022710085}
+  pf-20261104-9_s227:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7570281624794006, slope: 0.9387600080303459, cap: 15.917182670906186, last_round: 18, pre_switch: 0.028596872463822365}
+  pf-20261104-9_s228:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6542553275823593, slope: 4.476934350631415, cap: 11.509769858792424, last_round: 20, pre_switch: 0.30605848878622055}
+  pf-20261104-9_s229:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.4013342931866646, slope: 0.558303761698035, cap: 6.482319673523307, last_round: 15, pre_switch: 1.4804646223783493}
+  pf-20261104-9_s230:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.30559166893363, slope: 2.235052227678756, cap: 13.950243212282658, last_round: 23, pre_switch: 1.9949114695191383}
+  pf-20261104-9_s231:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9530734695494176, slope: 0.2752433415527256, cap: 4.110218603163958, last_round: 13, pre_switch: 0.7893814444541931}
+  pf-20261104-9_s232:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9278115764260293, slope: 2.344639312928063, cap: 12.972276395186782, last_round: 15, pre_switch: 1.5506872534751892}
+  pf-20261104-9_s233:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.3807558804750443, slope: 0.7151603009248105, cap: 4.881398336961865, last_round: 20, pre_switch: 0.7202103510499}
+  pf-20261104-9_s234:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.4763776041567326, slope: 1.14866078509857, cap: 12.4868821837008, last_round: 12, pre_switch: 0.23465792834758759}
+  pf-20261104-9_s235:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6289190731942653, slope: 0.35479691328342766, cap: 5.708576463162899, last_round: 22, pre_switch: 1.0340104922652245}
+  pf-20261104-9_s236:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7316670946776866, slope: 1.5019527975293754, cap: 2.8905201628804207, last_round: 21, pre_switch: 1.2568235341459513}
+  pf-20261104-9_s237:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5846190221607686, slope: 0.2178302687729387, cap: 14.925543952733278, last_round: 14, pre_switch: 0.4574172664433718}
+  pf-20261104-9_s238:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.28345500826835635, slope: 3.725474343529141, cap: 7.641566129401326, last_round: 19, pre_switch: 0.9426947925239801}
+  pf-20261104-9_s239:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8360041126608848, slope: 0.5335594252650804, cap: 10.488964071497321, last_round: 17, pre_switch: 1.7732249218970537}
+  pf-20261104-9_s240:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.8009445376694202, slope: 3.639802265968288, cap: 5.287798112258315, last_round: 23, pre_switch: 0.06927172467112541}
+  pf-20261104-9_s241:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.25464739724993707, slope: 0.44819215338827817, cap: 12.502630846574903, last_round: 12, pre_switch: 1.1449838317930698}
+  pf-20261104-9_s242:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5526844546198846, slope: 1.7943314338254521, cap: 6.1286892630159855, last_round: 20, pre_switch: 1.6301359795033932}
+  pf-20261104-9_s243:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7059844732284546, slope: 0.22374320110829624, cap: 12.030894063413143, last_round: 16, pre_switch: 0.5857995040714741}
+  pf-20261104-9_s244:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6079235285520554, slope: 1.066740331059291, cap: 14.521043367683887, last_round: 17, pre_switch: 0.8632384743541479}
+  pf-20261104-9_s245:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.46163095980882646, slope: 0.3132691417612099, cap: 3.361684489995241, last_round: 18, pre_switch: 1.907643435522914}
+  pf-20261104-9_s246:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.35663533434271816, slope: 2.6627810877511946, cap: 10.07080397196114, last_round: 13, pre_switch: 1.422217344865203}
+  pf-20261104-9_s247:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9099399365484715, slope: 0.7722069100924435, cap: 8.099019518122077, last_round: 21, pre_switch: 0.34643627516925335}
+  pf-20261104-9_s248:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.9850076571106912, slope: 1.8707336784164936, cap: 9.092838171869516, last_round: 18, pre_switch: 1.118610156700015}
+  pf-20261104-9_s249:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.3312746673822403, slope: 0.2679513020961969, cap: 8.87019818276167, last_round: 17, pre_switch: 0.167898153886199}
+  pf-20261104-9_s250:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.4363934852182865, slope: 4.582451145987123, cap: 15.498154675588012, last_round: 22, pre_switch: 0.6824704390019178}
+  pf-20261104-9_s251:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.6830633245408535, slope: 0.6646644225132162, cap: 2.587942348793149, last_round: 14, pre_switch: 1.6018067803233862}
+  pf-20261104-9_s252:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.7811483316123486, slope: 2.814605788826523, cap: 6.88619607873261, last_round: 12, pre_switch: 1.8246424682438374}
+  pf-20261104-9_s253:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.5274229653179645, slope: 0.869457367899387, cap: 11.039256414398551, last_round: 22, pre_switch: 0.9052376411855221}
+  pf-20261104-9_s254:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.2293107330799103, slope: 1.3962804562240965, cap: 4.527727819979191, last_round: 15, pre_switch: 0.39038998261094093}
+  pf-20261104-9_s255:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-9.yml
+    params: {rel: 0.875988207757473, slope: 0.4259343353800838, cap: 13.493414003401995, last_round: 19, pre_switch: 1.3411709479987621}
+pairings:
+- {name: pf-20261104-9_s128_vs_ah, group_0: pf-20261104-9_s128, group_1: ah}
+- {name: pf-20261104-9_s129_vs_ah, group_0: pf-20261104-9_s129, group_1: ah}
+- {name: pf-20261104-9_s130_vs_ah, group_0: pf-20261104-9_s130, group_1: ah}
+- {name: pf-20261104-9_s131_vs_ah, group_0: pf-20261104-9_s131, group_1: ah}
+- {name: pf-20261104-9_s132_vs_ah, group_0: pf-20261104-9_s132, group_1: ah}
+- {name: pf-20261104-9_s133_vs_ah, group_0: pf-20261104-9_s133, group_1: ah}
+- {name: pf-20261104-9_s134_vs_ah, group_0: pf-20261104-9_s134, group_1: ah}
+- {name: pf-20261104-9_s135_vs_ah, group_0: pf-20261104-9_s135, group_1: ah}
+- {name: pf-20261104-9_s136_vs_ah, group_0: pf-20261104-9_s136, group_1: ah}
+- {name: pf-20261104-9_s137_vs_ah, group_0: pf-20261104-9_s137, group_1: ah}
+- {name: pf-20261104-9_s138_vs_ah, group_0: pf-20261104-9_s138, group_1: ah}
+- {name: pf-20261104-9_s139_vs_ah, group_0: pf-20261104-9_s139, group_1: ah}
+- {name: pf-20261104-9_s140_vs_ah, group_0: pf-20261104-9_s140, group_1: ah}
+- {name: pf-20261104-9_s141_vs_ah, group_0: pf-20261104-9_s141, group_1: ah}
+- {name: pf-20261104-9_s142_vs_ah, group_0: pf-20261104-9_s142, group_1: ah}
+- {name: pf-20261104-9_s143_vs_ah, group_0: pf-20261104-9_s143, group_1: ah}
+- {name: pf-20261104-9_s144_vs_ah, group_0: pf-20261104-9_s144, group_1: ah}
+- {name: pf-20261104-9_s145_vs_ah, group_0: pf-20261104-9_s145, group_1: ah}
+- {name: pf-20261104-9_s146_vs_ah, group_0: pf-20261104-9_s146, group_1: ah}
+- {name: pf-20261104-9_s147_vs_ah, group_0: pf-20261104-9_s147, group_1: ah}
+- {name: pf-20261104-9_s148_vs_ah, group_0: pf-20261104-9_s148, group_1: ah}
+- {name: pf-20261104-9_s149_vs_ah, group_0: pf-20261104-9_s149, group_1: ah}
+- {name: pf-20261104-9_s150_vs_ah, group_0: pf-20261104-9_s150, group_1: ah}
+- {name: pf-20261104-9_s151_vs_ah, group_0: pf-20261104-9_s151, group_1: ah}
+- {name: pf-20261104-9_s152_vs_ah, group_0: pf-20261104-9_s152, group_1: ah}
+- {name: pf-20261104-9_s153_vs_ah, group_0: pf-20261104-9_s153, group_1: ah}
+- {name: pf-20261104-9_s154_vs_ah, group_0: pf-20261104-9_s154, group_1: ah}
+- {name: pf-20261104-9_s155_vs_ah, group_0: pf-20261104-9_s155, group_1: ah}
+- {name: pf-20261104-9_s156_vs_ah, group_0: pf-20261104-9_s156, group_1: ah}
+- {name: pf-20261104-9_s157_vs_ah, group_0: pf-20261104-9_s157, group_1: ah}
+- {name: pf-20261104-9_s158_vs_ah, group_0: pf-20261104-9_s158, group_1: ah}
+- {name: pf-20261104-9_s159_vs_ah, group_0: pf-20261104-9_s159, group_1: ah}
+- {name: pf-20261104-9_s160_vs_ah, group_0: pf-20261104-9_s160, group_1: ah}
+- {name: pf-20261104-9_s161_vs_ah, group_0: pf-20261104-9_s161, group_1: ah}
+- {name: pf-20261104-9_s162_vs_ah, group_0: pf-20261104-9_s162, group_1: ah}
+- {name: pf-20261104-9_s163_vs_ah, group_0: pf-20261104-9_s163, group_1: ah}
+- {name: pf-20261104-9_s164_vs_ah, group_0: pf-20261104-9_s164, group_1: ah}
+- {name: pf-20261104-9_s165_vs_ah, group_0: pf-20261104-9_s165, group_1: ah}
+- {name: pf-20261104-9_s166_vs_ah, group_0: pf-20261104-9_s166, group_1: ah}
+- {name: pf-20261104-9_s167_vs_ah, group_0: pf-20261104-9_s167, group_1: ah}
+- {name: pf-20261104-9_s168_vs_ah, group_0: pf-20261104-9_s168, group_1: ah}
+- {name: pf-20261104-9_s169_vs_ah, group_0: pf-20261104-9_s169, group_1: ah}
+- {name: pf-20261104-9_s170_vs_ah, group_0: pf-20261104-9_s170, group_1: ah}
+- {name: pf-20261104-9_s171_vs_ah, group_0: pf-20261104-9_s171, group_1: ah}
+- {name: pf-20261104-9_s172_vs_ah, group_0: pf-20261104-9_s172, group_1: ah}
+- {name: pf-20261104-9_s173_vs_ah, group_0: pf-20261104-9_s173, group_1: ah}
+- {name: pf-20261104-9_s174_vs_ah, group_0: pf-20261104-9_s174, group_1: ah}
+- {name: pf-20261104-9_s175_vs_ah, group_0: pf-20261104-9_s175, group_1: ah}
+- {name: pf-20261104-9_s176_vs_ah, group_0: pf-20261104-9_s176, group_1: ah}
+- {name: pf-20261104-9_s177_vs_ah, group_0: pf-20261104-9_s177, group_1: ah}
+- {name: pf-20261104-9_s178_vs_ah, group_0: pf-20261104-9_s178, group_1: ah}
+- {name: pf-20261104-9_s179_vs_ah, group_0: pf-20261104-9_s179, group_1: ah}
+- {name: pf-20261104-9_s180_vs_ah, group_0: pf-20261104-9_s180, group_1: ah}
+- {name: pf-20261104-9_s181_vs_ah, group_0: pf-20261104-9_s181, group_1: ah}
+- {name: pf-20261104-9_s182_vs_ah, group_0: pf-20261104-9_s182, group_1: ah}
+- {name: pf-20261104-9_s183_vs_ah, group_0: pf-20261104-9_s183, group_1: ah}
+- {name: pf-20261104-9_s184_vs_ah, group_0: pf-20261104-9_s184, group_1: ah}
+- {name: pf-20261104-9_s185_vs_ah, group_0: pf-20261104-9_s185, group_1: ah}
+- {name: pf-20261104-9_s186_vs_ah, group_0: pf-20261104-9_s186, group_1: ah}
+- {name: pf-20261104-9_s187_vs_ah, group_0: pf-20261104-9_s187, group_1: ah}
+- {name: pf-20261104-9_s188_vs_ah, group_0: pf-20261104-9_s188, group_1: ah}
+- {name: pf-20261104-9_s189_vs_ah, group_0: pf-20261104-9_s189, group_1: ah}
+- {name: pf-20261104-9_s190_vs_ah, group_0: pf-20261104-9_s190, group_1: ah}
+- {name: pf-20261104-9_s191_vs_ah, group_0: pf-20261104-9_s191, group_1: ah}
+- {name: pf-20261104-9_s192_vs_ah, group_0: pf-20261104-9_s192, group_1: ah}
+- {name: pf-20261104-9_s193_vs_ah, group_0: pf-20261104-9_s193, group_1: ah}
+- {name: pf-20261104-9_s194_vs_ah, group_0: pf-20261104-9_s194, group_1: ah}
+- {name: pf-20261104-9_s195_vs_ah, group_0: pf-20261104-9_s195, group_1: ah}
+- {name: pf-20261104-9_s196_vs_ah, group_0: pf-20261104-9_s196, group_1: ah}
+- {name: pf-20261104-9_s197_vs_ah, group_0: pf-20261104-9_s197, group_1: ah}
+- {name: pf-20261104-9_s198_vs_ah, group_0: pf-20261104-9_s198, group_1: ah}
+- {name: pf-20261104-9_s199_vs_ah, group_0: pf-20261104-9_s199, group_1: ah}
+- {name: pf-20261104-9_s200_vs_ah, group_0: pf-20261104-9_s200, group_1: ah}
+- {name: pf-20261104-9_s201_vs_ah, group_0: pf-20261104-9_s201, group_1: ah}
+- {name: pf-20261104-9_s202_vs_ah, group_0: pf-20261104-9_s202, group_1: ah}
+- {name: pf-20261104-9_s203_vs_ah, group_0: pf-20261104-9_s203, group_1: ah}
+- {name: pf-20261104-9_s204_vs_ah, group_0: pf-20261104-9_s204, group_1: ah}
+- {name: pf-20261104-9_s205_vs_ah, group_0: pf-20261104-9_s205, group_1: ah}
+- {name: pf-20261104-9_s206_vs_ah, group_0: pf-20261104-9_s206, group_1: ah}
+- {name: pf-20261104-9_s207_vs_ah, group_0: pf-20261104-9_s207, group_1: ah}
+- {name: pf-20261104-9_s208_vs_ah, group_0: pf-20261104-9_s208, group_1: ah}
+- {name: pf-20261104-9_s209_vs_ah, group_0: pf-20261104-9_s209, group_1: ah}
+- {name: pf-20261104-9_s210_vs_ah, group_0: pf-20261104-9_s210, group_1: ah}
+- {name: pf-20261104-9_s211_vs_ah, group_0: pf-20261104-9_s211, group_1: ah}
+- {name: pf-20261104-9_s212_vs_ah, group_0: pf-20261104-9_s212, group_1: ah}
+- {name: pf-20261104-9_s213_vs_ah, group_0: pf-20261104-9_s213, group_1: ah}
+- {name: pf-20261104-9_s214_vs_ah, group_0: pf-20261104-9_s214, group_1: ah}
+- {name: pf-20261104-9_s215_vs_ah, group_0: pf-20261104-9_s215, group_1: ah}
+- {name: pf-20261104-9_s216_vs_ah, group_0: pf-20261104-9_s216, group_1: ah}
+- {name: pf-20261104-9_s217_vs_ah, group_0: pf-20261104-9_s217, group_1: ah}
+- {name: pf-20261104-9_s218_vs_ah, group_0: pf-20261104-9_s218, group_1: ah}
+- {name: pf-20261104-9_s219_vs_ah, group_0: pf-20261104-9_s219, group_1: ah}
+- {name: pf-20261104-9_s220_vs_ah, group_0: pf-20261104-9_s220, group_1: ah}
+- {name: pf-20261104-9_s221_vs_ah, group_0: pf-20261104-9_s221, group_1: ah}
+- {name: pf-20261104-9_s222_vs_ah, group_0: pf-20261104-9_s222, group_1: ah}
+- {name: pf-20261104-9_s223_vs_ah, group_0: pf-20261104-9_s223, group_1: ah}
+- {name: pf-20261104-9_s224_vs_ah, group_0: pf-20261104-9_s224, group_1: ah}
+- {name: pf-20261104-9_s225_vs_ah, group_0: pf-20261104-9_s225, group_1: ah}
+- {name: pf-20261104-9_s226_vs_ah, group_0: pf-20261104-9_s226, group_1: ah}
+- {name: pf-20261104-9_s227_vs_ah, group_0: pf-20261104-9_s227, group_1: ah}
+- {name: pf-20261104-9_s228_vs_ah, group_0: pf-20261104-9_s228, group_1: ah}
+- {name: pf-20261104-9_s229_vs_ah, group_0: pf-20261104-9_s229, group_1: ah}
+- {name: pf-20261104-9_s230_vs_ah, group_0: pf-20261104-9_s230, group_1: ah}
+- {name: pf-20261104-9_s231_vs_ah, group_0: pf-20261104-9_s231, group_1: ah}
+- {name: pf-20261104-9_s232_vs_ah, group_0: pf-20261104-9_s232, group_1: ah}
+- {name: pf-20261104-9_s233_vs_ah, group_0: pf-20261104-9_s233, group_1: ah}
+- {name: pf-20261104-9_s234_vs_ah, group_0: pf-20261104-9_s234, group_1: ah}
+- {name: pf-20261104-9_s235_vs_ah, group_0: pf-20261104-9_s235, group_1: ah}
+- {name: pf-20261104-9_s236_vs_ah, group_0: pf-20261104-9_s236, group_1: ah}
+- {name: pf-20261104-9_s237_vs_ah, group_0: pf-20261104-9_s237, group_1: ah}
+- {name: pf-20261104-9_s238_vs_ah, group_0: pf-20261104-9_s238, group_1: ah}
+- {name: pf-20261104-9_s239_vs_ah, group_0: pf-20261104-9_s239, group_1: ah}
+- {name: pf-20261104-9_s240_vs_ah, group_0: pf-20261104-9_s240, group_1: ah}
+- {name: pf-20261104-9_s241_vs_ah, group_0: pf-20261104-9_s241, group_1: ah}
+- {name: pf-20261104-9_s242_vs_ah, group_0: pf-20261104-9_s242, group_1: ah}
+- {name: pf-20261104-9_s243_vs_ah, group_0: pf-20261104-9_s243, group_1: ah}
+- {name: pf-20261104-9_s244_vs_ah, group_0: pf-20261104-9_s244, group_1: ah}
+- {name: pf-20261104-9_s245_vs_ah, group_0: pf-20261104-9_s245, group_1: ah}
+- {name: pf-20261104-9_s246_vs_ah, group_0: pf-20261104-9_s246, group_1: ah}
+- {name: pf-20261104-9_s247_vs_ah, group_0: pf-20261104-9_s247, group_1: ah}
+- {name: pf-20261104-9_s248_vs_ah, group_0: pf-20261104-9_s248, group_1: ah}
+- {name: pf-20261104-9_s249_vs_ah, group_0: pf-20261104-9_s249, group_1: ah}
+- {name: pf-20261104-9_s250_vs_ah, group_0: pf-20261104-9_s250, group_1: ah}
+- {name: pf-20261104-9_s251_vs_ah, group_0: pf-20261104-9_s251, group_1: ah}
+- {name: pf-20261104-9_s252_vs_ah, group_0: pf-20261104-9_s252, group_1: ah}
+- {name: pf-20261104-9_s253_vs_ah, group_0: pf-20261104-9_s253, group_1: ah}
+- {name: pf-20261104-9_s254_vs_ah, group_0: pf-20261104-9_s254, group_1: ah}
+- {name: pf-20261104-9_s255_vs_ah, group_0: pf-20261104-9_s255, group_1: ah}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 500
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261104-9_sweep_p2of2
+figure_name: pf-20261104-9_sweep_p2of2
+save_per_round: true
+basedir: .
+sweep: true
