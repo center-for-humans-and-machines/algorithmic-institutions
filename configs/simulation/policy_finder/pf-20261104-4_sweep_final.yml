@@ -1,0 +1,61 @@
+# Final run of /home/kappablanca/pf_runs/worktrees/pf-20261104-4/plots/simulation/policy_finder/pf-20261104-4_sweep/sweep.json, written by scripts/policy_finder/generate_sim_config.py:
+# the Gaussian process's peak against `ah` on fresh seeds; its sweep.json holds the
+# rule's final result. Stack and sim parameters from configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 1000
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261104-4_gp:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-4.yml
+    params: {thr: 6, amount: 8, m: 4, t_stop: 11}
+  pf-20261104-4_s096:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-4.yml
+    params: {thr: 11, amount: 7, m: 1, t_stop: 13}
+  pf-20261104-4_s147:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-4.yml
+    params: {thr: 7, amount: 5, m: 3, t_stop: 11}
+  pf-20261104-4_s183:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-4.yml
+    params: {thr: 12, amount: 7, m: 1, t_stop: 11}
+  pf-20261104-4_s036:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-4.yml
+    params: {thr: 7, amount: 7, m: 2, t_stop: 11}
+  pf-20261104-4_s189:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-4.yml
+    params: {thr: 6, amount: 8, m: 3, t_stop: 18}
+pairings:
+- {name: pf-20261104-4_gp_vs_ah, group_0: pf-20261104-4_gp, group_1: ah}
+- {name: pf-20261104-4_s096_vs_ah, group_0: pf-20261104-4_s096, group_1: ah}
+- {name: pf-20261104-4_s147_vs_ah, group_0: pf-20261104-4_s147, group_1: ah}
+- {name: pf-20261104-4_s183_vs_ah, group_0: pf-20261104-4_s183, group_1: ah}
+- {name: pf-20261104-4_s036_vs_ah, group_0: pf-20261104-4_s036, group_1: ah}
+- {name: pf-20261104-4_s189_vs_ah, group_0: pf-20261104-4_s189, group_1: ah}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261104-4_sweep/final
+figure_name: pf-20261104-4_sweep_final
+save_per_round: true
+basedir: .
+sweep: true
