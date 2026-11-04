@@ -1,0 +1,40 @@
+params:
+  thr:
+    definition: >-
+      contribution threshold; a member contributing less than this in the
+      current round is punished in proportion to the shortfall
+    type: float
+  slope:
+    definition: >-
+      punishment points per point of contribution below thr in the first
+      block (rounds 0-3), before the manager's cap of 30
+    type: float
+  decay:
+    definition: >-
+      factor by which the punishment per point of shortfall changes from one
+      4-round block to the next (block b uses slope * decay^b), because a
+      punishment buys less contribution, and has fewer rounds to pay back,
+      the later in the game it is dealt
+    type: float
+  quiet:
+    definition: >-
+      number of rounds before each switch decision (rounds 3, 7, 11, 15, 19,
+      counted back from and including the decision round) in which nobody is
+      punished, so that punishment does not drive members out of the group;
+      after the last decision (rounds 20-23) nobody is punished at all
+    type: int
+sweep_config:
+  thr: [5, 18]
+  slope: [0.8, 10, log]
+  decay: [0.4, 1.5, log]
+  quiet: [1, 3]
+code: |
+  cur = c[..., -1]
+  shortfall = th.clamp(thr - cur, min=0.0)
+  block = th.floor(t / 4.0)
+  pos = th.remainder(t, 4.0)
+  before_switch = (3.0 - pos) < quiet
+  last_block = t >= 20
+  active = th.logical_not(before_switch | last_block)
+  scale = slope * th.pow(decay, block)
+  punishment = scale * shortfall * valid[..., -1] * active.float()
