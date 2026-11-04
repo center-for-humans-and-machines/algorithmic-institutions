@@ -1,0 +1,671 @@
+# Sweep of /home/kappablanca/pf_runs/worktrees/pf-20261104-5/configs/managers/rule_based/pf-20261104-5-v2.yml (#227), written by scripts/policy_finder/generate_sim_config.py:
+# 128 of 256 distinct design points (256 Sobol points), each against `ah`; stack and sim parameters from
+# configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 42
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261104-5-v2_s000:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.5445040059181814, thr: 15.382294044829905, cap: 13.430657347664237, decay: 0.8958200640976428, t_stop: 4}
+  pf-20261104-5-v2_s001:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.5399947343771532, thr: 9.566002066247165, cap: 20.33012823946774, decay: 1.0481322526931762, t_stop: 15}
+  pf-20261104-5-v2_s002:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.2875337511316303, thr: 12.85990209877491, cap: 8.441505424678326, decay: 0.784393697977066, t_stop: 19}
+  pf-20261104-5-v2_s003:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.6187631854883415, thr: 7.008454004302621, cap: 25.90323891863227, decay: 1.1337754614651203, t_stop: 8}
+  pf-20261104-5-v2_s004:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.02452533839834, thr: 11.990390235558152, cap: 17.425842683762312, decay: 1.056701235473156, t_stop: 6}
+  pf-20261104-5-v2_s005:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.9753642070829238, thr: 8.525163859128952, cap: 16.201616503298283, decay: 0.8122511856257916, t_stop: 17}
+  pf-20261104-5-v2_s006:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.7422593052637184, thr: 13.932703654281795, cap: 28.71191910095513, decay: 0.9735952071845531, t_stop: 13}
+  pf-20261104-5-v2_s007:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.774223923787359, thr: 10.502633661963046, cap: 5.550331329926848, decay: 0.9195740565657615, t_stop: 2}
+  pf-20261104-5-v2_s008:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.843544927625689, thr: 13.504115789197385, cap: 26.89887072890997, decay: 0.8391513280570507, t_stop: 13}
+  pf-20261104-5-v2_s009:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.7977379098611947, thr: 8.109967132098973, cap: 6.985694106668234, decay: 1.0915060147643088, t_stop: 6}
+  pf-20261104-5-v2_s010:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.0486284344069015, thr: 15.499164773151278, cap: 19.24365179799497, decay: 0.92870305031538, t_stop: 10}
+  pf-20261104-5-v2_s011:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.630220546501672, thr: 10.069859731942415, cap: 14.767840640619397, decay: 0.9777366869151591, t_stop: 18}
+  pf-20261104-5-v2_s012:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.108867900113135, thr: 14.685683015733957, cap: 9.851477624848485, decay: 1.0001238644123076, t_stop: 15}
+  pf-20261104-5-v2_s013:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.3841506939704993, thr: 11.36135002784431, cap: 24.064799970015883, decay: 0.8555335648357868, t_stop: 8}
+  pf-20261104-5-v2_s014:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.5803956958306783, thr: 12.145712022669613, cap: 12.022272061556578, decay: 1.1176052995026111, t_stop: 3}
+  pf-20261104-5-v2_s015:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.8533472645481797, thr: 8.856535150669515, cap: 22.173327930271626, decay: 0.7638345241546631, t_stop: 11}
+  pf-20261104-5-v2_s016:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.087856715552499, thr: 12.50131469219923, cap: 6.2134769186377525, decay: 0.9543523110449313, t_stop: 9}
+  pf-20261104-5-v2_s017:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.6394957921397717, thr: 9.070969941094518, cap: 27.750408824533224, decay: 0.9020981043577194, t_stop: 18}
+  pf-20261104-5-v2_s018:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.511444209641943, thr: 14.478921421803534, cap: 14.020987441763282, decay: 1.064997425675392, t_stop: 14}
+  pf-20261104-5-v2_s019:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.344602068022918, thr: 11.013420554809272, cap: 20.120656745508313, decay: 0.8156736470758915, t_stop: 4}
+  pf-20261104-5-v2_s020:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.7095235196317649, thr: 15.996661680750549, cap: 24.833502294495702, decay: 0.7934803918004036, t_stop: 2}
+  pf-20261104-5-v2_s021:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.1196058933246686, thr: 10.144938760437071, cap: 8.997106736525893, decay: 1.1379701159894466, t_stop: 12}
+  pf-20261104-5-v2_s022:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.8290537809520956, thr: 13.43897588737309, cap: 22.916567277163267, decay: 0.8758051715791225, t_stop: 16}
+  pf-20261104-5-v2_s023:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.06695396118689, thr: 7.622409351170063, cap: 11.14253330975771, decay: 1.0298659935593604, t_stop: 7}
+  pf-20261104-5-v2_s024:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.372134925342274, thr: 14.139585411176085, cap: 21.103517016395926, decay: 1.1102825246751307, t_stop: 18}
+  pf-20261104-5-v2_s025:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.667630797207599, thr: 10.85068329796195, cap: 12.577898072078824, decay: 0.757875956594944, t_stop: 10}
+  pf-20261104-5-v2_s026:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.9012885080890786, thr: 11.634633070789278, cap: 26.651313297450542, decay: 1.0215120509266853, t_stop: 5}
+  pf-20261104-5-v2_s027:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.8374273795690343, thr: 8.310574573464692, cap: 7.563328888267279, decay: 0.8724265359342098, t_stop: 14}
+  pf-20261104-5-v2_s028:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.5198417947331144, thr: 12.924956169910729, cap: 15.430961530655622, decay: 0.9493070274591445, t_stop: 11}
+  pf-20261104-5-v2_s029:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.2168073114847004, thr: 7.495925954543054, cap: 18.2822158113122, decay: 0.9938515521585941, t_stop: 3}
+  pf-20261104-5-v2_s030:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.5149443912921263, thr: 14.884985964745283, cap: 4.805089743807912, decay: 0.8326068438589572, t_stop: 7}
+  pf-20261104-5-v2_s031:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.3198036396371644, thr: 9.491111865267158, cap: 29.59361050091684, decay: 1.0863318413496017, t_stop: 16}
+  pf-20261104-5-v2_s032:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.3931073763535977, thr: 12.728177933953702, cap: 18.908378839492798, decay: 1.033748735487461, t_stop: 2}
+  pf-20261104-5-v2_s033:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.5269163523279456, thr: 7.157705147750676, cap: 15.257862273603678, decay: 0.8844219528138637, t_stop: 12}
+  pf-20261104-5-v2_s034:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.23409877590681, thr: 15.233128799125552, cap: 27.32529187016189, decay: 1.1481040023267268, t_stop: 17}
+  pf-20261104-5-v2_s035:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.552824643515656, thr: 9.697812128812075, cap: 6.612409645691514, decay: 0.7958467915654183, t_stop: 6}
+  pf-20261104-5-v2_s036:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.9294146636893372, thr: 13.80104810371995, cap: 11.528382131829858, decay: 0.8195534326136112, t_stop: 9}
+  pf-20261104-5-v2_s037:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.9474583311546377, thr: 10.651953486725688, cap: 22.504534227773547, decay: 1.0736173540353775, t_stop: 19}
+  pf-20261104-5-v2_s038:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.7082835843377515, thr: 11.84101897943765, cap: 10.220893789082766, decay: 0.9122290343046188, t_stop: 15}
+  pf-20261104-5-v2_s039:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.6330682120868, thr: 8.656767978332937, cap: 23.63431216776371, decay: 0.9567218579351902, t_stop: 4}
+  pf-20261104-5-v2_s040:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.314517457467821, thr: 15.63097505364567, cap: 8.81409546546638, decay: 1.0777634114027022, t_stop: 11}
+  pf-20261104-5-v2_s041:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.8785484935514377, thr: 9.920694704167545, cap: 25.47592499293387, decay: 0.8286747969686985, t_stop: 4}
+  pf-20261104-5-v2_s042:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.175635444957488, thr: 13.653366580605507, cap: 12.939941197633743, decay: 0.9915342666208744, t_stop: 8}
+  pf-20261104-5-v2_s043:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.797128805630256, thr: 7.978242615237832, cap: 20.664508316665888, decay: 0.9391245990991592, t_stop: 16}
+  pf-20261104-5-v2_s044:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.377960724193706, thr: 12.277316326275468, cap: 29.141514021903276, decay: 0.8638551495969296, t_stop: 18}
+  pf-20261104-5-v2_s045:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.5312019393936684, thr: 8.707164078950882, cap: 5.180220648646355, decay: 1.0175831511616706, t_stop: 10}
+  pf-20261104-5-v2_s046:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.6536274113912127, thr: 14.83500252198428, cap: 17.093743601813912, decay: 0.7555557146668435, t_stop: 6}
+  pf-20261104-5-v2_s047:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.159592407677851, thr: 11.229694158770144, cap: 16.694812012836337, decay: 1.1001032434403895, t_stop: 13}
+  pf-20261104-5-v2_s048:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.9994859941850076, thr: 14.34683701954782, cap: 26.328711001202464, decay: 0.9156454429030418, t_stop: 7}
+  pf-20261104-5-v2_s049:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.6094470321502724, thr: 11.16286077722907, cap: 8.040630364790559, decay: 0.9650241069495678, t_stop: 16}
+  pf-20261104-5-v2_s050:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.4667445537073032, thr: 12.35178870614618, cap: 21.542658120393753, decay: 0.8020714275538922, t_stop: 12}
+  pf-20261104-5-v2_s051:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.2372609688361176, thr: 9.20296857971698, cap: 12.191943142563105, decay: 1.054380516707897, t_stop: 2}
+  pf-20261104-5-v2_s052:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.6681352329635994, thr: 13.307097462005913, cap: 4.3239199705421925, decay: 1.1298438914120197, t_stop: 5}
+  pf-20261104-5-v2_s053:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.0717928464582924, thr: 7.772055617533624, cap: 29.912146136164665, decay: 0.7758257448673248, t_stop: 14}
+  pf-20261104-5-v2_s054:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.8081864109547371, thr: 15.847066979855299, cap: 15.813048163428903, decay: 1.0379495382308959, t_stop: 19}
+  pf-20261104-5-v2_s055:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.8982003970200485, thr: 10.27686875127256, cap: 17.83900804631412, decay: 0.8935024924576283, t_stop: 9}
+  pf-20261104-5-v2_s056:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.83666711656874, thr: 11.766632430255413, cap: 14.406247854232788, decay: 0.7724547386169434, t_stop: 16}
+  pf-20261104-5-v2_s057:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.7528278663466552, thr: 8.161049308255315, cap: 19.68062276020646, decay: 1.1214853711426258, t_stop: 8}
+  pf-20261104-5-v2_s058:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.9980306316489799, thr: 14.28902477864176, cap: 5.735481021925807, decay: 0.8579026348888874, t_stop: 3}
+  pf-20261104-5-v2_s059:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.069285146774829, thr: 10.718598040752113, cap: 28.072118336334825, decay: 1.0102543175220489, t_stop: 11}
+  pf-20261104-5-v2_s060:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.7750748371476517, thr: 15.016916709952056, cap: 23.358882257714868, decay: 0.9863539449870586, t_stop: 14}
+  pf-20261104-5-v2_s061:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.3658986417412569, thr: 9.341517918743193, cap: 10.759752256795764, decay: 0.9325862690806388, t_stop: 5}
+  pf-20261104-5-v2_s062:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.5676611227790221, thr: 13.074601547792554, cap: 24.51407377794385, decay: 1.0938721284270285, t_stop: 10}
+  pf-20261104-5-v2_s063:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.7218587918962065, thr: 7.364046640694141, cap: 9.4775819927454, decay: 0.8492849282920361, t_stop: 18}
+  pf-20261104-5-v2_s064:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.681513018755522, thr: 11.859850944951177, cap: 24.28552451916039, decay: 1.1227392084896564, t_stop: 12}
+  pf-20261104-5-v2_s065:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.5608889041446348, thr: 8.570953123271465, cap: 10.06160101853311, decay: 0.7704300463199616, t_stop: 2}
+  pf-20261104-5-v2_s066:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.3373514273954357, thr: 13.855037006549537, cap: 21.962425511330366, decay: 1.0091655492782592, t_stop: 6}
+  pf-20261104-5-v2_s067:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.7200011007020892, thr: 10.530982800759375, cap: 11.800739623606205, decay: 0.8597868628799915, t_stop: 17}
+  pf-20261104-5-v2_s068:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.0933595286346605, thr: 15.213475340045989, cap: 7.182724587619305, decay: 0.9368610724806785, t_stop: 19}
+  pf-20261104-5-v2_s069:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.0085561015597062, thr: 9.784449416212738, cap: 27.081905391067266, decay: 0.9813080959022045, t_stop: 9}
+  pf-20261104-5-v2_s070:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.7675212365565707, thr: 12.673366732895374, cap: 14.58399828337133, decay: 0.8449671261012554, t_stop: 4}
+  pf-20261104-5-v2_s071:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.936505777325388, thr: 7.2794969249516726, cap: 19.04584209807217, decay: 1.0989851996302604, t_stop: 15}
+  pf-20261104-5-v2_s072:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.976588441520376, thr: 14.781048085540533, cap: 16.39704854413867, decay: 0.9668957464396953, t_stop: 4}
+  pf-20261104-5-v2_s073:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.8253183600957805, thr: 11.350699042901397, cap: 17.610477335751057, decay: 0.9145440861582755, t_stop: 11}
+  pf-20261104-5-v2_s074:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.084891002180427, thr: 12.25851855892688, cap: 5.364913584664464, decay: 1.052343998849392, t_stop: 15}
+  pf-20261104-5-v2_s075:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.6866460622328496, thr: 8.793013400398195, cap: 28.51568323932588, decay: 0.8033134393393994, t_stop: 8}
+  pf-20261104-5-v2_s076:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.191695569250708, thr: 13.708143583498895, cap: 20.552451422438025, decay: 0.7809262275695801, t_stop: 10}
+  pf-20261104-5-v2_s077:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.4384694226085806, thr: 7.856416371650994, cap: 13.63918055780232, decay: 1.1255135007202623, t_stop: 17}
+  pf-20261104-5-v2_s078:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.6031688800657001, thr: 15.650594046339393, cap: 25.69391169399023, decay: 0.8884448178112506, t_stop: 13}
+  pf-20261104-5-v2_s079:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.9654206340454206, thr: 9.834023218601942, cap: 8.218399342149496, decay: 1.0422125160694122, t_stop: 6}
+  pf-20261104-5-v2_s080:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.1929352596144205, thr: 15.724382395856082, cap: 18.490256380289793, decay: 0.8267069436609745, t_stop: 16}
+  pf-20261104-5-v2_s081:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.6612361693317941, thr: 10.330238030292094, cap: 15.65376890450716, decay: 1.0789642244577407, t_stop: 7}
+  pf-20261104-5-v2_s082:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.5628262253048633, thr: 13.219567636027932, cap: 29.369995238259435, decay: 0.9410618513822555, t_stop: 2}
+  pf-20261104-5-v2_s083:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.4243993566621684, thr: 7.790266886353493, cap: 4.596270149573684, decay: 0.9903886593878268, t_stop: 12}
+  pf-20261104-5-v2_s084:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.7756772933499891, thr: 12.474201112985611, cap: 12.762222101911902, decay: 1.0125819340348243, t_stop: 14}
+  pf-20261104-5-v2_s085:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.1628836356957666, thr: 9.149872416630387, cap: 21.299258129671216, decay: 0.868089135736227, t_stop: 5}
+  pf-20261104-5-v2_s086:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.8611034917862844, thr: 14.43409386370331, cap: 7.36680855602026, decay: 1.1052571319043636, t_stop: 9}
+  pf-20261104-5-v2_s087:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.224297873807633, thr: 11.144921283237636, cap: 26.466181572526693, decay: 0.751193280518055, t_stop: 19}
+  pf-20261104-5-v2_s088:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.543704468366899, thr: 13.162028511054814, cap: 9.17985692806542, decay: 0.8832645200192928, t_stop: 7}
+  pf-20261104-5-v2_s089:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.693850637550804, thr: 7.34573224093765, cap: 25.030818795785308, decay: 1.035674162209034, t_stop: 16}
+  pf-20261104-5-v2_s090:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.9366918137276738, thr: 15.13949816301465, cap: 10.944412987679243, decay: 0.7970350161194801, t_stop: 11}
+  pf-20261104-5-v2_s091:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.909526429592358, thr: 9.288045777007937, cap: 22.7330339923501, decay: 1.1461235605180262, t_stop: 3}
+  pf-20261104-5-v2_s092:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.6069680865334344, thr: 14.201871065422893, cap: 27.960023038089275, decay: 1.0692430943250655, t_stop: 5}
+  pf-20261104-5-v2_s093:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.2589288160609453, thr: 10.736640397459269, cap: 6.434709098190069, decay: 0.8246954955160618, t_stop: 13}
+  pf-20261104-5-v2_s094:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.5327669051709154, thr: 11.644322886131704, cap: 19.898641666397452, decay: 0.9609432555735111, t_stop: 18}
+  pf-20261104-5-v2_s095:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.4345964565677867, thr: 8.21424860227853, cap: 13.810569213703275, decay: 0.9072152286767959, t_stop: 9}
+  pf-20261104-5-v2_s096:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.2667132038028495, thr: 13.986899103969336, cap: 4.982801962643862, decay: 0.7598135903477669, t_stop: 15}
+  pf-20261104-5-v2_s097:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.5073038964820242, thr: 10.381320273503661, cap: 28.958866015076637, decay: 1.1091372989118098, t_stop: 4}
+  pf-20261104-5-v2_s098:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.1881729974189488, thr: 12.00942770857364, cap: 16.87824291922152, decay: 0.8704583011567593, t_stop: 9}
+  pf-20261104-5-v2_s099:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.457725254566888, thr: 8.439005262218416, cap: 17.29196630232036, decay: 1.022712482511997, t_stop: 19}
+  pf-20261104-5-v2_s100:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.8659119782745102, thr: 12.805434874258935, cap: 25.254795191809535, decay: 0.9990058220922946, t_stop: 17}
+  pf-20261104-5-v2_s101:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.9163104262263619, thr: 7.130040374584496, cap: 8.604378873482347, decay: 0.9449449747800827, t_stop: 7}
+  pf-20261104-5-v2_s102:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.6849946748542091, thr: 15.362983455881476, cap: 20.87502872943878, decay: 1.0813302427530287, t_stop: 2}
+  pf-20261104-5-v2_s103:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.480589116420636, thr: 9.652432840317488, cap: 13.161854092031717, decay: 0.8368404485285282, t_stop: 13}
+  pf-20261104-5-v2_s104:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.170309806687243, thr: 12.126571418717504, cap: 22.281829038634896, decay: 0.9032867103815079, t_stop: 6}
+  pf-20261104-5-v2_s105:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.8491565359674018, thr: 8.94259088486433, cap: 11.320239378139377, decay: 0.9523722507059573, t_stop: 13}
+  pf-20261104-5-v2_s106:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.1363035799819028, thr: 14.631384703330696, cap: 23.84323414042592, decay: 0.814515832811594, t_stop: 18}
+  pf-20261104-5-v2_s107:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.7370701746856663, thr: 11.482560285367072, cap: 10.444406673312187, decay: 1.0669224709272385, t_stop: 10}
+  pf-20261104-5-v2_s108:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.288181659027872, thr: 15.518578224815428, cap: 15.062018781900406, decay: 1.142191895097494, t_stop: 8}
+  pf-20261104-5-v2_s109:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.4733312763425426, thr: 9.983532088808715, cap: 18.724157188087702, decay: 0.7884669676423073, t_stop: 15}
+  pf-20261104-5-v2_s110:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.628926350688088, thr: 13.558686144649982, cap: 6.797439185902476, decay: 1.0254913523793219, t_stop: 11}
+  pf-20261104-5-v2_s111:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.040277570681476, thr: 7.988483624532819, cap: 27.521914387121797, decay: 0.8809468530118465, t_stop: 3}
+  pf-20261104-5-v2_s112:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.9008726042299826, thr: 13.351240654475987, cap: 10.575021425262094, decay: 1.0904168650507926, t_stop: 19}
+  pf-20261104-5-v2_s113:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.589386771182969, thr: 7.640964596532285, cap: 23.163546396419406, decay: 0.8410351745784282, t_stop: 9}
+  pf-20261104-5-v2_s114:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.4184762787414409, thr: 15.873770583420992, cap: 9.673721868544817, decay: 0.9789909057319164, t_stop: 5}
+  pf-20261104-5-v2_s115:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.163701511676406, thr: 10.198650909587741, cap: 24.699587509036064, decay: 0.9266787394881248, t_stop: 14}
+  pf-20261104-5-v2_s116:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.6060497593594016, thr: 14.565835563465953, cap: 19.47219553589821, decay: 0.8512153811752796, t_stop: 12}
+  pf-20261104-5-v2_s117:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.031870054955213, thr: 10.99568760767579, cap: 14.183828685432673, decay: 1.0052365541458128, t_stop: 3}
+  pf-20261104-5-v2_s118:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.7780780237108122, thr: 12.623383357189596, cap: 28.29532059840858, decay: 0.7681097090244293, t_stop: 7}
+  pf-20261104-5-v2_s119:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.7531220755117283, thr: 9.018079285509884, cap: 5.94471206702292, decay: 1.1125598318874834, t_stop: 17}
+  pf-20261104-5-v2_s120:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 4.653866626880777, thr: 15.00791126023978, cap: 29.702118922024965, decay: 1.0460953533649444, t_stop: 10}
+  pf-20261104-5-v2_s121:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.7244023796361198, thr: 9.43743418250233, cap: 4.10309924185276, decay: 0.8970616944134235, t_stop: 18}
+  pf-20261104-5-v2_s122:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.9603458819480659, thr: 13.012725869193673, cap: 18.060636470094323, decay: 1.1356474824249743, t_stop: 14}
+  pf-20261104-5-v2_s123:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.9910863038249804, thr: 7.477404907345772, cap: 16.023854596540332, decay: 0.7832927227020263, t_stop: 5}
+  pf-20261104-5-v2_s124:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 2.682244839608667, thr: 11.51252993941307, cap: 7.8574997168034315, decay: 0.8071931295096875, t_stop: 3}
+  pf-20261104-5-v2_s125:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 1.3202458910992527, thr: 8.363431030884385, cap: 26.131776506081223, decay: 1.0609638318419456, t_stop: 11}
+  pf-20261104-5-v2_s126:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 0.5486899933901592, thr: 14.052637071348727, cap: 12.389656662940979, decay: 0.9246749207377434, t_stop: 16}
+  pf-20261104-5-v2_s127:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-5-v2.yml
+    params: {k: 3.5973268752170453, thr: 10.86838177870959, cap: 21.726596657186747, decay: 0.9692651979625224, t_stop: 7}
+pairings:
+- {name: pf-20261104-5-v2_s000_vs_ah, group_0: pf-20261104-5-v2_s000, group_1: ah}
+- {name: pf-20261104-5-v2_s001_vs_ah, group_0: pf-20261104-5-v2_s001, group_1: ah}
+- {name: pf-20261104-5-v2_s002_vs_ah, group_0: pf-20261104-5-v2_s002, group_1: ah}
+- {name: pf-20261104-5-v2_s003_vs_ah, group_0: pf-20261104-5-v2_s003, group_1: ah}
+- {name: pf-20261104-5-v2_s004_vs_ah, group_0: pf-20261104-5-v2_s004, group_1: ah}
+- {name: pf-20261104-5-v2_s005_vs_ah, group_0: pf-20261104-5-v2_s005, group_1: ah}
+- {name: pf-20261104-5-v2_s006_vs_ah, group_0: pf-20261104-5-v2_s006, group_1: ah}
+- {name: pf-20261104-5-v2_s007_vs_ah, group_0: pf-20261104-5-v2_s007, group_1: ah}
+- {name: pf-20261104-5-v2_s008_vs_ah, group_0: pf-20261104-5-v2_s008, group_1: ah}
+- {name: pf-20261104-5-v2_s009_vs_ah, group_0: pf-20261104-5-v2_s009, group_1: ah}
+- {name: pf-20261104-5-v2_s010_vs_ah, group_0: pf-20261104-5-v2_s010, group_1: ah}
+- {name: pf-20261104-5-v2_s011_vs_ah, group_0: pf-20261104-5-v2_s011, group_1: ah}
+- {name: pf-20261104-5-v2_s012_vs_ah, group_0: pf-20261104-5-v2_s012, group_1: ah}
+- {name: pf-20261104-5-v2_s013_vs_ah, group_0: pf-20261104-5-v2_s013, group_1: ah}
+- {name: pf-20261104-5-v2_s014_vs_ah, group_0: pf-20261104-5-v2_s014, group_1: ah}
+- {name: pf-20261104-5-v2_s015_vs_ah, group_0: pf-20261104-5-v2_s015, group_1: ah}
+- {name: pf-20261104-5-v2_s016_vs_ah, group_0: pf-20261104-5-v2_s016, group_1: ah}
+- {name: pf-20261104-5-v2_s017_vs_ah, group_0: pf-20261104-5-v2_s017, group_1: ah}
+- {name: pf-20261104-5-v2_s018_vs_ah, group_0: pf-20261104-5-v2_s018, group_1: ah}
+- {name: pf-20261104-5-v2_s019_vs_ah, group_0: pf-20261104-5-v2_s019, group_1: ah}
+- {name: pf-20261104-5-v2_s020_vs_ah, group_0: pf-20261104-5-v2_s020, group_1: ah}
+- {name: pf-20261104-5-v2_s021_vs_ah, group_0: pf-20261104-5-v2_s021, group_1: ah}
+- {name: pf-20261104-5-v2_s022_vs_ah, group_0: pf-20261104-5-v2_s022, group_1: ah}
+- {name: pf-20261104-5-v2_s023_vs_ah, group_0: pf-20261104-5-v2_s023, group_1: ah}
+- {name: pf-20261104-5-v2_s024_vs_ah, group_0: pf-20261104-5-v2_s024, group_1: ah}
+- {name: pf-20261104-5-v2_s025_vs_ah, group_0: pf-20261104-5-v2_s025, group_1: ah}
+- {name: pf-20261104-5-v2_s026_vs_ah, group_0: pf-20261104-5-v2_s026, group_1: ah}
+- {name: pf-20261104-5-v2_s027_vs_ah, group_0: pf-20261104-5-v2_s027, group_1: ah}
+- {name: pf-20261104-5-v2_s028_vs_ah, group_0: pf-20261104-5-v2_s028, group_1: ah}
+- {name: pf-20261104-5-v2_s029_vs_ah, group_0: pf-20261104-5-v2_s029, group_1: ah}
+- {name: pf-20261104-5-v2_s030_vs_ah, group_0: pf-20261104-5-v2_s030, group_1: ah}
+- {name: pf-20261104-5-v2_s031_vs_ah, group_0: pf-20261104-5-v2_s031, group_1: ah}
+- {name: pf-20261104-5-v2_s032_vs_ah, group_0: pf-20261104-5-v2_s032, group_1: ah}
+- {name: pf-20261104-5-v2_s033_vs_ah, group_0: pf-20261104-5-v2_s033, group_1: ah}
+- {name: pf-20261104-5-v2_s034_vs_ah, group_0: pf-20261104-5-v2_s034, group_1: ah}
+- {name: pf-20261104-5-v2_s035_vs_ah, group_0: pf-20261104-5-v2_s035, group_1: ah}
+- {name: pf-20261104-5-v2_s036_vs_ah, group_0: pf-20261104-5-v2_s036, group_1: ah}
+- {name: pf-20261104-5-v2_s037_vs_ah, group_0: pf-20261104-5-v2_s037, group_1: ah}
+- {name: pf-20261104-5-v2_s038_vs_ah, group_0: pf-20261104-5-v2_s038, group_1: ah}
+- {name: pf-20261104-5-v2_s039_vs_ah, group_0: pf-20261104-5-v2_s039, group_1: ah}
+- {name: pf-20261104-5-v2_s040_vs_ah, group_0: pf-20261104-5-v2_s040, group_1: ah}
+- {name: pf-20261104-5-v2_s041_vs_ah, group_0: pf-20261104-5-v2_s041, group_1: ah}
+- {name: pf-20261104-5-v2_s042_vs_ah, group_0: pf-20261104-5-v2_s042, group_1: ah}
+- {name: pf-20261104-5-v2_s043_vs_ah, group_0: pf-20261104-5-v2_s043, group_1: ah}
+- {name: pf-20261104-5-v2_s044_vs_ah, group_0: pf-20261104-5-v2_s044, group_1: ah}
+- {name: pf-20261104-5-v2_s045_vs_ah, group_0: pf-20261104-5-v2_s045, group_1: ah}
+- {name: pf-20261104-5-v2_s046_vs_ah, group_0: pf-20261104-5-v2_s046, group_1: ah}
+- {name: pf-20261104-5-v2_s047_vs_ah, group_0: pf-20261104-5-v2_s047, group_1: ah}
+- {name: pf-20261104-5-v2_s048_vs_ah, group_0: pf-20261104-5-v2_s048, group_1: ah}
+- {name: pf-20261104-5-v2_s049_vs_ah, group_0: pf-20261104-5-v2_s049, group_1: ah}
+- {name: pf-20261104-5-v2_s050_vs_ah, group_0: pf-20261104-5-v2_s050, group_1: ah}
+- {name: pf-20261104-5-v2_s051_vs_ah, group_0: pf-20261104-5-v2_s051, group_1: ah}
+- {name: pf-20261104-5-v2_s052_vs_ah, group_0: pf-20261104-5-v2_s052, group_1: ah}
+- {name: pf-20261104-5-v2_s053_vs_ah, group_0: pf-20261104-5-v2_s053, group_1: ah}
+- {name: pf-20261104-5-v2_s054_vs_ah, group_0: pf-20261104-5-v2_s054, group_1: ah}
+- {name: pf-20261104-5-v2_s055_vs_ah, group_0: pf-20261104-5-v2_s055, group_1: ah}
+- {name: pf-20261104-5-v2_s056_vs_ah, group_0: pf-20261104-5-v2_s056, group_1: ah}
+- {name: pf-20261104-5-v2_s057_vs_ah, group_0: pf-20261104-5-v2_s057, group_1: ah}
+- {name: pf-20261104-5-v2_s058_vs_ah, group_0: pf-20261104-5-v2_s058, group_1: ah}
+- {name: pf-20261104-5-v2_s059_vs_ah, group_0: pf-20261104-5-v2_s059, group_1: ah}
+- {name: pf-20261104-5-v2_s060_vs_ah, group_0: pf-20261104-5-v2_s060, group_1: ah}
+- {name: pf-20261104-5-v2_s061_vs_ah, group_0: pf-20261104-5-v2_s061, group_1: ah}
+- {name: pf-20261104-5-v2_s062_vs_ah, group_0: pf-20261104-5-v2_s062, group_1: ah}
+- {name: pf-20261104-5-v2_s063_vs_ah, group_0: pf-20261104-5-v2_s063, group_1: ah}
+- {name: pf-20261104-5-v2_s064_vs_ah, group_0: pf-20261104-5-v2_s064, group_1: ah}
+- {name: pf-20261104-5-v2_s065_vs_ah, group_0: pf-20261104-5-v2_s065, group_1: ah}
+- {name: pf-20261104-5-v2_s066_vs_ah, group_0: pf-20261104-5-v2_s066, group_1: ah}
+- {name: pf-20261104-5-v2_s067_vs_ah, group_0: pf-20261104-5-v2_s067, group_1: ah}
+- {name: pf-20261104-5-v2_s068_vs_ah, group_0: pf-20261104-5-v2_s068, group_1: ah}
+- {name: pf-20261104-5-v2_s069_vs_ah, group_0: pf-20261104-5-v2_s069, group_1: ah}
+- {name: pf-20261104-5-v2_s070_vs_ah, group_0: pf-20261104-5-v2_s070, group_1: ah}
+- {name: pf-20261104-5-v2_s071_vs_ah, group_0: pf-20261104-5-v2_s071, group_1: ah}
+- {name: pf-20261104-5-v2_s072_vs_ah, group_0: pf-20261104-5-v2_s072, group_1: ah}
+- {name: pf-20261104-5-v2_s073_vs_ah, group_0: pf-20261104-5-v2_s073, group_1: ah}
+- {name: pf-20261104-5-v2_s074_vs_ah, group_0: pf-20261104-5-v2_s074, group_1: ah}
+- {name: pf-20261104-5-v2_s075_vs_ah, group_0: pf-20261104-5-v2_s075, group_1: ah}
+- {name: pf-20261104-5-v2_s076_vs_ah, group_0: pf-20261104-5-v2_s076, group_1: ah}
+- {name: pf-20261104-5-v2_s077_vs_ah, group_0: pf-20261104-5-v2_s077, group_1: ah}
+- {name: pf-20261104-5-v2_s078_vs_ah, group_0: pf-20261104-5-v2_s078, group_1: ah}
+- {name: pf-20261104-5-v2_s079_vs_ah, group_0: pf-20261104-5-v2_s079, group_1: ah}
+- {name: pf-20261104-5-v2_s080_vs_ah, group_0: pf-20261104-5-v2_s080, group_1: ah}
+- {name: pf-20261104-5-v2_s081_vs_ah, group_0: pf-20261104-5-v2_s081, group_1: ah}
+- {name: pf-20261104-5-v2_s082_vs_ah, group_0: pf-20261104-5-v2_s082, group_1: ah}
+- {name: pf-20261104-5-v2_s083_vs_ah, group_0: pf-20261104-5-v2_s083, group_1: ah}
+- {name: pf-20261104-5-v2_s084_vs_ah, group_0: pf-20261104-5-v2_s084, group_1: ah}
+- {name: pf-20261104-5-v2_s085_vs_ah, group_0: pf-20261104-5-v2_s085, group_1: ah}
+- {name: pf-20261104-5-v2_s086_vs_ah, group_0: pf-20261104-5-v2_s086, group_1: ah}
+- {name: pf-20261104-5-v2_s087_vs_ah, group_0: pf-20261104-5-v2_s087, group_1: ah}
+- {name: pf-20261104-5-v2_s088_vs_ah, group_0: pf-20261104-5-v2_s088, group_1: ah}
+- {name: pf-20261104-5-v2_s089_vs_ah, group_0: pf-20261104-5-v2_s089, group_1: ah}
+- {name: pf-20261104-5-v2_s090_vs_ah, group_0: pf-20261104-5-v2_s090, group_1: ah}
+- {name: pf-20261104-5-v2_s091_vs_ah, group_0: pf-20261104-5-v2_s091, group_1: ah}
+- {name: pf-20261104-5-v2_s092_vs_ah, group_0: pf-20261104-5-v2_s092, group_1: ah}
+- {name: pf-20261104-5-v2_s093_vs_ah, group_0: pf-20261104-5-v2_s093, group_1: ah}
+- {name: pf-20261104-5-v2_s094_vs_ah, group_0: pf-20261104-5-v2_s094, group_1: ah}
+- {name: pf-20261104-5-v2_s095_vs_ah, group_0: pf-20261104-5-v2_s095, group_1: ah}
+- {name: pf-20261104-5-v2_s096_vs_ah, group_0: pf-20261104-5-v2_s096, group_1: ah}
+- {name: pf-20261104-5-v2_s097_vs_ah, group_0: pf-20261104-5-v2_s097, group_1: ah}
+- {name: pf-20261104-5-v2_s098_vs_ah, group_0: pf-20261104-5-v2_s098, group_1: ah}
+- {name: pf-20261104-5-v2_s099_vs_ah, group_0: pf-20261104-5-v2_s099, group_1: ah}
+- {name: pf-20261104-5-v2_s100_vs_ah, group_0: pf-20261104-5-v2_s100, group_1: ah}
+- {name: pf-20261104-5-v2_s101_vs_ah, group_0: pf-20261104-5-v2_s101, group_1: ah}
+- {name: pf-20261104-5-v2_s102_vs_ah, group_0: pf-20261104-5-v2_s102, group_1: ah}
+- {name: pf-20261104-5-v2_s103_vs_ah, group_0: pf-20261104-5-v2_s103, group_1: ah}
+- {name: pf-20261104-5-v2_s104_vs_ah, group_0: pf-20261104-5-v2_s104, group_1: ah}
+- {name: pf-20261104-5-v2_s105_vs_ah, group_0: pf-20261104-5-v2_s105, group_1: ah}
+- {name: pf-20261104-5-v2_s106_vs_ah, group_0: pf-20261104-5-v2_s106, group_1: ah}
+- {name: pf-20261104-5-v2_s107_vs_ah, group_0: pf-20261104-5-v2_s107, group_1: ah}
+- {name: pf-20261104-5-v2_s108_vs_ah, group_0: pf-20261104-5-v2_s108, group_1: ah}
+- {name: pf-20261104-5-v2_s109_vs_ah, group_0: pf-20261104-5-v2_s109, group_1: ah}
+- {name: pf-20261104-5-v2_s110_vs_ah, group_0: pf-20261104-5-v2_s110, group_1: ah}
+- {name: pf-20261104-5-v2_s111_vs_ah, group_0: pf-20261104-5-v2_s111, group_1: ah}
+- {name: pf-20261104-5-v2_s112_vs_ah, group_0: pf-20261104-5-v2_s112, group_1: ah}
+- {name: pf-20261104-5-v2_s113_vs_ah, group_0: pf-20261104-5-v2_s113, group_1: ah}
+- {name: pf-20261104-5-v2_s114_vs_ah, group_0: pf-20261104-5-v2_s114, group_1: ah}
+- {name: pf-20261104-5-v2_s115_vs_ah, group_0: pf-20261104-5-v2_s115, group_1: ah}
+- {name: pf-20261104-5-v2_s116_vs_ah, group_0: pf-20261104-5-v2_s116, group_1: ah}
+- {name: pf-20261104-5-v2_s117_vs_ah, group_0: pf-20261104-5-v2_s117, group_1: ah}
+- {name: pf-20261104-5-v2_s118_vs_ah, group_0: pf-20261104-5-v2_s118, group_1: ah}
+- {name: pf-20261104-5-v2_s119_vs_ah, group_0: pf-20261104-5-v2_s119, group_1: ah}
+- {name: pf-20261104-5-v2_s120_vs_ah, group_0: pf-20261104-5-v2_s120, group_1: ah}
+- {name: pf-20261104-5-v2_s121_vs_ah, group_0: pf-20261104-5-v2_s121, group_1: ah}
+- {name: pf-20261104-5-v2_s122_vs_ah, group_0: pf-20261104-5-v2_s122, group_1: ah}
+- {name: pf-20261104-5-v2_s123_vs_ah, group_0: pf-20261104-5-v2_s123, group_1: ah}
+- {name: pf-20261104-5-v2_s124_vs_ah, group_0: pf-20261104-5-v2_s124, group_1: ah}
+- {name: pf-20261104-5-v2_s125_vs_ah, group_0: pf-20261104-5-v2_s125, group_1: ah}
+- {name: pf-20261104-5-v2_s126_vs_ah, group_0: pf-20261104-5-v2_s126, group_1: ah}
+- {name: pf-20261104-5-v2_s127_vs_ah, group_0: pf-20261104-5-v2_s127, group_1: ah}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 500
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261104-5-v2_sweep_p1of2
+figure_name: pf-20261104-5-v2_sweep_p1of2
+save_per_round: true
+basedir: .
+sweep: true
