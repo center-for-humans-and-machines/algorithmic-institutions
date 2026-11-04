@@ -56,6 +56,7 @@ sys.path.insert(0, str(HERE))
 import agent_runner  # noqa: E402
 import cluster_proxy  # noqa: E402
 import export_instance  # noqa: E402
+import usage  # noqa: E402
 
 MAIN = HERE.parents[1]
 STEPS = (
@@ -215,25 +216,37 @@ class Version:
                 if run_id:
                     self.log(f"attaching to agent run {run_id}")
                 else:
-                    if attempts:
+                    if attempts or self.data.get("limited_runs"):
                         # a fresh copy for the retry: the failed run may have written
                         export_instance.build(self.wt, MAIN, self.exports)
+                    # the plan's usage: wait while a window is over its ceiling
+                    self.log(f"usage: {usage.describe(usage.gate(log=self.log))}")
                     run_id = agent_runner.start(self.stem, write_dirs, self.data["prompt"])
                     self.data["agent_current"] = run_id
                     self.save()
                     self.log(f"agent run {run_id} started")
                 record = agent_runner.finish(run_id, log=self.log)
             report = record.pop("report")
+            rule_written = (self.exports / self.stem / self.rule).exists()
+            ok = record["status"] == "succeeded" and report.strip() and rule_written
+            home = os.path.join(agent_runner.SPAWNER_STATE, "runs", run_id, "home")
+            hits = [] if ok else usage.limited({**record, "report": report}, home)
+            if hits:
+                # the account's limit, not the agent: not one of its attempts
+                self.data.setdefault("limited_runs", []).append(record)
+                self.data.pop("agent_current", None)
+                self.save()
+                usage.wait_after_limit(hits, log=self.log)
+                continue
             attempts.append(record)
             self.data.pop("agent_current", None)
             self.save()
-            rule_written = (self.exports / self.stem / self.rule).exists()
             self.log(
                 f"agent run {run_id}: {record['status']}, models {record['models']},"
-                f" cost {record['result'].get('total_cost_usd')},"
+                f" API-equivalent cost $ {record['result'].get('total_cost_usd')} (plan, not billed),"
                 f" rule {'written' if rule_written else 'missing'}"
             )
-            if record["status"] == "succeeded" and report.strip() and rule_written:
+            if ok:
                 (self.wt_root / f"{self.stem}.report.md").write_text(report + "\n")
                 return
         raise Failed(f"the agent failed {AGENT_ATTEMPTS} times: {attempts[-1]}")

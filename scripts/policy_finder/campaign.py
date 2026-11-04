@@ -286,7 +286,7 @@ class Campaign:
             return f"{x:.2f}" + (f" ± {se:.2f}" if se is not None else "")
 
         lines = [f"# Campaign {self.path.stem}", "",
-                 "| gen | version | status | GP peak | best of n | agent $ |",
+                 "| gen | version | status | GP peak | best of n | agent, API-equivalent $ |",
                  "|---|---|---|---|---|---|"]
         for r in rows:
             status = r["status"] + (f" ({r['failed_step']})" if r["failed_step"] else "")
