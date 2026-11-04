@@ -1,0 +1,39 @@
+params:
+  thr:
+    definition: >-
+      contribution threshold; a member contributing less than thr this round is
+      punished, a member at or above it never is
+    type: int
+  amount:
+    definition: >-
+      the punishment (points) dealt to each member below the threshold; small,
+      because the contribution gain from punishment is concave in its size
+    type: int
+  m:
+    definition: >-
+      number of rounds at the start of each 4-round block (rounds 0, 4, 8, ...
+      begin a block, the 4th round of a block precedes a switch decision) in
+      which punishment is dealt; 4 punishes in every round, smaller values keep
+      punishment away from the switch decisions
+    type: int
+  t_stop:
+    definition: >-
+      the last round (0-23) in which anyone is punished; later rounds leave too
+      little future for a punished player's higher contributions to repay the
+      points the punishment removes from the pool
+    type: int
+sweep_config:
+  thr: [1, 12]
+  amount: [1, 8]
+  m: [1, 4]
+  t_stop: [11, 23]
+constraints:
+  - thr >= 1
+  - amount >= 1
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  below = (now < thr).float()
+  in_block = t - 4 * th.floor(t / 4)
+  active = ((in_block < m) & (t <= t_stop)).float()
+  punishment = amount * below * member * active
