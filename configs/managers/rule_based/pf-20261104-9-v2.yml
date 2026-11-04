@@ -1,0 +1,62 @@
+params:
+  rel:
+    definition: >-
+      laggard threshold as a fraction of the mean contribution of the other
+      valid members of the group this round; a member contributing less is
+      punished in proportion to the gap
+    type: float
+  slope:
+    definition: punishment points per contribution point of shortfall below the threshold
+    type: float
+  cap:
+    definition: largest punishment dealt to one member in one round (before the timing multipliers)
+    type: float
+  fresh:
+    definition: >-
+      multiplier on the punishment in the first round after a switch
+      decision (rounds 0, 4, 8, 12, 16, 20), when newcomers arrive and the
+      next decision is furthest away, so a punished member is least likely
+      to leave over it
+    type: float
+  pre_switch:
+    definition: >-
+      multiplier on the punishment in the round just before a switch
+      decision (rounds 3, 7, 11, 15, 19), when a punishment most raises the
+      punished member's chance of leaving
+    type: float
+  last_round:
+    definition: >-
+      last round (0-23) in which the manager punishes; later rounds are left
+      unpunished because too few rounds remain for the lift to repay its cost
+    type: int
+sweep_config:
+  rel: [0.4, 1.2]
+  slope: [0.7, 8, log]
+  cap: [6, 30]
+  fresh: [0.5, 3, log]
+  pre_switch: [0, 1.5]
+  last_round: [8, 23]
+constraints:
+  - rel > 0
+  - slope > 0
+  - cap >= 1
+  - fresh > 0
+  - pre_switch >= 0
+code: |
+  mine = in_group[..., -1] * valid[..., -1]
+  cnow = c[..., -1]
+  zero = th.zeros_like(cnow)
+  one = th.ones_like(cnow)
+  n_mine = mine.sum(-1).unsqueeze(-1)
+  tot = (cnow * mine).sum(-1).unsqueeze(-1)
+  n_others = n_mine - mine
+  ref = (tot - cnow * mine) / th.maximum(n_others, one)
+  short = th.maximum(rel * ref - cnow, zero)
+  pun = th.minimum(slope * short, cap * one)
+  pun = pun * th.gt(n_others, 0.5 * one) * mine
+  pos = th.remainder(t + 0.0, 4.0)
+  is_fresh = 1.0 * th.eq(pos, 0.0)
+  is_pre = 1.0 * th.eq(pos, 3.0) * th.lt(t, 20.0)
+  mult = fresh * is_fresh + pre_switch * is_pre + (1.0 - is_fresh - is_pre)
+  active = 1.0 * th.le(t, last_round)
+  punishment = pun * mult * active
