@@ -1,0 +1,671 @@
+# Sweep of /home/kappablanca/pf_runs/worktrees/pf-20261104-7/configs/managers/rule_based/pf-20261104-7-v5.yml (#227), written by scripts/policy_finder/generate_sim_config.py:
+# 128 of 256 distinct design points (256 Sobol points), each against `ah`; stack and sim parameters from
+# configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 106
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261104-7-v5_s128:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.975682510063052, rate: 14.686181760403061, t_end: 6, cooldown: 2, repeat_factor: 0.8500328995287418}
+  pf-20261104-7-v5_s129:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.3208461962640285, rate: 2.6588314325877502, t_end: 18, cooldown: 2, repeat_factor: 0.2647848278284073}
+  pf-20261104-7-v5_s130:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.901483903639019, rate: 26.62677039271974, t_end: 9, cooldown: 1, repeat_factor: 0.007544483989477158}
+  pf-20261104-7-v5_s131:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.118122783489525, rate: 4.769867441704817, t_end: 15, cooldown: 3, repeat_factor: 0.6083583012223244}
+  pf-20261104-7-v5_s132:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.164629743434489, rate: 21.361367628767354, t_end: 20, cooldown: 3, repeat_factor: 0.7469595605507493}
+  pf-20261104-7-v5_s133:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.009726620279253, rate: 7.228340983904064, t_end: 4, cooldown: 1, repeat_factor: 0.14617229718714952}
+  pf-20261104-7-v5_s134:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.11692700535059, rate: 9.895021004513847, t_end: 13, cooldown: 2, repeat_factor: 0.4035198101773858}
+  pf-20261104-7-v5_s135:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.833499180153012, rate: 3.3839226051711253, t_end: 11, cooldown: 1, repeat_factor: 0.9887410895898938}
+  pf-20261104-7-v5_s136:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.178485720418394, rate: 24.04618348602097, t_end: 14, cooldown: 1, repeat_factor: 0.3687855498865247}
+  pf-20261104-7-v5_s137:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.333585777319968, rate: 4.541181907932349, t_end: 10, cooldown: 3, repeat_factor: 0.7665335545316339}
+  pf-20261104-7-v5_s138:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.225334161892533, rate: 11.316839018315946, t_end: 19, cooldown: 2, repeat_factor: 0.5238812090829015}
+  pf-20261104-7-v5_s139:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.508958920836449, rate: 2.114724303046755, t_end: 5, cooldown: 3, repeat_factor: 0.11056744400411844}
+  pf-20261104-7-v5_s140:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.462241519242525, rate: 8.478471402467497, t_end: 8, cooldown: 2, repeat_factor: 0.221859373152256}
+  pf-20261104-7-v5_s141:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.117301469668746, rate: 3.257022934252849, t_end: 16, cooldown: 2, repeat_factor: 0.6351465843617916}
+  pf-20261104-7-v5_s142:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.5372948395088315, rate: 15.2907919896651, t_end: 7, cooldown: 3, repeat_factor: 0.8779053837060928}
+  pf-20261104-7-v5_s143:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.320879596285522, rate: 5.93645699905811, t_end: 17, cooldown: 1, repeat_factor: 0.4801841713488102}
+  pf-20261104-7-v5_s144:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.506299583241343, rate: 17.75674686976476, t_end: 10, cooldown: 3, repeat_factor: 0.5655777482315898}
+  pf-20261104-7-v5_s145:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.668036948889494, rate: 6.072995710599186, t_end: 13, cooldown: 1, repeat_factor: 0.04142033215612173}
+  pf-20261104-7-v5_s146:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.330065245740116, rate: 8.312415923478781, t_end: 5, cooldown: 3, repeat_factor: 0.28412025701254606}
+  pf-20261104-7-v5_s147:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.620327365584671, rate: 2.8130195301060277, t_end: 19, cooldown: 1, repeat_factor: 0.8239619275555015}
+  pf-20261104-7-v5_s148:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.81743919942528, rate: 12.592877316618017, t_end: 15, cooldown: 1, repeat_factor: 0.9625668805092573}
+  pf-20261104-7-v5_s149:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.479109755717218, rate: 2.2560497229985983, t_end: 9, cooldown: 3, repeat_factor: 0.4227596316486597}
+  pf-20261104-7-v5_s150:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.614722214639187, rate: 22.59219568599066, t_end: 17, cooldown: 2, repeat_factor: 0.18016663752496243}
+  pf-20261104-7-v5_s151:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.404917629435658, rate: 4.090498709172215, t_end: 7, cooldown: 2, repeat_factor: 0.7042898703366518}
+  pf-20261104-7-v5_s152:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.620738728903234, rate: 10.092118448575352, t_end: 18, cooldown: 3, repeat_factor: 0.09074111469089985}
+  pf-20261104-7-v5_s153:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.958837860263884, rate: 3.917814015005305, t_end: 6, cooldown: 1, repeat_factor: 0.5523985978215933}
+  pf-20261104-7-v5_s154:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.8243099842220545, rate: 18.39529881954505, t_end: 14, cooldown: 2, repeat_factor: 0.8098050151020288}
+  pf-20261104-7-v5_s155:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.03388425707817, rate: 7.066009214637642, t_end: 10, cooldown: 2, repeat_factor: 0.33246329240500927}
+  pf-20261104-7-v5_s156:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.836989644914865, rate: 28.341732706151124, t_end: 4, cooldown: 1, repeat_factor: 0.4437515279278159}
+  pf-20261104-7-v5_s157:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.675048669800162, rate: 5.295648339031826, t_end: 19, cooldown: 3, repeat_factor: 0.9210588289424777}
+  pf-20261104-7-v5_s158:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.012369294650853, rate: 13.197551399545842, t_end: 12, cooldown: 1, repeat_factor: 0.6637591039761901}
+  pf-20261104-7-v5_s159:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.721903565339744, rate: 2.492184502094106, t_end: 12, cooldown: 3, repeat_factor: 0.20213580410927534}
+  pf-20261104-7-v5_s160:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.901176361367106, rate: 25.590336628247773, t_end: 19, cooldown: 2, repeat_factor: 0.9726498126983643}
+  pf-20261104-7-v5_s161:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.188165735453367, rate: 4.989448715695617, t_end: 5, cooldown: 2, repeat_factor: 0.3854468949139118}
+  pf-20261104-7-v5_s162:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.82398598920554, rate: 14.039493441223003, t_end: 14, cooldown: 3, repeat_factor: 0.12710922211408615}
+  pf-20261104-7-v5_s163:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.98928649444133, rate: 2.7664453254535033, t_end: 10, cooldown: 1, repeat_factor: 0.7298743240535259}
+  pf-20261104-7-v5_s164:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.076358259655535, rate: 9.509665813233578, t_end: 7, cooldown: 1, repeat_factor: 0.6186051638796926}
+  pf-20261104-7-v5_s165:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.86341433878988, rate: 3.53962859892234, t_end: 17, cooldown: 3, repeat_factor: 0.01586685422807932}
+  pf-20261104-7-v5_s166:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.025663755834103, rate: 20.42201161653109, t_end: 8, cooldown: 1, repeat_factor: 0.27406731713563204}
+  pf-20261104-7-v5_s167:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.691031070426106, rate: 7.521367946620675, t_end: 16, cooldown: 2, repeat_factor: 0.861243681050837}
+  pf-20261104-7-v5_s168:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.471795483492315, rate: 11.774877119682941, t_end: 9, cooldown: 3, repeat_factor: 0.4962911168113351}
+  pf-20261104-7-v5_s169:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.684963040985167, rate: 2.0216047725389177, t_end: 15, cooldown: 1, repeat_factor: 0.8959941016510129}
+  pf-20261104-7-v5_s170:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.521635273471475, rate: 25.153153087588176, t_end: 6, cooldown: 3, repeat_factor: 0.6541939759626985}
+  pf-20261104-7-v5_s171:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.856491595506668, rate: 4.364418908042356, t_end: 18, cooldown: 2, repeat_factor: 0.2389288218691945}
+  pf-20261104-7-v5_s172:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.769209805876017, rate: 15.910657898293168, t_end: 13, cooldown: 2, repeat_factor: 0.10033531114459038}
+  pf-20261104-7-v5_s173:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.482417365536094, rate: 5.6754035163252725, t_end: 11, cooldown: 2, repeat_factor: 0.5155736729502678}
+  pf-20261104-7-v5_s174:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.847254474647343, rate: 8.868595804575891, t_end: 20, cooldown: 1, repeat_factor: 0.7572363503277302}
+  pf-20261104-7-v5_s175:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.68215090315789, rate: 3.1301804885186777, t_end: 4, cooldown: 3, repeat_factor: 0.3575599193572998}
+  pf-20261104-7-v5_s176:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.360015464946628, rate: 7.989725183633043, t_end: 15, cooldown: 1, repeat_factor: 0.6940594678744674}
+  pf-20261104-7-v5_s177:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.579790290445089, rate: 2.9423497025827765, t_end: 10, cooldown: 2, repeat_factor: 0.1718568978831172}
+  pf-20261104-7-v5_s178:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.18762571644038, rate: 16.97669271809315, t_end: 17, cooldown: 1, repeat_factor: 0.41345688607543707}
+  pf-20261104-7-v5_s179:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.529089358635247, rate: 6.318436473253172, t_end: 6, cooldown: 3, repeat_factor: 0.9513472719117999}
+  pf-20261104-7-v5_s180:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.684733496047556, rate: 21.713813578923506, t_end: 12, cooldown: 3, repeat_factor: 0.8400667849928141}
+  pf-20261104-7-v5_s181:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.404575026594102, rate: 4.278296504653178, t_end: 12, cooldown: 1, repeat_factor: 0.3022105824202299}
+  pf-20261104-7-v5_s182:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.485861100256443, rate: 12.039920842873235, t_end: 4, cooldown: 2, repeat_factor: 0.060473622754216194}
+  pf-20261104-7-v5_s183:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.327391551807523, rate: 2.347276671236317, t_end: 20, cooldown: 2, repeat_factor: 0.5826417710632086}
+  pf-20261104-7-v5_s184:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.985826044343412, rate: 19.13874164643988, t_end: 5, cooldown: 1, repeat_factor: 0.21238105557858944}
+  pf-20261104-7-v5_s185:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.265780904330313, rate: 6.755597519669634, t_end: 19, cooldown: 3, repeat_factor: 0.6720835585147142}
+  pf-20261104-7-v5_s186:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.185553127899766, rate: 10.556111729066785, t_end: 11, cooldown: 2, repeat_factor: 0.9303467404097319}
+  pf-20261104-7-v5_s187:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.343819066882133, rate: 3.7657240318357132, t_end: 13, cooldown: 2, repeat_factor: 0.4549564067274332}
+  pf-20261104-7-v5_s188:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.188391733914614, rate: 13.73121178695657, t_end: 16, cooldown: 3, repeat_factor: 0.31637422274798155}
+  pf-20261104-7-v5_s189:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.96838659606874, rate: 2.3827514282583, t_end: 8, cooldown: 2, repeat_factor: 0.7917303731665015}
+  pf-20261104-7-v5_s190:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.3599272118881345, rate: 29.642928868418917, t_end: 16, cooldown: 3, repeat_factor: 0.5333295045420527}
+  pf-20261104-7-v5_s191:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.018233257345855, rate: 5.089755212477586, t_end: 8, cooldown: 1, repeat_factor: 0.07366142328828573}
+  pf-20261104-7-v5_s192:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.0910954317078, rate: 19.685119487796694, t_end: 16, cooldown: 3, repeat_factor: 0.3785975771024823}
+  pf-20261104-7-v5_s193:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.436140649951994, rate: 7.641858131274118, t_end: 8, cooldown: 1, repeat_factor: 0.9793846914544702}
+  pf-20261104-7-v5_s194:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.016795555129647, rate: 9.264012410889656, t_end: 17, cooldown: 2, repeat_factor: 0.7211673082783818}
+  pf-20261104-7-v5_s195:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.233529537916183, rate: 3.5584913935976794, t_end: 7, cooldown: 2, repeat_factor: 0.13594593945890665}
+  pf-20261104-7-v5_s196:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.266364101320505, rate: 14.568665110415806, t_end: 10, cooldown: 2, repeat_factor: 0.024547167122364044}
+  pf-20261104-7-v5_s197:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.111369213089347, rate: 2.7221492902164277, t_end: 14, cooldown: 3, repeat_factor: 0.6097951494157314}
+  pf-20261104-7-v5_s198:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.21854676771909, rate: 26.275449818618977, t_end: 5, cooldown: 1, repeat_factor: 0.8681197017431259}
+  pf-20261104-7-v5_s199:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.935240748338401, rate: 4.961767700889162, t_end: 19, cooldown: 3, repeat_factor: 0.26730573549866676}
+  pf-20261104-7-v5_s200:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.28181299380958, rate: 9.103482197855763, t_end: 4, cooldown: 2, repeat_factor: 0.9027212895452976}
+  pf-20261104-7-v5_s201:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.437038194388151, rate: 3.1134914595909327, t_end: 20, cooldown: 1, repeat_factor: 0.48943422734737396}
+  pf-20261104-7-v5_s202:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.328775639645755, rate: 16.50574474705281, t_end: 11, cooldown: 3, repeat_factor: 0.24775796756148338}
+  pf-20261104-7-v5_s203:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.612311971373856, rate: 5.58574579474254, t_end: 13, cooldown: 1, repeat_factor: 0.6454792693257332}
+  pf-20261104-7-v5_s204:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.579260707832873, rate: 24.498063166488887, t_end: 18, cooldown: 1, repeat_factor: 0.5067712301388383}
+  pf-20261104-7-v5_s205:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.23441909905523, rate: 4.388903234725991, t_end: 6, cooldown: 3, repeat_factor: 0.10902331490069628}
+  pf-20261104-7-v5_s206:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.654414854943752, rate: 11.347534280050034, t_end: 15, cooldown: 2, repeat_factor: 0.3508060285821557}
+  pf-20261104-7-v5_s207:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.437884481623769, rate: 2.0545649882084662, t_end: 9, cooldown: 2, repeat_factor: 0.7641199426725507}
+  pf-20261104-7-v5_s208:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.607933609746397, rate: 12.110341320788839, t_end: 20, cooldown: 1, repeat_factor: 0.1629896629601717}
+  pf-20261104-7-v5_s209:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.769766130484641, rate: 2.2870653017158724, t_end: 4, cooldown: 3, repeat_factor: 0.7027970012277365}
+  pf-20261104-7-v5_s210:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.431812042370439, rate: 22.073078539657686, t_end: 12, cooldown: 1, repeat_factor: 0.944520840421319}
+  pf-20261104-7-v5_s211:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.721955642104149, rate: 4.1246866973629395, t_end: 12, cooldown: 3, repeat_factor: 0.42039775662124157}
+  pf-20261104-7-v5_s212:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.932738412171602, rate: 16.879376929957647, t_end: 6, cooldown: 2, repeat_factor: 0.3090026816353202}
+  pf-20261104-7-v5_s213:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.594530826434493, rate: 6.48424039853412, t_end: 18, cooldown: 2, repeat_factor: 0.8331602467224002}
+  pf-20261104-7-v5_s214:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.730120872147381, rate: 7.860339215256215, t_end: 10, cooldown: 3, repeat_factor: 0.5915433382615447}
+  pf-20261104-7-v5_s215:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.520224469713867, rate: 3.05167355135258, t_end: 14, cooldown: 1, repeat_factor: 0.05170175712555647}
+  pf-20261104-7-v5_s216:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.737844480201602, rate: 29.16075822883479, t_end: 9, cooldown: 2, repeat_factor: 0.6808287827298045}
+  pf-20261104-7-v5_s217:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.075855132192373, rate: 5.279360010714932, t_end: 15, cooldown: 2, repeat_factor: 0.20352139230817556}
+  pf-20261104-7-v5_s218:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.941316734068096, rate: 13.651506575924058, t_end: 7, cooldown: 1, repeat_factor: 0.46190484892576933}
+  pf-20261104-7-v5_s219:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.151016202755272, rate: 2.445507279720324, t_end: 17, cooldown: 3, repeat_factor: 0.9235279997810721}
+  pf-20261104-7-v5_s220:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.940443561412394, rate: 10.729761343815836, t_end: 14, cooldown: 3, repeat_factor: 0.784816263243556}
+  pf-20261104-7-v5_s221:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.778387404046953, rate: 3.6307822218123165, t_end: 11, cooldown: 1, repeat_factor: 0.32315863110125065}
+  pf-20261104-7-v5_s222:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.115710832178593, rate: 19.248883873101615, t_end: 18, cooldown: 2, repeat_factor: 0.06488186679780483}
+  pf-20261104-7-v5_s223:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.825343595817685, rate: 6.582787175877561, t_end: 5, cooldown: 1, repeat_factor: 0.5422235000878572}
+  pf-20261104-7-v5_s224:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.785860328935087, rate: 9.638814350725458, t_end: 11, cooldown: 1, repeat_factor: 0.2560968855395913}
+  pf-20261104-7-v5_s225:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.072761275805533, rate: 3.402306559079595, t_end: 13, cooldown: 3, repeat_factor: 0.8588352845981717}
+  pf-20261104-7-v5_s226:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.708570772781968, rate: 20.5893083389482, t_end: 4, cooldown: 2, repeat_factor: 0.6014746511355042}
+  pf-20261104-7-v5_s227:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.873996421694756, rate: 7.344896973598608, t_end: 20, cooldown: 2, repeat_factor: 0.014298436231911182}
+  pf-20261104-7-v5_s228:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.974734116345644, rate: 27.336803196159707, t_end: 15, cooldown: 3, repeat_factor: 0.15302924439311028}
+  pf-20261104-7-v5_s229:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.761675065383315, rate: 4.743698062431966, t_end: 9, cooldown: 1, repeat_factor: 0.7402323111891747}
+  pf-20261104-7-v5_s230:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.923927103169262, rate: 15.238156473397456, t_end: 18, cooldown: 3, repeat_factor: 0.9974557347595692}
+  pf-20261104-7-v5_s231:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.589392858557403, rate: 2.61642115501363, t_end: 6, cooldown: 1, repeat_factor: 0.39469072222709656}
+  pf-20261104-7-v5_s232:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.368351293727756, rate: 15.864330395397463, t_end: 17, cooldown: 1, repeat_factor: 0.7753436267375946}
+  pf-20261104-7-v5_s233:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.581613954156637, rate: 5.842312097543978, t_end: 7, cooldown: 3, repeat_factor: 0.36010517552495}
+  pf-20261104-7-v5_s234:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.41830403637141, rate: 8.703925567548104, t_end: 16, cooldown: 1, repeat_factor: 0.11732896417379379}
+  pf-20261104-7-v5_s235:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.753041890449822, rate: 3.239457336890847, t_end: 8, cooldown: 3, repeat_factor: 0.5170052461326122}
+  pf-20261104-7-v5_s236:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.652087078429759, rate: 10.906793839893659, t_end: 5, cooldown: 3, repeat_factor: 0.6284117670729756}
+  pf-20261104-7-v5_s237:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.365416443906724, rate: 2.148980327562402, t_end: 19, cooldown: 1, repeat_factor: 0.2287086332216859}
+  pf-20261104-7-v5_s238:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.730231322348118, rate: 23.421378627095987, t_end: 10, cooldown: 2, repeat_factor: 0.47134739626199007}
+  pf-20261104-7-v5_s239:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.565035985782743, rate: 4.566186719010149, t_end: 14, cooldown: 2, repeat_factor: 0.8866124609485269}
+  pf-20261104-7-v5_s240:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.258264704607427, rate: 22.967414513899357, t_end: 7, cooldown: 3, repeat_factor: 0.034635862335562706}
+  pf-20261104-7-v5_s241:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.478164725936949, rate: 3.9432237267475148, t_end: 16, cooldown: 1, repeat_factor: 0.5724919158965349}
+  pf-20261104-7-v5_s242:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.08598897792399, rate: 12.667319480038126, t_end: 9, cooldown: 3, repeat_factor: 0.8150679897516966}
+  pf-20261104-7-v5_s243:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.427364140748978, rate: 2.197951766537144, t_end: 16, cooldown: 2, repeat_factor: 0.29289975203573704}
+  pf-20261104-7-v5_s244:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 9.569330874830484, rate: 8.17864785074278, t_end: 19, cooldown: 2, repeat_factor: 0.43161923717707396}
+  pf-20261104-7-v5_s245:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.289270898327231, rate: 2.917356851568169, t_end: 5, cooldown: 2, repeat_factor: 0.953821717761457}
+  pf-20261104-7-v5_s246:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.370559175498784, rate: 17.656786601674796, t_end: 13, cooldown: 1, repeat_factor: 0.7111086724326015}
+  pf-20261104-7-v5_s247:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.211974444799125, rate: 6.231973895272027, t_end: 11, cooldown: 3, repeat_factor: 0.17321813758462667}
+  pf-20261104-7-v5_s248:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 12.868816999718547, rate: 13.119586089764661, t_end: 12, cooldown: 2, repeat_factor: 0.5593050783500075}
+  pf-20261104-7-v5_s249:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 7.148653339594603, rate: 2.5579806723456175, t_end: 12, cooldown: 2, repeat_factor: 0.0839490769430995}
+  pf-20261104-7-v5_s250:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.068442995660007, rate: 27.877850744770083, t_end: 20, cooldown: 3, repeat_factor: 0.3412352195009589}
+  pf-20261104-7-v5_s251:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 10.226804089732468, rate: 5.493264396452061, t_end: 4, cooldown: 1, repeat_factor: 0.8009033901616931}
+  pf-20261104-7-v5_s252:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.08504790160805, rate: 18.50001260449549, t_end: 9, cooldown: 1, repeat_factor: 0.9123212341219187}
+  pf-20261104-7-v5_s253:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 8.86495094653219, rate: 6.885968396763092, t_end: 14, cooldown: 3, repeat_factor: 0.45261882059276104}
+  pf-20261104-7-v5_s254:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 6.256468914449215, rate: 10.257501104868933, t_end: 7, cooldown: 1, repeat_factor: 0.19519499130547047}
+  pf-20261104-7-v5_s255:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-7-v5.yml
+    params: {threshold: 11.914896817877889, rate: 3.777812935160779, t_end: 17, cooldown: 2, repeat_factor: 0.6705854739993811}
+pairings:
+- {name: pf-20261104-7-v5_s128_vs_ah, group_0: pf-20261104-7-v5_s128, group_1: ah}
+- {name: pf-20261104-7-v5_s129_vs_ah, group_0: pf-20261104-7-v5_s129, group_1: ah}
+- {name: pf-20261104-7-v5_s130_vs_ah, group_0: pf-20261104-7-v5_s130, group_1: ah}
+- {name: pf-20261104-7-v5_s131_vs_ah, group_0: pf-20261104-7-v5_s131, group_1: ah}
+- {name: pf-20261104-7-v5_s132_vs_ah, group_0: pf-20261104-7-v5_s132, group_1: ah}
+- {name: pf-20261104-7-v5_s133_vs_ah, group_0: pf-20261104-7-v5_s133, group_1: ah}
+- {name: pf-20261104-7-v5_s134_vs_ah, group_0: pf-20261104-7-v5_s134, group_1: ah}
+- {name: pf-20261104-7-v5_s135_vs_ah, group_0: pf-20261104-7-v5_s135, group_1: ah}
+- {name: pf-20261104-7-v5_s136_vs_ah, group_0: pf-20261104-7-v5_s136, group_1: ah}
+- {name: pf-20261104-7-v5_s137_vs_ah, group_0: pf-20261104-7-v5_s137, group_1: ah}
+- {name: pf-20261104-7-v5_s138_vs_ah, group_0: pf-20261104-7-v5_s138, group_1: ah}
+- {name: pf-20261104-7-v5_s139_vs_ah, group_0: pf-20261104-7-v5_s139, group_1: ah}
+- {name: pf-20261104-7-v5_s140_vs_ah, group_0: pf-20261104-7-v5_s140, group_1: ah}
+- {name: pf-20261104-7-v5_s141_vs_ah, group_0: pf-20261104-7-v5_s141, group_1: ah}
+- {name: pf-20261104-7-v5_s142_vs_ah, group_0: pf-20261104-7-v5_s142, group_1: ah}
+- {name: pf-20261104-7-v5_s143_vs_ah, group_0: pf-20261104-7-v5_s143, group_1: ah}
+- {name: pf-20261104-7-v5_s144_vs_ah, group_0: pf-20261104-7-v5_s144, group_1: ah}
+- {name: pf-20261104-7-v5_s145_vs_ah, group_0: pf-20261104-7-v5_s145, group_1: ah}
+- {name: pf-20261104-7-v5_s146_vs_ah, group_0: pf-20261104-7-v5_s146, group_1: ah}
+- {name: pf-20261104-7-v5_s147_vs_ah, group_0: pf-20261104-7-v5_s147, group_1: ah}
+- {name: pf-20261104-7-v5_s148_vs_ah, group_0: pf-20261104-7-v5_s148, group_1: ah}
+- {name: pf-20261104-7-v5_s149_vs_ah, group_0: pf-20261104-7-v5_s149, group_1: ah}
+- {name: pf-20261104-7-v5_s150_vs_ah, group_0: pf-20261104-7-v5_s150, group_1: ah}
+- {name: pf-20261104-7-v5_s151_vs_ah, group_0: pf-20261104-7-v5_s151, group_1: ah}
+- {name: pf-20261104-7-v5_s152_vs_ah, group_0: pf-20261104-7-v5_s152, group_1: ah}
+- {name: pf-20261104-7-v5_s153_vs_ah, group_0: pf-20261104-7-v5_s153, group_1: ah}
+- {name: pf-20261104-7-v5_s154_vs_ah, group_0: pf-20261104-7-v5_s154, group_1: ah}
+- {name: pf-20261104-7-v5_s155_vs_ah, group_0: pf-20261104-7-v5_s155, group_1: ah}
+- {name: pf-20261104-7-v5_s156_vs_ah, group_0: pf-20261104-7-v5_s156, group_1: ah}
+- {name: pf-20261104-7-v5_s157_vs_ah, group_0: pf-20261104-7-v5_s157, group_1: ah}
+- {name: pf-20261104-7-v5_s158_vs_ah, group_0: pf-20261104-7-v5_s158, group_1: ah}
+- {name: pf-20261104-7-v5_s159_vs_ah, group_0: pf-20261104-7-v5_s159, group_1: ah}
+- {name: pf-20261104-7-v5_s160_vs_ah, group_0: pf-20261104-7-v5_s160, group_1: ah}
+- {name: pf-20261104-7-v5_s161_vs_ah, group_0: pf-20261104-7-v5_s161, group_1: ah}
+- {name: pf-20261104-7-v5_s162_vs_ah, group_0: pf-20261104-7-v5_s162, group_1: ah}
+- {name: pf-20261104-7-v5_s163_vs_ah, group_0: pf-20261104-7-v5_s163, group_1: ah}
+- {name: pf-20261104-7-v5_s164_vs_ah, group_0: pf-20261104-7-v5_s164, group_1: ah}
+- {name: pf-20261104-7-v5_s165_vs_ah, group_0: pf-20261104-7-v5_s165, group_1: ah}
+- {name: pf-20261104-7-v5_s166_vs_ah, group_0: pf-20261104-7-v5_s166, group_1: ah}
+- {name: pf-20261104-7-v5_s167_vs_ah, group_0: pf-20261104-7-v5_s167, group_1: ah}
+- {name: pf-20261104-7-v5_s168_vs_ah, group_0: pf-20261104-7-v5_s168, group_1: ah}
+- {name: pf-20261104-7-v5_s169_vs_ah, group_0: pf-20261104-7-v5_s169, group_1: ah}
+- {name: pf-20261104-7-v5_s170_vs_ah, group_0: pf-20261104-7-v5_s170, group_1: ah}
+- {name: pf-20261104-7-v5_s171_vs_ah, group_0: pf-20261104-7-v5_s171, group_1: ah}
+- {name: pf-20261104-7-v5_s172_vs_ah, group_0: pf-20261104-7-v5_s172, group_1: ah}
+- {name: pf-20261104-7-v5_s173_vs_ah, group_0: pf-20261104-7-v5_s173, group_1: ah}
+- {name: pf-20261104-7-v5_s174_vs_ah, group_0: pf-20261104-7-v5_s174, group_1: ah}
+- {name: pf-20261104-7-v5_s175_vs_ah, group_0: pf-20261104-7-v5_s175, group_1: ah}
+- {name: pf-20261104-7-v5_s176_vs_ah, group_0: pf-20261104-7-v5_s176, group_1: ah}
+- {name: pf-20261104-7-v5_s177_vs_ah, group_0: pf-20261104-7-v5_s177, group_1: ah}
+- {name: pf-20261104-7-v5_s178_vs_ah, group_0: pf-20261104-7-v5_s178, group_1: ah}
+- {name: pf-20261104-7-v5_s179_vs_ah, group_0: pf-20261104-7-v5_s179, group_1: ah}
+- {name: pf-20261104-7-v5_s180_vs_ah, group_0: pf-20261104-7-v5_s180, group_1: ah}
+- {name: pf-20261104-7-v5_s181_vs_ah, group_0: pf-20261104-7-v5_s181, group_1: ah}
+- {name: pf-20261104-7-v5_s182_vs_ah, group_0: pf-20261104-7-v5_s182, group_1: ah}
+- {name: pf-20261104-7-v5_s183_vs_ah, group_0: pf-20261104-7-v5_s183, group_1: ah}
+- {name: pf-20261104-7-v5_s184_vs_ah, group_0: pf-20261104-7-v5_s184, group_1: ah}
+- {name: pf-20261104-7-v5_s185_vs_ah, group_0: pf-20261104-7-v5_s185, group_1: ah}
+- {name: pf-20261104-7-v5_s186_vs_ah, group_0: pf-20261104-7-v5_s186, group_1: ah}
+- {name: pf-20261104-7-v5_s187_vs_ah, group_0: pf-20261104-7-v5_s187, group_1: ah}
+- {name: pf-20261104-7-v5_s188_vs_ah, group_0: pf-20261104-7-v5_s188, group_1: ah}
+- {name: pf-20261104-7-v5_s189_vs_ah, group_0: pf-20261104-7-v5_s189, group_1: ah}
+- {name: pf-20261104-7-v5_s190_vs_ah, group_0: pf-20261104-7-v5_s190, group_1: ah}
+- {name: pf-20261104-7-v5_s191_vs_ah, group_0: pf-20261104-7-v5_s191, group_1: ah}
+- {name: pf-20261104-7-v5_s192_vs_ah, group_0: pf-20261104-7-v5_s192, group_1: ah}
+- {name: pf-20261104-7-v5_s193_vs_ah, group_0: pf-20261104-7-v5_s193, group_1: ah}
+- {name: pf-20261104-7-v5_s194_vs_ah, group_0: pf-20261104-7-v5_s194, group_1: ah}
+- {name: pf-20261104-7-v5_s195_vs_ah, group_0: pf-20261104-7-v5_s195, group_1: ah}
+- {name: pf-20261104-7-v5_s196_vs_ah, group_0: pf-20261104-7-v5_s196, group_1: ah}
+- {name: pf-20261104-7-v5_s197_vs_ah, group_0: pf-20261104-7-v5_s197, group_1: ah}
+- {name: pf-20261104-7-v5_s198_vs_ah, group_0: pf-20261104-7-v5_s198, group_1: ah}
+- {name: pf-20261104-7-v5_s199_vs_ah, group_0: pf-20261104-7-v5_s199, group_1: ah}
+- {name: pf-20261104-7-v5_s200_vs_ah, group_0: pf-20261104-7-v5_s200, group_1: ah}
+- {name: pf-20261104-7-v5_s201_vs_ah, group_0: pf-20261104-7-v5_s201, group_1: ah}
+- {name: pf-20261104-7-v5_s202_vs_ah, group_0: pf-20261104-7-v5_s202, group_1: ah}
+- {name: pf-20261104-7-v5_s203_vs_ah, group_0: pf-20261104-7-v5_s203, group_1: ah}
+- {name: pf-20261104-7-v5_s204_vs_ah, group_0: pf-20261104-7-v5_s204, group_1: ah}
+- {name: pf-20261104-7-v5_s205_vs_ah, group_0: pf-20261104-7-v5_s205, group_1: ah}
+- {name: pf-20261104-7-v5_s206_vs_ah, group_0: pf-20261104-7-v5_s206, group_1: ah}
+- {name: pf-20261104-7-v5_s207_vs_ah, group_0: pf-20261104-7-v5_s207, group_1: ah}
+- {name: pf-20261104-7-v5_s208_vs_ah, group_0: pf-20261104-7-v5_s208, group_1: ah}
+- {name: pf-20261104-7-v5_s209_vs_ah, group_0: pf-20261104-7-v5_s209, group_1: ah}
+- {name: pf-20261104-7-v5_s210_vs_ah, group_0: pf-20261104-7-v5_s210, group_1: ah}
+- {name: pf-20261104-7-v5_s211_vs_ah, group_0: pf-20261104-7-v5_s211, group_1: ah}
+- {name: pf-20261104-7-v5_s212_vs_ah, group_0: pf-20261104-7-v5_s212, group_1: ah}
+- {name: pf-20261104-7-v5_s213_vs_ah, group_0: pf-20261104-7-v5_s213, group_1: ah}
+- {name: pf-20261104-7-v5_s214_vs_ah, group_0: pf-20261104-7-v5_s214, group_1: ah}
+- {name: pf-20261104-7-v5_s215_vs_ah, group_0: pf-20261104-7-v5_s215, group_1: ah}
+- {name: pf-20261104-7-v5_s216_vs_ah, group_0: pf-20261104-7-v5_s216, group_1: ah}
+- {name: pf-20261104-7-v5_s217_vs_ah, group_0: pf-20261104-7-v5_s217, group_1: ah}
+- {name: pf-20261104-7-v5_s218_vs_ah, group_0: pf-20261104-7-v5_s218, group_1: ah}
+- {name: pf-20261104-7-v5_s219_vs_ah, group_0: pf-20261104-7-v5_s219, group_1: ah}
+- {name: pf-20261104-7-v5_s220_vs_ah, group_0: pf-20261104-7-v5_s220, group_1: ah}
+- {name: pf-20261104-7-v5_s221_vs_ah, group_0: pf-20261104-7-v5_s221, group_1: ah}
+- {name: pf-20261104-7-v5_s222_vs_ah, group_0: pf-20261104-7-v5_s222, group_1: ah}
+- {name: pf-20261104-7-v5_s223_vs_ah, group_0: pf-20261104-7-v5_s223, group_1: ah}
+- {name: pf-20261104-7-v5_s224_vs_ah, group_0: pf-20261104-7-v5_s224, group_1: ah}
+- {name: pf-20261104-7-v5_s225_vs_ah, group_0: pf-20261104-7-v5_s225, group_1: ah}
+- {name: pf-20261104-7-v5_s226_vs_ah, group_0: pf-20261104-7-v5_s226, group_1: ah}
+- {name: pf-20261104-7-v5_s227_vs_ah, group_0: pf-20261104-7-v5_s227, group_1: ah}
+- {name: pf-20261104-7-v5_s228_vs_ah, group_0: pf-20261104-7-v5_s228, group_1: ah}
+- {name: pf-20261104-7-v5_s229_vs_ah, group_0: pf-20261104-7-v5_s229, group_1: ah}
+- {name: pf-20261104-7-v5_s230_vs_ah, group_0: pf-20261104-7-v5_s230, group_1: ah}
+- {name: pf-20261104-7-v5_s231_vs_ah, group_0: pf-20261104-7-v5_s231, group_1: ah}
+- {name: pf-20261104-7-v5_s232_vs_ah, group_0: pf-20261104-7-v5_s232, group_1: ah}
+- {name: pf-20261104-7-v5_s233_vs_ah, group_0: pf-20261104-7-v5_s233, group_1: ah}
+- {name: pf-20261104-7-v5_s234_vs_ah, group_0: pf-20261104-7-v5_s234, group_1: ah}
+- {name: pf-20261104-7-v5_s235_vs_ah, group_0: pf-20261104-7-v5_s235, group_1: ah}
+- {name: pf-20261104-7-v5_s236_vs_ah, group_0: pf-20261104-7-v5_s236, group_1: ah}
+- {name: pf-20261104-7-v5_s237_vs_ah, group_0: pf-20261104-7-v5_s237, group_1: ah}
+- {name: pf-20261104-7-v5_s238_vs_ah, group_0: pf-20261104-7-v5_s238, group_1: ah}
+- {name: pf-20261104-7-v5_s239_vs_ah, group_0: pf-20261104-7-v5_s239, group_1: ah}
+- {name: pf-20261104-7-v5_s240_vs_ah, group_0: pf-20261104-7-v5_s240, group_1: ah}
+- {name: pf-20261104-7-v5_s241_vs_ah, group_0: pf-20261104-7-v5_s241, group_1: ah}
+- {name: pf-20261104-7-v5_s242_vs_ah, group_0: pf-20261104-7-v5_s242, group_1: ah}
+- {name: pf-20261104-7-v5_s243_vs_ah, group_0: pf-20261104-7-v5_s243, group_1: ah}
+- {name: pf-20261104-7-v5_s244_vs_ah, group_0: pf-20261104-7-v5_s244, group_1: ah}
+- {name: pf-20261104-7-v5_s245_vs_ah, group_0: pf-20261104-7-v5_s245, group_1: ah}
+- {name: pf-20261104-7-v5_s246_vs_ah, group_0: pf-20261104-7-v5_s246, group_1: ah}
+- {name: pf-20261104-7-v5_s247_vs_ah, group_0: pf-20261104-7-v5_s247, group_1: ah}
+- {name: pf-20261104-7-v5_s248_vs_ah, group_0: pf-20261104-7-v5_s248, group_1: ah}
+- {name: pf-20261104-7-v5_s249_vs_ah, group_0: pf-20261104-7-v5_s249, group_1: ah}
+- {name: pf-20261104-7-v5_s250_vs_ah, group_0: pf-20261104-7-v5_s250, group_1: ah}
+- {name: pf-20261104-7-v5_s251_vs_ah, group_0: pf-20261104-7-v5_s251, group_1: ah}
+- {name: pf-20261104-7-v5_s252_vs_ah, group_0: pf-20261104-7-v5_s252, group_1: ah}
+- {name: pf-20261104-7-v5_s253_vs_ah, group_0: pf-20261104-7-v5_s253, group_1: ah}
+- {name: pf-20261104-7-v5_s254_vs_ah, group_0: pf-20261104-7-v5_s254, group_1: ah}
+- {name: pf-20261104-7-v5_s255_vs_ah, group_0: pf-20261104-7-v5_s255, group_1: ah}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 500
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261104-7-v5_sweep_p2of2
+figure_name: pf-20261104-7-v5_sweep_p2of2
+save_per_round: true
+basedir: .
+sweep: true
