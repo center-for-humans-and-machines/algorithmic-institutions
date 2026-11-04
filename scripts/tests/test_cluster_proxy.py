@@ -24,6 +24,7 @@ class Stub:
         self.calls, self.busy, self.queue_answers = [], 0, []
         self.n = 0
         self.exit_codes = {}
+        self.fetch_answer = None  # (log, exit code) for the remote copy
 
     def start(self, kind, log, code=0, extra=None):
         self.n += 1
@@ -50,6 +51,8 @@ class Stub:
         if path == "/run_in_container":
             command = body["command"]
             if command.startswith("rm -rf /opt/cluster_transfer/pf/") and "cp -r" in command:
+                if self.fetch_answer:
+                    return 200, self.start("cmd", *self.fetch_answer)
                 key = command.split()[2].split("/opt/cluster_transfer/pf/")[1]
                 out = self.transfer / "pf" / key
                 out.mkdir(parents=True, exist_ok=True)
@@ -164,3 +167,27 @@ def test_fetch_skips_rsync_temp_files(stub, tmp_path):
     local = tmp_path / "out"
     cp.fetch(SHA, "plots/simulation/policy_finder/r_sweep", local, key="r/r_sweep")
     assert sorted(p.name for p in local.iterdir()) == ["sweep.json"]
+
+
+def test_fetch_tells_missing_output_from_an_outage(stub, tmp_path):
+    stub.fetch_answer = ("__PF_NO_OUTPUT__\n", 3)
+    with pytest.raises(cp.NoOutput):
+        cp.fetch(SHA, "plots/simulation/policy_finder/r_sweep", tmp_path, key="r/r_sweep")
+    # the command itself (were it echoed) does not carry the marker
+    command = [c[2]["command"] for c in stub.calls if c[1] == "/run_in_container"][-1]
+    assert "__PF_NO_OUTPUT__" not in command
+    stub.fetch_answer = ("Connection closed by UNKNOWN port 65535\n", 255)
+    with pytest.raises(cp.ClusterError) as e:
+        cp.fetch(SHA, "plots/simulation/policy_finder/r_sweep", tmp_path, key="r/r_sweep")
+    assert not isinstance(e.value, cp.NoOutput)
+
+
+def test_fetch_accepts_files_vanishing_elsewhere(stub, tmp_path):
+    def vanished(method, path, body):
+        if path == "/sync_from_cluster":
+            return 200, stub.start("pull", "rsync warning: some files vanished (code 24)\n", 24)
+        return Stub.handle(stub, method, path, body)
+
+    stub.handle = vanished
+    local = tmp_path / "out"
+    assert cp.fetch(SHA, "plots/simulation/policy_finder/r_sweep", local, key="r/r_sweep") == 2
