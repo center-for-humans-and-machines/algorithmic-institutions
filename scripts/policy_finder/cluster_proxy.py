@@ -133,7 +133,8 @@ def validate_rule(sha, rule, min_params, max_params, sobol_points):
     """validate-rule on the snapshot, in the image; (ok, log)."""
     upper = "none" if max_params is None else max_params
     code, log = run(
-        f"cd {REPO} && python -m aimanager validate-rule {rule}"
+        f"cd {REPO} && OMP_NUM_THREADS=2 MKL_NUM_THREADS=2"
+        f" python -m aimanager validate-rule {rule}"
         f" --min-params {min_params} --max-params {upper}"
         f" --sobol-points {sobol_points}",
         sha,

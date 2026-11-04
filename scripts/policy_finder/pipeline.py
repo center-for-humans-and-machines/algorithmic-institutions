@@ -43,6 +43,7 @@ Usage:
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -73,6 +74,11 @@ OUT_DIR = "plots/simulation/policy_finder"
 CONFIG_DIR = "configs/simulation/policy_finder"
 #: Agent runs and sim parts tried this many times
 AGENT_ATTEMPTS = 2
+#: validate-rule on the Raven login node: at most this many at once, tries
+#: when it does not run (not a verdict), seconds between them (times the try)
+IMAGE_CHECK_SLOTS = 2
+IMAGE_CHECK_TRIES = 4
+IMAGE_CHECK_RETRY = int(os.environ.get("PF_IMAGE_CHECK_RETRY", "120"))
 JOB_ATTEMPTS = 2
 
 
@@ -293,13 +299,28 @@ class Version:
         self.log(f"snapshot {self.data['sweep_sha'][:12]}")
 
     def step_image_check(self):
+        """validate-rule in the Raven image. Only its own "Invalid:" is a
+        verdict on the rule; anything else (the login node out of threads or
+        processes, a container that did not start) is retried, then left as a
+        resumable error. At most IMAGE_CHECK_SLOTS run on the login node."""
         upper = self.conf["max_params"]
-        ok, log = cluster_proxy.validate_rule(
-            self.data["sweep_sha"], self.rule, self.conf["min_params"], upper,
-            self.conf.get("sobol_points", 256),
-        )
-        if not ok:
-            raise Failed(f"{self.rule} fails validate-rule in the Raven image:\n{log[-3000:]}")
+        for attempt in range(1, IMAGE_CHECK_TRIES + 1):
+            with agent_runner.slot(self.locks / "image_check", slots=IMAGE_CHECK_SLOTS):
+                ok, log = cluster_proxy.validate_rule(
+                    self.data["sweep_sha"], self.rule, self.conf["min_params"], upper,
+                    self.conf.get("sobol_points", 256),
+                )
+            if ok:
+                return
+            if re.search(r"^Invalid: ", log, flags=re.M):
+                raise Failed(f"{self.rule} fails validate-rule in the Raven image:\n{log[-3000:]}")
+            tail = log.strip().splitlines()[-1:] or ["(no output)"]
+            self.log(f"image check {attempt}/{IMAGE_CHECK_TRIES} did not run: {tail[0][:200]}")
+            if attempt < IMAGE_CHECK_TRIES:
+                time.sleep(IMAGE_CHECK_RETRY * attempt)
+        raise cluster_proxy.ClusterError(
+            f"validate-rule did not run in the Raven image ({IMAGE_CHECK_TRIES} tries):"
+            f"\n{log[-2000:]}")
 
     def _jobs(self, key, sha, configs):
         """Submit each config not yet submitted (ids kept in data[key]), wait."""
