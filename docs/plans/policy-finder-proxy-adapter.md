@@ -1,4 +1,4 @@
-# [ACTIVE] Policy finder through the proxy: a from-scratch campaign, compared with Cem's
+# [DONE] Policy finder through the proxy: a from-scratch campaign, compared with Cem's
 
 ## Why
 
@@ -300,3 +300,15 @@ None as of 2026-11-04. Inputs, score, budget and the full switch from the sandbo
   heading check before finishing. The 3 were archived to `pf_runs/attic/` and rerun fresh.
   The generation 2 chosen from 6 scored lineages was discarded; versions run ahead of
   their selection are adopted when their lineage is selected, else reported as extras.
+- 2026-11-04 13:07–17:17: generations 1–7 completed. A Raven outage (about 40 min, in
+  generation 3) exposed two fetch faults, fixed in 5eb3a609 and eb79e452. `-7-v7` failed
+  at its sweep: a device-less `th.arange` crashes on the GPU and passes every CPU check.
+  `validate-rule` now rejects such calls (804a70af). The version stayed failed, as the
+  rules say. 36 versions, 35 scored, best GP peak 73.43 (`pf-20261104-12-v7`).
+- 2026-11-04 23:00: step 11 done. Categories recorded locally in `summary.json`.
+  Head to head on seed 5000 (`27_LEVIN`, job 31911380): `-12-v7` 72.2 and `-9-v3` 72.1
+  against Cem's top at 70.3, ± 0.8 each, paired +1.9 ± 1.1. Report:
+  `docs/reports/policy_finder_proxy_vs_cem.md`. The observation page was republished as
+  the artifact "Policy Finder Proxy Campaign".
+- Left open: porting more of Cem's rules, and a second seed for the head to head. Neither
+  is needed to read the result.
