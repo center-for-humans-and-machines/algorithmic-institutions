@@ -285,4 +285,10 @@ None as of 2026-11-04. Inputs, score, budget and the full switch from the sandbo
 ## Progress
 
 - 2026-11-04: steps 1–8 built (0c3dc45e, da67a6ce, 067d1f5c). Snapshot sync, a snapshot slurm
-  job and the `/jobs` format checked against the command server. Smoke (step 9) running.
+  job and the `/jobs` format checked against the command server.
+- 2026-11-04: smoke (step 9) passed. `pfsmoke-1` (16 points × 50 episodes) scored in 16 min;
+  `pfsmoke-1-v2` (`--iterate-on`, full size: 256 × 500 in 2 parts, final 6 × 2000) in 29 min:
+  agent 4 min ($0.65), image check 5.5 min, both sweep parts 8 min with the queue, fetch
+  2 × 47 MB, fit 17 s, final job 7 min. Leak check, copy-back, commits, `best`/`best_of_n`
+  and transfer cleanup all as intended. About 100 MB of sweep output per version on disk.
+- 2026-11-04 09:30: campaign (step 10) started, lineages `pf-20261104-1` … `-12`.
