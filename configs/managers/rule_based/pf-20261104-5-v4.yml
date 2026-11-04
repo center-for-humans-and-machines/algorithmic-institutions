@@ -1,0 +1,35 @@
+params:
+  k:
+    definition: punishment points per contribution point a member gives below the threshold, for a player not yet punished (the manager caps each punishment at 30)
+    type: float
+  thr:
+    definition: contribution threshold; members giving at least this much are never punished
+    type: float
+  w:
+    definition: within-block timing weight; punishment in a round is multiplied by w to the power of the round's position in its 4-round switching block (0 for rounds 0, 4, 8, ... right after a switch opportunity, 3 for the decision rounds 3, 7, 11, ...), so w=0 punishes only at block starts and w=1 punishes every round alike
+    type: float
+  budget:
+    definition: punishment-history scale; a player's punishment is multiplied by exp(-received / budget), where received is all punishment it has been charged so far in the game by either manager
+    type: float
+  t_stop:
+    definition: last round in which the manager punishes; later rounds go unpunished
+    type: int
+sweep_config:
+  k: [1.0, 15.0, log]
+  thr: [5.0, 14.0]
+  w: [0.0, 1.0]
+  budget: [5.0, 300.0, log]
+  t_stop: [0, 23]
+constraints:
+  - k > 0
+  - budget > 0
+  - w >= 0
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  received = p.sum(-1)
+  base = k * th.relu(thr - now)
+  fresh = th.exp(-received / budget)
+  pos = t - 4 * th.floor(t / 4)
+  timing = th.pow(w, pos) * (t <= t_stop)
+  punishment = base * fresh * timing * member
