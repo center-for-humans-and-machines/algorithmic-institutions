@@ -210,7 +210,14 @@ class Campaign:
             names, version = self.lineages(), {n: 1 for n in self.lineages()}
         else:
             names = self.select()
-            version = {n: self.conf(n)["version"] + 1 for n in names}
+            # a lineage's newest version that no generation holds yet (run
+            # ahead of its selection, from the same history) is adopted
+            # rather than followed by another
+            held = {(m["name"], m["version"]) for g in generations for m in g["members"]}
+            version = {}
+            for n in names:
+                current = self.conf(n)["version"]
+                version[n] = current if (n, current) not in held else current + 1
             self.log(f"generation {index + 1}: lineage bests "
                      + ", ".join(f"{n} {self.lineage_best(n):.2f}" for n in names))
         members = [{"name": n, "version": version[n]} for n in names]

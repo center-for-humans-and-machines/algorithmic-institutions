@@ -292,3 +292,11 @@ None as of 2026-11-04. Inputs, score, budget and the full switch from the sandbo
   2 × 47 MB, fit 17 s, final job 7 min. Leak check, copy-back, commits, `best`/`best_of_n`
   and transfer cleanup all as intended. About 100 MB of sweep output per version on disk.
 - 2026-11-04 09:30: campaign (step 10) started, lineages `pf-20261104-1` … `-12`.
+- 2026-11-04 12:00: campaign paused after generation 1. 4 versions had failed on the Raven
+  login node (12 parallel image checks: threads, container driver), counted as verdicts:
+  fixed (44b0de29), reclassified and resumed. 3 (`-4`, `-7`, `-8`) failed the notes check
+  without `## Key findings`: the agents' inserts above that heading deleted it. The notes
+  instructions now have the file written append-only, the summary sections last, and a
+  heading check before finishing. The 3 were archived to `pf_runs/attic/` and rerun fresh.
+  The generation 2 chosen from 6 scored lineages was discarded; versions run ahead of
+  their selection are adopted when their lineage is selected, else reported as extras.

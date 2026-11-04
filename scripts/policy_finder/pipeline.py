@@ -41,6 +41,7 @@ Usage:
 """
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -172,6 +173,21 @@ class Version:
     # -- the run -------------------------------------------------------------
 
     def run(self, prompt=None):
+        # one pipeline per version: a second one waits, then sees its state
+        self.lock_path = self.wt_root / f"{self.stem}.lock"
+        self._lock = open(self.lock_path, "w")
+        try:
+            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.log("another pipeline runs this version: waiting for it")
+            fcntl.flock(self._lock, fcntl.LOCK_EX)
+            self.state = json.loads(self.state_path.read_text())
+        if self.state["status"] in ("scored", "failed"):
+            self.log(f"already {self.state['status']}")
+            return self.state
+        return self._run(prompt)
+
+    def _run(self, prompt=None):
         if self.state["status"] == "scored":
             self.log("already scored")
             return self.state

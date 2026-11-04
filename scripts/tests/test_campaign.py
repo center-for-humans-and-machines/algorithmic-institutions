@@ -150,3 +150,19 @@ def test_a_running_version_resumes_with_the_pipeline(tmp_path, monkeypatch):
         json.dumps({"status": "running", "done": ["export"], "data": {}}))
     campaign.run()
     assert [c for c in fake.commands if "pf-20990101-1" in c][0][1].endswith("pipeline.py")
+
+
+def test_a_version_run_ahead_is_adopted(tmp_path, monkeypatch):
+    pools = {"pf-20990101-1": 70, "pf-20990101-2": 65, "pf-20990101-3": 50, "pf-20990101-4": 50}
+    campaign, fake = make(tmp_path, monkeypatch, pools=pools, generations=1)
+    campaign.members(0)
+    for m in campaign.state["generations"][0]["members"]:
+        campaign.run_version(m["name"], m["version"])
+    # lineages 1 and 3 got a version 2 outside any generation
+    for name in ("pf-20990101-1", "pf-20990101-3"):
+        campaign.run_version(name, 2)
+    assert {m["name"]: m["version"] for m in campaign.members(1)} == {
+        "pf-20990101-1": 2, "pf-20990101-2": 2}
+    campaign.run()
+    rows = {r["stem"] for r in campaign.rows()}
+    assert "pf-20990101-3-v2" not in rows  # never selected: an extra, outside the campaign

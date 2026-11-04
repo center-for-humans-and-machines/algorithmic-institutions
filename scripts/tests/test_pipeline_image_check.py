@@ -58,3 +58,19 @@ def test_a_login_node_that_never_works_is_an_error(version, monkeypatch):
     answers(monkeypatch, *["  File numpy\nKeyboardInterrupt\n"] * pl.IMAGE_CHECK_TRIES)
     with pytest.raises(pl.cluster_proxy.ClusterError):
         version.step_image_check()
+
+
+def test_a_second_pipeline_waits_and_sees_the_state(version, monkeypatch):
+    import fcntl
+    import threading
+    holder = open(version.wt_root / "pf-x.lock", "w")
+    fcntl.flock(holder, fcntl.LOCK_EX)
+    result = {}
+    t = threading.Thread(target=lambda: result.setdefault("state", version.run()))
+    t.start()
+    t.join(0.3)
+    assert t.is_alive()  # waiting on the lock
+    version.state_path.write_text(json.dumps({"status": "scored", "done": [], "data": {}}))
+    fcntl.flock(holder, fcntl.LOCK_UN)
+    t.join(5)
+    assert result["state"]["status"] == "scored"
