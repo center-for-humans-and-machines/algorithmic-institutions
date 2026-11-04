@@ -1,0 +1,61 @@
+# Final run of /home/kappablanca/pf_runs/worktrees/pf-20261104-2/plots/simulation/policy_finder/pf-20261104-2_sweep/sweep.json, written by scripts/policy_finder/generate_sim_config.py:
+# the Gaussian process's peak against `ah` on fresh seeds; its sweep.json holds the
+# rule's final result. Stack and sim parameters from configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 1000
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261104-2_gp:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-2.yml
+    params: {k: 1.5, tol: 0.0, cap: 20.0, w_dec: 1.0, t_stop: 22}
+  pf-20261104-2_s183:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-2.yml
+    params: {k: 1.3558696182444692, tol: 0.4729856550693512, cap: 17.559801868231403, w_dec: 0.4599961768835783, t_stop: 17}
+  pf-20261104-2_s147:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-2.yml
+    params: {k: 0.9900701497681439, tol: 1.007695622742176, cap: 14.095718103818522, w_dec: 0.015911435708403587, t_stop: 22}
+  pf-20261104-2_s003:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-2.yml
+    params: {k: 1.0786893339827657, tol: 0.007514670491218567, cap: 12.474686709342963, w_dec: 0.9594386536628008, t_stop: 14}
+  pf-20261104-2_s043:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-2.yml
+    params: {k: 0.8334138016216457, tol: 0.8695489913225174, cap: 6.821589538705721, w_dec: 0.4728114977478981, t_stop: 21}
+  pf-20261104-2_s237:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-2.yml
+    params: {k: 0.721160666551441, tol: 0.21224505454301834, cap: 15.892053852529266, w_dec: 0.21306326240301132, t_stop: 11}
+pairings:
+- {name: pf-20261104-2_gp_vs_ah, group_0: pf-20261104-2_gp, group_1: ah}
+- {name: pf-20261104-2_s183_vs_ah, group_0: pf-20261104-2_s183, group_1: ah}
+- {name: pf-20261104-2_s147_vs_ah, group_0: pf-20261104-2_s147, group_1: ah}
+- {name: pf-20261104-2_s003_vs_ah, group_0: pf-20261104-2_s003, group_1: ah}
+- {name: pf-20261104-2_s043_vs_ah, group_0: pf-20261104-2_s043, group_1: ah}
+- {name: pf-20261104-2_s237_vs_ah, group_0: pf-20261104-2_s237, group_1: ah}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261104-2_sweep/final
+figure_name: pf-20261104-2_sweep_final
+save_per_round: true
+basedir: .
+sweep: true
