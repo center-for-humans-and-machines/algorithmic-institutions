@@ -1,0 +1,78 @@
+params:
+  c0:
+    definition: >-
+      absolute contribution level a member is expected to reach; the target a
+      member is measured against is (1 - w) * c0 + w * (mean contribution of the
+      other valid members of my group this round), and only members below the
+      target are punished
+    type: int
+  w:
+    definition: >-
+      weight of the group's own norm in the target: 0 is a fixed level c0 for
+      everyone, 1 punishes only falling below the rest of one's own group. The
+      simulated players respond more, and leave less, when punished while
+      sitting further below the rest of their group
+    type: float
+  k:
+    definition: >-
+      punishment points dealt in the first round of the game to a member who
+      falls 5 points short of the target (a typical first-round shortfall);
+      other shortfalls get k * (shortfall / 5)^gamma, capped at 30
+    type: float
+  gamma:
+    definition: >-
+      how steeply the punishment grows with the shortfall: near 0 is a flat
+      fine on everyone below the target, 1 is proportional to the shortfall,
+      above 1 concentrates on the largest shortfalls. The best punishment grows
+      with the square of how strongly a player responds, and that response
+      grows with the shortfall (steeply in round 0, mildly later)
+    type: float
+  decay:
+    definition: >-
+      factor by which the punishment shrinks from one four-round block to the
+      next (block b is scaled by decay^b), because a lift has fewer rounds left
+      to pay back and repeated punishment lifts less
+    type: float
+  follow:
+    definition: >-
+      factor on punishment in the second round of a block (and follow squared in
+      the third), relative to the block's first round; the last round of a block,
+      right before players may switch, is never punished
+    type: float
+sweep_config:
+  c0: [6, 14]
+  w: [0, 1]
+  k: [8, 100, log]
+  gamma: [0.1, 1.6]
+  decay: [0.1, 1, log]
+  follow: [0, 1]
+constraints:
+  - c0 >= 1
+  - w >= 0
+  - w <= 1
+  - k > 0
+  - gamma > 0
+  - decay > 0
+  - follow >= 0
+code: |
+  # no float scalars as th arguments or in comparisons (they fail in a cold,
+  # builtins-free exec); relu is max(0, .)
+  now = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  # leave-one-out mean contribution of the other valid members of my group
+  total = (now * mine).sum(-1).unsqueeze(-1)
+  n = mine.sum(-1).unsqueeze(-1)
+  others = th.relu(n - mine)  # for a member: n - 1
+  has = th.sign(others)  # 1 if there is anyone else to compare with
+  others_mean = (total - now * mine) / (others + 1 - has)
+  target = c0 + w * has * (others_mean - c0)
+  short = th.relu(target - now)
+  shape = th.pow(short / 5, gamma)  # 0 at no shortfall, 1 at a shortfall of 5
+  block = th.floor(t / 4)
+  q = t - 4 * block  # place in the block, 0-3; 3 is the round before a switch decision
+  pos = th.relu(1 - q) + follow * th.relu(1 - th.abs(q - 1)) + follow * follow * th.relu(1 - th.abs(q - 2))
+  # in the last block (no decision follows) its last round is treated like its third
+  last = th.relu(th.sign(block - 4))
+  pos = pos + last * follow * follow * th.relu(1 - th.abs(q - 3))
+  size = k * th.pow(decay, block) * pos
+  punishment = size * shape * mine
