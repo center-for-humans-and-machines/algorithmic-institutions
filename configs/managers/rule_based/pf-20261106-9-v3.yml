@@ -1,0 +1,57 @@
+params:
+  k:
+    definition: >-
+      punishment points per contribution point a member falls short of the
+      group's mean contribution this round, beyond the tolerance s0
+    type: float
+  s0:
+    definition: >-
+      tolerance, in contribution points below the group's mean this round,
+      that goes unpunished; a negative value also punishes members slightly
+      above the mean
+    type: float
+  cap:
+    definition: >-
+      the most any one member is punished in a round (the game's own limit
+      is 30)
+    type: float
+  window:
+    definition: >-
+      initiation window: a member is punished only while it has been in our
+      group for fewer than this many consecutive rounds before the current
+      one (0 on arrival); the original members' window starts at round 0,
+      a newcomer's at the round it joins
+    type: int
+  quiet:
+    definition: >-
+      number of rounds right before each switch decision (after rounds 3, 7,
+      11, 15, 19) in which nobody is punished
+    type: int
+  t_end:
+    definition: >-
+      first round from which nobody is punished any more, newcomers
+      included (too few rounds left for a first punishment to repay itself);
+      24 never stops
+    type: int
+sweep_config:
+  k: [1.0, 20.0, log]
+  s0: [-3.0, 3.0]
+  cap: [10.0, 30.0]
+  window: [1, 8]
+  quiet: [1, 3]
+  t_end: [8, 24]
+constraints:
+  - k > 0
+  - cap > 0
+code: |
+  cur = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  n = th.clamp(mine.sum(-1), min=1).unsqueeze(-1)
+  mean = (cur * mine).sum(-1).unsqueeze(-1) / n
+  short = th.clamp(mean - cur - s0, min=0)
+  before = th.flip(in_group[..., :-1], dims=(-1,))
+  tenure = th.cumprod(before, dim=-1).sum(-1)
+  fresh = tenure < window
+  pos = th.remainder(t, 4)
+  active = (t < t_end) & ((pos < 4 - quiet) | (t >= 20))
+  punishment = th.minimum(k * short, cap * th.ones_like(cur)) * fresh * active * mine
