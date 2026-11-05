@@ -1,0 +1,46 @@
+params:
+  free:
+    definition: >-
+      the punishment of a valid player who contributes nothing (a free rider); the curve
+      punishment = free * ((20 - c) / 20) ** k falls from it to 0 at full contribution
+    type: float
+  mid:
+    definition: >-
+      the punishment of a player who contributes half (10); it sets how fast the curve
+      falls, k = log2(free / mid): a low mid spares the middle and concentrates the
+      punishment on free riders
+    type: float
+  horizon:
+    definition: >-
+      end of the opening phase: in rounds t < horizon (0-based) every valid player gets
+      the curve; afterwards a raise bought from a mid contributor has too few rounds left
+      to repay it
+    type: int
+  end:
+    definition: >-
+      the first round (0-based) in which nobody is punished any more; in rounds
+      horizon <= t < end only free riders (contribution below floor) still get the curve,
+      because their raise still repays a full punishment
+    type: int
+  floor:
+    definition: >-
+      the free-rider line of the late phase: only players contributing less than this
+      are punished there (2: players giving 0 or 1)
+    type: float
+sweep_config:
+  free: [22, 30]
+  mid: [4, 9.5]
+  horizon: [4, 9]
+  end: [10, 19]
+  floor: 2.0
+constraints:
+  - free > mid
+  - mid > 0
+  - end > horizon
+code: |
+  now = c[..., -1]
+  k = th.log(free / mid) / 0.6931471805599453
+  base = free * (th.clamp(20 - now, min=0) / 20) ** k
+  main = (t < horizon).to(now.dtype)
+  late = ((t >= horizon) & (t < end)).to(now.dtype) * (now < floor).to(now.dtype)
+  punishment = base * th.clamp(main + late, max=1) * valid[..., -1]
