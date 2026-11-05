@@ -1,0 +1,32 @@
+params:
+  target:
+    definition: >-
+      contribution standard; a player contributing less than this in the
+      current round is punished, a player at or above it never is
+    type: int
+  base:
+    definition: >-
+      flat nudge, in points, given to every player below the standard
+      (the step response to being punished at all)
+    type: float
+  slope:
+    definition: >-
+      extra punishment per point of contribution below the standard, so the
+      lowest contributors get more
+    type: float
+  last_round:
+    definition: >-
+      last round (0-based) in which the manager punishes; later rounds are
+      left unpunished because too few rounds remain for a gain to repay the cost
+    type: int
+sweep_config:
+  target: [4, 20]
+  base: [0.0, 5.0]
+  slope: [0.0, 0.6]
+  last_round: [12, 23]
+code: |
+  now = c[..., -1]
+  shortfall = th.clamp(target - now, min=0.0)
+  below = (shortfall > 0).float()
+  active = (t <= last_round).float()
+  punishment = active * below * (base + slope * shortfall)
