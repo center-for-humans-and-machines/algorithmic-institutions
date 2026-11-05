@@ -1,0 +1,25 @@
+params:
+  target:
+    definition: contribution below which a player is fined in the opening rounds; the fine grows with the shortfall below it (20 = anything short of full contribution)
+    type: int
+  slope:
+    definition: punishment points per point of shortfall below target
+    type: float
+  window:
+    definition: number of opening rounds in which the manager fines at all; from round `window` on it never punishes
+    type: int
+  taper:
+    definition: how much the fine fades over the window (0 = full fine in every window round, 1 = fading linearly to zero at the window's end)
+    type: float
+sweep_config:
+  target: [10, 20]
+  slope: [0.1, 3, log]
+  window: [1, 16]
+  taper: [0, 1]
+constraints:
+  - window >= 1
+code: |
+  shortfall = th.clamp(target - c[..., -1], min=0)
+  active = (t < window).float()
+  fade = th.clamp(1 - taper * t / window, min=0)
+  punishment = slope * shortfall * active * fade
