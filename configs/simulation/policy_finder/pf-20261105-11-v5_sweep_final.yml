@@ -1,0 +1,55 @@
+# Final run of /home/kappablanca/pf_runs/worktrees_exp1/pf-20261105-11/plots/simulation/policy_finder/pf-20261105-11-v5_sweep/sweep.json, written by scripts/policy_finder/generate_sim_config.py:
+# the Gaussian process's peak alone with the clones on fresh seeds; its sweep.json holds the
+# rule's final result. Stack and sim parameters from configs/simulation/manager_testing/29_EXP1_reference.yml.
+
+seed: 1000
+artificial_humans:
+  exp1:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+managers:
+  pf-20261105-11-v5_gp:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-11-v5.yml
+    params: {T: 12.62357904616027, A: 2.8274752260506872, B: 1.9806927250209252, S: 7}
+    setting: exp1
+  pf-20261105-11-v5_s114:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-11-v5.yml
+    params: {T: 12.44568280596286, A: 4.952130399644375, B: 1.4180300679891875, S: 7}
+    setting: exp1
+  pf-20261105-11-v5_s089:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-11-v5.yml
+    params: {T: 12.372190923430026, A: 1.3984914794564247, B: 2.2188317465669534, S: 7}
+    setting: exp1
+  pf-20261105-11-v5_s201:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-11-v5.yml
+    params: {T: 11.943667436484247, A: 1.8242347314953804, B: 2.1694506400862372, S: 7}
+    setting: exp1
+  pf-20261105-11-v5_s218:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-11-v5.yml
+    params: {T: 12.879994090180844, A: 3.2471901550889015, B: 1.389418327801636, S: 7}
+    setting: exp1
+  pf-20261105-11-v5_s223:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-11-v5.yml
+    params: {T: 14.344746328424662, A: 2.3526647984981537, B: 1.5886589500840667, S: 7}
+    setting: exp1
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: default
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261105-11-v5_sweep/final
+figure_name: pf-20261105-11-v5_sweep_final
+save_per_round: true
+basedir: .
+sweep_metric: group_payoff
+sweep: true
