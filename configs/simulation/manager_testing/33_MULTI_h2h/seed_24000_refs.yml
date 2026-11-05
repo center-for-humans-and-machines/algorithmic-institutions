@@ -1,0 +1,177 @@
+# Head-to-head of the exp2_multi campaign (docs/plans/policy-finder-multi-opponent.md,
+# step 8), refs, seed 24000: each row against levin, ah, prev_best, zero (the training
+# opponents), cem_best and thr9_p10 (held out) and itself, in both seats, 2000 games per
+# pairing. Written by scripts/data_analysis/exp2_multi_h2h_configs.py.
+# Report: docs/reports/policy_finder_multi_opponent.md
+
+seed: 24000
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  zero:
+    type: dummy
+    constant_punishment: 0
+  levin:
+    type: rule_based
+    rule: configs/managers/rule_based/levin_sigmoid.yml
+    params:
+      p_max: 30.0
+      c0: 7.13780183612438
+      tau: 0.4249189420822854
+      gamma_ep: 3.0
+      gamma_sw: 1.418622533255372
+  prev_best:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 8.593831124672404
+      peer: 0.6021230646847561
+      ceil: 15.0
+      slope: 9.18944166018839
+      decay: 0.5553923088191522
+      stop: 3
+  cem_best:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261008-3-v6.yml
+    params: configs/managers/rule_based/params/pf-20261008-3-v6_best.json
+  thr9_p10:
+    type: rule_based
+    rule: configs/managers/rule_based/thr9_p10.yml
+    params:
+      threshold: 9.0
+      amount: 10.0
+pairings:
+- name: prev_best_vs_levin
+  group_0: prev_best
+  group_1: levin
+- name: levin_vs_prev_best
+  group_0: levin
+  group_1: prev_best
+- name: prev_best_vs_ah
+  group_0: prev_best
+  group_1: ah
+- name: ah_vs_prev_best
+  group_0: ah
+  group_1: prev_best
+- name: prev_best_vs_prev_best
+  group_0: prev_best
+  group_1: prev_best
+- name: prev_best_vs_zero
+  group_0: prev_best
+  group_1: zero
+- name: zero_vs_prev_best
+  group_0: zero
+  group_1: prev_best
+- name: prev_best_vs_cem_best
+  group_0: prev_best
+  group_1: cem_best
+- name: cem_best_vs_prev_best
+  group_0: cem_best
+  group_1: prev_best
+- name: prev_best_vs_thr9_p10
+  group_0: prev_best
+  group_1: thr9_p10
+- name: thr9_p10_vs_prev_best
+  group_0: thr9_p10
+  group_1: prev_best
+- name: cem_best_vs_levin
+  group_0: cem_best
+  group_1: levin
+- name: levin_vs_cem_best
+  group_0: levin
+  group_1: cem_best
+- name: cem_best_vs_ah
+  group_0: cem_best
+  group_1: ah
+- name: ah_vs_cem_best
+  group_0: ah
+  group_1: cem_best
+- name: cem_best_vs_zero
+  group_0: cem_best
+  group_1: zero
+- name: zero_vs_cem_best
+  group_0: zero
+  group_1: cem_best
+- name: cem_best_vs_cem_best
+  group_0: cem_best
+  group_1: cem_best
+- name: cem_best_vs_thr9_p10
+  group_0: cem_best
+  group_1: thr9_p10
+- name: thr9_p10_vs_cem_best
+  group_0: thr9_p10
+  group_1: cem_best
+- name: levin_vs_levin
+  group_0: levin
+  group_1: levin
+- name: levin_vs_ah
+  group_0: levin
+  group_1: ah
+- name: ah_vs_levin
+  group_0: ah
+  group_1: levin
+- name: levin_vs_zero
+  group_0: levin
+  group_1: zero
+- name: zero_vs_levin
+  group_0: zero
+  group_1: levin
+- name: levin_vs_thr9_p10
+  group_0: levin
+  group_1: thr9_p10
+- name: thr9_p10_vs_levin
+  group_0: thr9_p10
+  group_1: levin
+- name: ah_vs_ah
+  group_0: ah
+  group_1: ah
+- name: ah_vs_zero
+  group_0: ah
+  group_1: zero
+- name: zero_vs_ah
+  group_0: zero
+  group_1: ah
+- name: ah_vs_thr9_p10
+  group_0: ah
+  group_1: thr9_p10
+- name: thr9_p10_vs_ah
+  group_0: thr9_p10
+  group_1: ah
+- name: zero_vs_zero
+  group_0: zero
+  group_1: zero
+- name: zero_vs_thr9_p10
+  group_0: zero
+  group_1: thr9_p10
+- name: thr9_p10_vs_zero
+  group_0: thr9_p10
+  group_1: zero
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 2
+n_agents: 8
+agent_groups:
+- 0
+- 0
+- 0
+- 0
+- 1
+- 1
+- 1
+- 1
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/33_MULTI_h2h/seed_24000_refs
+figure_name: MULTI_h2h_24000_refs
+save_per_round: true
+basedir: .

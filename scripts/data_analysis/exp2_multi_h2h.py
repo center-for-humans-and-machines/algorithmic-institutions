@@ -11,6 +11,7 @@ Aggregates per row:
 - `training`: the plain mean over levin, ah, prev_best, zero (the campaign's objective);
 - `held_out`: the mean over cem_best and thr9_p10;
 - `self`: self-play.
+A reference's column against itself is its self-play.
 
 Writes a JSON next to the data and prints a table.
 
@@ -89,6 +90,9 @@ def summarize(data):
             row[c + "_by_seed"] = (
                 {s: stat([v])["pool"] for s, v in d.items()} if d else None
             )
+        for c in TRAINING + HELD_OUT:
+            if c == r:  # a reference against itself is its self-play
+                row[c], row[c + "_by_seed"] = row["self"], row["self_by_seed"]
         row["training"] = mean_of([row[c] for c in TRAINING])
         row["held_out"] = mean_of([row[c] for c in HELD_OUT])
         table[r] = row
