@@ -1,0 +1,48 @@
+params:
+  c0:
+    definition: >-
+      contribution level a member is expected to reach; only members contributing
+      below it are punished, in proportion to their shortfall c0 - c
+    type: int
+  k:
+    definition: punishment points per point of shortfall below c0
+    type: float
+  horizon:
+    definition: >-
+      round by which punishment has faded to zero; the shortfall punishment is
+      scaled by max(0, 1 - t / horizon), since a late punishment has few rounds
+      left to pay back
+    type: float
+  slack:
+    definition: >-
+      how far my group's mean punishment per member may exceed the other group's
+      mean punishment per member observed so far; all punishments are scaled
+      down to respect it (players weigh punishment relative to the other group
+      when they switch)
+    type: float
+sweep_config:
+  c0: [2, 20]
+  k: [0.1, 3, log]
+  horizon: [6, 60, log]
+  slack: [0.25, 8, log]
+constraints:
+  - c0 >= 1
+  - k > 0
+  - horizon > 0
+  - slack > 0
+code: |
+  # no float scalars as th arguments or in comparisons (they fail in a cold,
+  # builtins-free exec); relu is max(0, .)
+  now = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  fade = th.relu((horizon - t) / horizon)
+  raw = k * th.relu(c0 - now) * fade * mine
+  # the other manager's mean punishment per valid member of its group, rounds so far
+  other = (1 - in_group[..., :-1]) * valid[..., :-1]
+  n_other = other.sum((-2, -1))
+  other_mean = (p * other).sum((-2, -1)) / th.maximum(n_other, th.ones_like(n_other))
+  cap = th.where(t > 0, other_mean + slack, th.ones_like(other_mean) * 30)
+  n_mine = mine.sum(-1)
+  my_mean = (raw * mine).sum(-1) / th.maximum(n_mine, th.ones_like(n_mine))
+  scale = th.minimum(cap / th.maximum(my_mean, th.ones_like(my_mean) * 0.000001), th.ones_like(my_mean))
+  punishment = raw * scale.unsqueeze(-1)
