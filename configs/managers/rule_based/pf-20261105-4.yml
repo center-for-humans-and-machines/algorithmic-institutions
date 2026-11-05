@@ -1,0 +1,28 @@
+params:
+  T:
+    definition: contribution threshold; a player contributing less than T this round is punished
+    type: float
+  a:
+    definition: flat signal punishment every player below the threshold gets, in points
+    type: float
+  k:
+    definition: extra punishment points per point of contribution below the threshold
+    type: float
+  t_end:
+    definition: first round (0-based) in which nobody is punished any more; 24 means punish in every round
+    type: int
+sweep_config:
+  T: [3, 18]
+  a: [0, 6]
+  k: [0, 1.5]
+  t_end: [8, 24]
+constraints:
+  - T > 0
+  - a >= 0
+  - k >= 0
+code: |
+  now = c[..., -1]
+  short = th.clamp(T - now, min=0)
+  below = (short > 0).float()
+  active = (t < t_end).float()
+  punishment = active * below * (a + k * short) * valid[..., -1]
