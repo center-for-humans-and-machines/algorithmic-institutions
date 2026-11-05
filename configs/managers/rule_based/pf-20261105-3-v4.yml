@@ -1,0 +1,34 @@
+params:
+  thr:
+    definition: shock standard; a player contributing less than thr gets a dose growing convexly with its shortfall thr - c (full contributors, c = 20, are never punished)
+    type: int
+  pmax:
+    definition: dose for a zero contributor, pmax * ((thr - c) / thr) ** gamma, clamped to 30; above 30 more of the lowest contributors get the full 30
+    type: float
+  gamma:
+    definition: curvature of the dose in the shortfall; above 1 keeps big doses for free riders and gives moderate contributors much less
+    type: float
+  horizon:
+    definition: first round of the late phase; in rounds 0..horizon-1 (the shock) every player below thr gets the dose
+    type: int
+  lthr:
+    definition: free-rider line of the late phase; in rounds horizon..lstop-1 only players contributing less than lthr still get their (big) dose, everyone else nothing; 0 switches the late phase off
+    type: int
+  lstop:
+    definition: first round with no punishment at all (the late phase runs from horizon to lstop-1), since a dose needs several rounds left to repay its cost
+    type: int
+sweep_config:
+  thr: [18, 24]
+  pmax: [24, 40]
+  gamma: [1.6, 3.2]
+  horizon: [3, 10]
+  lthr: [0, 8]
+  lstop: [8, 22]
+code: |
+  cnow = c[..., -1]
+  shortfall = th.clamp(thr - cnow, min=0)
+  frac = th.clamp(shortfall / thr, min=0, max=1)
+  dose = th.clamp(pmax * th.pow(frac, gamma), max=30) * (cnow < 20).float()
+  shock_on = (t < horizon).float() * th.ones_like(cnow)
+  late_on = (t >= horizon).float() * (t < lstop).float() * (cnow < lthr).float()
+  punishment = dose * th.maximum(shock_on, late_on) * valid[..., -1]
