@@ -1,0 +1,60 @@
+params:
+  c0:
+    definition: >-
+      contribution level a member is expected to reach; only members contributing
+      below it are punished, in proportion to their shortfall c0 - c
+    type: int
+  k:
+    definition: >-
+      punishment points per point of shortfall below c0 for a player who has not
+      been punished before, in the first round of the game (the first round of
+      the first block)
+    type: float
+  budget:
+    definition: >-
+      saturation scale of a player's punishment history: the punishment is scaled
+      by budget / (budget + punishment the player has received so far, from either
+      manager). The simulated players' response to a punishment falls with the
+      punishment they have already received (about half once 40+ points are behind
+      them), not with the round, so the rule spends on those not yet punished,
+      such as newcomers from a lenient group
+    type: float
+  decay:
+    definition: >-
+      factor by which the punishment shrinks from one four-round block to the
+      next (block b is scaled by decay^b), because a lift has fewer rounds left
+      to pay back
+    type: float
+  follow:
+    definition: >-
+      factor on punishment in the second round of a block (and follow squared in
+      the third), relative to the block's first round; the last round of a block,
+      right before players may switch, is never punished
+    type: float
+sweep_config:
+  c0: [7, 15]
+  k: [1.5, 20, log]
+  budget: [3, 300, log]
+  decay: [0.2, 1]
+  follow: [0, 1]
+constraints:
+  - c0 >= 1
+  - k > 0
+  - budget > 0
+  - decay > 0
+  - follow >= 0
+code: |
+  # no float scalars as th arguments or in comparisons (they fail in a cold,
+  # builtins-free exec); relu is max(0, .)
+  now = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  received = p.sum(-1)  # punishment received so far from either manager; 0 in round 0
+  saturate = budget / (budget + received)
+  block = th.floor(t / 4)
+  q = t - 4 * block  # place in the block, 0-3; 3 is the round before a switch decision
+  pos = th.relu(1 - q) + follow * th.relu(1 - th.abs(q - 1)) + follow * follow * th.relu(1 - th.abs(q - 2))
+  # in the last block (no decision follows) its last round is treated like its third
+  last = th.relu(th.sign(block - 4))
+  pos = pos + last * follow * follow * th.relu(1 - th.abs(q - 3))
+  size = k * th.pow(decay, block) * pos
+  punishment = size * saturate * th.relu(c0 - now) * mine
