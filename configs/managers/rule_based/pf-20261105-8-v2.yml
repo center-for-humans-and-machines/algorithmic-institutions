@@ -1,0 +1,37 @@
+params:
+  standard:
+    definition: >-
+      the contribution standard; a valid player contributing less than this is
+      punished, at or above it never
+    type: float
+  dose:
+    definition: >-
+      the punishment of a player who contributes nothing (the largest shortfall);
+      the manager clamps it at 30
+    type: float
+  curvature:
+    definition: >-
+      how the punishment grows with the shortfall: punishment = dose *
+      (shortfall / standard) ** curvature; 1 is linear (v1), above 1 the
+      punishment is concentrated on the free riders and small shortfalls get
+      only a light touch
+    type: float
+  horizon:
+    definition: >-
+      punishment is dealt only in rounds t < horizon (0-based); later rounds
+      are never punished, since a raise bought late has too few rounds to repay it
+    type: int
+sweep_config:
+  standard: [11, 23]
+  dose: [16, 40]
+  curvature: [0.7, 3.5, log]
+  horizon: [4, 20]
+constraints:
+  - standard > 0
+  - dose > 0
+  - curvature > 0
+code: |
+  now = c[..., -1]
+  shortfall = th.clamp(standard - now, min=0) / standard
+  active = (t < horizon).to(now.dtype)
+  punishment = dose * shortfall ** curvature * active * valid[..., -1]
