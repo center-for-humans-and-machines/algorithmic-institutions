@@ -1,0 +1,32 @@
+params:
+  target:
+    definition: contribution (0-20) below which a player is punished; the shortfall is measured from it
+    type: float
+  slope:
+    definition: punishment points per point of shortfall below the target
+    type: float
+  cap:
+    definition: largest punishment dealt to one player in one round, before the decay
+    type: float
+  half_life:
+    definition: rounds over which the punishment scale halves (front-loading; large means no decay)
+    type: float
+  quiet:
+    definition: number of final rounds in which nobody is punished (no future left to pay for it)
+    type: int
+sweep_config:
+  target: [8, 20]
+  slope: [0.1, 5, log]
+  cap: [1, 30, log]
+  half_life: [2, 100, log]
+  quiet: [1, 10]
+constraints:
+  - target <= 20
+  - quiet >= 1
+code: |
+  c_now = c[..., -1]
+  shortfall = th.clamp(target - c_now, min=0.0)
+  base = th.minimum(slope * shortfall, cap * th.ones_like(c_now))
+  decay = th.exp(-0.6931471805599453 * t / half_life)
+  active = (t < 24 - quiet).float()
+  punishment = th.round(base * decay * active) * valid[..., -1]
