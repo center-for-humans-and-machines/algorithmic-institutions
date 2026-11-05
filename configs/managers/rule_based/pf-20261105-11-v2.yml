@@ -1,0 +1,33 @@
+params:
+  T:
+    definition: >-
+      target contribution; a player contributing T or more is never punished
+    type: float
+  A:
+    definition: >-
+      tap: the fixed punishment any player below the target gets, the signal
+      that a shortfall was seen, whatever its size
+    type: float
+  B:
+    definition: >-
+      price per point of shortfall below the target, added to the tap, so a
+      player contributing c < T is punished A + B * (T - c); above 0.6 a
+      withheld point costs the player more than it keeps
+    type: float
+  S:
+    definition: >-
+      last punished round; from round S + 1 on the manager punishes no one,
+      since the regime carries on by itself and late punishment cannot repay
+      its cost in the rounds left
+    type: int
+sweep_config:
+  T: [10, 20]
+  A: [0, 6]
+  B: [0.5, 3.5, log]
+  S: [2, 16]
+code: |
+  shortfall = th.relu(T - c[..., -1])
+  below = shortfall > 0
+  scaled = th.where(below, A + B * shortfall, th.zeros_like(shortfall))
+  active = (t <= S)
+  punishment = th.where(active, scaled, th.zeros_like(scaled))
