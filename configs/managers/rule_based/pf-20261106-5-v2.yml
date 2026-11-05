@@ -1,0 +1,40 @@
+params:
+  target_open:
+    definition: contribution level below which a member is punished during the opening rounds (rounds before t_open)
+    type: float
+  t_open:
+    definition: first round after the opening; from this round on only the lower maintenance target applies
+    type: int
+  target_late:
+    definition: contribution level below which a member is punished after the opening (maintenance against clear free-riders; 0 means no punishment after the opening)
+    type: float
+  slope:
+    definition: punishment points per contribution point a member falls short of the current target
+    type: float
+  cap:
+    definition: largest punishment any one member gets in a round
+    type: float
+sweep_config:
+  target_open: [4, 17]
+  t_open: [1, 14]
+  target_late: [0, 10]
+  slope: [0.3, 6, log]
+  cap: [2, 25]
+constraints:
+  - target_open >= 0
+  - target_late >= 0
+  - slope > 0
+  - cap > 0
+code: |
+  ct = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  one = th.ones_like(t)
+  # opening (t < t_open): the high target; afterwards the maintenance target
+  opening = (t < t_open).float()
+  target = target_late + (target_open - target_late) * opening
+  shortfall = th.relu(target - ct)
+  pun = th.minimum(slope * shortfall, cap * th.ones_like(ct))
+  # the last three rounds (21-23) are never punished: a point dealt there has
+  # too few rounds left to be paid back by higher contributions
+  live = (t < 21 * one).float()
+  punishment = pun * mine * live
