@@ -1,0 +1,48 @@
+params:
+  rate:
+    definition: punishment points per contribution point a member falls short of the target
+    type: float
+  delta:
+    definition: offset of the target from the group norm (mean contribution of the other valid members this round); positive asks members to beat the norm, negative tolerates a little below it
+    type: float
+  floor:
+    definition: absolute minimum contribution expected of every member, whatever the group norm (the target is the larger of norm + delta and floor; a member alone in the group is held to floor)
+    type: float
+  late:
+    definition: multiplier on punishment in the third round of each block (rounds 2, 6, 10, 14, 18), the round before the switch-decision round; the decision rounds 3, 7, 11, 15, 19 themselves are never punished
+    type: float
+  kappa:
+    definition: how strongly my severity follows the other manager's; punishment is scaled by (1 + kappa * q) / (1 + kappa * 3), q the other manager's mean punishment per member over all rounds so far (taken as 3 in round 0)
+    type: float
+sweep_config:
+  rate: [0.5, 12.0, log]
+  delta: [-4.0, 6.0]
+  floor: [0.0, 12.0]
+  late: [0.0, 1.0]
+  kappa: [0.0, 2.0]
+constraints:
+  - rate > 0
+  - kappa >= 0
+code: |
+  zero = th.zeros_like(c[..., -1])
+  one = th.ones_like(zero)
+  cur = c[..., -1]
+  ok = valid[..., -1] * in_group[..., -1]
+  tot = (cur * ok).sum(-1).unsqueeze(-1)
+  cnt = ok.sum(-1).unsqueeze(-1)
+  others_n = cnt - ok
+  norm = th.where(others_n > zero, (tot - cur * ok) / th.maximum(others_n, one), zero + floor)
+  target = th.maximum(norm + delta, zero + floor)
+  short = th.maximum(target - cur, zero)
+  tt = zero + t
+  pos = tt - 4 * th.floor(tt / 4)
+  early = tt < zero + 20
+  w_pos = th.where((pos == zero + 2) * early, zero + late, one)
+  w_pos = th.where((pos == zero + 3) * early, zero, w_pos)
+  horizon = th.minimum(th.maximum((zero + 23 - tt) / 3, zero), one)
+  outside = th.ones_like(p) - in_group[..., :-1]
+  n_out = outside.sum(-1).sum(-1).unsqueeze(-1)
+  p_out = (p * outside).sum(-1).sum(-1).unsqueeze(-1)
+  q = th.where(n_out > zero, p_out / th.maximum(n_out, one), zero + 3)
+  scale = (one + kappa * q) / (one + kappa * 3)
+  punishment = rate * short * w_pos * horizon * scale * ok
