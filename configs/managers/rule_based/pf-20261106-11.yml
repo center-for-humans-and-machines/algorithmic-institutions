@@ -1,0 +1,42 @@
+params:
+  rate:
+    definition: punishment points per contribution point a member falls short of the target
+    type: float
+  w:
+    definition: weight of the group norm (mean contribution of the other valid members this round) in the target; 1 - w goes to the absolute anchor
+    type: float
+  anchor:
+    definition: absolute contribution level the target is pulled towards (and the whole target for a member alone in the group)
+    type: float
+  lam:
+    definition: multiplier on punishment in the switch-decision rounds 3, 7, 11, 15, 19 (leniency before players choose groups)
+    type: float
+  h:
+    definition: rounds over which punishment fades out before the last round (factor (23 - t) / h, capped at 1; round 23 is never punished)
+    type: float
+sweep_config:
+  rate: [0.1, 3.0, log]
+  w: [0.0, 1.0]
+  anchor: [4.0, 18.0]
+  lam: [0.0, 1.0]
+  h: [0.5, 8.0, log]
+constraints:
+  - rate > 0
+  - h > 0
+code: |
+  zero = th.zeros_like(c[..., -1])
+  one = th.ones_like(zero)
+  cur = c[..., -1]
+  ok = valid[..., -1] * in_group[..., -1]
+  tot = (cur * ok).sum(-1).unsqueeze(-1)
+  cnt = ok.sum(-1).unsqueeze(-1)
+  others_n = cnt - ok
+  others_mean = th.where(others_n > zero, (tot - cur * ok) / th.maximum(others_n, one), zero + anchor)
+  target = w * others_mean + (one - w) * anchor
+  short = th.maximum(target - cur, zero)
+  tt = zero + t
+  pos = tt - 4 * th.floor(tt / 4)
+  decision = (pos == zero + 3) * (tt < zero + 20)
+  timing = th.where(decision, zero + lam, one)
+  horizon = th.minimum(th.maximum((zero + 23 - tt) / h, zero), one)
+  punishment = rate * short * timing * horizon * ok
