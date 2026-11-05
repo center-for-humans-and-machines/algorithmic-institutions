@@ -1,0 +1,32 @@
+params:
+  pmax:
+    definition: dose for a zero contributor (before the clamp at 30); the dose for contribution c is pmax * (1 - c/20) ** gamma, full contributors (c = 20) are never punished
+    type: float
+  d10:
+    definition: dose for a player contributing 10, half the endowment; it fixes the curvature gamma = log2(pmax / d10), so how hard the middling contributors are hit
+    type: float
+  horizon:
+    definition: first round of the late phase; in rounds 0..horizon-1 (the shock) every valid player below 20 gets the dose
+    type: int
+  lthr:
+    definition: free-rider line of the late phase; in rounds horizon..lstop-1 only players contributing less than lthr still get their (big) dose, everyone else nothing
+    type: int
+  lstop:
+    definition: first round with no punishment at all (the late phase runs from horizon to lstop-1), since a dose needs several rounds left to repay its cost
+    type: int
+sweep_config:
+  pmax: [22, 40]
+  d10: [4, 11]
+  horizon: [4, 10]
+  lthr: [1, 7]
+  lstop: [10, 20]
+constraints:
+  - pmax > d10
+code: |
+  cnow = c[..., -1]
+  gamma = th.log2(pmax / d10)
+  frac = th.clamp(1 - cnow / 20, min=0, max=1)
+  dose = th.clamp(pmax * th.pow(frac, gamma), max=30) * (cnow < 20).float()
+  shock_on = (t < horizon).float() * th.ones_like(cnow)
+  late_on = (t >= horizon).float() * (t < lstop).float() * (cnow < lthr).float()
+  punishment = dose * th.maximum(shock_on, late_on) * valid[..., -1]
