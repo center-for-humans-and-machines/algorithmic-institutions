@@ -37,13 +37,29 @@ BASE = os.environ.get("PF_BASE", "policy-finder-base")
 SWEEP_DIR = "plots/simulation/policy_finder/{name}_sweep"
 LANDSCAPES = "landscapes.json"
 FINAL = "final"
-#: The final best's matchup against `ah` (simulation/sweep.py's BEST_PLOTS)
+#: The game the shown instances play (manager/rule.py SETTINGS): exp2, two
+#: groups scored by the pool against `ah`, or exp1, one group scored by the
+#: average payoff (PF_SETTING; the instances of one worktree root share it).
+SETTING = os.environ.get("PF_SETTING", "exp2")
+#: The words for the score in each setting, so exp2 reads as before.
+TERMS = {
+    "exp2": {"score": "pool", "vs": " vs ah", "against": "against ah",
+             "root": "ah vs ah", "start": "ah against ah"},
+    "exp1": {"score": "avg payoff", "vs": "", "against": "with the clones",
+             "root": "never punish", "start": "never punishing"},
+}[SETTING]
+#: The final best's plots (simulation/sweep.py's BEST_PLOTS, ROUND_PLOT)
 BEST_PLOTS = {
     "comparison_pairing_side.jpg": "Final best vs ah, by side",
     "group_size_evolution_global.jpg": "Group sizes",
+    "best_rounds.jpg": "Final best, per round",
 }
-#: The reference sim with `zero` (never punish) against `ah`.
-REFERENCE = MAIN / "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched"
+#: The reference sim with `zero` (never punish): against `ah` (exp2), alone
+#: with the clones (exp1).
+REFERENCE = MAIN / {
+    "exp2": "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched",
+    "exp1": "plots/simulation/29_EXP1_reference",
+}[SETTING]
 REFRESH_S = 5
 
 # Palette of the project's report artifacts; the charts use the light values
@@ -508,10 +524,17 @@ def show_scripts(wt: Path, name: str):
 
 @st.cache_data(show_spinner=False)
 def scores_vs_ah(per_round: str, mtime: float) -> pd.DataFrame:
-    """Definition 4 per manager that played `ah` (pool_scores, pandas only)."""
-    from aimanager.simulation.pool_scores import add_pool, against_anchor
+    """The setting's score per manager (pool_scores, pandas only): definition
+    4 for each manager that played `ah` (exp2), the average payoff (exp1)."""
+    from aimanager.simulation.pool_scores import (
+        add_pool, against_anchor, group_payoff_scores,
+    )
 
-    scores = against_anchor(add_pool(pd.read_parquet(per_round)), "ah")
+    df = pd.read_parquet(per_round)
+    if SETTING == "exp1":
+        scores = group_payoff_scores(df)
+    else:
+        scores = against_anchor(add_pool(df), "ah")
     return pd.DataFrame(
         [
             {
@@ -635,7 +658,7 @@ def landscape_layer(points: pd.DataFrame, land: dict, param: str, final, zero):
     def x(field):
         return alt.X(f"{field}:Q", title=param, scale=scale, axis=axis)
 
-    y = alt.Y("pool:Q", title="pool vs ah", scale=alt.Scale(zero=False))
+    y = alt.Y("pool:Q", title=f"{TERMS['score']}{TERMS['vs']}", scale=alt.Scale(zero=False))
     layers = [
         alt.Chart(points)
         .mark_circle(size=24, color=MUTED, opacity=0.4)
@@ -674,11 +697,11 @@ def landscape_layer(points: pd.DataFrame, land: dict, param: str, final, zero):
                 y=y,
                 tooltip=[
                     alt.Tooltip("point:N", title="final best"),
-                    alt.Tooltip("pool:Q", title="final-run pool", format=".1f"),
+                    alt.Tooltip("pool:Q", title=f"final-run {TERMS['score']}", format=".1f"),
                 ],
             )
         )
-    title = f"{param} · moves the pool {spec['effect']:.1f}"
+    title = f"{param} · moves the {TERMS['score']} {spec['effect']:.1f}"
     if param in land["peak"]["at_edge"]:
         title += " · peak on its edge"
     return alt.layer(*layers).properties(
@@ -718,9 +741,10 @@ def final_best(final):
 LANDSCAPE_CAPTION = (
     "Grey: the design points, against each param. Clay: the Gaussian process"
     " fitted to them, cut along the param through its peak (dashed), with a band"
-    " of 2 sd. Ink: the final best at its final-run pool. Dashed line: never"
-    " punishing against ah. Each panel's title says how far the param moves the"
-    " fitted pool, and when the peak sits on the edge of its range."
+    f" of 2 sd. Ink: the final best at its final-run {TERMS['score']}. Dashed line:"
+    f" never punishing {TERMS['against']}. Each panel's title says how far the"
+    f" param moves the fitted {TERMS['score']}, and when the peak sits on the edge"
+    " of its range."
 )
 
 
@@ -747,7 +771,7 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
     if final:
         predicted = f"{land['peak']['mean']:.1f}" if land else "–"
         tiles = [
-            ("Final best vs ah", f"{final['pool']:.1f}<small>± {final['pool_se']:.1f}</small>"),
+            (f"Final best{TERMS['vs']}", f"{final['pool']:.1f}<small>± {final['pool_se']:.1f}</small>"),
             ("Members", f"{final['members']:.2f}"),
             ("Fit predicted", predicted),
             (
@@ -757,7 +781,7 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
         ]
     else:
         tiles = [
-            ("Final best vs ah", "–<small>awaiting the final run</small>"),
+            (f"Final best{TERMS['vs']}", "–<small>awaiting the final run</small>"),
             ("Members", "–"),
             ("Fit predicted", "–"),
             ("Final run", "–"),
@@ -802,7 +826,7 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
             "caption",
             f"{design} Its own ranking, one estimate of {sweep['n_episodes']}"
             " episodes per point: its top reads high by luck."
-            + (" gp: the fitted pool at the point." if land else ""),
+            + (f" gp: the fitted {TERMS['score']} at the point." if land else ""),
         ),
         ("html", top10_html(points, params)),
     ]
@@ -1204,7 +1228,7 @@ def evolution_chart(frame: pd.DataFrame, refs: dict, links: bool = True):
     x_scale = alt.Scale(domain=[-0.6, n + 2.6], nice=False)
     x = alt.X("order:Q", title="experiment order", scale=x_scale,
               axis=alt.Axis(labels=False, ticks=False, grid=False))
-    y = alt.Y("pool:Q", title="final best pool vs ah", scale=y_scale)
+    y = alt.Y("pool:Q", title=f"final best {TERMS['score']}{TERMS['vs']}", scale=y_scale)
     tooltip = [
         alt.Tooltip("lineage:N"),
         alt.Tooltip("version:N"),
@@ -1280,7 +1304,7 @@ def evolution_chart(frame: pd.DataFrame, refs: dict, links: bool = True):
     ]
     if root is not None:
         root_row = pd.DataFrame(
-            [{"order": 0, "pool": root["pool"], "name": "ah vs ah",
+            [{"order": 0, "pool": root["pool"], "name": TERMS["root"],
               "se": root.get("se", float("nan"))}]
         )
         layers += [
@@ -1373,8 +1397,8 @@ def rule_counts(frame: pd.DataFrame) -> list:
 
 
 EVOLUTION_CAPTION = (
-    "Every finished version's final best against ah (± se), in the order the"
-    " versions were made. The tree starts at ah against ah; each v1 branches"
+    f"Every finished version's final best {TERMS['against']} (± se), in the order the"
+    f" versions were made. The tree starts at {TERMS['start']}; each v1 branches"
     " from it and each later version from the one before, in its lineage's"
     " colour when the lineage iterated (grey otherwise), dashed when it did not"
     " beat its lineage's best. A node's colour is its policy category. Dotted:"

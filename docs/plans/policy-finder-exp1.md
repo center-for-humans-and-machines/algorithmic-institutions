@@ -202,3 +202,19 @@ category list will differ from experiment 2's. New categories are drawn up from 
   the RL manager too, so it affects both sides equally. It is stated as a confound.
 - **Scope.** Steps 3–5 generalise code that the experiment 2 campaign depends on. Their tests
   must keep the experiment 2 path byte-for-byte unchanged in its sim configs and scores.
+
+## Progress
+
+- 2026-11-05 00:00: step 1 done. The 21/22 v4 clones and the human-like manager clone
+  (23 v4) were restored from the LFS store (sha256 match) to `artifacts/behavioral_cloning/`
+  here and in Raven's live checkout. The deployed RL manager loads again (`EmptyEncoder`
+  and `GraphNetwork.__setstate__`, ecc88be9). `gamma_08_heavy` was
+  `18_exp2_gamma_8_heavy`, which is not here, on Raven or on S3: it is left out.
+- 2026-11-05 00:35: step 2 gate passed (`28_EXP1_baselines`, job 31913912, 1000 games each).
+  Under experiment 1's own formula: deployed RL 660.7 ± 1.8 (recorded 656–659), zero 587.9
+  ± 2.2 (587–592), human-like 546.3 ± 3.5 (550.5). The policy finder's score (average payoff
+  of the valid players, summed over the game): RL 659.8, zero 591.1, human-like 546.3.
+- Steps 3–5 built (d97201e5). One deviation: sweep.json keeps the field `pool` for the score
+  under its `metric` (`group_payoff` here) instead of adding `score`, so the pipeline, the
+  fit and the campaign read it unchanged. The observation app labels it by `PF_SETTING`.
+  The experiment 2 path regenerates byte for byte.
