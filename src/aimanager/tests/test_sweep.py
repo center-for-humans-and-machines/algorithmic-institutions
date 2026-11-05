@@ -206,6 +206,7 @@ def _multi_config(points, rivals=("opponent_1", "opponent_2")):
         managers[name] = {"type": "rule_based", "rule": RULE_PATH, "params": {"a": a}}
         for r in rivals:
             pairings.append({"name": f"{name}_vs_{r}", "group_0": name, "group_1": r})
+            pairings.append({"name": f"{r}_vs_{name}", "group_0": r, "group_1": name})
     return {
         "managers": managers, "pairings": pairings, "seed": 42, "n_episodes": 2,
         "sweep_metric": "pool_vs_opponents", "sweep_opponents": list(rivals),
@@ -222,17 +223,21 @@ def test_the_score_is_the_mean_over_opponents_and_each_is_kept():
             # 8 against each
             "toy_s001_vs_opponent_1": [[(5, 0, 0)], [(5, 0, 0)]],
             "toy_s001_vs_opponent_2": [[(5, 0, 0)], [(5, 0, 0)]],
+            # the other seat: the point in group 1
+            "opponent_1_vs_toy_s000": [[(5, 0, 0), (10, 2, 1)], [(5, 0, 0), (20, 0, 1)]],
+            "opponent_2_vs_toy_s000": [[(5, 0, 0), (10, 0, 1)], [(5, 0, 0), (10, 0, 1)]],
+            "opponent_1_vs_toy_s001": [[(5, 0, 1)], [(5, 0, 1)]],
+            "opponent_2_vs_toy_s001": [[(5, 0, 1)], [(5, 0, 1)]],
         }
     )
     result = sweep_result(df, config)
     s000, s001 = result["points"]
+    # both seats pooled: 14, 32, 14, 32 against opponent_1
     assert s000["pools"]["opponent_1"]["pool"] == pytest.approx(23.0)
-    assert s000["pools"]["opponent_1"]["pool_se"] == pytest.approx(9.0)
+    assert s000["pools"]["opponent_1"]["n_episodes"] == 4
     assert s000["pools"]["opponent_2"]["pool"] == pytest.approx(16.0)
     assert s000["pool"] == pytest.approx(19.5)
-    # sqrt(9^2 + 0^2) / 2
-    assert s000["pool_se"] == pytest.approx(4.5)
-    assert s000["n_episodes"] == 2
+    assert s000["n_episodes"] == 4
     assert s001["pool"] == pytest.approx(8.0)
     assert result["best_name"] == "toy_s000"
     assert result["opponents"] == ["opponent_1", "opponent_2"]
@@ -244,8 +249,8 @@ def test_the_score_is_the_mean_over_opponents_and_each_is_kept():
     [
         (lambda c: c.pop("sweep_opponents"), "needs `sweep_opponents`"),
         (lambda c: c["managers"].pop("opponent_2"), "without a manager"),
-        (lambda c: c["pairings"].pop(), "every opponent once"),
-        (lambda c: c["pairings"][0].update(group_1="toy_s000"), "an opponent in group_1"),
+        (lambda c: c["pairings"].pop(), "once in each seat"),
+        (lambda c: c["pairings"][0].update(group_1="toy_s000"), "an opponent in the other"),
     ],
 )
 def test_a_multi_opponent_sweep_must_play_every_opponent(change, match):

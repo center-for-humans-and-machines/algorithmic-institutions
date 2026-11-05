@@ -1,11 +1,12 @@
 # The exp2_multi reference matrix (docs/plans/policy-finder-multi-opponent.md, step 2):
-# every reference governor in group 0 against each of the four opponents of
-# configs/simulation/opponents/exp2_multi.yml in group 1, 2000 games per pairing on
-# Levin's stack, seed 8000 (no sweep, final or earlier sim used it). A row's mean
-# over the four columns is its score on the exp2_multi objective. Rows: the four
-# opponents themselves, and two held-out governors for the head-to-head: Cem's best
-# (pf-20261008-3-v6 at s201, as in 27_LEVIN) and #207's thr9_p10.
-# levin_vs_ah also checks the port of Levin's rule: #219 had 69.8 against ah.
+# every reference governor against each of the four opponents of
+# configs/simulation/opponents/exp2_multi.yml, in both seats (group 0 and group 1),
+# 2000 games per pairing on Levin's stack, seed 8000 (no sweep, final or earlier sim
+# used it). A row's pool against an opponent pools both seats, as a sweep scores a
+# point; its mean over the four columns is its score on the exp2_multi objective.
+# Rows: the four opponents themselves, and two held-out governors for the
+# head-to-head: Cem's best (pf-20261008-3-v6 at s201, as in 27_LEVIN) and #207's
+# thr9_p10. levin_vs_ah also checks the port of Levin's rule: #219 had 69.8 against ah.
 # Never in a policy-finder export (it names the opponents).
 
 seed: 8000
@@ -57,14 +58,20 @@ pairings:
 - name: ah_vs_zero
   group_0: ah
   group_1: zero
+- name: zero_vs_ah
+  group_0: zero
+  group_1: ah
 - name: ah_vs_levin
   group_0: ah
   group_1: levin
+- name: levin_vs_ah
+  group_0: levin
+  group_1: ah
 - name: ah_vs_prev_best
   group_0: ah
   group_1: prev_best
-- name: zero_vs_ah
-  group_0: zero
+- name: prev_best_vs_ah
+  group_0: prev_best
   group_1: ah
 - name: zero_vs_zero
   group_0: zero
@@ -72,14 +79,14 @@ pairings:
 - name: zero_vs_levin
   group_0: zero
   group_1: levin
+- name: levin_vs_zero
+  group_0: levin
+  group_1: zero
 - name: zero_vs_prev_best
   group_0: zero
   group_1: prev_best
-- name: levin_vs_ah
-  group_0: levin
-  group_1: ah
-- name: levin_vs_zero
-  group_0: levin
+- name: prev_best_vs_zero
+  group_0: prev_best
   group_1: zero
 - name: levin_vs_levin
   group_0: levin
@@ -87,12 +94,6 @@ pairings:
 - name: levin_vs_prev_best
   group_0: levin
   group_1: prev_best
-- name: prev_best_vs_ah
-  group_0: prev_best
-  group_1: ah
-- name: prev_best_vs_zero
-  group_0: prev_best
-  group_1: zero
 - name: prev_best_vs_levin
   group_0: prev_best
   group_1: levin
@@ -102,27 +103,51 @@ pairings:
 - name: cem_best_vs_ah
   group_0: cem_best
   group_1: ah
+- name: ah_vs_cem_best
+  group_0: ah
+  group_1: cem_best
 - name: cem_best_vs_zero
   group_0: cem_best
   group_1: zero
+- name: zero_vs_cem_best
+  group_0: zero
+  group_1: cem_best
 - name: cem_best_vs_levin
   group_0: cem_best
   group_1: levin
+- name: levin_vs_cem_best
+  group_0: levin
+  group_1: cem_best
 - name: cem_best_vs_prev_best
   group_0: cem_best
   group_1: prev_best
+- name: prev_best_vs_cem_best
+  group_0: prev_best
+  group_1: cem_best
 - name: thr9_p10_vs_ah
   group_0: thr9_p10
   group_1: ah
+- name: ah_vs_thr9_p10
+  group_0: ah
+  group_1: thr9_p10
 - name: thr9_p10_vs_zero
   group_0: thr9_p10
   group_1: zero
+- name: zero_vs_thr9_p10
+  group_0: zero
+  group_1: thr9_p10
 - name: thr9_p10_vs_levin
   group_0: thr9_p10
   group_1: levin
+- name: levin_vs_thr9_p10
+  group_0: levin
+  group_1: thr9_p10
 - name: thr9_p10_vs_prev_best
   group_0: thr9_p10
   group_1: prev_best
+- name: prev_best_vs_thr9_p10
+  group_0: prev_best
+  group_1: thr9_p10
 switch_every: 4
 n_episode_steps: 24
 n_episodes: 2000

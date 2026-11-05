@@ -36,7 +36,9 @@ group, per round, averaged over rounds and games, against one opponent:
 | `prev_best` | the best experiment 2 rule found so far, fixed for the campaign | `pf-20261104-12-v7` at its GP peak (`27_LEVIN` config) |
 
 - **Weighting:** plain mean of the four raw pools, all in the same units.
-- **Seating:** the rule plays group 0 and the opponent plays group 1, as in today's sweeps.
+- **Seating:** the rule plays each opponent from both groups, half the games each. A
+  point's pool against an opponent pools both seats, so no score depends on the
+  seat.
 - **The four pools** are kept per point in `sweep.json` and in every final, not only their
   mean. The GP fits the mean.
 
@@ -56,8 +58,8 @@ group, per round, averaged over rounds and games, against one opponent:
      clear. It is for the report and the page only; agents never see it.
 3. **The `exp2_multi` setting.**
    - `generate_sim_config.py`: a setting with a list of opponents instead of one anchor. One
-     pairing per point per opponent; 125 games per pairing in sweeps (500 per point, as
-     today) and 2000 per pairing in finals.
+     pairing per point per opponent and seat (8); 64 games per pairing in sweeps (512 per
+     point, about today's 500) and 1000 per pairing in finals (8000 per point).
    - `sweep.py`: a metric `pool_vs_opponents`. Reuse `pool_scores.against_anchor` per
      opponent, then take the mean.
      - `sweep.json` keeps `pool` (the mean, so the fit, pipeline and campaign read it
@@ -140,6 +142,8 @@ Agreed 2026-11-05:
   - No reference sims of any governor.
 - **Weighting:** the plain mean of the four raw pools.
 - **Games:** 125 per opponent per sweep point, 2000 per opponent per final point.
+  Revised 2026-11-05: both seats, so 64 per opponent and seat per sweep point (128 per
+  opponent), 1000 per opponent and seat per final point (2000 per opponent).
 
 Defaults, unless changed:
 
@@ -165,12 +169,23 @@ This campaign plays 125 games per opponent per sweep point and 2000 per final po
   - Levin's rule ported. On random histories it returns exactly the original's
     punishments. In group 0 it scores 69.1 ± 1.0 against `ah` (#219: 69.8; the pre-#235
     code run here: 69.5 ± 1.5).
-  - **Seat effect.** Punishing governors score about 3 points lower in group 1 than in
-    group 0 (Levin 69.1 against 65.6, `prev_best` 74.8 against 72.1, `zero` 60.6 against
-    60.0). Sweeps seat every point in group 0, so references use that seat
-    (`pool_scores.seated`); the head-to-head must keep one seat or report both.
-  - **Reference matrix** (`32_LEVIN_multi_reference`, job 31935035, seed 8000, group 0,
-    mean over the four opponents):
+  - **Seat effect: none to speak of; corrected.** I first read about 3 points of group-0
+    advantage from two hand-picked comparisons (Levin 69.1 against 65.6, `prev_best`
+    74.8 against 72.1). Two checks, using independent games:
+    - the within-game gap in self-play, and in both orders of each opponent pair, gives
+      +0.6 ± 0.2 per group here;
+    - the older run (seed 42) leans the other way, at −1.6 ± 1.1 and −0.7 ± 1.0.
+
+    Mechanically, the contribution and switch clones read `agent_group`. But both were
+    trained (2026-09) on the flip-doubled file (#103, 2026-06-10): every game twice,
+    group labels swapped, CV grouped by `pair_id`. The group node is symmetric to
+    1e-16. So any asymmetry is residual fitting noise.
+
+    Decided (2026-11-05): no further measurement. Sweeps and finals play every opponent
+    in both seats, and the reference matrix is rerun with both seats for every row.
+    `pool_scores.seated` stays as a tool; nothing scores with it.
+  - **Reference matrix, first run** (`32_LEVIN_multi_reference`, job 31935035, seed
+    8000, group 0 only, mean over the four opponents; superseded by the both-seat rerun):
 
     | Manager | Mean |
     |---|---|

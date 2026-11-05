@@ -79,17 +79,19 @@ extend or rework.
 - `plots/simulation/policy_finder/<version>_sweep/`, the simulations of its
   rule against the other managers, which appear only as `opponent_1`,
   `opponent_2`, ... A key always means the same manager, in every point and
-  every version.
+  every version. The rule plays each of them from both groups: half the
+  games it manages group 0, half group 1.
   - `sweep.json`: every design point of its sweep, with its `params`, its
-    score `pool` (the mean of its group's pool against each opponent),
-    `pool_se` its standard error, `members` the mean group size, `n_episodes`
-    per opponent, and under `pools` the same per opponent (`pool`, `pool_se`,
-    `members`, `n_episodes`). `opponents` lists the keys.
+    score `pool` (the mean of its group's pool against each opponent, both
+    seats together), `pool_se` its standard error, `members` the mean group
+    size, `n_episodes` per opponent, and under `pools` the same per opponent
+    (`pool`, `pool_se`, `members`, `n_episodes`). `opponents` lists the keys.
   - `per_round_p<k>of<N>.parquet` (`per_round.parquet` for a sweep of one
     part): every design point's games per round and player; `run` names the
-    point and its opponent (`... managed by <version>_s<index>_vs_<key>`),
-    your rule's group is `group_id` 0, and `episode` counts from 0 per
-    pairing in each file.
+    point and its opponent, group 0's manager first: `... managed by
+    <version>_s<index>_vs_<key>` (your rule runs group 0) or `... managed by
+    <key>_vs_<version>_s<index>` (it runs group 1), and `episode` counts from
+    0 per pairing in each file.
   - `landscapes.json`: a smooth surface fitted to the design points' scores.
     Per parameter (`params`): its `range`, `effect` (how far the fitted pool
     moves along it, in pool points) and `length_scale`; `peak`: where the

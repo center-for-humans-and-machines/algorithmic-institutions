@@ -5,8 +5,9 @@ plays every design point of one rule, each point a `rule_based` manager with
 its params inline, in one of three ways (`sweep_metric`):
   - `pool_vs_anchor`: against one anchor governor, pairings
     `<point>_vs_<anchor>`, the point in group 0;
-  - `pool_vs_opponents`: against every governor in `sweep_opponents`, one
-    pairing `<point>_vs_<opponent>` each, the point in group 0;
+  - `pool_vs_opponents`: against every governor in `sweep_opponents` in
+    both seats, pairings `<point>_vs_<opponent>` (the point in group 0) and
+    `<opponent>_vs_<point>` (in group 1);
   - `group_payoff`: alone with the clones, no pairings (experiment 1).
 The sim then skips its plots and writes `sweep.json`: every point's params
 and its score (pool_scores), and under `best` the params of the point with
@@ -36,8 +37,9 @@ BEST_PLOTS = ("comparison_pairing_side.jpg", "group_size_evolution_global.jpg")
 #: A sweep's score (`sweep_metric` in its config): `pool_vs_anchor` (#226
 #: definition 4, the default) plays each point against the anchor;
 #: `pool_vs_opponents` plays each point against every governor in
-#: `sweep_opponents` and scores the mean of its group's pool against each
-#: (the per-opponent pools are kept under `pools`); `group_payoff`
+#: `sweep_opponents`, in both seats, and scores the mean of its group's pool
+#: against each, both seats pooled (the per-opponent pools are kept under
+#: `pools`); `group_payoff`
 #: (experiment 1) plays each point alone with the clones, no pairings, and
 #: scores the average payoff (pool_scores.group_payoff_scores).
 POOL_VS_ANCHOR = "pool_vs_anchor"
@@ -129,7 +131,7 @@ def _check_alone(config: dict) -> str:
 
 def _check_opponents(config: dict) -> str:
     """check_sweep for a pool_vs_opponents sweep: every design point plays
-    every opponent in `sweep_opponents` exactly once, in group 0."""
+    every opponent in `sweep_opponents` exactly once in each seat."""
     managers, pairings = config.get("managers", {}), config.get("pairings") or []
     rivals = config.get("sweep_opponents") or []
     if not rivals:
@@ -139,17 +141,21 @@ def _check_opponents(config: dict) -> str:
         raise ValueError(f"sweep: opponents without a manager: {missing}")
     played = {}
     for p in pairings:
-        point, other = p.get("group_0"), p.get("group_1")
-        if other not in rivals or point in rivals:
+        g0, g1 = p.get("group_0"), p.get("group_1")
+        if (g0 in rivals) == (g1 in rivals):
             raise ValueError(
-                f"sweep: pairing {p.get('name')!r} must put a design point in"
-                " group_0 and an opponent in group_1"
+                f"sweep: pairing {p.get('name')!r} must put a design point in one"
+                " group and an opponent in the other"
             )
-        played.setdefault(point, []).append(other)
+        point, seat = (g1, (g0, 1)) if g0 in rivals else (g0, (g1, 0))
+        played.setdefault(point, []).append(seat)
     rules = set()
-    for point, others in played.items():
-        if sorted(others) != sorted(rivals):
-            raise ValueError(f"sweep: `{point}` must play every opponent once, got {others}")
+    want = sorted((r, s) for r in rivals for s in (0, 1))
+    for point, seats in played.items():
+        if sorted(seats) != want:
+            raise ValueError(
+                f"sweep: `{point}` must play every opponent once in each seat, got {seats}"
+            )
         manager = managers.get(point, {})
         if manager.get("type") != "rule_based" or not isinstance(manager.get("params"), dict):
             raise ValueError(f"sweep: `{point}` must be a rule_based manager with inline params")
@@ -162,7 +168,10 @@ def _check_opponents(config: dict) -> str:
 def _point_names(config: dict) -> list:
     if metric_of(config) == GROUP_PAYOFF:
         return list(config["managers"])
-    return list(dict.fromkeys(p["group_0"] for p in config["pairings"]))
+    rivals = set(config.get("sweep_opponents") or ())
+    return list(dict.fromkeys(
+        p["group_1"] if p["group_0"] in rivals else p["group_0"] for p in config["pairings"]
+    ))
 
 
 def _summary(s) -> dict:
@@ -257,6 +266,8 @@ def plot_best(df, output_dir: str) -> None:
         return
     others = sweep.get("opponents") or [SWEEP_ANCHOR]
     pairings = [{"name": f"{best}_vs_{o}", "group_0": best, "group_1": o} for o in others]
+    if sweep.get("opponents"):  # both seats
+        pairings += [{"name": f"{o}_vs_{best}", "group_0": o, "group_1": best} for o in others]
     names = [f"managed by {p['name']}" for p in pairings]
     rows = df[df["run"].map(lambda run: any(run.endswith(n) for n in names))]
     rows = prepare(rows.reset_index(drop=True).copy())

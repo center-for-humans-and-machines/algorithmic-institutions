@@ -70,10 +70,12 @@ STEPS = (
 )
 #: Episodes per sweep point, and per final-run point (smoke runs lower them
 #: with PF_SWEEP_EPISODES and PF_FINAL_EPISODES); a setting whose points play
-#: several opponents counts them per pairing (SETTING_EPISODES)
+#: several opponents counts them per pairing, one per opponent and seat
+#: (SETTING_EPISODES: 8 pairings x 64 = 512 per sweep point, x 1000 = 8000
+#: per final point)
 N_EPISODES = 500
 FINAL_EPISODES = 2000
-SETTING_EPISODES = {"exp2_multi": (125, 2000)}
+SETTING_EPISODES = {"exp2_multi": (64, 1000)}
 #: A setting's opponents (generate_sim_config.py SETTINGS), in the worktree
 OPPONENTS = "configs/simulation/opponents/{}.yml"
 #: One sim job holds this many episodes (16 GB): 256 points x 500 = 2 parts
@@ -308,11 +310,12 @@ class Version:
         }
 
     def pairings(self):
-        """Pairings per design point: one per opponent of the setting, else one."""
+        """Pairings per design point: one per opponent of the setting and seat,
+        else one (generate_sim_config.pairings_per_point)."""
         path = self.wt / OPPONENTS.format(self.setting)
         if not path.exists():
             return 1
-        return len(yaml.safe_load(path.read_text()))
+        return 2 * len(yaml.safe_load(path.read_text()))
 
     def parts(self):
         sobol = self.conf.get("sobol_points", 256)

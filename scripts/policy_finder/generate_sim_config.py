@@ -64,7 +64,8 @@ ANCHOR = "ah"
 #: sweep is built from, the manager its points play (None: each point plays
 #: the clones alone), its score, and overrides of the template's sim keys.
 #: `opponents` (instead of an anchor): a file of governors under opaque keys
-#: (key -> name, manager); each point plays every one, the score is the mean.
+#: (key -> name, manager); each point plays every one in both seats (group 0
+#: and group 1), the score is the mean over the opponents of its pool there.
 SETTINGS = {
     "exp2": {"template": TEMPLATE, "anchor": ANCHOR, "overrides": {}},
     "exp2_multi": {
@@ -106,8 +107,8 @@ def opponents(setting):
 
 
 def pairings_per_point(setting):
-    """Pairings each design point plays: one per opponent, else one."""
-    return len(opponents(setting)) or 1
+    """Pairings each design point plays: one per opponent and seat, else one."""
+    return 2 * len(opponents(setting)) or 1
 
 
 class _Flow(dict):
@@ -180,9 +181,16 @@ def build_sim_config(
         }
         if setting and setting != "exp2":
             managers[manager]["setting"] = setting
-        for other in [anchor] if anchor else list(rivals):
+        if anchor:
+            pairings.append(
+                _Flow(name=f"{manager}_vs_{anchor}", group_0=manager, group_1=anchor)
+            )
+        for other in rivals:  # both seats against each opponent
             pairings.append(
                 _Flow(name=f"{manager}_vs_{other}", group_0=manager, group_1=other)
+            )
+            pairings.append(
+                _Flow(name=f"{other}_vs_{manager}", group_0=other, group_1=manager)
             )
 
     # TEMPLATE's keys in its order, the sweep's own values where it has them
@@ -284,7 +292,10 @@ def _against(setting):
         return f" against `{anchor}`"
     rivals = opponents(setting)
     if rivals:
-        return f" against each of {len(rivals)} opponents ({SETTINGS[setting]['opponents']})"
+        return (
+            f" against each of {len(rivals)} opponents in both seats"
+            f" ({SETTINGS[setting]['opponents']})"
+        )
     return " alone with the clones"
 
 
@@ -404,7 +415,7 @@ def main():
             f.write(header)
             yaml.safe_dump(config, f, sort_keys=False, width=1000)
         pairs = pairings_per_point(args.setting)
-        each = f" x {pairs} opponents" if pairs > 1 else ""
+        each = f" x {pairs // 2} opponents x 2 seats" if pairs > 1 else ""
         print(
             f"Wrote {out}: {n_points} design points{each} x {args.n_episodes} episodes"
             f" = {n_points * pairs * args.n_episodes} episodes"

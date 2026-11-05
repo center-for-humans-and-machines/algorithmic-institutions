@@ -321,13 +321,17 @@ def test_a_multi_sweep_plays_every_opponent_under_its_key(multi):
         assert config["managers"][key] == OPPONENTS[key]["manager"]
     assert "ah" not in config["managers"]
     assert config["pairings"] == [
-        {"name": f"toy_s{i:03d}_vs_{r}", "group_0": f"toy_s{i:03d}", "group_1": r}
+        pairing
         for i in range(4) for r in rivals
+        for pairing in (
+            {"name": f"toy_s{i:03d}_vs_{r}", "group_0": f"toy_s{i:03d}", "group_1": r},
+            {"name": f"{r}_vs_toy_s{i:03d}", "group_0": r, "group_1": f"toy_s{i:03d}"},
+        )
     ]
     # the opponents' real names stay in their file
     text = yaml.safe_dump(config)
     assert "name: a" not in text and "name: b" not in text
-    assert gen.pairings_per_point("exp2_multi") == 2 and gen.pairings_per_point("exp2") == 1
+    assert gen.pairings_per_point("exp2_multi") == 4 and gen.pairings_per_point("exp2") == 1
 
 
 def test_multi_parts_seed_past_every_pairing(multi):
@@ -336,6 +340,6 @@ def test_multi_parts_seed_past_every_pairing(multi):
     parts = gen.build_sim_configs(rule, design, n_episodes=300, n_parts=2,
                                   setting="exp2_multi")
     (_, first), (_, second) = parts
-    points = len({p["group_0"] for p in first["pairings"]})
+    points = len({p["group_0"] for p in first["pairings"]} - {"opponent_1", "opponent_2"})
     batch = first["episode_batch_size"]
-    assert second["seed"] == first["seed"] + -(-points * 2 * 300 // batch)
+    assert second["seed"] == first["seed"] + -(-points * 4 * 300 // batch)
