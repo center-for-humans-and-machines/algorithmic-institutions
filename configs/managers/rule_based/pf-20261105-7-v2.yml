@@ -1,0 +1,22 @@
+params:
+  free_rider_fine:
+    definition: the fine for a player who contributes nothing in an opening round (before the 30-point cap); a player short of the target pays a share of it that grows with the shortfall
+    type: float
+  target:
+    definition: contribution at or above which a player is never fined; below it the fine grows with the shortfall
+    type: int
+  curvature:
+    definition: shape of the fine in the shortfall, fine = free_rider_fine * (shortfall / target)^curvature (1 = linear; above 1 spares players just below the target and concentrates fines on low contributors; below 1 fines small shortfalls relatively harder)
+    type: float
+  window:
+    definition: number of opening rounds in which the manager fines at all; from round `window` on it never punishes
+    type: int
+sweep_config:
+  free_rider_fine: [18, 40]
+  target: [12, 20]
+  curvature: [0.6, 2.5, log]
+  window: [6, 14]
+code: |
+  shortfall = th.clamp(target - c[..., -1], min=0) / target
+  active = (t < window).float()
+  punishment = free_rider_fine * th.pow(shortfall, curvature) * active
