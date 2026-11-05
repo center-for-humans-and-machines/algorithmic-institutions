@@ -52,10 +52,19 @@ class Charts:
         self.specs = []
 
     def place(self, chart) -> str:
-        spec = chart.to_dict()
-        spec["width"] = "container"
+        return self.place_spec(chart.to_dict())
+
+    def place_spec(self, spec: dict) -> str:
+        spec = dict(spec, width="container")
         self.specs.append(spec)
         return f'<div class="chart" data-chart="{len(self.specs) - 1}"></div>'
+
+    def place_markers(self, text: str, specs: dict) -> str:
+        """Each `<!--chart:name-->` in `text` as the chart `specs[name]`."""
+        return d.CHART_MARKER.sub(
+            lambda m: self.place_spec(specs[m.group(1)]) if m.group(1) in specs else "",
+            text,
+        )
 
 
 def stats(tiles) -> str:
@@ -329,7 +338,7 @@ def build() -> str:
     style = STYLE + (HERE / "overview.css").read_text() + (HERE / "summary.css").read_text()
     return (
         PAGE.replace("__STYLE__", style)
-        .replace("__OVERVIEW__", d.overview(found))
+        .replace("__OVERVIEW__", charts.place_markers(d.overview(found), d.overview_charts()))
         .replace("__SUMMARY__", summary)
         .replace("__COUNT__", str(len(found)))
         .replace("__SUBTITLE__", d.TERMS["subtitle"])
@@ -352,6 +361,7 @@ STYLE = """
   --line: #e3dacc; --line-soft: #ece8de;
   --clay: #d97757; --clay-soft: #f3d9cd;
   --green: #2f6b3f; --green-soft: #e3eedf; --blue: #4f7aa8; --blue-soft: #e2eaf3;
+  --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a;
   --code-kw: #a2482c; --code-str: #2f6b3f; --code-com: #87867f; --code-num: #4f7aa8;
   --serif: "Newsreader", "Iowan Old Style", Georgia, serif;
   --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -363,6 +373,7 @@ STYLE = """
   --line: #3a3833; --line-soft: #2f2e2a;
   --clay: #e08b6d; --clay-soft: #4a3026;
   --green: #7fbf8e; --green-soft: #26302a; --blue: #8fb3dc; --blue-soft: #262d36;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
   --code-kw: #e08b6d; --code-str: #7fbf8e; --code-com: #9a988f; --code-num: #8fb3dc;
   color-scheme: dark; } }
 :root[data-theme="dark"] {
@@ -371,6 +382,7 @@ STYLE = """
   --line: #3a3833; --line-soft: #2f2e2a;
   --clay: #e08b6d; --clay-soft: #4a3026;
   --green: #7fbf8e; --green-soft: #26302a; --blue: #8fb3dc; --blue-soft: #262d36;
+  --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70;
   --code-kw: #e08b6d; --code-str: #7fbf8e; --code-com: #9a988f; --code-num: #8fb3dc;
   color-scheme: dark; }
 body { background: var(--ground); color: var(--ink-2); font-family: var(--sans);
@@ -513,7 +525,8 @@ PAGE = """<title>Policy Finder Instances</title>
   const specs = JSON.parse(document.getElementById("specs").textContent);
   const drawn = new Set();
   // the app's charts carry its light colours; draw them in the page's theme
-  const LIGHT = { "__INK__": "--ink", "__LINE__": "--line", "__MUTED__": "--muted" };
+  const LIGHT = { "__INK__": "--ink", "__LINE__": "--line", "__MUTED__": "--muted",
+    "#2a78d6": "--series-1", "#eb6834": "--series-2", "#1baf7a": "--series-3" };
   function themed(spec) {
     const css = getComputedStyle(document.documentElement);
     let text = JSON.stringify(spec);

@@ -105,6 +105,10 @@ DATA_NOTE = (
 #: The landing page's text, an HTML fragment in overview.css's classes. Kept
 #: beside the instances, outside every worktree, as it describes earlier rules.
 OVERVIEW = WT_ROOT / "overview.html"
+#: Vega-Lite specs by name, drawn where overview.html has a `<!--chart:name-->`
+#: marker. Optional, beside overview.html.
+OVERVIEW_CHARTS = WT_ROOT / "overview_charts.json"
+CHART_MARKER = re.compile(r"<!--chart:([\w-]+)-->")
 
 STATUS = {
     "running": "running",
@@ -971,6 +975,26 @@ def overview(found: list) -> str:
     return counts_html(found) + body
 
 
+def overview_charts() -> dict:
+    """overview_charts.json: chart name -> Vega-Lite spec, or none."""
+    try:
+        return json.loads(OVERVIEW_CHARTS.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def show_overview(found: list):
+    """The overview, its chart markers drawn as Vega-Lite charts."""
+    charts = overview_charts()
+    parts = CHART_MARKER.split(overview(found))
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            if part.strip():
+                st.html(part)
+        elif part in charts:
+            st.vega_lite_chart(charts[part], use_container_width=True)
+
+
 def references() -> dict:
     """references.json, or an empty set of rows."""
     try:
@@ -1603,4 +1627,4 @@ if __name__ == "__main__":
     elif view == "Agent browser":
         board()
     else:
-        st.html(overview(instances()))
+        show_overview(instances())
