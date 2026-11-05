@@ -1,0 +1,35 @@
+params:
+  T:
+    definition: >-
+      target contribution; a player contributing T or more is never punished
+    type: float
+  A:
+    definition: >-
+      tap: the fixed punishment any player below the target gets, the signal
+      that a shortfall was seen, whatever its size (the clones answer a small
+      fine on a small shortfall about as well as a large one)
+    type: float
+  B:
+    definition: >-
+      price per point of shortfall below the target, added to the tap, so a
+      player contributing c < T is punished A + B * (T - c); above 0.6 a
+      withheld point costs the player more than it keeps, and the steep end
+      falls on free riders, the players who keep answering bigger fines
+    type: float
+  S:
+    definition: >-
+      last punished round; from round S + 1 on the manager punishes no one,
+      since the regime carries on by itself and a late fine cannot repay its
+      double cost in the rounds left
+    type: int
+sweep_config:
+  T: [11.5, 16.5]
+  A: [0.5, 4.5]
+  B: [1.15, 3.0, log]
+  S: [5, 12]
+code: |
+  cur = c[..., -1]
+  shortfall = th.relu(T - cur)
+  scaled = th.where(shortfall > 0, A + B * shortfall, th.zeros_like(cur))
+  active = (t <= S)
+  punishment = th.where(active, scaled, th.zeros_like(cur))
