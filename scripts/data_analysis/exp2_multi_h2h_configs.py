@@ -1,4 +1,4 @@
-"""Write the exp2_multi head-to-head configs (docs/plans/policy-finder-multi-opponent.md,
+"""Write the exp2_multi head-to-head configs (docs/plans/archive/policy-finder-multi-opponent.md,
 step 8): the campaign's top 3 rules at their GP peaks and five reference governors, each
 against the four training opponents, two held-out ones (Cem's best, thr9_p10) and itself,
 in both seats, on seeds no sweep, final or reference run used.
@@ -30,7 +30,7 @@ RULES = {
               "decay": 0.5623720337021627, "follow": 0.6136408739081771}),
 }
 RULES["pf_9_w0"] = (RULES["pf_9"][0], {**RULES["pf_9"][1], "w": 0.0})
-HEADER = """# Head-to-head of the exp2_multi campaign (docs/plans/policy-finder-multi-opponent.md,
+HEADER = """# Head-to-head of the exp2_multi campaign (docs/plans/archive/policy-finder-multi-opponent.md,
 # step 8), {part}, seed {seed}: each row against levin, ah, prev_best, zero (the training
 # opponents), cem_best and thr9_p10 (held out) and itself, in both seats, 2000 games per
 # pairing. Written by scripts/data_analysis/exp2_multi_h2h_configs.py.

@@ -1,5 +1,5 @@
 """Score the exp2_multi head-to-head (configs/simulation/manager_testing/33_MULTI_h2h,
-docs/plans/policy-finder-multi-opponent.md, step 8).
+docs/plans/archive/policy-finder-multi-opponent.md, step 8).
 
 Per row (a governor) and column (an opponent, or `self`): the group pool of the row
 in every game against that opponent, both seats pooled (pool_scores.against_anchor),

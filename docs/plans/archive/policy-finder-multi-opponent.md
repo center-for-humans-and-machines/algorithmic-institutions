@@ -1,4 +1,4 @@
-# [ACTIVE] Policy finder against several governors (experiment 2)
+# [DONE] Policy finder against several governors (experiment 2)
 
 Task: `docs/tasks/a_new_kind_of_autoresearch.md`.
 
@@ -256,3 +256,17 @@ This campaign plays 125 games per opponent per sweep point and 2000 per final po
   - Step 8 started: `33_MULTI_h2h`, seeds 20000/21000/22000, the top 3 plus a `w = 0`
     ablation of `9-v5` and the five references, against the 4 training opponents,
     held-out Cem's best and `thr9_p10`, and self-play, both seats.
+- 2026-11-05: steps 8–10 done. Report: `docs/reports/policy_finder_multi_opponent.md`;
+  page: https://claude.ai/artifact/BgP93sxr11nxwZ4poFvjLg.
+  - Head-to-head (`33_MULTI_h2h`, seeds 20000–25000, 24,000 games per opponent): `prev_best`
+    69.67 ± 0.16, Cem's best 68.77, `-7-v5` 68.43 (−1.24 ± 0.23), `-11-v7` 68.04,
+    `-9-v5` 67.98. `prev_best` leads on every seed and against every opponent, held-out
+    and self-play included. No new rule beats it.
+  - The new rules share `prev_best`'s structure but fine 0.3–1 less per member in rounds
+    4–15; they lose the late rounds. Group sizes match within 0.3.
+  - Adaptation: `-9-v5` with w = 0 scores −0.01 ± 0.22 against `-9-v5`.
+  - Finals ran 0.4–1.0 above the fresh seeds.
+  - The page's references are now the fresh-seed values. Embedded plots are re-encoded at
+    JPEG quality 60 (`export_html.py --image-quality`) to stay under 16 MB.
+  - Follow-ups (not done): a lineage seeded from `prev_best`; more games per sweep point
+    (per-point se is about 2.1, twice the gap the search had to see).

@@ -1,7 +1,7 @@
 # The game, its actors and its data
 
 <!-- The policy finder's exp2_multi variant of basics.md: only "The simulation"
-differs (docs/plans/policy-finder-multi-opponent.md). -->
+differs (docs/plans/archive/policy-finder-multi-opponent.md). -->
 
 The rules and the setup only: how people played is left to the data.
 
