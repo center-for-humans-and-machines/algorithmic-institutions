@@ -1,0 +1,25 @@
+params:
+  k:
+    definition: punishment points per point of contribution below the target, at full strength (round 0)
+    type: float
+  target:
+    definition: contribution level below which a player is punished (a player at or above it is never punished)
+    type: float
+  base:
+    definition: fixed punishment added for any shortfall below the target, at full strength (round 0)
+    type: float
+  horizon:
+    definition: round by which the punishment has faded linearly to zero (weight 1 - t/horizon); above 23 it never fully fades
+    type: float
+sweep_config:
+  k: [0.5, 8, log]
+  target: [8, 20]
+  base: [0, 6]
+  horizon: [2, 30, log]
+code: |
+  shortfall = th.clamp(target - c[..., -1], min=0)
+  # front-loaded: full strength in round 0, fading linearly to zero by `horizon`
+  weight = th.clamp(1 - t / horizon, min=0)
+  # the last round cannot buy any later contribution
+  weight = weight * (t < 23).float()
+  punishment = weight * (shortfall > 0).float() * (base + k * shortfall)
