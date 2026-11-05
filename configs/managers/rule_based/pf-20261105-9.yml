@@ -1,0 +1,32 @@
+params:
+  target:
+    definition: >-
+      the contribution the manager asks of every player; a valid player who
+      contributes less is punished in proportion to the shortfall, one who
+      contributes at least this much is never punished
+    type: float
+  slope:
+    definition: punishment points per point of contribution below the target
+    type: float
+  cap:
+    definition: >-
+      the most punishment any player gets in a round (the first points buy
+      the most extra contribution, later ones little)
+    type: float
+  stop_round:
+    definition: >-
+      the first round (0-based) in which the manager no longer punishes;
+      later punishment has too few rounds left to pay back its cost
+    type: int
+sweep_config:
+  target: [8, 20]
+  slope: [0.1, 4, log]
+  cap: [1, 20, log]
+  stop_round: [2, 24]
+constraints:
+  - slope > 0
+  - cap >= 1
+code: |
+  shortfall = th.clamp(target - c[..., -1], min=0)
+  active = (t < stop_round).float()
+  punishment = th.minimum(slope * shortfall, cap * th.ones_like(shortfall)) * active * valid[..., -1]
