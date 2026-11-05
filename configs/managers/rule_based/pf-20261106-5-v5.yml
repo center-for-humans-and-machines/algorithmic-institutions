@@ -1,0 +1,40 @@
+params:
+  target0:
+    definition: contribution level below which a member is punished in round 0, the first round of the game (the opening norm, set before anyone has been punished)
+    type: float
+  target1:
+    definition: contribution level below which a member is punished in round 1, the second and last punishing round of the opening; lower than target0 spares those who already moved up and hits only those who did not respond
+    type: float
+  slope:
+    definition: punishment points per contribution point a member falls short of the round's target (the manager clamps at 30, so a large slope makes the rule a threshold that deals the full 30 to anyone clearly below the target)
+    type: float
+  target_late:
+    definition: contribution level below which a member is punished in the first round after a switch decision (rounds 4, 8, ...), when newcomers arrive and punishment costs least in members; a moderate maintenance norm
+    type: float
+  n_late:
+    definition: number of switch decisions after which the first round is punished (rounds 4, 8, ..., 4 * n_late); 0 = punish in the opening only. No other round is ever punished
+    type: int
+sweep_config:
+  target0: [7, 13]
+  target1: [3, 13]
+  slope: [2, 25, log]
+  target_late: [2, 12]
+  n_late: [0, 4]
+constraints:
+  - slope > 0
+  - n_late >= 0
+code: |
+  ct = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  one = th.ones_like(t)
+  # rounds 0 and 1: the opening, each with its own target
+  is0 = (t < 0.5 * one).float()
+  is1 = ((t > 0.5 * one) & (t < 1.5 * one)).float()
+  # later: only the first round after a decision (t = 4, 8, ...), up to round 4 * n_late
+  block = th.floor(t / (4 * one))
+  pos = t - 4 * block
+  is_late = ((pos < 0.5 * one) & (block > 0.5 * one) & (block < n_late + 0.5)).float()
+  target_r = target0 * is0 + target1 * is1 + target_late * is_late
+  on = is0 + is1 + is_late
+  shortfall = th.relu(target_r - ct)
+  punishment = slope * shortfall * mine * on
