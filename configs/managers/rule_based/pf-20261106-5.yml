@@ -1,0 +1,46 @@
+params:
+  slope:
+    definition: punishment points per contribution point a member falls short of this round's group mean (beyond the tolerance)
+    type: float
+  tol:
+    definition: shortfall below this round's group mean contribution that goes unpunished
+    type: float
+  cap0:
+    definition: largest punishment any one member can get when the other manager punishes no one
+    type: float
+  follow:
+    definition: how much the per-member cap rises per point of the other manager's mean punishment per member over the last 4 rounds
+    type: float
+  t_stop:
+    definition: first round from which no one is punished any more (punishment has no rounds left to pay back)
+    type: int
+sweep_config:
+  slope: [0.05, 4, log]
+  tol: [0, 10]
+  cap0: [0, 15]
+  follow: [0, 3]
+  t_stop: [8, 23]
+constraints:
+  - slope > 0
+  - tol >= 0
+  - cap0 >= 0
+  - follow >= 0
+code: |
+  ct = c[..., -1]
+  vt = valid[..., -1]
+  mine = in_group[..., -1] * vt
+  # this round's mean contribution of the group's valid members
+  n_mine = mine.sum(-1).unsqueeze(-1)
+  gmean = (ct * mine).sum(-1).unsqueeze(-1) / th.maximum(n_mine, th.ones_like(n_mine))
+  shortfall = th.relu(gmean - ct - tol)
+  raw = slope * shortfall
+  # the other manager's recent harshness: mean punishment per valid member of
+  # the other group over the last (up to) 4 rounds; 0 before any punishment
+  past_other = (th.ones_like(in_group[..., :-1]) - in_group[..., :-1]) * valid[..., :-1]
+  w = past_other[..., -4:]
+  opp_sum = (p[..., -4:] * w).sum(-1).sum(-1)
+  opp_n = w.sum(-1).sum(-1)
+  opp_mean = opp_sum / th.maximum(opp_n, th.ones_like(opp_n))
+  cap = cap0 + follow * opp_mean
+  pun = th.minimum(raw, cap.unsqueeze(-1))
+  punishment = pun * (t < t_stop) * mine
