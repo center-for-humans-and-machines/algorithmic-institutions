@@ -1,0 +1,43 @@
+params:
+  norm_frac:
+    definition: >-
+      the contribution norm as a fraction of the mean contribution of the other
+      valid members of the group this round; only players below it are punished
+    type: float
+  slope:
+    definition: punishment points per contribution point a player falls short of the norm
+    type: float
+  pmax:
+    definition: the most punishment any one player gets in a round
+    type: int
+  allow:
+    definition: >-
+      how far the group's mean punishment per valid member may exceed the other
+      manager's mean punishment per valid member over the last 4 rounds; above
+      it all punishments are scaled down together
+    type: float
+  t_stop:
+    definition: the first round in which no one is punished any more (the end game)
+    type: int
+sweep_config:
+  norm_frac: [0.4, 1.2]
+  slope: [0.2, 4, log]
+  pmax: [1, 15]
+  allow: [0.05, 8, log]
+  t_stop: [14, 23]
+constraints:
+  - norm_frac > 0
+code: |
+  c_now = c[..., -1]
+  m = valid[..., -1] * in_group[..., -1]
+  n_mem = m.sum(-1).unsqueeze(-1)
+  peers = n_mem - m
+  loo = ((c_now * m).sum(-1).unsqueeze(-1) - c_now * m) / peers.clamp(min=1)
+  short = (norm_frac * loo - c_now).clamp(min=0)
+  raw = th.minimum(slope * short, pmax * th.ones_like(short)) * m * (peers > 0)
+  opp_w = (1 - in_group[..., :-1][..., -4:]) * valid[..., :-1][..., -4:]
+  opp_p = (p[..., -4:] * opp_w).sum(-1).sum(-1) / opp_w.sum(-1).sum(-1).clamp(min=1)
+  budget = (allow + opp_p.unsqueeze(-1)) * n_mem
+  total = raw.sum(-1).unsqueeze(-1)
+  scale = th.minimum(budget / (total + 1e-6), th.ones_like(total))
+  punishment = raw * scale * (t < t_stop)
