@@ -1,0 +1,32 @@
+params:
+  free_rider_fine:
+    definition: opening fine (before the 30-point cap) for a player who contributes nothing; in the opening a player short of full contribution pays free_rider_fine * (shortfall/20)^curvature
+    type: float
+  curvature:
+    definition: shape of the opening fine in the shortfall below 20 (1 = linear; above 1 spares near-full contributors and concentrates the fine on low contributors)
+    type: float
+  window:
+    definition: number of opening rounds in which every player short of 20 is fined by the schedule
+    type: int
+  net_floor:
+    definition: after the opening, the defector net fines only players contributing at or below this level
+    type: int
+  net_end:
+    definition: round at which the defector net stops; it is active in rounds window..net_end-1
+    type: int
+  net_fine:
+    definition: the fine for a defector caught by the net (a fixed amount, independent of the opening schedule)
+    type: float
+sweep_config:
+  free_rider_fine: [22, 42]
+  curvature: [1.6, 3.0, log]
+  window: [4, 10]
+  net_floor: [0, 5]
+  net_end: [11, 21]
+  net_fine: [10, 30]
+code: |
+  cc = c[..., -1]
+  shortfall = th.clamp(20 - cc, min=0) / 20
+  opening = free_rider_fine * th.pow(shortfall, curvature) * (t < window).float()
+  net = net_fine * ((t >= window) & (t < net_end)).float() * (cc <= net_floor).float()
+  punishment = opening + net
