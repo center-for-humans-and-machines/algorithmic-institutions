@@ -5,7 +5,8 @@ objects. They were removed from the tree, and `.gitignore` now ignores those thr
 extensions. A clone of this branch has the code and configs but none of these files.
 Fetch the ones you need from S3.
 
-`docs/large_files.tsv` lists the 264 removed files (171 MB): repo path, sha256, size, and
+`docs/large_files.tsv` lists the 264 removed files (171 MB), plus the three experiment 1 clones
+(see below): repo path, sha256, size, and
 the key of the copy on S3 (`s3://chm-algorithmic-institutions`, see `docs/s3_layout.md`).
 That key is usually not the repo path: for example
 `artifacts/artificial_humans/raven_script_22/...` is under
@@ -13,12 +14,18 @@ That key is usually not the repo path: for example
 
 | | files | MB |
 |---|---|---|
-| on S3 | 87 | 36 |
+| on S3 | 90 | 36 |
 | only in the LFS history | 177 | 135 |
 
 Every file is still in Git LFS. Commit `720a7075` (tag `lfs-archive/yannik-handover`) and the
 history before it hold the LFS pointers, and GitHub's LFS store has every object
 (checked 2026-11-03 by fetching all 264 into a fresh clone). Other branches still use LFS.
+
+The experiment 1 clones the RL manager was trained and evaluated against
+(`artifacts/behavioral_cloning/{21_contribution_model_v4,22_contribution_valid_model_v4,23_punishment_autoregressive_v4}`)
+were deleted before the LFS removal (18755cfb), so the table did not list them. They were
+restored from the LFS objects of b69c994e and are on S3 under `experiment_1/models/`
+(`contribution_clones/` and `humanlike_manager_clones/`), checked by sha256 on 2026-11-05.
 
 ## Fetch
 
