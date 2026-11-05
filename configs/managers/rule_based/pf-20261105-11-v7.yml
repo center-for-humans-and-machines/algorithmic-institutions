@@ -1,0 +1,63 @@
+params:
+  T:
+    definition: >-
+      opening target contribution; in rounds 0..S a player contributing T or
+      more is never punished. Fixed at v4's best-known value (13.29), the best
+      paired final of six versions of this window
+    type: float
+  A:
+    definition: >-
+      opening tap: the fixed punishment any player below the target gets in
+      rounds 0..S, whatever the size of the shortfall. Fixed at v4's 2.43
+    type: float
+  B:
+    definition: >-
+      opening price per point of shortfall, added to the tap, so in rounds 0..S
+      a player contributing c < T is punished A + B * (T - c). Fixed at v4's 1.76
+    type: float
+  S:
+    definition: >-
+      last round of the opening window. The window builds the cooperative
+      regime (mean contribution 11.5 -> 17); later broad fines no longer cover
+      their double cost. Fixed at 8
+    type: int
+  F:
+    definition: >-
+      late floor: after the opening window, a player contributing less than F
+      (a collapse to near zero) is punished, and nobody else is; contributions
+      are whole points, so F in (k, k+1] fines c <= k. Collapsed
+      clones do not come back by themselves, but a cap-level fine brings them
+      back by ~8-10 points for many rounds, and the others follow them up
+    type: float
+  E:
+    definition: >-
+      end of the late floor: it runs in rounds S+1 up to (not including) E,
+      and from there on nobody is punished,
+      because too few rounds are left for a recovered contribution to repay
+      the fine's double cost
+    type: float
+  L:
+    definition: >-
+      the late floor's fine. The zeros' response grows faster than the fine
+      (return per point 0.14 at 12, 0.33 at 30), so it is fixed at the cap, 30
+    type: float
+sweep_config:
+  T: 13.28734753818213
+  A: 2.4262768157156414
+  B: 1.7607020146886698
+  S: 8
+  F: [0.5, 4.5]
+  E: [11.5, 18.5]
+  L: 30
+constraints:
+  - E > S
+code: |
+  cur = c[..., -1]
+  ok = valid[..., -1] > 0
+  shortfall = th.relu(T - cur)
+  opening = th.where(shortfall > 0, A + B * shortfall, th.zeros_like(cur))
+  floor_fine = th.where(ok & (cur < F), L * th.ones_like(cur), th.zeros_like(cur))
+  in_open = (t <= S)
+  in_late = (t > S) & (t < E)
+  late = th.where(in_late, floor_fine, th.zeros_like(cur))
+  punishment = th.where(in_open, opening, late)
