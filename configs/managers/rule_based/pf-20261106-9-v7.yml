@@ -1,0 +1,54 @@
+params:
+  k0:
+    definition: >-
+      punishment points per contribution point a member falls short of the
+      group's mean contribution, beyond the tolerance s0, in round 0 of the
+      game (the opening initiation of the original members, set blind,
+      before anything is known about the other manager)
+    type: float
+  k1:
+    definition: >-
+      the same slope in every later initiation round: round 1 for the
+      original members, and a newcomer's first two rounds with us after it
+      joins at the switches after rounds 3 and 7; a round-1 point weighs
+      about twice a round-0 point in the first switch decision, so it gets
+      its own slope
+    type: float
+  s0:
+    definition: >-
+      tolerance, in contribution points below the group's mean this round,
+      that goes unpunished; a negative value also punishes members slightly
+      above the mean
+    type: float
+  r:
+    definition: >-
+      repeat factor: the slope is multiplied by r for a member we already
+      punished in the previous round (the second round of its initiation),
+      because a repeat lifts its contribution and its groupmates' less per
+      point than a first punishment while still costing the pool and
+      members; r = 1 treats repeats like first punishments, r = 0 punishes
+      each member at most once per initiation
+    type: float
+sweep_config:
+  k0: [6.0, 30.0, log]
+  k1: [1.5, 20.0, log]
+  s0: [-1.0, 2.0]
+  r: [0.0, 1.5]
+constraints:
+  - k0 > 0
+  - k1 > 0
+  - r >= 0
+code: |
+  cur = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  n = th.clamp(mine.sum(-1), min=1).unsqueeze(-1)
+  mean = (cur * mine).sum(-1).unsqueeze(-1) / n
+  short = th.clamp(mean - cur - s0, min=0)
+  before = th.flip(in_group[..., :-1], dims=(-1,))
+  tenure = th.cumprod(before, dim=-1).sum(-1)
+  prev = (p[..., -1:] * in_group[..., -2:-1]).sum(-1)
+  rep = th.where(prev > 0.5, r, th.ones_like(prev))
+  slope = th.where(t < 0.5, k0, k1)
+  pos = th.remainder(t, 4)
+  active = (pos < 2) & (t < 10)
+  punishment = slope * rep * short * (tenure < 4) * active * mine
