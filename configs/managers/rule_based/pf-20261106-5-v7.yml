@@ -1,0 +1,48 @@
+params:
+  target_open:
+    definition: contribution level below which a member may be punished in rounds 0 and 1, the opening that sets the group's norm before the first switch decision
+    type: float
+  slope:
+    definition: punishment points per contribution point a selected member falls short of the round's target (the manager clamps at 30, so a large slope deals the full 30 to anyone clearly below the target)
+    type: float
+  k_open:
+    definition: the most members punished in each opening round (0 and 1); only the k_open lowest contributors among those below target_open are punished (ties broken by player index), so the norm is set by making an example of the worst, not by hitting most of a low group
+    type: int
+  target_late:
+    definition: maintenance norm in the first round after the switch decisions of rounds 3, 7 and 11 (rounds 4, 8 and 12), when newcomers have arrived
+    type: float
+  k_late:
+    definition: the most members punished in each maintenance round (4, 8, 12); only the k_late lowest contributors among those below target_late are punished, whatever the group's size
+    type: int
+sweep_config:
+  target_open: [7, 13]
+  slope: [2, 20, log]
+  k_open: [1, 3]
+  target_late: [2, 12]
+  k_late: [1, 2]
+constraints:
+  - slope > 0
+  - k_open >= 1
+  - k_late >= 1
+code: |
+  ct = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  one = th.ones_like(t)
+  # opening: rounds 0 and 1; maintenance: rounds 4, 8, 12; nothing else
+  block = th.floor(t / (4 * one))
+  pos = t - 4 * block
+  is_open = (t < 1.5 * one).float()
+  is_late = ((pos < 0.5 * one) & (block > 0.5 * one) & (block < 3.5 * one)).float()
+  target = target_open * is_open + target_late * is_late
+  k = k_open * is_open + k_late * is_late
+  # rank of each member among my group's valid members, lowest contribution first, ties broken by player index
+  idx = th.cumsum(th.ones_like(ct), -1)
+  ci = ct.unsqueeze(-1)
+  cj = ct.unsqueeze(-2)
+  ii = idx.unsqueeze(-1)
+  jj = idx.unsqueeze(-2)
+  lower = ((cj < ci) | ((cj == ci) & (jj < ii))).float() * mine.unsqueeze(-2)
+  rank = lower.sum(-1)
+  selected = (rank < k - 0.5).float()
+  shortfall = th.relu(target - ct)
+  punishment = slope * shortfall * mine * selected * (is_open + is_late)
