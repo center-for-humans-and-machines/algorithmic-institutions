@@ -1,0 +1,66 @@
+params:
+  k0:
+    definition: >-
+      punishment points per contribution point a member falls short of the
+      group's mean contribution, beyond the tolerance s0, in round 0 of the
+      game (the opening shock, chosen before anything is known about the
+      other manager)
+    type: float
+  k1:
+    definition: >-
+      the same slope in every later initiation round (round 1 of the game
+      and the first two rounds after a newcomer arrives) when the other
+      manager has punished nobody so far
+    type: float
+  w:
+    definition: >-
+      licence from the other manager's harshness: the later initiation
+      slope is k1 * (1 + w * q), q being the other manager's mean
+      punishment per member and round so far (read from p for the players
+      outside our group); a harsh other manager makes our punishment cheaper
+      in members, since players weigh our group's pool per head against the
+      other's
+    type: float
+  s0:
+    definition: >-
+      tolerance, in contribution points below the group's mean this round,
+      that goes unpunished; a negative value also punishes members slightly
+      above the mean
+    type: float
+  quiet:
+    definition: >-
+      number of rounds right before each switch decision (after rounds 3, 7,
+      11, 15, 19) in which nobody is punished; with 2, a member is punished
+      only in the first two rounds of its first block with us
+    type: int
+  t_end:
+    definition: >-
+      first round from which nobody is punished any more (too few rounds
+      left for a newcomer's initiation to repay itself)
+    type: int
+sweep_config:
+  k0: [2.0, 30.0, log]
+  k1: [1.0, 20.0, log]
+  w: [0.0, 0.3]
+  s0: [-0.5, 2.5]
+  quiet: 2
+  t_end: 16
+constraints:
+  - k0 > 0
+  - k1 > 0
+  - w >= 0
+code: |
+  cur = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  n = th.clamp(mine.sum(-1), min=1).unsqueeze(-1)
+  mean = (cur * mine).sum(-1).unsqueeze(-1) / n
+  short = th.clamp(mean - cur - s0, min=0)
+  before = th.flip(in_group[..., :-1], dims=(-1,))
+  tenure = th.cumprod(before, dim=-1).sum(-1)
+  outside = (1 - in_group[..., :-1]) * valid[..., :-1]
+  q = (p * outside).sum(-1).sum(-1) / th.clamp(outside.sum(-1).sum(-1), min=1)
+  later = k1 * (1 + w * q)
+  slope = th.where(t < 0.5, k0 * th.ones_like(later), later).unsqueeze(-1)
+  pos = th.remainder(t, 4)
+  active = (t < t_end) & (pos < 4 - quiet)
+  punishment = slope * short * (tenure < 4) * active * mine
