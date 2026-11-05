@@ -161,3 +161,42 @@ This campaign plays 125 games per opponent per sweep point and 2000 per final po
 ## Progress
 
 - 2026-11-05: decisions agreed (above); implementation started on `pf-multi-opponent`.
+- 2026-11-05: steps 1–5 built (3dc21c2a, a9852a91, 044dfbcc, 453744d7, 6a69054b).
+  - Levin's rule ported. On random histories it returns exactly the original's
+    punishments. In group 0 it scores 69.1 ± 1.0 against `ah` (#219: 69.8; the pre-#235
+    code run here: 69.5 ± 1.5).
+  - **Seat effect.** Punishing governors score about 3 points lower in group 1 than in
+    group 0 (Levin 69.1 against 65.6, `prev_best` 74.8 against 72.1, `zero` 60.6 against
+    60.0). Sweeps seat every point in group 0, so references use that seat
+    (`pool_scores.seated`); the head-to-head must keep one seat or report both.
+  - **Reference matrix** (`32_LEVIN_multi_reference`, job 31935035, seed 8000, group 0,
+    mean over the four opponents):
+
+    | Manager | Mean |
+    |---|---|
+    | `prev_best` | 70.8 |
+    | Cem's best | 69.3 |
+    | Levin | 66.5 |
+    | `zero` | 58.7 |
+    | `thr9_p10` | 57.9 |
+    | `ah` | 54.8 |
+
+    Every manager scores lowest against `zero` (44.6–63.1).
+  - **Export.** The first smoke's export failed the opponent-term check on old plotting
+    and baseline scripts, the punisher clone's configs and a login script; they are now
+    denied for exp2_multi.
+    - What remains is code (`src/`, which names manager types generically), the player
+      clones' configs, the game doc and the human data.
+    - Also found: `30_EXP1`/`31_EXP1_confirm` named exp1 instances and would have failed
+      every later export; they are now in the global deny list.
+- 2026-11-05 14:41: smoke (step 6) passed.
+  - `pfsmoke-multi`: 16 points × 50 games per opponent, final 6 × 200; 59.8 ± 1.5 in
+    16 min. Knowing only "another manager", the agent made its rule adaptive: it caps its
+    own punishment at the other manager's recent mean, read from `p`.
+  - `pfsmoke-multi-v2` (`--iterate-on`, full size: 256 × 125 per opponent in 2 parts,
+    final 6 × 2000 per opponent): 69.06 ± 0.55 in 26 min (agent 5 min, sweep 11 min,
+    final 5 min). Its export held v1's results under `opponent_1..4` only. The agent
+    read them per opponent, then profiled each opponent from the per-round frames, e.g.
+    "opponent_4 never punishes".
+  - The page (`PF_SETTING=exp2_multi`) shows a column per opponent and the
+    per-opponent table with the references.
