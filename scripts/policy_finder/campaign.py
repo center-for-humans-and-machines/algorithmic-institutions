@@ -310,6 +310,7 @@ class Campaign:
                     "best_of_n": score.get("best_of_n"),
                     "best_of_n_se": score.get("best_of_n_se"),
                     "n_points": score.get("n_points"),
+                    "pools": score.get("pools"),
                     "agent_cost_usd": round(cost, 2),
                     "times": state.get("times", {}),
                 })
@@ -324,14 +325,24 @@ class Campaign:
                 return ""
             return f"{x:.2f}" + (f" ± {se:.2f}" if se is not None else "")
 
+        # against each opponent, when the setting has several (exp2_multi)
+        rivals = sorted({k for r in rows for k in (r.get("pools") or {})})
+        extra = "".join(f" {k} |" for k in rivals)
         lines = [f"# Campaign {self.path.stem}", "",
-                 "| gen | version | status | GP peak | best of n | agent, API-equivalent $ |",
-                 "|---|---|---|---|---|---|"]
+                 f"| gen | version | status | GP peak | best of n |{extra}"
+                 " agent, API-equivalent $ |",
+                 "|---|---|---|---|---|" + "---|" * len(rivals) + "---|"]
         for r in rows:
             status = r["status"] + (f" ({r['failed_step']})" if r["failed_step"] else "")
+            pools = r.get("pools") or {}
+            cells = "".join(
+                f" {num(pools[k]['pool'], pools[k]['pool_se']) if k in pools else ''} |"
+                for k in rivals
+            )
             lines.append(f"| {r['generation']} | {r['stem']} | {status} "
                          f"| {num(r['pool'], r['pool_se'])} "
-                         f"| {num(r['best_of_n'], r['best_of_n_se'])} | {r['agent_cost_usd']} |")
+                         f"| {num(r['best_of_n'], r['best_of_n_se'])} |{cells}"
+                         f" {r['agent_cost_usd']} |")
         lines += ["", "| lineage | best GP peak |", "|---|---|"]
         for n in sorted(self.lineages(), key=lambda n: -self.lineage_best(n)):
             best = self.lineage_best(n)

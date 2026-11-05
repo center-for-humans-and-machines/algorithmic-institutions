@@ -38,8 +38,9 @@ SWEEP_DIR = "plots/simulation/policy_finder/{name}_sweep"
 LANDSCAPES = "landscapes.json"
 FINAL = "final"
 #: The game the shown instances play (manager/rule.py SETTINGS): exp2, two
-#: groups scored by the pool against `ah`, or exp1, one group scored by the
-#: average payoff (PF_SETTING; the instances of one worktree root share it).
+#: groups scored by the pool against `ah`; exp2_multi, the mean pool against
+#: several governors; or exp1, one group scored by the average payoff
+#: (PF_SETTING; the instances of one worktree root share it).
 SETTING = os.environ.get("PF_SETTING", "exp2")
 #: The words for the score in each setting, so exp2 reads as before.
 TERMS = {
@@ -49,10 +50,20 @@ TERMS = {
     "exp1": {"score": "avg payoff", "vs": "", "against": "with the clones",
              "root": "never punish", "start": "never punishing",
              "members": "valid players", "subtitle": "on experiment 1's clones"},
+    "exp2_multi": {"score": "mean pool", "vs": " vs the opponents",
+                   "against": "against the four opponents", "root": "never punish",
+                   "start": "never punishing", "members": "members",
+                   "subtitle": "swept against four governors"},
 }[SETTING]
+#: exp2_multi's opponents: opaque key (what sweeps and agents see) -> name
+OPPONENTS_FILE = MAIN / "configs/simulation/opponents/exp2_multi.yml"
+OPPONENTS = (
+    {k: v["name"] for k, v in sorted(yaml.safe_load(OPPONENTS_FILE.read_text()).items())}
+    if SETTING == "exp2_multi" and OPPONENTS_FILE.exists() else {}
+)
 #: The final best's plots (simulation/sweep.py's BEST_PLOTS, ROUND_PLOT)
 BEST_PLOTS = {
-    "comparison_pairing_side.jpg": "Final best vs ah, by side",
+    "comparison_pairing_side.jpg": f"Final best{TERMS['vs']}, by side",
     "group_size_evolution_global.jpg": "Group sizes",
     "best_rounds.jpg": "Final best, per round",
 }
@@ -61,6 +72,7 @@ BEST_PLOTS = {
 REFERENCE = MAIN / {
     "exp2": "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched",
     "exp1": "plots/simulation/29_EXP1_reference",
+    "exp2_multi": "plots/simulation/32_LEVIN_multi_reference",
 }[SETTING]
 REFRESH_S = 5
 
@@ -539,6 +551,23 @@ def scores_vs_ah(per_round: str, mtime: float) -> pd.DataFrame:
     df = pd.read_parquet(per_round)
     if SETTING == "exp1":
         scores = group_payoff_scores(df)
+    elif SETTING == "exp2_multi":
+        # the reference matrix names the opponents (32_LEVIN): each manager's
+        # mean pool over them, as a sweep scores a point
+        df = add_pool(df)
+        each = {o: against_anchor(df, o) for o in OPPONENTS.values()}
+        rows = []
+        for m in set.intersection(*(set(s) for s in each.values())):
+            pools = {o: each[o][m]["pool"].mean() for o in each}
+            ses = [each[o][m]["pool"].std(ddof=1) / len(each[o][m]) ** 0.5 for o in each]
+            rows.append({
+                "manager": m, "episodes": min(len(each[o][m]) for o in each),
+                "pool": sum(pools.values()) / len(pools),
+                "pool se": sum(s * s for s in ses) ** 0.5 / len(ses),
+                "members": sum(each[o][m]["members"].mean() for o in each) / len(each),
+                **{f"vs {o}": v for o, v in pools.items()},
+            })
+        return pd.DataFrame(rows)
     else:
         scores = against_anchor(add_pool(df), "ah")
     return pd.DataFrame(
@@ -576,6 +605,33 @@ def reference_html(best_pool: float) -> str:
     return (
         f'<div class="refs">{tiles}</div>'
         f'<div class="ref-src">{esc(refs.get("source", ""))}</div>'
+    )
+
+
+def opponents_html(final: dict) -> str:
+    """exp2_multi: the final best's pool against each opponent, beside the
+    references' (references.json rows with `pools`, by opponent name)."""
+    pools = final.get("pools") or {}
+    if not pools:
+        return ""
+    names = [(k, OPPONENTS.get(k, k)) for k in sorted(pools)]
+    head = "".join(f"<th>{esc(n)}<small>{esc(k)}</small></th>" for k, n in names)
+    cells = "".join(
+        f'<td><b>{pools[k]["pool"]:.1f}</b><small>± {pools[k]["pool_se"]:.1f}</small></td>'
+        for k, _ in names
+    )
+    body = [f'<tr class="best"><td class="txt">final best</td>{cells}'
+            f'<td><b>{final["pool"]:.1f}</b></td></tr>']
+    for r in references().get("rows", []):
+        if "pools" not in r:
+            continue
+        ref = "".join(
+            f'<td>{r["pools"][n]:.1f}</td>' if n in r["pools"] else "<td></td>" for _, n in names
+        )
+        body.append(f'<tr><td class="txt">{esc(r["name"])}</td>{ref}<td>{r["pool"]:.1f}</td></tr>')
+    return (
+        '<div class="agents opp"><table><thead><tr><th class="txt"></th>'
+        f'{head}<th>mean</th></tr></thead><tbody>{"".join(body)}</tbody></table></div>'
     )
 
 
@@ -797,6 +853,14 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
         f" median point {points.pool.median():.1f}."
     )
     out = [("html", stats_html(tiles))]
+    if final and final.get("pools"):
+        out += [
+            ("section", "Against each opponent"),
+            ("caption", "The final best's pool against each governor it plays, the"
+             " agent's opaque key under each name, beside the reference managers'"
+             " pools against the same governors (references.json)."),
+            ("html", opponents_html(final)),
+        ]
     if final:
         refs = reference_html(final["pool"])
         if refs:
@@ -1103,6 +1167,8 @@ def version_row(wt: Path, version: str, key: str, summary: dict) -> dict:
         row.update(
             {"best pool": best["pool"], "se": best["pool_se"], "members": best["members"]}
         )
+        for k, v in (best.get("pools") or {}).items():
+            row[f"vs {OPPONENTS.get(k, k)}"] = v["pool"]
     notes = read(wt / "notes/policy_finder" / f"{version}.md")
     if notes:
         sections = parse_notes(notes)
@@ -1504,7 +1570,9 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
             f'<a class="open" href="{href}" target="_self">{name}</a>'
             + (f'<div class="idea">{esc(idea)}</div>' if idea else "")
             + "</td>"
-            f'<td class="txt">{hit}{cell}</td><td>{hit}{num(r, "members", ".2f")}</td>'
+            f'<td class="txt">{hit}{cell}</td>'
+            + "".join(f'<td>{hit}{num(r, f"vs {o}", ".1f")}</td>' for o in OPPONENTS.values())
+            + f'<td>{hit}{num(r, "members", ".2f")}</td>'
             f'<td class="txt">{hit}{esc(r["version label"])}'
             f'<span class="se"> of {r["versions"]}</span></td>'
             f'<td>{hit}{num(r, "params", ".0f")}</td>'
@@ -1512,8 +1580,8 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
             f"{esc(category)}</span></td>"
             f'<td class="txt tags">{hit}{tags}</td></tr>'
         )
-    heads = ("agent", "final best", TERMS["members"], "version", "params",
-             "policy category", "rules included")
+    heads = ("agent", "final best", *(f"vs {o}" for o in OPPONENTS.values()),
+             TERMS["members"], "version", "params", "policy category", "rules included")
     head = "".join(
         f'<th class="{"txt" if h in ("agent", "final best", "version", "policy category", "rules included") else ""}">'
         f"{h}</th>"

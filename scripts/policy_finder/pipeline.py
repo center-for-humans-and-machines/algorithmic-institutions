@@ -459,6 +459,10 @@ class Version:
             "best_of_n_name": top["name"], "best_of_n_params": top["params"],
             "n_points": final["n_points"],
         }
+        if "pools" in gp:  # against each opponent (pool_vs_opponents)
+            self.data["score"]["pools"] = {
+                k: {"pool": v["pool"], "pool_se": v["pool_se"]} for k, v in gp["pools"].items()
+            }
         self.commit([self.final], "final run")
 
 
