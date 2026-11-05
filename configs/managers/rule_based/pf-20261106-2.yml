@@ -1,0 +1,52 @@
+params:
+  T:
+    definition: >-
+      target contribution; a member contributing less than T this round is
+      punished in proportion to the shortfall T - c, members at or above T
+      are never punished
+    type: float
+  s:
+    definition: >-
+      punishment points per point of shortfall below T (the base severity,
+      before the timing and opponent factors)
+    type: float
+  d:
+    definition: >-
+      factor on the punishment in the rounds right before a switch decision
+      (rounds 3, 7, 11, 15, 19), where punishment drives players out most;
+      0 = no punishment then, 1 = no damping
+    type: float
+  L:
+    definition: >-
+      number of final rounds in which nobody is punished, because too few
+      rounds remain for the raised contributions to repay the points
+    type: int
+  k:
+    definition: >-
+      how much the severity grows with the other manager's punishment per
+      contributing member per round over the last 4 rounds; the rule stays
+      lenient against a lenient opponent and may punish more, while still
+      looking milder, against a harsh one
+    type: float
+sweep_config:
+  T: [2, 16]
+  s: [0.05, 2, log]
+  d: [0, 1]
+  L: [0, 6]
+  k: [0, 1.5]
+constraints:
+  - T > 0
+  - s > 0
+  - d >= 0
+  - L >= 0
+  - k >= 0
+code: |
+  cnow = c[..., -1]
+  deficit = th.clamp(T - cnow, min=0) * valid[..., -1]
+  decision = ((th.remainder(t, 4) == 3) & (t < 20)).float()
+  damp = 1 - decision * (1 - d)
+  active = (t < 24 - L).float()
+  other = (1 - in_group[..., :-1][..., -4:]) * valid[..., :-1][..., -4:]
+  opp_total = (p[..., -4:] * other).sum(dim=(-2, -1))
+  opp_rate = opp_total / th.clamp(other.sum(dim=(-2, -1)), min=1)
+  punishment = s * deficit * damp * active * (1 + k * opp_rate).unsqueeze(-1)
