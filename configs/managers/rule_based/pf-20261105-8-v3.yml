@@ -1,0 +1,54 @@
+params:
+  standard:
+    definition: >-
+      the contribution standard; a valid player contributing less than this is
+      punished, at or above it never
+    type: float
+  dose:
+    definition: >-
+      the punishment of a player who contributes nothing (the largest shortfall);
+      the manager clamps it at 30
+    type: float
+  curvature:
+    definition: >-
+      how the punishment grows with the shortfall: punishment = dose *
+      (shortfall / standard) ** curvature; above 1 the punishment is
+      concentrated on the free riders and small shortfalls get only a light touch
+    type: float
+  horizon:
+    definition: >-
+      the main phase: in rounds t < horizon (0-based) every player below the
+      standard is punished; afterwards a raise bought from a near-standard or
+      mid contributor has too few rounds left to repay it
+    type: int
+  floor:
+    definition: >-
+      the free-rider line of the tail phase: after the horizon only players
+      contributing less than this are still punished (with the same dose curve),
+      since a free rider's raise and its spillover to the group repay a point
+      for longer than a mid contributor's
+    type: float
+  tail:
+    definition: >-
+      the length of the tail phase in rounds: free riders below the floor are
+      punished in rounds horizon <= t < horizon + tail, nobody after that;
+      0 switches the tail off
+    type: int
+sweep_config:
+  standard: [14, 24]
+  dose: [22, 40]
+  curvature: [1.2, 3.6, log]
+  horizon: [5, 13]
+  floor: [1, 10]
+  tail: [0, 12]
+constraints:
+  - standard > 0
+  - dose > 0
+  - curvature > 0
+  - floor > 0
+code: |
+  now = c[..., -1]
+  base = dose * (th.clamp(standard - now, min=0) / standard) ** curvature
+  main = (t < horizon).to(now.dtype)
+  late = ((t >= horizon) & (t < horizon + tail)).to(now.dtype) * (now < floor).to(now.dtype)
+  punishment = base * th.clamp(main + late, max=1) * valid[..., -1]
