@@ -224,3 +224,12 @@ category list will differ from experiment 2's. New categories are drawn up from 
   25 s, sweep 9 min, final 7 min. The export held the exp1 agent as `policy-finder`, the
   pilot data, `29_EXP1_reference` and `basics_exp1.md`, and no RL manager, baseline config
   or experiment 2 game. Instances live in `pf_runs/worktrees_exp1/`.
+- 2026-11-05 05:24: campaign `exp1-2026-11` done (step 7): 36 versions, all scored, 4 h 21 min,
+  $48.95 API-equivalent. Best GP peak `-7-v3` 656.05 (generation 3); lineage bests -7 656.05,
+  -3 655.91, -8 654.47, -11 651.45. All 36 beat zero punishment; categories in
+  `pf_runs/worktrees_exp1/summary.json` (opening shock + late net 14 versions, mean 654.2).
+- 2026-11-05 06:47: head-to-head (step 9, `30_EXP1_pf_vs_rl`, job 31924549, seed 6000, 2000
+  games): `-7-v3` 658.0 ± 1.3, deployed RL 657.2 ± 1.2 (+0.8 ± 1.8), `-8-v7` 655.1, `-3-v4`
+  654.6, zero 587.7, human-like 548.8. The best rule ties the RL manager and matches its
+  punishment by round and by contribution in the first four rounds. Report:
+  `docs/reports/policy_finder_exp1_vs_rl.md`.
