@@ -1,0 +1,37 @@
+params:
+  thr:
+    definition: shock standard; in the shock phase a player contributing less than thr gets a dose growing convexly with its shortfall thr - c (full contributors, c = 20, are never shocked)
+    type: int
+  pmax:
+    definition: shock dose for a zero contributor, pmax * ((thr - c) / thr) ** gamma, clamped to 30; above 30 more of the low contributors get the full 30
+    type: float
+  gamma:
+    definition: curvature of the shock dose in the shortfall; above 1 keeps big doses for free riders and gives moderate contributors much less
+    type: float
+  horizon:
+    definition: first round without shock doses (the shock phase is rounds 0..horizon-1)
+    type: int
+  nudge:
+    definition: standing small punishment, in points, for every player contributing less than mthr (maintenance that stops the slow decline of the cooperators)
+    type: int
+  mthr:
+    definition: maintenance standard; a player contributing less than mthr gets at least the nudge
+    type: int
+  stop:
+    definition: first round without nudges (nudges run in rounds 0..stop-1), since a nudge needs a few rounds left to repay its cost
+    type: int
+sweep_config:
+  thr: [15, 22]
+  pmax: [18, 45]
+  gamma: [1.0, 3.2]
+  horizon: [4, 16]
+  nudge: [0, 4]
+  mthr: [13, 20]
+  stop: [8, 23]
+code: |
+  cnow = c[..., -1]
+  shortfall = th.clamp(thr - cnow, min=0)
+  frac = th.clamp(shortfall / thr, min=0, max=1)
+  big = th.clamp(pmax * th.pow(frac, gamma), max=30) * (cnow < 20).float() * (t < horizon).float()
+  small = nudge * (cnow < mthr).float() * (t < stop).float()
+  punishment = th.maximum(big, small) * valid[..., -1]
