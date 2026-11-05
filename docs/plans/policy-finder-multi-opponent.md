@@ -215,3 +215,21 @@ This campaign plays 125 games per opponent per sweep point and 2000 per final po
     "opponent_4 never punishes".
   - The page (`PF_SETTING=exp2_multi`) shows a column per opponent and the
     per-opponent table with the references.
+- 2026-11-05 15:07: campaign `exp2-multi-2026-11` started (step 7), both seats, on
+  `pf-multi-opponent` (040a3367).
+- 2026-11-05: reference matrix rerun with both seats for every row (job 31937417, seed
+  8000, 2000 games per pairing, 4000 per cell). Mean over the four opponents (± 0.4):
+
+  | Manager | Mean |
+  |---|---|
+  | `prev_best` | 70.0 |
+  | Cem's best | 68.9 |
+  | Levin | 66.1 |
+  | `zero` | 58.4 |
+  | `thr9_p10` | 58.0 |
+  | `ah` | 53.9 |
+
+  Every manager scores lowest against `zero` (44.5–61.1). The page's references
+  (`pf_runs/worktrees_multi/references.json`) are these. Seat check on this run: group 0
+  ahead by +0.37 ± 0.15 per group over 18 independent tests. The both-seat design
+  cancels it.
