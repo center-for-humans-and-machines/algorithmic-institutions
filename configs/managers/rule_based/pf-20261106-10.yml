@@ -1,0 +1,55 @@
+params:
+  slope:
+    definition: >-
+      punishment points per contribution point a member falls short of the
+      tolerated level (this round's mean contribution of the group's valid
+      members minus tol)
+    type: float
+  tol:
+    definition: >-
+      how many points below the group's mean a member may contribute before
+      being punished at all
+    type: float
+  cap:
+    definition: >-
+      the most any one member is punished in a round (small doses buy the
+      most contribution per point)
+    type: float
+  base:
+    definition: >-
+      the group's punishment budget per member and round when the other
+      manager punishes nothing
+    type: float
+  ratio:
+    definition: >-
+      budget added per point of the other manager's mean punishment per member
+      and round over the last 4 rounds (below 1 keeps this group the milder
+      one, which draws switchers)
+    type: float
+sweep_config:
+  slope: [0.1, 3, log]
+  tol: [0, 8]
+  cap: [1, 20, log]
+  base: [0, 4]
+  ratio: [0, 2]
+constraints:
+  - slope > 0
+  - cap >= 1
+  - base >= 0
+  - ratio >= 0
+code: |
+  cn = c[..., -1]
+  now = in_group[..., -1] * valid[..., -1]
+  n = th.clamp(now.sum(-1, keepdim=True), min=1.0)
+  gm = (cn * now).sum(-1, keepdim=True) / n
+  raw = th.clamp(slope * (gm - tol - cn), min=0.0)
+  raw = th.minimum(raw, cap * th.ones_like(raw)) * now
+  planned = raw.sum(-1, keepdim=True) / n
+  pw = p[..., -4:]
+  other = (1.0 - in_group[..., :-1][..., -4:]) * valid[..., :-1][..., -4:]
+  opp_pm = (pw * other).sum(-1).sum(-1, keepdim=True) / th.clamp(other.sum(-1).sum(-1, keepdim=True), min=1.0)
+  budget = base + ratio * opp_pm
+  scale = th.clamp(budget / th.clamp(planned, min=1e-6), max=1.0)
+  decision = (th.remainder(t, 4.0) == 3.0) & (t < 20.0)
+  quiet = (decision | (t >= 23.0)).float()
+  punishment = th.round(raw * scale) * (1.0 - quiet)
