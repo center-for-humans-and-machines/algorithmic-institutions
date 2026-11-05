@@ -218,3 +218,9 @@ category list will differ from experiment 2's. New categories are drawn up from 
   under its `metric` (`group_payoff` here) instead of adding `score`, so the pipeline, the
   fit and the campaign read it unchanged. The observation app labels it by `PF_SETTING`.
   The experiment 2 path regenerates byte for byte.
+- 2026-11-05 01:03: smoke (step 6) passed. `pfsmoke-exp1` (16 points × 50 games, final
+  6 × 200) scored 653.4 ± 4.2 in 13 min. `pfsmoke-exp1-v2` (`--iterate-on`, full size: 256 ×
+  500 in 2 parts, final 6 × 2000) scored 644.1 ± 1.3 in 23 min: agent 4 min, image check
+  25 s, sweep 9 min, final 7 min. The export held the exp1 agent as `policy-finder`, the
+  pilot data, `29_EXP1_reference` and `basics_exp1.md`, and no RL manager, baseline config
+  or experiment 2 game. Instances live in `pf_runs/worktrees_exp1/`.
