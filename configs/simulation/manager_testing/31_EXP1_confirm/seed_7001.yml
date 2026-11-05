@@ -1,0 +1,60 @@
+# Experiment 1, confirmation of the head-to-head (30_EXP1_pf_vs_rl): the same three
+# policy-finder rules at their GP peaks and the deployed RL manager, 2000 games on seed
+# 7001. Seeds 7000-7004 together give 10000 games per manager, on seeds no sweep, final
+# run or earlier sim used, to check whether the best rule's 658.0 on seed 6000 was lucky.
+# Report: docs/reports/policy_finder_exp1_vs_rl.md
+
+seed: 7001
+artificial_humans:
+  exp1:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+managers:
+  pf_7:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-7-v3.yml
+    params:
+      free_rider_fine: 29.71338404198894
+      curvature: 2.1769873977170433
+      window: 7
+      net_floor: 2
+      net_end: 16
+      net_scale: 0.8484157973484898
+    setting: exp1
+  rl_deployed:
+    type: rl
+    path: artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt
+  pf_3:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-3-v4.yml
+    params:
+      thr: 24
+      pmax: 30.07813169262534
+      gamma: 2.9260147554989424
+      horizon: 7
+      lthr: 4
+      lstop: 15
+    setting: exp1
+  pf_8:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-8-v7.yml
+    params:
+      free: 34.0
+      mid: 6.919797558816308
+      horizon: 7
+      high: 20.0
+      end: 18
+    setting: exp1
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: default
+episode_batch_size: 1
+output_dir: plots/simulation/31_EXP1_confirm/seed_7001
+figure_name: EXP1_confirm_7001
+save_per_round: true
+basedir: .
