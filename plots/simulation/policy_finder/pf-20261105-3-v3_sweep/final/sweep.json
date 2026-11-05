@@ -1,0 +1,128 @@
+{
+  "best": {
+    "thr": 15,
+    "pmax": 33.9115159536044,
+    "gamma": 1.7533378642588127,
+    "horizon": 13,
+    "nudge": 4,
+    "mthr": 14,
+    "stop": 8
+  },
+  "best_name": "pf-20261105-3-v3_gp",
+  "rule": "configs/managers/rule_based/pf-20261105-3-v3.yml",
+  "anchor": null,
+  "metric": "group_payoff",
+  "score": "experiment 1's average payoff: per round the mean payoff of the valid (not timed-out) players, 20 - c - p + (1.6*sum(c) - sum(p))/n over them, summed over the episode's rounds, mean over episodes; pool_se its standard error over episodes",
+  "seed": 1000,
+  "n_episodes": 2000,
+  "episode_batch_size": 1000,
+  "points": [
+    {
+      "name": "pf-20261105-3-v3_gp",
+      "params": {
+        "thr": 15,
+        "pmax": 33.9115159536044,
+        "gamma": 1.7533378642588127,
+        "horizon": 13,
+        "nudge": 4,
+        "mthr": 14,
+        "stop": 8
+      },
+      "pool": 648.2911750545353,
+      "pool_se": 1.3392544645787432,
+      "members": 3.9265,
+      "n_episodes": 2000
+    },
+    {
+      "name": "pf-20261105-3-v3_s152",
+      "params": {
+        "thr": 22,
+        "pmax": 36.863274042494595,
+        "gamma": 3.085201998986304,
+        "horizon": 11,
+        "nudge": 0,
+        "mthr": 17,
+        "stop": 13
+      },
+      "pool": 650.9456083066699,
+      "pool_se": 1.2804371957013898,
+      "members": 3.9235625,
+      "n_episodes": 2000
+    },
+    {
+      "name": "pf-20261105-3-v3_s172",
+      "params": {
+        "thr": 19,
+        "pmax": 38.56374721694738,
+        "gamma": 2.246414990350604,
+        "horizon": 9,
+        "nudge": 0,
+        "mthr": 18,
+        "stop": 14
+      },
+      "pool": 651.0703997013109,
+      "pool_se": 1.3058370214268473,
+      "members": 3.9261875,
+      "n_episodes": 2000
+    },
+    {
+      "name": "pf-20261105-3-v3_s229",
+      "params": {
+        "thr": 18,
+        "pmax": 29.41812877357006,
+        "gamma": 1.6912159640341997,
+        "horizon": 8,
+        "nudge": 3,
+        "mthr": 13,
+        "stop": 10
+      },
+      "pool": 650.885724754259,
+      "pool_se": 1.3547463534495539,
+      "members": 3.9266666666666663,
+      "n_episodes": 2000
+    },
+    {
+      "name": "pf-20261105-3-v3_s154",
+      "params": {
+        "thr": 18,
+        "pmax": 40.13197395019233,
+        "gamma": 2.505155412852764,
+        "horizon": 16,
+        "nudge": 3,
+        "mthr": 16,
+        "stop": 8
+      },
+      "pool": 646.9734581141037,
+      "pool_se": 1.4581220372585622,
+      "members": 3.926625,
+      "n_episodes": 2000
+    },
+    {
+      "name": "pf-20261105-3-v3_s110",
+      "params": {
+        "thr": 15,
+        "pmax": 33.390852321870625,
+        "gamma": 1.4090802038088441,
+        "horizon": 15,
+        "nudge": 4,
+        "mthr": 18,
+        "stop": 12
+      },
+      "pool": 644.7610827466622,
+      "pool_se": 1.4582571968217042,
+      "members": 3.923354166666667,
+      "n_episodes": 2000
+    }
+  ],
+  "best_of_n": {
+    "thr": 19,
+    "pmax": 38.56374721694738,
+    "gamma": 2.246414990350604,
+    "horizon": 9,
+    "nudge": 0,
+    "mthr": 18,
+    "stop": 14
+  },
+  "best_of_n_name": "pf-20261105-3-v3_s172",
+  "n_points": 6
+}
