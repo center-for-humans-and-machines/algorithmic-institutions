@@ -233,3 +233,26 @@ This campaign plays 125 games per opponent per sweep point and 2000 per final po
   (`pf_runs/worktrees_multi/references.json`) are these. Seat check on this run: group 0
   ahead by +0.37 ± 0.15 per group over 18 independent tests. The both-seat design
   cancels it.
+- 2026-11-05 20:13: campaign done, 36 versions in 5 h 6 min, $42 API-equivalent (plan, not
+  billed). Lineage bests, at the final's GP peak (2000 games per opponent, ± 0.55):
+
+  | Version | Mean | opp_1 | opp_2 | opp_3 | opp_4 |
+  |---|---|---|---|---|---|
+  | `pf-20261106-9-v5` | 68.93 | 70.82 | 69.94 | 73.98 | 61.00 |
+  | `pf-20261106-11-v7` | 68.91 | 70.94 | 70.00 | 74.38 | 60.31 |
+  | `pf-20261106-7-v5` | 68.86 | 71.65 | 69.20 | 74.15 | 60.46 |
+  | `pf-20261106-5-v3` | 68.52 | 70.15 | 70.00 | 72.98 | 60.93 |
+
+  opp_1..4 are Levin, `ah`, `prev_best`, `zero`. On the reference matrix,
+  `prev_best` scores 70.0 (71.2 / 73.2 / 74.5 / 61.1). So no new rule is ahead of the
+  earlier ah-only champion on the multi-opponent objective. Its edge is against `ah`
+  (+3 points); against the other three the new rules tie.
+  - Adaptation: 11 of 12 v1 rules read the other group's `p`, to stay milder or to take
+    licence from a harsh opponent. Every lineage measured the effect and later dropped it
+    as flat; `9-v5` (w capped at 0.3) and `11-v2`/`11-v5` are the exceptions. By v2–v3 the
+    agents had profiled the opponents accurately from per-round data, e.g. "opponent 4
+    never punishes", Levin's block-start spikes, and `prev_best`'s block-timed fines. No
+    agent named or guessed an identity.
+  - Step 8 started: `33_MULTI_h2h`, seeds 20000/21000/22000, the top 3 plus a `w = 0`
+    ablation of `9-v5` and the five references, against the 4 training opponents,
+    held-out Cem's best and `thr9_p10`, and self-play, both seats.
