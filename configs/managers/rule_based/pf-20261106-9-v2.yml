@@ -1,0 +1,46 @@
+params:
+  k:
+    definition: >-
+      punishment points per contribution point a member falls short of the
+      group's mean contribution this round, beyond the tolerance s0
+    type: float
+  s0:
+    definition: >-
+      tolerance, in contribution points below the group's mean this round,
+      that goes unpunished; a negative value also punishes members slightly
+      above the mean
+    type: float
+  cap:
+    definition: >-
+      the most any one member is punished in a round (the game's own limit
+      is 30); a low cap with a high k punishes everyone below the target by
+      the same flat amount
+    type: float
+  quiet:
+    definition: >-
+      number of rounds right before each switch decision (after rounds 3, 7,
+      11, 15, 19) in which nobody is punished; 0 punishes in every round
+    type: int
+  t_end:
+    definition: >-
+      first round from which nobody is punished any more (too few rounds
+      left for the contribution gain to repay the punishment); 24 never stops
+    type: int
+sweep_config:
+  k: [0.5, 30.0, log]
+  s0: [-3.0, 5.0]
+  cap: [4.0, 30.0]
+  quiet: [0, 3]
+  t_end: [4, 24]
+constraints:
+  - k > 0
+  - cap > 0
+code: |
+  cur = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  n = th.clamp(mine.sum(-1), min=1).unsqueeze(-1)
+  mean = (cur * mine).sum(-1).unsqueeze(-1) / n
+  short = th.clamp(mean - cur - s0, min=0)
+  pos = th.remainder(t, 4)
+  active = (t < t_end) & ((pos < 4 - quiet) | (t >= 20))
+  punishment = th.minimum(k * short, cap * th.ones_like(cur)) * active * mine
