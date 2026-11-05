@@ -1,0 +1,61 @@
+params:
+  standard:
+    definition: >-
+      the contribution standard from round 1 on; a valid player contributing less
+      than this is punished in the main phase, at or above it never
+    type: float
+  rate:
+    definition: >-
+      steepness of the punishment curve: about the fraction by which the punishment
+      falls per point of contribution near zero; punishment = dose * (shortfall /
+      standard) ** (rate * standard), so the curve's exponent grows with the standard
+      and the steepness stays rate whatever the cut-off
+    type: float
+  dose:
+    definition: >-
+      the punishment of a player who contributes nothing; the manager clamps it at 30
+    type: float
+  opening:
+    definition: >-
+      the standard of round 0 alone (same dose and rate): round-0 contributions are made
+      before anybody has seen the manager, and it is the most expensive round, so it
+      may want a different cut-off
+    type: float
+  horizon:
+    definition: >-
+      end of the main phase: in rounds t < horizon (0-based) everyone below the standard
+      is punished; afterwards a raise bought from a mid contributor has too few rounds
+      left to repay it
+    type: int
+  floor:
+    definition: >-
+      the free-rider line after the main phase: in rounds horizon <= t < end only players
+      contributing less than this are still punished (same curve); at or below 1 only
+      players who give nothing
+    type: float
+  end:
+    definition: >-
+      the first round (0-based) in which nobody is punished any more; the free-rider
+      phase runs from horizon to end - 1 (empty if end <= horizon)
+    type: int
+sweep_config:
+  standard: [17, 32]
+  rate: [0.07, 0.18, log]
+  dose: [22, 42]
+  opening: [6, 30]
+  horizon: [2, 10]
+  floor: [0.5, 8, log]
+  end: [9, 24]
+constraints:
+  - standard > 0
+  - opening > 0
+  - rate > 0
+  - dose > 0
+  - floor > 0
+code: |
+  now = c[..., -1]
+  s = th.where(t < 1, opening, standard)
+  base = dose * (th.clamp(s - now, min=0) / s) ** (rate * s)
+  main = (t < horizon).to(now.dtype)
+  late = ((t >= horizon) & (t < end)).to(now.dtype) * (now < floor).to(now.dtype)
+  punishment = base * th.clamp(main + late, max=1) * valid[..., -1]
