@@ -53,6 +53,10 @@ DENY = (
     "configs/simulation/manager_testing/26_LEVIN_ah_vs_pf_top_batched.yml",
     "configs/simulation/manager_testing/27_LEVIN_pf_proxy_vs_cem_batched.yml",
     "configs/simulation/manager_testing/28_EXP1_baselines.yml",
+    "configs/simulation/manager_testing/30_EXP1_pf_vs_rl.yml",
+    "configs/simulation/manager_testing/31_EXP1_confirm",
+    "configs/simulation/opponents",
+    "configs/simulation/manager_testing/32_LEVIN_multi_reference.yml",
     "scripts/policy_finder/observation_app",
     "scripts/policy_finder/campaign.py",
     "scripts/policy_finder/campaigns",
@@ -66,7 +70,7 @@ DENY = (
 SETTINGS = {
     "exp2": {
         "agent_data": AGENT_DATA,
-        "deny": ("docs/reports/basics_exp1.md",),
+        "deny": ("docs/reports/basics_exp1.md", "docs/reports/basics_exp2_multi.md"),
         "agent": ".claude/agents/policy-finder.md",
     },
     "exp1": {
@@ -76,10 +80,39 @@ SETTINGS = {
         ),
         "deny": (
             "docs/reports/basics.md",
+            "docs/reports/basics_exp2_multi.md",
             "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched",
             "artifacts/manager",
         ),
         "agent": ".claude/agents/policy-finder-exp1.md",
+    },
+    # experiment 2 against several governors: the agent learns nothing of them
+    # up front (no game doc naming one, no reference sim of any governor, no
+    # sim config, no opponents file) and sees its own results under opaque keys
+    "exp2_multi": {
+        "agent_data": ("experiments/2group_8agent_50ep.csv",),
+        "deny": (
+            "docs/reports/basics.md",
+            "docs/reports/basics_exp1.md",
+            "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched",
+            "plots/simulation/29_EXP1_reference",
+            "configs/simulation/manager_testing",
+            "configs/simulation/opponents",
+            "configs/simulation/policy_finder",
+            "configs/training/rl_manager",
+            "artifacts/manager",
+            "artifacts/baselines",
+            "src/aimanager/tests",
+        ),
+        "agent": ".claude/agents/policy-finder-exp2-multi.md",
+        # text that would tell an agent who its opponents are
+        "leak_terms": (
+            r"(?i)levin",
+            r"_vs_ah\b",
+            r"punishment_multinomial",
+            r"sigmoid_opt",
+            r"opponents/exp2_multi",
+        ),
     },
 }
 #: Folders that hold one entry per instance or version; only the lineage's own
@@ -173,8 +206,10 @@ def _prune(export, name, deny=()):
                     os.rmdir(p)
 
 
-def leaks(export, name):
-    """Text files that name another instance: [(path, name)]."""
+def leaks(export, name, terms=()):
+    """Text files that name another instance, or match one of `terms`
+    (regular expressions): [(path, match)]."""
+    patterns = [re.compile(term) for term in terms]
     found = []
     for root, _, files in os.walk(export):
         for f in files:
@@ -188,9 +223,15 @@ def leaks(export, name):
                 continue
             if b"\0" in data[:8192]:
                 continue
-            for match in set(INSTANCE_NAME.findall(data.decode("utf-8", "replace"))):
+            text = data.decode("utf-8", "replace")
+            rel = os.path.relpath(path, export)
+            for match in set(INSTANCE_NAME.findall(text)):
                 if match != name:
-                    found.append((os.path.relpath(path, export), match))
+                    found.append((rel, match))
+            for pattern in patterns:
+                hit = pattern.search(text)
+                if hit:
+                    found.append((rel, hit.group(0)))
     return sorted(found)
 
 
@@ -253,10 +294,12 @@ def build(wt, main, exports):
         for f in matched:
             shutil.copy2(os.path.join(source_dir, f), os.path.join(export, base, f))
     _prune(export, name, setting["deny"])
-    found = leaks(export, name)
+    found = leaks(export, name, setting.get("leak_terms", ()))
     if found:
         listing = ", ".join(f"{p} ({n})" for p, n in found[:20])
-        raise ExportError(f"the export of {stem} names other instances: {listing}")
+        raise ExportError(
+            f"the export of {stem} names other instances or its opponents: {listing}"
+        )
     dirs = write_dirs(name, stem)
     for d in dirs:
         os.makedirs(os.path.join(export, d), exist_ok=True)

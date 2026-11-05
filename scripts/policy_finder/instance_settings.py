@@ -79,7 +79,7 @@ def main():
     ap.add_argument("--max-params", type=bound, default=4, help="a number or none")
     ap.add_argument("--sobol-points", type=int, default=256)
     ap.add_argument("--python", default="python3")
-    ap.add_argument("--setting", default="exp2", choices=("exp2", "exp1"))
+    ap.add_argument("--setting", default="exp2", choices=("exp2", "exp1", "exp2_multi"))
     write(ap.parse_args())
 
 

@@ -6,7 +6,7 @@ Usage:
     python -m aimanager simulate <config>
     python -m aimanager evaluate <config>
     python -m aimanager validate-rule <rule.yml> [--min-params N]
-        [--max-params N|none] [--sobol-points N] [--setting exp2|exp1]
+        [--max-params N|none] [--sobol-points N] [--setting exp2|exp1|exp2_multi]
 """
 
 import argparse
@@ -230,7 +230,7 @@ def main():
     p.add_argument(
         "--setting",
         default="exp2",
-        help="the game the rule is for (manager/rule.py SETTINGS): exp2 or exp1",
+        help="the game the rule is for (manager/rule.py SETTINGS): exp2, exp1 or exp2_multi",
     )
 
     args = parser.parse_args()

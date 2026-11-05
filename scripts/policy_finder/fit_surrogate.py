@@ -80,8 +80,9 @@ EDGE = 0.02
 EDGE_EFFECT = 1.0
 #: EDGE_EFFECT per sweep metric (sweep.json `metric`; absent: pool_vs_anchor).
 #: Experiment 1's average payoff is summed over 24 rounds and spreads several
-#: times wider than a pool: 5 points there is about 0.2 a round.
-EDGE_EFFECTS = {"pool_vs_anchor": EDGE_EFFECT, "group_payoff": 5.0}
+#: times wider than a pool: 5 points there is about 0.2 a round. The mean pool
+#: over several opponents (pool_vs_opponents) is on a pool's scale.
+EDGE_EFFECTS = {"pool_vs_anchor": EDGE_EFFECT, "pool_vs_opponents": EDGE_EFFECT, "group_payoff": 5.0}
 
 
 def axes(rule):

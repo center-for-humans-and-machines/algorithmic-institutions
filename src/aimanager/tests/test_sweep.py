@@ -194,3 +194,74 @@ def test_copy_best_plots_takes_the_best_part(tmp_path):
     copied = copy_best_plots(parts, "toy_s001", str(out))
     assert len(copied) == len(BEST_PLOTS)
     assert all((out / name).read_text() == "part 2" for name in BEST_PLOTS)
+
+
+# -- pool_vs_opponents: every point against several governors --------------
+
+
+def _multi_config(points, rivals=("opponent_1", "opponent_2")):
+    managers = {r: {"type": "dummy", "constant_punishment": 0} for r in rivals}
+    pairings = []
+    for name, a in points.items():
+        managers[name] = {"type": "rule_based", "rule": RULE_PATH, "params": {"a": a}}
+        for r in rivals:
+            pairings.append({"name": f"{name}_vs_{r}", "group_0": name, "group_1": r})
+    return {
+        "managers": managers, "pairings": pairings, "seed": 42, "n_episodes": 2,
+        "sweep_metric": "pool_vs_opponents", "sweep_opponents": list(rivals),
+    }
+
+
+def test_the_score_is_the_mean_over_opponents_and_each_is_kept():
+    config = _multi_config({"toy_s000": 0.5, "toy_s001": 1.5})
+    df = _frame(
+        {
+            # 14 and 32 against opponent_1 (mean 23), 16 and 16 against opponent_2
+            "toy_s000_vs_opponent_1": [[(10, 2, 0), (5, 0, 1)], [(20, 0, 0), (5, 0, 1)]],
+            "toy_s000_vs_opponent_2": [[(10, 0, 0), (5, 0, 1)], [(10, 0, 0), (5, 0, 1)]],
+            # 8 against each
+            "toy_s001_vs_opponent_1": [[(5, 0, 0)], [(5, 0, 0)]],
+            "toy_s001_vs_opponent_2": [[(5, 0, 0)], [(5, 0, 0)]],
+        }
+    )
+    result = sweep_result(df, config)
+    s000, s001 = result["points"]
+    assert s000["pools"]["opponent_1"]["pool"] == pytest.approx(23.0)
+    assert s000["pools"]["opponent_1"]["pool_se"] == pytest.approx(9.0)
+    assert s000["pools"]["opponent_2"]["pool"] == pytest.approx(16.0)
+    assert s000["pool"] == pytest.approx(19.5)
+    # sqrt(9^2 + 0^2) / 2
+    assert s000["pool_se"] == pytest.approx(4.5)
+    assert s000["n_episodes"] == 2
+    assert s001["pool"] == pytest.approx(8.0)
+    assert result["best_name"] == "toy_s000"
+    assert result["opponents"] == ["opponent_1", "opponent_2"]
+    assert result["anchor"] is None and result["metric"] == "pool_vs_opponents"
+
+
+@pytest.mark.parametrize(
+    "change, match",
+    [
+        (lambda c: c.pop("sweep_opponents"), "needs `sweep_opponents`"),
+        (lambda c: c["managers"].pop("opponent_2"), "without a manager"),
+        (lambda c: c["pairings"].pop(), "every opponent once"),
+        (lambda c: c["pairings"][0].update(group_1="toy_s000"), "an opponent in group_1"),
+    ],
+)
+def test_a_multi_opponent_sweep_must_play_every_opponent(change, match):
+    config = _multi_config({"toy_s000": 0.5})
+    change(config)
+    with pytest.raises(ValueError, match=match):
+        check_sweep(config)
+
+
+def test_merge_rejects_parts_with_other_opponents():
+    from aimanager.simulation.sweep import merge_sweeps
+
+    one = {"rule": RULE_PATH, "metric": "pool_vs_opponents", "opponents": ["opponent_1"],
+           "points": [{"name": "toy_s000", "params": {}, "pool": 1.0}]}
+    two = dict(one, opponents=["opponent_2"],
+               points=[{"name": "toy_s001", "params": {}, "pool": 2.0}])
+    with pytest.raises(ValueError, match="opponents"):
+        merge_sweeps([one, two])
+    assert merge_sweeps([one, dict(two, opponents=["opponent_1"])])["best_name"] == "toy_s001"

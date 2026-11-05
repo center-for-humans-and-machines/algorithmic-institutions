@@ -291,3 +291,51 @@ def test_a_later_version_sweeps_and_runs_its_peak_under_its_own_name(
     config = yaml.safe_load(out.read_text())
     assert list(config["managers"]) == ["ah", "toy-v2_gp", "toy-v2_s000"]
     assert config["output_dir"] == str(gen.OUTPUT_DIR / "toy-v2_sweep/final")
+
+
+# -- exp2_multi: every point against each opponent of a file -----------------
+
+OPPONENTS = {
+    "opponent_2": {"name": "b", "manager": {"type": "dummy", "constant_punishment": 0}},
+    "opponent_1": {"name": "a", "manager": {"type": "dummy", "constant_punishment": 3}},
+}
+
+
+@pytest.fixture
+def multi(repo):
+    path = repo / gen.SETTINGS["exp2_multi"]["opponents"]
+    path.parent.mkdir(parents=True)
+    path.write_text(yaml.safe_dump(OPPONENTS))
+    return repo
+
+
+def test_a_multi_sweep_plays_every_opponent_under_its_key(multi):
+    rule = "configs/managers/rule_based/toy.yml"
+    design = validate_rule(rule, n_points=4)
+    config = gen.build_sim_config(rule, design, n_episodes=5, setting="exp2_multi")
+
+    rivals = ["opponent_1", "opponent_2"]
+    assert config["sweep_opponents"] == rivals
+    assert config["sweep_metric"] == "pool_vs_opponents"
+    for key in rivals:
+        assert config["managers"][key] == OPPONENTS[key]["manager"]
+    assert "ah" not in config["managers"]
+    assert config["pairings"] == [
+        {"name": f"toy_s{i:03d}_vs_{r}", "group_0": f"toy_s{i:03d}", "group_1": r}
+        for i in range(4) for r in rivals
+    ]
+    # the opponents' real names stay in their file
+    text = yaml.safe_dump(config)
+    assert "name: a" not in text and "name: b" not in text
+    assert gen.pairings_per_point("exp2_multi") == 2 and gen.pairings_per_point("exp2") == 1
+
+
+def test_multi_parts_seed_past_every_pairing(multi):
+    rule = "configs/managers/rule_based/toy.yml"
+    design = validate_rule(rule, n_points=16)
+    parts = gen.build_sim_configs(rule, design, n_episodes=300, n_parts=2,
+                                  setting="exp2_multi")
+    (_, first), (_, second) = parts
+    points = len({p["group_0"] for p in first["pairings"]})
+    batch = first["episode_batch_size"]
+    assert second["seed"] == first["seed"] + -(-points * 2 * 300 // batch)

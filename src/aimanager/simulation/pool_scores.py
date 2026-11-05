@@ -1,6 +1,6 @@
 """The common pool score of a group against an anchor manager (#226, #227).
 
-Definition 4 of #226 (Levin's criterion): per round, a group's common pool
+Definition 4 of #226: per round, a group's common pool
 1.6 * sum(c) - sum(p) over its members; a group with no members that round
 scores 0 and stays in the average over the episode's rounds. A manager's
 score is its group's mean over episodes, in every pairing with the anchor.

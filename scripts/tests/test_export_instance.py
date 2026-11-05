@@ -166,3 +166,55 @@ def test_an_exp2_export_has_no_exp1_game(layout):
     files = _files(Path(ex.build(wt, main, exports)))
     assert "docs/reports/basics_exp1.md" not in files
     assert (Path(exports) / f"{NAME}-v2/.claude/agents/policy-finder.md").read_text() == "agent\n"
+
+
+def _multi(layout):
+    wt, main, exports = layout
+    _write(wt, ".claude/policy_finder.json", json.dumps(
+        {"name": NAME, "version": 2, "rule_name": f"{NAME}-v2", "setting": "exp2_multi"}))
+    _write(wt, ".claude/agents/policy-finder-exp2-multi.md",
+           "---\nname: policy-finder-exp2-multi\nmodel: opus\n---\n\nAny manager.\n")
+    _write(wt, "docs/reports/basics.md", "exp2 game, against ah\n")
+    _write(wt, "docs/reports/basics_exp2_multi.md", "the game, another manager\n")
+    _write(wt, "configs/simulation/opponents/exp2_multi.yml", "opponent_1: {name: x}\n")
+    _write(wt, "configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml",
+           "template\n")
+    _write(wt, "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/x.jpg", "jpg")
+    _write(wt, f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json",
+           '{"opponents": ["opponent_1"]}\n')
+    return wt, main, exports
+
+
+def test_an_exp2_multi_export_tells_nothing_of_the_opponents(layout):
+    wt, main, exports = _multi(layout)
+    export = Path(ex.build(wt, main, exports))
+    files = _files(export)
+    agent = (export / ".claude/agents/policy-finder.md").read_text()
+    assert agent.startswith("---\nname: policy-finder\n") and "Any manager." in agent
+    assert "docs/reports/basics_exp2_multi.md" in files
+    assert "experiments/2group_8agent_50ep.csv" in files
+    # its own results, under opaque keys, stay
+    assert f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json" in files
+    for gone in ("docs/reports/basics.md",
+                 "configs/simulation/opponents/exp2_multi.yml",
+                 f"configs/simulation/policy_finder/{NAME}_sweep_p1of2.yml",
+                 "configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml"):
+        assert gone not in files
+    assert not any(f.startswith("plots/simulation/25_LEVIN") for f in files)
+
+
+@pytest.mark.parametrize("text", ["Levin's rule", "x_s001_vs_ah", "punishment_multinomial_x"])
+def test_an_exp2_multi_export_fails_on_an_opponent_term(layout, text):
+    wt, main, exports = _multi(layout)
+    _write(wt, "src/aimanager/hint.py", f"# {text}\n")
+    with pytest.raises(ex.ExportError, match="its opponents"):
+        ex.build(wt, main, exports)
+
+
+def test_other_exports_hold_no_opponents_file(layout):
+    wt, main, exports = layout
+    _write(wt, "configs/simulation/opponents/exp2_multi.yml", "rule: pf-20261104-12-v7\n")
+    _write(wt, "docs/reports/basics_exp2_multi.md", "multi game\n")
+    files = _files(Path(ex.build(wt, main, exports)))
+    assert "configs/simulation/opponents/exp2_multi.yml" not in files
+    assert "docs/reports/basics_exp2_multi.md" not in files

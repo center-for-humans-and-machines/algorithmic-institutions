@@ -63,8 +63,16 @@ ANCHOR = "ah"
 #: The games the policy finder runs on (manager/rule.py SETTINGS): the sim a
 #: sweep is built from, the manager its points play (None: each point plays
 #: the clones alone), its score, and overrides of the template's sim keys.
+#: `opponents` (instead of an anchor): a file of governors under opaque keys
+#: (key -> name, manager); each point plays every one, the score is the mean.
 SETTINGS = {
     "exp2": {"template": TEMPLATE, "anchor": ANCHOR, "overrides": {}},
+    "exp2_multi": {
+        "template": TEMPLATE,
+        "anchor": None,
+        "opponents": Path("configs/simulation/opponents/exp2_multi.yml"),
+        "overrides": {"sweep_metric": "pool_vs_opponents"},
+    },
     "exp1": {
         "template": Path("configs/simulation/manager_testing/29_EXP1_reference.yml"),
         "anchor": None,
@@ -84,6 +92,22 @@ FINAL_DIR = "final"
 FINAL_TOP = 5
 CONFIG_DIR = Path("configs/simulation/policy_finder")
 OUTPUT_DIR = Path("plots/simulation/policy_finder")
+
+
+def opponents(setting):
+    """The setting's governors under their opaque keys, {key: manager config}
+    in key order; {} for a setting without them."""
+    path = SETTINGS[setting or SETTING].get("opponents")
+    if path is None:
+        return {}
+    with open(ROOT / path) as f:
+        entries = yaml.safe_load(f)
+    return {key: entries[key]["manager"] for key in sorted(entries)}
+
+
+def pairings_per_point(setting):
+    """Pairings each design point plays: one per opponent, else one."""
+    return len(opponents(setting)) or 1
 
 
 class _Flow(dict):
@@ -141,8 +165,10 @@ def build_sim_config(
     anchor = spec["anchor"]
     with open(ROOT / spec["template"]) as f:
         template = yaml.safe_load(f)
+    rivals = opponents(setting)
 
     managers = {anchor: template["managers"][anchor]} if anchor else {}
+    managers.update(rivals)
     pairings = []
     if names is None:
         names = [f"{name}_s{i:03d}" for i in range(start, start + len(design))]
@@ -154,9 +180,9 @@ def build_sim_config(
         }
         if setting and setting != "exp2":
             managers[manager]["setting"] = setting
-        if anchor:
+        for other in [anchor] if anchor else list(rivals):
             pairings.append(
-                _Flow(name=f"{manager}_vs_{anchor}", group_0=manager, group_1=anchor)
+                _Flow(name=f"{manager}_vs_{other}", group_0=manager, group_1=other)
             )
 
     # TEMPLATE's keys in its order, the sweep's own values where it has them
@@ -168,8 +194,10 @@ def build_sim_config(
         "figure_name": f"{name}_sweep{suffix}",
         **spec["overrides"],
     }
-    if anchor:
+    if pairings:
         own["pairings"] = pairings
+    if rivals:
+        own["sweep_opponents"] = list(rivals)
     config = {k: own.get(k, v) for k, v in template.items()}
     if "agent_groups" in config:
         config["agent_groups"] = _FlowList(config["agent_groups"])
@@ -203,7 +231,7 @@ def build_sim_configs(
         )
         configs.append((suffix, config))
         batch = config.get("episode_batch_size", 1)
-        part_seed += math.ceil(len(part) * n_episodes / batch)
+        part_seed += math.ceil(len(part) * pairings_per_point(setting) * n_episodes / batch)
     return configs
 
 
@@ -252,7 +280,12 @@ def write_final(args):
 
 def _against(setting):
     anchor = SETTINGS[setting]["anchor"]
-    return f" against `{anchor}`" if anchor else " alone with the clones"
+    if anchor:
+        return f" against `{anchor}`"
+    rivals = opponents(setting)
+    if rivals:
+        return f" against each of {len(rivals)} opponents ({SETTINGS[setting]['opponents']})"
+    return " alone with the clones"
 
 
 def score_final(path):
@@ -354,11 +387,12 @@ def main():
     for suffix, config in configs:
         out = Path(args.out or ROOT / CONFIG_DIR / f"{stem}_sweep{suffix}.yml")
         out.parent.mkdir(parents=True, exist_ok=True)
-        n_points = sum(1 for m in config["managers"].values() if m["type"] == "rule_based")
-        each = (
-            f"each against `{SETTINGS[args.setting]['anchor']}`"
-            if SETTINGS[args.setting]["anchor"] else "each alone with the clones"
+        rivals = config.get("sweep_opponents", ())
+        n_points = sum(
+            1 for k, m in config["managers"].items()
+            if m["type"] == "rule_based" and k not in rivals
         )
+        each = "each" + _against(args.setting)
         header = (
             f"# Sweep of {args.config} (#227), written by"
             f" scripts/policy_finder/generate_sim_config.py:\n"
@@ -369,9 +403,11 @@ def main():
         with open(out, "w") as f:
             f.write(header)
             yaml.safe_dump(config, f, sort_keys=False, width=1000)
+        pairs = pairings_per_point(args.setting)
+        each = f" x {pairs} opponents" if pairs > 1 else ""
         print(
-            f"Wrote {out}: {n_points} design points x {args.n_episodes} episodes"
-            f" = {n_points * args.n_episodes} episodes"
+            f"Wrote {out}: {n_points} design points{each} x {args.n_episodes} episodes"
+            f" = {n_points * pairs * args.n_episodes} episodes"
         )
 
 

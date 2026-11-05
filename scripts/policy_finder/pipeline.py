@@ -52,6 +52,8 @@ import time
 import traceback
 from pathlib import Path
 
+import yaml
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
@@ -66,9 +68,14 @@ STEPS = (
     "sweep_config", "sweep_snap", "image_check", "sweep_jobs", "sweep_fetch", "fit",
     "final_config", "final_snap", "final_jobs", "final_fetch",
 )
-#: Episodes per sweep point, and per final-run point (smoke runs lower them)
-N_EPISODES = int(os.environ.get("PF_SWEEP_EPISODES", "500"))
-FINAL_EPISODES = int(os.environ.get("PF_FINAL_EPISODES", "2000"))
+#: Episodes per sweep point, and per final-run point (smoke runs lower them
+#: with PF_SWEEP_EPISODES and PF_FINAL_EPISODES); a setting whose points play
+#: several opponents counts them per pairing (SETTING_EPISODES)
+N_EPISODES = 500
+FINAL_EPISODES = 2000
+SETTING_EPISODES = {"exp2_multi": (125, 2000)}
+#: A setting's opponents (generate_sim_config.py SETTINGS), in the worktree
+OPPONENTS = "configs/simulation/opponents/{}.yml"
 #: One sim job holds this many episodes (16 GB): 256 points x 500 = 2 parts
 MAX_JOB_EPISODES = 125000
 OUT_DIR = "plots/simulation/policy_finder"
@@ -199,7 +206,7 @@ class Version:
             "Design your rule." if self.version == 1
             else f"Design version {self.version} of your rule."
         ))
-        self.data.setdefault("episodes", {"sweep": N_EPISODES, "final": FINAL_EPISODES})
+        self.data.setdefault("episodes", self.default_episodes())
         self.save()
         try:
             for step in STEPS:
@@ -293,9 +300,24 @@ class Version:
 
     # -- sweep ---------------------------------------------------------------
 
+    def default_episodes(self):
+        sweep, final = SETTING_EPISODES.get(self.setting, (N_EPISODES, FINAL_EPISODES))
+        return {
+            "sweep": int(os.environ.get("PF_SWEEP_EPISODES", sweep)),
+            "final": int(os.environ.get("PF_FINAL_EPISODES", final)),
+        }
+
+    def pairings(self):
+        """Pairings per design point: one per opponent of the setting, else one."""
+        path = self.wt / OPPONENTS.format(self.setting)
+        if not path.exists():
+            return 1
+        return len(yaml.safe_load(path.read_text()))
+
     def parts(self):
         sobol = self.conf.get("sobol_points", 256)
-        n = -(-sobol * self.data["episodes"]["sweep"] // MAX_JOB_EPISODES)
+        per_point = self.pairings() * self.data["episodes"]["sweep"]
+        n = -(-sobol * per_point // MAX_JOB_EPISODES)
         if n == 1:
             return [f"{self.stem}_sweep"]
         return [f"{self.stem}_sweep_p{k}of{n}" for k in range(1, n + 1)]
