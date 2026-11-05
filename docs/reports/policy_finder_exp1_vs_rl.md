@@ -12,12 +12,18 @@ objective. The task is `docs/tasks/autoresearch_an_old_policy.md`; the plan is
 
 ## Summary
 
-- **The best rule ties the deployed RL manager.** On a fresh seed, 2000 games each, the
-  campaign's best rule (`-7-v3`) scores 658.0 ± 1.3 and the RL manager 657.2 ± 1.2, a
-  difference of +0.8 ± 1.8. The other two lineage bests land 2.1 and 2.5 points below the RL
-  manager, within 1.5 standard errors. All four sit about 70 points above never punishing
-  (587.7) and about 108 above the human-like manager clone (548.8). Under experiment 1's own
-  formula the order and the gaps are the same (659.0 against 657.9).
+- **The RL manager stays ahead, by about 2 points of 657 (0.3%).** On fresh seeds, 12,000
+  games per rule, the three lineage bests score 655.7, 655.3 and 654.8 (± 0.5); the deployed
+  RL manager scores 657.3 ± 0.5 over 13,000 games. The best rule (`-3-v4`) trails by
+  1.4 ± 0.7, the campaign's top (`-7-v3`) by 1.8 ± 0.7. All sit about 66 points above never
+  punishing (588.9) and about 107 above the human-like manager clone (548.7).
+- **The first head-to-head was lucky.** On seed 6000 alone (2000 games) `-7-v3` scored 658.0
+  and seemed to tie the RL manager (+0.8 ± 1.8). Five more seeds put it at 654.7: the 658.0
+  was about 2.4 standard errors high. It was not a selection effect (`-7-v3` was picked on
+  the campaign's own finals, before seed 6000 ran) but one noisy draw.
+- **No leak.** An independent audit of the 38 agent runs' isolation and transcripts found no
+  route by which the RL manager's behaviour or scores could have reached an agent (see
+  Leak audit).
 
 - **The rules converged on the RL manager's strategy, written down.** The three best
   lineages found the same two-phase rule independently:
@@ -87,32 +93,54 @@ error of about 1.3.
 The other eight lineages kept their first version: 647.8, 647.6, 647.2, 646.9, 642.4,
 642.3, 623.6 and 614.1. The two lowest are the only mild rules, with fines of at most
 about 13 points. All 36 versions beat never punishing (591.1); none of the campaign's own
-finals reached the RL manager's 659.8 on the reproduction seed, but that seed differs; on a
-common seed below the best rule ties it.
+finals reached the RL manager's 659.8 on the reproduction seed. Those finals are not
+directly comparable with the RL manager's numbers: every version's final ran on the same
+seeds (1000 on, in batches of 1000 games), the RL manager on others.
 
-## Head to head on a common seed
+## Head to head on fresh seeds
 
-`configs/simulation/manager_testing/30_EXP1_pf_vs_rl.yml`: the three lineage bests at their GP
-peaks, the deployed RL manager, zero punishment and the human-like manager clone, each
-alone on the clones for 2000 games on seed 6000 (Raven job 31924549). No sweep, final run or
-baseline used that seed. The games diverge from the first punishment on, so the
-differences carry about √2 times a single score's error.
+Two runs, both of the three lineage bests at their GP peaks and the deployed RL manager, each
+alone on the clones; no sweep, final run or baseline used these seeds:
+- `30_EXP1_pf_vs_rl`: seed 6000, 2000 games, with zero punishment and the human-like clone
+  too (Raven job 31924549);
+- `31_EXP1_confirm/seed_7000`–`7004`: 2000 games each, 10,000 per manager. These ran on the
+  local CPU image (torch 2.5) while Raven was unreachable; the RL manager's 657.1 there
+  agrees with its 657.2 on Raven.
 
-| Manager | Average payoff | vs RL | Experiment 1's formula | Contribution | Punishment per player-round | Rounds with a fine |
-|---|---|---|---|---|---|---|
-| `-7-v3` (pf_7) | **658.0 ± 1.3** | +0.8 ± 1.8 | 659.0 ± 1.3 | 16.0 | 1.08 | 13.9% |
-| Deployed RL | 657.2 ± 1.2 | – | 657.9 ± 1.2 | 15.6 | 0.97 | 16.2% |
-| `-8-v7` (pf_8) | 655.1 ± 1.3 | −2.1 ± 1.8 | 656.1 ± 1.3 | 15.8 | 1.09 | 14.2% |
-| `-3-v4` (pf_3) | 654.6 ± 1.3 | −2.5 ± 1.8 | 655.6 ± 1.3 | 15.9 | 1.12 | 15.4% |
-| Zero punishment | 587.7 ± 1.5 | −69.5 ± 2.0 | 584.3 ± 1.5 | 7.5 | 0 | 0% |
-| Human-like clone | 548.8 ± 2.4 | −108.4 ± 2.7 | 549.0 ± 2.4 | 12.9 | 2.44 | 33.9% |
+Each unbatched sim draws all its games from one random stream, so managers do not share
+games and a difference carries about √2 times a single score's error.
 
-Contribution and punishment are means over valid player-rounds. The campaign's finals
-held up on the new seed: `-7-v3` 656.05 → 658.0, `-3-v4` 655.91 → 654.6, `-8-v7` 654.47 →
-655.1. The RL manager scored 659.8 on the reproduction seed and 657.2 here; neither move
-is larger than about two standard errors.
+| Manager | Seed 6000 | Seeds 7000–7004 | All fresh seeds | vs RL | Campaign final |
+|---|---|---|---|---|---|
+| Deployed RL | 657.2 ± 1.2 | 657.1 ± 0.6 | **657.3 ± 0.5** (13,000 games¹) | – | – |
+| `-3-v4` (pf_3) | 654.6 ± 1.3 | 655.9 ± 0.6 | 655.7 ± 0.5 | −1.4 ± 0.7 | 655.91 |
+| `-7-v3` (pf_7) | 658.0 ± 1.3 | 654.7 ± 0.6 | 655.3 ± 0.5 | −1.8 ± 0.7 | 656.05 |
+| `-8-v7` (pf_8) | 655.1 ± 1.3 | 654.7 ± 0.6 | 654.8 ± 0.5 | −2.4 ± 0.7 | 654.47 |
+| Zero punishment | 587.7 ± 1.5 | – | 588.9 ± 1.1 (4,000²) | | |
+| Human-like clone | 548.8 ± 2.4 | – | 548.7 ± 1.7 (4,000²) | | |
 
-**Same opening, different tail.** Mean punishment per valid player, by round:
+¹ with the reproduction run (seed 3000, 1000 games, 659.8). ² with `28_EXP1_baselines` and
+`29_EXP1_reference`.
+
+Per 2000-game block the rules range over 1.6–4.5 points (`-7-v3`: 653.6 to 658.0), about what
+a standard error of 1.3 implies for six blocks. Under experiment 1's own formula (payoff recomputed on every
+row, seed 6000) the order is the same.
+
+**Survivor bias.** The top three were chosen as the best of 36 campaign finals, which would
+inflate their finals. On fresh seeds they moved by −0.8, −0.2 and +0.3: little inflation,
+since all finals shared seeds and the ranking compared like with like. What made `-7-v3`
+look like a tie was the single head-to-head seed, not the selection. With 12,000 games the
+rules' order among themselves is still uncertain (differences of 0.4–0.9 ± 0.7); their gap
+to the RL manager is not.
+
+**Where the 2 points go.** Over the 10,000 confirmation games the rules punish about 13
+points more per game than the RL manager (102–105 against 92), most of it in rounds 4–6,
+and get about 0.3 more contribution per player-round (15.8–15.9 against 15.6). The extra
+contribution is worth about +4 per game (0.6 per point contributed), the extra fines cost
+about 6.5 (each point costs the fined player 1 and the pool 1, so 0.5 of the group mean).
+The net is about −2, the measured gap.
+
+**Same opening, different tail.** Mean punishment per valid player, by round (seed 6000; seeds 7000–7004 agree within 0.2):
 
 | Round | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7–14 | 15–17 | 18–23 |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -137,11 +165,12 @@ In the opening the two dose zero to five points almost identically; the rule is 
 middling contributions (6–12) and never fines a contribution of 16 or more, which the RL
 manager occasionally does. Later the rule is about twice as hard on free riders and
 leaves everyone else alone. Contributions follow: the rule's groups give 0.2–0.5 more per
-round from round 3 on (17.0 against 16.6 at round 8, 15.0 against 14.6 at round 23), at
-about 10 more punishment points per game (101 against 92 per group).
+round from round 4 on (16.9 against 16.6 at round 8, 14.9 against 14.4 at round 23, seeds
+7000–7004), which does not pay for the extra fines.
 
 So the policy finder, given the RL manager's clones and objective and none of its
-behaviour, wrote a six-parameter rule that plays like it and scores the same. The rule can
+behaviour, wrote six-parameter rules that play like it and score about 2 points (0.3%) less,
+mostly because they keep the opening dose two rounds too long. The rule can
 be read in full; the RL manager is a recurrent graph network. `-7-v3` at its GP peak:
 
 ```python
@@ -200,6 +229,42 @@ Building the setting:
 
 That took about 2 hours before the campaign. The experiment 2 path was left byte-identical.
 
+## Leak audit
+
+The opening fines match the RL manager's closely, so a separate agent audited whether
+anything about the RL manager could have reached the policy-finder agents. It rebuilt the
+agents' view with the export code at the campaign's base commit and searched all 38 agent
+transcripts (36 campaign, 2 smoke), tool results included.
+
+- **The view.** It is copied without `.git`. `28_EXP1_baselines.yml`, the only file in the
+  worktree with RL numbers, is denied, and so is `artifacts/manager/`. The 30/31 configs and
+  plots, `temp/`, `experiment_analysis/`, notebooks and the experiment 1 reports are outside
+  the instance checkout. `29_EXP1_reference` holds only the zero and human-like runs.
+  `basics_exp1.md` and the agent definition describe the game and the data, not a strategy.
+- **The container.** Network egress is limited to `api.anthropic.com`, and the agent
+  definition disallows WebFetch and WebSearch. Clone and RL checkpoints are not in the
+  container.
+- **The sweeps.** Exp1 sweeps run no anchor, so they never simulate the RL manager.
+- **The transcripts.** The only tools used were Bash, Read, Write, Edit and Agent. No web
+  call and no git command was made. There were zero hits for the RL run's names or paths.
+  The remaining "RL" mentions are code comments and filenames of old configs that were
+  never opened.
+
+The top lineages reasoned their way to the shape from the pilot data and the reference sims:
+- never punishing beats the human-like manager on the clones;
+- a fine has to buy about 3.3 contribution points later to pay;
+- its effect persists in the pilots;
+- players giving 16 or more do not respond to fines.
+
+The sweeps then tuned the opening against the same clones the RL manager was trained on.
+Two optimisers of the same objective on the same simulator ending at similar opening fines
+is what one would expect.
+
+The audit could not check:
+- the original exports, which were deleted, so the view was rebuilt;
+- the egress rule at the network level;
+- every transcript read in full.
+
 ## Confounds
 
 - **Inputs.** The rules read the full history. The RL manager read this round's
@@ -214,5 +279,8 @@ That took about 2 hours before the campaign. The experiment 2 path was left byte
   36 agent sessions and about 9,000 simulated sweep points. Neither side's budget was
   matched to the other's.
 - **Selection.** The campaign's top was picked from 36 noisy finals, and the RL manager was
-  deployed after experiment 1's own comparisons. The head-to-head on a fresh seed removes
-  the seed difference, not the selection on each side.
+  deployed after experiment 1's own comparisons. The fresh seeds remove both from the
+  estimates above, but not from which managers were compared.
+- **Platform.** The confirmation ran on the local CPU image (torch 2.5), the rest on Raven
+  (torch 1.11). Random streams differ between them; the RL manager's score does not
+  (657.1 against 657.2).

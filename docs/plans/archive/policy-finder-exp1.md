@@ -235,3 +235,8 @@ category list will differ from experiment 2's. New categories are drawn up from 
   `docs/reports/policy_finder_exp1_vs_rl.md`.
 - 2026-11-05 06:55: step 10 done: observation page "Policy Finder Experiment 1"
   (https://claude.ai/artifact/PMfYuxEbjvmijyBpznvxnt), overview with the head-to-head. Plan done.
+- 2026-11-05 (follow-up): confirmation on seeds 7000-7004 (`31_EXP1_confirm`, 10,000 games per
+  manager, run locally on the CPU image while Raven refused logins). Pooled over all fresh
+  seeds: RL 657.3 ± 0.5, `-3-v4` 655.7, `-7-v3` 655.3, `-8-v7` 654.8 (± 0.5). The seed-6000
+  "tie" (658.0) was one lucky draw; the RL manager leads by about 2 points. A leak audit of
+  the 38 agent runs found no route for RL information. Report and page updated.
