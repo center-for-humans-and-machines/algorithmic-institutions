@@ -1,0 +1,57 @@
+params:
+  k0:
+    definition: >-
+      punishment points per contribution point a member falls short of the
+      group's mean contribution, beyond the tolerance s0, in round 0 of the
+      game (the opening initiation of the original members, before anything
+      is known about the other manager)
+    type: float
+  k1:
+    definition: >-
+      the same slope in round 1, the second round of the originals'
+      initiation, which costs about twice as many members per point as
+      round 0 because it weighs more in their first switch decision
+    type: float
+  kn:
+    definition: >-
+      the same slope for newcomers, in the first two rounds after they join
+      our group at a switch (their own initiation); separate from k1 because
+      newcomers arrive several points below the incumbents and lift their
+      later contribution with the dose, while a round-1 point is dear in
+      members
+    type: float
+  s0:
+    definition: >-
+      tolerance, in contribution points below the group's mean this round,
+      that goes unpunished; a negative value also punishes members slightly
+      above the mean
+    type: float
+  nb:
+    definition: >-
+      number of switch rounds (after rounds 3, 7, 11, 15, 19) whose
+      newcomers are initiated; newcomers arriving at round 4*nb or earlier
+      are punished, later ones are left alone because too few rounds remain
+      for their initiation to repay itself
+    type: int
+sweep_config:
+  k0: [3.0, 30.0, log]
+  k1: [0.5, 15.0, log]
+  kn: [1.0, 40.0, log]
+  s0: [-0.5, 2.5]
+  nb: [1, 5]
+constraints:
+  - k0 > 0
+  - k1 > 0
+  - kn > 0
+code: |
+  cur = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  n = th.clamp(mine.sum(-1), min=1).unsqueeze(-1)
+  mean = (cur * mine).sum(-1).unsqueeze(-1) / n
+  short = th.clamp(mean - cur - s0, min=0)
+  before = th.flip(in_group[..., :-1], dims=(-1,))
+  tenure = th.cumprod(before, dim=-1).sum(-1)
+  slope = th.where(t < 0.5, k0, th.where(t < 1.5, k1, kn))
+  pos = th.remainder(t, 4)
+  active = (pos < 2) & (t < 4 * nb + 2)
+  punishment = slope * short * (tenure < 4) * active * mine
