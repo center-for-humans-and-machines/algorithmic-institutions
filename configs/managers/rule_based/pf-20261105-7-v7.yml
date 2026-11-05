@@ -1,0 +1,39 @@
+params:
+  mid_fine:
+    definition: opening fine of a player contributing 10 (half of the endowment); in the opening a player short of 20 pays mid_fine * (shortfall/10)^curvature, capped at 30 by the manager, if the group gate lets the fine through
+    type: float
+  curvature:
+    definition: convexity of the opening fine in the shortfall below 20 around c=10 (above 1 spares near-full contributors and fines free riders harder, at the same fine for a player at 10)
+    type: float
+  window:
+    definition: number of opening rounds in which players short of 20 are fined by the schedule
+    type: int
+  gate_margin:
+    definition: in the opening a player is fined only if their contribution is below the round's mean contribution of the valid players plus this margin (players already well above their group are spared; about 8 switches the gate off)
+    type: float
+  net_floor:
+    definition: after the opening, the defector net fines only players contributing at or below this level
+    type: int
+  net_end:
+    definition: round at which the defector net stops; it is active in rounds window..net_end-1
+    type: int
+  net_fine:
+    definition: the fixed fine for a defector caught by the net
+    type: float
+sweep_config:
+  mid_fine: [6, 8.2, log]
+  curvature: [2.0, 2.55, log]
+  window: [6, 7]
+  gate_margin: [2.5, 8]
+  net_floor: 2
+  net_end: [14, 17]
+  net_fine: [20, 26]
+code: |
+  cc = c[..., -1]
+  vv = valid[..., -1]
+  group_mean = (cc * vv).sum(-1, keepdim=True) / th.clamp(vv.sum(-1, keepdim=True), min=1)
+  gate = (cc < group_mean + gate_margin).float()
+  shortfall = th.clamp(20 - cc, min=0) / 10
+  opening = mid_fine * th.pow(shortfall, curvature) * gate * (t < window).float()
+  net = net_fine * ((t >= window) & (t < net_end)).float() * (cc <= net_floor).float()
+  punishment = opening + net
