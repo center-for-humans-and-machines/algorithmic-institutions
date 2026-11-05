@@ -1,0 +1,49 @@
+params:
+  rate:
+    definition: punishment points per contribution point a member falls short of the target, in the first block (rounds 0-3); later blocks scale it by decay
+    type: float
+  delta:
+    definition: offset of the target from the group norm (mean contribution of the other valid members this round); negative tolerates contributing a little below the norm before any punishment
+    type: float
+  decay:
+    definition: multiplier on severity per block of four rounds; block b (rounds 4b..4b+3, b = 0..5) is punished at rate * decay^b, front-loading punishment while many rounds are left to repay it
+    type: float
+  mid:
+    definition: multiplier on punishment in the second round of each block before round 20 (rounds 1, 5, 9, 13, 17); the third and fourth rounds of those blocks, just before players choose groups, are never punished
+    type: float
+  kappa:
+    definition: how strongly my severity from round 1 on follows the other manager's observed stance; it is scaled by exp(kappa * (q0 - 6) / 6), q0 the other manager's mean punishment per member of its group in round 0 (6 = a typical manager); positive matches a harsh manager and eases off against a lenient one, 0 ignores it
+    type: float
+sweep_config:
+  rate: [3.0, 20.0, log]
+  delta: [-3.0, 0.8]
+  decay: [0.15, 0.85]
+  mid: [0.2, 1.8]
+  kappa: [-0.5, 1.0]
+constraints:
+  - rate > 0
+  - decay >= 0
+  - mid >= 0
+code: |
+  zero = th.zeros_like(c[..., -1])
+  one = th.ones_like(zero)
+  cur = c[..., -1]
+  ok = valid[..., -1] * in_group[..., -1]
+  tot = (cur * ok).sum(-1).unsqueeze(-1)
+  cnt = ok.sum(-1).unsqueeze(-1)
+  others_n = cnt - ok
+  norm = th.where(others_n > zero, (tot - cur * ok) / th.maximum(others_n, one), cur)
+  short = th.maximum(norm + delta - cur, zero)
+  tt = zero + t
+  blk = th.floor(tt / 4)
+  pos = tt - 4 * blk
+  early = tt < zero + 20
+  w_pos = th.where((pos == one) * early, zero + mid, one)
+  w_pos = th.where((pos > one) * early, zero, w_pos)
+  horizon = th.minimum(th.maximum((zero + 23 - tt) / 3, zero), one)
+  pp = th.cat([p, th.zeros_like(c[..., :1])], -1)
+  out0 = (one - in_group[..., 0]) * valid[..., 0]
+  q0 = ((pp[..., 0] * out0).sum(-1) / th.maximum(out0.sum(-1), one[..., 0])).unsqueeze(-1) + zero
+  stance = th.where(tt > zero, th.exp(kappa * (q0 - 6) / 6), one)
+  severity = rate * th.pow(zero + decay, blk) * stance
+  punishment = severity * short * w_pos * horizon * ok
