@@ -1,0 +1,55 @@
+params:
+  c0:
+    definition: >-
+      contribution level a member is expected to reach; only members contributing
+      below it are punished, in proportion to their shortfall c0 - c
+    type: int
+  k:
+    definition: >-
+      punishment points per point of shortfall below c0 for a member not yet
+      punished, at the start of the game (before the fade and the saturation)
+    type: float
+  horizon:
+    definition: >-
+      round by which punishment has faded to zero; punishment is scaled by
+      max(0, 1 - t / horizon) squared, because the best size of a punishment
+      grows with the square of the rounds left in which its lift pays back
+    type: float
+  budget:
+    definition: >-
+      saturation of the punishment a member has already received (from either
+      manager, all rounds so far): the punishment is scaled by
+      budget / (budget + received), since a first punishment lifts a
+      contribution most and repeated ones less and less
+    type: float
+  dec:
+    definition: >-
+      factor on punishment in the last round of a block, right before players
+      may switch (rounds 3, 7, 11, 15, 19), where a punishment drives a member
+      out about twice as much as earlier in the block
+    type: float
+sweep_config:
+  c0: [5, 18]
+  k: [0.5, 12, log]
+  horizon: [4, 60, log]
+  budget: [2, 200, log]
+  dec: [0, 1]
+constraints:
+  - c0 >= 1
+  - k > 0
+  - horizon > 0
+  - budget > 0
+  - dec >= 0
+code: |
+  # no float scalars as th arguments or in comparisons (they fail in a cold,
+  # builtins-free exec); relu is max(0, .)
+  now = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  fade = th.relu((horizon - t) / horizon)
+  fade = fade * fade
+  received = p.sum(-1)
+  saturate = budget / (budget + received)
+  # 1 in rounds 3, 7, 11, 15, 19 (the rounds before a switch decision), else 0
+  last = th.relu(1 - (t + 1 - 4 * th.floor((t + 1) / 4))) * th.relu(th.sign(20 - t))
+  timing = 1 - last * (1 - dec)
+  punishment = k * th.relu(c0 - now) * fade * saturate * timing * mine
