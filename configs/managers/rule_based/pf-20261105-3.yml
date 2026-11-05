@@ -1,0 +1,32 @@
+params:
+  thr:
+    definition: contribution level below which a player is punished; the shortfall thr - c is what gets punished
+    type: int
+  slope:
+    definition: punishment points per point of shortfall below thr (at full strength, early in the game)
+    type: float
+  cap:
+    definition: largest punishment dealt to one player in one round
+    type: float
+  horizon:
+    definition: first round in which the manager no longer punishes (punishes rounds 0..horizon-1), since late punishment has too few rounds left to pay back
+    type: int
+  taper:
+    definition: how fast punishment fades toward the horizon; strength is ((horizon - t) / horizon) ** taper, 0 means flat
+    type: float
+sweep_config:
+  thr: [6, 20]
+  slope: [0.15, 4, log]
+  cap: [2, 30, log]
+  horizon: [6, 23]
+  taper: [0, 2]
+constraints:
+  - cap >= 2
+  - horizon >= 6
+code: |
+  cnow = c[..., -1]
+  shortfall = th.clamp(thr - cnow, min=0)
+  base = th.minimum(slope * shortfall, cap * th.ones_like(cnow))
+  left = th.clamp((horizon - t) / horizon, min=0)
+  strength = th.pow(left, taper) * (t < horizon).float()
+  punishment = base * strength * valid[..., -1]
