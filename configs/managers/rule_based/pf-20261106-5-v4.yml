@@ -1,0 +1,46 @@
+params:
+  target:
+    definition: contribution level below which a member is punished in the first 4-round block (the opening norm)
+    type: float
+  slope:
+    definition: punishment points per contribution point a member falls short of the current target (the manager clamps at 30, so a large slope makes the rule a threshold that deals the full 30 to anyone clearly below the target)
+    type: float
+  decay:
+    definition: how much the target drops with each later 4-round block (block b uses target - decay * b), as the group's contributions settle and only free-riders and low-contributing newcomers need correcting
+    type: float
+  window_open:
+    definition: number of rounds at the start of the first block (rounds 0..window_open-1) in which punishment is dealt; the rest of the block, leading up to the first switch decision, is never punished
+    type: int
+  window_late:
+    definition: number of rounds at the start of each later punishing block (right after a switch decision, when newcomers arrive) in which punishment is dealt; the rounds leading up to the next decision are never punished
+    type: int
+  n_blocks:
+    definition: number of 4-round blocks, counted from round 0, in which anyone is punished at all; from round 4 * n_blocks on no one is punished (late punishment has too few rounds left to pay back)
+    type: int
+sweep_config:
+  target: [5.5, 12.5]
+  slope: [1.5, 25, log]
+  decay: [-1, 3]
+  window_open: [1, 4]
+  window_late: [1, 3]
+  n_blocks: [1, 5]
+constraints:
+  - slope > 0
+  - window_open >= 1
+  - window_late >= 1
+  - n_blocks >= 1
+code: |
+  ct = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  one = th.ones_like(t)
+  # 4-round blocks between switch decisions; pos 0 is the round right after a decision
+  block = th.floor(t / (4 * one))
+  pos = t - 4 * block
+  first = (block < one).float()
+  window = window_late + (window_open - window_late) * first
+  in_window = (pos < window).float()
+  live = (block < n_blocks).float()
+  # the norm: the opening target, lowered by decay per later block
+  target_b = target - decay * block
+  shortfall = th.relu(target_b - ct)
+  punishment = slope * shortfall * mine * in_window * live
