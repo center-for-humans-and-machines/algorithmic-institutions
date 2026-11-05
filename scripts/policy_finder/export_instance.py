@@ -100,9 +100,18 @@ SETTINGS = {
             "configs/simulation/opponents",
             "configs/simulation/policy_finder",
             "configs/training/rl_manager",
+            "configs/training/baselines",
+            # the human-manager clone, one of the governors: its tests and training
+            "configs/simulation/ah_testing",
+            "configs/training/artificial_humans/punishment",
             "artifacts/manager",
             "artifacts/baselines",
             "src/aimanager/tests",
+            # analyses of earlier sims and of the clones' training, naming the
+            # governors they played
+            "scripts/plotting",
+            "scripts/baselines",
+            "scripts/kinit_mpcdf.sh",
         ),
         "agent": ".claude/agents/policy-finder-exp2-multi.md",
         # text that would tell an agent who its opponents are
