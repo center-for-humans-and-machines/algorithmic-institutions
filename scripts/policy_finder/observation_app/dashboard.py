@@ -44,9 +44,11 @@ SETTING = os.environ.get("PF_SETTING", "exp2")
 #: The words for the score in each setting, so exp2 reads as before.
 TERMS = {
     "exp2": {"score": "pool", "vs": " vs ah", "against": "against ah",
-             "root": "ah vs ah", "start": "ah against ah"},
+             "root": "ah vs ah", "start": "ah against ah", "members": "members",
+             "subtitle": "swept against the AH manager"},
     "exp1": {"score": "avg payoff", "vs": "", "against": "with the clones",
-             "root": "never punish", "start": "never punishing"},
+             "root": "never punish", "start": "never punishing",
+             "members": "valid players", "subtitle": "on experiment 1's clones"},
 }[SETTING]
 #: The final best's plots (simulation/sweep.py's BEST_PLOTS, ROUND_PLOT)
 BEST_PLOTS = {
@@ -563,7 +565,7 @@ def reference_html(best_pool: float) -> str:
     tiles = "".join(
         f'<div class="stat"><div class="k">{esc(r["name"])}</div>'
         f'<div class="v">{r["pool"]:.1f}'
-        + (f'<small>{r["members"]:.2f} members</small>' if "members" in r else "")
+        + (f'<small>{r["members"]:.2f} {TERMS["members"]}</small>' if "members" in r else "")
         + f'</div><div class="k">final best {best_pool - r["pool"]:+.1f}</div></div>'
         for r in refs.get("rows", [])
     )
@@ -772,7 +774,7 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
         predicted = f"{land['peak']['mean']:.1f}" if land else "–"
         tiles = [
             (f"Final best{TERMS['vs']}", f"{final['pool']:.1f}<small>± {final['pool_se']:.1f}</small>"),
-            ("Members", f"{final['members']:.2f}"),
+            (TERMS["members"].capitalize(), f"{final['members']:.2f}"),
             ("Fit predicted", predicted),
             (
                 "Final run",
@@ -1486,7 +1488,7 @@ def agents_table_html(frame: pd.DataFrame, refs: dict) -> str:
             f"{esc(category)}</span></td>"
             f'<td class="txt tags">{hit}{tags}</td></tr>'
         )
-    heads = ("agent", "final best", "members", "version", "params",
+    heads = ("agent", "final best", TERMS["members"], "version", "params",
              "policy category", "rules included")
     head = "".join(
         f'<th class="{"txt" if h in ("agent", "final best", "version", "policy category", "rules included") else ""}">'

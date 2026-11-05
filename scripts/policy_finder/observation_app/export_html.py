@@ -332,6 +332,7 @@ def build() -> str:
         .replace("__OVERVIEW__", d.overview(found))
         .replace("__SUMMARY__", summary)
         .replace("__COUNT__", str(len(found)))
+        .replace("__SUBTITLE__", d.TERMS["subtitle"])
         .replace("__STAMP__", datetime.now().strftime("%Y-%m-%d %H:%M"))
         .replace("__DATA_NOTE__", esc(d.DATA_NOTE))
         .replace("__OPTIONS__", options)
@@ -482,7 +483,7 @@ PAGE = """<title>Policy Finder Instances</title>
   <header class="hero">
     <div class="eyebrow">Algorithmic institutions</div>
     <h1>Policy finder</h1>
-    <p>Agents that design rule-based punishment managers, swept against the AH manager ·
+    <p>Agents that design rule-based punishment managers, __SUBTITLE__ ·
     snapshot of __STAMP__</p>
     <p class="data-note">__DATA_NOTE__</p>
   </header>
