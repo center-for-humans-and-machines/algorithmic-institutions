@@ -109,6 +109,8 @@ class Version:
             raise Failed(f"no instance {name}: {conf_path} missing")
         self.conf = json.loads(conf_path.read_text())
         self.stem = self.conf["rule_name"]
+        # the game (manager/rule.py SETTINGS); absent: exp2
+        self.setting = self.conf.get("setting", "exp2")
         self.version = self.conf.get("version", 1)
         self.rule = f"configs/managers/rule_based/{self.stem}.yml"
         self.sweep = f"{OUT_DIR}/{self.stem}_sweep"
@@ -306,6 +308,7 @@ class Version:
             "--n-episodes", self.data["episodes"]["sweep"], "--n-parts", len(self.parts()),
             "--min-params", self.conf["min_params"],
             "--max-params", "none" if upper is None else upper,
+            "--setting", self.setting,
         )
         configs = [f"{CONFIG_DIR}/{p}.yml" for p in self.parts()]
         self.data["sweep_commit"] = self.commit(configs, "sweep configs")
@@ -324,7 +327,7 @@ class Version:
             with agent_runner.slot(self.locks / "image_check", slots=IMAGE_CHECK_SLOTS):
                 ok, log = cluster_proxy.validate_rule(
                     self.data["sweep_sha"], self.rule, self.conf["min_params"], upper,
-                    self.conf.get("sobol_points", 256),
+                    self.conf.get("sobol_points", 256), self.setting,
                 )
             if ok:
                 return
@@ -407,7 +410,7 @@ class Version:
     def step_final_config(self):
         self.py("generate_sim_config.py", "--root", self.wt,
                 "--final", self.wt / self.sweep / "sweep.json",
-                "--n-episodes", self.data["episodes"]["final"])
+                "--n-episodes", self.data["episodes"]["final"], "--setting", self.setting)
         config = f"{CONFIG_DIR}/{self.stem}_sweep_final.yml"
         self.data["final_commit"] = self.commit([config], "final run config")
 

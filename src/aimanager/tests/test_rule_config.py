@@ -434,3 +434,49 @@ def test_attribute_check_rejects_escapes(tmp_path, code, reason):
 
     with pytest.raises(ValueError, match=__import__("re").escape(reason)):
         read_rule(_code_rule(tmp_path, code))
+
+
+# --- settings: experiment 1 (one group of 4, no switching) -----------------
+
+
+def test_exp1_inputs_zero_timeouts_and_drop_in_group():
+    from aimanager.manager.rule import rule_inputs
+
+    c = th.tensor([[[15.0, 12.0], [15.0, 3.0]]])  # [1, 2 players, 2 rounds]
+    valid = th.tensor([[[False, True], [True, False]]])
+    p = th.tensor([[[0.0], [4.0]]])
+    groups = th.zeros_like(c, dtype=th.long)
+    inputs = rule_inputs(c, valid, p, groups, 0, setting="exp1")
+    assert sorted(inputs) == ["c", "p", "t", "valid"]
+    assert inputs["c"].tolist() == [[[0.0, 12.0], [15.0, 0.0]]]
+    # experiment 2 reads the recorded contribution as it is
+    assert rule_inputs(c, valid, p, groups, 0)["c"].tolist() == c.tolist()
+
+
+def test_exp1_rules_read_only_its_inputs(tmp_path):
+    from aimanager.manager.rule import read_rule, validate_rule
+
+    path = _code_rule(tmp_path, "punishment = a * in_group[..., -1]")
+    read_rule(path)  # exp2 has in_group
+    with pytest.raises(ValueError, match="undefined names \\['in_group'\\]"):
+        read_rule(path, setting="exp1")
+    good = tmp_path / "g.yml"
+    good.write_text(yaml.safe_dump({
+        "params": {"a": {"definition": "a scale", "type": "float"}},
+        "sweep_config": {"a": [0.5, 2]},
+        "code": "punishment = a * (10 - c[..., -1]) * valid[..., -1] * (t < 20)\n",
+    }))
+    assert len(validate_rule(good, n_points=8, setting="exp1")) == 8
+
+
+def test_exp1_manager_runs_one_group(tmp_path):
+    from aimanager.manager.api_manager import RuleBasedManager
+
+    kwargs = _rule(tmp_path, {**BASE, "code": "punishment = a * (20 - c[..., -1])"}, {"a": 1.0})
+    manager = RuleBasedManager(**kwargs, setting="exp1")
+    assert manager.n_groups == 1
+    c = th.tensor([[[5.0], [20.0], [15.0], [0.0]]])
+    valid = th.tensor([[[True], [True], [False], [True]]])
+    out = manager._punish(c, valid, th.zeros((1, 4, 0)), th.zeros_like(c, dtype=th.long))
+    # the timed-out player's contribution reads 0 (the env drops its punishment)
+    assert out.view(-1).tolist() == [15, 0, 20, 20]

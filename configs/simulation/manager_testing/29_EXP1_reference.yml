@@ -1,0 +1,43 @@
+# Experiment 1's reference sims for the policy finder (setting exp1,
+# docs/plans/policy-finder-exp1.md): the artificial humans of experiment 1
+# (21/22 v4 contribution and timeout clones) in one group of 4 over 24 rounds,
+# under a manager that never punishes and under the human-like manager clone
+# (23 v4). The agents read its per_round.parquet (docs/reports/basics_exp1.md),
+# and every exp1 sweep is built from it (generate_sim_config.py SETTINGS,
+# which batches the rules and scores them by the average payoff).
+#
+# A timed-out player is out of the round's pool and cannot be punished (the
+# env zeroes both); timeout_contribution "default" feeds the clones their
+# trained input for it, which a rule never sees (rule.py SETTINGS zero it).
+# The human-like manager punishes unbatched: episode_batch_size 1.
+
+seed: 4000
+
+artificial_humans:
+  exp1:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+
+managers:
+  zero:
+    type: dummy
+    constant_punishment: 0
+  humanlike:
+    type: human
+    path: artifacts/behavioral_cloning/23_punishment_autoregressive_v4/model/architecture_node+edge.pt
+    autoregressive: true
+
+n_episode_steps: 24
+n_episodes: 1000
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: default
+episode_batch_size: 1
+
+output_dir: plots/simulation/29_EXP1_reference
+figure_name: EXP1_reference
+save_per_round: true
+basedir: .

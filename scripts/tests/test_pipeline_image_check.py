@@ -32,7 +32,7 @@ def answers(monkeypatch, *logs):
     queue = list(logs)
     calls = []
 
-    def fake(sha, rule, lo, hi, n):
+    def fake(sha, rule, lo, hi, n, setting="exp2"):
         calls.append(rule)
         log = queue.pop(0)
         return log.startswith("Valid"), log

@@ -6,7 +6,7 @@ Usage:
     python -m aimanager simulate <config>
     python -m aimanager evaluate <config>
     python -m aimanager validate-rule <rule.yml> [--min-params N]
-        [--max-params N|none] [--sobol-points N]
+        [--max-params N|none] [--sobol-points N] [--setting exp2|exp1]
 """
 
 import argparse
@@ -186,7 +186,8 @@ def validate_rule(args):
 
     try:
         design = validate_rule(
-            args.rule, args.min_params, args.max_params, args.sobol_points
+            args.rule, args.min_params, args.max_params, args.sobol_points,
+            setting=args.setting,
         )
     except ValueError as e:
         print(f"Invalid: {e}", file=sys.stderr)
@@ -226,6 +227,11 @@ def main():
         help="a number, or none for no upper bound",
     )
     p.add_argument("--sobol-points", type=int, default=256)
+    p.add_argument(
+        "--setting",
+        default="exp2",
+        help="the game the rule is for (manager/rule.py SETTINGS): exp2 or exp1",
+    )
 
     args = parser.parse_args()
     if args.command == "validate-rule":

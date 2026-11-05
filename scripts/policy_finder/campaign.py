@@ -57,6 +57,7 @@ HERE = Path(__file__).resolve().parent
 DEFAULTS = {
     "n_fresh": 12, "generations": 6, "top_k": 4, "min_params": 1, "max_params": 5,
     "sobol_points": 256, "parallel": 12, "error_retries": 3, "retry_wait": 600,
+    "setting": "exp2",
     "summarize": None,
 }
 
@@ -153,8 +154,11 @@ class Campaign:
         if current == 0 and version == 1:
             if (self.wt_root / name).exists():
                 raise CampaignError(f"{self.wt_root / name} exists without an instance file")
-            return [HERE / "new_instance.sh", name, "--min-params", s["min_params"],
-                    "--max-params", s["max_params"], "--sobol-points", s["sobol_points"]]
+            command = [HERE / "new_instance.sh", name, "--min-params", s["min_params"],
+                       "--max-params", s["max_params"], "--sobol-points", s["sobol_points"]]
+            if s["setting"] != "exp2":
+                command += ["--setting", s["setting"]]
+            return command
         if current == version - 1 and current >= 1:
             command = [HERE / "new_instance.sh", "--iterate-on", name]
             previous = self.version_state(name, current) or {}

@@ -51,11 +51,37 @@ AGENT_DATA = (
 #: Never in an export: earlier results and the tools that list instances.
 DENY = (
     "configs/simulation/manager_testing/26_LEVIN_ah_vs_pf_top_batched.yml",
+    "configs/simulation/manager_testing/27_LEVIN_pf_proxy_vs_cem_batched.yml",
+    "configs/simulation/manager_testing/28_EXP1_baselines.yml",
     "scripts/policy_finder/observation_app",
     "scripts/policy_finder/campaign.py",
     "scripts/policy_finder/campaigns",
     "scripts/tests",
 )
+#: Per game (the instance file's `setting`, manager/rule.py SETTINGS): the
+#: data the agent reads (AGENT_DATA's role), what else stays out (the other
+#: game's rules and data, and for experiment 1 the RL manager it is compared
+#: with), and the agent definition the export holds as
+#: `.claude/agents/policy-finder.md`, the one policy-finder-host starts.
+SETTINGS = {
+    "exp2": {
+        "agent_data": AGENT_DATA,
+        "deny": ("docs/reports/basics_exp1.md",),
+        "agent": ".claude/agents/policy-finder.md",
+    },
+    "exp1": {
+        "agent_data": (
+            "experiments/pilot_random1_player_round_slim.csv",
+            "plots/simulation/29_EXP1_reference/*",
+        ),
+        "deny": (
+            "docs/reports/basics.md",
+            "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched",
+            "artifacts/manager",
+        ),
+        "agent": ".claude/agents/policy-finder-exp1.md",
+    },
+}
 #: Folders that hold one entry per instance or version; only the lineage's own
 #: entries stay (and .gitkeep)
 PER_INSTANCE = (
@@ -117,8 +143,8 @@ def _rm(path):
         os.remove(path)
 
 
-def _prune(export, name):
-    for rel in DENY:
+def _prune(export, name, deny=()):
+    for rel in (*DENY, *deny):
         _rm(os.path.join(export, rel))
     # parents before children: a child folder in PER_INSTANCE is kept by its
     # parent and pruned in its own turn
@@ -195,12 +221,23 @@ def build(wt, main, exports):
     wt, main = os.path.realpath(wt), os.path.realpath(main)
     conf = instance(wt)
     name, stem = conf["name"], conf["rule_name"]
+    setting = SETTINGS[conf.get("setting", "exp2")]
     export = os.path.join(exports, stem)
     _rm(export)
     shutil.copytree(
         wt, export, symlinks=False, ignore=shutil.ignore_patterns(".git")
     )
-    for pattern in AGENT_DATA:
+    agent = os.path.join(export, setting["agent"])
+    target = os.path.join(export, ".claude/agents/policy-finder.md")
+    if not os.path.isfile(agent):
+        raise ExportError(f"no agent definition {setting['agent']} in {wt}")
+    if agent != target:
+        # policy-finder-host starts the subagent by its frontmatter name
+        text = Path(agent).read_text()
+        head, sep, body = text.partition("\n---\n")
+        head = re.sub(r"(?m)^name: .*$", "name: policy-finder", head, count=1)
+        Path(target).write_text(head + sep + body)
+    for pattern in setting["agent_data"]:
         base = os.path.dirname(pattern)
         source_dir = os.path.join(main, base)
         if not os.path.isdir(source_dir):
@@ -215,7 +252,7 @@ def build(wt, main, exports):
         os.makedirs(os.path.join(export, base), exist_ok=True)
         for f in matched:
             shutil.copy2(os.path.join(source_dir, f), os.path.join(export, base, f))
-    _prune(export, name)
+    _prune(export, name, setting["deny"])
     found = leaks(export, name)
     if found:
         listing = ", ".join(f"{p} ({n})" for p, n in found[:20])

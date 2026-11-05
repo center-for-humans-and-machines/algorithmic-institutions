@@ -131,3 +131,38 @@ def test_collect_reports_strays(layout):
     ])
     # an earlier version's file is never copied back
     assert (wt / f"configs/managers/rule_based/{NAME}.yml").read_text() == "v1 rule\n"
+
+
+def test_an_exp1_export_holds_its_own_game(layout):
+    wt, main, exports = layout
+    _write(wt, ".claude/policy_finder.json", json.dumps(
+        {"name": NAME, "version": 2, "rule_name": f"{NAME}-v2", "setting": "exp1"}))
+    _write(wt, ".claude/agents/policy-finder-exp1.md",
+           "---\nname: policy-finder-exp1\nmodel: opus\n---\n\nThe exp1 game.\n")
+    _write(wt, "docs/reports/basics.md", "exp2 game\n")
+    _write(wt, "docs/reports/basics_exp1.md", "exp1 game\n")
+    _write(wt, "configs/simulation/manager_testing/28_EXP1_baselines.yml", "rl\n")
+    _write(main, "experiments/pilot_random1_player_round_slim.csv", "pilot\n")
+    _write(main, "plots/simulation/29_EXP1_reference/per_round.parquet", "PAR1")
+    export = Path(ex.build(wt, main, exports))
+    files = _files(export)
+    # the exp1 definition, under the name policy-finder-host starts
+    agent = (export / ".claude/agents/policy-finder.md").read_text()
+    assert agent.startswith("---\nname: policy-finder\n") and "The exp1 game." in agent
+    assert ".claude/agents/policy-finder-exp1.md" not in files
+    assert "experiments/pilot_random1_player_round_slim.csv" in files
+    assert "plots/simulation/29_EXP1_reference/per_round.parquet" in files
+    assert "docs/reports/basics_exp1.md" in files
+    for gone in ("docs/reports/basics.md", "experiments/2group_8agent_50ep.csv",
+                 "configs/simulation/manager_testing/28_EXP1_baselines.yml"):
+        assert gone not in files
+
+
+def test_an_exp2_export_has_no_exp1_game(layout):
+    wt, main, exports = layout
+    _write(wt, "docs/reports/basics_exp1.md", "exp1 game\n")
+    _write(wt, "configs/simulation/manager_testing/27_LEVIN_pf_proxy_vs_cem_batched.yml",
+           f"rule: {OTHER}\n")
+    files = _files(Path(ex.build(wt, main, exports)))
+    assert "docs/reports/basics_exp1.md" not in files
+    assert (Path(exports) / f"{NAME}-v2/.claude/agents/policy-finder.md").read_text() == "agent\n"

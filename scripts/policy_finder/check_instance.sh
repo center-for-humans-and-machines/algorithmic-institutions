@@ -54,12 +54,12 @@ git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null \
 # the current version, from the instance file (instance_settings.py)
 CONF="$WT/.claude/policy_finder.json"
 { read -r PY; read -r STEM; read -r START; read -r MIN_PARAMS; read -r MAX_PARAMS
-  read -r SOBOL_POINTS; } < <(
+  read -r SOBOL_POINTS; read -r SETTING; } < <(
     python3 -c 'import json, sys
 c = json.load(open(sys.argv[1]))
 print(c["python"], c.get("rule_name") or sys.argv[2], c.get("start_commit") or "",
       c["min_params"], "none" if c["max_params"] is None else c["max_params"],
-      c.get("sobol_points", 256), sep="\n")' "$CONF" "$NAME"
+      c.get("sobol_points", 256), c.get("setting", "exp2"), sep="\n")' "$CONF" "$NAME"
 ) || { echo "FAIL: cannot read the instance from $CONF" >&2; exit 1; }
 PY="${PF_PYTHON:-$PY}"
 RULE="configs/managers/rule_based/$STEM.yml"
@@ -115,7 +115,7 @@ done
 # the rule passes validate-rule (#227) within the instance's limits
 if ! (cd "$WT" && PYTHONPATH="$WT/src${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m aimanager validate-rule "$RULE" \
     --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
-    --sobol-points "$SOBOL_POINTS"); then
+    --sobol-points "$SOBOL_POINTS" --setting "$SETTING"); then
     echo "FAIL: $RULE does not pass validate-rule" >&2
     exit 1
 fi

@@ -1,0 +1,18 @@
+# The policy finder on experiment 1 (docs/plans/policy-finder-exp1.md): one
+# group of 4 clones, no switching, scored on the players' average payoff;
+# compared with experiment 1's RL manager afterwards (30_EXP1_pf_vs_rl).
+# Same budget as proxy-2026-11.yml.
+# Run: PF_RUNS=... PF_WORKTREE_ROOT=$PF_RUNS/worktrees_exp1 \
+#      python scripts/policy_finder/campaign.py run <this file>
+prefix: pf-20261105
+setting: exp1
+n_fresh: 12
+generations: 6
+top_k: 4
+min_params: 1
+max_params: 5
+sobol_points: 256
+parallel: 12
+error_retries: 3
+retry_wait: 600
+summarize: null

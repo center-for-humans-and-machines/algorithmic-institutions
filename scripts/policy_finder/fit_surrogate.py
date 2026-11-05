@@ -78,6 +78,10 @@ PROFILE_POINTS = 101
 #: a flat param the peak's value is arbitrary
 EDGE = 0.02
 EDGE_EFFECT = 1.0
+#: EDGE_EFFECT per sweep metric (sweep.json `metric`; absent: pool_vs_anchor).
+#: Experiment 1's average payoff is summed over 24 rounds and spreads several
+#: times wider than a pool: 5 points there is about 0.2 a round.
+EDGE_EFFECTS = {"pool_vs_anchor": EDGE_EFFECT, "group_payoff": 5.0}
 
 
 def axes(rule):
@@ -281,7 +285,8 @@ def landscapes(sweep, rule, rule_path, seed=0):
             "at_edge": [
                 a["name"]
                 for a, v in zip(ax, peak)
-                if (v <= EDGE or v >= 1 - EDGE) and effect[a["name"]] >= EDGE_EFFECT
+                if (v <= EDGE or v >= 1 - EDGE)
+                and effect[a["name"]] >= EDGE_EFFECTS[sweep.get("metric", "pool_vs_anchor")]
             ],
         },
         "points": [

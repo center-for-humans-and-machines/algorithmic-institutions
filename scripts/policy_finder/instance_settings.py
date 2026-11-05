@@ -56,6 +56,9 @@ def write(args):
         "sobol_points": args.sobol_points,
         "python": args.python,
     }
+    # the game (manager/rule.py SETTINGS); absent means exp2
+    if args.setting != "exp2":
+        instance["setting"] = args.setting
     os.makedirs(os.path.join(wt, ".claude"), exist_ok=True)
     with open(os.path.join(wt, ".claude", "policy_finder.json"), "w") as f:
         json.dump(instance, f, indent=2)
@@ -76,6 +79,7 @@ def main():
     ap.add_argument("--max-params", type=bound, default=4, help="a number or none")
     ap.add_argument("--sobol-points", type=int, default=256)
     ap.add_argument("--python", default="python3")
+    ap.add_argument("--setting", default="exp2", choices=("exp2", "exp1"))
     write(ap.parse_args())
 
 

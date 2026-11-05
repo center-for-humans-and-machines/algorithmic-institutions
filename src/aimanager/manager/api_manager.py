@@ -6,7 +6,7 @@ from aimanager.generic.graph import GraphNetwork
 from aimanager.manager.manager import ArtificalManager
 from aimanager.generic.data import MAX_CONTRIBUTION, shift
 from aimanager.simulation.linear_ah import LinearAHAdapter
-from aimanager.manager.rule import load_rule, rule_inputs, run_rule
+from aimanager.manager.rule import load_rule, rule_inputs, run_rule, setting_of
 
 
 class Round(BaseModel):
@@ -193,10 +193,14 @@ class RuleBasedManager:
     # hands it the raw round history; the batched path keeps its own.
     needs_rounds = True
 
-    def __init__(self, rule=None, params=None, n_punishments=31, **_):
+    def __init__(self, rule=None, params=None, n_punishments=31, setting=None, **_):
         if rule is None or params is None:
             raise ValueError("rule_based: `rule` and `params` are required")
-        self.code, self.params = load_rule(rule, params)
+        # the game the rule is written for (manager/rule.py SETTINGS):
+        # its inputs, and how many groups have a manager to run it
+        self.setting = setting
+        self.n_groups = setting_of(setting)["n_groups"]
+        self.code, self.params = load_rule(rule, params, setting)
         self.n_punishments = int(n_punishments)
         self.model = None
         self.history = None
@@ -207,8 +211,10 @@ class RuleBasedManager:
         own group's run, as [B, A, 1] int64."""
         now = agent_group[..., -1:]
         out = th.zeros(now.shape, dtype=th.float, device=now.device)
-        for group in (0, 1):
-            inputs = rule_inputs(contribution, valid, punishment, agent_group, group)
+        for group in range(self.n_groups):
+            inputs = rule_inputs(
+                contribution, valid, punishment, agent_group, group, self.setting
+            )
             raw = run_rule(self.code, self.params, inputs).unsqueeze(-1)
             out = th.where(now == group, raw, out)
         return out.clamp(0, self.n_punishments - 1).to(th.int64)

@@ -3,7 +3,7 @@
 #
 # Usage:
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
-#       [--sobol-points N] [--prompt TEXT]
+#       [--sobol-points N] [--prompt TEXT] [--setting exp2|exp1]
 #   scripts/policy_finder/new_instance.sh --iterate-on <name> [--after-failure]
 #       [the same options]
 #
@@ -56,6 +56,8 @@ NAME=""
 MAX_PARAMS=4
 MIN_PARAMS=1
 SOBOL_POINTS=256
+SETTING=exp2
+SETTING_GIVEN=0
 PROMPT=""
 ITERATE=0
 PARAMS_GIVEN=0
@@ -68,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --min-params) MIN_PARAMS="${2:-}"; PARAMS_GIVEN=1; shift 2 ;;
         --sobol-points) SOBOL_POINTS="${2:-}"; SOBOL_GIVEN=1; shift 2 ;;
         --prompt) PROMPT="${2:-}"; shift 2 ;;
+        --setting) SETTING="${2:-}"; SETTING_GIVEN=1; shift 2 ;;
         --after-failure) AFTER_FAILURE=1; shift ;;
         -h|--help) usage ;;
         -*) echo "unknown option: $1" >&2; usage ;;
@@ -117,12 +120,18 @@ if [[ "$ITERATE" == 1 ]]; then
         || { echo "no instance $NAME: no worktree at $WT" >&2; exit 1; }
     WT="$(cd "$WT" && pwd -P)"
     git -C "$MAIN" worktree lock --reason "policy finder: outside the command server's view" "$WT" 2>/dev/null || true
-    { read -r PREV_VERSION; read -r PREV_STEM; read -r PREV_SOBOL; } < <(
+    { read -r PREV_VERSION; read -r PREV_STEM; read -r PREV_SOBOL; read -r PREV_SETTING; } < <(
         python3 -c 'import json, sys
 c = json.load(open(sys.argv[1]))
 print(c.get("version", 1), c.get("rule_name") or sys.argv[2],
-      c.get("sobol_points", 256), sep="\n")' "$WT/.claude/policy_finder.json" "$NAME"
+      c.get("sobol_points", 256), c.get("setting", "exp2"), sep="\n")' "$WT/.claude/policy_finder.json" "$NAME"
     )
+    # an instance keeps its game across versions
+    if [[ "$SETTING_GIVEN" == 1 && "$SETTING" != "$PREV_SETTING" ]]; then
+        echo "$NAME is a $PREV_SETTING instance: --setting $SETTING does not apply" >&2
+        exit 2
+    fi
+    SETTING="$PREV_SETTING"
     PREV_FINAL="plots/simulation/policy_finder/${PREV_STEM}_sweep/final/sweep.json"
     PREV_STATE="$WT_ROOT/$PREV_STEM.state.json"
     if [[ ! -f "$WT/$PREV_FINAL" && "$AFTER_FAILURE" == 1 ]] \
@@ -172,11 +181,11 @@ grep -v '^#' "$MAIN/scripts/policy_finder/instance_paths" \
 "$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$NAME" \
     --version "$VERSION" --start-commit "$(git -C "$WT" rev-parse HEAD)" \
     --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
-    --sobol-points "$SOBOL_POINTS" --python "$PYTHON"
+    --sobol-points "$SOBOL_POINTS" --python "$PYTHON" --setting "$SETTING"
 STEM="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["rule_name"])' \
     "$WT/.claude/policy_finder.json")"
 
 echo "instance $NAME, version $VERSION ($STEM): branch $BRANCH, worktree $WT," \
-    "params $MIN_PARAMS-$MAX_PARAMS, $SOBOL_POINTS Sobol points"
+    "params $MIN_PARAMS-$MAX_PARAMS, $SOBOL_POINTS Sobol points, setting $SETTING"
 exec "$PYTHON" "$MAIN/scripts/policy_finder/pipeline.py" run "$NAME" \
     ${PROMPT:+--prompt "$PROMPT"}

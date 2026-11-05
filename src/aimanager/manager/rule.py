@@ -18,10 +18,13 @@ A rule YAML:
       punishment = 5 * (c[..., -1] < c0)
 
 `code` runs with these names in scope (rule_inputs computes them):
-  RULE_INPUTS, the raw history of every player of both groups (#245):
+  the inputs of the rule's setting (SETTINGS), the raw history of every player
+  (#245). For `exp2` (the default: two groups of 8 players in all, switching):
     c, valid, in_group   [B, A, t+1] float, rounds 0..t
     p                    [B, A, t] float, rounds 0..t-1
     t                    the round, 0-d float
+  For `exp1` (one group of 4, no switching): c, valid, p and t, with a
+  timed-out player's c read as 0.
   th        torch
   each name declared under `params`, from the params (0-d float tensor)
 It must set `punishment`, one value per player ([B, A], or anything that
@@ -52,6 +55,36 @@ RULE_INPUTS = (
     "in_group",  # 1 where the player was in this manager's group, rounds 0..t
     "t",  # the round, 0-23
 )
+#: The games a rule can be written for. `inputs`: the names its code sees;
+#: `n_players` and `n_groups`: the layout validate_rule's random histories
+#: take; `zero_timeouts`: whether rule_inputs reads a timed-out player's
+#: contribution as 0 whatever the env recorded (experiment 1's clones are fed
+#: their default, 15, which is no contribution).
+SETTINGS = {
+    "exp2": {
+        "inputs": RULE_INPUTS,
+        "n_players": 8,
+        "n_groups": 2,
+        "zero_timeouts": False,
+    },
+    "exp1": {
+        "inputs": ("c", "valid", "p", "t"),
+        "n_players": 4,
+        "n_groups": 1,
+        "zero_timeouts": True,
+    },
+}
+DEFAULT_SETTING = "exp2"
+#: Names no param may take, in any setting.
+ALL_INPUTS = tuple(dict.fromkeys(n for s in SETTINGS.values() for n in s["inputs"]))
+
+
+def setting_of(name):
+    """The SETTINGS entry `name` (None: the default)."""
+    name = DEFAULT_SETTING if name is None else name
+    if name not in SETTINGS:
+        raise ValueError(f"unknown rule setting {name!r}, expected one of {sorted(SETTINGS)}")
+    return SETTINGS[name]
 #: Besides the inputs and the params.
 RULE_MODULES = ("th",)
 RULE_OUTPUT = "punishment"
@@ -237,8 +270,10 @@ def _check_sweep_config(rule_path, declared, sweep):
                 raise ValueError(f"{where}: a log range needs low > 0, got {low}")
 
 
-def read_rule(rule_path):
+def read_rule(rule_path, setting=None):
     """Read and check a rule YAML on its own; return (rule, compiled code).
+
+    `setting` (SETTINGS, default exp2) sets the inputs the code may read.
 
     Checked here:
       - the only top-level keys are `params`, `sweep_config`, `constraints`
@@ -253,6 +288,7 @@ def read_rule(rule_path):
         every declared param, and assigns `punishment`
       - `constraints` (optional) are comparisons over declared params only
     """
+    inputs = setting_of(setting)["inputs"]
     with open(rule_path) as f:
         rule = yaml.safe_load(f)
 
@@ -266,7 +302,7 @@ def read_rule(rule_path):
     if not isinstance(declared, dict) or not declared:
         raise ValueError(f"{rule_path}: needs a non-empty `params` mapping")
     reserved = sorted(
-        set(declared) & {*RULE_INPUTS, *RULE_MODULES, RULE_OUTPUT, PARAMS_BEST}
+        set(declared) & {*ALL_INPUTS, *RULE_MODULES, RULE_OUTPUT, PARAMS_BEST}
     )
     if reserved:
         raise ValueError(f"{rule_path}: params use reserved names {reserved}")
@@ -285,7 +321,7 @@ def read_rule(rule_path):
     except ValueError as e:
         raise ValueError(f"{rule_path}: code: {e}") from None
     undefined = sorted(
-        read - bound - set(RULE_INPUTS) - set(RULE_MODULES) - set(declared)
+        read - bound - set(inputs) - set(RULE_MODULES) - set(declared)
     )
     if undefined:
         raise ValueError(f"{rule_path}: code reads undefined names {undefined}")
@@ -346,7 +382,7 @@ def check_params(rule_path, rule, params, source):
     return params
 
 
-def load_rule(rule_path, params):
+def load_rule(rule_path, params, setting=None):
     """Read a rule YAML and its params; return (compiled code, params).
 
     `params` is a JSON path or a mapping (inline in a sim config). If it has
@@ -354,7 +390,7 @@ def load_rule(rule_path, params):
     sweep's `sweep.json` loads as params. See read_rule and check_params for
     the checks.
     """
-    rule, code = read_rule(rule_path)
+    rule, code = read_rule(rule_path, setting)
     if isinstance(params, dict):
         source = "inline params"
     else:
@@ -366,20 +402,24 @@ def load_rule(rule_path, params):
     return code, check_params(rule_path, rule, params, source)
 
 
-def rule_inputs(contribution, valid, punishment, agent_group, group):
-    """RULE_INPUTS from the round history: `contribution`, `valid` and
-    `agent_group` (each player's group, 0 or 1) are [B, A, t+1] over episodes
-    B, players A of both groups and rounds 0..t; `punishment` is [B, A, t],
-    the punishments charged in rounds 0..t-1. `group` is the group the manager
-    runs, which `in_group` is relative to. Returns float tensors; `t` is 0-d.
+def rule_inputs(contribution, valid, punishment, agent_group, group, setting=None):
+    """The setting's inputs from the round history: `contribution`, `valid`
+    and `agent_group` (each player's group, 0 or 1) are [B, A, t+1] over
+    episodes B, players A of both groups and rounds 0..t; `punishment` is
+    [B, A, t], the punishments charged in rounds 0..t-1. `group` is the group
+    the manager runs, which `in_group` is relative to. Returns float tensors;
+    `t` is 0-d.
     """
+    spec = setting_of(setting)
     contribution = contribution.to(th.float)
+    if spec["zero_timeouts"]:
+        contribution = th.where(valid.to(th.bool), contribution, th.zeros_like(contribution))
     if punishment.shape[-1] != contribution.shape[-1] - 1:
         raise ValueError(
             f"rule_inputs: punishment covers {punishment.shape[-1]} rounds,"
             f" contribution {contribution.shape[-1]}: expected one fewer"
         )
-    return {
+    inputs = {
         "c": contribution,
         "valid": valid.to(th.float),
         "p": punishment.to(th.float),
@@ -388,6 +428,7 @@ def rule_inputs(contribution, valid, punishment, agent_group, group):
             contribution.shape[-1] - 1, dtype=th.float, device=contribution.device
         ),
     }
+    return {k: inputs[k] for k in spec["inputs"]}
 
 
 def run_rule(code, params, inputs):
@@ -403,7 +444,7 @@ def run_rule(code, params, inputs):
         "__builtins__": {},
         "th": th,
         **{k: th.tensor(v, dtype=th.float, device=c.device) for k, v in params.items()},
-        **{k: inputs[k].clone() for k in RULE_INPUTS},
+        **{k: v.clone() for k, v in inputs.items()},
     }
     exec(code, scope)
     if RULE_OUTPUT not in scope:
@@ -428,23 +469,29 @@ def run_rule(code, params, inputs):
 DRY_RUN_ROUNDS = (0, 11, 23)
 
 
-def dry_run_inputs(n_states=2048, n_players=8, rounds=DRY_RUN_ROUNDS, seed=0):
+def dry_run_inputs(n_states=2048, n_players=None, rounds=DRY_RUN_ROUNDS, seed=0, setting=None):
     """rule_inputs over random histories, one set per round in `rounds`, for
-    validate_rule: contributions 0-20 with timeouts, punishments 0-30, each
-    round's group split anywhere from all players in one group to an even
-    split, and each state's manager running group 0 or 1."""
+    validate_rule: contributions 0-20 with timeouts, punishments 0-30, and,
+    with two groups, each round's group split anywhere from all players in
+    one group to an even split, and each state's manager running group 0 or
+    1. The player count and groups come from the setting."""
+    spec = setting_of(setting)
+    n_players = spec["n_players"] if n_players is None else n_players
     g = th.Generator().manual_seed(seed)
     out = []
     for t in rounds:
         shape = (n_states, n_players, t + 1)
         split = th.rand(n_states, 1, t + 1, generator=g)  # per state and round
+        if spec["n_groups"] == 1:
+            split = th.zeros_like(split)  # every player in group 0
         out.append(
             rule_inputs(
                 contribution=th.randint(0, 21, shape, generator=g),
                 valid=th.rand(shape, generator=g) > 0.1,
                 punishment=th.randint(0, 31, (n_states, n_players, t), generator=g),
                 agent_group=(th.rand(shape, generator=g) < split).to(th.long),
-                group=th.randint(0, 2, (n_states, 1, 1), generator=g),
+                group=th.randint(0, spec["n_groups"], (n_states, 1, 1), generator=g),
+                setting=setting,
             )
         )
     return out
@@ -508,7 +555,9 @@ def sobol_design(rule, n_points=SOBOL_POINTS):
     return design
 
 
-def validate_rule(rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS):
+def validate_rule(
+    rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS, setting=None
+):
     """Check a rule for a sweep; return its design (see sobol_design).
 
     On top of read_rule: `sweep_config` is required, the rule declares
@@ -518,7 +567,7 @@ def validate_rule(rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS):
     point over random histories at the first, a middle and the last round
     (dry_run_inputs) without error or NaN, giving one punishment per player.
     """
-    rule, code = read_rule(rule_path)
+    rule, code = read_rule(rule_path, setting)
     if "sweep_config" not in rule:
         raise ValueError(f"{rule_path}: needs a `sweep_config` for a sweep")
     n_params = len(rule["params"])
@@ -531,7 +580,7 @@ def validate_rule(rule_path, min_params=1, max_params=4, n_points=SOBOL_POINTS):
         raise ValueError(f"{rule_path}: declares {n_params} params, allowed {allowed}")
 
     design = sobol_design(rule, n_points)
-    histories = dry_run_inputs()
+    histories = dry_run_inputs(setting=setting)
     for i, point in enumerate(design):
         source = f"{rule_path}: design point s{i:03d} {point}"
         check_params(rule_path, rule, point, source)

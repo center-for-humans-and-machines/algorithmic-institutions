@@ -60,6 +60,19 @@ TEMPLATE = Path(
 )
 #: The manager every design point plays (definition 4 of #226).
 ANCHOR = "ah"
+#: The games the policy finder runs on (manager/rule.py SETTINGS): the sim a
+#: sweep is built from, the manager its points play (None: each point plays
+#: the clones alone), its score, and overrides of the template's sim keys.
+SETTINGS = {
+    "exp2": {"template": TEMPLATE, "anchor": ANCHOR, "overrides": {}},
+    "exp1": {
+        "template": Path("configs/simulation/manager_testing/29_EXP1_reference.yml"),
+        "anchor": None,
+        # the template's human-like manager runs unbatched; rules batch
+        "overrides": {"episode_batch_size": 1000, "sweep_metric": "group_payoff"},
+    },
+}
+SETTING = "exp2"
 N_EPISODES = 500
 SEED = 42
 #: The final run of the Gaussian process's peak: its episodes (se about half
@@ -104,8 +117,10 @@ def build_sim_config(
     suffix="",
     names=None,
     output=None,
+    setting=None,
 ):
-    """The sweep's sim config, as a dict: TEMPLATE with the design's managers.
+    """The sweep's sim config, as a dict: the setting's template with the
+    design's managers (SETTINGS; default exp2, TEMPLATE against ANCHOR).
 
     `design` is the points of this sim, the first of them point `start` of
     the whole design; `suffix` tells a part's output and figure name apart.
@@ -122,10 +137,12 @@ def build_sim_config(
         rule_path = rule_path.relative_to(ROOT)
     except ValueError:
         raise ValueError(f"{rule_path} is outside the repo {ROOT}") from None
-    with open(ROOT / TEMPLATE) as f:
+    spec = SETTINGS[setting or SETTING]
+    anchor = spec["anchor"]
+    with open(ROOT / spec["template"]) as f:
         template = yaml.safe_load(f)
 
-    managers = {ANCHOR: template["managers"][ANCHOR]}
+    managers = {anchor: template["managers"][anchor]} if anchor else {}
     pairings = []
     if names is None:
         names = [f"{name}_s{i:03d}" for i in range(start, start + len(design))]
@@ -135,27 +152,35 @@ def build_sim_config(
             "rule": str(rule_path),
             "params": _Flow(point),
         }
-        pairings.append(
-            _Flow(name=f"{manager}_vs_{ANCHOR}", group_0=manager, group_1=ANCHOR)
-        )
+        if setting and setting != "exp2":
+            managers[manager]["setting"] = setting
+        if anchor:
+            pairings.append(
+                _Flow(name=f"{manager}_vs_{anchor}", group_0=manager, group_1=anchor)
+            )
 
     # TEMPLATE's keys in its order, the sweep's own values where it has them
     own = {
         "seed": seed,
         "managers": managers,
-        "pairings": pairings,
         "n_episodes": n_episodes,
         "output_dir": str(OUTPUT_DIR / (output or f"{name}_sweep{suffix}")),
         "figure_name": f"{name}_sweep{suffix}",
+        **spec["overrides"],
     }
+    if anchor:
+        own["pairings"] = pairings
     config = {k: own.get(k, v) for k, v in template.items()}
-    config["agent_groups"] = _FlowList(config["agent_groups"])
-    config.update(own)  # in case TEMPLATE lacks one
+    if "agent_groups" in config:
+        config["agent_groups"] = _FlowList(config["agent_groups"])
+    config.update(own)  # in case the template lacks one
     config["sweep"] = True
     return config
 
 
-def build_sim_configs(rule_path, design, n_episodes=N_EPISODES, seed=SEED, n_parts=1):
+def build_sim_configs(
+    rule_path, design, n_episodes=N_EPISODES, seed=SEED, n_parts=1, setting=None
+):
     """The sweep as `n_parts` sim configs: [(name suffix, config)].
 
     Contiguous parts of near-equal size. A sim seeds its batch i with
@@ -165,14 +190,16 @@ def build_sim_configs(rule_path, design, n_episodes=N_EPISODES, seed=SEED, n_par
     if not 1 <= n_parts <= len(design):
         raise ValueError(f"--n-parts must be in 1..{len(design)}, got {n_parts}")
     if n_parts == 1:
-        return [("", build_sim_config(rule_path, design, n_episodes, seed))]
+        return [
+            ("", build_sim_config(rule_path, design, n_episodes, seed, setting=setting))
+        ]
     edges = [round(k * len(design) / n_parts) for k in range(n_parts + 1)]
     configs, part_seed = [], seed
     for k in range(n_parts):
         part = design[edges[k] : edges[k + 1]]
         suffix = f"_p{k + 1}of{n_parts}"
         config = build_sim_config(
-            rule_path, part, n_episodes, part_seed, edges[k], suffix
+            rule_path, part, n_episodes, part_seed, edges[k], suffix, setting=setting
         )
         configs.append((suffix, config))
         batch = config.get("episode_batch_size", 1)
@@ -202,6 +229,7 @@ def write_final(args):
             FINAL_SEED if args.seed is None else args.seed,
             names=[f"{stem}_gp"] + [p["name"] for p in measured],
             output=f"{stem}_sweep/{FINAL_DIR}",
+            setting=args.setting,
         )
     except ValueError as e:
         sys.exit(f"Invalid: {e}")
@@ -211,15 +239,20 @@ def write_final(args):
     header = (
         f"# Final run of {sweep_file}, written by"
         f" scripts/policy_finder/generate_sim_config.py:\n"
-        f"# the Gaussian process's peak against `{ANCHOR}` on fresh seeds;"
+        f"# the Gaussian process's peak{_against(args.setting)} on fresh seeds;"
         f" its sweep.json holds the\n# rule's final result. Stack and sim"
-        f" parameters from {TEMPLATE}.\n\n"
+        f" parameters from {SETTINGS[args.setting]['template']}.\n\n"
     )
     with open(out, "w") as f:
         f.write(header)
         yaml.safe_dump(config, f, sort_keys=False, width=1000)
     extra = f" and the {len(measured)} best measured points" if measured else ""
     print(f"Wrote {out}: the peak{extra} x {n_episodes} episodes")
+
+
+def _against(setting):
+    anchor = SETTINGS[setting]["anchor"]
+    return f" against `{anchor}`" if anchor else " alone with the clones"
 
 
 def score_final(path):
@@ -277,6 +310,10 @@ def main():
         help="a number, or none for no upper bound",
     )
     ap.add_argument("--root", help="the repo the paths are relative to")
+    ap.add_argument(
+        "--setting", default=SETTING, choices=sorted(SETTINGS),
+        help="the game (manager/rule.py SETTINGS), default exp2",
+    )
     ap.add_argument("--out", help="the sim config to write (one part only)")
     args = ap.parse_args()
     if args.root:
@@ -303,10 +340,12 @@ def main():
 
     try:
         design = validate_rule(
-            args.config, args.min_params, args.max_params, args.sobol_points
+            args.config, args.min_params, args.max_params, args.sobol_points,
+            setting=args.setting,
         )
         configs = build_sim_configs(
-            args.config, design, args.n_episodes, args.seed, args.n_parts
+            args.config, design, args.n_episodes, args.seed, args.n_parts,
+            setting=args.setting,
         )
     except ValueError as e:
         sys.exit(f"Invalid: {e}")
@@ -315,13 +354,17 @@ def main():
     for suffix, config in configs:
         out = Path(args.out or ROOT / CONFIG_DIR / f"{stem}_sweep{suffix}.yml")
         out.parent.mkdir(parents=True, exist_ok=True)
-        n_points = len(config["pairings"])
+        n_points = sum(1 for m in config["managers"].values() if m["type"] == "rule_based")
+        each = (
+            f"each against `{SETTINGS[args.setting]['anchor']}`"
+            if SETTINGS[args.setting]["anchor"] else "each alone with the clones"
+        )
         header = (
             f"# Sweep of {args.config} (#227), written by"
             f" scripts/policy_finder/generate_sim_config.py:\n"
             f"# {n_points} of {len(design)} distinct design points"
-            f" ({args.sobol_points} Sobol points), each against `{ANCHOR}`;"
-            f" stack and sim parameters from\n# {TEMPLATE}.\n\n"
+            f" ({args.sobol_points} Sobol points), {each};"
+            f" stack and sim parameters from\n# {SETTINGS[args.setting]['template']}.\n\n"
         )
         with open(out, "w") as f:
             f.write(header)

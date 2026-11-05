@@ -67,3 +67,41 @@ def against_anchor(df: pd.DataFrame, anchor: str) -> dict:
             )
             scores.setdefault(manager, []).append(frame)
     return {m: pd.concat(f, ignore_index=True) for m, f in scores.items()}
+
+
+# -- Experiment 1: one group, no anchor ----------------------------------
+
+GROUP_PAYOFF = "group_payoff"
+
+
+def manager_of(run: str) -> str:
+    """The manager of a run without pairings ("ah <h> managed by <m>")."""
+    return run.split("managed by ")[-1]
+
+
+def group_payoff_scores(df: pd.DataFrame) -> dict:
+    """Manager -> per-episode (pool, members) for experiment 1's score.
+
+    Experiment 1's objective, the average payoff: per round, the mean payoff
+    of the players who did not time out, with payoff 20 - c - p + their share
+    of the pool, (1.6 * sum(c) - sum(p)) / n over the n valid players (the
+    sim's `payoff` column on valid rows; a timed-out player is out of the
+    pool and cannot be punished). A round with no valid player scores 0.
+    Summed over the episode's rounds, as experiment 1's payoffs are reported.
+    `pool` carries the score, so the sweep's consumers read it unchanged;
+    `members` is the mean number of valid players per round.
+    """
+    valid = df[df["contribution_valid"].astype(bool)]
+    per_round = valid.groupby(["run", "episode", "round_number"])["payoff"].agg(
+        ["mean", "size"]
+    )
+    rounds = df[["run", "episode", "round_number"]].drop_duplicates()
+    full = rounds.set_index(["run", "episode", "round_number"]).join(per_round)
+    full = full.fillna(0.0)
+    episodes = full.groupby(["run", "episode"]).agg(
+        pool=("mean", "sum"), members=("size", "mean")
+    )
+    scores = {}
+    for run, frame in episodes.groupby(level="run"):
+        scores[manager_of(run)] = frame.reset_index(drop=True)
+    return scores
