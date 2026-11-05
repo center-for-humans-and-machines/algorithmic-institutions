@@ -1,0 +1,137 @@
+# Final run of /home/kappablanca/pf_runs/worktrees_multi/pf-20261106-7/plots/simulation/policy_finder/pf-20261106-7-v4_sweep/sweep.json, written by scripts/policy_finder/generate_sim_config.py:
+# the Gaussian process's peak against each of 4 opponents in both seats (configs/simulation/opponents/exp2_multi.yml) on fresh seeds; its sweep.json holds the
+# rule's final result. Stack and sim parameters from configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 1000
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  opponent_1:
+    type: rule_based
+    rule: configs/managers/rule_based/levin_sigmoid.yml
+    params:
+      p_max: 30.0
+      c0: 7.13780183612438
+      tau: 0.4249189420822854
+      gamma_ep: 3.0
+      gamma_sw: 1.418622533255372
+  opponent_2:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  opponent_3:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 8.593831124672404
+      peer: 0.6021230646847561
+      ceil: 15.0
+      slope: 9.18944166018839
+      decay: 0.5553923088191522
+      stop: 3
+  opponent_4:
+    type: dummy
+    constant_punishment: 0
+  pf-20261106-7-v4_gp:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-7-v4.yml
+    params: {c0: 9, k: 11.383469791097218, budget: 106.74610674905954, decay: 0.2, follow: 0.37736357752978167}
+    setting: exp2_multi
+  pf-20261106-7-v4_s178:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-7-v4.yml
+    params: {c0: 11, k: 11.601561012792446, budget: 126.73994438259967, decay: 0.2477338805794716, follow: 0.41345688607543707}
+    setting: exp2_multi
+  pf-20261106-7-v4_s050:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-7-v4.yml
+    params: {c0: 11, k: 6.9988779070414, budget: 67.07435340085487, decay: 0.30414285510778427, follow: 0.5764309000223875}
+    setting: exp2_multi
+  pf-20261106-7-v4_s218:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-7-v4.yml
+    params: {c0: 9, k: 9.418062703187926, budget: 8.328930402929272, decay: 0.35018360018730166, follow: 0.46190484892576933}
+    setting: exp2_multi
+  pf-20261106-7-v4_s233:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-7-v4.yml
+    params: {c0: 9, k: 4.182128114787377, budget: 7.740153767829998, decay: 0.7486522004008294, follow: 0.36010517552495}
+    setting: exp2_multi
+  pf-20261106-7-v4_s038:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-7-v4.yml
+    params: {c0: 8, k: 6.042068970515506, budget: 9.029247262757048, decay: 0.5244580686092377, follow: 0.7358694262802601}
+    setting: exp2_multi
+pairings:
+- {name: pf-20261106-7-v4_gp_vs_opponent_1, group_0: pf-20261106-7-v4_gp, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-7-v4_gp, group_0: opponent_1, group_1: pf-20261106-7-v4_gp}
+- {name: pf-20261106-7-v4_gp_vs_opponent_2, group_0: pf-20261106-7-v4_gp, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-7-v4_gp, group_0: opponent_2, group_1: pf-20261106-7-v4_gp}
+- {name: pf-20261106-7-v4_gp_vs_opponent_3, group_0: pf-20261106-7-v4_gp, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-7-v4_gp, group_0: opponent_3, group_1: pf-20261106-7-v4_gp}
+- {name: pf-20261106-7-v4_gp_vs_opponent_4, group_0: pf-20261106-7-v4_gp, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-7-v4_gp, group_0: opponent_4, group_1: pf-20261106-7-v4_gp}
+- {name: pf-20261106-7-v4_s178_vs_opponent_1, group_0: pf-20261106-7-v4_s178, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-7-v4_s178, group_0: opponent_1, group_1: pf-20261106-7-v4_s178}
+- {name: pf-20261106-7-v4_s178_vs_opponent_2, group_0: pf-20261106-7-v4_s178, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-7-v4_s178, group_0: opponent_2, group_1: pf-20261106-7-v4_s178}
+- {name: pf-20261106-7-v4_s178_vs_opponent_3, group_0: pf-20261106-7-v4_s178, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-7-v4_s178, group_0: opponent_3, group_1: pf-20261106-7-v4_s178}
+- {name: pf-20261106-7-v4_s178_vs_opponent_4, group_0: pf-20261106-7-v4_s178, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-7-v4_s178, group_0: opponent_4, group_1: pf-20261106-7-v4_s178}
+- {name: pf-20261106-7-v4_s050_vs_opponent_1, group_0: pf-20261106-7-v4_s050, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-7-v4_s050, group_0: opponent_1, group_1: pf-20261106-7-v4_s050}
+- {name: pf-20261106-7-v4_s050_vs_opponent_2, group_0: pf-20261106-7-v4_s050, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-7-v4_s050, group_0: opponent_2, group_1: pf-20261106-7-v4_s050}
+- {name: pf-20261106-7-v4_s050_vs_opponent_3, group_0: pf-20261106-7-v4_s050, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-7-v4_s050, group_0: opponent_3, group_1: pf-20261106-7-v4_s050}
+- {name: pf-20261106-7-v4_s050_vs_opponent_4, group_0: pf-20261106-7-v4_s050, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-7-v4_s050, group_0: opponent_4, group_1: pf-20261106-7-v4_s050}
+- {name: pf-20261106-7-v4_s218_vs_opponent_1, group_0: pf-20261106-7-v4_s218, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-7-v4_s218, group_0: opponent_1, group_1: pf-20261106-7-v4_s218}
+- {name: pf-20261106-7-v4_s218_vs_opponent_2, group_0: pf-20261106-7-v4_s218, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-7-v4_s218, group_0: opponent_2, group_1: pf-20261106-7-v4_s218}
+- {name: pf-20261106-7-v4_s218_vs_opponent_3, group_0: pf-20261106-7-v4_s218, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-7-v4_s218, group_0: opponent_3, group_1: pf-20261106-7-v4_s218}
+- {name: pf-20261106-7-v4_s218_vs_opponent_4, group_0: pf-20261106-7-v4_s218, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-7-v4_s218, group_0: opponent_4, group_1: pf-20261106-7-v4_s218}
+- {name: pf-20261106-7-v4_s233_vs_opponent_1, group_0: pf-20261106-7-v4_s233, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-7-v4_s233, group_0: opponent_1, group_1: pf-20261106-7-v4_s233}
+- {name: pf-20261106-7-v4_s233_vs_opponent_2, group_0: pf-20261106-7-v4_s233, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-7-v4_s233, group_0: opponent_2, group_1: pf-20261106-7-v4_s233}
+- {name: pf-20261106-7-v4_s233_vs_opponent_3, group_0: pf-20261106-7-v4_s233, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-7-v4_s233, group_0: opponent_3, group_1: pf-20261106-7-v4_s233}
+- {name: pf-20261106-7-v4_s233_vs_opponent_4, group_0: pf-20261106-7-v4_s233, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-7-v4_s233, group_0: opponent_4, group_1: pf-20261106-7-v4_s233}
+- {name: pf-20261106-7-v4_s038_vs_opponent_1, group_0: pf-20261106-7-v4_s038, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-7-v4_s038, group_0: opponent_1, group_1: pf-20261106-7-v4_s038}
+- {name: pf-20261106-7-v4_s038_vs_opponent_2, group_0: pf-20261106-7-v4_s038, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-7-v4_s038, group_0: opponent_2, group_1: pf-20261106-7-v4_s038}
+- {name: pf-20261106-7-v4_s038_vs_opponent_3, group_0: pf-20261106-7-v4_s038, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-7-v4_s038, group_0: opponent_3, group_1: pf-20261106-7-v4_s038}
+- {name: pf-20261106-7-v4_s038_vs_opponent_4, group_0: pf-20261106-7-v4_s038, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-7-v4_s038, group_0: opponent_4, group_1: pf-20261106-7-v4_s038}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 1000
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261106-7-v4_sweep/final
+figure_name: pf-20261106-7-v4_sweep_final
+save_per_round: true
+basedir: .
+sweep_metric: pool_vs_opponents
+sweep_opponents:
+- opponent_1
+- opponent_2
+- opponent_3
+- opponent_4
+sweep: true
