@@ -1,0 +1,67 @@
+params:
+  c0:
+    definition: >-
+      absolute contribution level a member is expected to reach; the target a
+      member is measured against is (1 - w) * c0 + w * (mean contribution of the
+      other valid members of my group this round), and only members below the
+      target are punished, in proportion to their shortfall
+    type: int
+  w:
+    definition: >-
+      weight of the group's own norm in the target: 0 is a fixed level c0 for
+      everyone, 1 punishes only falling below the rest of one's own group. The
+      simulated players respond more, and leave less, when punished while
+      sitting further below the rest of their group, at the same own
+      contribution; punishing a member who is level with or above the others
+      buys the least and costs the most members
+    type: float
+  k:
+    definition: >-
+      punishment points per point of shortfall below the target in the first
+      round of the game (the first round of the first block)
+    type: float
+  decay:
+    definition: >-
+      factor by which the punishment shrinks from one four-round block to the
+      next (block b is scaled by decay^b), because a lift has fewer rounds left
+      to pay back
+    type: float
+  follow:
+    definition: >-
+      factor on punishment in the second round of a block (and follow squared in
+      the third), relative to the block's first round; the last round of a block,
+      right before players may switch, is never punished
+    type: float
+sweep_config:
+  c0: [6, 14]
+  w: [0, 1]
+  k: [2, 25, log]
+  decay: [0.05, 1, log]
+  follow: [0, 0.8]
+constraints:
+  - c0 >= 1
+  - w >= 0
+  - w <= 1
+  - k > 0
+  - decay > 0
+  - follow >= 0
+code: |
+  # no float scalars as th arguments or in comparisons (they fail in a cold,
+  # builtins-free exec); relu is max(0, .)
+  now = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  # leave-one-out mean contribution of the other valid members of my group
+  total = (now * mine).sum(-1).unsqueeze(-1)
+  n = mine.sum(-1).unsqueeze(-1)
+  others = th.relu(n - mine)  # for a member: n - 1
+  has = th.sign(others)  # 1 if there is anyone else to compare with
+  others_mean = (total - now * mine) / (others + 1 - has)
+  target = c0 + w * has * (others_mean - c0)
+  block = th.floor(t / 4)
+  q = t - 4 * block  # place in the block, 0-3; 3 is the round before a switch decision
+  pos = th.relu(1 - q) + follow * th.relu(1 - th.abs(q - 1)) + follow * follow * th.relu(1 - th.abs(q - 2))
+  # in the last block (no decision follows) its last round is treated like its third
+  last = th.relu(th.sign(block - 4))
+  pos = pos + last * follow * follow * th.relu(1 - th.abs(q - 3))
+  size = k * th.pow(decay, block) * pos
+  punishment = size * th.relu(target - now) * mine
