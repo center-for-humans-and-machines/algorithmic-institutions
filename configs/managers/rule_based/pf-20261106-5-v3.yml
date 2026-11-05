@@ -1,0 +1,50 @@
+params:
+  target_open:
+    definition: contribution level below which a member is punished in the opening blocks (the first n_open 4-round blocks)
+    type: float
+  n_open:
+    definition: number of 4-round blocks (counted from round 0) in which the opening target applies
+    type: int
+  target_late:
+    definition: contribution level below which a member is punished in the blocks after the opening (maintenance against clear free-riders and low-contributing newcomers; 0 means none)
+    type: float
+  window:
+    definition: number of rounds at the start of each 4-round block (right after a switch decision) in which punishment is dealt; the rest of the block, the rounds leading up to the next decision, is never punished (4 = every round)
+    type: int
+  slope:
+    definition: punishment points per contribution point a member falls short of the current target
+    type: float
+  cap:
+    definition: largest punishment any one member gets in a round
+    type: float
+  t_end:
+    definition: first round from which no one is punished any more (late punishment has no rounds left to pay back)
+    type: int
+sweep_config:
+  target_open: [5, 14]
+  n_open: [1, 4]
+  target_late: [0, 10]
+  window: [1, 4]
+  slope: [0.5, 12, log]
+  cap: [5, 30]
+  t_end: [8, 22]
+constraints:
+  - target_open >= 0
+  - target_late >= 0
+  - slope > 0
+  - cap > 0
+  - window >= 1
+code: |
+  ct = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  one = th.ones_like(t)
+  # position in the 4-round block: 0 right after a switch decision, 3 just before the next
+  block = th.floor(t / (4 * one))
+  pos = t - 4 * block
+  in_window = (pos < window).float()
+  opening = (block < n_open).float()
+  target = target_late + (target_open - target_late) * opening
+  shortfall = th.relu(target - ct)
+  pun = th.minimum(slope * shortfall, cap * th.ones_like(ct))
+  live = (t < t_end).float()
+  punishment = pun * mine * in_window * live
