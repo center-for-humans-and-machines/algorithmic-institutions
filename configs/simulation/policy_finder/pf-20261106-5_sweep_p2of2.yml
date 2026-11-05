@@ -1,0 +1,1723 @@
+# Sweep of /home/kappablanca/pf_runs/worktrees_multi/pf-20261106-5/configs/managers/rule_based/pf-20261106-5.yml (#227), written by scripts/policy_finder/generate_sim_config.py:
+# 128 of 256 distinct design points (256 Sobol points), each against each of 4 opponents in both seats (configs/simulation/opponents/exp2_multi.yml); stack and sim parameters from
+# configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 108
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  opponent_1:
+    type: rule_based
+    rule: configs/managers/rule_based/levin_sigmoid.yml
+    params:
+      p_max: 30.0
+      c0: 7.13780183612438
+      tau: 0.4249189420822854
+      gamma_ep: 3.0
+      gamma_sw: 1.418622533255372
+  opponent_2:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  opponent_3:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 8.593831124672404
+      peer: 0.6021230646847561
+      ceil: 15.0
+      slope: 9.18944166018839
+      decay: 0.5553923088191522
+      stop: 3
+  opponent_4:
+    type: dummy
+    constant_punishment: 0
+  pf-20261106-5_s128:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.106584077363529, tol: 7.362344516441226, cap0: 1.9026248948648572, follow: 1.350864389911294, t_stop: 21}
+    setting: exp2_multi
+  pf-20261106-5_s129:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.06112212702743416, tol: 1.051455894485116, cap0: 12.914949296973646, follow: 1.697422195225954, t_stop: 12}
+    setting: exp2_multi
+  pf-20261106-5_s130:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.30746552560787155, tol: 9.559534508734941, cap0: 5.1033613085746765, follow: 0.6572652496397495, t_stop: 8}
+    setting: exp2_multi
+  pf-20261106-5_s131:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.2314989218847112, tol: 3.2095835357904434, cap0: 10.02184390090406, follow: 2.5726762656122446, t_stop: 17}
+    setting: exp2_multi
+  pf-20261106-5_s132:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.6779659537965808, tol: 8.745911940932274, cap0: 14.564863471314311, follow: 2.7464367896318436, t_stop: 19}
+    setting: exp2_multi
+  pf-20261106-5_s133:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.17593586349066628, tol: 4.744603205472231, cap0: 0.2637108787894249, follow: 0.1143504437059164, t_stop: 10}
+    setting: exp2_multi
+  pf-20261106-5_s134:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.1006071733342369, tol: 5.90419084765017, cap0: 8.434410891495645, follow: 1.8873101379722357, t_stop: 14}
+    setting: exp2_multi
+  pf-20261106-5_s135:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 3.604071628848483, tol: 1.9419447612017393, cap0: 6.789657440967858, follow: 0.7801320254802704, t_stop: 23}
+    setting: exp2_multi
+  pf-20261106-5_s136:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.3917451703491346, tol: 9.183098273351789, cap0: 9.247856363654137, follow: 0.27079873345792294, t_stop: 13}
+    setting: exp2_multi
+  pf-20261106-5_s137:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.11522108675532151, tol: 3.0281570460647345, cap0: 5.729019558057189, follow: 2.8654814064502716, t_stop: 20}
+    setting: exp2_multi
+  pf-20261106-5_s138:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.20135925642694202, tol: 6.399972252547741, cap0: 13.75233352649957, follow: 1.0815826803445816, t_stop: 16}
+    setting: exp2_multi
+  pf-20261106-5_s139:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.4497287581193826, tol: 0.20596837624907494, cap0: 1.3270953437313437, follow: 2.2480482514947653, t_stop: 9}
+    setting: exp2_multi
+  pf-20261106-5_s140:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.8168072762866014, tol: 5.333664026111364, cap0: 4.057371891103685, follow: 1.6641294993460178, t_stop: 11}
+    setting: exp2_multi
+  pf-20261106-5_s141:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.35194171750800235, tol: 1.8008026108145714, cap0: 10.849937838502228, follow: 1.2846514228731394, t_stop: 18}
+    setting: exp2_multi
+  pf-20261106-5_s142:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.06999134694538843, tol: 7.511321743950248, cap0: 2.951360894367099, follow: 2.312315622344613, t_stop: 22}
+    setting: exp2_multi
+  pf-20261106-5_s143:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.3981621153390336, tol: 4.017522679641843, cap0: 12.087770886719227, follow: 0.4548160918056965, t_stop: 15}
+    setting: exp2_multi
+  pf-20261106-5_s144:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.5702458771823276, tol: 8.063433859497309, cap0: 6.176358684897423, follow: 2.02570310421288, t_stop: 17}
+    setting: exp2_multi
+  pf-20261106-5_s145:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.07596074375370238, tol: 4.101492762565613, cap0: 8.758417284116149, follow: 0.9288477413356304, t_stop: 8}
+    setting: exp2_multi
+  pf-20261106-5_s146:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.40208218981779614, tol: 5.260622976347804, cap0: 1.7598015116527677, follow: 2.7134428583085537, t_stop: 12}
+    setting: exp2_multi
+  pf-20261106-5_s147:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.9017754266703629, tol: 1.25961952842772, cap0: 13.2482019206509, follow: 0.04773430712521076, t_stop: 21}
+    setting: exp2_multi
+  pf-20261106-5_s148:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.5455281835347057, tol: 6.794498050585389, cap0: 10.400964296422899, follow: 0.6302000507712364, t_stop: 23}
+    setting: exp2_multi
+  pf-20261106-5_s149:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.2360291101245484, tol: 0.4448521416634321, cap0: 4.544783276505768, follow: 2.5118515323847532, t_stop: 14}
+    setting: exp2_multi
+  pf-20261106-5_s150:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.1373929757346501, tol: 8.952778428792953, cap0: 11.6534876357764, follow: 1.4834673386067152, t_stop: 10}
+    setting: exp2_multi
+  pf-20261106-5_s151:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.7559729354811844, tol: 2.6421951688826084, cap0: 3.453407473862171, follow: 1.8402105644345284, t_stop: 19}
+    setting: exp2_multi
+  pf-20261106-5_s152:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 3.1546430835200687, tol: 5.977022089064121, cap0: 12.466934253461659, follow: 2.349680481478572, t_stop: 9}
+    setting: exp2_multi
+  pf-20261106-5_s153:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.09112745712379065, tol: 2.4829180352389812, cap0: 2.39276850130409, follow: 0.5053411200642586, t_stop: 16}
+    setting: exp2_multi
+  pf-20261106-5_s154:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.15665532298967697, tol: 8.193895192816854, cap0: 9.58843320608139, follow: 1.5447558984160423, t_stop: 20}
+    setting: exp2_multi
+  pf-20261106-5_s155:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.6246864845125909, tol: 4.660728489980102, cap0: 5.6081688310950994, follow: 1.1286336611956358, t_stop: 13}
+    setting: exp2_multi
+  pf-20261106-5_s156:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.0327670419493016, tol: 9.79002601467073, cap0: 0.7138109486550093, follow: 0.9563275538384914, t_stop: 15}
+    setting: exp2_multi
+  pf-20261106-5_s157:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.2668305068868549, tol: 3.5957170743495226, cap0: 14.07629694789648, follow: 2.0861947406083345, t_stop: 22}
+    setting: exp2_multi
+  pf-20261106-5_s158:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.05038866409071003, tol: 6.967685203999281, cap0: 7.225095829926431, follow: 0.3140008170157671, t_stop: 18}
+    setting: exp2_multi
+  pf-20261106-5_s159:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.797148298375259, tol: 0.812438614666462, cap0: 7.931237784214318, follow: 2.9218894354999065, t_stop: 11}
+    setting: exp2_multi
+  pf-20261106-5_s160:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.010586724803515, tol: 9.412926035001874, cap0: 13.969563860446215, follow: 1.8228309229016304, t_stop: 23}
+    setting: exp2_multi
+  pf-20261106-5_s161:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.05625053047933598, tol: 3.375780275091529, cap0: 1.082842731848359, follow: 1.407099125906825, t_stop: 14}
+    setting: exp2_multi
+  pf-20261106-5_s162:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.29290519198328835, tol: 7.196052484214306, cap0: 8.96705421153456, follow: 2.4475883077830076, t_stop: 10}
+    setting: exp2_multi
+  pf-20261106-5_s163:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.1360758142508387, tol: 1.1979690752923489, cap0: 5.924234348349273, follow: 0.6007096990942955, t_stop: 19}
+    setting: exp2_multi
+  pf-20261106-5_s164:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.6415189901373349, tol: 5.757506098598242, cap0: 3.194183106534183, follow: 0.030332492664456367, t_stop: 17}
+    setting: exp2_multi
+  pf-20261106-5_s165:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.16053748580466204, tol: 2.108065150678158, cap0: 11.86922459397465, follow: 2.6370982490479946, t_stop: 8}
+    setting: exp2_multi
+  pf-20261106-5_s166:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.0950204773269784, tol: 8.579848846420646, cap0: 3.8607267010957003, follow: 0.8645623438060284, t_stop: 12}
+    setting: exp2_multi
+  pf-20261106-5_s167:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 3.2965571486952916, tol: 4.89134524948895, cap0: 11.129424031823874, follow: 1.9962363559752703, t_stop: 21}
+    setting: exp2_multi
+  pf-20261106-5_s168:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.8738032421641715, tol: 6.546485079452395, cap0: 4.908547201193869, follow: 2.9978935830295086, t_stop: 15}
+    setting: exp2_multi
+  pf-20261106-5_s169:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.1435690752903056, tol: 0.039675990119576454, cap0: 10.303161176852882, follow: 0.33174881525337696, t_stop: 22}
+    setting: exp2_multi
+  pf-20261106-5_s170:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.24239685539691935, tol: 9.34929521754384, cap0: 2.147278133779764, follow: 2.115315305069089, t_stop: 18}
+    setting: exp2_multi
+  pf-20261106-5_s171:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.5590290379147489, tol: 2.8815487772226334, cap0: 12.698234030976892, follow: 1.0209534130990505, t_stop: 11}
+    setting: exp2_multi
+  pf-20261106-5_s172:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.9898629414133062, tol: 7.658063396811485, cap0: 8.15543976612389, follow: 1.2046156357973814, t_stop: 9}
+    setting: exp2_multi
+  pf-20261106-5_s173:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.44231819739923955, tol: 3.8514591939747334, cap0: 6.986703258007765, follow: 1.5625275000929832, t_stop: 16}
+    setting: exp2_multi
+  pf-20261106-5_s174:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.08497928580002284, tol: 5.499784657731652, cap0: 14.783924887888134, follow: 0.5344395115971565, t_stop: 20}
+    setting: exp2_multi
+  pf-20261106-5_s175:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.752977572617702, tol: 1.6541181039065123, cap0: 0.021289349533617496, follow: 2.414329944178462, t_stop: 13}
+    setting: exp2_multi
+  pf-20261106-5_s176:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.4328390161729108, tol: 5.114414729177952, cap0: 9.813002147711813, follow: 0.7979000508785248, t_stop: 19}
+    setting: exp2_multi
+  pf-20261106-5_s177:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.07187826565761987, tol: 1.4256061427295208, cap0: 5.356606277637184, follow: 1.9632885362952948, t_stop: 10}
+    setting: exp2_multi
+  pf-20261106-5_s178:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.36778143411473546, tol: 7.897542687132955, cap0: 12.193441931158304, follow: 0.17900205217301846, t_stop: 14}
+    setting: exp2_multi
+  pf-20261106-5_s179:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.8517134780554013, tol: 4.247796451672912, cap0: 2.5806447956711054, follow: 2.7755373269319534, t_stop: 23}
+    setting: exp2_multi
+  pf-20261106-5_s180:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.5020401990091762, tol: 8.806341355666518, cap0: 7.4752279836684465, follow: 2.5904221180826426, t_stop: 21}
+    setting: exp2_multi
+  pf-20261106-5_s181:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.22526919772307166, tol: 2.80795288272202, cap0: 7.705352883785963, follow: 0.7332672514021397, t_stop: 12}
+    setting: exp2_multi
+  pf-20261106-5_s182:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.12674506512913744, tol: 6.628683190792799, cap0: 0.5245042545720935, follow: 1.7620516307651997, t_stop: 8}
+    setting: exp2_multi
+  pf-20261106-5_s183:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.6254148280921443, tol: 0.591232068836689, cap0: 14.348473311401904, follow: 1.379988530650735, t_stop: 17}
+    setting: exp2_multi
+  pf-20261106-5_s184:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 3.964665193124567, tol: 8.340197894722223, cap0: 1.5723258443176746, follow: 0.3784679062664509, t_stop: 11}
+    setting: exp2_multi
+  pf-20261106-5_s185:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.11043274220058293, tol: 4.494836330413818, cap0: 13.522209310904145, follow: 2.294910231605172, t_stop: 18}
+    setting: exp2_multi
+  pf-20261106-5_s186:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.19640671375431892, tol: 6.143009541556239, cap0: 6.428321921266615, follow: 1.2551868204027414, t_stop: 22}
+    setting: exp2_multi
+  pf-20261106-5_s187:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.7584449883972838, tol: 2.336710626259446, cap0: 8.534363466314971, follow: 1.5998462475836277, t_stop: 15}
+    setting: exp2_multi
+  pf-20261106-5_s188:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.2868800119573853, tol: 7.114064181223512, cap0: 11.381826396100223, follow: 2.1716778930276632, t_stop: 13}
+    setting: exp2_multi
+  pf-20261106-5_s189:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.3206160525118594, tol: 0.6466228049248457, cap0: 3.6431148508563638, follow: 1.0642008930444717, t_stop: 20}
+    setting: exp2_multi
+  pf-20261106-5_s190:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.06263591336778206, tol: 9.955784529447556, cap0: 10.627364264801145, follow: 2.835994631052017, t_stop: 16}
+    setting: exp2_multi
+  pf-20261106-5_s191:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.163451027479303, tol: 3.4492808021605015, cap0: 4.295051749795675, follow: 0.20653908513486385, t_stop: 9}
+    setting: exp2_multi
+  pf-20261106-5_s192:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.264415442918887, tol: 8.444141149520874, cap0: 10.964298150502145, follow: 2.256988490000367, t_stop: 14}
+    setting: exp2_multi
+  pf-20261106-5_s193:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.06569670104289371, tol: 4.950032327324152, cap0: 4.163196352310479, follow: 0.4104537405073643, t_stop: 23}
+    setting: exp2_multi
+  pf-20261106-5_s194:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.3304807794767764, tol: 5.660862857475877, cap0: 11.9823959749192, follow: 1.638087797909975, t_stop: 19}
+    setting: exp2_multi
+  pf-20261106-5_s195:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.3237612685812055, tol: 2.127691386267543, cap0: 2.837466560304165, follow: 1.2226995024830103, t_stop: 10}
+    setting: exp2_multi
+  pf-20261106-5_s196:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.7225475031801045, tol: 7.332677273079753, cap0: 5.85704505443573, follow: 1.0489390790462494, t_stop: 8}
+    setting: exp2_multi
+  pf-20261106-5_s197:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.18749424778944299, tol: 1.1383635643869638, cap0: 9.369311621412635, follow: 2.1810023691505194, t_stop: 17}
+    setting: exp2_multi
+  pf-20261106-5_s198:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.10721518808881009, tol: 9.510487858206034, cap0: 1.2061061756685376, follow: 0.22056556306779385, t_stop: 21}
+    setting: exp2_multi
+  pf-20261106-5_s199:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 3.8410847864400868, tol: 3.3552365005016327, cap0: 13.624757467769086, follow: 2.827720955014229, t_stop: 12}
+    setting: exp2_multi
+  pf-20261106-5_s200:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.5515641482074387, tol: 5.5963136069476604, cap0: 0.39265955798327923, follow: 1.9308956321328878, t_stop: 22}
+    setting: exp2_multi
+  pf-20261106-5_s201:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.1229299133711685, tol: 1.6343772783875465, cap0: 14.685396440327168, follow: 0.8362360149621964, t_stop: 15}
+    setting: exp2_multi
+  pf-20261106-5_s202:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.214829656066521, tol: 7.793656503781676, cap0: 6.669576144777238, follow: 2.8076118528842926, t_stop: 11}
+    setting: exp2_multi
+  pf-20261106-5_s203:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.4797878582299212, tol: 3.7926578242331743, cap0: 8.305926066823304, follow: 0.14116900227963924, t_stop: 18}
+    setting: exp2_multi
+  pf-20261106-5_s204:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.8788881409369187, tol: 9.251847984269261, cap0: 13.028386537916958, follow: 0.7250879891216755, t_stop: 16}
+    setting: exp2_multi
+  pf-20261106-5_s205:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.378714138400893, tol: 2.9022068437188864, cap0: 2.0093715330585837, follow: 2.6045430097728968, t_stop: 9}
+    setting: exp2_multi
+  pf-20261106-5_s206:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.07531574385123081, tol: 6.409974582493305, cap0: 9.915561005473137, follow: 1.3894016984850168, t_stop: 13}
+    setting: exp2_multi
+  pf-20261106-5_s207:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.504414976715872, tol: 0.09939609095454216, cap0: 4.99037585221231, follow: 1.746878508478403, t_stop: 20}
+    setting: exp2_multi
+  pf-20261106-5_s208:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.673396685322544, tol: 6.650218525901437, cap0: 14.183323038741946, follow: 0.36339990980923176, t_stop: 10}
+    setting: exp2_multi
+  pf-20261106-5_s209:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.08095549279863498, tol: 0.4952725302428007, cap0: 0.8269696310162544, follow: 2.96027797088027, t_stop: 19}
+    setting: exp2_multi
+  pf-20261106-5_s210:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.42852556670062913, tol: 8.866938725113869, cap0: 7.818545079790056, follow: 0.988159965723753, t_stop: 23}
+    setting: exp2_multi
+  pf-20261106-5_s211:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.9610103742780621, tol: 2.6729300804436207, cap0: 7.118519288487732, follow: 2.153891595080495, t_stop: 14}
+    setting: exp2_multi
+  pf-20261106-5_s212:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.5863589914101718, tol: 7.876314092427492, cap0: 2.5134798930957913, follow: 1.5714256837964058, t_stop: 12}
+    setting: exp2_multi
+  pf-20261106-5_s213:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.2537143872883779, tol: 4.343447908759117, cap0: 12.595703615806997, follow: 1.1897515039891005, t_stop: 21}
+    setting: exp2_multi
+  pf-20261106-5_s214:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.1476855356917175, tol: 5.054125590249896, cap0: 5.4798489063978195, follow: 2.4056585859507322, t_stop: 17}
+    setting: exp2_multi
+  pf-20261106-5_s215:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.9622616680962084, tol: 1.560321757569909, cap0: 9.468187903985381, follow: 0.5488922819495201, t_stop: 8}
+    setting: exp2_multi
+  pf-20261106-5_s216:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 3.394593463674323, tol: 9.895225455984473, cap0: 4.666403434239328, follow: 1.4457641076296568, t_stop: 18}
+    setting: exp2_multi
+  pf-20261106-5_s217:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.09805341799598313, tol: 3.5843416023999453, cap0: 10.52882578689605, follow: 1.7901261672377586, t_stop: 11}
+    setting: exp2_multi
+  pf-20261106-5_s218:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.16856048850083175, tol: 7.092566844075918, cap0: 3.326009837910533, follow: 0.5631885007023811, t_stop: 15}
+    setting: exp2_multi
+  pf-20261106-5_s219:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.6722127903972381, tol: 0.7426206395030022, cap0: 11.532319150865078, follow: 2.4793338160961866, t_stop: 22}
+    setting: exp2_multi
+  pf-20261106-5_s220:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.1018649948857242, tol: 6.203260682523251, cap0: 8.864534497261047, follow: 2.651639711111784, t_stop: 20}
+    setting: exp2_multi
+  pf-20261106-5_s221:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.284662449895184, tol: 2.2019567154347897, cap0: 6.290425350889564, follow: 0.02174982614815235, t_stop: 13}
+    setting: exp2_multi
+  pf-20261106-5_s222:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.053756168684520544, tol: 8.361388193443418, cap0: 13.134587039239705, follow: 1.9814666379243135, t_stop: 9}
+    setting: exp2_multi
+  pf-20261106-5_s223:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.9173710109107016, tol: 4.399146875366569, cap0: 1.6541480412706733, follow: 0.8735549412667751, t_stop: 16}
+    setting: exp2_multi
+  pf-20261106-5_s224:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.870560852998, tol: 5.8073182217776775, cap0: 6.858897255733609, follow: 0.4725448116660118, t_stop: 12}
+    setting: exp2_multi
+  pf-20261106-5_s225:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.05233010573556985, tol: 1.9619518890976906, cap0: 8.033764120191336, follow: 2.3882539104670286, t_stop: 21}
+    setting: exp2_multi
+  pf-20261106-5_s226:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.272489100510095, tol: 8.609976088628173, cap0: 0.14251321088522673, follow: 1.1602876167744398, t_stop: 17}
+    setting: exp2_multi
+  pf-20261106-5_s227:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.0569718047616796, tol: 4.803672404959798, cap0: 14.911267147399485, follow: 1.507143147289753, t_stop: 8}
+    setting: exp2_multi
+  pf-20261106-5_s228:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.6019784732440543, tol: 9.656714322045445, cap0: 10.189039134420455, follow: 2.0775205213576555, t_stop: 10}
+    setting: exp2_multi
+  pf-20261106-5_s229:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.1506317775551904, tol: 3.1892681773751974, cap0: 4.802485364489257, follow: 0.9707774631679058, t_stop: 19}
+    setting: exp2_multi
+  pf-20261106-5_s230:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.08915753734511746, tol: 7.49858845025301, cap0: 12.80383201315999, follow: 2.9307904802262783, t_stop: 23}
+    setting: exp2_multi
+  pf-20261106-5_s231:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 3.093344067545841, tol: 0.9920799545943737, cap0: 2.2609485033899546, follow: 0.29913954623043537, t_stop: 14}
+    setting: exp2_multi
+  pf-20261106-5_s232:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.6936034444023615, tol: 7.647295594215393, cap0: 11.75601042341441, follow: 0.8913236819207668, t_stop: 20}
+    setting: exp2_multi
+  pf-20261106-5_s233:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.13457468970413097, tol: 3.958491776138544, cap0: 3.087212503887713, follow: 2.05744575150311, t_stop: 13}
+    setting: exp2_multi
+  pf-20261106-5_s234:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.22721359761889331, tol: 5.430574947968125, cap0: 11.235945196822286, follow: 0.0864021498709917, t_stop: 9}
+    setting: exp2_multi
+  pf-20261106-5_s235:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.523973708790987, tol: 1.7808334808796644, cap0: 3.973474781960249, follow: 2.680740963667631, t_stop: 16}
+    setting: exp2_multi
+  pf-20261106-5_s236:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.919883671015357, tol: 6.263690022751689, cap0: 0.9541287459433079, follow: 2.4970789533108473, t_stop: 18}
+    setting: exp2_multi
+  pf-20261106-5_s237:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.4110794498970844, tol: 0.2653063181787729, cap0: 13.848797092214227, follow: 0.639189787209034, t_stop: 11}
+    setting: exp2_multi
+  pf-20261106-5_s238:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.07897651989055982, tol: 9.08588046208024, cap0: 6.044535138644278, follow: 1.854754887521267, t_stop: 15}
+    setting: exp2_multi
+  pf-20261106-5_s239:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.6290571766696513, tol: 3.0484341084957123, cap0: 9.095318648032844, follow: 1.4748875331133604, t_stop: 22}
+    setting: exp2_multi
+  pf-20261106-5_s240:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.3444183136943562, tol: 9.013604214414954, cap0: 3.5226408345624804, follow: 2.903725817799568, t_stop: 8}
+    setting: exp2_multi
+  pf-20261106-5_s241:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.06744793340449515, tol: 2.506790356710553, cap0: 11.252818764187396, follow: 0.23831427656114101, t_stop: 17}
+    setting: exp2_multi
+  pf-20261106-5_s242:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.3451102211674861, tol: 6.81626295670867, cap0: 4.423595638945699, follow: 2.210123648867011, t_stop: 21}
+    setting: exp2_multi
+  pf-20261106-5_s243:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.7991668947183492, tol: 0.3485117480158806, cap0: 10.747386496514082, follow: 1.1135656535625458, t_stop: 12}
+    setting: exp2_multi
+  pf-20261106-5_s244:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.4670506519512817, tol: 5.2007147297263145, cap0: 13.415403608232737, follow: 1.2986807618290186, t_stop: 14}
+    setting: exp2_multi
+  pf-20261106-5_s245:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.20958204767017133, tol: 1.3941057585179806, cap0: 1.458947667852044, follow: 1.6558586843311787, t_stop: 23}
+    setting: exp2_multi
+  pf-20261106-5_s246:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.11791903727712283, tol: 8.042587386444211, cap0: 8.647289969958365, follow: 0.4395514167845249, t_stop: 19}
+    setting: exp2_multi
+  pf-20261106-5_s247:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.4424151495827373, tol: 4.196916064247489, cap0: 6.534663769416511, follow: 2.32163723744452, t_stop: 10}
+    setting: exp2_multi
+  pf-20261106-5_s248:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 3.6846417549241752, tol: 6.94580570794642, cap0: 7.599469469860196, follow: 1.7294995822012424, t_stop: 16}
+    setting: exp2_multi
+  pf-20261106-5_s249:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.10262528722871109, tol: 0.9086647164076567, cap0: 7.360926624387503, follow: 1.313034201040864, t_stop: 9}
+    setting: exp2_multi
+  pf-20261106-5_s250:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.18252299973744476, tol: 9.729085937142372, cap0: 14.462308580987155, follow: 2.5402805004268885, t_stop: 13}
+    setting: exp2_multi
+  pf-20261106-5_s251:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.7048735664731808, tol: 3.731007296591997, cap0: 0.6299382308498025, follow: 0.6955983527004719, t_stop: 20}
+    setting: exp2_multi
+  pf-20261106-5_s252:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 1.2062628919284322, tol: 8.214855957776308, cap0: 5.235210084356368, follow: 0.12376647256314754, t_stop: 22}
+    setting: exp2_multi
+  pf-20261106-5_s253:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.30051365652887535, tol: 4.565419778227806, cap0: 9.68491758685559, follow: 2.731266528367996, t_stop: 15}
+    setting: exp2_multi
+  pf-20261106-5_s254:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 0.05870785428555538, tol: 6.0370449256151915, cap0: 2.7082798071205616, follow: 0.771949902176857, t_stop: 11}
+    setting: exp2_multi
+  pf-20261106-5_s255:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-5.yml
+    params: {slope: 2.027930145963229, tol: 2.3485460970550776, cap0: 12.314372146502137, follow: 1.9014281686395407, t_stop: 18}
+    setting: exp2_multi
+pairings:
+- {name: pf-20261106-5_s128_vs_opponent_1, group_0: pf-20261106-5_s128, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s128, group_0: opponent_1, group_1: pf-20261106-5_s128}
+- {name: pf-20261106-5_s128_vs_opponent_2, group_0: pf-20261106-5_s128, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s128, group_0: opponent_2, group_1: pf-20261106-5_s128}
+- {name: pf-20261106-5_s128_vs_opponent_3, group_0: pf-20261106-5_s128, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s128, group_0: opponent_3, group_1: pf-20261106-5_s128}
+- {name: pf-20261106-5_s128_vs_opponent_4, group_0: pf-20261106-5_s128, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s128, group_0: opponent_4, group_1: pf-20261106-5_s128}
+- {name: pf-20261106-5_s129_vs_opponent_1, group_0: pf-20261106-5_s129, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s129, group_0: opponent_1, group_1: pf-20261106-5_s129}
+- {name: pf-20261106-5_s129_vs_opponent_2, group_0: pf-20261106-5_s129, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s129, group_0: opponent_2, group_1: pf-20261106-5_s129}
+- {name: pf-20261106-5_s129_vs_opponent_3, group_0: pf-20261106-5_s129, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s129, group_0: opponent_3, group_1: pf-20261106-5_s129}
+- {name: pf-20261106-5_s129_vs_opponent_4, group_0: pf-20261106-5_s129, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s129, group_0: opponent_4, group_1: pf-20261106-5_s129}
+- {name: pf-20261106-5_s130_vs_opponent_1, group_0: pf-20261106-5_s130, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s130, group_0: opponent_1, group_1: pf-20261106-5_s130}
+- {name: pf-20261106-5_s130_vs_opponent_2, group_0: pf-20261106-5_s130, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s130, group_0: opponent_2, group_1: pf-20261106-5_s130}
+- {name: pf-20261106-5_s130_vs_opponent_3, group_0: pf-20261106-5_s130, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s130, group_0: opponent_3, group_1: pf-20261106-5_s130}
+- {name: pf-20261106-5_s130_vs_opponent_4, group_0: pf-20261106-5_s130, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s130, group_0: opponent_4, group_1: pf-20261106-5_s130}
+- {name: pf-20261106-5_s131_vs_opponent_1, group_0: pf-20261106-5_s131, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s131, group_0: opponent_1, group_1: pf-20261106-5_s131}
+- {name: pf-20261106-5_s131_vs_opponent_2, group_0: pf-20261106-5_s131, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s131, group_0: opponent_2, group_1: pf-20261106-5_s131}
+- {name: pf-20261106-5_s131_vs_opponent_3, group_0: pf-20261106-5_s131, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s131, group_0: opponent_3, group_1: pf-20261106-5_s131}
+- {name: pf-20261106-5_s131_vs_opponent_4, group_0: pf-20261106-5_s131, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s131, group_0: opponent_4, group_1: pf-20261106-5_s131}
+- {name: pf-20261106-5_s132_vs_opponent_1, group_0: pf-20261106-5_s132, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s132, group_0: opponent_1, group_1: pf-20261106-5_s132}
+- {name: pf-20261106-5_s132_vs_opponent_2, group_0: pf-20261106-5_s132, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s132, group_0: opponent_2, group_1: pf-20261106-5_s132}
+- {name: pf-20261106-5_s132_vs_opponent_3, group_0: pf-20261106-5_s132, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s132, group_0: opponent_3, group_1: pf-20261106-5_s132}
+- {name: pf-20261106-5_s132_vs_opponent_4, group_0: pf-20261106-5_s132, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s132, group_0: opponent_4, group_1: pf-20261106-5_s132}
+- {name: pf-20261106-5_s133_vs_opponent_1, group_0: pf-20261106-5_s133, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s133, group_0: opponent_1, group_1: pf-20261106-5_s133}
+- {name: pf-20261106-5_s133_vs_opponent_2, group_0: pf-20261106-5_s133, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s133, group_0: opponent_2, group_1: pf-20261106-5_s133}
+- {name: pf-20261106-5_s133_vs_opponent_3, group_0: pf-20261106-5_s133, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s133, group_0: opponent_3, group_1: pf-20261106-5_s133}
+- {name: pf-20261106-5_s133_vs_opponent_4, group_0: pf-20261106-5_s133, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s133, group_0: opponent_4, group_1: pf-20261106-5_s133}
+- {name: pf-20261106-5_s134_vs_opponent_1, group_0: pf-20261106-5_s134, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s134, group_0: opponent_1, group_1: pf-20261106-5_s134}
+- {name: pf-20261106-5_s134_vs_opponent_2, group_0: pf-20261106-5_s134, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s134, group_0: opponent_2, group_1: pf-20261106-5_s134}
+- {name: pf-20261106-5_s134_vs_opponent_3, group_0: pf-20261106-5_s134, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s134, group_0: opponent_3, group_1: pf-20261106-5_s134}
+- {name: pf-20261106-5_s134_vs_opponent_4, group_0: pf-20261106-5_s134, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s134, group_0: opponent_4, group_1: pf-20261106-5_s134}
+- {name: pf-20261106-5_s135_vs_opponent_1, group_0: pf-20261106-5_s135, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s135, group_0: opponent_1, group_1: pf-20261106-5_s135}
+- {name: pf-20261106-5_s135_vs_opponent_2, group_0: pf-20261106-5_s135, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s135, group_0: opponent_2, group_1: pf-20261106-5_s135}
+- {name: pf-20261106-5_s135_vs_opponent_3, group_0: pf-20261106-5_s135, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s135, group_0: opponent_3, group_1: pf-20261106-5_s135}
+- {name: pf-20261106-5_s135_vs_opponent_4, group_0: pf-20261106-5_s135, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s135, group_0: opponent_4, group_1: pf-20261106-5_s135}
+- {name: pf-20261106-5_s136_vs_opponent_1, group_0: pf-20261106-5_s136, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s136, group_0: opponent_1, group_1: pf-20261106-5_s136}
+- {name: pf-20261106-5_s136_vs_opponent_2, group_0: pf-20261106-5_s136, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s136, group_0: opponent_2, group_1: pf-20261106-5_s136}
+- {name: pf-20261106-5_s136_vs_opponent_3, group_0: pf-20261106-5_s136, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s136, group_0: opponent_3, group_1: pf-20261106-5_s136}
+- {name: pf-20261106-5_s136_vs_opponent_4, group_0: pf-20261106-5_s136, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s136, group_0: opponent_4, group_1: pf-20261106-5_s136}
+- {name: pf-20261106-5_s137_vs_opponent_1, group_0: pf-20261106-5_s137, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s137, group_0: opponent_1, group_1: pf-20261106-5_s137}
+- {name: pf-20261106-5_s137_vs_opponent_2, group_0: pf-20261106-5_s137, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s137, group_0: opponent_2, group_1: pf-20261106-5_s137}
+- {name: pf-20261106-5_s137_vs_opponent_3, group_0: pf-20261106-5_s137, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s137, group_0: opponent_3, group_1: pf-20261106-5_s137}
+- {name: pf-20261106-5_s137_vs_opponent_4, group_0: pf-20261106-5_s137, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s137, group_0: opponent_4, group_1: pf-20261106-5_s137}
+- {name: pf-20261106-5_s138_vs_opponent_1, group_0: pf-20261106-5_s138, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s138, group_0: opponent_1, group_1: pf-20261106-5_s138}
+- {name: pf-20261106-5_s138_vs_opponent_2, group_0: pf-20261106-5_s138, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s138, group_0: opponent_2, group_1: pf-20261106-5_s138}
+- {name: pf-20261106-5_s138_vs_opponent_3, group_0: pf-20261106-5_s138, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s138, group_0: opponent_3, group_1: pf-20261106-5_s138}
+- {name: pf-20261106-5_s138_vs_opponent_4, group_0: pf-20261106-5_s138, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s138, group_0: opponent_4, group_1: pf-20261106-5_s138}
+- {name: pf-20261106-5_s139_vs_opponent_1, group_0: pf-20261106-5_s139, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s139, group_0: opponent_1, group_1: pf-20261106-5_s139}
+- {name: pf-20261106-5_s139_vs_opponent_2, group_0: pf-20261106-5_s139, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s139, group_0: opponent_2, group_1: pf-20261106-5_s139}
+- {name: pf-20261106-5_s139_vs_opponent_3, group_0: pf-20261106-5_s139, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s139, group_0: opponent_3, group_1: pf-20261106-5_s139}
+- {name: pf-20261106-5_s139_vs_opponent_4, group_0: pf-20261106-5_s139, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s139, group_0: opponent_4, group_1: pf-20261106-5_s139}
+- {name: pf-20261106-5_s140_vs_opponent_1, group_0: pf-20261106-5_s140, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s140, group_0: opponent_1, group_1: pf-20261106-5_s140}
+- {name: pf-20261106-5_s140_vs_opponent_2, group_0: pf-20261106-5_s140, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s140, group_0: opponent_2, group_1: pf-20261106-5_s140}
+- {name: pf-20261106-5_s140_vs_opponent_3, group_0: pf-20261106-5_s140, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s140, group_0: opponent_3, group_1: pf-20261106-5_s140}
+- {name: pf-20261106-5_s140_vs_opponent_4, group_0: pf-20261106-5_s140, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s140, group_0: opponent_4, group_1: pf-20261106-5_s140}
+- {name: pf-20261106-5_s141_vs_opponent_1, group_0: pf-20261106-5_s141, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s141, group_0: opponent_1, group_1: pf-20261106-5_s141}
+- {name: pf-20261106-5_s141_vs_opponent_2, group_0: pf-20261106-5_s141, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s141, group_0: opponent_2, group_1: pf-20261106-5_s141}
+- {name: pf-20261106-5_s141_vs_opponent_3, group_0: pf-20261106-5_s141, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s141, group_0: opponent_3, group_1: pf-20261106-5_s141}
+- {name: pf-20261106-5_s141_vs_opponent_4, group_0: pf-20261106-5_s141, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s141, group_0: opponent_4, group_1: pf-20261106-5_s141}
+- {name: pf-20261106-5_s142_vs_opponent_1, group_0: pf-20261106-5_s142, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s142, group_0: opponent_1, group_1: pf-20261106-5_s142}
+- {name: pf-20261106-5_s142_vs_opponent_2, group_0: pf-20261106-5_s142, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s142, group_0: opponent_2, group_1: pf-20261106-5_s142}
+- {name: pf-20261106-5_s142_vs_opponent_3, group_0: pf-20261106-5_s142, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s142, group_0: opponent_3, group_1: pf-20261106-5_s142}
+- {name: pf-20261106-5_s142_vs_opponent_4, group_0: pf-20261106-5_s142, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s142, group_0: opponent_4, group_1: pf-20261106-5_s142}
+- {name: pf-20261106-5_s143_vs_opponent_1, group_0: pf-20261106-5_s143, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s143, group_0: opponent_1, group_1: pf-20261106-5_s143}
+- {name: pf-20261106-5_s143_vs_opponent_2, group_0: pf-20261106-5_s143, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s143, group_0: opponent_2, group_1: pf-20261106-5_s143}
+- {name: pf-20261106-5_s143_vs_opponent_3, group_0: pf-20261106-5_s143, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s143, group_0: opponent_3, group_1: pf-20261106-5_s143}
+- {name: pf-20261106-5_s143_vs_opponent_4, group_0: pf-20261106-5_s143, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s143, group_0: opponent_4, group_1: pf-20261106-5_s143}
+- {name: pf-20261106-5_s144_vs_opponent_1, group_0: pf-20261106-5_s144, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s144, group_0: opponent_1, group_1: pf-20261106-5_s144}
+- {name: pf-20261106-5_s144_vs_opponent_2, group_0: pf-20261106-5_s144, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s144, group_0: opponent_2, group_1: pf-20261106-5_s144}
+- {name: pf-20261106-5_s144_vs_opponent_3, group_0: pf-20261106-5_s144, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s144, group_0: opponent_3, group_1: pf-20261106-5_s144}
+- {name: pf-20261106-5_s144_vs_opponent_4, group_0: pf-20261106-5_s144, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s144, group_0: opponent_4, group_1: pf-20261106-5_s144}
+- {name: pf-20261106-5_s145_vs_opponent_1, group_0: pf-20261106-5_s145, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s145, group_0: opponent_1, group_1: pf-20261106-5_s145}
+- {name: pf-20261106-5_s145_vs_opponent_2, group_0: pf-20261106-5_s145, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s145, group_0: opponent_2, group_1: pf-20261106-5_s145}
+- {name: pf-20261106-5_s145_vs_opponent_3, group_0: pf-20261106-5_s145, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s145, group_0: opponent_3, group_1: pf-20261106-5_s145}
+- {name: pf-20261106-5_s145_vs_opponent_4, group_0: pf-20261106-5_s145, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s145, group_0: opponent_4, group_1: pf-20261106-5_s145}
+- {name: pf-20261106-5_s146_vs_opponent_1, group_0: pf-20261106-5_s146, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s146, group_0: opponent_1, group_1: pf-20261106-5_s146}
+- {name: pf-20261106-5_s146_vs_opponent_2, group_0: pf-20261106-5_s146, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s146, group_0: opponent_2, group_1: pf-20261106-5_s146}
+- {name: pf-20261106-5_s146_vs_opponent_3, group_0: pf-20261106-5_s146, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s146, group_0: opponent_3, group_1: pf-20261106-5_s146}
+- {name: pf-20261106-5_s146_vs_opponent_4, group_0: pf-20261106-5_s146, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s146, group_0: opponent_4, group_1: pf-20261106-5_s146}
+- {name: pf-20261106-5_s147_vs_opponent_1, group_0: pf-20261106-5_s147, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s147, group_0: opponent_1, group_1: pf-20261106-5_s147}
+- {name: pf-20261106-5_s147_vs_opponent_2, group_0: pf-20261106-5_s147, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s147, group_0: opponent_2, group_1: pf-20261106-5_s147}
+- {name: pf-20261106-5_s147_vs_opponent_3, group_0: pf-20261106-5_s147, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s147, group_0: opponent_3, group_1: pf-20261106-5_s147}
+- {name: pf-20261106-5_s147_vs_opponent_4, group_0: pf-20261106-5_s147, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s147, group_0: opponent_4, group_1: pf-20261106-5_s147}
+- {name: pf-20261106-5_s148_vs_opponent_1, group_0: pf-20261106-5_s148, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s148, group_0: opponent_1, group_1: pf-20261106-5_s148}
+- {name: pf-20261106-5_s148_vs_opponent_2, group_0: pf-20261106-5_s148, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s148, group_0: opponent_2, group_1: pf-20261106-5_s148}
+- {name: pf-20261106-5_s148_vs_opponent_3, group_0: pf-20261106-5_s148, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s148, group_0: opponent_3, group_1: pf-20261106-5_s148}
+- {name: pf-20261106-5_s148_vs_opponent_4, group_0: pf-20261106-5_s148, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s148, group_0: opponent_4, group_1: pf-20261106-5_s148}
+- {name: pf-20261106-5_s149_vs_opponent_1, group_0: pf-20261106-5_s149, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s149, group_0: opponent_1, group_1: pf-20261106-5_s149}
+- {name: pf-20261106-5_s149_vs_opponent_2, group_0: pf-20261106-5_s149, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s149, group_0: opponent_2, group_1: pf-20261106-5_s149}
+- {name: pf-20261106-5_s149_vs_opponent_3, group_0: pf-20261106-5_s149, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s149, group_0: opponent_3, group_1: pf-20261106-5_s149}
+- {name: pf-20261106-5_s149_vs_opponent_4, group_0: pf-20261106-5_s149, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s149, group_0: opponent_4, group_1: pf-20261106-5_s149}
+- {name: pf-20261106-5_s150_vs_opponent_1, group_0: pf-20261106-5_s150, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s150, group_0: opponent_1, group_1: pf-20261106-5_s150}
+- {name: pf-20261106-5_s150_vs_opponent_2, group_0: pf-20261106-5_s150, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s150, group_0: opponent_2, group_1: pf-20261106-5_s150}
+- {name: pf-20261106-5_s150_vs_opponent_3, group_0: pf-20261106-5_s150, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s150, group_0: opponent_3, group_1: pf-20261106-5_s150}
+- {name: pf-20261106-5_s150_vs_opponent_4, group_0: pf-20261106-5_s150, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s150, group_0: opponent_4, group_1: pf-20261106-5_s150}
+- {name: pf-20261106-5_s151_vs_opponent_1, group_0: pf-20261106-5_s151, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s151, group_0: opponent_1, group_1: pf-20261106-5_s151}
+- {name: pf-20261106-5_s151_vs_opponent_2, group_0: pf-20261106-5_s151, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s151, group_0: opponent_2, group_1: pf-20261106-5_s151}
+- {name: pf-20261106-5_s151_vs_opponent_3, group_0: pf-20261106-5_s151, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s151, group_0: opponent_3, group_1: pf-20261106-5_s151}
+- {name: pf-20261106-5_s151_vs_opponent_4, group_0: pf-20261106-5_s151, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s151, group_0: opponent_4, group_1: pf-20261106-5_s151}
+- {name: pf-20261106-5_s152_vs_opponent_1, group_0: pf-20261106-5_s152, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s152, group_0: opponent_1, group_1: pf-20261106-5_s152}
+- {name: pf-20261106-5_s152_vs_opponent_2, group_0: pf-20261106-5_s152, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s152, group_0: opponent_2, group_1: pf-20261106-5_s152}
+- {name: pf-20261106-5_s152_vs_opponent_3, group_0: pf-20261106-5_s152, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s152, group_0: opponent_3, group_1: pf-20261106-5_s152}
+- {name: pf-20261106-5_s152_vs_opponent_4, group_0: pf-20261106-5_s152, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s152, group_0: opponent_4, group_1: pf-20261106-5_s152}
+- {name: pf-20261106-5_s153_vs_opponent_1, group_0: pf-20261106-5_s153, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s153, group_0: opponent_1, group_1: pf-20261106-5_s153}
+- {name: pf-20261106-5_s153_vs_opponent_2, group_0: pf-20261106-5_s153, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s153, group_0: opponent_2, group_1: pf-20261106-5_s153}
+- {name: pf-20261106-5_s153_vs_opponent_3, group_0: pf-20261106-5_s153, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s153, group_0: opponent_3, group_1: pf-20261106-5_s153}
+- {name: pf-20261106-5_s153_vs_opponent_4, group_0: pf-20261106-5_s153, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s153, group_0: opponent_4, group_1: pf-20261106-5_s153}
+- {name: pf-20261106-5_s154_vs_opponent_1, group_0: pf-20261106-5_s154, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s154, group_0: opponent_1, group_1: pf-20261106-5_s154}
+- {name: pf-20261106-5_s154_vs_opponent_2, group_0: pf-20261106-5_s154, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s154, group_0: opponent_2, group_1: pf-20261106-5_s154}
+- {name: pf-20261106-5_s154_vs_opponent_3, group_0: pf-20261106-5_s154, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s154, group_0: opponent_3, group_1: pf-20261106-5_s154}
+- {name: pf-20261106-5_s154_vs_opponent_4, group_0: pf-20261106-5_s154, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s154, group_0: opponent_4, group_1: pf-20261106-5_s154}
+- {name: pf-20261106-5_s155_vs_opponent_1, group_0: pf-20261106-5_s155, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s155, group_0: opponent_1, group_1: pf-20261106-5_s155}
+- {name: pf-20261106-5_s155_vs_opponent_2, group_0: pf-20261106-5_s155, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s155, group_0: opponent_2, group_1: pf-20261106-5_s155}
+- {name: pf-20261106-5_s155_vs_opponent_3, group_0: pf-20261106-5_s155, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s155, group_0: opponent_3, group_1: pf-20261106-5_s155}
+- {name: pf-20261106-5_s155_vs_opponent_4, group_0: pf-20261106-5_s155, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s155, group_0: opponent_4, group_1: pf-20261106-5_s155}
+- {name: pf-20261106-5_s156_vs_opponent_1, group_0: pf-20261106-5_s156, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s156, group_0: opponent_1, group_1: pf-20261106-5_s156}
+- {name: pf-20261106-5_s156_vs_opponent_2, group_0: pf-20261106-5_s156, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s156, group_0: opponent_2, group_1: pf-20261106-5_s156}
+- {name: pf-20261106-5_s156_vs_opponent_3, group_0: pf-20261106-5_s156, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s156, group_0: opponent_3, group_1: pf-20261106-5_s156}
+- {name: pf-20261106-5_s156_vs_opponent_4, group_0: pf-20261106-5_s156, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s156, group_0: opponent_4, group_1: pf-20261106-5_s156}
+- {name: pf-20261106-5_s157_vs_opponent_1, group_0: pf-20261106-5_s157, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s157, group_0: opponent_1, group_1: pf-20261106-5_s157}
+- {name: pf-20261106-5_s157_vs_opponent_2, group_0: pf-20261106-5_s157, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s157, group_0: opponent_2, group_1: pf-20261106-5_s157}
+- {name: pf-20261106-5_s157_vs_opponent_3, group_0: pf-20261106-5_s157, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s157, group_0: opponent_3, group_1: pf-20261106-5_s157}
+- {name: pf-20261106-5_s157_vs_opponent_4, group_0: pf-20261106-5_s157, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s157, group_0: opponent_4, group_1: pf-20261106-5_s157}
+- {name: pf-20261106-5_s158_vs_opponent_1, group_0: pf-20261106-5_s158, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s158, group_0: opponent_1, group_1: pf-20261106-5_s158}
+- {name: pf-20261106-5_s158_vs_opponent_2, group_0: pf-20261106-5_s158, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s158, group_0: opponent_2, group_1: pf-20261106-5_s158}
+- {name: pf-20261106-5_s158_vs_opponent_3, group_0: pf-20261106-5_s158, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s158, group_0: opponent_3, group_1: pf-20261106-5_s158}
+- {name: pf-20261106-5_s158_vs_opponent_4, group_0: pf-20261106-5_s158, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s158, group_0: opponent_4, group_1: pf-20261106-5_s158}
+- {name: pf-20261106-5_s159_vs_opponent_1, group_0: pf-20261106-5_s159, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s159, group_0: opponent_1, group_1: pf-20261106-5_s159}
+- {name: pf-20261106-5_s159_vs_opponent_2, group_0: pf-20261106-5_s159, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s159, group_0: opponent_2, group_1: pf-20261106-5_s159}
+- {name: pf-20261106-5_s159_vs_opponent_3, group_0: pf-20261106-5_s159, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s159, group_0: opponent_3, group_1: pf-20261106-5_s159}
+- {name: pf-20261106-5_s159_vs_opponent_4, group_0: pf-20261106-5_s159, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s159, group_0: opponent_4, group_1: pf-20261106-5_s159}
+- {name: pf-20261106-5_s160_vs_opponent_1, group_0: pf-20261106-5_s160, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s160, group_0: opponent_1, group_1: pf-20261106-5_s160}
+- {name: pf-20261106-5_s160_vs_opponent_2, group_0: pf-20261106-5_s160, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s160, group_0: opponent_2, group_1: pf-20261106-5_s160}
+- {name: pf-20261106-5_s160_vs_opponent_3, group_0: pf-20261106-5_s160, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s160, group_0: opponent_3, group_1: pf-20261106-5_s160}
+- {name: pf-20261106-5_s160_vs_opponent_4, group_0: pf-20261106-5_s160, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s160, group_0: opponent_4, group_1: pf-20261106-5_s160}
+- {name: pf-20261106-5_s161_vs_opponent_1, group_0: pf-20261106-5_s161, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s161, group_0: opponent_1, group_1: pf-20261106-5_s161}
+- {name: pf-20261106-5_s161_vs_opponent_2, group_0: pf-20261106-5_s161, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s161, group_0: opponent_2, group_1: pf-20261106-5_s161}
+- {name: pf-20261106-5_s161_vs_opponent_3, group_0: pf-20261106-5_s161, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s161, group_0: opponent_3, group_1: pf-20261106-5_s161}
+- {name: pf-20261106-5_s161_vs_opponent_4, group_0: pf-20261106-5_s161, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s161, group_0: opponent_4, group_1: pf-20261106-5_s161}
+- {name: pf-20261106-5_s162_vs_opponent_1, group_0: pf-20261106-5_s162, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s162, group_0: opponent_1, group_1: pf-20261106-5_s162}
+- {name: pf-20261106-5_s162_vs_opponent_2, group_0: pf-20261106-5_s162, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s162, group_0: opponent_2, group_1: pf-20261106-5_s162}
+- {name: pf-20261106-5_s162_vs_opponent_3, group_0: pf-20261106-5_s162, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s162, group_0: opponent_3, group_1: pf-20261106-5_s162}
+- {name: pf-20261106-5_s162_vs_opponent_4, group_0: pf-20261106-5_s162, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s162, group_0: opponent_4, group_1: pf-20261106-5_s162}
+- {name: pf-20261106-5_s163_vs_opponent_1, group_0: pf-20261106-5_s163, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s163, group_0: opponent_1, group_1: pf-20261106-5_s163}
+- {name: pf-20261106-5_s163_vs_opponent_2, group_0: pf-20261106-5_s163, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s163, group_0: opponent_2, group_1: pf-20261106-5_s163}
+- {name: pf-20261106-5_s163_vs_opponent_3, group_0: pf-20261106-5_s163, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s163, group_0: opponent_3, group_1: pf-20261106-5_s163}
+- {name: pf-20261106-5_s163_vs_opponent_4, group_0: pf-20261106-5_s163, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s163, group_0: opponent_4, group_1: pf-20261106-5_s163}
+- {name: pf-20261106-5_s164_vs_opponent_1, group_0: pf-20261106-5_s164, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s164, group_0: opponent_1, group_1: pf-20261106-5_s164}
+- {name: pf-20261106-5_s164_vs_opponent_2, group_0: pf-20261106-5_s164, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s164, group_0: opponent_2, group_1: pf-20261106-5_s164}
+- {name: pf-20261106-5_s164_vs_opponent_3, group_0: pf-20261106-5_s164, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s164, group_0: opponent_3, group_1: pf-20261106-5_s164}
+- {name: pf-20261106-5_s164_vs_opponent_4, group_0: pf-20261106-5_s164, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s164, group_0: opponent_4, group_1: pf-20261106-5_s164}
+- {name: pf-20261106-5_s165_vs_opponent_1, group_0: pf-20261106-5_s165, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s165, group_0: opponent_1, group_1: pf-20261106-5_s165}
+- {name: pf-20261106-5_s165_vs_opponent_2, group_0: pf-20261106-5_s165, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s165, group_0: opponent_2, group_1: pf-20261106-5_s165}
+- {name: pf-20261106-5_s165_vs_opponent_3, group_0: pf-20261106-5_s165, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s165, group_0: opponent_3, group_1: pf-20261106-5_s165}
+- {name: pf-20261106-5_s165_vs_opponent_4, group_0: pf-20261106-5_s165, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s165, group_0: opponent_4, group_1: pf-20261106-5_s165}
+- {name: pf-20261106-5_s166_vs_opponent_1, group_0: pf-20261106-5_s166, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s166, group_0: opponent_1, group_1: pf-20261106-5_s166}
+- {name: pf-20261106-5_s166_vs_opponent_2, group_0: pf-20261106-5_s166, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s166, group_0: opponent_2, group_1: pf-20261106-5_s166}
+- {name: pf-20261106-5_s166_vs_opponent_3, group_0: pf-20261106-5_s166, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s166, group_0: opponent_3, group_1: pf-20261106-5_s166}
+- {name: pf-20261106-5_s166_vs_opponent_4, group_0: pf-20261106-5_s166, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s166, group_0: opponent_4, group_1: pf-20261106-5_s166}
+- {name: pf-20261106-5_s167_vs_opponent_1, group_0: pf-20261106-5_s167, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s167, group_0: opponent_1, group_1: pf-20261106-5_s167}
+- {name: pf-20261106-5_s167_vs_opponent_2, group_0: pf-20261106-5_s167, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s167, group_0: opponent_2, group_1: pf-20261106-5_s167}
+- {name: pf-20261106-5_s167_vs_opponent_3, group_0: pf-20261106-5_s167, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s167, group_0: opponent_3, group_1: pf-20261106-5_s167}
+- {name: pf-20261106-5_s167_vs_opponent_4, group_0: pf-20261106-5_s167, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s167, group_0: opponent_4, group_1: pf-20261106-5_s167}
+- {name: pf-20261106-5_s168_vs_opponent_1, group_0: pf-20261106-5_s168, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s168, group_0: opponent_1, group_1: pf-20261106-5_s168}
+- {name: pf-20261106-5_s168_vs_opponent_2, group_0: pf-20261106-5_s168, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s168, group_0: opponent_2, group_1: pf-20261106-5_s168}
+- {name: pf-20261106-5_s168_vs_opponent_3, group_0: pf-20261106-5_s168, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s168, group_0: opponent_3, group_1: pf-20261106-5_s168}
+- {name: pf-20261106-5_s168_vs_opponent_4, group_0: pf-20261106-5_s168, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s168, group_0: opponent_4, group_1: pf-20261106-5_s168}
+- {name: pf-20261106-5_s169_vs_opponent_1, group_0: pf-20261106-5_s169, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s169, group_0: opponent_1, group_1: pf-20261106-5_s169}
+- {name: pf-20261106-5_s169_vs_opponent_2, group_0: pf-20261106-5_s169, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s169, group_0: opponent_2, group_1: pf-20261106-5_s169}
+- {name: pf-20261106-5_s169_vs_opponent_3, group_0: pf-20261106-5_s169, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s169, group_0: opponent_3, group_1: pf-20261106-5_s169}
+- {name: pf-20261106-5_s169_vs_opponent_4, group_0: pf-20261106-5_s169, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s169, group_0: opponent_4, group_1: pf-20261106-5_s169}
+- {name: pf-20261106-5_s170_vs_opponent_1, group_0: pf-20261106-5_s170, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s170, group_0: opponent_1, group_1: pf-20261106-5_s170}
+- {name: pf-20261106-5_s170_vs_opponent_2, group_0: pf-20261106-5_s170, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s170, group_0: opponent_2, group_1: pf-20261106-5_s170}
+- {name: pf-20261106-5_s170_vs_opponent_3, group_0: pf-20261106-5_s170, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s170, group_0: opponent_3, group_1: pf-20261106-5_s170}
+- {name: pf-20261106-5_s170_vs_opponent_4, group_0: pf-20261106-5_s170, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s170, group_0: opponent_4, group_1: pf-20261106-5_s170}
+- {name: pf-20261106-5_s171_vs_opponent_1, group_0: pf-20261106-5_s171, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s171, group_0: opponent_1, group_1: pf-20261106-5_s171}
+- {name: pf-20261106-5_s171_vs_opponent_2, group_0: pf-20261106-5_s171, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s171, group_0: opponent_2, group_1: pf-20261106-5_s171}
+- {name: pf-20261106-5_s171_vs_opponent_3, group_0: pf-20261106-5_s171, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s171, group_0: opponent_3, group_1: pf-20261106-5_s171}
+- {name: pf-20261106-5_s171_vs_opponent_4, group_0: pf-20261106-5_s171, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s171, group_0: opponent_4, group_1: pf-20261106-5_s171}
+- {name: pf-20261106-5_s172_vs_opponent_1, group_0: pf-20261106-5_s172, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s172, group_0: opponent_1, group_1: pf-20261106-5_s172}
+- {name: pf-20261106-5_s172_vs_opponent_2, group_0: pf-20261106-5_s172, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s172, group_0: opponent_2, group_1: pf-20261106-5_s172}
+- {name: pf-20261106-5_s172_vs_opponent_3, group_0: pf-20261106-5_s172, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s172, group_0: opponent_3, group_1: pf-20261106-5_s172}
+- {name: pf-20261106-5_s172_vs_opponent_4, group_0: pf-20261106-5_s172, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s172, group_0: opponent_4, group_1: pf-20261106-5_s172}
+- {name: pf-20261106-5_s173_vs_opponent_1, group_0: pf-20261106-5_s173, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s173, group_0: opponent_1, group_1: pf-20261106-5_s173}
+- {name: pf-20261106-5_s173_vs_opponent_2, group_0: pf-20261106-5_s173, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s173, group_0: opponent_2, group_1: pf-20261106-5_s173}
+- {name: pf-20261106-5_s173_vs_opponent_3, group_0: pf-20261106-5_s173, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s173, group_0: opponent_3, group_1: pf-20261106-5_s173}
+- {name: pf-20261106-5_s173_vs_opponent_4, group_0: pf-20261106-5_s173, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s173, group_0: opponent_4, group_1: pf-20261106-5_s173}
+- {name: pf-20261106-5_s174_vs_opponent_1, group_0: pf-20261106-5_s174, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s174, group_0: opponent_1, group_1: pf-20261106-5_s174}
+- {name: pf-20261106-5_s174_vs_opponent_2, group_0: pf-20261106-5_s174, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s174, group_0: opponent_2, group_1: pf-20261106-5_s174}
+- {name: pf-20261106-5_s174_vs_opponent_3, group_0: pf-20261106-5_s174, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s174, group_0: opponent_3, group_1: pf-20261106-5_s174}
+- {name: pf-20261106-5_s174_vs_opponent_4, group_0: pf-20261106-5_s174, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s174, group_0: opponent_4, group_1: pf-20261106-5_s174}
+- {name: pf-20261106-5_s175_vs_opponent_1, group_0: pf-20261106-5_s175, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s175, group_0: opponent_1, group_1: pf-20261106-5_s175}
+- {name: pf-20261106-5_s175_vs_opponent_2, group_0: pf-20261106-5_s175, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s175, group_0: opponent_2, group_1: pf-20261106-5_s175}
+- {name: pf-20261106-5_s175_vs_opponent_3, group_0: pf-20261106-5_s175, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s175, group_0: opponent_3, group_1: pf-20261106-5_s175}
+- {name: pf-20261106-5_s175_vs_opponent_4, group_0: pf-20261106-5_s175, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s175, group_0: opponent_4, group_1: pf-20261106-5_s175}
+- {name: pf-20261106-5_s176_vs_opponent_1, group_0: pf-20261106-5_s176, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s176, group_0: opponent_1, group_1: pf-20261106-5_s176}
+- {name: pf-20261106-5_s176_vs_opponent_2, group_0: pf-20261106-5_s176, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s176, group_0: opponent_2, group_1: pf-20261106-5_s176}
+- {name: pf-20261106-5_s176_vs_opponent_3, group_0: pf-20261106-5_s176, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s176, group_0: opponent_3, group_1: pf-20261106-5_s176}
+- {name: pf-20261106-5_s176_vs_opponent_4, group_0: pf-20261106-5_s176, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s176, group_0: opponent_4, group_1: pf-20261106-5_s176}
+- {name: pf-20261106-5_s177_vs_opponent_1, group_0: pf-20261106-5_s177, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s177, group_0: opponent_1, group_1: pf-20261106-5_s177}
+- {name: pf-20261106-5_s177_vs_opponent_2, group_0: pf-20261106-5_s177, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s177, group_0: opponent_2, group_1: pf-20261106-5_s177}
+- {name: pf-20261106-5_s177_vs_opponent_3, group_0: pf-20261106-5_s177, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s177, group_0: opponent_3, group_1: pf-20261106-5_s177}
+- {name: pf-20261106-5_s177_vs_opponent_4, group_0: pf-20261106-5_s177, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s177, group_0: opponent_4, group_1: pf-20261106-5_s177}
+- {name: pf-20261106-5_s178_vs_opponent_1, group_0: pf-20261106-5_s178, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s178, group_0: opponent_1, group_1: pf-20261106-5_s178}
+- {name: pf-20261106-5_s178_vs_opponent_2, group_0: pf-20261106-5_s178, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s178, group_0: opponent_2, group_1: pf-20261106-5_s178}
+- {name: pf-20261106-5_s178_vs_opponent_3, group_0: pf-20261106-5_s178, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s178, group_0: opponent_3, group_1: pf-20261106-5_s178}
+- {name: pf-20261106-5_s178_vs_opponent_4, group_0: pf-20261106-5_s178, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s178, group_0: opponent_4, group_1: pf-20261106-5_s178}
+- {name: pf-20261106-5_s179_vs_opponent_1, group_0: pf-20261106-5_s179, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s179, group_0: opponent_1, group_1: pf-20261106-5_s179}
+- {name: pf-20261106-5_s179_vs_opponent_2, group_0: pf-20261106-5_s179, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s179, group_0: opponent_2, group_1: pf-20261106-5_s179}
+- {name: pf-20261106-5_s179_vs_opponent_3, group_0: pf-20261106-5_s179, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s179, group_0: opponent_3, group_1: pf-20261106-5_s179}
+- {name: pf-20261106-5_s179_vs_opponent_4, group_0: pf-20261106-5_s179, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s179, group_0: opponent_4, group_1: pf-20261106-5_s179}
+- {name: pf-20261106-5_s180_vs_opponent_1, group_0: pf-20261106-5_s180, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s180, group_0: opponent_1, group_1: pf-20261106-5_s180}
+- {name: pf-20261106-5_s180_vs_opponent_2, group_0: pf-20261106-5_s180, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s180, group_0: opponent_2, group_1: pf-20261106-5_s180}
+- {name: pf-20261106-5_s180_vs_opponent_3, group_0: pf-20261106-5_s180, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s180, group_0: opponent_3, group_1: pf-20261106-5_s180}
+- {name: pf-20261106-5_s180_vs_opponent_4, group_0: pf-20261106-5_s180, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s180, group_0: opponent_4, group_1: pf-20261106-5_s180}
+- {name: pf-20261106-5_s181_vs_opponent_1, group_0: pf-20261106-5_s181, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s181, group_0: opponent_1, group_1: pf-20261106-5_s181}
+- {name: pf-20261106-5_s181_vs_opponent_2, group_0: pf-20261106-5_s181, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s181, group_0: opponent_2, group_1: pf-20261106-5_s181}
+- {name: pf-20261106-5_s181_vs_opponent_3, group_0: pf-20261106-5_s181, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s181, group_0: opponent_3, group_1: pf-20261106-5_s181}
+- {name: pf-20261106-5_s181_vs_opponent_4, group_0: pf-20261106-5_s181, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s181, group_0: opponent_4, group_1: pf-20261106-5_s181}
+- {name: pf-20261106-5_s182_vs_opponent_1, group_0: pf-20261106-5_s182, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s182, group_0: opponent_1, group_1: pf-20261106-5_s182}
+- {name: pf-20261106-5_s182_vs_opponent_2, group_0: pf-20261106-5_s182, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s182, group_0: opponent_2, group_1: pf-20261106-5_s182}
+- {name: pf-20261106-5_s182_vs_opponent_3, group_0: pf-20261106-5_s182, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s182, group_0: opponent_3, group_1: pf-20261106-5_s182}
+- {name: pf-20261106-5_s182_vs_opponent_4, group_0: pf-20261106-5_s182, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s182, group_0: opponent_4, group_1: pf-20261106-5_s182}
+- {name: pf-20261106-5_s183_vs_opponent_1, group_0: pf-20261106-5_s183, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s183, group_0: opponent_1, group_1: pf-20261106-5_s183}
+- {name: pf-20261106-5_s183_vs_opponent_2, group_0: pf-20261106-5_s183, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s183, group_0: opponent_2, group_1: pf-20261106-5_s183}
+- {name: pf-20261106-5_s183_vs_opponent_3, group_0: pf-20261106-5_s183, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s183, group_0: opponent_3, group_1: pf-20261106-5_s183}
+- {name: pf-20261106-5_s183_vs_opponent_4, group_0: pf-20261106-5_s183, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s183, group_0: opponent_4, group_1: pf-20261106-5_s183}
+- {name: pf-20261106-5_s184_vs_opponent_1, group_0: pf-20261106-5_s184, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s184, group_0: opponent_1, group_1: pf-20261106-5_s184}
+- {name: pf-20261106-5_s184_vs_opponent_2, group_0: pf-20261106-5_s184, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s184, group_0: opponent_2, group_1: pf-20261106-5_s184}
+- {name: pf-20261106-5_s184_vs_opponent_3, group_0: pf-20261106-5_s184, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s184, group_0: opponent_3, group_1: pf-20261106-5_s184}
+- {name: pf-20261106-5_s184_vs_opponent_4, group_0: pf-20261106-5_s184, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s184, group_0: opponent_4, group_1: pf-20261106-5_s184}
+- {name: pf-20261106-5_s185_vs_opponent_1, group_0: pf-20261106-5_s185, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s185, group_0: opponent_1, group_1: pf-20261106-5_s185}
+- {name: pf-20261106-5_s185_vs_opponent_2, group_0: pf-20261106-5_s185, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s185, group_0: opponent_2, group_1: pf-20261106-5_s185}
+- {name: pf-20261106-5_s185_vs_opponent_3, group_0: pf-20261106-5_s185, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s185, group_0: opponent_3, group_1: pf-20261106-5_s185}
+- {name: pf-20261106-5_s185_vs_opponent_4, group_0: pf-20261106-5_s185, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s185, group_0: opponent_4, group_1: pf-20261106-5_s185}
+- {name: pf-20261106-5_s186_vs_opponent_1, group_0: pf-20261106-5_s186, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s186, group_0: opponent_1, group_1: pf-20261106-5_s186}
+- {name: pf-20261106-5_s186_vs_opponent_2, group_0: pf-20261106-5_s186, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s186, group_0: opponent_2, group_1: pf-20261106-5_s186}
+- {name: pf-20261106-5_s186_vs_opponent_3, group_0: pf-20261106-5_s186, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s186, group_0: opponent_3, group_1: pf-20261106-5_s186}
+- {name: pf-20261106-5_s186_vs_opponent_4, group_0: pf-20261106-5_s186, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s186, group_0: opponent_4, group_1: pf-20261106-5_s186}
+- {name: pf-20261106-5_s187_vs_opponent_1, group_0: pf-20261106-5_s187, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s187, group_0: opponent_1, group_1: pf-20261106-5_s187}
+- {name: pf-20261106-5_s187_vs_opponent_2, group_0: pf-20261106-5_s187, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s187, group_0: opponent_2, group_1: pf-20261106-5_s187}
+- {name: pf-20261106-5_s187_vs_opponent_3, group_0: pf-20261106-5_s187, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s187, group_0: opponent_3, group_1: pf-20261106-5_s187}
+- {name: pf-20261106-5_s187_vs_opponent_4, group_0: pf-20261106-5_s187, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s187, group_0: opponent_4, group_1: pf-20261106-5_s187}
+- {name: pf-20261106-5_s188_vs_opponent_1, group_0: pf-20261106-5_s188, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s188, group_0: opponent_1, group_1: pf-20261106-5_s188}
+- {name: pf-20261106-5_s188_vs_opponent_2, group_0: pf-20261106-5_s188, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s188, group_0: opponent_2, group_1: pf-20261106-5_s188}
+- {name: pf-20261106-5_s188_vs_opponent_3, group_0: pf-20261106-5_s188, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s188, group_0: opponent_3, group_1: pf-20261106-5_s188}
+- {name: pf-20261106-5_s188_vs_opponent_4, group_0: pf-20261106-5_s188, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s188, group_0: opponent_4, group_1: pf-20261106-5_s188}
+- {name: pf-20261106-5_s189_vs_opponent_1, group_0: pf-20261106-5_s189, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s189, group_0: opponent_1, group_1: pf-20261106-5_s189}
+- {name: pf-20261106-5_s189_vs_opponent_2, group_0: pf-20261106-5_s189, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s189, group_0: opponent_2, group_1: pf-20261106-5_s189}
+- {name: pf-20261106-5_s189_vs_opponent_3, group_0: pf-20261106-5_s189, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s189, group_0: opponent_3, group_1: pf-20261106-5_s189}
+- {name: pf-20261106-5_s189_vs_opponent_4, group_0: pf-20261106-5_s189, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s189, group_0: opponent_4, group_1: pf-20261106-5_s189}
+- {name: pf-20261106-5_s190_vs_opponent_1, group_0: pf-20261106-5_s190, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s190, group_0: opponent_1, group_1: pf-20261106-5_s190}
+- {name: pf-20261106-5_s190_vs_opponent_2, group_0: pf-20261106-5_s190, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s190, group_0: opponent_2, group_1: pf-20261106-5_s190}
+- {name: pf-20261106-5_s190_vs_opponent_3, group_0: pf-20261106-5_s190, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s190, group_0: opponent_3, group_1: pf-20261106-5_s190}
+- {name: pf-20261106-5_s190_vs_opponent_4, group_0: pf-20261106-5_s190, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s190, group_0: opponent_4, group_1: pf-20261106-5_s190}
+- {name: pf-20261106-5_s191_vs_opponent_1, group_0: pf-20261106-5_s191, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s191, group_0: opponent_1, group_1: pf-20261106-5_s191}
+- {name: pf-20261106-5_s191_vs_opponent_2, group_0: pf-20261106-5_s191, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s191, group_0: opponent_2, group_1: pf-20261106-5_s191}
+- {name: pf-20261106-5_s191_vs_opponent_3, group_0: pf-20261106-5_s191, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s191, group_0: opponent_3, group_1: pf-20261106-5_s191}
+- {name: pf-20261106-5_s191_vs_opponent_4, group_0: pf-20261106-5_s191, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s191, group_0: opponent_4, group_1: pf-20261106-5_s191}
+- {name: pf-20261106-5_s192_vs_opponent_1, group_0: pf-20261106-5_s192, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s192, group_0: opponent_1, group_1: pf-20261106-5_s192}
+- {name: pf-20261106-5_s192_vs_opponent_2, group_0: pf-20261106-5_s192, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s192, group_0: opponent_2, group_1: pf-20261106-5_s192}
+- {name: pf-20261106-5_s192_vs_opponent_3, group_0: pf-20261106-5_s192, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s192, group_0: opponent_3, group_1: pf-20261106-5_s192}
+- {name: pf-20261106-5_s192_vs_opponent_4, group_0: pf-20261106-5_s192, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s192, group_0: opponent_4, group_1: pf-20261106-5_s192}
+- {name: pf-20261106-5_s193_vs_opponent_1, group_0: pf-20261106-5_s193, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s193, group_0: opponent_1, group_1: pf-20261106-5_s193}
+- {name: pf-20261106-5_s193_vs_opponent_2, group_0: pf-20261106-5_s193, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s193, group_0: opponent_2, group_1: pf-20261106-5_s193}
+- {name: pf-20261106-5_s193_vs_opponent_3, group_0: pf-20261106-5_s193, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s193, group_0: opponent_3, group_1: pf-20261106-5_s193}
+- {name: pf-20261106-5_s193_vs_opponent_4, group_0: pf-20261106-5_s193, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s193, group_0: opponent_4, group_1: pf-20261106-5_s193}
+- {name: pf-20261106-5_s194_vs_opponent_1, group_0: pf-20261106-5_s194, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s194, group_0: opponent_1, group_1: pf-20261106-5_s194}
+- {name: pf-20261106-5_s194_vs_opponent_2, group_0: pf-20261106-5_s194, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s194, group_0: opponent_2, group_1: pf-20261106-5_s194}
+- {name: pf-20261106-5_s194_vs_opponent_3, group_0: pf-20261106-5_s194, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s194, group_0: opponent_3, group_1: pf-20261106-5_s194}
+- {name: pf-20261106-5_s194_vs_opponent_4, group_0: pf-20261106-5_s194, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s194, group_0: opponent_4, group_1: pf-20261106-5_s194}
+- {name: pf-20261106-5_s195_vs_opponent_1, group_0: pf-20261106-5_s195, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s195, group_0: opponent_1, group_1: pf-20261106-5_s195}
+- {name: pf-20261106-5_s195_vs_opponent_2, group_0: pf-20261106-5_s195, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s195, group_0: opponent_2, group_1: pf-20261106-5_s195}
+- {name: pf-20261106-5_s195_vs_opponent_3, group_0: pf-20261106-5_s195, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s195, group_0: opponent_3, group_1: pf-20261106-5_s195}
+- {name: pf-20261106-5_s195_vs_opponent_4, group_0: pf-20261106-5_s195, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s195, group_0: opponent_4, group_1: pf-20261106-5_s195}
+- {name: pf-20261106-5_s196_vs_opponent_1, group_0: pf-20261106-5_s196, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s196, group_0: opponent_1, group_1: pf-20261106-5_s196}
+- {name: pf-20261106-5_s196_vs_opponent_2, group_0: pf-20261106-5_s196, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s196, group_0: opponent_2, group_1: pf-20261106-5_s196}
+- {name: pf-20261106-5_s196_vs_opponent_3, group_0: pf-20261106-5_s196, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s196, group_0: opponent_3, group_1: pf-20261106-5_s196}
+- {name: pf-20261106-5_s196_vs_opponent_4, group_0: pf-20261106-5_s196, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s196, group_0: opponent_4, group_1: pf-20261106-5_s196}
+- {name: pf-20261106-5_s197_vs_opponent_1, group_0: pf-20261106-5_s197, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s197, group_0: opponent_1, group_1: pf-20261106-5_s197}
+- {name: pf-20261106-5_s197_vs_opponent_2, group_0: pf-20261106-5_s197, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s197, group_0: opponent_2, group_1: pf-20261106-5_s197}
+- {name: pf-20261106-5_s197_vs_opponent_3, group_0: pf-20261106-5_s197, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s197, group_0: opponent_3, group_1: pf-20261106-5_s197}
+- {name: pf-20261106-5_s197_vs_opponent_4, group_0: pf-20261106-5_s197, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s197, group_0: opponent_4, group_1: pf-20261106-5_s197}
+- {name: pf-20261106-5_s198_vs_opponent_1, group_0: pf-20261106-5_s198, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s198, group_0: opponent_1, group_1: pf-20261106-5_s198}
+- {name: pf-20261106-5_s198_vs_opponent_2, group_0: pf-20261106-5_s198, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s198, group_0: opponent_2, group_1: pf-20261106-5_s198}
+- {name: pf-20261106-5_s198_vs_opponent_3, group_0: pf-20261106-5_s198, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s198, group_0: opponent_3, group_1: pf-20261106-5_s198}
+- {name: pf-20261106-5_s198_vs_opponent_4, group_0: pf-20261106-5_s198, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s198, group_0: opponent_4, group_1: pf-20261106-5_s198}
+- {name: pf-20261106-5_s199_vs_opponent_1, group_0: pf-20261106-5_s199, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s199, group_0: opponent_1, group_1: pf-20261106-5_s199}
+- {name: pf-20261106-5_s199_vs_opponent_2, group_0: pf-20261106-5_s199, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s199, group_0: opponent_2, group_1: pf-20261106-5_s199}
+- {name: pf-20261106-5_s199_vs_opponent_3, group_0: pf-20261106-5_s199, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s199, group_0: opponent_3, group_1: pf-20261106-5_s199}
+- {name: pf-20261106-5_s199_vs_opponent_4, group_0: pf-20261106-5_s199, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s199, group_0: opponent_4, group_1: pf-20261106-5_s199}
+- {name: pf-20261106-5_s200_vs_opponent_1, group_0: pf-20261106-5_s200, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s200, group_0: opponent_1, group_1: pf-20261106-5_s200}
+- {name: pf-20261106-5_s200_vs_opponent_2, group_0: pf-20261106-5_s200, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s200, group_0: opponent_2, group_1: pf-20261106-5_s200}
+- {name: pf-20261106-5_s200_vs_opponent_3, group_0: pf-20261106-5_s200, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s200, group_0: opponent_3, group_1: pf-20261106-5_s200}
+- {name: pf-20261106-5_s200_vs_opponent_4, group_0: pf-20261106-5_s200, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s200, group_0: opponent_4, group_1: pf-20261106-5_s200}
+- {name: pf-20261106-5_s201_vs_opponent_1, group_0: pf-20261106-5_s201, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s201, group_0: opponent_1, group_1: pf-20261106-5_s201}
+- {name: pf-20261106-5_s201_vs_opponent_2, group_0: pf-20261106-5_s201, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s201, group_0: opponent_2, group_1: pf-20261106-5_s201}
+- {name: pf-20261106-5_s201_vs_opponent_3, group_0: pf-20261106-5_s201, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s201, group_0: opponent_3, group_1: pf-20261106-5_s201}
+- {name: pf-20261106-5_s201_vs_opponent_4, group_0: pf-20261106-5_s201, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s201, group_0: opponent_4, group_1: pf-20261106-5_s201}
+- {name: pf-20261106-5_s202_vs_opponent_1, group_0: pf-20261106-5_s202, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s202, group_0: opponent_1, group_1: pf-20261106-5_s202}
+- {name: pf-20261106-5_s202_vs_opponent_2, group_0: pf-20261106-5_s202, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s202, group_0: opponent_2, group_1: pf-20261106-5_s202}
+- {name: pf-20261106-5_s202_vs_opponent_3, group_0: pf-20261106-5_s202, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s202, group_0: opponent_3, group_1: pf-20261106-5_s202}
+- {name: pf-20261106-5_s202_vs_opponent_4, group_0: pf-20261106-5_s202, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s202, group_0: opponent_4, group_1: pf-20261106-5_s202}
+- {name: pf-20261106-5_s203_vs_opponent_1, group_0: pf-20261106-5_s203, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s203, group_0: opponent_1, group_1: pf-20261106-5_s203}
+- {name: pf-20261106-5_s203_vs_opponent_2, group_0: pf-20261106-5_s203, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s203, group_0: opponent_2, group_1: pf-20261106-5_s203}
+- {name: pf-20261106-5_s203_vs_opponent_3, group_0: pf-20261106-5_s203, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s203, group_0: opponent_3, group_1: pf-20261106-5_s203}
+- {name: pf-20261106-5_s203_vs_opponent_4, group_0: pf-20261106-5_s203, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s203, group_0: opponent_4, group_1: pf-20261106-5_s203}
+- {name: pf-20261106-5_s204_vs_opponent_1, group_0: pf-20261106-5_s204, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s204, group_0: opponent_1, group_1: pf-20261106-5_s204}
+- {name: pf-20261106-5_s204_vs_opponent_2, group_0: pf-20261106-5_s204, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s204, group_0: opponent_2, group_1: pf-20261106-5_s204}
+- {name: pf-20261106-5_s204_vs_opponent_3, group_0: pf-20261106-5_s204, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s204, group_0: opponent_3, group_1: pf-20261106-5_s204}
+- {name: pf-20261106-5_s204_vs_opponent_4, group_0: pf-20261106-5_s204, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s204, group_0: opponent_4, group_1: pf-20261106-5_s204}
+- {name: pf-20261106-5_s205_vs_opponent_1, group_0: pf-20261106-5_s205, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s205, group_0: opponent_1, group_1: pf-20261106-5_s205}
+- {name: pf-20261106-5_s205_vs_opponent_2, group_0: pf-20261106-5_s205, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s205, group_0: opponent_2, group_1: pf-20261106-5_s205}
+- {name: pf-20261106-5_s205_vs_opponent_3, group_0: pf-20261106-5_s205, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s205, group_0: opponent_3, group_1: pf-20261106-5_s205}
+- {name: pf-20261106-5_s205_vs_opponent_4, group_0: pf-20261106-5_s205, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s205, group_0: opponent_4, group_1: pf-20261106-5_s205}
+- {name: pf-20261106-5_s206_vs_opponent_1, group_0: pf-20261106-5_s206, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s206, group_0: opponent_1, group_1: pf-20261106-5_s206}
+- {name: pf-20261106-5_s206_vs_opponent_2, group_0: pf-20261106-5_s206, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s206, group_0: opponent_2, group_1: pf-20261106-5_s206}
+- {name: pf-20261106-5_s206_vs_opponent_3, group_0: pf-20261106-5_s206, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s206, group_0: opponent_3, group_1: pf-20261106-5_s206}
+- {name: pf-20261106-5_s206_vs_opponent_4, group_0: pf-20261106-5_s206, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s206, group_0: opponent_4, group_1: pf-20261106-5_s206}
+- {name: pf-20261106-5_s207_vs_opponent_1, group_0: pf-20261106-5_s207, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s207, group_0: opponent_1, group_1: pf-20261106-5_s207}
+- {name: pf-20261106-5_s207_vs_opponent_2, group_0: pf-20261106-5_s207, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s207, group_0: opponent_2, group_1: pf-20261106-5_s207}
+- {name: pf-20261106-5_s207_vs_opponent_3, group_0: pf-20261106-5_s207, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s207, group_0: opponent_3, group_1: pf-20261106-5_s207}
+- {name: pf-20261106-5_s207_vs_opponent_4, group_0: pf-20261106-5_s207, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s207, group_0: opponent_4, group_1: pf-20261106-5_s207}
+- {name: pf-20261106-5_s208_vs_opponent_1, group_0: pf-20261106-5_s208, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s208, group_0: opponent_1, group_1: pf-20261106-5_s208}
+- {name: pf-20261106-5_s208_vs_opponent_2, group_0: pf-20261106-5_s208, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s208, group_0: opponent_2, group_1: pf-20261106-5_s208}
+- {name: pf-20261106-5_s208_vs_opponent_3, group_0: pf-20261106-5_s208, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s208, group_0: opponent_3, group_1: pf-20261106-5_s208}
+- {name: pf-20261106-5_s208_vs_opponent_4, group_0: pf-20261106-5_s208, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s208, group_0: opponent_4, group_1: pf-20261106-5_s208}
+- {name: pf-20261106-5_s209_vs_opponent_1, group_0: pf-20261106-5_s209, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s209, group_0: opponent_1, group_1: pf-20261106-5_s209}
+- {name: pf-20261106-5_s209_vs_opponent_2, group_0: pf-20261106-5_s209, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s209, group_0: opponent_2, group_1: pf-20261106-5_s209}
+- {name: pf-20261106-5_s209_vs_opponent_3, group_0: pf-20261106-5_s209, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s209, group_0: opponent_3, group_1: pf-20261106-5_s209}
+- {name: pf-20261106-5_s209_vs_opponent_4, group_0: pf-20261106-5_s209, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s209, group_0: opponent_4, group_1: pf-20261106-5_s209}
+- {name: pf-20261106-5_s210_vs_opponent_1, group_0: pf-20261106-5_s210, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s210, group_0: opponent_1, group_1: pf-20261106-5_s210}
+- {name: pf-20261106-5_s210_vs_opponent_2, group_0: pf-20261106-5_s210, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s210, group_0: opponent_2, group_1: pf-20261106-5_s210}
+- {name: pf-20261106-5_s210_vs_opponent_3, group_0: pf-20261106-5_s210, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s210, group_0: opponent_3, group_1: pf-20261106-5_s210}
+- {name: pf-20261106-5_s210_vs_opponent_4, group_0: pf-20261106-5_s210, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s210, group_0: opponent_4, group_1: pf-20261106-5_s210}
+- {name: pf-20261106-5_s211_vs_opponent_1, group_0: pf-20261106-5_s211, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s211, group_0: opponent_1, group_1: pf-20261106-5_s211}
+- {name: pf-20261106-5_s211_vs_opponent_2, group_0: pf-20261106-5_s211, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s211, group_0: opponent_2, group_1: pf-20261106-5_s211}
+- {name: pf-20261106-5_s211_vs_opponent_3, group_0: pf-20261106-5_s211, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s211, group_0: opponent_3, group_1: pf-20261106-5_s211}
+- {name: pf-20261106-5_s211_vs_opponent_4, group_0: pf-20261106-5_s211, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s211, group_0: opponent_4, group_1: pf-20261106-5_s211}
+- {name: pf-20261106-5_s212_vs_opponent_1, group_0: pf-20261106-5_s212, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s212, group_0: opponent_1, group_1: pf-20261106-5_s212}
+- {name: pf-20261106-5_s212_vs_opponent_2, group_0: pf-20261106-5_s212, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s212, group_0: opponent_2, group_1: pf-20261106-5_s212}
+- {name: pf-20261106-5_s212_vs_opponent_3, group_0: pf-20261106-5_s212, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s212, group_0: opponent_3, group_1: pf-20261106-5_s212}
+- {name: pf-20261106-5_s212_vs_opponent_4, group_0: pf-20261106-5_s212, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s212, group_0: opponent_4, group_1: pf-20261106-5_s212}
+- {name: pf-20261106-5_s213_vs_opponent_1, group_0: pf-20261106-5_s213, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s213, group_0: opponent_1, group_1: pf-20261106-5_s213}
+- {name: pf-20261106-5_s213_vs_opponent_2, group_0: pf-20261106-5_s213, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s213, group_0: opponent_2, group_1: pf-20261106-5_s213}
+- {name: pf-20261106-5_s213_vs_opponent_3, group_0: pf-20261106-5_s213, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s213, group_0: opponent_3, group_1: pf-20261106-5_s213}
+- {name: pf-20261106-5_s213_vs_opponent_4, group_0: pf-20261106-5_s213, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s213, group_0: opponent_4, group_1: pf-20261106-5_s213}
+- {name: pf-20261106-5_s214_vs_opponent_1, group_0: pf-20261106-5_s214, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s214, group_0: opponent_1, group_1: pf-20261106-5_s214}
+- {name: pf-20261106-5_s214_vs_opponent_2, group_0: pf-20261106-5_s214, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s214, group_0: opponent_2, group_1: pf-20261106-5_s214}
+- {name: pf-20261106-5_s214_vs_opponent_3, group_0: pf-20261106-5_s214, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s214, group_0: opponent_3, group_1: pf-20261106-5_s214}
+- {name: pf-20261106-5_s214_vs_opponent_4, group_0: pf-20261106-5_s214, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s214, group_0: opponent_4, group_1: pf-20261106-5_s214}
+- {name: pf-20261106-5_s215_vs_opponent_1, group_0: pf-20261106-5_s215, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s215, group_0: opponent_1, group_1: pf-20261106-5_s215}
+- {name: pf-20261106-5_s215_vs_opponent_2, group_0: pf-20261106-5_s215, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s215, group_0: opponent_2, group_1: pf-20261106-5_s215}
+- {name: pf-20261106-5_s215_vs_opponent_3, group_0: pf-20261106-5_s215, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s215, group_0: opponent_3, group_1: pf-20261106-5_s215}
+- {name: pf-20261106-5_s215_vs_opponent_4, group_0: pf-20261106-5_s215, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s215, group_0: opponent_4, group_1: pf-20261106-5_s215}
+- {name: pf-20261106-5_s216_vs_opponent_1, group_0: pf-20261106-5_s216, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s216, group_0: opponent_1, group_1: pf-20261106-5_s216}
+- {name: pf-20261106-5_s216_vs_opponent_2, group_0: pf-20261106-5_s216, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s216, group_0: opponent_2, group_1: pf-20261106-5_s216}
+- {name: pf-20261106-5_s216_vs_opponent_3, group_0: pf-20261106-5_s216, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s216, group_0: opponent_3, group_1: pf-20261106-5_s216}
+- {name: pf-20261106-5_s216_vs_opponent_4, group_0: pf-20261106-5_s216, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s216, group_0: opponent_4, group_1: pf-20261106-5_s216}
+- {name: pf-20261106-5_s217_vs_opponent_1, group_0: pf-20261106-5_s217, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s217, group_0: opponent_1, group_1: pf-20261106-5_s217}
+- {name: pf-20261106-5_s217_vs_opponent_2, group_0: pf-20261106-5_s217, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s217, group_0: opponent_2, group_1: pf-20261106-5_s217}
+- {name: pf-20261106-5_s217_vs_opponent_3, group_0: pf-20261106-5_s217, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s217, group_0: opponent_3, group_1: pf-20261106-5_s217}
+- {name: pf-20261106-5_s217_vs_opponent_4, group_0: pf-20261106-5_s217, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s217, group_0: opponent_4, group_1: pf-20261106-5_s217}
+- {name: pf-20261106-5_s218_vs_opponent_1, group_0: pf-20261106-5_s218, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s218, group_0: opponent_1, group_1: pf-20261106-5_s218}
+- {name: pf-20261106-5_s218_vs_opponent_2, group_0: pf-20261106-5_s218, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s218, group_0: opponent_2, group_1: pf-20261106-5_s218}
+- {name: pf-20261106-5_s218_vs_opponent_3, group_0: pf-20261106-5_s218, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s218, group_0: opponent_3, group_1: pf-20261106-5_s218}
+- {name: pf-20261106-5_s218_vs_opponent_4, group_0: pf-20261106-5_s218, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s218, group_0: opponent_4, group_1: pf-20261106-5_s218}
+- {name: pf-20261106-5_s219_vs_opponent_1, group_0: pf-20261106-5_s219, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s219, group_0: opponent_1, group_1: pf-20261106-5_s219}
+- {name: pf-20261106-5_s219_vs_opponent_2, group_0: pf-20261106-5_s219, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s219, group_0: opponent_2, group_1: pf-20261106-5_s219}
+- {name: pf-20261106-5_s219_vs_opponent_3, group_0: pf-20261106-5_s219, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s219, group_0: opponent_3, group_1: pf-20261106-5_s219}
+- {name: pf-20261106-5_s219_vs_opponent_4, group_0: pf-20261106-5_s219, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s219, group_0: opponent_4, group_1: pf-20261106-5_s219}
+- {name: pf-20261106-5_s220_vs_opponent_1, group_0: pf-20261106-5_s220, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s220, group_0: opponent_1, group_1: pf-20261106-5_s220}
+- {name: pf-20261106-5_s220_vs_opponent_2, group_0: pf-20261106-5_s220, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s220, group_0: opponent_2, group_1: pf-20261106-5_s220}
+- {name: pf-20261106-5_s220_vs_opponent_3, group_0: pf-20261106-5_s220, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s220, group_0: opponent_3, group_1: pf-20261106-5_s220}
+- {name: pf-20261106-5_s220_vs_opponent_4, group_0: pf-20261106-5_s220, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s220, group_0: opponent_4, group_1: pf-20261106-5_s220}
+- {name: pf-20261106-5_s221_vs_opponent_1, group_0: pf-20261106-5_s221, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s221, group_0: opponent_1, group_1: pf-20261106-5_s221}
+- {name: pf-20261106-5_s221_vs_opponent_2, group_0: pf-20261106-5_s221, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s221, group_0: opponent_2, group_1: pf-20261106-5_s221}
+- {name: pf-20261106-5_s221_vs_opponent_3, group_0: pf-20261106-5_s221, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s221, group_0: opponent_3, group_1: pf-20261106-5_s221}
+- {name: pf-20261106-5_s221_vs_opponent_4, group_0: pf-20261106-5_s221, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s221, group_0: opponent_4, group_1: pf-20261106-5_s221}
+- {name: pf-20261106-5_s222_vs_opponent_1, group_0: pf-20261106-5_s222, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s222, group_0: opponent_1, group_1: pf-20261106-5_s222}
+- {name: pf-20261106-5_s222_vs_opponent_2, group_0: pf-20261106-5_s222, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s222, group_0: opponent_2, group_1: pf-20261106-5_s222}
+- {name: pf-20261106-5_s222_vs_opponent_3, group_0: pf-20261106-5_s222, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s222, group_0: opponent_3, group_1: pf-20261106-5_s222}
+- {name: pf-20261106-5_s222_vs_opponent_4, group_0: pf-20261106-5_s222, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s222, group_0: opponent_4, group_1: pf-20261106-5_s222}
+- {name: pf-20261106-5_s223_vs_opponent_1, group_0: pf-20261106-5_s223, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s223, group_0: opponent_1, group_1: pf-20261106-5_s223}
+- {name: pf-20261106-5_s223_vs_opponent_2, group_0: pf-20261106-5_s223, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s223, group_0: opponent_2, group_1: pf-20261106-5_s223}
+- {name: pf-20261106-5_s223_vs_opponent_3, group_0: pf-20261106-5_s223, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s223, group_0: opponent_3, group_1: pf-20261106-5_s223}
+- {name: pf-20261106-5_s223_vs_opponent_4, group_0: pf-20261106-5_s223, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s223, group_0: opponent_4, group_1: pf-20261106-5_s223}
+- {name: pf-20261106-5_s224_vs_opponent_1, group_0: pf-20261106-5_s224, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s224, group_0: opponent_1, group_1: pf-20261106-5_s224}
+- {name: pf-20261106-5_s224_vs_opponent_2, group_0: pf-20261106-5_s224, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s224, group_0: opponent_2, group_1: pf-20261106-5_s224}
+- {name: pf-20261106-5_s224_vs_opponent_3, group_0: pf-20261106-5_s224, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s224, group_0: opponent_3, group_1: pf-20261106-5_s224}
+- {name: pf-20261106-5_s224_vs_opponent_4, group_0: pf-20261106-5_s224, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s224, group_0: opponent_4, group_1: pf-20261106-5_s224}
+- {name: pf-20261106-5_s225_vs_opponent_1, group_0: pf-20261106-5_s225, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s225, group_0: opponent_1, group_1: pf-20261106-5_s225}
+- {name: pf-20261106-5_s225_vs_opponent_2, group_0: pf-20261106-5_s225, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s225, group_0: opponent_2, group_1: pf-20261106-5_s225}
+- {name: pf-20261106-5_s225_vs_opponent_3, group_0: pf-20261106-5_s225, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s225, group_0: opponent_3, group_1: pf-20261106-5_s225}
+- {name: pf-20261106-5_s225_vs_opponent_4, group_0: pf-20261106-5_s225, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s225, group_0: opponent_4, group_1: pf-20261106-5_s225}
+- {name: pf-20261106-5_s226_vs_opponent_1, group_0: pf-20261106-5_s226, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s226, group_0: opponent_1, group_1: pf-20261106-5_s226}
+- {name: pf-20261106-5_s226_vs_opponent_2, group_0: pf-20261106-5_s226, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s226, group_0: opponent_2, group_1: pf-20261106-5_s226}
+- {name: pf-20261106-5_s226_vs_opponent_3, group_0: pf-20261106-5_s226, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s226, group_0: opponent_3, group_1: pf-20261106-5_s226}
+- {name: pf-20261106-5_s226_vs_opponent_4, group_0: pf-20261106-5_s226, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s226, group_0: opponent_4, group_1: pf-20261106-5_s226}
+- {name: pf-20261106-5_s227_vs_opponent_1, group_0: pf-20261106-5_s227, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s227, group_0: opponent_1, group_1: pf-20261106-5_s227}
+- {name: pf-20261106-5_s227_vs_opponent_2, group_0: pf-20261106-5_s227, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s227, group_0: opponent_2, group_1: pf-20261106-5_s227}
+- {name: pf-20261106-5_s227_vs_opponent_3, group_0: pf-20261106-5_s227, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s227, group_0: opponent_3, group_1: pf-20261106-5_s227}
+- {name: pf-20261106-5_s227_vs_opponent_4, group_0: pf-20261106-5_s227, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s227, group_0: opponent_4, group_1: pf-20261106-5_s227}
+- {name: pf-20261106-5_s228_vs_opponent_1, group_0: pf-20261106-5_s228, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s228, group_0: opponent_1, group_1: pf-20261106-5_s228}
+- {name: pf-20261106-5_s228_vs_opponent_2, group_0: pf-20261106-5_s228, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s228, group_0: opponent_2, group_1: pf-20261106-5_s228}
+- {name: pf-20261106-5_s228_vs_opponent_3, group_0: pf-20261106-5_s228, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s228, group_0: opponent_3, group_1: pf-20261106-5_s228}
+- {name: pf-20261106-5_s228_vs_opponent_4, group_0: pf-20261106-5_s228, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s228, group_0: opponent_4, group_1: pf-20261106-5_s228}
+- {name: pf-20261106-5_s229_vs_opponent_1, group_0: pf-20261106-5_s229, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s229, group_0: opponent_1, group_1: pf-20261106-5_s229}
+- {name: pf-20261106-5_s229_vs_opponent_2, group_0: pf-20261106-5_s229, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s229, group_0: opponent_2, group_1: pf-20261106-5_s229}
+- {name: pf-20261106-5_s229_vs_opponent_3, group_0: pf-20261106-5_s229, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s229, group_0: opponent_3, group_1: pf-20261106-5_s229}
+- {name: pf-20261106-5_s229_vs_opponent_4, group_0: pf-20261106-5_s229, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s229, group_0: opponent_4, group_1: pf-20261106-5_s229}
+- {name: pf-20261106-5_s230_vs_opponent_1, group_0: pf-20261106-5_s230, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s230, group_0: opponent_1, group_1: pf-20261106-5_s230}
+- {name: pf-20261106-5_s230_vs_opponent_2, group_0: pf-20261106-5_s230, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s230, group_0: opponent_2, group_1: pf-20261106-5_s230}
+- {name: pf-20261106-5_s230_vs_opponent_3, group_0: pf-20261106-5_s230, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s230, group_0: opponent_3, group_1: pf-20261106-5_s230}
+- {name: pf-20261106-5_s230_vs_opponent_4, group_0: pf-20261106-5_s230, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s230, group_0: opponent_4, group_1: pf-20261106-5_s230}
+- {name: pf-20261106-5_s231_vs_opponent_1, group_0: pf-20261106-5_s231, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s231, group_0: opponent_1, group_1: pf-20261106-5_s231}
+- {name: pf-20261106-5_s231_vs_opponent_2, group_0: pf-20261106-5_s231, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s231, group_0: opponent_2, group_1: pf-20261106-5_s231}
+- {name: pf-20261106-5_s231_vs_opponent_3, group_0: pf-20261106-5_s231, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s231, group_0: opponent_3, group_1: pf-20261106-5_s231}
+- {name: pf-20261106-5_s231_vs_opponent_4, group_0: pf-20261106-5_s231, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s231, group_0: opponent_4, group_1: pf-20261106-5_s231}
+- {name: pf-20261106-5_s232_vs_opponent_1, group_0: pf-20261106-5_s232, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s232, group_0: opponent_1, group_1: pf-20261106-5_s232}
+- {name: pf-20261106-5_s232_vs_opponent_2, group_0: pf-20261106-5_s232, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s232, group_0: opponent_2, group_1: pf-20261106-5_s232}
+- {name: pf-20261106-5_s232_vs_opponent_3, group_0: pf-20261106-5_s232, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s232, group_0: opponent_3, group_1: pf-20261106-5_s232}
+- {name: pf-20261106-5_s232_vs_opponent_4, group_0: pf-20261106-5_s232, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s232, group_0: opponent_4, group_1: pf-20261106-5_s232}
+- {name: pf-20261106-5_s233_vs_opponent_1, group_0: pf-20261106-5_s233, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s233, group_0: opponent_1, group_1: pf-20261106-5_s233}
+- {name: pf-20261106-5_s233_vs_opponent_2, group_0: pf-20261106-5_s233, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s233, group_0: opponent_2, group_1: pf-20261106-5_s233}
+- {name: pf-20261106-5_s233_vs_opponent_3, group_0: pf-20261106-5_s233, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s233, group_0: opponent_3, group_1: pf-20261106-5_s233}
+- {name: pf-20261106-5_s233_vs_opponent_4, group_0: pf-20261106-5_s233, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s233, group_0: opponent_4, group_1: pf-20261106-5_s233}
+- {name: pf-20261106-5_s234_vs_opponent_1, group_0: pf-20261106-5_s234, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s234, group_0: opponent_1, group_1: pf-20261106-5_s234}
+- {name: pf-20261106-5_s234_vs_opponent_2, group_0: pf-20261106-5_s234, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s234, group_0: opponent_2, group_1: pf-20261106-5_s234}
+- {name: pf-20261106-5_s234_vs_opponent_3, group_0: pf-20261106-5_s234, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s234, group_0: opponent_3, group_1: pf-20261106-5_s234}
+- {name: pf-20261106-5_s234_vs_opponent_4, group_0: pf-20261106-5_s234, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s234, group_0: opponent_4, group_1: pf-20261106-5_s234}
+- {name: pf-20261106-5_s235_vs_opponent_1, group_0: pf-20261106-5_s235, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s235, group_0: opponent_1, group_1: pf-20261106-5_s235}
+- {name: pf-20261106-5_s235_vs_opponent_2, group_0: pf-20261106-5_s235, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s235, group_0: opponent_2, group_1: pf-20261106-5_s235}
+- {name: pf-20261106-5_s235_vs_opponent_3, group_0: pf-20261106-5_s235, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s235, group_0: opponent_3, group_1: pf-20261106-5_s235}
+- {name: pf-20261106-5_s235_vs_opponent_4, group_0: pf-20261106-5_s235, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s235, group_0: opponent_4, group_1: pf-20261106-5_s235}
+- {name: pf-20261106-5_s236_vs_opponent_1, group_0: pf-20261106-5_s236, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s236, group_0: opponent_1, group_1: pf-20261106-5_s236}
+- {name: pf-20261106-5_s236_vs_opponent_2, group_0: pf-20261106-5_s236, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s236, group_0: opponent_2, group_1: pf-20261106-5_s236}
+- {name: pf-20261106-5_s236_vs_opponent_3, group_0: pf-20261106-5_s236, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s236, group_0: opponent_3, group_1: pf-20261106-5_s236}
+- {name: pf-20261106-5_s236_vs_opponent_4, group_0: pf-20261106-5_s236, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s236, group_0: opponent_4, group_1: pf-20261106-5_s236}
+- {name: pf-20261106-5_s237_vs_opponent_1, group_0: pf-20261106-5_s237, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s237, group_0: opponent_1, group_1: pf-20261106-5_s237}
+- {name: pf-20261106-5_s237_vs_opponent_2, group_0: pf-20261106-5_s237, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s237, group_0: opponent_2, group_1: pf-20261106-5_s237}
+- {name: pf-20261106-5_s237_vs_opponent_3, group_0: pf-20261106-5_s237, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s237, group_0: opponent_3, group_1: pf-20261106-5_s237}
+- {name: pf-20261106-5_s237_vs_opponent_4, group_0: pf-20261106-5_s237, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s237, group_0: opponent_4, group_1: pf-20261106-5_s237}
+- {name: pf-20261106-5_s238_vs_opponent_1, group_0: pf-20261106-5_s238, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s238, group_0: opponent_1, group_1: pf-20261106-5_s238}
+- {name: pf-20261106-5_s238_vs_opponent_2, group_0: pf-20261106-5_s238, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s238, group_0: opponent_2, group_1: pf-20261106-5_s238}
+- {name: pf-20261106-5_s238_vs_opponent_3, group_0: pf-20261106-5_s238, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s238, group_0: opponent_3, group_1: pf-20261106-5_s238}
+- {name: pf-20261106-5_s238_vs_opponent_4, group_0: pf-20261106-5_s238, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s238, group_0: opponent_4, group_1: pf-20261106-5_s238}
+- {name: pf-20261106-5_s239_vs_opponent_1, group_0: pf-20261106-5_s239, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s239, group_0: opponent_1, group_1: pf-20261106-5_s239}
+- {name: pf-20261106-5_s239_vs_opponent_2, group_0: pf-20261106-5_s239, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s239, group_0: opponent_2, group_1: pf-20261106-5_s239}
+- {name: pf-20261106-5_s239_vs_opponent_3, group_0: pf-20261106-5_s239, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s239, group_0: opponent_3, group_1: pf-20261106-5_s239}
+- {name: pf-20261106-5_s239_vs_opponent_4, group_0: pf-20261106-5_s239, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s239, group_0: opponent_4, group_1: pf-20261106-5_s239}
+- {name: pf-20261106-5_s240_vs_opponent_1, group_0: pf-20261106-5_s240, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s240, group_0: opponent_1, group_1: pf-20261106-5_s240}
+- {name: pf-20261106-5_s240_vs_opponent_2, group_0: pf-20261106-5_s240, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s240, group_0: opponent_2, group_1: pf-20261106-5_s240}
+- {name: pf-20261106-5_s240_vs_opponent_3, group_0: pf-20261106-5_s240, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s240, group_0: opponent_3, group_1: pf-20261106-5_s240}
+- {name: pf-20261106-5_s240_vs_opponent_4, group_0: pf-20261106-5_s240, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s240, group_0: opponent_4, group_1: pf-20261106-5_s240}
+- {name: pf-20261106-5_s241_vs_opponent_1, group_0: pf-20261106-5_s241, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s241, group_0: opponent_1, group_1: pf-20261106-5_s241}
+- {name: pf-20261106-5_s241_vs_opponent_2, group_0: pf-20261106-5_s241, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s241, group_0: opponent_2, group_1: pf-20261106-5_s241}
+- {name: pf-20261106-5_s241_vs_opponent_3, group_0: pf-20261106-5_s241, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s241, group_0: opponent_3, group_1: pf-20261106-5_s241}
+- {name: pf-20261106-5_s241_vs_opponent_4, group_0: pf-20261106-5_s241, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s241, group_0: opponent_4, group_1: pf-20261106-5_s241}
+- {name: pf-20261106-5_s242_vs_opponent_1, group_0: pf-20261106-5_s242, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s242, group_0: opponent_1, group_1: pf-20261106-5_s242}
+- {name: pf-20261106-5_s242_vs_opponent_2, group_0: pf-20261106-5_s242, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s242, group_0: opponent_2, group_1: pf-20261106-5_s242}
+- {name: pf-20261106-5_s242_vs_opponent_3, group_0: pf-20261106-5_s242, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s242, group_0: opponent_3, group_1: pf-20261106-5_s242}
+- {name: pf-20261106-5_s242_vs_opponent_4, group_0: pf-20261106-5_s242, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s242, group_0: opponent_4, group_1: pf-20261106-5_s242}
+- {name: pf-20261106-5_s243_vs_opponent_1, group_0: pf-20261106-5_s243, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s243, group_0: opponent_1, group_1: pf-20261106-5_s243}
+- {name: pf-20261106-5_s243_vs_opponent_2, group_0: pf-20261106-5_s243, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s243, group_0: opponent_2, group_1: pf-20261106-5_s243}
+- {name: pf-20261106-5_s243_vs_opponent_3, group_0: pf-20261106-5_s243, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s243, group_0: opponent_3, group_1: pf-20261106-5_s243}
+- {name: pf-20261106-5_s243_vs_opponent_4, group_0: pf-20261106-5_s243, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s243, group_0: opponent_4, group_1: pf-20261106-5_s243}
+- {name: pf-20261106-5_s244_vs_opponent_1, group_0: pf-20261106-5_s244, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s244, group_0: opponent_1, group_1: pf-20261106-5_s244}
+- {name: pf-20261106-5_s244_vs_opponent_2, group_0: pf-20261106-5_s244, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s244, group_0: opponent_2, group_1: pf-20261106-5_s244}
+- {name: pf-20261106-5_s244_vs_opponent_3, group_0: pf-20261106-5_s244, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s244, group_0: opponent_3, group_1: pf-20261106-5_s244}
+- {name: pf-20261106-5_s244_vs_opponent_4, group_0: pf-20261106-5_s244, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s244, group_0: opponent_4, group_1: pf-20261106-5_s244}
+- {name: pf-20261106-5_s245_vs_opponent_1, group_0: pf-20261106-5_s245, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s245, group_0: opponent_1, group_1: pf-20261106-5_s245}
+- {name: pf-20261106-5_s245_vs_opponent_2, group_0: pf-20261106-5_s245, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s245, group_0: opponent_2, group_1: pf-20261106-5_s245}
+- {name: pf-20261106-5_s245_vs_opponent_3, group_0: pf-20261106-5_s245, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s245, group_0: opponent_3, group_1: pf-20261106-5_s245}
+- {name: pf-20261106-5_s245_vs_opponent_4, group_0: pf-20261106-5_s245, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s245, group_0: opponent_4, group_1: pf-20261106-5_s245}
+- {name: pf-20261106-5_s246_vs_opponent_1, group_0: pf-20261106-5_s246, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s246, group_0: opponent_1, group_1: pf-20261106-5_s246}
+- {name: pf-20261106-5_s246_vs_opponent_2, group_0: pf-20261106-5_s246, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s246, group_0: opponent_2, group_1: pf-20261106-5_s246}
+- {name: pf-20261106-5_s246_vs_opponent_3, group_0: pf-20261106-5_s246, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s246, group_0: opponent_3, group_1: pf-20261106-5_s246}
+- {name: pf-20261106-5_s246_vs_opponent_4, group_0: pf-20261106-5_s246, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s246, group_0: opponent_4, group_1: pf-20261106-5_s246}
+- {name: pf-20261106-5_s247_vs_opponent_1, group_0: pf-20261106-5_s247, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s247, group_0: opponent_1, group_1: pf-20261106-5_s247}
+- {name: pf-20261106-5_s247_vs_opponent_2, group_0: pf-20261106-5_s247, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s247, group_0: opponent_2, group_1: pf-20261106-5_s247}
+- {name: pf-20261106-5_s247_vs_opponent_3, group_0: pf-20261106-5_s247, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s247, group_0: opponent_3, group_1: pf-20261106-5_s247}
+- {name: pf-20261106-5_s247_vs_opponent_4, group_0: pf-20261106-5_s247, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s247, group_0: opponent_4, group_1: pf-20261106-5_s247}
+- {name: pf-20261106-5_s248_vs_opponent_1, group_0: pf-20261106-5_s248, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s248, group_0: opponent_1, group_1: pf-20261106-5_s248}
+- {name: pf-20261106-5_s248_vs_opponent_2, group_0: pf-20261106-5_s248, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s248, group_0: opponent_2, group_1: pf-20261106-5_s248}
+- {name: pf-20261106-5_s248_vs_opponent_3, group_0: pf-20261106-5_s248, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s248, group_0: opponent_3, group_1: pf-20261106-5_s248}
+- {name: pf-20261106-5_s248_vs_opponent_4, group_0: pf-20261106-5_s248, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s248, group_0: opponent_4, group_1: pf-20261106-5_s248}
+- {name: pf-20261106-5_s249_vs_opponent_1, group_0: pf-20261106-5_s249, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s249, group_0: opponent_1, group_1: pf-20261106-5_s249}
+- {name: pf-20261106-5_s249_vs_opponent_2, group_0: pf-20261106-5_s249, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s249, group_0: opponent_2, group_1: pf-20261106-5_s249}
+- {name: pf-20261106-5_s249_vs_opponent_3, group_0: pf-20261106-5_s249, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s249, group_0: opponent_3, group_1: pf-20261106-5_s249}
+- {name: pf-20261106-5_s249_vs_opponent_4, group_0: pf-20261106-5_s249, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s249, group_0: opponent_4, group_1: pf-20261106-5_s249}
+- {name: pf-20261106-5_s250_vs_opponent_1, group_0: pf-20261106-5_s250, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s250, group_0: opponent_1, group_1: pf-20261106-5_s250}
+- {name: pf-20261106-5_s250_vs_opponent_2, group_0: pf-20261106-5_s250, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s250, group_0: opponent_2, group_1: pf-20261106-5_s250}
+- {name: pf-20261106-5_s250_vs_opponent_3, group_0: pf-20261106-5_s250, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s250, group_0: opponent_3, group_1: pf-20261106-5_s250}
+- {name: pf-20261106-5_s250_vs_opponent_4, group_0: pf-20261106-5_s250, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s250, group_0: opponent_4, group_1: pf-20261106-5_s250}
+- {name: pf-20261106-5_s251_vs_opponent_1, group_0: pf-20261106-5_s251, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s251, group_0: opponent_1, group_1: pf-20261106-5_s251}
+- {name: pf-20261106-5_s251_vs_opponent_2, group_0: pf-20261106-5_s251, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s251, group_0: opponent_2, group_1: pf-20261106-5_s251}
+- {name: pf-20261106-5_s251_vs_opponent_3, group_0: pf-20261106-5_s251, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s251, group_0: opponent_3, group_1: pf-20261106-5_s251}
+- {name: pf-20261106-5_s251_vs_opponent_4, group_0: pf-20261106-5_s251, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s251, group_0: opponent_4, group_1: pf-20261106-5_s251}
+- {name: pf-20261106-5_s252_vs_opponent_1, group_0: pf-20261106-5_s252, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s252, group_0: opponent_1, group_1: pf-20261106-5_s252}
+- {name: pf-20261106-5_s252_vs_opponent_2, group_0: pf-20261106-5_s252, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s252, group_0: opponent_2, group_1: pf-20261106-5_s252}
+- {name: pf-20261106-5_s252_vs_opponent_3, group_0: pf-20261106-5_s252, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s252, group_0: opponent_3, group_1: pf-20261106-5_s252}
+- {name: pf-20261106-5_s252_vs_opponent_4, group_0: pf-20261106-5_s252, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s252, group_0: opponent_4, group_1: pf-20261106-5_s252}
+- {name: pf-20261106-5_s253_vs_opponent_1, group_0: pf-20261106-5_s253, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s253, group_0: opponent_1, group_1: pf-20261106-5_s253}
+- {name: pf-20261106-5_s253_vs_opponent_2, group_0: pf-20261106-5_s253, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s253, group_0: opponent_2, group_1: pf-20261106-5_s253}
+- {name: pf-20261106-5_s253_vs_opponent_3, group_0: pf-20261106-5_s253, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s253, group_0: opponent_3, group_1: pf-20261106-5_s253}
+- {name: pf-20261106-5_s253_vs_opponent_4, group_0: pf-20261106-5_s253, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s253, group_0: opponent_4, group_1: pf-20261106-5_s253}
+- {name: pf-20261106-5_s254_vs_opponent_1, group_0: pf-20261106-5_s254, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s254, group_0: opponent_1, group_1: pf-20261106-5_s254}
+- {name: pf-20261106-5_s254_vs_opponent_2, group_0: pf-20261106-5_s254, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s254, group_0: opponent_2, group_1: pf-20261106-5_s254}
+- {name: pf-20261106-5_s254_vs_opponent_3, group_0: pf-20261106-5_s254, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s254, group_0: opponent_3, group_1: pf-20261106-5_s254}
+- {name: pf-20261106-5_s254_vs_opponent_4, group_0: pf-20261106-5_s254, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s254, group_0: opponent_4, group_1: pf-20261106-5_s254}
+- {name: pf-20261106-5_s255_vs_opponent_1, group_0: pf-20261106-5_s255, group_1: opponent_1}
+- {name: opponent_1_vs_pf-20261106-5_s255, group_0: opponent_1, group_1: pf-20261106-5_s255}
+- {name: pf-20261106-5_s255_vs_opponent_2, group_0: pf-20261106-5_s255, group_1: opponent_2}
+- {name: opponent_2_vs_pf-20261106-5_s255, group_0: opponent_2, group_1: pf-20261106-5_s255}
+- {name: pf-20261106-5_s255_vs_opponent_3, group_0: pf-20261106-5_s255, group_1: opponent_3}
+- {name: opponent_3_vs_pf-20261106-5_s255, group_0: opponent_3, group_1: pf-20261106-5_s255}
+- {name: pf-20261106-5_s255_vs_opponent_4, group_0: pf-20261106-5_s255, group_1: opponent_4}
+- {name: opponent_4_vs_pf-20261106-5_s255, group_0: opponent_4, group_1: pf-20261106-5_s255}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 64
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261106-5_sweep_p2of2
+figure_name: pf-20261106-5_sweep_p2of2
+save_per_round: true
+basedir: .
+sweep_metric: pool_vs_opponents
+sweep_opponents:
+- opponent_1
+- opponent_2
+- opponent_3
+- opponent_4
+sweep: true
