@@ -1,0 +1,36 @@
+params:
+  standard:
+    definition: >-
+      the contribution standard; a valid player who contributes less than this
+      in the current round is punished
+    type: int
+  base:
+    definition: >-
+      the fixed punishment every player below the standard gets, whatever the
+      size of the shortfall (the signal that free riding is noticed)
+    type: float
+  slope:
+    definition: >-
+      extra punishment per point of the player's shortfall below the standard
+    type: float
+  stop_round:
+    definition: >-
+      the first round in which the manager no longer punishes anyone (24 means
+      it punishes to the end); late punishment has too few rounds left to pay
+      back its cost
+    type: int
+sweep_config:
+  standard: [4, 20]
+  base: [0.0, 6.0]
+  slope: [0.0, 1.0]
+  stop_round: [8, 24]
+constraints:
+  - standard >= 1
+  - base >= 0
+  - slope >= 0
+code: |
+  now = c[..., -1]
+  shortfall = th.relu(standard - now)
+  below = th.where(now < standard, th.ones_like(now), th.zeros_like(now))
+  active = th.where(t < stop_round, th.ones_like(now), th.zeros_like(now))
+  punishment = active * below * (base + slope * shortfall)
