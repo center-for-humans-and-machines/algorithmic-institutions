@@ -265,3 +265,14 @@ def test_merge_rejects_parts_with_other_opponents():
     with pytest.raises(ValueError, match="opponents"):
         merge_sweeps([one, two])
     assert merge_sweeps([one, dict(two, opponents=["opponent_1"])])["best_name"] == "toy_s001"
+
+
+def test_seated_takes_group_0_against_the_opponent_only():
+    from aimanager.simulation.pool_scores import add_pool, seated
+
+    df = add_pool(_frame({
+        "a_vs_b": [[(10, 0, 0), (5, 0, 1)]],   # a in group 0: 16
+        "b_vs_a": [[(20, 0, 0), (5, 0, 1)]],   # a in group 1: not counted
+    }))
+    scores = seated(df, "b")
+    assert list(scores) == ["a"] and scores["a"]["pool"].tolist() == [16.0]

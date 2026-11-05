@@ -69,6 +69,22 @@ def against_anchor(df: pd.DataFrame, anchor: str) -> dict:
     return {m: pd.concat(f, ignore_index=True) for m, f in scores.items()}
 
 
+def seated(df: pd.DataFrame, opponent: str) -> dict:
+    """Manager -> per-episode (pool, members) of group 0 in each pairing
+    `<manager>_vs_<opponent>`: only the seat a sweep gives its points (the
+    opponent in group 1), unlike against_anchor, which pools both seats."""
+    scores = {}
+    for run in df["run"].unique():
+        g0, g1 = pairing_of(run)
+        if g1 != opponent:
+            continue
+        sub = df[df["run"] == run]
+        ep = group_round_scores(sub, POOL, "sum").groupby("episode").mean()
+        frame = pd.DataFrame({"pool": ep[0], "members": episode_members(sub, 0)})
+        scores.setdefault(g0, []).append(frame)
+    return {m: pd.concat(f, ignore_index=True) for m, f in scores.items()}
+
+
 # -- Experiment 1: one group, no anchor ----------------------------------
 
 GROUP_PAYOFF = "group_payoff"

@@ -545,7 +545,7 @@ def scores_vs_ah(per_round: str, mtime: float) -> pd.DataFrame:
     """The setting's score per manager (pool_scores, pandas only): definition
     4 for each manager that played `ah` (exp2), the average payoff (exp1)."""
     from aimanager.simulation.pool_scores import (
-        add_pool, against_anchor, group_payoff_scores,
+        add_pool, against_anchor, group_payoff_scores, seated,
     )
 
     df = pd.read_parquet(per_round)
@@ -553,9 +553,9 @@ def scores_vs_ah(per_round: str, mtime: float) -> pd.DataFrame:
         scores = group_payoff_scores(df)
     elif SETTING == "exp2_multi":
         # the reference matrix names the opponents (32_LEVIN): each manager's
-        # mean pool over them, as a sweep scores a point
+        # mean pool over them, in group 0 as a sweep seats a point
         df = add_pool(df)
-        each = {o: against_anchor(df, o) for o in OPPONENTS.values()}
+        each = {o: seated(df, o) for o in OPPONENTS.values()}
         rows = []
         for m in set.intersection(*(set(s) for s in each.values())):
             pools = {o: each[o][m]["pool"].mean() for o in each}
