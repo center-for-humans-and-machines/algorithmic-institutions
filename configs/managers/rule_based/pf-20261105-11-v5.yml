@@ -1,0 +1,36 @@
+params:
+  T:
+    definition: >-
+      target contribution; a player contributing T or more is never punished
+    type: float
+  A:
+    definition: >-
+      tap: the fixed punishment any player below the target gets, whatever the
+      size of the shortfall; it is also what the other players see being
+      handed out, and unpunished shortfalls make the middle and top players
+      slide
+    type: float
+  B:
+    definition: >-
+      price per point of shortfall below the target, added to the tap, so a
+      player contributing c < T is punished A + B * (T - c); the steep end
+      falls on free riders, the players who keep answering bigger fines
+    type: float
+  S:
+    definition: >-
+      last punished round; from round S + 1 on the manager punishes no one,
+      since the group has locked in or not by then and later fines only repay
+      themselves (fixed at 7, the middle of the flat stretch 5-11 of all
+      earlier sweeps)
+    type: int
+sweep_config:
+  T: [11.5, 15.0]
+  A: [1.0, 5.0]
+  B: [1.3, 3.0, log]
+  S: 7
+code: |
+  cur = c[..., -1]
+  shortfall = th.relu(T - cur)
+  scaled = th.where(shortfall > 0, A + B * shortfall, th.zeros_like(cur))
+  active = (t <= S)
+  punishment = th.where(active, scaled, th.zeros_like(cur))
