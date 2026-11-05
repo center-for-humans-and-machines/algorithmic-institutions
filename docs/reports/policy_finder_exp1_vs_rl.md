@@ -6,8 +6,9 @@ report asks whether the policy finder would have done as well. The policy finder
 design interpretable rule-based managers, then lets a Sobol sweep, a GP fit and a final run
 choose each rule's values. It was given the same clones, the same game and the same
 objective. The task is `docs/tasks/autoresearch_an_old_policy.md`; the plan is
-`docs/plans/policy-finder-exp1.md`. The observation page is the artifact
-"Policy Finder Experiment 1".
+`docs/plans/archive/policy-finder-exp1.md`. The observation page is the artifact
+"Policy Finder Experiment 1"
+(https://claude.ai/artifact/PMfYuxEbjvmijyBpznvxnt).
 
 ## Summary
 

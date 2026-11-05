@@ -1,4 +1,4 @@
-# [ACTIVE] Policy finder on experiment 1: rules against the RL GNN manager
+# [DONE] Policy finder on experiment 1: rules against the RL GNN manager
 
 Task: `docs/tasks/autoresearch_an_old_policy.md`.
 
@@ -233,3 +233,5 @@ category list will differ from experiment 2's. New categories are drawn up from 
   654.6, zero 587.7, human-like 548.8. The best rule ties the RL manager and matches its
   punishment by round and by contribution in the first four rounds. Report:
   `docs/reports/policy_finder_exp1_vs_rl.md`.
+- 2026-11-05 06:55: step 10 done: observation page "Policy Finder Experiment 1"
+  (https://claude.ai/artifact/PMfYuxEbjvmijyBpznvxnt), overview with the head-to-head. Plan done.
