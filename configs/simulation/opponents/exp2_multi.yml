@@ -1,0 +1,32 @@
+# The governors an exp2_multi sweep plays (docs/plans/policy-finder-multi-opponent.md):
+# opaque key -> name and manager config. generate_sim_config.py writes each sweep
+# and final run against all of them, under the keys only; the score is the mean
+# of the rule's group's common pool against each. The keys are what an agent
+# sees of its results, so this file is never in an export
+# (export_instance.py), and no real name may appear in one.
+opponent_1:
+  name: levin
+  description: Levin's sigmoid rule (#219) at its common-pool optimum
+  manager:
+    type: rule_based
+    rule: configs/managers/rule_based/levin_sigmoid.yml
+    params: {p_max: 30.0, c0: 7.13780183612438, tau: 0.4249189420822854, gamma_ep: 3.0, gamma_sw: 1.418622533255372}
+opponent_2:
+  name: ah
+  description: the clone of a human governor (multinomial logistic regression, severity copula)
+  manager:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+opponent_3:
+  name: prev_best
+  description: pf-20261104-12-v7 at its GP peak, the proxy campaign's best (72.2 against ah head to head)
+  manager:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params: {thr: 8.593831124672404, peer: 0.6021230646847561, ceil: 15.0, slope: 9.18944166018839, decay: 0.5553923088191522, stop: 3}
+opponent_4:
+  name: zero
+  description: never punishes
+  manager:
+    type: dummy
+    constant_punishment: 0

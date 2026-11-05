@@ -1,0 +1,17 @@
+# #207's simplest robust winner (origin/dev, notes/autoresearch_log/
+# rule-based-manager-sweep.md, `thr9_p10`): punish 10 whenever a player
+# contributed 9 or less this round, and nothing otherwise. Ported to the #245
+# inputs as a held-out governor for the exp2_multi head-to-head
+# (docs/plans/policy-finder-multi-opponent.md).
+
+params:
+  threshold:
+    definition: the highest contribution that is punished
+    type: float
+  amount:
+    definition: the punishment for a contribution at or below the threshold
+    type: float
+
+code: |
+  cur = c[..., -1]
+  punishment = amount * (cur <= threshold).float()
