@@ -1,0 +1,33 @@
+params:
+  T:
+    definition: >-
+      target contribution; a player contributing T or more is never punished,
+      a player below it is punished for the shortfall T - c
+    type: float
+  P:
+    definition: >-
+      punishment of a full free rider (contribution 0); a shortfall s is
+      punished P * (s / T)^g
+    type: float
+  g:
+    definition: >-
+      curvature of punishment in the shortfall; g < 1 punishes even small
+      shortfalls close to P (a flat signal), g > 1 spares small shortfalls and
+      reserves punishment for free riders
+    type: float
+  E:
+    definition: >-
+      number of final rounds without punishment (round t is punished only if
+      t <= 23 - E), since late punishment has no rounds left to repay itself
+    type: int
+sweep_config:
+  T: [6, 20]
+  P: [1, 30, log]
+  g: [0.25, 2.5, log]
+  E: [1, 10]
+code: |
+  shortfall = th.relu(T - c[..., -1]) / T
+  scaled = P * th.pow(shortfall, g)
+  scaled = th.where(shortfall > 0, scaled, th.zeros_like(scaled))
+  active = (t <= 23 - E)
+  punishment = th.where(active, scaled, th.zeros_like(scaled))
