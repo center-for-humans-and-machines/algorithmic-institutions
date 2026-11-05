@@ -1,0 +1,55 @@
+# Final run of /home/kappablanca/pf_runs/worktrees_exp1/pf-20261105-7/plots/simulation/policy_finder/pf-20261105-7-v5_sweep/sweep.json, written by scripts/policy_finder/generate_sim_config.py:
+# the Gaussian process's peak alone with the clones on fresh seeds; its sweep.json holds the
+# rule's final result. Stack and sim parameters from configs/simulation/manager_testing/29_EXP1_reference.yml.
+
+seed: 1000
+artificial_humans:
+  exp1:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+managers:
+  pf-20261105-7-v5_gp:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-7-v5.yml
+    params: {free_rider_fine: 35.416574235392346, curvature: 2.3971505400651445, window: 7, gate_margin: 2.423918727416968, net_floor: 4, net_end: 13, net_fine: 30.0}
+    setting: exp1
+  pf-20261105-7-v5_s044:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-7-v5.yml
+    params: {free_rider_fine: 37.633615707978606, curvature: 2.5364974294722793, window: 8, gate_margin: 1.101744381710887, net_floor: 2, net_end: 12, net_fine: 23.803339468315244}
+    setting: exp1
+  pf-20261105-7-v5_s201:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-7-v5.yml
+    params: {free_rider_fine: 28.008447555825114, curvature: 1.8428128644178186, window: 8, gate_margin: 0.5953488890081644, net_floor: 2, net_end: 16, net_fine: 28.431455466896296}
+    setting: exp1
+  pf-20261105-7-v5_s177:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-7-v5.yml
+    params: {free_rider_fine: 24.971486071124673, curvature: 1.814245891430219, window: 6, gate_margin: 6.095292299985886, net_floor: 0, net_end: 17, net_fine: 20.503532012924552}
+    setting: exp1
+  pf-20261105-7-v5_s200:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-7-v5.yml
+    params: {free_rider_fine: 47.1247523855418, curvature: 2.392047835532878, window: 5, gate_margin: 5.9705379996448755, net_floor: 2, net_end: 13, net_fine: 19.478757010772824}
+    setting: exp1
+  pf-20261105-7-v5_s110:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-7-v5.yml
+    params: {free_rider_fine: 24.12903863750398, curvature: 2.28949302983547, window: 5, gate_margin: 6.725209627300501, net_floor: 4, net_end: 18, net_fine: 17.613471496850252}
+    setting: exp1
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: default
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261105-7-v5_sweep/final
+figure_name: pf-20261105-7-v5_sweep_final
+save_per_round: true
+basedir: .
+sweep_metric: group_payoff
+sweep: true
