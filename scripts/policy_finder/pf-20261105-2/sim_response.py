@@ -1,0 +1,30 @@
+"""Artificial humans' response to punishment in the reference sims."""
+import numpy as np, pandas as pd
+d = pd.read_parquet('plots/simulation/29_EXP1_reference/per_round.parquet')
+print(d.columns.tolist(), d.shape)
+d['valid'] = d.contribution_valid.astype(int)
+d['c'] = np.where(d.valid == 1, d.contribution, 0)
+d = d.sort_values(['run', 'episode', 'participant_code', 'round_number'])
+g = d.groupby(['run', 'episode', 'participant_code'])
+d['next_c'] = g['c'].shift(-1); d['next_valid'] = g['valid'].shift(-1)
+d['sum_c'] = d.groupby(['run', 'episode', 'round_number'])['c'].transform('sum')
+d['n_valid'] = d.groupby(['run', 'episode', 'round_number'])['valid'].transform('sum')
+d['oth_c'] = (d.sum_c - d.c) / (d.n_valid - d.valid).clip(lower=1)
+print('timeout rate', 1 - d.valid.mean())
+print('payoff sum per game by run:')
+pr = d[d.valid == 1].groupby(['run', 'episode', 'round_number']).payoff.mean().groupby(['run', 'episode']).sum()
+print(pr.groupby('run').agg(['mean', 'sem']))
+x = d[(d.valid == 1) & (d.next_valid == 1)].copy()
+x['dc'] = x.next_c - x.c
+x['pbin'] = pd.cut(x.punishment, [-1, 0, 3, 6, 10, 15, 30])
+x['cbin'] = pd.cut(x.c, [-1, 4, 9, 14, 19, 20])
+for r, xr in x.groupby('run'):
+    print(r)
+    print(xr.pivot_table(index='cbin', columns='pbin', values='dc', aggfunc='mean', observed=False).round(2))
+    print(xr.pivot_table(index='cbin', columns='pbin', values='dc', aggfunc='size', observed=False))
+    X = np.column_stack([np.ones(len(xr)), xr.c, xr.oth_c, xr.punishment])
+    print('OLS next_c ~ 1,c,oth,p', np.linalg.lstsq(X, xr.next_c, rcond=None)[0].round(3))
+# human-like manager policy
+h = d[(d.run.str.contains('humanlike')) & (d.valid == 1)].copy()
+h['cbin'] = pd.cut(h.c, [-1, 4, 9, 14, 19, 20])
+print('humanlike punishment by c bin', h.groupby('cbin', observed=False).punishment.agg(['mean', 'size']).round(2))

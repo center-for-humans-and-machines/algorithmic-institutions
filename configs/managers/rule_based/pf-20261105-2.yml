@@ -1,0 +1,30 @@
+params:
+  c_star:
+    definition: >-
+      contribution norm; a valid player contributing less than it is punished
+      in proportion to the shortfall, at or above it never
+    type: float
+  k:
+    definition: punishment points per point of contribution shortfall below c_star
+    type: float
+  p_max:
+    definition: >-
+      cap on the punishment of one player in one round (the response to
+      punishment saturates, so large punishments cost more than they buy)
+    type: float
+  H:
+    definition: >-
+      taper horizon in rounds; punishment is scaled by (23 - t) / H, clamped
+      to [0, 1], so it fades linearly over the last H rounds and is zero in
+      the last round, where no later contribution can repay it
+    type: int
+sweep_config:
+  c_star: [4, 20]
+  k: [0.1, 4, log]
+  p_max: [1, 30, log]
+  H: [1, 24]
+code: |
+  shortfall = th.clamp(c_star - c[..., -1], min=0)
+  base = th.minimum(k * shortfall, th.ones_like(shortfall) * p_max)
+  taper = th.clamp((23 - t) / H, 0, 1)
+  punishment = base * taper * valid[..., -1]
