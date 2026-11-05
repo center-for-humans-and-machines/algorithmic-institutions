@@ -1,0 +1,54 @@
+params:
+  rate:
+    definition: punishment points per point of effective shortfall in the first block (rounds 0-3); later blocks scale it by decay
+    type: float
+  delta:
+    definition: offset of the target from the group norm (mean contribution of the other valid members this round); negative tolerates contributing a little below the norm before any punishment
+    type: float
+  decay:
+    definition: multiplier on severity per block of four rounds; block b (rounds 4b..4b+3, b = 0..5) is punished at rate * decay^b, front-loading punishment while many rounds are left to repay it
+    type: float
+  mid:
+    definition: multiplier on punishment in the second round of each block before round 20 (rounds 1, 5, 9, 13, 17); the third and fourth rounds of those blocks, just before players choose groups, are never punished
+    type: float
+  mu:
+    definition: momentum weight; for a member below the target, each point by which its contribution fell from its own previous round, beyond theta, adds mu points to its effective shortfall (members who just cut sharply respond more per punishment point at the same exit cost); 0 is the v3 rule
+    type: float
+  theta:
+    definition: tolerated drop of a member's own contribution from its previous round before the momentum term applies (drops of 1-3 behave like no drop)
+    type: float
+sweep_config:
+  rate: [3.0, 16.0, log]
+  delta: [-2.8, 0.8]
+  decay: [0.25, 0.8]
+  mid: [0.3, 1.6]
+  mu: [0.0, 3.0]
+  theta: [0.0, 6.0]
+constraints:
+  - rate > 0
+  - decay >= 0
+  - mid >= 0
+  - mu >= 0
+code: |
+  zero = th.zeros_like(c[..., -1])
+  one = th.ones_like(zero)
+  cur = c[..., -1]
+  prev = c[..., -2:][..., 0]
+  ok = valid[..., -1] * in_group[..., -1]
+  tot = (cur * ok).sum(-1).unsqueeze(-1)
+  cnt = ok.sum(-1).unsqueeze(-1)
+  others_n = cnt - ok
+  norm = th.where(others_n > zero, (tot - cur * ok) / th.maximum(others_n, one), cur)
+  short = th.maximum(norm + delta - cur, zero)
+  below = (short > zero).float()
+  drop = th.maximum(prev - cur - theta, zero)
+  eff = short + mu * drop * below
+  tt = zero + t
+  blk = th.floor(tt / 4)
+  pos = tt - 4 * blk
+  early = tt < zero + 20
+  w_pos = th.where((pos == one) * early, zero + mid, one)
+  w_pos = th.where((pos > one) * early, zero, w_pos)
+  horizon = th.minimum(th.maximum((zero + 23 - tt) / 3, zero), one)
+  severity = rate * th.pow(zero + decay, blk)
+  punishment = severity * eff * w_pos * horizon * ok
