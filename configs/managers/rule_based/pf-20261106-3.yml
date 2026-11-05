@@ -1,0 +1,36 @@
+params:
+  thr:
+    definition: contribution bar; a member giving less is punished in proportion to the shortfall (thr - contribution)
+    type: float
+  slope:
+    definition: punishment points per point of shortfall below thr, against a rival that never punishes
+    type: float
+  alpha:
+    definition: relative increase of slope per point of the rival manager's mean punishment of its own members so far (a harsher rival lets us enforce more without losing members)
+    type: float
+  m_dec:
+    definition: multiplier on punishment in switch-decision rounds (3, 7, 11, 15, 19), whose punishment and pool weigh most on switching
+    type: float
+  t_stop:
+    definition: last round in which the manager punishes; later rounds leave too little time for contributions to repay a punishment
+    type: int
+sweep_config:
+  thr: [4, 16]
+  slope: [0.05, 2.0, log]
+  alpha: [0, 1.5]
+  m_dec: [0, 1]
+  t_stop: [10, 23]
+constraints:
+  - thr > 0
+  - slope > 0
+  - alpha >= 0
+code: |
+  cn = c[..., -1]
+  short = th.clamp(thr - cn, min=0.0)
+  n_past = p.shape[-1]
+  rival = (1.0 - in_group[..., :n_past]) * valid[..., :n_past]
+  rival_p = th.sum(p * rival, dim=(-1, -2)) / th.clamp(th.sum(rival, dim=(-1, -2)), min=1.0)
+  scale = slope * (1.0 + alpha * rival_p)
+  is_dec = ((t % 4) == 3).float() * (t < 20).float()
+  tf = (m_dec * is_dec + (1.0 - is_dec)) * (t <= t_stop).float()
+  punishment = scale[..., None] * short * tf
