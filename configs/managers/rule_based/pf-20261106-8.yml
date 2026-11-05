@@ -1,0 +1,46 @@
+params:
+  slope:
+    definition: >-
+      punishment points per contribution point a member falls below the
+      group's mean contribution this round (beyond the dead zone)
+    type: float
+  dead_zone:
+    definition: >-
+      how many points below the group's mean contribution a member may be
+      before any punishment
+    type: float
+  cap:
+    definition: the largest punishment dealt to any one member in a round
+    type: float
+  horizon:
+    definition: >-
+      the round at which punishment has decayed linearly to zero (full
+      strength in round 0); punishment late in the game has little future
+      left to pay off and drives members away
+    type: float
+  adapt:
+    definition: >-
+      how much the punishment scales with the other manager's observed mean
+      punishment per player so far (multiplier 1 + adapt x that mean, kept
+      within 0-4); players flee punishing managers less when the other one
+      punishes too
+    type: float
+sweep_config:
+  slope: [0.1, 3.0, log]
+  dead_zone: [0.0, 6.0]
+  cap: [2.0, 30.0, log]
+  horizon: [4.0, 40.0]
+  adapt: [-0.4, 1.0]
+code: |
+  cur = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  n_member = member.sum(-1, keepdim=True)
+  ref = (cur * member).sum(-1, keepdim=True) / th.clamp(n_member, min=1.0)
+  gap = th.clamp(ref - cur - dead_zone, min=0.0)
+  # the other manager's punishment per player, rounds 0..t-1
+  outside = 1.0 - in_group[..., :-1]
+  other_p = (p * outside).sum((-2, -1)) / th.clamp(outside.sum((-2, -1)), min=1.0)
+  mult = th.clamp(1.0 + adapt * other_p, min=0.0, max=4.0).unsqueeze(-1)
+  decay = th.clamp(1.0 - t / horizon, min=0.0, max=1.0)
+  last = (t < 23).float()
+  punishment = th.clamp(slope * gap * mult, max=cap) * decay * last * member
