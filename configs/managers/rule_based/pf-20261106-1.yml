@@ -1,0 +1,49 @@
+params:
+  thresh:
+    definition: >-
+      contribution level a member is expected to reach; a valid member
+      contributing below it is punished in proportion to the shortfall
+    type: float
+  slope:
+    definition: punishment points per point of shortfall below thresh
+    type: float
+  dec_mult:
+    definition: >-
+      multiplier on the punishment in a switching-decision round (rounds 3,
+      7, 11, 15, 19), when punishment drives members out of the group
+    type: float
+  margin:
+    definition: >-
+      the most our group's mean punishment per member may exceed the other
+      manager's recent mean punishment per member (last 4 rounds); above it
+      every punishment is scaled down so the group stays the more lenient one
+    type: float
+sweep_config:
+  thresh: [3, 15]
+  slope: [0.05, 3, log]
+  dec_mult: [0, 1.5]
+  margin: [0.2, 6, log]
+constraints:
+  - slope > 0
+  - margin > 0
+  - dec_mult >= 0
+code: |
+  c_now = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  # shortfall-based punishment of low contributors, members only
+  raw = slope * th.clamp(thresh - c_now, min=0.0) * mine
+  # switching-decision rounds: punishment there drives members out
+  is_dec = ((th.remainder(t, 4.0) == 3.0) & (t <= 19.0)).float()
+  raw = raw * (1.0 - is_dec + is_dec * dec_mult)
+  # the other manager's mean punishment per member over the last 4 rounds
+  n_past = p.shape[-1]
+  rounds = th.arange(n_past, device=c.device).float()
+  recent = (rounds >= t - 4.0).float()
+  other = (1.0 - in_group[..., :-1]) * valid[..., :-1] * recent
+  opp_mean = (p * other).sum(dim=(-1, -2)) / th.clamp(other.sum(dim=(-1, -2)), min=1.0)
+  # stay at most `margin` above the other manager, per member
+  own_mean = raw.sum(dim=-1) / th.clamp(mine.sum(dim=-1), min=1.0)
+  scale = th.clamp((opp_mean + margin) / th.clamp(own_mean, min=1e-6), max=1.0)
+  raw = raw * scale.unsqueeze(-1)
+  # the last round's punishment can no longer pay back
+  punishment = raw * (t < 23.0).float()
