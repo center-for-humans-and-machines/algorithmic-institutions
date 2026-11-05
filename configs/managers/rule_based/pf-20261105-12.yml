@@ -1,0 +1,29 @@
+params:
+  T:
+    definition: contribution standard; a valid player contributing less than T this round is punished
+    type: float
+  b:
+    definition: base punishment for any shortfall below the standard (the signal step)
+    type: float
+  k:
+    definition: extra punishment per point of shortfall below the standard
+    type: float
+  L:
+    definition: number of final rounds in which nobody is punished (too few rounds left for punishment to pay back)
+    type: int
+sweep_config:
+  T: [2, 20]
+  b: [0, 4]
+  k: [0, 0.6]
+  L: [0, 16]
+constraints:
+  - T > 0
+  - b >= 0
+  - k >= 0
+  - L >= 0
+code: |
+  now = c[..., -1]
+  short = th.clamp(T - now, min=0)
+  below = (short > 0).float()
+  active = (t < 24 - L).float()
+  punishment = active * below * (b + k * short) * valid[..., -1]
