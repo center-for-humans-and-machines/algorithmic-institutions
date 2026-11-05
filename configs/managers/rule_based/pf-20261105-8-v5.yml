@@ -1,0 +1,52 @@
+params:
+  standard:
+    definition: >-
+      the contribution standard of the opening phase; a valid player contributing less
+      than this is punished there, at or above it never
+    type: float
+  rate:
+    definition: >-
+      steepness of the punishment curve: about the fraction by which the punishment
+      falls per point of contribution near zero; punishment = dose * (shortfall /
+      standard) ** (rate * standard), so a free rider gets the full dose, a player just
+      short of the standard a light touch
+    type: float
+  dose:
+    definition: >-
+      the punishment of a player who contributes nothing; the manager clamps it at 30
+    type: float
+  horizon:
+    definition: >-
+      end of the opening phase: in rounds t < horizon (0-based) everyone below the
+      standard is punished; afterwards a raise bought from a mid contributor has too few
+      rounds left to repay it
+    type: int
+  end:
+    definition: >-
+      the first round (0-based) in which nobody is punished any more; in rounds
+      horizon <= t < end only free riders (contribution below floor) are still punished,
+      with the same curve, because their raise still repays a full punishment
+    type: int
+  floor:
+    definition: >-
+      the free-rider line of the late phase: only players contributing less than this
+      are punished there (2: players giving 0 or 1)
+    type: float
+sweep_config:
+  standard: [18, 30]
+  rate: [0.088, 0.15, log]
+  dose: [23, 36]
+  horizon: [4, 10]
+  end: [11, 20]
+  floor: 2.0
+constraints:
+  - standard > 0
+  - rate > 0
+  - dose > 0
+  - end > horizon
+code: |
+  now = c[..., -1]
+  base = dose * (th.clamp(standard - now, min=0) / standard) ** (rate * standard)
+  main = (t < horizon).to(now.dtype)
+  late = ((t >= horizon) & (t < end)).to(now.dtype) * (now < floor).to(now.dtype)
+  punishment = base * th.clamp(main + late, max=1) * valid[..., -1]
