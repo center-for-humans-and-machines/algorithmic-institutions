@@ -1,0 +1,31 @@
+params:
+  target:
+    definition: >-
+      the contribution standard; a valid player contributing less than this is
+      punished in proportion to the shortfall, at or above it never
+    type: float
+  slope:
+    definition: punishment points per point of contribution below the target
+    type: float
+  horizon:
+    definition: >-
+      punishment is dealt only in rounds t < horizon (0-based); later rounds
+      are never punished, since a raise bought late has too few rounds to repay it
+    type: int
+  cap:
+    definition: the most punishment one player can get in one round
+    type: float
+sweep_config:
+  target: [6, 20]
+  slope: [0.2, 4, log]
+  horizon: [1, 24]
+  cap: [3, 30, log]
+constraints:
+  - target > 0
+  - slope > 0
+  - cap > 0
+code: |
+  now = c[..., -1]
+  shortfall = th.clamp(target - now, min=0)
+  active = (t < horizon).to(now.dtype)
+  punishment = th.minimum(slope * shortfall, cap * th.ones_like(now)) * active * valid[..., -1]
