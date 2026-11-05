@@ -12,15 +12,18 @@ objective. The task is `docs/tasks/autoresearch_an_old_policy.md`; the plan is
 
 ## Summary
 
-- **The RL manager stays ahead, by about 2 points of 657 (0.3%).** On fresh seeds, 12,000
-  games per rule, the three lineage bests score 655.7, 655.3 and 654.8 (± 0.5); the deployed
-  RL manager scores 657.3 ± 0.5 over 13,000 games. The best rule (`-3-v4`) trails by
-  1.4 ± 0.7, the campaign's top (`-7-v3`) by 1.8 ± 0.7. All sit about 66 points above never
-  punishing (588.9) and about 107 above the human-like manager clone (548.7).
-- **The first head-to-head was lucky.** On seed 6000 alone (2000 games) `-7-v3` scored 658.0
-  and seemed to tie the RL manager (+0.8 ± 1.8). Five more seeds put it at 654.7: the 658.0
-  was about 2.4 standard errors high. It was not a selection effect (`-7-v3` was picked on
-  the campaign's own finals, before seed 6000 ran) but one noisy draw.
+- **The best rule comes within 1 point of the RL manager; none beats it.** On fresh seeds,
+  22,000 games per rule, the three lineage bests score 655.9, 655.0 and 654.9 (± 0.4); the
+  deployed RL manager scores 656.8 ± 0.4 over 23,000 games. The best rule (`-3-v4`) trails
+  by 0.9 ± 0.5, which does not separate it clearly from a tie; the campaign's top (`-7-v3`)
+  and `-8-v7` trail by 1.8 and 1.9 ± 0.5. All sit about 67 points above never punishing
+  (588.9) and about 108 above the human-like manager clone (548.7).
+- **Single runs mislead.** One 2000-game run has a standard error of 1.3, and runs of the
+  same manager spread over 2.5–5 points. On seed 6000 alone `-7-v3` scored 658.0 and seemed to
+  tie the RL manager (+0.8 ± 1.8); on Raven's seeds 7000–7004 alone `-3-v4` tied it exactly
+  (656.1 each). Neither was a selection effect (the three were picked on the campaign's own
+  finals, before any of these seeds ran), just noise that the pooled 22,000 games average
+  out.
 - **No leak.** An independent audit of the 38 agent runs' isolation and transcripts found no
   route by which the RL manager's behaviour or scores could have reached an agent (see
   Leak audit).
@@ -99,46 +102,50 @@ seeds (1000 on, in batches of 1000 games), the RL manager on others.
 
 ## Head to head on fresh seeds
 
-Two runs, both of the three lineage bests at their GP peaks and the deployed RL manager, each
-alone on the clones; no sweep, final run or baseline used these seeds:
-- `30_EXP1_pf_vs_rl`: seed 6000, 2000 games, with zero punishment and the human-like clone
-  too (Raven job 31924549);
-- `31_EXP1_confirm/seed_7000`–`7004`: 2000 games each, 10,000 per manager. These ran on the
-  local CPU image (torch 2.5) while Raven was unreachable; the RL manager's 657.1 there
-  agrees with its 657.2 on Raven.
+Three runs, all of the three lineage bests at their GP peaks and the deployed RL manager,
+each alone on the clones; no sweep, final run or baseline used these seeds:
+- `30_EXP1_pf_vs_rl`: seed 6000 on Raven, 2000 games, with zero punishment and the
+  human-like clone too (job 31924549);
+- `31_EXP1_confirm/seed_7000`–`7004` on the local CPU image (torch 2.5), 2000 games each,
+  run while Raven refused logins;
+- the same five configs on Raven (torch 1.11, jobs 31933686–31933693), fetched to
+  `plots/simulation/31_EXP1_confirm_raven/`.
 
-Each unbatched sim draws all its games from one random stream, so managers do not share
-games and a difference carries about √2 times a single score's error.
+The two platforms draw different random streams for the same seed, so the local and Raven
+runs of seeds 7000–7004 are independent games. Each unbatched sim draws all its games from
+one stream, so managers do not share games, and a difference carries about √2 times a
+single score's error.
 
-| Manager | Seed 6000 | Seeds 7000–7004 | All fresh seeds | vs RL | Campaign final |
-|---|---|---|---|---|---|
-| Deployed RL | 657.2 ± 1.2 | 657.1 ± 0.6 | **657.3 ± 0.5** (13,000 games¹) | – | – |
-| `-3-v4` (pf_3) | 654.6 ± 1.3 | 655.9 ± 0.6 | 655.7 ± 0.5 | −1.4 ± 0.7 | 655.91 |
-| `-7-v3` (pf_7) | 658.0 ± 1.3 | 654.7 ± 0.6 | 655.3 ± 0.5 | −1.8 ± 0.7 | 656.05 |
-| `-8-v7` (pf_8) | 655.1 ± 1.3 | 654.7 ± 0.6 | 654.8 ± 0.5 | −2.4 ± 0.7 | 654.47 |
-| Zero punishment | 587.7 ± 1.5 | – | 588.9 ± 1.1 (4,000²) | | |
-| Human-like clone | 548.8 ± 2.4 | – | 548.7 ± 1.7 (4,000²) | | |
+| Manager | Seed 6000 | 7000–7004 local | 7000–7004 Raven | All fresh seeds | vs RL | Campaign final |
+|---|---|---|---|---|---|---|
+| Deployed RL | 657.2 ± 1.2 | 657.1 ± 0.6 | 656.1 ± 0.6 | **656.8 ± 0.4** (23,000 games¹) | – | – |
+| `-3-v4` (pf_3) | 654.6 ± 1.3 | 655.9 ± 0.6 | 656.1 ± 0.6 | **655.9 ± 0.4** | −0.9 ± 0.5 | 655.91 |
+| `-7-v3` (pf_7) | 658.0 ± 1.3 | 654.7 ± 0.6 | 654.7 ± 0.6 | 655.0 ± 0.4 | −1.8 ± 0.5 | 656.05 |
+| `-8-v7` (pf_8) | 655.1 ± 1.3 | 654.7 ± 0.6 | 655.0 ± 0.6 | 654.9 ± 0.4 | −1.9 ± 0.5 | 654.47 |
+| Zero punishment | 587.7 ± 1.5 | – | – | 588.9 ± 1.1 (4,000²) | | |
+| Human-like clone | 548.8 ± 2.4 | – | – | 548.7 ± 1.7 (4,000²) | | |
 
 ¹ with the reproduction run (seed 3000, 1000 games, 659.8). ² with `28_EXP1_baselines` and
 `29_EXP1_reference`.
 
-Per 2000-game block the rules range over 1.6–4.5 points (`-7-v3`: 653.6 to 658.0), about what
-a standard error of 1.3 implies for six blocks. Under experiment 1's own formula (payoff recomputed on every
-row, seed 6000) the order is the same.
+Per 2000-game run the managers spread over 2.5–5 points (`-7-v3`: 653.2 to 658.0), about what
+a standard error of 1.3 implies for eleven runs. Under experiment 1's own formula (payoff
+recomputed on every row, seed 6000) the order is the same.
 
 **Survivor bias.** The top three were chosen as the best of 36 campaign finals, which would
-inflate their finals. On fresh seeds they moved by −0.8, −0.2 and +0.3: little inflation,
+inflate their finals. On fresh seeds they moved by −1.0, 0.0 and +0.4: little inflation,
 since all finals shared seeds and the ranking compared like with like. What made `-7-v3`
-look like a tie was the single head-to-head seed, not the selection. With 12,000 games the
-rules' order among themselves is still uncertain (differences of 0.4–0.9 ± 0.7); their gap
-to the RL manager is not.
+look like a tie was the single head-to-head seed, not the selection. The campaign ranked
+`-7-v3` first and `-3-v4` second; on fresh seeds their order flips (0.9 ± 0.5 apart), so the
+campaign's ranking of its top versions is itself within noise.
 
-**Where the 2 points go.** Over the 10,000 confirmation games the rules punish about 13
-points more per game than the RL manager (102–105 against 92), most of it in rounds 4–6,
-and get about 0.3 more contribution per player-round (15.8–15.9 against 15.6). The extra
-contribution is worth about +4 per game (0.6 per point contributed), the extra fines cost
-about 6.5 (each point costs the fined player 1 and the pool 1, so 0.5 of the group mean).
-The net is about −2, the measured gap.
+**Where the points go.** Over the 22,000 fresh games the rules punish 10–12 points more per
+game than the RL manager (102–104 against 92.5), most of it in rounds 4–6, and get 0.25–0.35
+more contribution per player-round (15.8–15.9 against 15.6). The extra contribution is worth
+about +3.5 to +5 per game (0.6 per point contributed), the extra fines cost about 5–6 (each
+point costs the fined player 1 and the pool 1, so 0.5 of the group mean). The net, −1 to
+−2, is the measured gap. The cumulative payoff gap by round (chart 4 on the page) shows it:
+the rules fall 4–6 points behind in rounds 4–6 and win back 1–3 in the last eight rounds.
 
 **Same opening, different tail.** Mean punishment per valid player, by round (seed 6000; seeds 7000–7004 agree within 0.2):
 
@@ -169,8 +176,8 @@ round from round 4 on (16.9 against 16.6 at round 8, 14.9 against 14.4 at round 
 7000–7004), which does not pay for the extra fines.
 
 So the policy finder, given the RL manager's clones and objective and none of its
-behaviour, wrote six-parameter rules that play like it and score about 2 points (0.3%) less,
-mostly because they keep the opening dose two rounds too long. The rule can
+behaviour, wrote six-parameter rules that play like it and score 1–2 points (0.1–0.3%)
+less, mostly because they keep the opening dose two rounds too long. The rule can
 be read in full; the RL manager is a recurrent graph network. `-7-v3` at its GP peak:
 
 ```python
@@ -281,6 +288,6 @@ The audit could not check:
 - **Selection.** The campaign's top was picked from 36 noisy finals, and the RL manager was
   deployed after experiment 1's own comparisons. The fresh seeds remove both from the
   estimates above, but not from which managers were compared.
-- **Platform.** The confirmation ran on the local CPU image (torch 2.5), the rest on Raven
-  (torch 1.11). Random streams differ between them; the RL manager's score does not
-  (657.1 against 657.2).
+- **Platform.** Seeds 7000–7004 ran twice, on the local CPU image (torch 2.5) and on Raven
+  (torch 1.11). Their random streams differ, so these are different games; the gaps to the
+  RL manager differ between the two by about 1 point, within their errors (± 0.8).

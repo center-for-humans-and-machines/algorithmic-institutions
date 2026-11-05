@@ -240,3 +240,9 @@ category list will differ from experiment 2's. New categories are drawn up from 
   seeds: RL 657.3 ± 0.5, `-3-v4` 655.7, `-7-v3` 655.3, `-8-v7` 654.8 (± 0.5). The seed-6000
   "tie" (658.0) was one lucky draw; the RL manager leads by about 2 points. A leak audit of
   the 38 agent runs found no route for RL information. Report and page updated.
+- 2026-11-05 (follow-up 2): seeds 7000-7004 rerun on Raven (jobs 31933686-31933693). Pooled
+  over 22,000 fresh games per rule: RL 656.8 ± 0.4 (23,000 with seed 3000), `-3-v4` 655.9
+  (−0.9 ± 0.5), `-7-v3` 655.0, `-8-v7` 654.9. Clones 21/22 v4 uploaded to S3
+  (`experiment_1/models/contribution_clones/`), 23 v4 already there; all three in
+  `docs/large_files.tsv`. The page's overview gained five comparison charts
+  (`scripts/data_analysis/exp1_pf_vs_rl_charts.py`).
