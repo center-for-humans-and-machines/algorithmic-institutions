@@ -3,11 +3,13 @@ step 8): the campaign's top 3 rules at their GP peaks and five reference governo
 against the four training opponents, two held-out ones (Cem's best, thr9_p10) and itself,
 in both seats, on seeds no sweep, final or reference run used.
 
-Per seed two configs: `rules` (the three new rules) and `refs` (the references). Batch i
+Per seed three configs: `rules` (the three new rules), `refs` (the references) and
+`ablation` (pf_9 with w = 0, i.e. pf-20261106-9-v5 without reading the other group's
+punishments: step 9's test of whether adapting to the opponent pays). Batch i
 of a config is seeded seed + i, and a config has under 200 batches, so seeds 1000 apart
 never share a batch seed.
 
-    python scripts/data_analysis/exp2_multi_h2h_configs.py 20000 21000 22000
+    python scripts/data_analysis/exp2_multi_h2h_configs.py 20000 21000 22000 [--ablation-only]
 """
 import sys
 from pathlib import Path
@@ -27,6 +29,7 @@ RULES = {
     "pf_7": ("pf-20261106-7-v5", {"c0": 10, "w": 0.5386950376481652, "k": 5.018051125947482,
               "decay": 0.5623720337021627, "follow": 0.6136408739081771}),
 }
+RULES["pf_9_w0"] = (RULES["pf_9"][0], {**RULES["pf_9"][1], "w": 0.0})
 HEADER = """# Head-to-head of the exp2_multi campaign (docs/plans/policy-finder-multi-opponent.md,
 # step 8), {part}, seed {seed}: each row against levin, ah, prev_best, zero (the training
 # opponents), cem_best and thr9_p10 (held out) and itself, in both seats, 2000 games per
@@ -70,6 +73,8 @@ def config(seed, part, rows):
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    for s in map(int, sys.argv[1:]):
-        config(s, "rules", list(RULES))
-        config(s, "refs", REFS)
+    for s in (int(a) for a in sys.argv[1:] if a.isdigit()):
+        if "--ablation-only" not in sys.argv:
+            config(s, "rules", ["pf_9", "pf_11", "pf_7"])
+            config(s, "refs", REFS)
+        config(s, "ablation", ["pf_9_w0"])
