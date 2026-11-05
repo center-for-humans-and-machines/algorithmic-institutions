@@ -1,0 +1,52 @@
+params:
+  c_thr:
+    definition: >-
+      contribution threshold; a member contributing less than c_thr this
+      round is punished in proportion to its shortfall c_thr - c, members at
+      or above it are never punished
+    type: int
+  k:
+    definition: punishment points per point of shortfall below c_thr, before the budget cap
+    type: float
+  m0:
+    definition: >-
+      base punishment budget, the most the group's mean punishment per member
+      may be in a round when the other manager does not punish
+    type: float
+  rho:
+    definition: >-
+      how much of the other manager's recent punishment (mean per member of
+      the other group over the last 4 rounds) is added to the budget; 0 keeps
+      the budget fixed, 1 lets it match the other manager
+    type: float
+  n_end:
+    definition: number of final rounds in which no one is punished, as no later rounds remain to repay the cost
+    type: int
+sweep_config:
+  c_thr: [2, 16]
+  k: [0.2, 6, log]
+  m0: [0.1, 5, log]
+  rho: [0, 1.5]
+  n_end: [1, 10]
+constraints:
+  - c_thr >= 1
+  - k > 0
+  - m0 > 0
+  - rho >= 0
+  - n_end >= 0
+code: |
+  c_now = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  raw = k * th.clamp(c_thr - c_now, min=0) * mine
+  n_mine = th.clamp(mine.sum(-1, keepdim=True), min=1)
+  # the other manager's punishment per member of its group, last 4 rounds
+  n_past = p.shape[-1]
+  lo = th.clamp(th.zeros_like(t) + n_past - 4, min=0).long()
+  w = (th.arange(n_past, device=c.device) >= lo).float()
+  other = (1 - in_group[..., :n_past]) * valid[..., :n_past] * w
+  p_other = (p * other).sum((-1, -2)) / th.clamp(other.sum((-1, -2)), min=1)
+  cap = n_mine * (m0 + rho * p_other.unsqueeze(-1))
+  total = raw.sum(-1, keepdim=True)
+  scale = th.clamp(cap / th.clamp(total, min=1e-6), max=1)
+  live = (t < 24 - n_end).float()
+  punishment = raw * scale * live
