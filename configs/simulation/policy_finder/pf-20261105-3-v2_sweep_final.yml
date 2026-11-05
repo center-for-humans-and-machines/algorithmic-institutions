@@ -1,0 +1,55 @@
+# Final run of /home/kappablanca/pf_runs/worktrees_exp1/pf-20261105-3/plots/simulation/policy_finder/pf-20261105-3-v2_sweep/sweep.json, written by scripts/policy_finder/generate_sim_config.py:
+# the Gaussian process's peak alone with the clones on fresh seeds; its sweep.json holds the
+# rule's final result. Stack and sim parameters from configs/simulation/manager_testing/29_EXP1_reference.yml.
+
+seed: 1000
+artificial_humans:
+  exp1:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+managers:
+  pf-20261105-3-v2_gp:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-3-v2.yml
+    params: {thr: 20, pmax: 30.0, gamma: 2.0948028839045847, warn: 0.12188365782738154, horizon: 9, taper: 0.0}
+    setting: exp1
+  pf-20261105-3-v2_s136:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-3-v2.yml
+    params: {thr: 20, pmax: 28.567027973011136, gamma: 1.754421016573906, warn: 0.16809697076678276, horizon: 11, taper: 0.26069203950464725}
+    setting: exp1
+  pf-20261105-3-v2_s092:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-3-v2.yml
+    params: {thr: 17, pmax: 26.837817829102278, gamma: 2.5743977189064027, warn: 3.552057884633541, horizon: 9, taper: 0.2898877840489149}
+    setting: exp1
+  pf-20261105-3-v2_s132:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-3-v2.yml
+    params: {thr: 18, pmax: 25.6736989505589, gamma: 2.422530023753643, warn: 3.254691805690527, horizon: 15, taper: 0.6129117216914892}
+    setting: exp1
+  pf-20261105-3-v2_s238:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-3-v2.yml
+    params: {thr: 15, pmax: 28.347778810188174, gamma: 1.4456084541976453, warn: 2.6951911710202694, horizon: 14, taper: 0.5020154006779194}
+    setting: exp1
+  pf-20261105-3-v2_s114:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-3-v2.yml
+    params: {thr: 13, pmax: 29.886745635420084, gamma: 0.9190798088908195, warn: 2.608323134481907, horizon: 9, taper: 0.8485624082386494}
+    setting: exp1
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: default
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261105-3-v2_sweep/final
+figure_name: pf-20261105-3-v2_sweep_final
+save_per_round: true
+basedir: .
+sweep_metric: group_payoff
+sweep: true
