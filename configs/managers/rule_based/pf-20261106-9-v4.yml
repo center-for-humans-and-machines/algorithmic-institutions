@@ -1,0 +1,68 @@
+params:
+  k:
+    definition: >-
+      punishment points per contribution point a member falls short of the
+      group's mean contribution this round, beyond the tolerance s0 (in the
+      member's first block with us)
+    type: float
+  s0:
+    definition: >-
+      tolerance, in contribution points below the group's mean this round,
+      that goes unpunished; a negative value also punishes members slightly
+      above the mean
+    type: float
+  cap:
+    definition: >-
+      the most any one member is punished in a round in its first block
+      with us (the game's own limit is 30)
+    type: float
+  n_stages:
+    definition: >-
+      number of blocks of a member's stay with us in which it can be
+      punished; stage 0 is its first block (round 0-3 for the original
+      members, the arrival block for a newcomer), stage 1 the next block,
+      and so on; later stages are never punished
+    type: int
+  decay:
+    definition: >-
+      factor applied to the punishment once per block the member has
+      already spent with us: stage s gets decay^s times the stage-0
+      punishment (cap included); 1 treats every stage alike, below 1 the
+      later initiation rounds are milder, above 1 harsher
+    type: float
+  quiet:
+    definition: >-
+      number of rounds right before each switch decision (after rounds 3, 7,
+      11, 15, 19) in which nobody is punished
+    type: int
+  t_end:
+    definition: >-
+      first round from which nobody is punished any more, newcomers
+      included (too few rounds left for a punishment to repay itself)
+    type: int
+sweep_config:
+  k: [2.0, 16.0, log]
+  s0: [-1.0, 2.5]
+  cap: [16.0, 30.0]
+  n_stages: [1, 3]
+  decay: [0.25, 1.5]
+  quiet: 2
+  t_end: [5, 17]
+constraints:
+  - k > 0
+  - cap > 0
+  - decay > 0
+code: |
+  cur = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  n = th.clamp(mine.sum(-1), min=1).unsqueeze(-1)
+  mean = (cur * mine).sum(-1).unsqueeze(-1) / n
+  short = th.clamp(mean - cur - s0, min=0)
+  before = th.flip(in_group[..., :-1], dims=(-1,))
+  tenure = th.cumprod(before, dim=-1).sum(-1)
+  stage = th.floor(tenure / 4)
+  scale = th.pow(decay * th.ones_like(cur), stage) * (stage < n_stages)
+  pos = th.remainder(t, 4)
+  active = (t < t_end) & ((pos < 4 - quiet) | (t >= 20))
+  base = th.minimum(k * short, cap * th.ones_like(cur))
+  punishment = base * scale * active * mine
