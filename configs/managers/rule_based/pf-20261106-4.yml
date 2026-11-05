@@ -1,0 +1,40 @@
+params:
+  k:
+    definition: punishment points per contribution point a member falls below the mean of its valid group-mates this round
+    type: float
+  t_stop:
+    definition: punishment is dealt only in rounds t < t_stop (0 means never punish)
+    type: int
+  quiet:
+    definition: number of rounds at the end of each 4-round block, the switch-decision round included, in which no one is punished
+    type: int
+  cap0:
+    definition: per-player punishment cap when the other manager has punished nothing so far
+    type: float
+  rel:
+    definition: how much the per-player cap grows per point of the other manager's mean punishment per member so far
+    type: float
+sweep_config:
+  k: [0.0, 1.5]
+  t_stop: [0, 20]
+  quiet: [0, 3]
+  cap0: [0.0, 8.0]
+  rel: [0.0, 1.5]
+constraints:
+  - k >= 0
+  - cap0 >= 0
+  - rel >= 0
+code: |
+  cur = c[..., -1]
+  m = in_group[..., -1] * valid[..., -1]
+  n = m.sum(-1)[..., None]
+  s = (cur * m).sum(-1)[..., None]
+  others = n - m
+  loo = (s - cur * m) / others.clamp(min=1)
+  short = (loo - cur).clamp(min=0) * (others > 0) * m
+  out = 1 - in_group[..., :-1]
+  other_mean = (p * out).sum((-1, -2)) / out.sum((-1, -2)).clamp(min=1)
+  cap = cap0 + rel * other_mean[..., None]
+  phase = t - 4 * th.floor(t / 4)
+  allowed = (t < t_stop) * (phase < 4 - quiet)
+  punishment = th.minimum(k * short, cap) * allowed
