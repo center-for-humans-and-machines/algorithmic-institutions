@@ -1,0 +1,55 @@
+# Final run of /home/kappablanca/pf_runs/worktrees_exp1/pf-20261105-8/plots/simulation/policy_finder/pf-20261105-8-v4_sweep/sweep.json, written by scripts/policy_finder/generate_sim_config.py:
+# the Gaussian process's peak alone with the clones on fresh seeds; its sweep.json holds the
+# rule's final result. Stack and sim parameters from configs/simulation/manager_testing/29_EXP1_reference.yml.
+
+seed: 1000
+artificial_humans:
+  exp1:
+    contribution_model: artifacts/behavioral_cloning/21_contribution_model_v4/model/architecture_node+edge+rnn__dataset_full.pt
+    valid_model: artifacts/behavioral_cloning/22_contribution_valid_model_v4/model/rnn_False__dataset_full.pt
+managers:
+  pf-20261105-8-v4_gp:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-8-v4.yml
+    params: {standard: 17.0, rate: 0.10064416067061936, dose: 27.70483451709943, opening: 24.76951394492805, horizon: 10, floor: 0.7229510392963565, end: 10}
+    setting: exp1
+  pf-20261105-8-v4_s200:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-8-v4.yml
+    params: {standard: 30.341203299351037, rate: 0.1280864291041636, dose: 26.490064401179552, opening: 25.1292911991477, horizon: 7, floor: 0.6816271291040159, end: 15}
+    setting: exp1
+  pf-20261105-8-v4_s112:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-8-v4.yml
+    params: {standard: 28.873082225210965, rate: 0.12330706157954785, dose: 27.87992276996374, opening: 18.131863363087177, horizon: 6, floor: 4.787192361626435, end: 17}
+    setting: exp1
+  pf-20261105-8-v4_s194:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-8-v4.yml
+    params: {standard: 22.3943872731179, rate: 0.14082716964493094, dose: 39.67844919115305, opening: 28.5226137265563, horizon: 9, floor: 2.382080279797309, end: 13}
+    setting: exp1
+  pf-20261105-8-v4_s209:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-8-v4.yml
+    params: {standard: 17.343105145730078, rate: 0.07772660889610536, dose: 26.04400547966361, opening: 23.00922006368637, horizon: 8, floor: 0.7623744143406073, end: 10}
+    setting: exp1
+  pf-20261105-8-v4_s044:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261105-8-v4.yml
+    params: {standard: 24.86554752383381, rate: 0.13988227960598978, dose: 37.43195130303502, opening: 13.444186516106129, horizon: 7, floor: 0.5675684006399547, end: 19}
+    setting: exp1
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 1
+n_agents: 4
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: default
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261105-8-v4_sweep/final
+figure_name: pf-20261105-8-v4_sweep_final
+save_per_round: true
+basedir: .
+sweep_metric: group_payoff
+sweep: true
