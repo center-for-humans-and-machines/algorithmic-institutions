@@ -656,7 +656,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", default=str(d.WT_ROOT / "dashboard.html"))
     ap.add_argument("--fragment", action="store_true", help="no <html> wrapper")
+    ap.add_argument("--image-quality", type=int, default=None,
+                    help="re-encode the embedded plots at this JPEG quality")
     args = ap.parse_args()
+    d.IMAGE_QUALITY = args.image_quality
     page = build()
     if not args.fragment:
         page = (

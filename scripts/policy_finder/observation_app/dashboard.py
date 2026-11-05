@@ -13,6 +13,7 @@ Run from the repo root (streamlit is not a project dependency):
 import base64
 import hashlib
 import html
+import io
 import json
 import math
 import os
@@ -921,12 +922,27 @@ def show_sweep(wt: Path, name: str):
             st.html(content)
 
 
+#: JPEG quality to re-encode embedded plots at; None embeds the files as they are.
+#: export_html.py --image-quality sets it, to keep a large campaign's page small.
+IMAGE_QUALITY = None
+
+
+def jpeg_bytes(path: Path) -> bytes:
+    if IMAGE_QUALITY is None:
+        return path.read_bytes()
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.open(path).convert("RGB").save(buf, "JPEG", quality=IMAGE_QUALITY, optimize=True)
+    return buf.getvalue()
+
+
 def figures_html(plots: list) -> str:
     """The best point's plots, embedded in the page: no media files to expire
     when the app refreshes."""
     figs = "".join(
         f'<figure><img src="data:image/jpeg;base64,'
-        f'{base64.b64encode(path.read_bytes()).decode()}" alt="{esc(cap)}">'
+        f'{base64.b64encode(jpeg_bytes(path)).decode()}" alt="{esc(cap)}">'
         f"<figcaption>{esc(cap)}</figcaption></figure>"
         for path, cap in plots
     )
