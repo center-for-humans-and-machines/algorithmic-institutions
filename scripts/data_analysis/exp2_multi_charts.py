@@ -204,6 +204,66 @@ specs["score-seeds"] = {
     ],
 }
 
+# 6. both groups of the same games: each governor's pool and its opponent's
+GOVERNORS = {**NAMES, "cem_best": "Cem's best", "levin": "Levin's rule",
+             "zero": "zero", "ah": "ah"}
+SIDES = ["the governor's group", "the opponent's group"]
+both, selfplay = [], []
+for o in TRAINING + ["cem_best", "thr9_p10"]:
+    for g, label in GOVERNORS.items():
+        m = summary["matchups"].get(g, {}).get(o)
+        if m is None or g == o:
+            continue
+        for side, key in zip(SIDES, ["own", "opp"]):
+            both.append({"opponent": OPPONENTS[o], "governor": label, "side": side,
+                         "pool": m[key]["pool"], "lead": m["diff"]["pool"],
+                         "lead_se": m["diff"]["se"], "games": m["n"]})
+    if o in table:
+        selfplay.append({"opponent": OPPONENTS[o], "pool": table[o]["self"]["pool"]})
+side_color = {"field": "side", "type": "nominal", "title": None,
+              "scale": {"domain": SIDES, "range": [INK, "#eb6834"]},
+              "legend": {"orient": "top", "direction": "horizontal", "labelFont": "Geist",
+                         "labelColor": INK, "symbolStrokeWidth": 3}}
+tip = [{"field": "governor"}, {"field": "opponent"}, {"field": "side"},
+       {"field": "pool", "format": ".2f"},
+       {"field": "lead", "title": "governor minus opponent", "format": "+.2f"},
+       {"field": "lead_se", "title": "± (paired se)", "format": ".2f"},
+       {"field": "games"}]
+gy = {"field": "governor", "type": "nominal", "title": None,
+      "sort": list(GOVERNORS.values()),
+      "axis": {"labelFont": "Geist Mono", "labelColor": INK}}
+both_labels = [OPPONENTS[o] for o in TRAINING + ["cem_best", "thr9_p10"]]
+specs["both-groups"] = {
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    "height": {"step": 34},
+    "params": [{"name": "opponent", "value": OPPONENTS["zero"],
+                "bind": {"input": "radio", "options": both_labels, "name": "Opponent  "}}],
+    "layer": [
+        {"data": {"values": selfplay},
+         "transform": [{"filter": "datum.opponent === opponent"}],
+         "mark": {"type": "rule", "color": MUTED, "strokeDash": [4, 3]},
+         "encoding": {"x": {"field": "pool", "type": "quantitative"},
+                      "tooltip": [{"field": "opponent"},
+                                  {"field": "pool", "title": "its self-play",
+                                   "format": ".2f"}]}},
+        {"data": {"values": both},
+         "transform": [{"filter": "datum.opponent === opponent"}],
+         "encoding": {"y": gy},
+         "layer": [
+             {"mark": {"type": "rule", "color": MUTED, "strokeWidth": 2},
+              "encoding": {"detail": {"field": "governor"},
+                           "x": {"aggregate": "min", "field": "pool",
+                                 "type": "quantitative"},
+                           "x2": {"aggregate": "max", "field": "pool"}}},
+             {"mark": {"type": "point", "filled": True, "size": 110, "opacity": 1},
+              "encoding": {"x": {"field": "pool", "type": "quantitative",
+                                 "title": "group pool in the same games",
+                                 "scale": {"zero": False}},
+                           "color": side_color, "tooltip": tip}},
+         ]},
+    ],
+}
+
 # 3-5. by round, one training opponent at a time
 t = per_round()
 t = t[t.opponent.isin(TRAINING + ["self"])].copy()

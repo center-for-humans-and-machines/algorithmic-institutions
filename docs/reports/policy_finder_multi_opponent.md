@@ -22,7 +22,12 @@ https://claude.ai/artifact/BgP93sxr11nxwZ4poFvjLg (built from `pf_runs/view_mult
   groups give less. Group sizes match within 0.3.
 - **Adaptation bought nothing.** Eleven of twelve first versions read the other group's
   fines. Each lineage measured the effect and dropped it. Setting the remaining
-  adaptation weight of `-9-v5` to 0 changes its score by −0.01 ± 0.22.
+  adaptation weight of `-9-v5` to 0 changes its score by −0.01 ± 0.22, though the
+  opponent's group then earns 1.5–3 less. The sweeps could not have seen a gain of about
+  a point against one opponent, so this null is weak.
+- **Against `zero`, the punishing group often earns less than `zero`'s** in the same games
+  (`-7-v5` −2.62 ± 0.47), because players drift to the group that does not fine. Copying
+  `zero` would still be worse: `zero` against itself scores 51.0, the rules 59.5–61.3.
 - **The agents profiled the opponents accurately** from per-round data, under opaque names.
   None named or guessed an identity.
 - **Campaign finals ran 0.4–1.0 high** for the three lineage bests (survivor bias, as in
@@ -168,11 +173,52 @@ is a narrower objective, but it was measured about as precisely per point.
 - **The ablation agrees.** `-9-v5` with w = 0 is 67.99 against 67.98, on the objective and
   on every training opponent within 0.5. The weight matters only in self-play (69.27
   against 66.77), where the opponent is itself.
+- **The weight helps the neighbour.** With w = 0.3, `-9-v5` fines newcomers harder when
+  the other governor fines. Its own pool does not move, but the opponent's group earns
+  1.5–3 more than against the w = 0 ablation, on the same seeds:
+
+  | Opponent | Opponent's pool vs `-9-v5` | vs w = 0 |
+  |---|---|---|
+  | Levin's rule | 67.64 | 64.93 |
+  | `ah` | 53.86 | 52.29 |
+  | `prev_best` | 71.49 | 68.39 |
+  | Cem's best | 70.17 | 67.38 |
+  | `thr9_p10` | 59.08 | 57.00 |
+  | `zero` | 58.09 | 58.09 |
+
+  Against `zero`, which never fines, the two are the same rule and give identical games.
+  That is why self-play, where the neighbour is `-9-v5` itself, is where w pays.
 
 No rule tells the opponents apart to play a different strategy for each. The agents
 considered it:
 - `-7-v7` rejected telling opponent 4 apart: the per-opponent surfaces were "too noisy";
 - `-11-v5` put the most that full tailoring could buy at +0.7.
+
+## How the opponents do against the rules
+
+Both groups of the same head-to-head games (`matchups` in `h2h_summary.json`): the
+opponent's own pool against each governor, and the governor's pool minus the opponent's,
+paired per game. 24,000 games per cell.
+
+| Opponent | Against itself | vs `-7-v5` | vs `-11-v7` | vs `-9-v5` | vs `prev_best` |
+|---|---|---|---|---|---|
+| Levin's rule | 68.09 | 69.31 (+1.39 ± 0.53) | 68.21 (+1.85 ± 0.52) | 67.64 (+1.46 ± 0.52) | 70.29 (+0.55 ± 0.53) |
+| `ah` | 55.76 | 57.61 (+13.79 ± 0.49) | 56.28 (+14.29 ± 0.48) | 53.86 (+17.18 ± 0.47) | 57.71 (+15.20 ± 0.49) |
+| `prev_best` | 73.70 | 73.59 (−1.49 ± 0.55) | 72.36 (−0.49 ± 0.54) | 71.49 (+0.24 ± 0.54) | – |
+| `zero` | 51.02 | 62.14 (−2.62 ± 0.47) | 61.37 (−1.72 ± 0.46) | 58.09 (+1.96 ± 0.45) | 62.38 (−1.12 ± 0.47) |
+| Cem's best | 71.00 | 71.79 (−0.16 ± 0.54) | 71.43 (−0.11 ± 0.54) | 70.17 (+0.52 ± 0.53) | 72.62 (+0.39 ± 0.55) |
+| `thr9_p10` | – | 60.86 (+14.42 ± 0.52) | 60.07 (+14.26 ± 0.52) | 59.08 (+15.48 ± 0.51) | 62.30 (+13.73 ± 0.52) |
+
+- **Against `ah` and `thr9_p10`** every rule's group earns 14–17 more than the opponent's.
+  Against Levin's rule, Cem's best and `prev_best`, the two groups are within 2.
+- **`zero` often out-earns the punishing group beside it.** Only `-9-v5`'s group earns more
+  than `zero`'s. Players drift to the group that does not fine: the rules hold 3.8–4.0 of
+  the 8 players (members chart), so `zero` has about 4.0–4.2. Per member, the rule's group
+  still earns more (`-7-v5` about 15.7 against 14.7).
+- **Punishing is still right against `zero`.** Never punishing against it is `zero`'s
+  self-play, 51.0. Every rule earns 59.5–61.3 against `zero`, and its fines lift `zero`'s
+  own group to 58–62. The two groups together earn 118–124, against 102 when neither
+  punishes.
 
 ## What the agents learned about the opponents
 

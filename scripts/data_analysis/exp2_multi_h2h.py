@@ -13,6 +13,11 @@ Aggregates per row:
 - `self`: self-play.
 A reference's column against itself is its self-play.
 
+`matchups`: both groups of the same games. Per row and opponent, the row's pool, the
+opponent's pool against it, and their difference, paired per episode (so its standard
+error is the sd of the per-episode differences over sqrt(n)). It answers how well each
+opponent does against the rules, e.g. whether a rule's group out-earns `zero`'s.
+
 Writes a JSON next to the data and prints a table.
 
     python scripts/data_analysis/exp2_multi_h2h.py [--root plots/simulation/33_MULTI_h2h]
@@ -24,7 +29,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from aimanager.simulation.pool_scores import add_pool, against_anchor, pairing_of
+from aimanager.simulation.pool_scores import (
+    POOL, add_pool, against_anchor, group_round_scores, pairing_of,
+)
 
 TRAINING = ["levin", "ah", "prev_best", "zero"]
 HELD_OUT = ["cem_best", "thr9_p10"]
@@ -39,15 +46,33 @@ LABELS = {
 COLS = ["episode", "round_number", "agent_group", "contribution", "punishment", "run"]
 
 
-def cells(root):
-    """(row, column) -> {seed: per-episode pools}."""
+def both_groups(df):
+    """(group_0 manager, group_1 manager) -> per-episode pools of both groups."""
     out = {}
+    for run in df["run"].unique():
+        g0, g1 = pairing_of(run)
+        ep = group_round_scores(df[df["run"] == run], POOL, "sum").groupby("episode").mean()
+        out.setdefault((g0, g1), []).append(ep[[0, 1]].reset_index(drop=True))
+    return out
+
+
+def cells(root):
+    """(row, column) -> {seed: per-episode pools}, and (row, opponent) -> per-episode
+    (own, opp) pools of the same games, both seats."""
+    out, games = {}, {}
     for d in sorted(Path(root).glob("seed_*")):
         f = d / "per_round.parquet"
         if not f.exists():
             continue
         seed = d.name.split("_")[1]
         df = add_pool(pd.read_parquet(f, columns=COLS))
+        for (g0, g1), frames in both_groups(df).items():
+            if g0 == g1:
+                continue
+            for f in frames:
+                for own, opp, side in ((g0, g1, [0, 1]), (g1, g0, [1, 0])):
+                    pair = f[side].set_axis(["own", "opp"], axis=1)
+                    games.setdefault((own, opp), []).append(pair)
         runs = [pairing_of(r) for r in df["run"].unique()]
         for anchor in sorted({m for pair in runs for m in pair}):
             for manager, frame in against_anchor(df, anchor).items():
@@ -56,8 +81,9 @@ def cells(root):
                     out.setdefault((manager, col), {}).setdefault(seed, []).append(
                         frame["pool"]
                     )
-    return {k: {s: pd.concat(v, ignore_index=True) for s, v in d.items()}
-            for k, d in out.items()}
+    return ({k: {s: pd.concat(v, ignore_index=True) for s, v in d.items()}
+             for k, d in out.items()},
+            {k: pd.concat(v, ignore_index=True) for k, v in games.items()})
 
 
 def stat(series):
@@ -79,7 +105,27 @@ def diff(a, b):
     return {"pool": a["pool"] - b["pool"], "se": math.hypot(a["se"], b["se"])}
 
 
-def summarize(data):
+def mean_se(x):
+    return {"pool": float(x.mean()), "se": float(x.std(ddof=1) / math.sqrt(len(x)))}
+
+
+def matchups(games):
+    """row -> opponent -> the row's pool, the opponent's, their paired difference."""
+    out = {}
+    for r in ROWS:
+        for o in TRAINING + HELD_OUT:
+            g = games.get((r, o))
+            if g is None:
+                continue
+            out.setdefault(r, {})[o] = {
+                "own": mean_se(g["own"]), "opp": mean_se(g["opp"]),
+                "diff": mean_se(g["own"] - g["opp"]),
+                "total": mean_se(g["own"] + g["opp"]), "n": int(len(g)),
+            }
+    return out
+
+
+def summarize(data, games):
     seeds = sorted({s for d in data.values() for s in d})
     table = {}
     for r in ROWS:
@@ -102,7 +148,8 @@ def summarize(data):
             table[r][f"{agg}_vs_prev_best"] = diff(table[r][agg], best[agg])
     table["pf_9"]["training_vs_w0"] = diff(table["pf_9"]["training"],
                                            table["pf_9_w0"]["training"])
-    return {"seeds": seeds, "labels": LABELS, "columns": COLUMNS, "rows": table}
+    return {"seeds": seeds, "labels": LABELS, "columns": COLUMNS, "rows": table,
+            "matchups": matchups(games)}
 
 
 def fmt(s):
@@ -113,7 +160,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default="plots/simulation/33_MULTI_h2h")
     args = ap.parse_args()
-    result = summarize(cells(args.root))
+    result = summarize(*cells(args.root))
     Path(args.root, "h2h_summary.json").write_text(json.dumps(result, indent=1))
     print("seeds", result["seeds"])
     head = ["row"] + COLUMNS + ["training", "held_out", "training - prev_best"]
@@ -124,6 +171,11 @@ def main():
         vals.append(fmt(row["training_vs_prev_best"]))
         print(f"| {LABELS.get(r, r)} | " + " | ".join(vals) + " |")
     print("pf_9 - pf_9_w0 (training):", fmt(result["rows"]["pf_9"]["training_vs_w0"]))
+    print("\nmatchups: row's pool / opponent's pool against it / row minus opponent")
+    for r, opps in result["matchups"].items():
+        print(f"{LABELS.get(r, r)}: " + "; ".join(
+            f"{o} {m['own']['pool']:.2f} / {m['opp']['pool']:.2f} / {fmt(m['diff'])}"
+            for o, m in opps.items()))
 
 
 if __name__ == "__main__":

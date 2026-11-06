@@ -62,6 +62,9 @@ OPPONENTS = (
     {k: v["name"] for k, v in sorted(yaml.safe_load(OPPONENTS_FILE.read_text()).items())}
     if SETTING == "exp2_multi" and OPPONENTS_FILE.exists() else {}
 )
+#: The final best's plots redrawn with the opponents' names (named_plots.py),
+#: per version; the Sweep tab prefers them to the sweep's own, keyed plots
+NAMED_PLOTS = WT_ROOT / "named_plots"
 #: The final best's plots (simulation/sweep.py's BEST_PLOTS, ROUND_PLOT)
 BEST_PLOTS = {
     "comparison_pairing_side.jpg": f"Final best{TERMS['vs']}, by side",
@@ -877,6 +880,8 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
             )
         )
         folder = f["folder"] / FINAL
+        if any((NAMED_PLOTS / name / p).exists() for p in BEST_PLOTS):
+            folder = NAMED_PLOTS / name
         plots = [(folder / p, c) for p, c in BEST_PLOTS.items() if (folder / p).exists()]
         if plots:
             out += [("section", "Final best"), ("html", figures_html(plots))]
