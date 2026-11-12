@@ -40,6 +40,10 @@ class Call:
     model_cls: Any
     kind: str  # max_tokens key: open_rules, open_notes, propose, assign, judge
     meta: dict = field(default_factory=dict)  # only read by the fake backend
+    # sampling overrides for generative calls (proposals, consolidation); both go
+    # into the request body and therefore into the cache key
+    temperature: Optional[float] = None
+    seed: Optional[int] = None
 
 
 @dataclass
@@ -249,13 +253,19 @@ class LLMClient:
         body = {
             "model": self.model,
             "messages": call.messages,
-            "temperature": self.cfg.get("temperature", 0.0),
+            "temperature": (
+                call.temperature
+                if call.temperature is not None
+                else self.cfg.get("temperature", 0.0)
+            ),
             "max_tokens": max_tokens,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": call.kind, "schema": schema, "strict": True},
             },
         }
+        if call.seed is not None:
+            body["seed"] = call.seed
         body.update(self.extra)
         return body
 

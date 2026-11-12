@@ -9,6 +9,8 @@ import yaml
 from aimanager.annotation.cli import main, review_begin
 from aimanager.annotation.client import Call, LLMClient
 from aimanager.annotation.cluster import (
+    _propose,
+    dedupe_proposal,
     est_tokens,
     fit_items,
     is_negated,
@@ -245,6 +247,34 @@ def test_apply_consolidation_merges_and_families():
     assert by["a"]["family"] == "fam_one" and by["c"]["family"] == "fam_one"
     assert unplaced == ["b"] and by["b"]["family"] == UNPLACED
     assert set(defs) == {"fam_one", UNPLACED}
+
+
+def test_degenerate_proposal_is_reasked_with_another_seed(tmp_path):
+    def code(n):
+        return {"name": n, "label": n, "definition": n, "fits": [], "does_not_fit": []}
+
+    loop = {"codes": [code("a")] + [code("b")] * 10}
+    good = {"codes": [code("a"), code("c"), code("a")]}
+    bodies = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        bodies.append(body)
+        return httpx.Response(
+            200, json=_reply(json.dumps(loop if len(bodies) == 1 else good))
+        )
+
+    client, cfg, run = _client(tmp_path, handler)
+    info = {}
+    codes, _ = _propose(client, cfg, "s", "why", [("1", "x")], [], 0, 5, info)
+    assert [c.name for c in codes] == ["a", "c"]  # repeated name dropped
+    seeds = [b["seed"] for b in bodies]
+    assert seeds == [cfg["llm"]["seed_generate"], cfg["llm"]["seed_generate"] + 1]
+    assert {b["temperature"] for b in bodies} == {cfg["llm"]["temperature_generate"]}
+    assert "about 5 codes" in bodies[0]["messages"][-1]["content"]
+    assert info["degenerate"][0]["repeated"] == {"b": 10}
+    assert info["duplicates"][0]["repeated"] == {"a": 2}
+    assert dedupe_proposal([])[2] == 0
 
 
 def test_negated_or_excluding_codes_never_merge_into_positive_codes():

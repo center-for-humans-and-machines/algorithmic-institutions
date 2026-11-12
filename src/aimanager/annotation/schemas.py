@@ -73,8 +73,12 @@ class ProposedCode(BaseModel):
     does_not_fit: List[str] = Field(max_length=4)
 
 
+# a safety net against runaway replies; the target size is set in the prompt
+PROPOSAL_CAP = 60
+
+
 class Proposal(BaseModel):
-    codes: List[ProposedCode] = Field(max_length=60)
+    codes: List[ProposedCode] = Field(max_length=PROPOSAL_CAP)
 
 
 # answer values of an assignment that are not codes; no code may take these names
@@ -122,6 +126,13 @@ def consolidation_model(code_names):
         merges=(List[Merge], Field(max_length=60)),
         families=(List[Family], Field(max_length=20)),
     )
+
+
+def merge_model(code_names):
+    """Merges only (the second consolidation pass keeps the families)."""
+    full = consolidation_model(code_names)
+    Merge = full.model_fields["merges"].annotation.__args__[0]
+    return create_model("Merges", merges=(List[Merge], Field(max_length=60)))
 
 
 def placement_model(code_names, family_names):

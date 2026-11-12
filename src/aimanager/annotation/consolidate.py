@@ -13,9 +13,9 @@ codebook/<kind>.merges.yml, each merge with the model's stated reason.
 
 from . import prompting as P
 from .client import Call
-from .cluster import is_negated, is_negated_or_exclusion
+from .cluster import gen_sampling, is_negated, is_negated_or_exclusion
 from .common import StepFailed, log, slugify
-from .schemas import consolidation_model, placement_model
+from .schemas import consolidation_model, merge_model, placement_model
 
 UNPLACED = "unplaced"
 
@@ -46,6 +46,22 @@ KIND_TEXT = {
 }
 
 
+# the level of a code, the same in the proposal prompts and the consolidation
+LEVEL = {
+    "what": (
+        "a code is a lever a manager can use (what the punishment depends on or "
+        "how it is shaped), general enough that several different rules could "
+        "implement it; variants that differ only in thresholds, constants or the "
+        "exact formula are one code."
+    ),
+    "why": (
+        "a code is a kind of justification that could be given for several "
+        "different mechanisms; it is not a specific claim with its numbers and not "
+        "tied to one mechanism."
+    ),
+    "basis": "a code is a kind of support a reason can rest on.",
+}
+
 KIND_RULES = {
     "what": (
         'Never define a code or a family as the absence of something ("does not '
@@ -57,20 +73,56 @@ KIND_RULES = {
 }
 
 
-def consolidation_call(step, kind, codes):
-    instr = (
-        P.load("consolidate")
+def _instructions(name, kind, target, n_codes):
+    return (
+        P.load(name)
         .replace("$kind_text", KIND_TEXT[kind])
         .replace("$kind_rules", KIND_RULES[kind])
+        .replace("$level", LEVEL[kind])
+        .replace("$target", str(target))
+        .replace("$n_codes", str(n_codes))
     )
+
+
+def consolidation_call(step, kind, codes, cfg=None, target=None):
     names = [c["name"] for c in codes]
+    temperature, seed = gen_sampling(cfg) if cfg else (None, None)
     return Call(
         step,
         f"{kind}-consolidate",
-        P.messages(instr, P.render_codebook(codes, "Codes")),
+        P.messages(
+            _instructions("consolidate", kind, target or len(codes), len(codes)),
+            P.render_codebook(codes, "Codes"),
+        ),
         consolidation_model(names),
         "consolidate",
-        meta={"kind": kind, "codes": names},
+        meta={"kind": kind, "codes": names, "pass": 1},
+        temperature=temperature,
+        seed=seed,
+    )
+
+
+def merge_call(step, kind, codes, defs, cfg, target):
+    """Second pass: merges within families, the families stay."""
+    names = [c["name"] for c in codes]
+    temperature, seed = gen_sampling(cfg)
+    return Call(
+        step,
+        f"{kind}-consolidate-pass2",
+        P.messages(
+            _instructions("consolidate_merge", kind, target, len(codes)),
+            P.render_codebook(codes, "Codes", families=defs),
+        ),
+        merge_model(names),
+        "consolidate",
+        meta={
+            "kind": kind,
+            "codes": names,
+            "pass": 2,
+            "families": {c["name"]: c["family"] for c in codes},
+        },
+        temperature=temperature,
+        seed=seed,
     )
 
 
@@ -189,11 +241,12 @@ def apply_placements(survivors, defs, placements):
     return defs, replaced, own
 
 
-def consolidate_codes(client, cfg, step, kind, codes):
+def consolidate_codes(client, cfg, step, kind, codes, target=None):
     """Run the consolidation call and apply it; codes left unplaced are re-asked
-    once against the existing families, then get a family of their own.
+    once against the existing families, then get a family of their own. If more
+    than 1.5 times the target survive, a second pass merges within families.
     StepFailed if a call fails. Returns (survivors, defs, audit, placement)."""
-    call = consolidation_call(step, kind, codes)
+    call = consolidation_call(step, kind, codes, cfg, target)
     (res,) = client.map([call])
     if not res.ok:
         raise StepFailed(f"{step}: the consolidation call failed: {res.error[:300]}")
@@ -214,6 +267,36 @@ def consolidate_codes(client, cfg, step, kind, codes):
             placements = pres.value.model_dump()["placements"]
         defs, replaced, own = apply_placements(survivors, defs, placements)
         placement.update(placed_on_reask=replaced, own_family=own)
+    for a in audit:
+        a["pass"] = 1
+    if target and len(survivors) > 1.5 * target:
+        n_before = len(survivors)
+        (mres,) = client.map([merge_call(step, kind, survivors, defs, cfg, target)])
+        if not mres.ok:
+            raise StepFailed(
+                f"{step}: the second merge pass failed: {mres.error[:300]}"
+            )
+        fams = [
+            {
+                "name": f,
+                "definition": d,
+                "codes": [c["name"] for c in survivors if c["family"] == f],
+            }
+            for f, d in defs.items()
+        ]
+        survivors, defs, audit2, _ = apply_consolidation(
+            survivors,
+            mres.value.model_dump()["merges"],
+            fams,
+            guard_negation=kind == "what",
+        )
+        for a in audit2:
+            a["pass"] = 2
+        audit += audit2
+        log(
+            f"  {step}: second pass {n_before} -> {len(survivors)} codes "
+            f"(target {target})"
+        )
     n_merged = sum(len(a["merge"]) - 1 for a in audit if a["applied"])
     log(
         f"  {step}: {len(codes)} codes -> {len(survivors)} after {n_merged} merges, "

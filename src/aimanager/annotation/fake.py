@@ -196,8 +196,25 @@ def judge(meta):
 
 
 def consolidate(meta):
-    """Merge proportional_punishment into punish_below_group_mean; two families."""
+    """Pass 1: merge proportional_punishment into punish_below_group_mean; two
+    families. Pass 2: merge the first two codes of the first family."""
     names = meta["codes"]
+    if meta.get("pass") == 2:
+        fams = meta["families"]
+        first = [n for n in names if fams[n] == fams[names[0]]][:2]
+        if len(first) < 2:
+            return {"merges": []}
+        return {
+            "merges": [
+                {
+                    "codes": first,
+                    "reason": "the same lever at this level",
+                    "keep": first[0],
+                    "label": "merged",
+                    "definition": f"Either of {first[0]} or {first[1]}.",
+                }
+            ]
+        }
     merges = []
     pair = ["punish_below_group_mean", "proportional_punishment"]
     if all(n in names for n in pair):

@@ -116,6 +116,8 @@ def run_dir(tmp_path_factory):
             "corpus": {"repo": str(repo)},
             "sampling": {"expert_check_n": 4},
             "llm": {"concurrency": 4},
+            # small targets, so the second consolidation pass runs
+            "codebook": {"what": {"target_codes": 2}},
         },
     )
     base = ["--run", "t", "--runs-root", str(root / "runs"), "--config", str(cfg)]
@@ -171,8 +173,8 @@ def test_stage_a_outputs(run_dir):
     assert len(list((run_dir / "records").glob("*.json"))) == 12
     draft = yaml.safe_load((run_dir / "codebook" / "what.draft.yml").read_text())
     v1 = yaml.safe_load((run_dir / "codebook" / "what.v1.yml").read_text())
-    # one merge in the fake consolidation; candidates may add codes
-    assert len(v1["codes"]) >= len(draft["codes"]) - 1 >= 2
+    # one merge in each fake consolidation pass; candidates may add codes
+    assert len(v1["codes"]) >= len(draft["codes"]) - 2 >= 2
     never = yaml.safe_load((run_dir / "codebook" / "never_implemented.yml").read_text())
     assert "reward_cooperators" in [c["name"] for c in never["codes"]]
     members = yaml.safe_load(
@@ -198,6 +200,14 @@ def test_stage_a_outputs(run_dir):
     assert (run_dir / "codebook" / "non_discriminating.yml").exists()
     # the fake leaves one code out of the families: it is placed on the re-ask
     assert merges["placement"]["placed_on_reask"]
+    assert {1, 2} <= {m["pass"] for m in merges["merges"]}
+    for kind in ("what", "why", "basis"):
+        un = yaml.safe_load(
+            (run_dir / "codebook" / f"{kind}.v1.unassigned.yml").read_text()
+        )
+        assert un["n"] == len(un["items"]) and all(i["text"] for i in un["items"])
+    m = json.loads((run_dir / "manifests" / "consolidate-what.json").read_text())
+    assert m["generation_sampling"]["temperature"] > 0
     assert "unplaced" not in {c["family"] for c in v1["codes"]}
     assert all(m["reason"] for m in merges["merges"] if m["applied"])
     basis = yaml.safe_load((run_dir / "codebook" / "basis.v1.yml").read_text())
@@ -254,7 +264,7 @@ def test_stage_b_join_and_agreement(run_dir):
     assert q["quote_check"]["rule_free_codes"]["n"] > 0
     assert q["calls"]["total"]["calls"] > 0
     assert q["judge_reliability"]["overall"]["n"]
-    assert len(q["judge_reliability"]["least_reliable"]) == 5
+    assert 0 < len(q["judge_reliability"]["least_reliable"]) <= 5
     assert q["codes_per_rule"]["rules"] == 12 and "codes_above_max_prevalence" in q
     assert q["judge_flags"]["tiebreaks"] > 0
     assert "codes" in q["judge_reliability"]["unreliable_codes"]

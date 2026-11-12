@@ -26,7 +26,14 @@ sampling:
   expert_check_n: 30
 
 llm:
+  # extraction, assignment and judge calls
   temperature: 0.0
+  # proposals and consolidation: long list generation at 0 looped on DeepSeek
+  # (prod1); its model card recommends a non-zero temperature. The seed is
+  # sent with the request (and so is part of the cache key) and recorded in
+  # the manifests; a degenerate reply is re-asked once with seed + 1.
+  temperature_generate: 0.6
+  seed_generate: 20261112
   # requests in flight, = --max-num-seqs (128): on viper the server never
   # queued at 64 (viper1/viper2), so the client was the bottleneck
   concurrency: 128
@@ -91,9 +98,22 @@ clustering:
   min_unassigned: 3
   # codes with fewer members after the last assignment are dropped
   min_members: 1
+  # a proposal reply that repeats one name more often than this (or fills the
+  # schema cap with repeats) is degenerate and re-asked once
+  max_name_repeats: 3
 
 saturation:
   batch_size: 6
+
+# Target sizes of the codebooks. These are settings, not limits: the proposal
+# and consolidation prompts ask for about this many codes in total, merging
+# rather than adding when in doubt; a second consolidation pass runs if more
+# than 1.5 times the target survive the first. target_candidates is the size
+# the coverage step aims for with the candidate codes from the notes.
+codebook:
+  what: {target_codes: 30, target_candidates: 15}
+  why: {target_codes: 25}
+  basis: {target_codes: 10}
 
 coverage:
   # a candidate code from the notes is added only if the judge finds it in at

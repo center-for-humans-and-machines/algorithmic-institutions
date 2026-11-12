@@ -16,7 +16,7 @@ import re
 from . import prompting as P
 from .client import Call
 from .common import StepFailed, check_failures, log, slugify
-from .schemas import RESERVED, Proposal, assignment_model
+from .schemas import PROPOSAL_CAP, RESERVED, Proposal, assignment_model
 
 UNITS = {
     "what": "a mechanism, i.e. something a manager does to players",
@@ -156,12 +156,68 @@ def fit_items(items, budget_tokens, cap, seed):
     return [it for i, it in enumerate(items) if i in keep]
 
 
-def _propose(client, cfg, step, kind, items, codes, rnd):
+def gen_sampling(cfg):
+    """(temperature, seed) for generative calls: proposals and consolidation.
+
+    Long list generation at temperature 0 looped on DeepSeek (prod1: one name 29
+    times), and its model card recommends a non-zero temperature.
+    """
+    llm = cfg["llm"]
+    return llm.get("temperature_generate", 0.6), llm.get("seed_generate", 20261112)
+
+
+def target_codes(cfg, kind):
+    """The configured target size of a codebook (a setting, not a limit)."""
+    return (cfg.get("codebook", {}).get(kind) or {}).get("target_codes")
+
+
+def dedupe_proposal(codes):
+    """(codes with each name once, keeping the first; names seen more than once
+    with their counts; highest count of one name)."""
+    seen, out, counts = set(), [], {}
+    for c in codes:
+        key = slugify(c.name)
+        counts[key] = counts.get(key, 0) + 1
+        if key not in seen:
+            seen.add(key)
+            out.append(c)
+    dups = {k: n for k, n in counts.items() if n > 1}
+    return out, dups, max(counts.values(), default=0)
+
+
+def is_degenerate(codes, cap, max_repeats):
+    """A reply that repeats one name more than `max_repeats` times, or fills the
+    schema cap with repeated names, came from a generation loop."""
+    _, dups, top = dedupe_proposal(codes)
+    return top > max_repeats or (len(codes) >= cap and bool(dups))
+
+
+def _fill(text, **values):
+    for k, v in values.items():
+        text = text.replace(f"${k}", str(v))
+    return text
+
+
+def _propose(client, cfg, step, kind, items, codes, rnd, target=None, info=None):
+    """Proposed codes (deduplicated; negated what codes dropped) and the names
+    rejected as negated. `info` collects degenerate replies and duplicates."""
+    info = info if info is not None else {}
     cap = cfg["clustering"].get("max_items_in_proposal", 400)
-    instr = P.load(f"{kind}_propose")
+    target = target or target_codes(cfg, kind) or 20
+    instr = _fill(P.load(f"{kind}_propose"), target=target)
     shared = ""
     if rnd:
-        instr = instr + "\n\n" + P.load("refine")
+        min_members = max(cfg["clustering"].get("min_members", 1), 2)
+        instr = (
+            instr
+            + "\n\n"
+            + _fill(
+                P.load("refine"),
+                n_existing=len(codes),
+                target=target,
+                min_members=min_members,
+            )
+        )
         shared = P.render_codebook(codes, "Current codebook")
     # prompt + the largest max_tokens of a proposal must fit the context length
     fixed = est_tokens(P.load("system") + instr + shared) + 256
@@ -180,42 +236,68 @@ def _propose(client, cfg, step, kind, items, codes, rnd):
             f"items ({n_all - len(items)} sampled out; cap {cap}, about {budget} "
             "tokens for items)"
         )
-    call = Call(
-        step,
-        f"{kind}-propose-r{rnd}",
-        P.messages(instr, P.render_items(items), shared),
-        Proposal,
-        "propose",
-        meta={
-            "kind": kind,
-            "items": items,
-            "round": rnd,
-            "existing": [c["name"] for c in codes],
-        },
-    )
-    (res,) = client.map([call])
+    temperature, seed = gen_sampling(cfg)
+    max_repeats = cfg["clustering"].get("max_name_repeats", 3)
+
+    def call(attempt):
+        return Call(
+            step,
+            f"{kind}-propose-r{rnd}" + (f"-retry{attempt}" if attempt else ""),
+            P.messages(instr, P.render_items(items), shared),
+            Proposal,
+            "propose",
+            meta={
+                "kind": kind,
+                "items": items,
+                "round": rnd,
+                "existing": [c["name"] for c in codes],
+                "attempt": attempt,
+            },
+            temperature=temperature,
+            seed=seed + attempt,
+        )
+
+    (res,) = client.map([call(0)])
+    if res.ok and is_degenerate(res.value.codes, PROPOSAL_CAP, max_repeats):
+        _, dups, _ = dedupe_proposal(res.value.codes)
+        log(f"  {step}: degenerate {kind} proposal (repeated {dups}); re-asking")
+        info.setdefault("degenerate", []).append({"round": rnd, "repeated": dups})
+        (res,) = client.map([call(1)])
+        if res.ok and is_degenerate(res.value.codes, PROPOSAL_CAP, max_repeats):
+            _, dups, _ = dedupe_proposal(res.value.codes)
+            log(f"  {step}: re-ask still degenerate ({dups}); keeping it deduplicated")
+            info["degenerate"][-1]["reask_also_degenerate"] = dups
     if not res.ok:
-        check_failures(cfg, step, "propose", [(call.item_id, res.error)], 1)
+        check_failures(cfg, step, "propose", [(res.call.item_id, res.error)], 1)
         return [], []
+    proposed, dups, _ = dedupe_proposal(res.value.codes)
+    if dups:
+        log(f"  {step}: dropped repeated names in one reply: {dups}")
+        info.setdefault("duplicates", []).append({"round": rnd, "repeated": dups})
     # only mechanisms: reasons and kinds of support are often legitimately
     # negative ("late punishment has no future benefit", "no data available")
     if kind != "what":
-        return list(res.value.codes), []
-    return drop_negated(res.value.codes, step, kind)
+        return proposed, []
+    return drop_negated(proposed, step, kind)
 
 
-def cluster(client, cfg, step, kind, items, source, taken=None):
-    """Returns (codes, assignment {id: code|None}, failed [(id, error)], history)."""
+def cluster(client, cfg, step, kind, items, source, taken=None, target=None):
+    """Returns (codes, assignment {id: code|None}, failed [(id, error)], history).
+
+    `target` is the size the proposal aims for (default codebook.<kind>.target_codes).
+    """
     ccfg = cfg["clustering"]
     taken = set(taken or ())
     items = list(items)
-    proposed, rejected = _propose(client, cfg, step, kind, items, [], 0)
+    info = {}
+    proposed, rejected = _propose(client, cfg, step, kind, items, [], 0, target, info)
     codes = to_codebook_entries(proposed, taken, source)
     history = [
         {
             "round": 0,
             "new_codes": [c["name"] for c in codes],
             "rejected_negated": rejected,
+            **info,
         }
     ]
     rounds = ccfg.get("refine_rounds", 2)
@@ -227,8 +309,9 @@ def cluster(client, cfg, step, kind, items, source, taken=None):
         log(f"  {step}: round {rnd}, {len(codes)} codes, {len(unassigned)} unassigned")
         if rnd == rounds or len(unassigned) < ccfg.get("min_unassigned", 3):
             break
+        info = {}
         proposed, rejected = _propose(
-            client, cfg, step, kind, unassigned, codes, rnd + 1
+            client, cfg, step, kind, unassigned, codes, rnd + 1, target, info
         )
         new = to_codebook_entries(proposed, taken, source)
         history.append(
@@ -236,6 +319,7 @@ def cluster(client, cfg, step, kind, items, source, taken=None):
                 "round": rnd + 1,
                 "new_codes": [c["name"] for c in new],
                 "rejected_negated": rejected,
+                **info,
             }
         )
         if not new:

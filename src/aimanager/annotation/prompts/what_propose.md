@@ -1,9 +1,9 @@
 # Task: build a codebook of manager mechanisms
 
-Below is a numbered list of short descriptions of mechanisms that manager rules use (what a manager does to players). Many describe the same mechanism in different words. Group them into a codebook of distinct mechanisms, derived from the items.
+Below is a numbered list of short descriptions of mechanisms that manager rules use (what a manager does to players). Many describe the same mechanism in different words. Group them into a codebook of distinct mechanisms, derived from the items. Aim for about $target codes; when in doubt, merge rather than add.
 
 Guidelines:
-- A code is one mechanism at the level of what the manager does to players. For the level of abstraction, examples from an unrelated domain (a library's rules for overdue books): "fee grows with the days overdue", "borrowing suspended after repeated lateness", "grace period before any fee". A code must be specific enough that one can decide for any rule whether it implements the code.
+- A code is a lever a manager can use: what the punishment depends on or how it is shaped, general enough that several different rules could implement it. Variants that differ only in thresholds, constants or the exact formula are one code. For the level of abstraction, examples from an unrelated domain (a library's rules for overdue books): "fee grows with the days overdue", "borrowing suspended after repeated lateness", "grace period before any fee". A code must still be specific enough that one can decide for any rule whether it implements the code.
 - A code names the mechanism, not an implementation detail or a parameter value: different rates or lengths of one idea are one code ("a fee of 0.20 per day" and "a fee of 0.50 per day" are both "fee grows with the days overdue").
 - Define each code by the lever, i.e. what the punishment depends on (for example "fee depends on the days overdue"), not by the direction or size of the effect: a rule that raises the fee with the days overdue and one that lowers it fit the same code.
 - Codes should not overlap: an item should fit exactly one code. Prefer merging near-duplicates over splitting by minor variants.

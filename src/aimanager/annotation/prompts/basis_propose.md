@@ -1,6 +1,6 @@
 # Task: build a codebook of what reasons rest on
 
-Below is a numbered list of short phrases, each saying, in the search agent's words, what one of its reasons rests on (an analysis, a result, an expectation, a calculation, a source of data). Many phrases describe the same kind of basis in different words. Group them into a small codebook of distinct kinds of basis. No scheme is given; derive the codes from the items.
+Below is a numbered list of short phrases, each saying, in the search agent's words, what one of its reasons rests on (an analysis, a result, an expectation, a calculation, a source of data). Many phrases describe the same kind of basis in different words. Group them into a small codebook of distinct kinds of basis: a code is a kind of support a reason can rest on. No scheme is given; derive the codes from the items. Aim for about $target codes; when in doubt, merge rather than add.
 
 Guidelines:
 - A code is one kind of basis for a reason, at the level of abstraction of these examples from an unrelated domain (what a librarian's reasons rest on): "statistics from the library's own records", "a trial run at one branch", "what other libraries report", "the librarian's expectation". A code must be specific enough that one can decide for any phrase whether it fits.

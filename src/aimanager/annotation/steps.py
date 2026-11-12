@@ -11,7 +11,7 @@ import re
 
 from . import prompting as P
 from .client import Call
-from .cluster import assign, cluster, members
+from .cluster import assign, cluster, gen_sampling, members, target_codes
 from .common import (
     StepFailed,
     atomic_write_text,
@@ -280,6 +280,7 @@ def what_codebook(run, cfg, client, limit=None):
         written=len(assignment),
         failed=[dict(item=i, error=e) for i, e in failed],
         codes=len(codes),
+        generation_sampling=_sampling(cfg),
         model=client.model,
         limit=limit,
     )
@@ -342,6 +343,7 @@ def coverage(run, cfg, client, limit=None):
             unmatched,
             "notes",
             taken={c["name"] for c in draft},
+            target=(cfg.get("codebook", {}).get("what") or {}).get("target_candidates"),
         )
     # judged on the rules outside the expert check only, so the held-out rules
     # stay unseen by every codebook decision
@@ -453,6 +455,7 @@ def coverage(run, cfg, client, limit=None):
         expected=len(items),
         written=len(to_draft),
         failed=[dict(item=i, error=e) for i, e in failed + cfailed],
+        generation_sampling=_sampling(cfg),
         model=client.model,
         limit=limit,
     )
@@ -470,6 +473,25 @@ def _free_code_items(run):
         (r["id"], r["description"])
         for r in read_jsonl(run.dir / "open" / "rule_free_codes.jsonl")
     ]
+
+
+def _sampling(cfg):
+    temperature, seed = gen_sampling(cfg)
+    return {"temperature": temperature, "seed": seed}
+
+
+def write_unassigned(path, members_doc, items):
+    """The items no code covers, with their text, for the reviewer."""
+    text = dict(items)
+    none = members_doc.get("none", [])
+    write_yaml(
+        path,
+        {
+            "n": len(none),
+            "of": len(items),
+            "items": [{"id": i, "text": text.get(i, "")} for i in none],
+        },
+    )
 
 
 def _merged_members(codes, *assignments):
@@ -492,7 +514,7 @@ def consolidate_what(run, cfg, client, limit=None):
     npre = run.dir / "codebook" / "never_implemented.premerge.yml"
     codes = read_yaml(pre)["codes"] + read_yaml(npre)["codes"]
     survivors, defs, audit, placement = consolidate_codes(
-        client, cfg, "consolidate-what", "what", codes
+        client, cfg, "consolidate-what", "what", codes, target_codes(cfg, "what")
     )
     v1 = [c for c in survivors if c.get("implemented")]
     never = [c for c in survivors if not c.get("implemented")]
@@ -509,7 +531,9 @@ def consolidate_what(run, cfg, client, limit=None):
         "never": run.path("codebook", "never_implemented.yml"),
         "members": run.path("codebook", "what.v1.members.yml"),
         "merges": run.path("codebook", "what.merges.yml"),
+        "unassigned": run.path("codebook", "what.v1.unassigned.yml"),
     }
+    write_unassigned(outs["unassigned"], mem, rules_items + notes_items)
     write_yaml(
         outs["v1"], _codebook_doc("what", 1, v1, families=families_doc(defs, v1))
     )
@@ -538,6 +562,7 @@ def consolidate_what(run, cfg, client, limit=None):
         families=len(defs),
         placement=placement,
         codes_without_members=empty,
+        generation_sampling=_sampling(cfg),
         failed=[dict(item=i, error=e) for i, e in a_rules[1] + a_notes[1]],
         model=client.model,
         limit=limit,
@@ -553,7 +578,7 @@ def _consolidate_single(run, cfg, client, kind, src_step, items, limit=None):
     draft_path = run.dir / "codebook" / f"{kind}.draft.yml"
     codes = read_yaml(draft_path)["codes"]
     survivors, defs, audit, placement = consolidate_codes(
-        client, cfg, step, kind, codes
+        client, cfg, step, kind, codes, target_codes(cfg, kind)
     )
     items = _limit(items, limit)
     a = assign(client, cfg, step, survivors, items, kind)
@@ -562,7 +587,9 @@ def _consolidate_single(run, cfg, client, kind, src_step, items, limit=None):
         "v1": run.path("codebook", f"{kind}.v1.yml"),
         "members": run.path("codebook", f"{kind}.v1.members.yml"),
         "merges": run.path("codebook", f"{kind}.merges.yml"),
+        "unassigned": run.path("codebook", f"{kind}.v1.unassigned.yml"),
     }
+    write_unassigned(outs["unassigned"], mem, items)
     write_yaml(
         outs["v1"],
         _codebook_doc(kind, 1, survivors, families=families_doc(defs, survivors)),
@@ -585,6 +612,7 @@ def _consolidate_single(run, cfg, client, kind, src_step, items, limit=None):
         codes_out=len(survivors),
         families=len(defs),
         placement=placement,
+        generation_sampling=_sampling(cfg),
         failed=[dict(item=i, error=e) for i, e in a[1]],
         model=client.model,
         limit=limit,
@@ -632,6 +660,7 @@ def why_codebook(run, cfg, client, limit=None):
         expected=len(items),
         written=len(assignment),
         failed=[dict(item=i, error=e) for i, e in failed],
+        generation_sampling=_sampling(cfg),
         model=client.model,
         limit=limit,
     )
@@ -676,6 +705,7 @@ def basis_codebook(run, cfg, client, limit=None):
         expected=len(items),
         written=len(assignment),
         failed=[dict(item=i, error=e) for i, e in failed],
+        generation_sampling=_sampling(cfg),
         model=client.model,
         limit=limit,
     )
