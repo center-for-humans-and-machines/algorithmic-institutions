@@ -1,0 +1,31 @@
+params:
+  thr:
+    definition: >-
+      contribution below which a member counts as a free-rider and is
+      punished; members giving thr or more are never punished
+    type: float
+  base:
+    definition: flat fine for any member giving less than thr
+    type: float
+  slope:
+    definition: extra fine per point of contribution short of thr
+    type: float
+  t_stop:
+    definition: last round (0-23) in which the manager punishes at all
+    type: int
+sweep_config:
+  thr: [3, 15]
+  base: [0, 3]
+  slope: [0, 0.8]
+  t_stop: [10, 23]
+constraints:
+  - thr > 0
+  - base >= 0
+  - slope >= 0
+code: |
+  c_now = c[..., -1]
+  short = th.clamp(thr - c_now, min=0)
+  below = (short > 0).float()
+  active = (t <= t_stop).float()
+  mine = in_group[..., -1] * valid[..., -1]
+  punishment = (base + slope * short) * below * active * mine
