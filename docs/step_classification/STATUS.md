@@ -24,9 +24,9 @@ Last updated: 2026-11-12, 18:40. This file is the handover for picking the work 
 | Run id | Where | What | State |
 |---|---|---|---|
 | `dev0`, `e2e-rev2` | Mac | Fake backend, end to end | Done, local only |
-| `viper0` | viper | Trial on a few versions, Qwen3-30B-A3B | Done |
-| `viper1` | viper | First full run, both stages, Qwen3-30B-A3B, pass-through review | Done, on S3 |
-| `viper2` | viper | Follow-up run after prompt fixes | In progress |
+| `viper0` | viper | Trial on a few versions, Qwen3-30B-A3B | Done, on S3 |
+| `viper1` | viper | First full run, both stages, Qwen3-30B-A3B, pass-through review, simulated expert check | Done, on S3, with `REPORT.md` |
+| `viper2` | viper | Same corpus after the prompt fixes of commit 732e137d; stage A, pass-through review and stage B in one job | Done, on S3; compared in viper1's `REPORT.md` |
 | `smoke-dais` | dais | Job-script tests with Qwen3-30B-A3B | 1-GPU test passes, 2-GPU test queued |
 | `dais0` | dais | First boot of DeepSeek V4.1 Flash plus a trial on 6 versions | Not started |
 
