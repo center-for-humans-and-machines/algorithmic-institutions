@@ -1,0 +1,76 @@
+# Final run of /home/kappablanca/pf_runs/worktrees_diff/pf-20261112-5/plots/simulation/policy_finder/pf-20261112-5-v5_sweep/sweep.json, written by scripts/policy_finder/generate_sim_config.py:
+# the Gaussian process's peak against `ah` in both seats (configs/simulation/opponents/exp2_diff.yml) on fresh seeds; its sweep.json holds the
+# rule's final result. Stack and sim parameters from configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 1000
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261112-5-v5_gp:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-5-v5.yml
+    params: {D0: 11.938798206840982, D4: 12.132424071051625, D8: 11.74015787293653, s: 0.797239250951429, hi: 5}
+    setting: exp2_diff
+  pf-20261112-5-v5_s047:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-5-v5.yml
+    params: {D0: 24.019831717014313, D4: 19.399320352822542, D8: 14.647860014811158, s: 0.8752581086009741, hi: 6}
+    setting: exp2_diff
+  pf-20261112-5-v5_s045:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-5-v5.yml
+    params: {D0: 14.581873985007405, D4: 13.793697953224182, D8: 1.3617930561304092, s: 0.6689578779041767, hi: 5}
+    setting: exp2_diff
+  pf-20261112-5-v5_s007:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-5-v5.yml
+    params: {D0: 29.397983411327004, D4: 17.78363035991788, D8: 1.7888438422232866, s: 0.4239351414144039, hi: 3}
+    setting: exp2_diff
+  pf-20261112-5-v5_s075:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-5-v5.yml
+    params: {D0: 15.841618571430445, D4: 13.9844742231071, D8: 28.287326814606786, s: 0.13328359834849834, hi: 5}
+    setting: exp2_diff
+  pf-20261112-5-v5_s218:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-5-v5.yml
+    params: {D0: 8.319928860291839, D4: 24.185133688151836, D8: 6.652019675821066, s: 0.18772950023412704, hi: 5}
+    setting: exp2_diff
+pairings:
+- {name: pf-20261112-5-v5_gp_vs_ah, group_0: pf-20261112-5-v5_gp, group_1: ah}
+- {name: ah_vs_pf-20261112-5-v5_gp, group_0: ah, group_1: pf-20261112-5-v5_gp}
+- {name: pf-20261112-5-v5_s047_vs_ah, group_0: pf-20261112-5-v5_s047, group_1: ah}
+- {name: ah_vs_pf-20261112-5-v5_s047, group_0: ah, group_1: pf-20261112-5-v5_s047}
+- {name: pf-20261112-5-v5_s045_vs_ah, group_0: pf-20261112-5-v5_s045, group_1: ah}
+- {name: ah_vs_pf-20261112-5-v5_s045, group_0: ah, group_1: pf-20261112-5-v5_s045}
+- {name: pf-20261112-5-v5_s007_vs_ah, group_0: pf-20261112-5-v5_s007, group_1: ah}
+- {name: ah_vs_pf-20261112-5-v5_s007, group_0: ah, group_1: pf-20261112-5-v5_s007}
+- {name: pf-20261112-5-v5_s075_vs_ah, group_0: pf-20261112-5-v5_s075, group_1: ah}
+- {name: ah_vs_pf-20261112-5-v5_s075, group_0: ah, group_1: pf-20261112-5-v5_s075}
+- {name: pf-20261112-5-v5_s218_vs_ah, group_0: pf-20261112-5-v5_s218, group_1: ah}
+- {name: ah_vs_pf-20261112-5-v5_s218, group_0: ah, group_1: pf-20261112-5-v5_s218}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 1000
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261112-5-v5_sweep/final
+figure_name: pf-20261112-5-v5_sweep_final
+save_per_round: true
+basedir: .
+sweep_metric: pool_diff_vs_opponents
+sweep_opponents:
+- ah
+sweep: true
