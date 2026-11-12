@@ -1,0 +1,46 @@
+params:
+  n_min:
+    definition: >-
+      minimum size of the own group (members this round) for punishment to be dealt at all; punishment is
+      dealt only when the other group is a weak alternative (8 - n_min members or fewer), because a punished
+      member leaves when the other group is a real option and stays when it is nearly empty
+    type: int
+  last_b:
+    definition: >-
+      the last block start at which punishment may be dealt: punishment only in rounds 4, 8, ..., 4*last_b
+      (5 includes round 20, after the last switch); never in round 0, never mid-block or at a switch decision
+    type: int
+  thr:
+    definition: >-
+      low-contribution threshold in points: a member counts as a low contributor in a round if it gave at
+      most thr
+    type: int
+  streak:
+    definition: >-
+      persistence required: a member is punished only if it was a low contributor in each of the last
+      streak rounds (this one included), so one-round dips, which revert on their own, are left alone
+    type: int
+  amt:
+    definition: >-
+      flat punishment in points dealt to each persistent low contributor at an eligible block start
+    type: float
+sweep_config:
+  n_min: [5, 8]
+  last_b: [1, 5]
+  thr: [1, 10]
+  streak: [1, 3]
+  amt: [2, 16, log]
+code: |
+  T = c.shape[-1]
+  here = in_group[..., -1]
+  size = here.sum(-1, keepdim=True)
+  big = (size >= n_min).float()
+  pos = th.remainder(t, 4.0)
+  eligible = (pos == 0).float() * (t >= 4).float() * (t <= 4.0 * last_b).float() * (t < 23).float()
+  idx = th.arange(T, device=c.device).float()
+  recent = (idx >= t + 1 - streak).float()
+  low = (c <= thr).float()
+  n_low = (low * recent).sum(-1)
+  n_need = th.clamp(th.minimum(streak, t + 1.0), min=1.0)
+  persistent = (n_low >= n_need).float()
+  punishment = amt * persistent * big * eligible * valid[..., -1] * here
