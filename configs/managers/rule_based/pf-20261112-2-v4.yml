@@ -1,0 +1,54 @@
+params:
+  gap:
+    definition: >-
+      shortfall line: a member is fined only if the mean contribution of the
+      other valid members of my group this round exceeds his own by at least
+      gap points (a shirker relative to his own group, not in absolute terms)
+    type: float
+  fine:
+    definition: >-
+      flat fine for a member past the shortfall line in a fining round
+      (floored to an integer, so below 1 means never punish)
+    type: float
+  n_min:
+    definition: >-
+      smallest size of my group (members this round) at which the manager
+      fines at all; in smaller groups an exit risks emptying the group
+    type: int
+  start:
+    definition: >-
+      first fining block: no fines before round 4*start (0 = from round 0,
+      1 = after the first switch decision)
+    type: int
+  last_block:
+    definition: >-
+      fining stops after block last_block - 1, i.e. no fines after round
+      4*last_block - 1 (5 = through the last switch decision in round 19,
+      6 = through the end of the game)
+    type: int
+sweep_config:
+  gap: [5, 15]
+  fine: [0, 10]
+  n_min: [2, 6]
+  start: [0, 2]
+  last_block: [3, 6]
+constraints:
+  - gap > 0
+  - fine >= 0
+  - n_min >= 1
+  - start >= 0
+  - last_block > start
+code: |
+  c_now = c[..., -1]
+  mine = in_group[..., -1] * valid[..., -1]
+  cm = c_now * mine
+  total = cm.sum(-1).unsqueeze(-1)
+  n_valid = mine.sum(-1).unsqueeze(-1)
+  n_others = n_valid - mine
+  others_mean = (total - cm) / th.maximum(n_others, th.ones_like(n_others))
+  shortfall = others_mean - c_now
+  size = in_group[..., -1].sum(-1).unsqueeze(-1)
+  target = (shortfall >= gap).float() * (n_others > 0).float() * mine
+  big_enough = (size >= n_min).float()
+  window = (t >= 4 * start).float() * (t <= 4 * last_block - 1).float()
+  punishment = fine * target * big_enough * window
