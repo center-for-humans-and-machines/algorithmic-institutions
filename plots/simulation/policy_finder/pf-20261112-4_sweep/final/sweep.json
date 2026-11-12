@@ -1,0 +1,191 @@
+{
+  "best": {
+    "k": 0.05,
+    "target": 20.0,
+    "window": 1,
+    "stop": 2
+  },
+  "best_name": "pf-20261112-4_gp",
+  "rule": "configs/managers/rule_based/pf-20261112-4.yml",
+  "anchor": null,
+  "metric": "pool_diff_vs_opponents",
+  "score": "the mean over the opponents of the group's lead in common pool over the opponent's group in the same game: per round each group's pool 1.6*sum(c) - sum(p), empty group-rounds 0, mean over rounds, own minus the opponent's per episode, mean over episodes, both seats pooled; pool_se its standard error over episodes (the opponents' errors combined); `own` and `other` the two groups' pools; `pools` the same per opponent",
+  "seed": 1000,
+  "n_episodes": 1000,
+  "episode_batch_size": 1000,
+  "points": [
+    {
+      "name": "pf-20261112-4_gp",
+      "params": {
+        "k": 0.05,
+        "target": 20.0,
+        "window": 1,
+        "stop": 2
+      },
+      "pool": 16.636787499999997,
+      "pool_se": 1.4240936017308714,
+      "members": 4.6255,
+      "n_episodes": 2000,
+      "pools": {
+        "ah": {
+          "pool": 16.636787499999997,
+          "pool_se": 1.4240936017308714,
+          "members": 4.6255,
+          "n_episodes": 2000,
+          "own": 62.105362500000005,
+          "other": 45.468574999999994,
+          "other_members": 3.3745
+        }
+      },
+      "own": 62.105362500000005,
+      "other": 45.468574999999994,
+      "other_members": 3.3745
+    },
+    {
+      "name": "pf-20261112-4_s007",
+      "params": {
+        "k": 1.4164113914862657,
+        "target": 9.533618703484535,
+        "window": 1,
+        "stop": 11
+      },
+      "pool": 15.552845833333334,
+      "pool_se": 1.428681799761649,
+      "members": 4.53575,
+      "n_episodes": 2000,
+      "pools": {
+        "ah": {
+          "pool": 15.552845833333334,
+          "pool_se": 1.428681799761649,
+          "members": 4.53575,
+          "n_episodes": 2000,
+          "own": 62.60537083333333,
+          "other": 47.052525,
+          "other_members": 3.46425
+        }
+      },
+      "own": 62.60537083333333,
+      "other": 47.052525,
+      "other_members": 3.46425
+    },
+    {
+      "name": "pf-20261112-4_s241",
+      "params": {
+        "k": 0.21389995849388085,
+        "target": 11.425598964095116,
+        "window": 4,
+        "stop": 7
+      },
+      "pool": 14.708808333333334,
+      "pool_se": 1.4111979289172412,
+      "members": 4.504583333333333,
+      "n_episodes": 2000,
+      "pools": {
+        "ah": {
+          "pool": 14.708808333333334,
+          "pool_se": 1.4111979289172412,
+          "members": 4.504583333333333,
+          "n_episodes": 2000,
+          "own": 61.753620833333336,
+          "other": 47.0448125,
+          "other_members": 3.4954166666666664
+        }
+      },
+      "own": 61.753620833333336,
+      "other": 47.0448125,
+      "other_members": 3.4954166666666664
+    },
+    {
+      "name": "pf-20261112-4_s245",
+      "params": {
+        "k": 0.08612375988106664,
+        "target": 7.437794059514999,
+        "window": 1,
+        "stop": 21
+      },
+      "pool": 14.163462500000001,
+      "pool_se": 1.4329961135878402,
+      "members": 4.56725,
+      "n_episodes": 2000,
+      "pools": {
+        "ah": {
+          "pool": 14.163462500000001,
+          "pool_se": 1.4329961135878402,
+          "members": 4.56725,
+          "n_episodes": 2000,
+          "own": 61.10426666666667,
+          "other": 46.940804166666666,
+          "other_members": 3.43275
+        }
+      },
+      "own": 61.10426666666667,
+      "other": 46.940804166666666,
+      "other_members": 3.43275
+    },
+    {
+      "name": "pf-20261112-4_s130",
+      "params": {
+        "k": 0.05253393063830117,
+        "target": 19.90763682126999,
+        "window": 2,
+        "stop": 4
+      },
+      "pool": 16.325933333333335,
+      "pool_se": 1.3756197404956545,
+      "members": 4.636333333333333,
+      "n_episodes": 2000,
+      "pools": {
+        "ah": {
+          "pool": 16.325933333333335,
+          "pool_se": 1.3756197404956545,
+          "members": 4.636333333333333,
+          "n_episodes": 2000,
+          "own": 60.343849999999996,
+          "other": 44.01791666666667,
+          "other_members": 3.3636666666666666
+        }
+      },
+      "own": 60.343849999999996,
+      "other": 44.01791666666667,
+      "other_members": 3.3636666666666666
+    },
+    {
+      "name": "pf-20261112-4_s047",
+      "params": {
+        "k": 0.8560336442969677,
+        "target": 8.593467965722084,
+        "window": 2,
+        "stop": 16
+      },
+      "pool": 15.701379166666669,
+      "pool_se": 1.4397681086299827,
+      "members": 4.5245,
+      "n_episodes": 2000,
+      "pools": {
+        "ah": {
+          "pool": 15.701379166666669,
+          "pool_se": 1.4397681086299827,
+          "members": 4.5245,
+          "n_episodes": 2000,
+          "own": 62.4219875,
+          "other": 46.72060833333334,
+          "other_members": 3.4755
+        }
+      },
+      "own": 62.4219875,
+      "other": 46.72060833333334,
+      "other_members": 3.4755
+    }
+  ],
+  "opponents": [
+    "ah"
+  ],
+  "best_of_n": {
+    "k": 0.05,
+    "target": 20.0,
+    "window": 1,
+    "stop": 2
+  },
+  "best_of_n_name": "pf-20261112-4_gp",
+  "n_points": 6
+}
