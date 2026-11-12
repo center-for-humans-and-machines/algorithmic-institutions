@@ -11,21 +11,27 @@
 #   annot_gpu_sampler       runs forever, appending GPU samples to stdout
 #
 # Contract with the pipeline (src/aimanager/annotation): the command runs with
-# cwd = project dir, PYTHONPATH=<project>/src and
+# cwd = project dir, PYTHONPATH=<code>/src (the per-job code snapshot that
+# submit.sh made, CFG_CODE_DIR, else the project dir) and
 #   ANNOT_BASE_URL=http://127.0.0.1:<port>/v1  ANNOT_MODEL=<served model id>
 #   ANNOT_RUNS_ROOT=<project>/runs/annotation  ANNOT_RUN_ID  ANNOT_JOB_LOG_DIR
-# and the job exits with the command's status.
+#   ANNOT_MAX_MODEL_LEN=<--max-model-len>  ANNOT_CODE_DIR=<code>
+# With CFG_PIPELINE_PREFLIGHT=1 (default) the command is preceded by
+# `python -m aimanager.annotation preflight --run <run_id>` and runs only if
+# every schema passes. The job exits with the command's status.
 # shellcheck shell=bash
 
 mark() { echo "$(date +%s) $(date -Is) $*" | tee -a "$LOG_DIR/timeline.txt"; }
 
 annot_init() {
     : "${ANNOT_RUN_ID:?}" "${ANNOT_CMD:?}" "${CFG_PROJECT:?}" "${CFG_MODEL:?}"
+    CODE_DIR="${CFG_CODE_DIR:-$CFG_PROJECT}"
     RUN_DIR="$CFG_RUNS_ROOT/$ANNOT_RUN_ID"
     LOG_DIR="$RUN_DIR/logs/job-${SLURM_JOB_ID}"
     JOB_TMP="${JOB_SHMTMPDIR:-${TMPDIR:-/tmp}}/annot_${SLURM_JOB_ID}"
     mkdir -p "$LOG_DIR" "$JOB_TMP"/{home,shim,tmp}
     cp "$ANNOT_JOB_ENV" "$LOG_DIR/job.env"
+    cp "$CODE_DIR/CODE_VERSION" "$LOG_DIR/" 2>/dev/null || true
     # per-job port window so co-scheduled jobs on one node never collide
     PORT=$((20000 + (SLURM_JOB_ID % 2000) * 10))
     while (exec 3<>"/dev/tcp/127.0.0.1/$PORT") 2>/dev/null; do PORT=$((PORT + 1)); done
@@ -107,7 +113,7 @@ annot_link_model() {
     fi
     local snap="$CFG_HF_HOME/hub/$name/snapshots/$CFG_REVISION"
     [ -f "$snap/config.json" ] || { mark "FAIL $snap has no config.json"; return 1; }
-    if find -L "$snap" -type l | grep -q .; then
+    if [ -n "$(find -L "$snap" -type l -print -quit)" ]; then
         mark "FAIL dangling links in $snap (blobs purged or download incomplete)"
         return 1
     fi
@@ -156,6 +162,12 @@ annot_start_server() {
 annot_wait_ready() {
     local deadline=$(($(date +%s) + CFG_WAIT_MIN * 60))
     until curl -sf "$BASE_URL/v1/models" 2>/dev/null | grep -q "\"$CFG_MODEL\""; do
+        # a TERM or the wall-time signal during the wait ends the job (cleanup
+        # runs from the EXIT trap) instead of being ignored until SIGKILL
+        if [ -n "$STOP_REASON" ]; then
+            mark "FAIL stopped while waiting for the server: $STOP_REASON"
+            return 1
+        fi
         if ! kill -0 "$SERVER_PID" 2>/dev/null; then
             mark "FAIL server died before becoming ready"
             tail -40 "$LOG_DIR/vllm.log"
@@ -203,14 +215,19 @@ annot_run_command() {
     local left
     left=$(annot_seconds_left)
     [ "$left" -gt 60 ] || { mark "FAIL only ${left}s left before the wall-time buffer"; return 1; }
-    mark "START command (internal limit ${left}s)"
+    local cmd=$ANNOT_CMD
+    if [ "${CFG_PIPELINE_PREFLIGHT:-1}" = 1 ]; then
+        cmd="python -m aimanager.annotation preflight --run $(printf %q "$ANNOT_RUN_ID") && { $ANNOT_CMD; }"
+    fi
+    mark "START command (internal limit ${left}s): $cmd"
     setsid timeout --signal=TERM --kill-after=60 "$left" \
         apptainer exec "${COMMON_FLAGS[@]}" "${CONTAINER_FLAGS[@]}" "$CFG_IMAGE" \
-        env PYTHONPATH="$CFG_PROJECT/src" \
+        env PYTHONPATH="$CODE_DIR/src" ANNOT_CODE_DIR="$CODE_DIR" \
+        ANNOT_MAX_MODEL_LEN="$CFG_MAX_MODEL_LEN" \
         ANNOT_BASE_URL="$BASE_URL/v1" ANNOT_MODEL="$CFG_MODEL" \
         ANNOT_RUNS_ROOT="$CFG_RUNS_ROOT" ANNOT_RUN_ID="$ANNOT_RUN_ID" \
         ANNOT_JOB_LOG_DIR="$LOG_DIR" ANNOT_SHIM="$JOB_TMP/shim" \
-        bash -c "$SHIM_PRELUDE $ANNOT_CMD" >"$LOG_DIR/command.log" 2>&1 &
+        bash -c "$SHIM_PRELUDE $cmd" >"$LOG_DIR/command.log" 2>&1 &
     CMD_PID=$!
     local rc=0
     wait "$CMD_PID" || rc=$?
@@ -246,7 +263,7 @@ annot_cleanup() {
     fi
     wait 2>/dev/null || true
     mark "server stopped"
-    cexec python3 "$CFG_PROJECT/scripts/annotation/cluster/metrics_summary.py" "$LOG_DIR" \
+    cexec python3 "$CODE_DIR/scripts/annotation/cluster/metrics_summary.py" "$LOG_DIR" \
         >"$LOG_DIR/summary.json" 2>"$LOG_DIR/summary.err" && cat "$LOG_DIR/summary.json" || true
     rm -rf "$JOB_TMP"
 }

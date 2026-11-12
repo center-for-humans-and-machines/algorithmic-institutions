@@ -18,6 +18,7 @@ Failure handling:
 
 import hashlib
 import json
+import os
 import re
 import threading
 import time
@@ -219,6 +220,11 @@ class LLMClient:
                 raise SystemExit("no endpoint: pass --base-url or set ANNOT_BASE_URL")
             self.backend = HttpBackend(base_url, self.cfg, transport)
         self.model = model or self.backend.default_model()
+        # the server's context length (the job passes --max-model-len)
+        self.max_model_len = int(
+            os.environ.get("ANNOT_MAX_MODEL_LEN")
+            or self.cfg.get("max_model_len", 32768)
+        )
         self.extra = self._extra_body(self.model)
         self.use_cache = use_cache
         self.log_lock = threading.Lock()
@@ -302,16 +308,18 @@ class LLMClient:
                 "latency_s": latency,
                 "reasoning_chars": len(resp.get("reasoning") or ""),
             }
+            content, stripped = strip_think(resp.get("content") or "")
+            info["think_stripped"] = stripped
+            # checked before `length`: a thinking model usually runs out of
+            # tokens while still reasoning
+            if not content.strip() and resp.get("reasoning"):
+                self._log(call, resp, latency, hit, max_tokens, "thinking")
+                raise Abort(f"{call.step} {call.item_id}: {THINKING_HELP}")
             if resp.get("finish_reason") == "length":
                 self._log(call, resp, latency, hit, max_tokens, "length")
                 if self.use_cache and not hit:
                     atomic_write_text(path, json.dumps(resp, ensure_ascii=False))
                 return None
-            content, stripped = strip_think(resp.get("content") or "")
-            info["think_stripped"] = stripped
-            if not content.strip() and resp.get("reasoning"):
-                self._log(call, resp, latency, hit, max_tokens, "thinking")
-                raise Abort(f"{call.step} {call.item_id}: {THINKING_HELP}")
             if stripped:
                 with self.log_lock:
                     self.n_think_stripped += 1

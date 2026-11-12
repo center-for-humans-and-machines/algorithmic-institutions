@@ -32,7 +32,7 @@ $A join --run R                         # analysis/version_codes.csv, quality.js
                                         # agreement.csv
 ```
 
-Each step can also be run alone (`$A coverage --run R ...`). Every validated LLM reply (and every `length` reply) is cached under `cache/` keyed on model, messages, schema and sampling parameters, so a rerun repeats only missing or failed calls; invalid replies are never cached. Every call is logged in `logs/calls.jsonl`.
+Proposal prompts hold at most `clustering.max_items_in_proposal` items and only as many as fit the context length (`llm.max_model_len`, or `ANNOT_MAX_MODEL_LEN` from the job) next to `max_tokens.propose.retry`; the rest are sampled out with a seed and the step logs how many. Each step can also be run alone (`$A coverage --run R ...`). Every validated LLM reply (and every `length` reply) is cached under `cache/` keyed on model, messages, schema and sampling parameters, so a rerun repeats only missing or failed calls; invalid replies are never cached. Every call is logged in `logs/calls.jsonl`.
 
 ## Failures
 
@@ -44,7 +44,7 @@ A step that cannot produce valid outputs exits non-zero and writes nothing:
 
 ## Preflight
 
-`preflight` sends one structured request per schema the pipeline uses (free codes, notes record, codebook proposal, assignment, rule judgement) with a short built-in sample, bypassing the cache, and prints per schema whether the reply parsed, the latency and whether reasoning text leaked. A cluster job runs it before the real stage; it exits 1 if any schema fails.
+`preflight` sends one structured request per schema the pipeline uses (free codes, notes record, codebook proposal, assignment, rule judgement) with a short built-in sample, bypassing the cache, and prints per schema whether the reply parsed, the latency and whether reasoning text leaked. A cluster job runs it before its command (unless `CFG_PIPELINE_PREFLIGHT=0`) and runs the command only if it passes; it exits 1 if any schema fails.
 
 ## Manifests and revisions
 

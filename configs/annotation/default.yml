@@ -27,7 +27,12 @@ sampling:
 
 llm:
   temperature: 0.0
-  concurrency: 16
+  # requests in flight; the server batches up to --max-num-seqs (128)
+  concurrency: 64
+  # the server's context length; a cluster job overrides it with
+  # ANNOT_MAX_MODEL_LEN (= --max-model-len). Proposal prompts are cut to fit
+  # it together with max_tokens.propose.retry.
+  max_model_len: 32768
   connect_timeout: 10
   # seconds without a byte from the server; sized for the longest structured
   # reply (12k tokens at a slow ~15 tokens/s under full batch load)
@@ -73,7 +78,8 @@ failure_budget:
   judge: 0.0
 
 clustering:
-  # proposal call sees at most this many items (seeded sample beyond that)
+  # proposal call sees at most this many items, and only as many as fit the
+  # context length (seeded sample beyond that; the step logs how many)
   max_items_in_proposal: 400
   refine_rounds: 2
   # a refinement round runs only if at least this many items are unassigned

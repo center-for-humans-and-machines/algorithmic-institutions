@@ -21,7 +21,7 @@ set -euo pipefail
 # shellcheck source=/dev/null
 source "$ANNOT_JOB_ENV"
 # shellcheck source=common.sh
-source "$CFG_PROJECT/scripts/annotation/cluster/common.sh"
+source "${CFG_CODE_DIR:-$CFG_PROJECT}/scripts/annotation/cluster/common.sh"
 
 annot_container_flags() {
     # --contain: no host /tmp, /dev/shm or home leak into the image

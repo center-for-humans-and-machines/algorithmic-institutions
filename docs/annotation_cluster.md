@@ -21,12 +21,13 @@ How the step-classification pipeline (`docs/plans/step-classification-pipeline.m
 
 The job runs the command given to `submit.sh` with `bash -c` inside the serving image, with the working directory at the project dir and:
 
-- `PYTHONPATH=<project>/src`
+- `PYTHONPATH=<code>/src`, where `<code>` is the per-job snapshot `<run>/jobs/<stamp>.code/` that `submit.sh` copies from the synced project dir (package, `configs/annotation`, `scripts/annotation`, `CODE_VERSION`), so a later sync never changes a queued or running job; `ANNOT_CODE_DIR=<code>`
+- `ANNOT_MAX_MODEL_LEN=<--max-model-len>` (the pipeline cuts proposal prompts to fit it)
 - `ANNOT_BASE_URL=http://127.0.0.1:<port>/v1` (port unique per job)
 - `ANNOT_MODEL=<served model id>` (the Hugging Face id, e.g. `Qwen/Qwen3-30B-A3B-Instruct-2507`)
 - `ANNOT_RUNS_ROOT=<project>/runs/annotation`, `ANNOT_RUN_ID`, `ANNOT_JOB_LOG_DIR`
 
-`python` resolves to the image's `python3` (the CUDA image has no `python`). All three images in use have `pydantic` 2, `yaml`, `openai` and `httpx` (checked at every job start). The job exits with the command's status; judge a stage by the rows it wrote, not by `COMPLETED`.
+Unless `CFG_PIPELINE_PREFLIGHT=0`, the job runs `python -m aimanager.annotation preflight --run <run_id>` first and the command only if every schema passes, so a submitted command need not include it. `python` resolves to the image's `python3` (the CUDA image has no `python`). All three images in use have `pydantic` 2, `yaml`, `openai` and `httpx` (checked at every job start). The job exits with the command's status; judge a stage by the rows it wrote, not by `COMPLETED`.
 
 ## Workflow
 
@@ -34,7 +35,7 @@ The job runs the command given to `submit.sh` with `bash -c` inside the serving 
 # 0. on the Mac, in this checkout: corpus etc. under runs/annotation/<run_id>/
 # 1. sync code + run dir and submit (sync is part of submit.sh)
 scripts/annotation/cluster/submit.sh viper r1 "python -m aimanager.annotation stage A --run r1"
-#    overrides: any CFG_* from config.sh, plus --dry-run (sbatch --test-only), --dependency=afterok:<id>
+#    overrides: any CFG_* from config.sh, plus --dry-run (sbatch --test-only, no sync), --dependency=afterok:<id>
 scripts/annotation/cluster/submit.sh viper r1 "python -m aimanager.annotation stage A --run r1" \
     CFG_TIME=04:00:00 CFG_MAX_NUM_SEQS=64
 # 2. monitor
@@ -50,7 +51,7 @@ python3 scripts/annotation/s3_sync.py pull r1            # on another machine
 
 Preflight before a real stage: `submit.sh <cluster> <run_id> "python scripts/annotation/cluster/probe.py"` with the production settings. On viper the `apudev` partition (15 min, `CFG_PARTITION=apudev CFG_TIME=00:15:00 CFG_WALL_BUFFER_MIN=2`) fits even the 30B model; on dais `gpudev` (15 min, at most 4 GPUs, one job per user) fits a small model, not the production one.
 
-Every job leaves in `<run>/logs/job-<jobid>/`: `timeline.txt` (job start, server start, ready, command start/end), `job.env` (resolved config), `serve_cmd.txt`, `vllm.log`, `startup_lines.txt` (weight load, KV cache size, compile, graph capture), `metrics_start.prom`, `metrics_end.prom`, `metrics_samples.txt` (every 15 s: KV cache use, running and waiting requests incl. grammar-deferred, prompt and generation token counters, prefix-cache hits, preemptions), `gpu_samples.txt` (rocm-smi or nvidia-smi), `version.json`, `command.log`, `summary.json`. Slurm's own log is `<run>/logs/slurm-<jobid>.out`.
+Every job leaves in `<run>/logs/job-<jobid>/`: `CODE_VERSION` (commit synced, `dirty` if uncommitted changes), `timeline.txt` (job start, server start, ready, command start/end), `job.env` (resolved config), `serve_cmd.txt`, `vllm.log`, `startup_lines.txt` (weight load, KV cache size, compile, graph capture), `metrics_start.prom`, `metrics_end.prom`, `metrics_samples.txt` (every 15 s: KV cache use, running and waiting requests incl. grammar-deferred, prompt and generation token counters, prefix-cache hits, preemptions), `gpu_samples.txt` (rocm-smi or nvidia-smi), `version.json`, `command.log`, `summary.json`. Slurm's own log is `<run>/logs/slurm-<jobid>.out`.
 
 ## What the job does
 
@@ -83,7 +84,7 @@ All probe checks passed in both viper jobs: plain chat, top-level `response_form
 
 The dais smoke (job 878226: `serve_and_run.dais.sbatch`, vLLM 0.32.0 image, Qwen3-30B-A3B-Instruct-2507 read through a symlink into `~/.cache/huggingface` on one B200, the same probe) was submitted at 16:22 with an estimated start of 17:25. Its results land in `/dais/fs/scratch/levinb/algorithmic-institutions-annot/runs/annotation/smoke-dais/logs/job-878226/` (`probe.json`, `summary.json`); fetch them with `scripts/annotation/cluster/fetch_run.sh dais smoke-dais`. The submission itself passed `sbatch --test-only`, as did the production request (2x B200 on `gpu1`, 24 CPUs, 480G, estimated start the next morning).
 
-What this means for the pipeline: on viper the 30B model spends 8.5 min loading, 5 min of it reading weights, so a stage should be one job against one server. The KV cache is far larger than the workload needs (110 documents per pass, prompts up to about 12k tokens): at 128 sequences of 14k tokens it would be 1.8M tokens, above the 1.45M of TP 2, but the pipeline keeps 16 requests in flight (`llm.concurrency` in `configs/annotation/default.yml`); `CFG_MAX_NUM_SEQS` can be lowered to 64 if needed. The pipeline's concurrency of 16 is well below what the server can batch (it decoded 128 sequences at once without preemption); raising it towards 64 would shorten a pass.
+What this means for the pipeline: on viper the 30B model spends 8.5 min loading, 5 min of it reading weights, so a stage should be one job against one server. The KV cache is far larger than the workload needs (110 documents per pass, prompts up to about 12k tokens): at 128 sequences of 14k tokens it would be 1.8M tokens, above the 1.45M of TP 2, and the pipeline keeps at most 64 requests in flight (`llm.concurrency` in `configs/annotation/default.yml`, raised from 16 after the review: the server decoded 128 sequences at once without preemption).
 
 ## Storage and retention
 

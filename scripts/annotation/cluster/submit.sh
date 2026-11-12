@@ -7,7 +7,9 @@
 #   submit.sh dais smoke "python scripts/annotation/cluster/probe.py" \
 #       CFG_MODEL=Qwen/Qwen3-30B-A3B-Instruct-2507 CFG_TP=1 CFG_GPUS=1 \
 #       CFG_PARTITION=gpudev CFG_TIME=00:15:00
-# Syncs code and the local run dir first (sync_code.sh). The config is
+# Syncs code and the local run dir first (sync_code.sh; not with --dry-run),
+# then snapshots the synced code into <run>/jobs/<stamp>.code/, which the job
+# runs from, so a later sync cannot change a queued or running job. The config is
 # resolved on the login node from config.sh plus the overrides, written to
 # <run>/jobs/<stamp>.env (the job sources it, so values with commas or quotes
 # survive) and the sbatch header values are passed on the command line.
@@ -19,11 +21,12 @@ run_id=${2:?$usage}
 cmd=${3:?$usage}
 shift 3
 [[ $run_id =~ ^[A-Za-z0-9._-]+$ ]] || { echo "bad run_id: $run_id" >&2; exit 2; }
-sync=1 extra=()
+sync=1 dry=0 extra=()
 for a in "$@"; do
     case "$a" in
     --no-sync) sync=0 ;;
-    --dry-run | --dependency=* | --begin=* | --nodelist=* | --exclude=*) extra+=("$a") ;;
+    --dry-run) dry=1 extra+=("$a") ;;
+    --dependency=* | --begin=* | --nodelist=* | --exclude=*) extra+=("$a") ;;
     CFG_*=*) extra+=("$a") ;;
     *) echo "unknown argument: $a" >&2; exit 2 ;;
     esac
@@ -31,7 +34,7 @@ done
 # shellcheck source=config.sh
 source "$here/config.sh"
 P=$(cluster_config "$cluster" && echo "$CFG_PROJECT")
-[ "$sync" = 1 ] && "$here/sync_code.sh" "$cluster" "$run_id"
+if [ "$sync" = 1 ] && [ "$dry" = 0 ]; then "$here/sync_code.sh" "$cluster" "$run_id"; fi
 
 # ssh hands the remote shell one string; %q quoting survives that re-parse
 ssh -o BatchMode=yes "$cluster" "bash -s -- $(printf '%q ' "$P" "$cluster" "$run_id" "$cmd" ${extra[@]+"${extra[@]}"})" <<'REMOTE'
@@ -51,7 +54,18 @@ cluster_config "$cluster"
 model_config
 run_dir="$CFG_RUNS_ROOT/$run_id"
 mkdir -p "$run_dir/jobs" "$run_dir/logs"
-envf="$run_dir/jobs/$(date +%Y%m%dT%H%M%S)-$$.env"
+stamp="$(date +%Y%m%dT%H%M%S)-$$"
+envf="$run_dir/jobs/$stamp.env"
+CFG_CODE_DIR=$P
+if [ "$dry" = 0 ]; then
+    # per-job code snapshot: package, config, scripts and the synced version
+    CFG_CODE_DIR="$run_dir/jobs/$stamp.code"
+    mkdir -p "$CFG_CODE_DIR/src/aimanager" "$CFG_CODE_DIR/configs" "$CFG_CODE_DIR/scripts"
+    cp -a "$P/src/aimanager/__init__.py" "$P/src/aimanager/annotation" "$CFG_CODE_DIR/src/aimanager/"
+    cp -a "$P/configs/annotation" "$CFG_CODE_DIR/configs/"
+    cp -a "$P/scripts/annotation" "$CFG_CODE_DIR/scripts/"
+    cp -a "$P/CODE_VERSION" "$CFG_CODE_DIR/" 2>/dev/null || true
+fi
 {
     # shellcheck disable=SC2046
     declare -p $(compgen -v CFG_)
@@ -65,9 +79,9 @@ args=(--parsable --job-name "annot-$run_id" --partition "$CFG_PARTITION"
     --output "$run_dir/logs/slurm-%j.out"
     $CFG_SBATCH_EXTRA "${sbatch_extra[@]}"
     --export "ALL,ANNOT_JOB_ENV=$envf"
-    "$P/scripts/annotation/cluster/serve_and_run.$cluster.sbatch")
+    "$CFG_CODE_DIR/scripts/annotation/cluster/serve_and_run.$cluster.sbatch")
 echo "sbatch ${args[*]}"
-echo "model=$CFG_MODEL@$CFG_REVISION tp=$CFG_TP image=$CFG_IMAGE"
+echo "model=$CFG_MODEL@$CFG_REVISION tp=$CFG_TP image=$CFG_IMAGE code=$CFG_CODE_DIR"
 if [ "$dry" = 1 ]; then
     sbatch --test-only "${args[@]:1}"
 else

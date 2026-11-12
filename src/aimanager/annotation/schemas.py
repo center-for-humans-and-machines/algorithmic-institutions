@@ -11,8 +11,9 @@ class Quoted(BaseModel):
 
 
 # step 1a: free coding of a rule
+# Generous list bounds so a runaway reply cannot spend max_tokens on one list.
 class FreeCodes(BaseModel):
-    mechanisms: List[Quoted]
+    mechanisms: List[Quoted] = Field(max_length=20)
 
 
 # step 1b: notes record
@@ -39,7 +40,7 @@ class Mechanism(Quoted):
     source_version: Optional[str] = Field(
         description="earlier version the notes credit for this idea, else null"
     )
-    reasons: List[Reason]
+    reasons: List[Reason] = Field(max_length=12)
 
 
 class TheoryMention(BaseModel):
@@ -49,9 +50,9 @@ class TheoryMention(BaseModel):
 
 
 class NotesRecord(BaseModel):
-    mechanisms: List[Mechanism]
-    theory_mentions: List[TheoryMention]
-    unlinked_findings: List[Quoted]
+    mechanisms: List[Mechanism] = Field(max_length=30)
+    theory_mentions: List[TheoryMention] = Field(max_length=20)
+    unlinked_findings: List[Quoted] = Field(max_length=30)
 
 
 # clustering: proposal and refinement
@@ -59,12 +60,12 @@ class ProposedCode(BaseModel):
     name: str = Field(description="short snake_case identifier")
     label: str
     definition: str
-    fits: List[str]
-    does_not_fit: List[str]
+    fits: List[str] = Field(max_length=4)
+    does_not_fit: List[str] = Field(max_length=4)
 
 
 class Proposal(BaseModel):
-    codes: List[ProposedCode]
+    codes: List[ProposedCode] = Field(max_length=60)
 
 
 # answer values of an assignment that are not codes; no code may take these names

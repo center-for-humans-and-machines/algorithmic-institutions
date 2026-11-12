@@ -8,7 +8,7 @@ import yaml
 
 from aimanager.annotation.cli import main, review_begin
 from aimanager.annotation.client import Call, LLMClient
-from aimanager.annotation.cluster import to_codebook_entries
+from aimanager.annotation.cluster import est_tokens, fit_items, to_codebook_entries
 from aimanager.annotation.common import (
     Run,
     latest_codebook,
@@ -188,6 +188,16 @@ def test_failed_assignments_do_not_empty_the_codebook(tmp_path):
     with pytest.raises(SystemExit, match="failure_budget.assign"):
         what_codebook(run, cfg, client)
     assert not (run.dir / "codebook").exists()
+
+
+def test_proposal_items_fit_the_token_budget():
+    items = [(f"i{k}", "x" * 300) for k in range(500)]
+    kept = fit_items(items, budget_tokens=5000, cap=400, seed=1)
+    assert 0 < len(kept) < 500
+    assert sum(est_tokens(t) + 3 for _, t in kept) <= 5000
+    assert kept == [it for it in items if it in kept]  # input order kept
+    assert fit_items(items[:5], 5000, 400, 1) == items[:5]
+    assert len(fit_items(items, 10**6, 400, 1)) == 400
 
 
 def test_reserved_code_names():

@@ -14,7 +14,7 @@ import random
 
 from . import prompting as P
 from .client import Call
-from .common import check_failures, log, slugify
+from .common import StepFailed, check_failures, log, slugify
 from .schemas import RESERVED, Proposal, assignment_model
 
 UNITS = {
@@ -77,15 +77,53 @@ def assign(client, cfg, step, codes, items, kind, label=None):
     return out, failed
 
 
+def est_tokens(text):
+    """Conservative token estimate for budgeting (about 3 characters per token)."""
+    return len(text) // 3 + 1
+
+
+def fit_items(items, budget_tokens, cap, seed):
+    """At most `cap` items whose rendered list fits `budget_tokens`.
+
+    A seeded sample, kept in input order, when the items exceed either limit.
+    """
+    if len(items) <= cap and est_tokens(P.render_items(items)) <= budget_tokens:
+        return items
+    order = random.Random(seed).sample(range(len(items)), len(items))
+    keep, used = set(), 0
+    for i in order:
+        cost = est_tokens(items[i][1]) + 3  # number, newline, indentation
+        if len(keep) >= cap or used + cost > budget_tokens:
+            continue
+        keep.add(i)
+        used += cost
+    return [it for i, it in enumerate(items) if i in keep]
+
+
 def _propose(client, cfg, step, kind, items, codes, rnd):
     cap = cfg["clustering"].get("max_items_in_proposal", 400)
-    if len(items) > cap:
-        items = random.Random(len(items) * 1000 + rnd).sample(items, cap)
     instr = P.load(f"{kind}_propose")
     shared = ""
     if rnd:
         instr = instr + "\n\n" + P.load("refine")
         shared = P.render_codebook(codes, "Current codebook")
+    # prompt + the largest max_tokens of a proposal must fit the context length
+    fixed = est_tokens(P.load("system") + instr + shared) + 256
+    budget = client.max_model_len - cfg["llm"]["max_tokens"]["propose"]["retry"] - fixed
+    if budget <= 0:
+        raise StepFailed(
+            f"{step}: no room for items in a proposal: max_model_len "
+            f"{client.max_model_len} minus max_tokens.propose.retry minus the "
+            "instructions and codebook is not positive"
+        )
+    n_all = len(items)
+    items = fit_items(items, budget, cap, n_all * 1000 + rnd)
+    if len(items) < n_all:
+        log(
+            f"  {step}: {kind} proposal round {rnd} sees {len(items)} of {n_all} "
+            f"items ({n_all - len(items)} sampled out; cap {cap}, about {budget} "
+            "tokens for items)"
+        )
     call = Call(
         step,
         f"{kind}-propose-r{rnd}",

@@ -29,6 +29,9 @@ cluster_config() {
         : "${CFG_MEM:=220000}"
         : "${CFG_SBATCH_EXTRA:=--constraint=apu}"
         : "${CFG_WALL_BUFFER_MIN:=10}"
+        # the KV cache holds 1.45M tokens at TP 2, so a long context is cheap
+        # and gives proposal prompts room (the pipeline cuts them to fit)
+        : "${CFG_MAX_MODEL_LEN:=65536}"
         ;;
     dais)
         # Production: B200 nodes (8x 183 GB). gpu1 takes up to 4 GPUs per job
@@ -69,6 +72,8 @@ cluster_config() {
     : "${CFG_MAX_BATCHED_TOKENS:=8192}"
     : "${CFG_STRUCTURED_BACKEND:=xgrammar}"
     : "${CFG_SAMPLE_SEC:=15}"
+    # run the pipeline preflight (one request per schema) before the command
+    : "${CFG_PIPELINE_PREFLIGHT:=1}"
     : "${CFG_EXTRA_ARGS:=}"
 }
 
