@@ -80,6 +80,10 @@ cluster_config() {
 model_config() {
     # Revision pins, reasoning parser, KV dtype and model-specific serve flags.
     # CFG_MODEL_ARGS and CFG_SERVE_ENV are arrays (JSON values keep their commas).
+    # A CFG_MODEL_ARGS override replaces the model's flags; CFG_SERVE_ENV
+    # entries are appended to the defaults (later entries win). Call once.
+    local serve_env=() user_env=()
+    if declare -p CFG_SERVE_ENV >/dev/null 2>&1; then user_env=("${CFG_SERVE_ENV[@]}"); fi
     case "$CFG_MODEL" in
     Qwen/Qwen3-30B-A3B-Instruct-2507)
         : "${CFG_REVISION:=0d7cf23991f47feeb3a57ecb4c9cee8ea4a17bfe}"
@@ -99,7 +103,9 @@ model_config() {
         : "${CFG_REVISION:=08c8657f02291e11b6f6b63e0e16014f8e748518}"
         : "${CFG_REASONING_PARSER:=deepseek_v41}"
         : "${CFG_KV_DTYPE:=fp8}"
-        : "${CFG_WAIT_MIN:=120}"
+        # first boot: 510 GB load plus a FlashInfer autotune of 75-90 min
+        # (recipe), so the wait and the engine timeout sit well above it
+        : "${CFG_WAIT_MIN:=200}"
         # FlashInfer autotune on first boot can take over an hour (recipe);
         # keep its cache across jobs
         : "${CFG_PERSIST_COMPILE_CACHE:=1}"
@@ -112,11 +118,10 @@ model_config() {
                 --language-model-only
             )
         fi
-        if ! declare -p CFG_SERVE_ENV >/dev/null 2>&1; then
-            # first load can be long; the Rust frontend of the recipe is left
-            # off until response_format + chat_template_kwargs are proven on it
-            CFG_SERVE_ENV=(VLLM_ENGINE_READY_TIMEOUT_S=7200)
-        fi
+        # first load can be long (engine timeout above CFG_WAIT_MIN); the Rust
+        # frontend of the recipe is left off until response_format and
+        # chat_template_kwargs are proven on it
+        serve_env=(VLLM_ENGINE_READY_TIMEOUT_S=14400)
         ;;
     *)
         if [ -z "${CFG_REVISION:-}" ]; then
@@ -129,8 +134,6 @@ model_config() {
     : "${CFG_KV_DTYPE:=auto}"
     : "${CFG_WAIT_MIN:=30}"
     if ! declare -p CFG_MODEL_ARGS >/dev/null 2>&1; then CFG_MODEL_ARGS=(); fi
-    if ! declare -p CFG_SERVE_ENV >/dev/null 2>&1; then CFG_SERVE_ENV=(); fi
-    if [ "$CFG_CLUSTER" = viper ] && [ ${#CFG_SERVE_ENV[@]} -eq 0 ]; then
-        CFG_SERVE_ENV=(VLLM_ROCM_USE_AITER=1)
-    fi
+    if [ "$CFG_CLUSTER" = viper ]; then serve_env=(VLLM_ROCM_USE_AITER=1 "${serve_env[@]}"); fi
+    CFG_SERVE_ENV=("${serve_env[@]}" "${user_env[@]}")
 }

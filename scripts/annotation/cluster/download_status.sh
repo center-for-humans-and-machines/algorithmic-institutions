@@ -8,9 +8,13 @@ cluster=${1:-dais}
 # shellcheck source=config.sh
 source "$here/config.sh"
 cluster_config "$cluster"
-repo=${2:-$CFG_PROD_MODEL}
-rev=${3:-$CFG_PROD_REVISION}
-hf_home=$CFG_PROD_HF_HOME
+repo=${2:-${CFG_PROD_MODEL:-}}
+rev=${3:-${CFG_PROD_REVISION:-}}
+hf_home=${CFG_PROD_HF_HOME:-${CFG_HF_HOME}}
+[ -n "$repo" ] && [ -n "$rev" ] || {
+    echo "no production model configured for $cluster; pass repo_id and revision" >&2
+    exit 2
+}
 
 ssh -o BatchMode=yes "$cluster" bash -s -- "$repo" "$rev" "$hf_home" <<'EOF'
 set -euo pipefail

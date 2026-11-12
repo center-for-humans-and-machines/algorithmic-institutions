@@ -8,8 +8,11 @@ Local side: runs/annotation/<run_id>/ (or --local-dir). Remote side:
 s3://chm-algorithmic-institutions/policy_finder/step_classification/<run_id>/.
 A file is copied only when it is missing on the other side or differs in size
 or content (MD5, or the multipart ETag computed with the remote part count).
-Nothing is ever deleted, on either side. The response cache (<run>/cache/) is
-left out unless --include-cache is given.
+A copy never replaces a newer file: push skips objects modified on S3 after
+the local file's mtime, pull skips local files modified after the object
+(both reported; --force copies anyway). A pulled file gets the object's
+modification time. Nothing is ever deleted, on either side. The response
+cache (<run>/cache/) is left out unless --include-cache is given.
 
 Endpoint and keys come from the environment or the worktree .env
 (AWS_ENDPOINT_URL, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY; the MINIO_*
@@ -110,7 +113,11 @@ def remote_files(s3, prefix, include_cache):
             rel = o["Key"][len(prefix) :]
             if not include_cache and rel.split("/", 1)[0] == "cache":
                 continue
-            out[rel] = {"size": o["Size"], "etag": o["ETag"].strip('"')}
+            out[rel] = {
+                "size": o["Size"],
+                "etag": o["ETag"].strip('"'),
+                "mtime": o["LastModified"].timestamp(),
+            }
     return out
 
 
@@ -128,6 +135,9 @@ def main():
     ap.add_argument("--local-dir", type=Path, help="default runs/annotation/<run_id>")
     ap.add_argument("--include-cache", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument(
+        "--force", action="store_true", help="also copy older over newer files"
+    )
     a = ap.parse_args()
     if "/" in a.run_id or a.run_id in ("", ".", ".."):
         sys.exit(f"bad run_id {a.run_id!r}")
@@ -145,7 +155,7 @@ def main():
         )
         return
 
-    copied = skipped = 0
+    copied = skipped = newer = 0
     if a.action == "push":
         if not root.is_dir():
             sys.exit(f"no local run dir {root}")
@@ -153,6 +163,11 @@ def main():
             if rel in remote and same(path, remote[rel]):
                 skipped += 1
                 continue
+            if rel in remote and remote[rel]["mtime"] > path.stat().st_mtime:
+                if not a.force:
+                    print(f"skip {rel}: newer on S3 (--force to overwrite)")
+                    newer += 1
+                    continue
             print(f"push {rel}")
             if not a.dry_run:
                 s3.upload_file(str(path), BUCKET, prefix + rel, Config=TRANSFER)
@@ -163,13 +178,22 @@ def main():
             if path.exists() and same(path, meta):
                 skipped += 1
                 continue
+            if path.exists() and path.stat().st_mtime > meta["mtime"]:
+                if not a.force:
+                    print(f"skip {rel}: newer locally (--force to overwrite)")
+                    newer += 1
+                    continue
             print(f"pull {rel}")
             if not a.dry_run:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 s3.download_file(BUCKET, prefix + rel, str(path), Config=TRANSFER)
+                os.utime(path, (meta["mtime"], meta["mtime"]))
             copied += 1
     verb = "would copy" if a.dry_run else "copied"
-    print(f"{a.action}: {verb} {copied}, unchanged {skipped} (s3://{BUCKET}/{prefix})")
+    print(
+        f"{a.action}: {verb} {copied}, unchanged {skipped}, newer on the target "
+        f"{newer} (s3://{BUCKET}/{prefix})"
+    )
 
 
 if __name__ == "__main__":

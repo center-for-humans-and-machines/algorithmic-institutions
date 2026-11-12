@@ -73,19 +73,27 @@ annot_init() {
 # shared cache was once corrupted by concurrent jobs. With
 # CFG_PERSIST_COMPILE_CACHE=1 (models whose first boot autotunes for a long
 # time) one directory per image/model/TP is reused, held under an exclusive
-# flock for the whole job; a second concurrent job falls back to per job.
+# flock for the whole job; a second concurrent job fails rather than pay the
+# autotune again. The cache gets a COMPLETE marker once the server is ready;
+# a cache without it (a boot that died half-way) is wiped at job start.
 annot_compile_cache() {
     local dir="$JOB_TMP/cc"
+    PERSIST_CC=""
     if [ "${CFG_PERSIST_COMPILE_CACHE:-0}" = 1 ]; then
         local key
         key="$(basename "$CFG_IMAGE" .sif)__${CFG_MODEL//\//--}__tp${CFG_TP}"
         mkdir -p "$CFG_PROJECT/compile_cache/$key"
         exec 9>"$CFG_PROJECT/compile_cache/$key.lock"
-        if flock -n 9; then
-            dir="$CFG_PROJECT/compile_cache/$key"
-        else
-            mark "compile cache $key in use by another job; using a per-job cache"
+        if ! flock -n 9; then
+            mark "FAIL compile cache $key is held by another job; wait for it or set CFG_PERSIST_COMPILE_CACHE=0"
+            return 1
         fi
+        dir="$CFG_PROJECT/compile_cache/$key"
+        if [ ! -f "$dir/COMPLETE" ] && [ -n "$(ls -A "$dir")" ]; then
+            mark "compile cache $key has no COMPLETE marker; wiping it"
+            find "$dir" -mindepth 1 -delete
+        fi
+        PERSIST_CC=$dir
     fi
     mkdir -p "$dir"/{vllm,triton,inductor,xdg,flashinfer}
     mark "compile cache: $dir"
@@ -181,6 +189,7 @@ annot_wait_ready() {
         sleep 5
     done
     mark "server ready"
+    if [ -n "${PERSIST_CC:-}" ]; then date -Is >"$PERSIST_CC/COMPLETE"; fi
     curl -s "$BASE_URL/version" >"$LOG_DIR/version.json" || true
     curl -s "$BASE_URL/metrics" >"$LOG_DIR/metrics_start.prom" || true
     grep -E "KV cache size|Maximum concurrency|Available KV cache|Model loading took|Loading weights took|torch.compile takes|Graph capturing finished|init engine" \

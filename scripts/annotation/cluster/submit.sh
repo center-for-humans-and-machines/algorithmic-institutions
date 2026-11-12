@@ -52,6 +52,20 @@ done
 source "$P/scripts/annotation/cluster/config.sh"
 cluster_config "$cluster"
 model_config
+if [ "$cluster" = dais ] && [ "${CFG_SKIP_VERIFY:-0}" != 1 ]; then
+    # the image and the production weights must have been verified on disk
+    [ -s "$CFG_IMAGE.sha256" ] || {
+        echo "no $CFG_IMAGE.sha256: image pull unfinished or unverified (CFG_SKIP_VERIFY=1 overrides)" >&2
+        exit 1
+    }
+    if [ "$CFG_MODEL" = "${CFG_PROD_MODEL:-}" ]; then
+        v="$CFG_PROD_HF_HOME/annot_downloads/${CFG_MODEL//\//--}/$CFG_REVISION/VERIFIED"
+        [ -f "$v" ] || {
+            echo "no $v: weights not verified by download_model.sh (CFG_SKIP_VERIFY=1 overrides)" >&2
+            exit 1
+        }
+    fi
+fi
 run_dir="$CFG_RUNS_ROOT/$run_id"
 mkdir -p "$run_dir/jobs" "$run_dir/logs"
 stamp="$(date +%Y%m%dT%H%M%S)-$$"
