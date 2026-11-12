@@ -157,6 +157,7 @@ footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); border-top: 1
   <a href="#pipeline" data-tab="pipeline">2 · Pipeline</a>
   <a href="#formats" data-tab="formats">3 · Data formats</a>
   <a href="#progress" data-tab="progress">4 · Progress</a>
+  <a href="#testrun" data-tab="testrun">5 · Test run</a>
 </nav>
 
 <!-- ============ TAB 1 ============ -->
@@ -534,10 +535,8 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
 
 <section id="tab-progress" data-panel="progress" hidden>
   <p class="lead">Status of building and running the pipeline. Updated as work comes in. Results get their own tabs once there are any.</p>
-  <div class="callout">
-    <p><b>Blocked on cluster access.</b> The SSH connections to viper and dais dropped at about 16:30 and need a second factor. Running <code>ssh viper</code> and <code>ssh dais</code> in a terminal reopens them. Until then no job can be submitted or checked.</p>
-  </div>
-  <p class="meta">Last update: 12 Nov 2026, 17:30 · code and cluster setup done, waiting for cluster access</p>
+  
+  <p class="meta">Last update: 12 Nov 2026, 19:00 · first real run done on viper, production model being brought up</p>
 
   <h2>Where things stand</h2>
   <div class="tablebox">
@@ -548,11 +547,11 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
         <tr><td class="k">Survey of existing setups and data</td><td><span class="tag git">done</span></td><td>See "What the surveys found".</td></tr>
         <tr><td class="k">Plan</td><td><span class="tag git">done</span></td><td><code>docs/plans/step-classification-pipeline.md</code> on the branch.</td></tr>
         <tr><td class="k">Pipeline code</td><td><span class="tag git">done</span></td><td>All steps run end to end on a test backend over the real 110 versions. Reviewed once; 2 blockers and 10 other findings fixed. 18 tests pass.</td></tr>
-        <tr><td class="k">Cluster setup</td><td><span class="tag git">mostly done</span></td><td>Job scripts for both clusters and the S3 sync are in. Test jobs on viper pass. A test job on dais was queued when access dropped and is unchecked. The job scripts are under review.</td></tr>
+        <tr><td class="k">Cluster setup</td><td><span class="tag git">mostly done</span></td><td>Job scripts for both clusters and the S3 sync are in. Test jobs on viper pass. The job scripts were reviewed and the findings fixed.</td></tr>
         <tr><td class="k">Production model</td><td><span class="tag git">downloaded</span></td><td>DeepSeek V4.1 Flash 1017 is on dais scratch and its checksums are verified. It has not been loaded yet.</td></tr>
-        <tr><td class="k">End-to-end test, small model on viper</td><td><span class="tag none">not started</span></td><td></td></tr>
-        <tr><td class="k">End-to-end run, production model on dais</td><td><span class="tag none">not started</span></td><td></td></tr>
-        <tr><td class="k">Results in this page</td><td><span class="tag none">not started</span></td><td></td></tr>
+        <tr><td class="k">End-to-end test, small model on viper</td><td><span class="tag off">second round</span></td><td>Two full runs done without a failed call. The codebooks need the changes listed in the <a href="#testrun">Test run</a> tab; a revised run is under way.</td></tr>
+        <tr><td class="k">End-to-end run, production model on dais</td><td><span class="tag off">bring-up</span></td><td>The job script passes its one-GPU test. The first load of the production model is next.</td></tr>
+        <tr><td class="k">Results in this page</td><td><span class="tag off">started</span></td><td>Test-run results are in tab 5. Production results follow.</td></tr>
       </tbody>
     </table>
   </div>
@@ -615,12 +614,82 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
   </ul>
 </section>
 
+<section id="tab-testrun" data-panel="testrun" hidden>
+  <p class="lead">The first real run of the whole pipeline, on viper with a mid-sized model (Qwen3-30B-A3B). It ran end to end without a failed call. The codebooks it produced are not good enough yet, and the reasons are specific. A revised run is under way.</p>
+  <p class="meta">Runs <code>viper1</code> and <code>viper2</code>, 12 Nov 2026. The human steps were skipped in this test: the codebook review was a pass-through and the expert check used a simulated rater, so there are no agreement figures.</p>
+
+  <h2>What ran</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Job</th><th>Contents</th><th>Job time</th><th>Of which loading the model</th></tr></thead>
+      <tbody>
+        <tr><td class="k">viper1, first job</td><td>Open pass and both codebooks, all 110 versions</td><td>14:47</td><td>9:25</td></tr>
+        <tr><td class="k">viper1, second job</td><td>Final coding of rules and notes</td><td>10:58</td><td>8:59</td></tr>
+        <tr><td class="k">viper2</td><td>Everything in one job, after prompt fixes</td><td>17:59</td><td>9:15</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>No call failed and no reply failed to parse in either run. Loading the model takes more than half of every job. During the work the server was never the limit: nothing waited, and its working memory peaked at a quarter full.</p>
+
+  <h2>What came out</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Output</th><th>viper1</th><th>viper2, after prompt fixes</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Free codes from 36 rules</td><td>192</td><td>170</td></tr>
+        <tr><td class="k">Mechanisms found in the notes</td><td>440</td><td>772</td></tr>
+        <tr><td class="k">· of which rejected ideas</td><td>50</td><td>333</td></tr>
+        <tr><td class="k">Reasons</td><td>713</td><td>957</td></tr>
+        <tr><td class="k">What codes from rules alone</td><td></td><td>23</td></tr>
+        <tr><td class="k">What codes after adding ideas from notes</td><td>40</td><td>46</td></tr>
+        <tr><td class="k">Why codes</td><td>29</td><td>31</td></tr>
+        <tr><td class="k">Ideas no rule implements</td><td>2</td><td>3</td></tr>
+        <tr><td class="k">Quotes found verbatim in the rule</td><td>97.9%</td><td>95.9%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The jump in rejected ideas comes from a prompt fix. In the first run the model skipped most ideas the notes list as "not modelled".</p>
+
+  <h2>Theory in the notes</h2>
+  <p>The notes cite no literature at all. They do use named concepts: the second run found 45 genuine mentions, such as herding, conformity and conditional cooperation. So explicit use of theory in this corpus means naming a concept, not citing a source. Links to publications have to come from the codebook.</p>
+
+  <h2>The what codebook from rules</h2>
+  <p>These 23 mechanisms came out of free-coding 36 rules, with no categories given. This part is sensible. It is still a flat list with overlaps, for example two entries for a lever that either eases or tightens punishment before a switch decision.</p>
+  <ul class="tight">
+    <li><b>How much:</b> proportional to the shortfall; flat amount; curved function of the contribution; cap per player; budget for the whole group.</li>
+    <li><b>Compared with what:</b> fixed threshold; group norm; a moving target; a tolerance band; an aspiration margin; several reference levels combined; exemption above a threshold.</li>
+    <li><b>When:</b> only in a phase of the game; stops before the final rounds; decays over time; a pattern within each block of rounds; eased before a switch decision; tightened before a switch decision.</li>
+    <li><b>Depending on whom:</b> newcomers treated differently; a player's history; a recent drop in contribution; the other manager's punishment; only players who did not time out.</li>
+  </ul>
+  <p class="meta">The four groupings are mine, added here for reading. The pipeline did not produce them.</p>
+
+  <h2>Three problems</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Problem</th><th>What happened</th><th>Change</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Codes that are true of every rule</td><td>Rejected ideas entered the codebook as negations, such as "does not punish based on history". The judge then finds them in almost every rule. 15 of the 46 codes in the second run are of this kind.</td><td>Every idea is recorded in its positive form, with the decision kept separately. A candidate found in more than 90% of rules is not added.</td></tr>
+        <tr><td class="k">An inconsistent judge</td><td>The same code was found in 65 of 80 rules in one pass and in 22 of 110 in another. Some answers said "present" without a quote.</td><td>The judge gives the quote first, then the decision. Each rule is judged twice with the codes in a different order, and the agreement between the two is reported for every run.</td></tr>
+        <tr><td class="k">Flat, overlapping codebooks</td><td>The why codebook mixes reasons about how players behave with reasons about the search itself, such as a parameter limit or weak evidence.</td><td>A new step merges duplicates and groups codes into families. The families come from the codes; none are given.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>These are partly limits of the small model. It ignored an explicit instruction against negated codes. The same comparison will be repeated with the production model before more prompt work.</p>
+
+  <h2>Also changed</h2>
+  <ul class="tight">
+    <li><b>What a reason rests on.</b> In the first run 525 of 713 reasons said "analysis of the data", which was one of the prompt's own examples. The field now records the agent's wording plus what it points to, such as an exploration or an earlier version. A third, small codebook is built from these.</li>
+    <li><b>First versions.</b> The model called every mechanism of a first version "new". That is now set in code.</li>
+    <li><b>Speed.</b> More requests in flight and the longest notes first.</li>
+  </ul>
+</section>
+
 <footer>Sources: the <code>policy-finder/*</code> branches and the policy-finder scripts in the repository, the policy-finder Slack threads, and the paper blueprint.</footer>
 </div>
 
 <script>
 (function () {
-  var tabs = ["artifacts", "pipeline", "formats", "progress"];
+  var tabs = ["artifacts", "pipeline", "formats", "progress", "testrun"];
   function show() {
     var h = (location.hash || "").replace("#", "");
     var anchor = h;
