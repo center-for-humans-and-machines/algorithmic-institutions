@@ -1,0 +1,51 @@
+params:
+  D0:
+    definition: >-
+      the round-0 shock: punishment points dealt in round 0 to each of the (at most K0) lowest
+      contributors of my group who gave at most hi
+    type: float
+  K0:
+    definition: >-
+      the most members shocked in round 0: only the K0 lowest contributors giving at most hi are
+      shocked (ties broken by player index), since before the first switch decision a shock that
+      hits several members of a group costs members, while one that hits a single member does not
+    type: int
+  D4:
+    definition: >-
+      the round-4 shock, right after the first switch decision: points dealt to every member of
+      my group who gave at most hi (no cap on how many)
+    type: float
+  D8:
+    definition: >-
+      the round-8 shock, right after the second switch decision: points dealt to every member of
+      my group who gave at most hi. Nothing is dealt in any other round
+    type: float
+  hi:
+    definition: >-
+      the highest contribution that is still shocked, in every shock round
+    type: int
+sweep_config:
+  D0: [10.0, 30.0]
+  K0: [1, 3]
+  D4: [15.0, 30.0]
+  D8: [0.0, 30.0]
+  hi: [4, 7]
+constraints:
+  - D0 >= 0
+  - D4 >= 0
+  - D8 >= 0
+  - K0 >= 1
+code: |
+  c_now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  n_mem = member.sum(dim=-1, keepdim=True)
+  target = member * (n_mem > 1.5).float() * (c_now <= hi).float()
+  idx = th.arange(8, device=c.device).float()
+  ci = c_now.unsqueeze(-1)
+  cj = c_now.unsqueeze(-2)
+  before = ((cj < ci) | ((cj == ci) & (idx.view(1, 1, 8) < idx.view(1, 8, 1)))).float()
+  rank = (before * target.unsqueeze(-2)).sum(dim=-1)
+  first_k = (rank < K0 - 0.5).float()
+  dose0 = D0 * (t == 0).float() * first_k
+  dose48 = D4 * (t == 4).float() + D8 * (t == 8).float()
+  punishment = (dose0 + dose48) * target
