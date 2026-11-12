@@ -1,0 +1,44 @@
+params:
+  lo:
+    definition: >-
+      lowest contribution that is punished (fixed at 1): at round 4 a member who gave nothing is left alone.
+      Zero-givers raise their giving after a hit but leave over it as often, so hitting them is worth about
+      nothing at any dose
+    type: int
+  mid:
+    definition: >-
+      highest contribution of the hard tier (fixed at 2): at round 4 members who gave lo to mid points get
+      amt_fr, members who gave mid+1 to hi points get amt. The best dose falls with the contribution, and the
+      break lies between 2 (best at the cap) and 3 (best near 20)
+    type: int
+  hi:
+    definition: >-
+      highest contribution that is punished (fixed at 5): members who give 6 or more at round 4 cut back or
+      leave when hit, so they are left alone
+    type: int
+  amt_fr:
+    definition: >-
+      the one-off hit in points, at round 4 only, on every valid member who gave lo to mid points (near-free
+      riders). They move and stay only under a very hard hit: their rest-of-game gain still rises at the
+      largest doses tried, so the tier runs up to the cap of 30
+    type: float
+  amt:
+    definition: >-
+      the one-off hit in points, at round 4 only (the first round after the first switch decision, the
+      farthest from the next one, with 19 rounds left for the raised giving to carry), on every valid member
+      who gave mid+1 to hi points (low givers). Their gain peaks near 18 points: harder hits cost members at
+      round 8 without raising their giving further
+    type: float
+sweep_config:
+  lo: 1
+  mid: 2
+  hi: 5
+  amt_fr: [22, 30]
+  amt: [12, 24]
+code: |
+  here = in_group[..., -1] * valid[..., -1]
+  cc = c[..., -1]
+  at4 = (t == 4).float()
+  hard = (cc >= lo).float() * (cc <= mid).float()
+  soft = (cc > mid).float() * (cc <= hi).float()
+  punishment = at4 * here * (hard * amt_fr + soft * amt)
