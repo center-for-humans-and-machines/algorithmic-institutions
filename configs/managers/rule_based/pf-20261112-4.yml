@@ -1,0 +1,38 @@
+params:
+  k:
+    definition: >-
+      punishment points per point of contribution shortfall below the target
+      (severity of the lift given to low contributors)
+    type: float
+  target:
+    definition: >-
+      contribution below which a member is punished; the shortfall is
+      target minus this round's contribution
+    type: float
+  window:
+    definition: >-
+      how many rounds at the start of each 4-round block (between switch
+      decisions) punishment is allowed in; the rest of the block, up to and
+      including the decision round (3, 7, 11, 15, 19), is left unpunished so
+      that members are not pushed out. 4 punishes in every round. Rounds
+      20-23 have no decision after them and are not restricted by it
+    type: int
+  stop:
+    definition: >-
+      first round with no punishment at all: punishment only in rounds before
+      it, since late punishment has no rounds left to pay back its cost
+    type: int
+sweep_config:
+  k: [0.05, 2.0, log]
+  target: [4.0, 20.0]
+  window: [1, 4]
+  stop: [2, 24]
+constraints:
+  - k > 0
+code: |
+  cur = c[..., -1]
+  shortfall = th.clamp(target - cur, min=0.0)
+  in_window = (th.remainder(t, 4) < window) | (t >= 20)
+  before_stop = t < stop
+  allowed = (in_window & before_stop).float()
+  punishment = k * shortfall * allowed * valid[..., -1]
