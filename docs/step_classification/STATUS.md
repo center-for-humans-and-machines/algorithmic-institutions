@@ -1,6 +1,6 @@
 # Step classification: status and how to resume
 
-Last updated: 2026-11-12, 20:15. This file is the handover for picking the work up on another machine or in another session. Update it whenever the state changes.
+Last updated: 2026-11-12, 21:30. This file is the handover for picking the work up on another machine or in another session. Update it whenever the state changes.
 
 ## Where everything is
 
@@ -31,7 +31,7 @@ Last updated: 2026-11-12, 20:15. This file is the handover for picking the work 
 | `viper4` | viper | Commit 47631873: basis consolidation, every code placed in a family, merge reasons, unreliable judge codes, with fixes f9827c51 and 68047187 | Done (jobs 13082961, 13083896), on S3 with `REPORT.md`; judge test-retest 0.87 (kappa 0.73), 6 unreliable codes; merge rule not followed by the 30B model |
 | `smoke-dais` | dais | Job-script tests with Qwen3-30B-A3B | 1-GPU test passes (job 878637); 2-GPU test (job 878812) cancelled unrun, the DeepSeek boot tested tensor-parallel 2 under the production container options; on S3 |
 | `dais0` | dais | First boot of DeepSeek V4.1 Flash plus a trial on 6 versions | First boot done (job 878977, 2 B200, TP 2): server ready in 22 min, preflight, probe and stage A on 6 versions all passed; on S3. Second boot (job 879378) also 22 min: the autotune reruns despite the cache; probe ok |
-| `prod1` | dais | Production run, DeepSeek-V4.1-Flash-1017 on 2 B200 (TP 2, `--max-model-len 65536`, client concurrency 128), code at commit 95e242d8 | Stage A queued (job 879637, `gpu1`, 3 h limit, estimated start 2026-11-13 about 02:40); review, stage B, expert check and join wait for the scientific lead's codebook review |
+| `prod1` | dais | Production run, DeepSeek-V4.1-Flash-1017 on 2 B200 (TP 2, `--max-model-len 65536`, client concurrency 128), code at commit 95e242d8 | Stage A done (job 879637: 25 min queue, 17 min load, 16 min serving, 0 failed calls), on S3 with `REPORT_stageA.md`. Codebooks v1: what 42 + 8 never implemented (9 families), why 112 (8 families), basis 27 (10 families). Next: the scientific lead reviews the codebooks; then stage B, expert check and join |
 
 ## Next steps
 
