@@ -536,7 +536,7 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
 <section id="tab-progress" data-panel="progress" hidden>
   <p class="lead">Status of building and running the pipeline. Updated as work comes in. Results get their own tabs once there are any.</p>
   
-  <p class="meta">Last update: 12 Nov 2026, 19:00 · first real run done on viper, production model being brought up</p>
+  <p class="meta">Last update: 12 Nov 2026, 20:15 · production model works on dais, production run queued</p>
 
   <h2>Where things stand</h2>
   <div class="tablebox">
@@ -548,9 +548,9 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
         <tr><td class="k">Plan</td><td><span class="tag git">done</span></td><td><code>docs/plans/step-classification-pipeline.md</code> on the branch.</td></tr>
         <tr><td class="k">Pipeline code</td><td><span class="tag git">done</span></td><td>All steps run end to end on a test backend over the real 110 versions. Reviewed once; 2 blockers and 10 other findings fixed. 18 tests pass.</td></tr>
         <tr><td class="k">Cluster setup</td><td><span class="tag git">mostly done</span></td><td>Job scripts for both clusters and the S3 sync are in. Test jobs on viper pass. The job scripts were reviewed and the findings fixed.</td></tr>
-        <tr><td class="k">Production model</td><td><span class="tag git">downloaded</span></td><td>DeepSeek V4.1 Flash 1017 is on dais scratch and its checksums are verified. It has not been loaded yet.</td></tr>
-        <tr><td class="k">End-to-end test, small model on viper</td><td><span class="tag off">second round</span></td><td>Two full runs done without a failed call. The codebooks need the changes listed in the <a href="#testrun">Test run</a> tab; a revised run is under way.</td></tr>
-        <tr><td class="k">End-to-end run, production model on dais</td><td><span class="tag off">bring-up</span></td><td>The job script passes its one-GPU test. The first load of the production model is next.</td></tr>
+        <tr><td class="k">Production model</td><td><span class="tag git">working</span></td><td>DeepSeek V4.1 Flash 1017 on two B200 GPUs. Booted twice, 22 minutes each.</td></tr>
+        <tr><td class="k">End-to-end test, small model on viper</td><td><span class="tag git">done</span></td><td>Four full runs without a failed call. Tuning on the small model is finished; see the <a href="#testrun">Test run</a> tab.</td></tr>
+        <tr><td class="k">End-to-end run, production model on dais</td><td><span class="tag off">queued</span></td><td>The model boots and passes all checks on two GPUs. The first production job, everything up to the three codebooks, is waiting in the queue.</td></tr>
         <tr><td class="k">Results in this page</td><td><span class="tag off">started</span></td><td>Test-run results are in tab 5. Production results follow.</td></tr>
       </tbody>
     </table>
@@ -569,7 +569,21 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
       </tbody>
     </table>
   </div>
-  <p>For the production model the plan is 2 of the 8 GPUs of a B200 node. The workload is small, so the weights decide the size of the request, not the number of documents. One GPU is too small for the weights.</p>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Test on dais, DeepSeek V4.1 Flash on two B200 GPUs</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Launch to server ready</td><td>22 minutes, on both boots</td></tr>
+        <tr><td class="k">Structured replies</td><td>96 requests, none violated the schema</td></tr>
+        <tr><td class="k">Thinking switched off</td><td>no reasoning text in the replies</td></tr>
+        <tr><td class="k">GPU memory</td><td>166 to 169 of 179 GiB in use per GPU</td></tr>
+        <tr><td class="k">Host memory</td><td>about 278 of the 480 GiB requested</td></tr>
+        <tr><td class="k">Output speed under load</td><td>about 8,070 tokens per second</td></tr>
+        <tr><td class="k">Trial on six versions</td><td>45 calls, none failed</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Two of a node's eight GPUs are enough. The workload is small, so the weights decide the size of the request, not the number of documents. Waiting in the queue costs more time than the job itself.</p>
 
   <h2>What the surveys found</h2>
   <ul class="tight">
