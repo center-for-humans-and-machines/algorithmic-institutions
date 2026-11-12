@@ -1,0 +1,37 @@
+params:
+  gap0:
+    definition: >-
+      tolerated shortfall, in contribution points, of a member's contribution
+      below the mean contribution of the other active members of the group this
+      round; only the shortfall beyond it is punished
+    type: float
+  k:
+    definition: punishment points per point of shortfall beyond the tolerance gap0
+    type: float
+  cap:
+    definition: largest punishment any member receives in one round
+    type: int
+  w:
+    definition: >-
+      punishment is dealt only in the first w rounds of each 4-round block
+      between switch decisions (rounds with t mod 4 < w), where it drives the
+      fewest members out; never in the last round, where it buys nothing
+    type: int
+sweep_config:
+  gap0: [0.0, 12.0]
+  k: [0.03, 3.0, log]
+  cap: [1, 15]
+  w: [1, 4]
+constraints:
+  - k > 0
+  - cap >= 1
+code: |
+  g = in_group[..., -1] * valid[..., -1]
+  cn = c[..., -1] * g
+  n_oth = (g.sum(-1, keepdim=True) - g).clamp(min=1.0)
+  oth_mean = (cn.sum(-1, keepdim=True) - cn) / n_oth
+  short = (oth_mean - cn - gap0).clamp(min=0.0)
+  pun = th.minimum(k * short, cap * th.ones_like(short))
+  in_phase = (th.remainder(t, 4.0) < w).to(c.dtype)
+  not_last = (t < 23).to(c.dtype)
+  punishment = pun * g * in_phase * not_last
