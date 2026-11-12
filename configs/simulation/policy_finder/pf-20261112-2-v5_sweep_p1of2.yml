@@ -1,0 +1,930 @@
+# Sweep of /home/kappablanca/pf_runs/worktrees_diff/pf-20261112-2/configs/managers/rule_based/pf-20261112-2-v5.yml (#227), written by scripts/policy_finder/generate_sim_config.py:
+# 128 of 256 distinct design points (256 Sobol points), each against `ah` in both seats (configs/simulation/opponents/exp2_diff.yml); stack and sim parameters from
+# configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 42
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261112-2-v5_s000:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 21.264636679552495, gap: 14.313660049811006, fine: 2.17630554176867, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s001:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 11.050062347203493, gap: 9.888844303786755, fine: 3.816142749041319, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s002:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 0.19101593643426895, gap: 10.392799573019147, fine: 0.923870500177145, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s003:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 16.545235994271934, gap: 5.98751500248909, fine: 5.094942206516862, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s004:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 14.928346988745034, gap: 11.860420778393745, fine: 3.3909508008509874, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s005:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 4.71389195881784, gap: 7.379447938874364, fine: 2.5934380777180195, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s006:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 6.30741217173636, gap: 12.959015853703022, fine: 5.510567609220743, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s007:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 22.661751345731318, gap: 8.458511689677835, fine: 0.4943318534642458, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s008:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 24.60961607284844, gap: 11.166040729731321, fine: 5.673073600977659, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s009:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 8.261219435371459, gap: 5.568888587877154, fine: 0.28165496326982975, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s010:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 3.544577141292393, gap: 14.754869509488344, fine: 3.2282617036253214, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s011:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 13.75238629989326, gap: 9.177248692139983, fine: 2.8055656515061855, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s012:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 18.494650349020958, gap: 13.5973687376827, fine: 1.464123297482729, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s013:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 2.146325330249965, gap: 8.1003094650805, fine: 4.510377885773778, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s014:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 9.879245585761964, gap: 12.205805657431483, fine: 1.6355034280568361, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s015:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 20.087126176804304, gap: 6.689215209335089, fine: 4.400523964315653, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s016:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 18.782509095035493, gap: 12.16379881836474, fine: 0.007610868662595749, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s017:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 10.234765987843275, gap: 6.413142122328281, fine: 5.961397061124444, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s018:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 2.3553799837827682, gap: 13.24293908663094, fine: 2.903600687161088, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s019:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 17.238842765800655, gap: 7.5118135660886765, fine: 3.138652380555868, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s020:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 12.618643720634282, gap: 14.635443985462189, fine: 4.784737396985292, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s021:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 4.071019915863872, gap: 8.980006920173764, fine: 1.1762168426066637, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s022:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 8.738805027678609, gap: 10.73403861373663, fine: 4.3028158117085695, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s023:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 23.62238692585379, gap: 5.059070223942399, fine: 1.7255182899534702, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s024:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 22.45269068516791, gap: 12.68851226195693, fine: 4.0903220269829035, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s025:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 7.563225761987269, gap: 8.422074345871806, fine: 1.8878411762416363, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s026:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 6.018503126688302, gap: 11.277341786772013, fine: 4.9970480762422085, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s027:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 14.572832500562072, gap: 7.030435195192695, fine: 1.0133446399122477, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s028:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 16.067644394934177, gap: 10.199754005298018, fine: 2.318853260949254, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s029:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 1.1782510904595256, gap: 5.872285682708025, fine: 3.679088283330202, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s030:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 12.183799012564123, gap: 13.808190478011966, fine: 0.5918089784681797, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s031:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 20.738199818879366, gap: 9.461190979927778, fine: 5.42077805288136, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s032:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 20.41731176432222, gap: 10.475869309157133, fine: 3.3240673318505287, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s033:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 11.869112681597471, gap: 6.226682169362903, fine: 2.7153475787490606, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s034:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 0.9130556136369705, gap: 14.074540603905916, fine: 5.774735754355788, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s035:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 15.796443889848888, gap: 9.805822288617492, fine: 0.19729339331388474, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s036:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 14.10560302902013, gap: 13.042123755440116, fine: 1.5386906862258911, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s037:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 5.557284830138087, gap: 8.697716984897852, fine: 4.492664633318782, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s038:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 7.054032804444432, gap: 11.621186910197139, fine: 1.361454052850604, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s039:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 21.93730177823454, gap: 7.296311464160681, fine: 4.596662029623985, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s040:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 23.894345993176103, gap: 14.984347308054566, fine: 0.8208350446075201, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s041:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 9.00476484093815, gap: 9.250629059970379, fine: 5.180860139429569, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s042:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 4.384941724129021, gap: 11.092708008363843, fine: 2.079126589000225, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s043:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 12.938773399218917, gap: 5.3394584357738495, fine: 3.907917207106948, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s044:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 17.75499004870653, gap: 12.435168996453285, fine: 5.611863551661372, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s045:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 2.8653374640271068, gap: 6.762481154873967, fine: 0.4096040725708008, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s046:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 10.695219947956502, gap: 13.524074144661427, fine: 3.4863902181386948, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s047:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 19.24898000434041, gap: 7.8709174785763025, fine: 2.5028537940233946, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s048:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 19.62585689034313, gap: 13.32580840215087, fine: 4.9068156983703375, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s049:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 9.411970991641283, gap: 7.751085488125682, fine: 1.1091588512063026, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s050:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 1.63088608533144, gap: 11.924479249864817, fine: 4.005951873958111, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s051:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 17.9854131070897, gap: 6.330225160345435, fine: 1.9895176347345114, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s052:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 13.437744346447289, gap: 10.817022388800979, fine: 0.6839639525860548, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s053:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 3.223739331588149, gap: 5.298456568270922, fine: 5.323956727981567, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s054:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 7.990063959732652, gap: 14.396086288616061, fine: 2.405145987868309, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s055:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 24.344471679069102, gap: 8.89705179259181, fine: 3.576404733583331, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s056:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 23.171747149899602, gap: 11.506924340501428, fine: 2.989527203142643, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s057:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 6.823615753091872, gap: 7.103615142405033, fine: 3.035602619871497, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s058:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 5.180402030237019, gap: 12.615284593775868, fine: 0.09939963184297085, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s059:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 15.388857899233699, gap: 8.192444071173668, fine: 5.864209525287151, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s060:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 16.81113876402378, gap: 14.037734866142273, fine: 4.218079447746277, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s061:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 0.4629359347745776, gap: 9.534332798793912, fine: 1.8268285375088453, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s062:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 11.37013582047075, gap: 10.126640759408474, fine: 4.694138808175921, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s063:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 21.578520070761442, gap: 5.642769867554307, fine: 1.2716648429632187, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s064:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 21.83674522675574, gap: 11.65148589760065, fine: 4.556445244699717, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s065:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 11.62237657699734, gap: 7.228800365701318, fine: 1.4152177143841982, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s066:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 0.7633016677573323, gap: 13.052891120314598, fine: 4.355772318318486, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s067:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 17.11734584532678, gap: 8.649736912921071, fine: 1.683276403695345, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s068:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 15.524881519377232, gap: 14.200645135715604, fine: 0.33084821328520775, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s069:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 5.310584488324821, gap: 9.716929197311401, fine: 5.626901680603623, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s070:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 6.904147728346288, gap: 10.621505910530686, fine: 2.7580779287964106, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s071:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 23.25826333835721, gap: 6.11825879663229, fine: 3.272911202162504, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s072:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 24.42815077956766, gap: 13.513325778767467, fine: 2.5486967135220766, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s073:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 8.07953653857112, gap: 7.9189166985452175, fine: 3.438713315874338, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s074:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 3.3629100769758224, gap: 12.404889157041907, fine: 0.5404125340282917, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s075:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 13.57088319491595, gap: 6.830011252313852, fine: 5.461648883298039, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s076:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 18.288735230453312, gap: 10.947052258998156, fine: 3.76864474453032, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s077:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 1.940240291878581, gap: 5.44786280952394, fine: 2.220965500921011, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s078:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 9.673152538016438, gap: 14.858223777264357, fine: 5.144122134894133, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s079:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 19.88124477211386, gap: 9.339503003284335, fine: 0.8777117226272821, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s080:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 19.379222067072988, gap: 14.504013769328594, fine: 3.723692374303937, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s081:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 10.83130317274481, gap: 8.750614011660218, fine: 2.271410945802927, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s082:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 2.95188941527158, gap: 10.905419439077377, fine: 5.3745607025921345, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s083:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 17.835557786747813, gap: 5.171551005914807, fine: 0.6410476583987474, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s084:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 13.190954551100731, gap: 11.973260464146733, fine: 1.9355680290609598, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s085:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 4.643107275478542, gap: 6.319953575730324, fine: 4.045616503804922, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s086:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 9.310936159454286, gap: 13.394120493903756, fine: 0.9643929116427898, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s087:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 24.194675963371992, gap: 7.721282429993153, fine: 5.043161580339074, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s088:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 22.246620221994817, gap: 10.038186414167285, fine: 1.1300119198858738, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s089:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 7.357319165021181, gap: 5.769618283957243, fine: 4.83396347053349, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s090:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 5.812613107264042, gap: 13.929750239476562, fine: 1.7701321262866259, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s091:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 14.36672497075051, gap: 9.680713284760714, fine: 4.255363930016756, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s092:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 15.88595223147422, gap: 12.54702964797616, fine: 5.9124329052865505, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s093:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 0.9967704769223928, gap: 8.222304424270988, fine: 0.0537369791418314, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s094:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 12.002311134710908, gap: 11.458200421184301, fine: 3.186369488015771, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s095:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 20.55654211435467, gap: 7.113943872973323, fine: 2.858904730528593, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s096:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 21.016905130818486, gap: 12.813647417351604, fine: 0.4541169237345457, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s097:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 12.468870007432997, gap: 8.566590603441, fine: 5.564329549670219, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s098:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 1.5128298895433545, gap: 11.734584560617805, fine: 2.456544578075409, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s099:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 16.396000562235713, gap: 7.467996422201395, fine: 3.5355374794453382, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s100:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 14.68074657022953, gap: 10.382376629859209, fine: 5.228495126590133, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s101:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 6.132640014402568, gap: 6.035226946696639, fine: 0.7760381028056145, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s102:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 7.629381096921861, gap: 14.28370563313365, fine: 3.8588742390275, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s103:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 22.51248015090823, gap: 9.956087125465274, fine: 2.125148406252265, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s104:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 23.68539513554424, gap: 12.331584729254246, fine: 4.446368023753166, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s105:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 8.795638103038073, gap: 6.600609431043267, fine: 1.587825519964099, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s106:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 4.1757868602871895, gap: 13.742679879069328, fine: 4.641184447333217, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s107:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 12.729824217967689, gap: 7.992173405364156, fine: 1.3139103055000305, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s108:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 17.570465174503624, gap: 14.78488122113049, fine: 2.666292004287243, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s109:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 2.6805890258401632, gap: 9.110063016414642, fine: 3.3701015766710043, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s110:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 10.510514909401536, gap: 11.176520818844438, fine: 0.24491881392896175, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s111:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 19.064432964660227, gap: 5.521233938634396, fine: 5.729948557913303, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s112:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 20.201227301731706, gap: 10.66607098095119, fine: 1.8728042095899582, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s113:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 9.987123892642558, gap: 5.0886051170527935, fine: 4.169082624837756, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s114:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 2.206055191345513, gap: 14.587007379159331, fine: 1.2268217783421278, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s115:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 18.560746079310775, gap: 8.990010190755129, fine: 4.74181991815567, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s116:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 14.037493057549, gap: 13.154810164123774, fine: 3.084704451262951, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s117:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 3.8233182160183787, gap: 7.6383747067302465, fine: 2.943263417109847, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s118:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 8.58963520731777, gap: 12.05613961443305, fine: 5.816630115732551, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s119:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 24.944254476577044, gap: 6.559235332533717, fine: 0.14395789057016373, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s120:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 22.98701999243349, gap: 13.856646232306957, fine: 5.279124123975635, last_block: 6}
+    setting: exp2_diff
+  pf-20261112-2-v5_s121:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 6.6390941850841045, gap: 9.451206708326936, fine: 0.7316347807645798, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s122:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 4.995851591229439, gap: 10.26774063706398, fine: 3.622393548488617, last_block: 4}
+    setting: exp2_diff
+  pf-20261112-2-v5_s123:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 15.20413167309016, gap: 5.842769937589765, fine: 2.356135843321681, last_block: 2}
+    setting: exp2_diff
+  pf-20261112-2-v5_s124:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 16.602009464986622, gap: 11.38498199172318, fine: 1.0615689810365438, last_block: 1}
+    setting: exp2_diff
+  pf-20261112-2-v5_s125:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 0.2539645414799452, gap: 6.884322836995125, fine: 4.951384238898754, last_block: 5}
+    setting: exp2_diff
+  pf-20261112-2-v5_s126:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 11.161207081750035, gap: 12.776622036471963, fine: 2.038606323301792, last_block: 3}
+    setting: exp2_diff
+  pf-20261112-2-v5_s127:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v5.yml
+    params: {lead: 21.369367861188948, gap: 8.295494206249714, fine: 3.959701409563422, last_block: 6}
+    setting: exp2_diff
+pairings:
+- {name: pf-20261112-2-v5_s000_vs_ah, group_0: pf-20261112-2-v5_s000, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s000, group_0: ah, group_1: pf-20261112-2-v5_s000}
+- {name: pf-20261112-2-v5_s001_vs_ah, group_0: pf-20261112-2-v5_s001, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s001, group_0: ah, group_1: pf-20261112-2-v5_s001}
+- {name: pf-20261112-2-v5_s002_vs_ah, group_0: pf-20261112-2-v5_s002, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s002, group_0: ah, group_1: pf-20261112-2-v5_s002}
+- {name: pf-20261112-2-v5_s003_vs_ah, group_0: pf-20261112-2-v5_s003, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s003, group_0: ah, group_1: pf-20261112-2-v5_s003}
+- {name: pf-20261112-2-v5_s004_vs_ah, group_0: pf-20261112-2-v5_s004, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s004, group_0: ah, group_1: pf-20261112-2-v5_s004}
+- {name: pf-20261112-2-v5_s005_vs_ah, group_0: pf-20261112-2-v5_s005, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s005, group_0: ah, group_1: pf-20261112-2-v5_s005}
+- {name: pf-20261112-2-v5_s006_vs_ah, group_0: pf-20261112-2-v5_s006, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s006, group_0: ah, group_1: pf-20261112-2-v5_s006}
+- {name: pf-20261112-2-v5_s007_vs_ah, group_0: pf-20261112-2-v5_s007, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s007, group_0: ah, group_1: pf-20261112-2-v5_s007}
+- {name: pf-20261112-2-v5_s008_vs_ah, group_0: pf-20261112-2-v5_s008, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s008, group_0: ah, group_1: pf-20261112-2-v5_s008}
+- {name: pf-20261112-2-v5_s009_vs_ah, group_0: pf-20261112-2-v5_s009, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s009, group_0: ah, group_1: pf-20261112-2-v5_s009}
+- {name: pf-20261112-2-v5_s010_vs_ah, group_0: pf-20261112-2-v5_s010, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s010, group_0: ah, group_1: pf-20261112-2-v5_s010}
+- {name: pf-20261112-2-v5_s011_vs_ah, group_0: pf-20261112-2-v5_s011, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s011, group_0: ah, group_1: pf-20261112-2-v5_s011}
+- {name: pf-20261112-2-v5_s012_vs_ah, group_0: pf-20261112-2-v5_s012, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s012, group_0: ah, group_1: pf-20261112-2-v5_s012}
+- {name: pf-20261112-2-v5_s013_vs_ah, group_0: pf-20261112-2-v5_s013, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s013, group_0: ah, group_1: pf-20261112-2-v5_s013}
+- {name: pf-20261112-2-v5_s014_vs_ah, group_0: pf-20261112-2-v5_s014, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s014, group_0: ah, group_1: pf-20261112-2-v5_s014}
+- {name: pf-20261112-2-v5_s015_vs_ah, group_0: pf-20261112-2-v5_s015, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s015, group_0: ah, group_1: pf-20261112-2-v5_s015}
+- {name: pf-20261112-2-v5_s016_vs_ah, group_0: pf-20261112-2-v5_s016, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s016, group_0: ah, group_1: pf-20261112-2-v5_s016}
+- {name: pf-20261112-2-v5_s017_vs_ah, group_0: pf-20261112-2-v5_s017, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s017, group_0: ah, group_1: pf-20261112-2-v5_s017}
+- {name: pf-20261112-2-v5_s018_vs_ah, group_0: pf-20261112-2-v5_s018, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s018, group_0: ah, group_1: pf-20261112-2-v5_s018}
+- {name: pf-20261112-2-v5_s019_vs_ah, group_0: pf-20261112-2-v5_s019, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s019, group_0: ah, group_1: pf-20261112-2-v5_s019}
+- {name: pf-20261112-2-v5_s020_vs_ah, group_0: pf-20261112-2-v5_s020, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s020, group_0: ah, group_1: pf-20261112-2-v5_s020}
+- {name: pf-20261112-2-v5_s021_vs_ah, group_0: pf-20261112-2-v5_s021, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s021, group_0: ah, group_1: pf-20261112-2-v5_s021}
+- {name: pf-20261112-2-v5_s022_vs_ah, group_0: pf-20261112-2-v5_s022, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s022, group_0: ah, group_1: pf-20261112-2-v5_s022}
+- {name: pf-20261112-2-v5_s023_vs_ah, group_0: pf-20261112-2-v5_s023, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s023, group_0: ah, group_1: pf-20261112-2-v5_s023}
+- {name: pf-20261112-2-v5_s024_vs_ah, group_0: pf-20261112-2-v5_s024, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s024, group_0: ah, group_1: pf-20261112-2-v5_s024}
+- {name: pf-20261112-2-v5_s025_vs_ah, group_0: pf-20261112-2-v5_s025, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s025, group_0: ah, group_1: pf-20261112-2-v5_s025}
+- {name: pf-20261112-2-v5_s026_vs_ah, group_0: pf-20261112-2-v5_s026, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s026, group_0: ah, group_1: pf-20261112-2-v5_s026}
+- {name: pf-20261112-2-v5_s027_vs_ah, group_0: pf-20261112-2-v5_s027, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s027, group_0: ah, group_1: pf-20261112-2-v5_s027}
+- {name: pf-20261112-2-v5_s028_vs_ah, group_0: pf-20261112-2-v5_s028, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s028, group_0: ah, group_1: pf-20261112-2-v5_s028}
+- {name: pf-20261112-2-v5_s029_vs_ah, group_0: pf-20261112-2-v5_s029, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s029, group_0: ah, group_1: pf-20261112-2-v5_s029}
+- {name: pf-20261112-2-v5_s030_vs_ah, group_0: pf-20261112-2-v5_s030, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s030, group_0: ah, group_1: pf-20261112-2-v5_s030}
+- {name: pf-20261112-2-v5_s031_vs_ah, group_0: pf-20261112-2-v5_s031, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s031, group_0: ah, group_1: pf-20261112-2-v5_s031}
+- {name: pf-20261112-2-v5_s032_vs_ah, group_0: pf-20261112-2-v5_s032, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s032, group_0: ah, group_1: pf-20261112-2-v5_s032}
+- {name: pf-20261112-2-v5_s033_vs_ah, group_0: pf-20261112-2-v5_s033, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s033, group_0: ah, group_1: pf-20261112-2-v5_s033}
+- {name: pf-20261112-2-v5_s034_vs_ah, group_0: pf-20261112-2-v5_s034, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s034, group_0: ah, group_1: pf-20261112-2-v5_s034}
+- {name: pf-20261112-2-v5_s035_vs_ah, group_0: pf-20261112-2-v5_s035, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s035, group_0: ah, group_1: pf-20261112-2-v5_s035}
+- {name: pf-20261112-2-v5_s036_vs_ah, group_0: pf-20261112-2-v5_s036, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s036, group_0: ah, group_1: pf-20261112-2-v5_s036}
+- {name: pf-20261112-2-v5_s037_vs_ah, group_0: pf-20261112-2-v5_s037, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s037, group_0: ah, group_1: pf-20261112-2-v5_s037}
+- {name: pf-20261112-2-v5_s038_vs_ah, group_0: pf-20261112-2-v5_s038, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s038, group_0: ah, group_1: pf-20261112-2-v5_s038}
+- {name: pf-20261112-2-v5_s039_vs_ah, group_0: pf-20261112-2-v5_s039, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s039, group_0: ah, group_1: pf-20261112-2-v5_s039}
+- {name: pf-20261112-2-v5_s040_vs_ah, group_0: pf-20261112-2-v5_s040, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s040, group_0: ah, group_1: pf-20261112-2-v5_s040}
+- {name: pf-20261112-2-v5_s041_vs_ah, group_0: pf-20261112-2-v5_s041, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s041, group_0: ah, group_1: pf-20261112-2-v5_s041}
+- {name: pf-20261112-2-v5_s042_vs_ah, group_0: pf-20261112-2-v5_s042, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s042, group_0: ah, group_1: pf-20261112-2-v5_s042}
+- {name: pf-20261112-2-v5_s043_vs_ah, group_0: pf-20261112-2-v5_s043, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s043, group_0: ah, group_1: pf-20261112-2-v5_s043}
+- {name: pf-20261112-2-v5_s044_vs_ah, group_0: pf-20261112-2-v5_s044, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s044, group_0: ah, group_1: pf-20261112-2-v5_s044}
+- {name: pf-20261112-2-v5_s045_vs_ah, group_0: pf-20261112-2-v5_s045, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s045, group_0: ah, group_1: pf-20261112-2-v5_s045}
+- {name: pf-20261112-2-v5_s046_vs_ah, group_0: pf-20261112-2-v5_s046, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s046, group_0: ah, group_1: pf-20261112-2-v5_s046}
+- {name: pf-20261112-2-v5_s047_vs_ah, group_0: pf-20261112-2-v5_s047, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s047, group_0: ah, group_1: pf-20261112-2-v5_s047}
+- {name: pf-20261112-2-v5_s048_vs_ah, group_0: pf-20261112-2-v5_s048, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s048, group_0: ah, group_1: pf-20261112-2-v5_s048}
+- {name: pf-20261112-2-v5_s049_vs_ah, group_0: pf-20261112-2-v5_s049, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s049, group_0: ah, group_1: pf-20261112-2-v5_s049}
+- {name: pf-20261112-2-v5_s050_vs_ah, group_0: pf-20261112-2-v5_s050, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s050, group_0: ah, group_1: pf-20261112-2-v5_s050}
+- {name: pf-20261112-2-v5_s051_vs_ah, group_0: pf-20261112-2-v5_s051, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s051, group_0: ah, group_1: pf-20261112-2-v5_s051}
+- {name: pf-20261112-2-v5_s052_vs_ah, group_0: pf-20261112-2-v5_s052, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s052, group_0: ah, group_1: pf-20261112-2-v5_s052}
+- {name: pf-20261112-2-v5_s053_vs_ah, group_0: pf-20261112-2-v5_s053, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s053, group_0: ah, group_1: pf-20261112-2-v5_s053}
+- {name: pf-20261112-2-v5_s054_vs_ah, group_0: pf-20261112-2-v5_s054, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s054, group_0: ah, group_1: pf-20261112-2-v5_s054}
+- {name: pf-20261112-2-v5_s055_vs_ah, group_0: pf-20261112-2-v5_s055, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s055, group_0: ah, group_1: pf-20261112-2-v5_s055}
+- {name: pf-20261112-2-v5_s056_vs_ah, group_0: pf-20261112-2-v5_s056, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s056, group_0: ah, group_1: pf-20261112-2-v5_s056}
+- {name: pf-20261112-2-v5_s057_vs_ah, group_0: pf-20261112-2-v5_s057, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s057, group_0: ah, group_1: pf-20261112-2-v5_s057}
+- {name: pf-20261112-2-v5_s058_vs_ah, group_0: pf-20261112-2-v5_s058, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s058, group_0: ah, group_1: pf-20261112-2-v5_s058}
+- {name: pf-20261112-2-v5_s059_vs_ah, group_0: pf-20261112-2-v5_s059, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s059, group_0: ah, group_1: pf-20261112-2-v5_s059}
+- {name: pf-20261112-2-v5_s060_vs_ah, group_0: pf-20261112-2-v5_s060, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s060, group_0: ah, group_1: pf-20261112-2-v5_s060}
+- {name: pf-20261112-2-v5_s061_vs_ah, group_0: pf-20261112-2-v5_s061, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s061, group_0: ah, group_1: pf-20261112-2-v5_s061}
+- {name: pf-20261112-2-v5_s062_vs_ah, group_0: pf-20261112-2-v5_s062, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s062, group_0: ah, group_1: pf-20261112-2-v5_s062}
+- {name: pf-20261112-2-v5_s063_vs_ah, group_0: pf-20261112-2-v5_s063, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s063, group_0: ah, group_1: pf-20261112-2-v5_s063}
+- {name: pf-20261112-2-v5_s064_vs_ah, group_0: pf-20261112-2-v5_s064, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s064, group_0: ah, group_1: pf-20261112-2-v5_s064}
+- {name: pf-20261112-2-v5_s065_vs_ah, group_0: pf-20261112-2-v5_s065, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s065, group_0: ah, group_1: pf-20261112-2-v5_s065}
+- {name: pf-20261112-2-v5_s066_vs_ah, group_0: pf-20261112-2-v5_s066, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s066, group_0: ah, group_1: pf-20261112-2-v5_s066}
+- {name: pf-20261112-2-v5_s067_vs_ah, group_0: pf-20261112-2-v5_s067, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s067, group_0: ah, group_1: pf-20261112-2-v5_s067}
+- {name: pf-20261112-2-v5_s068_vs_ah, group_0: pf-20261112-2-v5_s068, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s068, group_0: ah, group_1: pf-20261112-2-v5_s068}
+- {name: pf-20261112-2-v5_s069_vs_ah, group_0: pf-20261112-2-v5_s069, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s069, group_0: ah, group_1: pf-20261112-2-v5_s069}
+- {name: pf-20261112-2-v5_s070_vs_ah, group_0: pf-20261112-2-v5_s070, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s070, group_0: ah, group_1: pf-20261112-2-v5_s070}
+- {name: pf-20261112-2-v5_s071_vs_ah, group_0: pf-20261112-2-v5_s071, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s071, group_0: ah, group_1: pf-20261112-2-v5_s071}
+- {name: pf-20261112-2-v5_s072_vs_ah, group_0: pf-20261112-2-v5_s072, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s072, group_0: ah, group_1: pf-20261112-2-v5_s072}
+- {name: pf-20261112-2-v5_s073_vs_ah, group_0: pf-20261112-2-v5_s073, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s073, group_0: ah, group_1: pf-20261112-2-v5_s073}
+- {name: pf-20261112-2-v5_s074_vs_ah, group_0: pf-20261112-2-v5_s074, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s074, group_0: ah, group_1: pf-20261112-2-v5_s074}
+- {name: pf-20261112-2-v5_s075_vs_ah, group_0: pf-20261112-2-v5_s075, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s075, group_0: ah, group_1: pf-20261112-2-v5_s075}
+- {name: pf-20261112-2-v5_s076_vs_ah, group_0: pf-20261112-2-v5_s076, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s076, group_0: ah, group_1: pf-20261112-2-v5_s076}
+- {name: pf-20261112-2-v5_s077_vs_ah, group_0: pf-20261112-2-v5_s077, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s077, group_0: ah, group_1: pf-20261112-2-v5_s077}
+- {name: pf-20261112-2-v5_s078_vs_ah, group_0: pf-20261112-2-v5_s078, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s078, group_0: ah, group_1: pf-20261112-2-v5_s078}
+- {name: pf-20261112-2-v5_s079_vs_ah, group_0: pf-20261112-2-v5_s079, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s079, group_0: ah, group_1: pf-20261112-2-v5_s079}
+- {name: pf-20261112-2-v5_s080_vs_ah, group_0: pf-20261112-2-v5_s080, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s080, group_0: ah, group_1: pf-20261112-2-v5_s080}
+- {name: pf-20261112-2-v5_s081_vs_ah, group_0: pf-20261112-2-v5_s081, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s081, group_0: ah, group_1: pf-20261112-2-v5_s081}
+- {name: pf-20261112-2-v5_s082_vs_ah, group_0: pf-20261112-2-v5_s082, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s082, group_0: ah, group_1: pf-20261112-2-v5_s082}
+- {name: pf-20261112-2-v5_s083_vs_ah, group_0: pf-20261112-2-v5_s083, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s083, group_0: ah, group_1: pf-20261112-2-v5_s083}
+- {name: pf-20261112-2-v5_s084_vs_ah, group_0: pf-20261112-2-v5_s084, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s084, group_0: ah, group_1: pf-20261112-2-v5_s084}
+- {name: pf-20261112-2-v5_s085_vs_ah, group_0: pf-20261112-2-v5_s085, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s085, group_0: ah, group_1: pf-20261112-2-v5_s085}
+- {name: pf-20261112-2-v5_s086_vs_ah, group_0: pf-20261112-2-v5_s086, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s086, group_0: ah, group_1: pf-20261112-2-v5_s086}
+- {name: pf-20261112-2-v5_s087_vs_ah, group_0: pf-20261112-2-v5_s087, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s087, group_0: ah, group_1: pf-20261112-2-v5_s087}
+- {name: pf-20261112-2-v5_s088_vs_ah, group_0: pf-20261112-2-v5_s088, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s088, group_0: ah, group_1: pf-20261112-2-v5_s088}
+- {name: pf-20261112-2-v5_s089_vs_ah, group_0: pf-20261112-2-v5_s089, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s089, group_0: ah, group_1: pf-20261112-2-v5_s089}
+- {name: pf-20261112-2-v5_s090_vs_ah, group_0: pf-20261112-2-v5_s090, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s090, group_0: ah, group_1: pf-20261112-2-v5_s090}
+- {name: pf-20261112-2-v5_s091_vs_ah, group_0: pf-20261112-2-v5_s091, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s091, group_0: ah, group_1: pf-20261112-2-v5_s091}
+- {name: pf-20261112-2-v5_s092_vs_ah, group_0: pf-20261112-2-v5_s092, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s092, group_0: ah, group_1: pf-20261112-2-v5_s092}
+- {name: pf-20261112-2-v5_s093_vs_ah, group_0: pf-20261112-2-v5_s093, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s093, group_0: ah, group_1: pf-20261112-2-v5_s093}
+- {name: pf-20261112-2-v5_s094_vs_ah, group_0: pf-20261112-2-v5_s094, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s094, group_0: ah, group_1: pf-20261112-2-v5_s094}
+- {name: pf-20261112-2-v5_s095_vs_ah, group_0: pf-20261112-2-v5_s095, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s095, group_0: ah, group_1: pf-20261112-2-v5_s095}
+- {name: pf-20261112-2-v5_s096_vs_ah, group_0: pf-20261112-2-v5_s096, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s096, group_0: ah, group_1: pf-20261112-2-v5_s096}
+- {name: pf-20261112-2-v5_s097_vs_ah, group_0: pf-20261112-2-v5_s097, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s097, group_0: ah, group_1: pf-20261112-2-v5_s097}
+- {name: pf-20261112-2-v5_s098_vs_ah, group_0: pf-20261112-2-v5_s098, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s098, group_0: ah, group_1: pf-20261112-2-v5_s098}
+- {name: pf-20261112-2-v5_s099_vs_ah, group_0: pf-20261112-2-v5_s099, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s099, group_0: ah, group_1: pf-20261112-2-v5_s099}
+- {name: pf-20261112-2-v5_s100_vs_ah, group_0: pf-20261112-2-v5_s100, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s100, group_0: ah, group_1: pf-20261112-2-v5_s100}
+- {name: pf-20261112-2-v5_s101_vs_ah, group_0: pf-20261112-2-v5_s101, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s101, group_0: ah, group_1: pf-20261112-2-v5_s101}
+- {name: pf-20261112-2-v5_s102_vs_ah, group_0: pf-20261112-2-v5_s102, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s102, group_0: ah, group_1: pf-20261112-2-v5_s102}
+- {name: pf-20261112-2-v5_s103_vs_ah, group_0: pf-20261112-2-v5_s103, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s103, group_0: ah, group_1: pf-20261112-2-v5_s103}
+- {name: pf-20261112-2-v5_s104_vs_ah, group_0: pf-20261112-2-v5_s104, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s104, group_0: ah, group_1: pf-20261112-2-v5_s104}
+- {name: pf-20261112-2-v5_s105_vs_ah, group_0: pf-20261112-2-v5_s105, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s105, group_0: ah, group_1: pf-20261112-2-v5_s105}
+- {name: pf-20261112-2-v5_s106_vs_ah, group_0: pf-20261112-2-v5_s106, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s106, group_0: ah, group_1: pf-20261112-2-v5_s106}
+- {name: pf-20261112-2-v5_s107_vs_ah, group_0: pf-20261112-2-v5_s107, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s107, group_0: ah, group_1: pf-20261112-2-v5_s107}
+- {name: pf-20261112-2-v5_s108_vs_ah, group_0: pf-20261112-2-v5_s108, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s108, group_0: ah, group_1: pf-20261112-2-v5_s108}
+- {name: pf-20261112-2-v5_s109_vs_ah, group_0: pf-20261112-2-v5_s109, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s109, group_0: ah, group_1: pf-20261112-2-v5_s109}
+- {name: pf-20261112-2-v5_s110_vs_ah, group_0: pf-20261112-2-v5_s110, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s110, group_0: ah, group_1: pf-20261112-2-v5_s110}
+- {name: pf-20261112-2-v5_s111_vs_ah, group_0: pf-20261112-2-v5_s111, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s111, group_0: ah, group_1: pf-20261112-2-v5_s111}
+- {name: pf-20261112-2-v5_s112_vs_ah, group_0: pf-20261112-2-v5_s112, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s112, group_0: ah, group_1: pf-20261112-2-v5_s112}
+- {name: pf-20261112-2-v5_s113_vs_ah, group_0: pf-20261112-2-v5_s113, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s113, group_0: ah, group_1: pf-20261112-2-v5_s113}
+- {name: pf-20261112-2-v5_s114_vs_ah, group_0: pf-20261112-2-v5_s114, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s114, group_0: ah, group_1: pf-20261112-2-v5_s114}
+- {name: pf-20261112-2-v5_s115_vs_ah, group_0: pf-20261112-2-v5_s115, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s115, group_0: ah, group_1: pf-20261112-2-v5_s115}
+- {name: pf-20261112-2-v5_s116_vs_ah, group_0: pf-20261112-2-v5_s116, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s116, group_0: ah, group_1: pf-20261112-2-v5_s116}
+- {name: pf-20261112-2-v5_s117_vs_ah, group_0: pf-20261112-2-v5_s117, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s117, group_0: ah, group_1: pf-20261112-2-v5_s117}
+- {name: pf-20261112-2-v5_s118_vs_ah, group_0: pf-20261112-2-v5_s118, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s118, group_0: ah, group_1: pf-20261112-2-v5_s118}
+- {name: pf-20261112-2-v5_s119_vs_ah, group_0: pf-20261112-2-v5_s119, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s119, group_0: ah, group_1: pf-20261112-2-v5_s119}
+- {name: pf-20261112-2-v5_s120_vs_ah, group_0: pf-20261112-2-v5_s120, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s120, group_0: ah, group_1: pf-20261112-2-v5_s120}
+- {name: pf-20261112-2-v5_s121_vs_ah, group_0: pf-20261112-2-v5_s121, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s121, group_0: ah, group_1: pf-20261112-2-v5_s121}
+- {name: pf-20261112-2-v5_s122_vs_ah, group_0: pf-20261112-2-v5_s122, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s122, group_0: ah, group_1: pf-20261112-2-v5_s122}
+- {name: pf-20261112-2-v5_s123_vs_ah, group_0: pf-20261112-2-v5_s123, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s123, group_0: ah, group_1: pf-20261112-2-v5_s123}
+- {name: pf-20261112-2-v5_s124_vs_ah, group_0: pf-20261112-2-v5_s124, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s124, group_0: ah, group_1: pf-20261112-2-v5_s124}
+- {name: pf-20261112-2-v5_s125_vs_ah, group_0: pf-20261112-2-v5_s125, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s125, group_0: ah, group_1: pf-20261112-2-v5_s125}
+- {name: pf-20261112-2-v5_s126_vs_ah, group_0: pf-20261112-2-v5_s126, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s126, group_0: ah, group_1: pf-20261112-2-v5_s126}
+- {name: pf-20261112-2-v5_s127_vs_ah, group_0: pf-20261112-2-v5_s127, group_1: ah}
+- {name: ah_vs_pf-20261112-2-v5_s127, group_0: ah, group_1: pf-20261112-2-v5_s127}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 250
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261112-2-v5_sweep_p1of2
+figure_name: pf-20261112-2-v5_sweep_p1of2
+save_per_round: true
+basedir: .
+sweep_metric: pool_diff_vs_opponents
+sweep_opponents:
+- ah
+sweep: true
