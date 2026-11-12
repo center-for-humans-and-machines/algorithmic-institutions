@@ -102,3 +102,14 @@ This is the proxy campaign's budget:
 - 2026-11-12: setting, metric, agent definition, game doc, page and tests built on `pf-diff`.
   - Blocked at start: Raven unreachable from the command server (exit 255), the container
     spawner not resolvable, 2.0 GB free disk.
+- 2026-11-12 15:35: blockers resolved (Raven reachable, spawner up, 14 GB free).
+- 2026-11-12: smoke passed.
+  - The first export failed the leak check: the `33_MULTI_h2h` configs name earlier
+    instances. They are now in the global deny list, and exp2_diff exports also leave out
+    experiment 1's reference sims.
+  - `pfsmoke-diff` (16 points × 50 games per seat, final 6 × 200): lead 11.8 ± 3.2 (own 59.8,
+    ah 48.0) in 23 min. The agent read the objective as sorting: fine persistent free riders
+    just before a switch so that they move to ah's group, and leave everyone else alone.
+  - `pfsmoke-diff-v2` (`--iterate-on`, full size: 256 × 250 per seat, final 6 × 1000 per
+    seat): lead 16.4 ± 1.4 (own 61.8, ah 45.4) in 27 min.
+- 2026-11-12 16:30: campaign `exp2-diff-2026-11` started on `pf-diff`.
