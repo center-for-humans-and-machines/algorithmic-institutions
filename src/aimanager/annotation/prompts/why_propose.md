@@ -1,9 +1,11 @@
 # Task: build a codebook of reasons
 
-Below is a numbered list of reasons the search agent gave for or against manager mechanisms (why a mechanism should raise or lower the group's score). Many state the same reason in different words. Group them into a codebook of distinct reasons. No scheme is given; derive the codes from the items.
+Below is a numbered list of reasons the search agent gave for or against manager mechanisms. Each item is the reason itself, followed by a context line naming the mechanism it refers to and whether it argues for or against it; the context line is there to make the reason understandable and is not to be coded. Many items state the same reason in different words. Group them into a codebook of distinct reasons. No scheme is given; derive the codes from the items.
 
 Guidelines:
-- A code is one kind of justification, e.g. "punishment raises later contributions", "punishment drives members to switch groups", "punishment points cost score directly", "human managers did it". It must be specific enough that one can decide for any stated reason whether it fits.
-- Codes should not overlap: an item should fit exactly one code. Merge near-duplicates; do not split by the numbers quoted.
+- A code is one kind of justification. For the level of abstraction, examples from an unrelated domain (reasons a librarian gives for overdue rules): "fees make borrowers return books sooner", "harsh fees drive members away", "collecting fees costs staff time", "other libraries do it". A code must be specific enough that one can decide for any stated reason whether it fits.
+- Group by the kind of justification, not by the mechanism: the same kind of reason given for different mechanisms is one code, and different reasons for one mechanism are different codes. Do not split by stance either.
+- A code names the kind of reason, not a specific number or result: "a 0.20 fee halved late returns" and "fees reduce late returns" fit the same code.
+- Codes should not overlap: an item should fit exactly one code. Merge near-duplicates.
 - Cover the frequent reasons; rare idiosyncratic items may stay without a code.
-- `name`: short snake_case identifier; `label`: a few words; `definition`: one or two sentences saying what counts; `fits`: two short examples that fit; `does_not_fit`: one or two near misses that belong elsewhere.
+- `name`: short snake_case identifier (not `none` or `failed`); `label`: a few words; `definition`: one or two sentences saying what counts; `fits`: two short examples that fit; `does_not_fit`: one or two near misses that belong elsewhere.
