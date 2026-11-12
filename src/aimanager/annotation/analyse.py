@@ -441,20 +441,22 @@ def why_by_what(ctx):
     rows = []
     for rec in ctx.records.values():
         for m in rec["mechanisms"]:
-            if not m.get("what_code"):
-                continue
-            for r in m["reasons"]:
-                if not r.get("why_code"):
-                    continue
-                rows.append(
-                    dict(
-                        what_code=m["what_code"],
-                        what_family=ctx.families["what"].get(m["what_code"], "none"),
-                        why_code=r["why_code"],
-                        why_family=ctx.families["why"].get(r["why_code"], "none"),
-                        stance=r["stance"],
+            codes = m.get("what_codes")
+            if codes is None:
+                codes = [m["what_code"]] if m.get("what_code") else []
+            for code in codes:
+                for r in m["reasons"]:
+                    if not r.get("why_code"):
+                        continue
+                    rows.append(
+                        dict(
+                            what_code=code,
+                            what_family=ctx.families["what"].get(code, "none"),
+                            why_code=r["why_code"],
+                            why_family=ctx.families["why"].get(r["why_code"], "none"),
+                            stance=r["stance"],
+                        )
                     )
-                )
     raw = pd.DataFrame(
         rows, columns=["what_code", "what_family", "why_code", "why_family", "stance"]
     )
@@ -643,7 +645,10 @@ def theory(ctx):
         for m in rec["mechanisms"]:
             if m["status"] != "adopted":
                 continue
-            implicit = m.get("what_code") in linked
+            codes = m.get("what_codes")
+            if codes is None:
+                codes = [m.get("what_code")]
+            implicit = any(c in linked for c in codes)
             mech.append(
                 dict(
                     version=stem,

@@ -103,9 +103,12 @@ STEP_PROMPTS = {
     "basis-codebook": ["system", "basis_propose", "refine", "assign"],
     "consolidate-basis": _CONSOLIDATE,
     "apply-rules": ["system", "judge"],
-    "apply-notes": ["system", "assign"],
+    "apply-notes": ["system", "assign", "assign_multi"],
 }
 STEP_VERSION = {step: 1 for step in STEP_PROMPTS}
+# 2: notes ideas get up to three what codes, with description and quote as
+# context; compound reasons are coded by their main claim
+STEP_VERSION["apply-notes"] = 2
 _CFG_KEYS = ("clustering", "codebook", "coverage", "judge", "sampling", "settings")
 _LLM_KEYS = (
     "temperature",

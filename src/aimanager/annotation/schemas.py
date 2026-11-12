@@ -145,6 +145,17 @@ def placement_model(code_names, family_names):
     return create_model("Placements", placements=(List[Placement], ...))
 
 
+def multi_assignment_model(code_names, max_codes=3):
+    """{codes: [up to max_codes code names]}, best fit first; [] for none."""
+    clash = set(code_names) & set(RESERVED)
+    if clash:
+        raise ValueError(f"code names {sorted(clash)} are reserved")
+    Name = Literal[tuple(code_names)]
+    return create_model(
+        "MultiAssignment", codes=(List[Name], Field(max_length=max_codes))
+    )
+
+
 class Judgement(BaseModel):
     # evidence first: the model has to find the line before it decides
     evidence: str = Field(

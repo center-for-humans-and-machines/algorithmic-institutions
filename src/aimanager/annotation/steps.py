@@ -11,7 +11,14 @@ import re
 
 from . import prompting as P
 from .client import Call
-from .cluster import assign, cluster, gen_sampling, members, target_codes
+from .cluster import (
+    assign,
+    assign_multi,
+    cluster,
+    gen_sampling,
+    members,
+    target_codes,
+)
 from .common import (
     StepFailed,
     atomic_write_text,
@@ -230,10 +237,21 @@ def idea_of(m):
     return positive(m.get("idea") or m["description"])
 
 
-def _mechanism_items(records):
+def _mechanism_items(records, context=False):
     """Notes mechanisms as clustering and assignment items: always the `idea`,
-    never the possibly negated description."""
-    return [(m["id"], idea_of(m)) for r in records.values() for m in r["mechanisms"]]
+    never the possibly negated description. With `context`, a labelled line
+    adds how the notes describe it and the verbatim quote (stage B)."""
+    out = []
+    for r in records.values():
+        for m in r["mechanisms"]:
+            text = idea_of(m)
+            if context:
+                text += (
+                    f"\n(context, not to be coded: the notes describe it as "
+                    f"\"{m['description']}\"; quote: \"{m['quote']}\")"
+                )
+            out.append((m["id"], text))
+    return out
 
 
 def _reason_items(records):
@@ -825,15 +843,11 @@ def apply_notes(run, cfg, client, limit=None):
         records = dict(list(records.items())[:limit])
     _, npath, _ = latest_never(run)
     wfams = {**codebook_families(npath), **codebook_families(wpath)}
-    what, wfailed = assign(
-        client,
-        cfg,
-        "apply-notes",
-        wcodes + never,
-        _mechanism_items(records),
-        "what",
-        families=wfams,
+    what_items = _mechanism_items(records, context=True)
+    what_multi, wfailed = assign_multi(
+        client, cfg, "apply-notes", wcodes + never, what_items, "what", families=wfams
     )
+    what = {i: (codes[0] if codes else None) for i, codes in what_multi.items()}
     why, yfailed = assign(
         client,
         cfg,
@@ -857,7 +871,7 @@ def apply_notes(run, cfg, client, limit=None):
     # items the reviewed codebooks do not cover, per codebook revision
     unassigned, un_paths = {}, []
     for kind, rev, mapping, items in (
-        ("what", wrev, what, _mechanism_items(records)),
+        ("what", wrev, what, what_items),
         ("why", yrev, why, _reason_items(records)),
         ("basis", brev, basis, _basis_items(records)),
     ):
@@ -876,6 +890,8 @@ def apply_notes(run, cfg, client, limit=None):
     for stem, rec in records.items():
         for m in rec["mechanisms"]:
             m["what_code"], m["what_code_status"] = _status(what, wfail, m["id"])
+            # every code the idea fits, best first; what_code is the first
+            m["what_codes"] = what_multi.get(m["id"], [])
             m["what_code_never_implemented"] = m["what_code"] in never_names
             for r in m["reasons"]:
                 r["why_code"], r["why_code_status"] = _status(why, yfail, r["id"])

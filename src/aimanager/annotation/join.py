@@ -161,8 +161,8 @@ def join(run, cfg, limit=None):
         by_code = defaultdict(list)
         if rec:
             for m in rec["mechanisms"]:
-                if m.get("what_code"):
-                    by_code[m["what_code"]].append(m)
+                for code in _codes_of(m):
+                    by_code[code].append(m)
         theory = sorted(
             {t["name"] for t in (rec or {}).get("theory_mentions", []) if _named(t)}
         )
@@ -298,6 +298,13 @@ def _write_theory(run, versions, records):
             ]
         )
     atomic_write_text(run.path("analysis", "theory_mentions.csv"), buf.getvalue())
+
+
+def _codes_of(m):
+    """All what codes of a notes mechanism (best first); older records have one."""
+    if m.get("what_codes") is not None:
+        return list(m["what_codes"])
+    return [m["what_code"]] if m.get("what_code") else []
 
 
 def _rule_code_stats(cfg, rule_rows, coder, names):
@@ -459,6 +466,10 @@ def _rate(flags):
 def _quality(run, versions, records, rule_rows, coder, in_rule, names):
     mechs = [m for r in records.values() for m in r["mechanisms"]]
     reasons = [r for m in mechs for r in m["reasons"]]
+    n_codes = Counter(
+        len(_codes_of(m)) for m in mechs if m.get("what_code_status") != "failed"
+    )
+    tot = sum(n_codes.values()) or 1
     statuses = {
         "mechanisms": dict(Counter(m.get("what_code_status") for m in mechs)),
         "reasons": dict(Counter(r.get("why_code_status") for r in reasons)),
@@ -472,8 +483,8 @@ def _quality(run, versions, records, rule_rows, coder, in_rule, names):
     adopted = defaultdict(set)
     for stem, rec in records.items():
         for m in rec["mechanisms"]:
-            if m["status"] == "adopted" and m.get("what_code"):
-                adopted[stem].add(m["what_code"])
+            if m["status"] == "adopted":
+                adopted[stem].update(_codes_of(m))
     said_not_done = [
         not in_rule[(s, c)]
         for s, cs in adopted.items()
@@ -511,6 +522,10 @@ def _quality(run, versions, records, rule_rows, coder, in_rule, names):
         "what_codes": len(names),
         "coverage_what_on_notes_mechanisms": cov,
         "assignment_status": statuses,
+        "what_codes_per_idea": {
+            str(k): {"n": n_codes.get(k, 0), "share": round(n_codes.get(k, 0) / tot, 4)}
+            for k in range(4)
+        },
         "say_do_gap": {
             "notes_adopted_rule_absent": _rate(said_not_done),
             "rule_present_notes_not_adopted": _rate(done_not_said),

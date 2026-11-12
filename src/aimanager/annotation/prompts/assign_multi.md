@@ -1,0 +1,3 @@
+# Task: assign one item to up to three codes
+
+Below is a codebook, then one item ($unit), followed by a context line from the notes. Choose the codes whose definitions the item fits, best fit first: usually one; two or three when the item names several levers at once (for example "conditions punishment on group size, newcomers or the rival's state" fits each of those codes). Return an empty list if the item fits no code well; do not stretch a definition to make an item fit. If the idea plainly describes what a code defines (for example a stop of punishment before the end of the game, or a reduction in the rounds before a switch decision), choose that code even if the wording differs. Use the context line only to understand the item; code the item itself.

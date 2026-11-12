@@ -274,6 +274,29 @@ def test_stage_b_join_and_agreement(run_dir):
     assert "codes" in q["judge_reliability"]["unreliable_codes"]
     assert {"0", "1"} <= set(next(iter(q["judge_present_share_by_repeat"].values())))
     assert set(q["family_sizes"]) == {"what", "why", "basis"}
+    per_idea = q["what_codes_per_idea"]
+    assert set(per_idea) == {"0", "1", "2", "3"}
+    assert abs(sum(d["share"] for d in per_idea.values()) - 1) < 1e-3
+    recs = [json.loads(p.read_text()) for p in (run_dir / "records_coded").glob("*")]
+    mechs = [m for r in recs for m in r["mechanisms"]]
+    assert all(
+        m["what_codes"][:1] == ([m["what_code"]] if m["what_code"] else [])
+        for m in mechs
+        if m["what_code_status"] != "failed"
+    )
+    from aimanager.annotation.fake import assign as fake_assign
+    from aimanager.annotation.join import _codes_of
+
+    multi = fake_assign(
+        {
+            "codes": ["punish_below_group_mean", "punishment_cap"],
+            "text": "punish below the mean, up to a cap",
+            "multi": True,
+        }
+    )
+    assert multi == {"codes": ["punish_below_group_mean", "punishment_cap"]}
+    assert _codes_of({"what_codes": ["a", "b"], "what_code": "a"}) == ["a", "b"]
+    assert _codes_of({"what_code": "a"}) == ["a"] and _codes_of({}) == []
     un = q["unassigned_by_codebook"]
     assert "v1" in un["why"] and "v1_stage_b" in un["why"]
     assert (run_dir / "unassigned" / "basis.v1.stage_b.yml").exists()

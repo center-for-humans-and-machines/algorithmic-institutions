@@ -16,7 +16,13 @@ import re
 from . import prompting as P
 from .client import Call
 from .common import StepFailed, check_failures, log, slugify
-from .schemas import PROPOSAL_CAP, RESERVED, Proposal, assignment_model
+from .schemas import (
+    PROPOSAL_CAP,
+    RESERVED,
+    Proposal,
+    assignment_model,
+    multi_assignment_model,
+)
 
 UNITS = {
     "what": "a mechanism, i.e. something a manager does to players",
@@ -123,6 +129,11 @@ def assign(client, cfg, step, codes, items, kind, label=None, families=None):
     names = [c["name"] for c in codes]
     model_cls = assignment_model(names)
     instr = P.load("assign").replace("$unit", UNITS[kind])
+    if kind == "why":
+        instr += (
+            " A reason that makes several claims gets the code of its main claim, "
+            "the one the reason is given for."
+        )
     shared = P.render_codebook(codes, families=families)
     calls = [
         Call(
@@ -209,6 +220,36 @@ def _fill(text, **values):
     for k, v in values.items():
         text = text.replace(f"${k}", str(v))
     return text
+
+
+def assign_multi(client, cfg, step, codes, items, kind, families=None, max_codes=3):
+    """({item_id: [code names, best first]}, failed) for items that may name
+    several codes (notes ideas). [] means no code fits. Raises StepFailed beyond
+    the assignment failure budget."""
+    names = [c["name"] for c in codes]
+    model_cls = multi_assignment_model(names, max_codes)
+    instr = P.load("assign_multi").replace("$unit", UNITS[kind])
+    shared = P.render_codebook(codes, families=families)
+    calls = [
+        Call(
+            step,
+            iid,
+            P.messages(instr, text, shared),
+            model_cls,
+            "assign",
+            meta={"codes": names, "text": text, "multi": True},
+        )
+        for iid, text in items
+    ]
+    out, failed = {}, []
+    for res in client.map(calls, label=f"{step} assign (multi)"):
+        iid = res.call.item_id
+        if res.ok:
+            out[iid] = list(dict.fromkeys(res.value.codes))
+        else:
+            failed.append((iid, res.error))
+    check_failures(cfg, step, "assign", failed, len(items))
+    return out, failed
 
 
 def _propose(client, cfg, step, kind, items, codes, rnd, target=None, info=None):

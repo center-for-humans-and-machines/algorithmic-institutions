@@ -163,11 +163,14 @@ def propose(meta):
 def assign(meta):
     text = meta["text"].splitlines()[0]  # never the context line
     by_name = {v[0]: v for v in WHAT + WHY + BASIS}
-    for name in meta["codes"]:
-        v = by_name.get(name)
-        if v and re.search(v[2], text, re.I):
-            return {"code": name}
-    return {"code": "none"}
+    hits = [
+        n
+        for n in meta["codes"]
+        if by_name.get(n) and re.search(by_name[n][2], text, re.I)
+    ]
+    if meta.get("multi"):
+        return {"codes": hits[:3]}
+    return {"code": hits[0] if hits else "none"}
 
 
 def judge(meta):
