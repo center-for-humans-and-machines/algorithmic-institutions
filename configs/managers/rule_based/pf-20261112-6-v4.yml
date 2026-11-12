@@ -1,0 +1,43 @@
+params:
+  last_b:
+    definition: >-
+      the last block start at which punishment is dealt: punishment only in rounds 4, 8, ..., 4*last_b, the
+      first round after a switch decision and the farthest from the next one; never in round 0 (before the
+      first decision, when the two groups are even and any pool difference tips players), never mid-block or
+      at a decision round
+    type: int
+  thr:
+    definition: >-
+      upper contribution limit of the nudge: a member who gave at most thr points this round (and more than
+      lo) gets the small nudge amt; members above thr are never punished
+    type: int
+  amt:
+    definition: >-
+      the nudge in points dealt to middling contributors (lo < contribution <= thr) at an eligible block
+      start; small, because middling contributors raise their contributions after a small hit and do not
+      leave over it
+    type: float
+  lo:
+    definition: >-
+      free-rider cutoff: a member who gave at most lo points this round counts as a free rider and gets
+      amt_fr instead of the nudge
+    type: int
+  amt_fr:
+    definition: >-
+      the punishment in points dealt to free riders (contribution <= lo) at an eligible block start; free
+      riders hardly move after a small hit and need a large one, or none (values below 1 floor to no
+      punishment)
+    type: float
+sweep_config:
+  last_b: [1, 3]
+  thr: [4, 16]
+  amt: [1, 8, log]
+  lo: [0, 5]
+  amt_fr: [0, 16]
+code: |
+  here = in_group[..., -1] * valid[..., -1]
+  cc = c[..., -1]
+  eligible = (th.remainder(t, 4.0) == 0).float() * (t >= 4).float() * (t <= 4.0 * last_b).float()
+  free = (cc <= lo).float()
+  mid = (cc > lo).float() * (cc <= thr).float()
+  punishment = eligible * here * (amt * mid + amt_fr * free)
