@@ -114,15 +114,16 @@ def to_codebook_entries(proposed, taken, source):
     return out
 
 
-def assign(client, cfg, step, codes, items, kind, label=None):
+def assign(client, cfg, step, codes, items, kind, label=None, families=None):
     """({item_id: code name | None}, [(item_id, error)] of failed calls).
 
     Failed items are not in the mapping. Raises StepFailed beyond the budget.
+    `families` ({family: definition}) puts the definitions under the headings.
     """
     names = [c["name"] for c in codes]
     model_cls = assignment_model(names)
     instr = P.load("assign").replace("$unit", UNITS[kind])
-    shared = P.render_codebook(codes)
+    shared = P.render_codebook(codes, families=families)
     calls = [
         Call(
             step,

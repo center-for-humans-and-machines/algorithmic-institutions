@@ -40,12 +40,15 @@ def lineage_position(version):
 
 
 def _render_code(c):
+    """Name, label, definition and examples (each example its own list item,
+    since examples may contain semicolons). Only these fields reach a prompt:
+    theory candidates, review notes and sources never influence the coding."""
     lines = [f"- `{c['name']}` ({c.get('label', '')}): {c['definition']}"]
     ex = c.get("examples") or {}
-    if ex.get("fits"):
-        lines.append("  fits: " + "; ".join(ex["fits"]))
-    if ex.get("does_not_fit"):
-        lines.append("  does not fit: " + "; ".join(ex["does_not_fit"]))
+    for key, title in (("fits", "fits"), ("does_not_fit", "does not fit")):
+        if ex.get(key):
+            lines.append(f"  {title}:")
+            lines.extend(f"    - {e}" for e in ex[key])
     return lines
 
 

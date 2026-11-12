@@ -153,3 +153,25 @@ def test_positive_idea():
     assert positive("the manager does not punish x") == "punish x"
     assert positive("Punishes x") == "Punishes x"
     assert positive("notifies players") == "notifies players"
+
+
+def test_codebook_rendering_hides_theory_and_lists_examples():
+    from aimanager.annotation.prompting import render_codebook
+
+    codes = [
+        {
+            "name": "end_cutoff",
+            "label": "Stops at a round",
+            "definition": "Punishment stops from a round on. Does not count: a fade.",
+            "examples": {"fits": ["a; b", "c"], "does_not_fit": ["d (-> fade)"]},
+            "family": "game_clock",
+            "theory_candidates": ["end-game effect (candidate)"],
+            "theory_link": "end-game effect",
+            "review": {"change": "redefined"},
+        }
+    ]
+    text = render_codebook(codes, families={"game_clock": "When punishment applies."})
+    assert "### Family `game_clock`: When punishment applies." in text
+    assert "Does not count: a fade." in text
+    assert "    - a; b\n    - c" in text and "    - d (-> fade)" in text
+    assert "end-game" not in text and "redefined" not in text

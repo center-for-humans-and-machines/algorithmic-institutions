@@ -89,6 +89,15 @@ class Context:
             fams = {c["name"]: c.get("family") or "none" for c in codes}
             if kind == "what":
                 npath = run.dir / "codebook" / "never_implemented.yml"
+                nrevs = [
+                    p
+                    for p in sorted(
+                        (run.dir / "codebook").glob("never_implemented.v*.yml")
+                    )
+                    if p.stem.split(".v")[-1].isdigit()
+                ]
+                if nrevs:
+                    npath = max(nrevs, key=lambda p: int(p.stem.split(".v")[-1]))
                 if npath.exists():
                     never = read_yaml(npath).get("codes") or []
                     fams.update({c["name"]: c.get("family") or "none" for c in never})

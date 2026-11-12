@@ -78,6 +78,11 @@ def _check_revisions(run, rule_rows):
     an = require(run, "apply-notes")
     used = [("apply-rules", "what", ar["codebook"])]
     used += [("apply-notes", k, an["codebooks"][k]) for k in ("what", "why", "basis")]
+    never = an["codebooks"].get("never_implemented") or {}
+    if "revision" in never:  # runs before revisions of the list carry only a name
+        rev, path, _ = latest_codebook(run, "never_implemented")
+        latest["never_implemented"] = (rev, file_hash(path), path.name)
+        used.append(("apply-notes", "never_implemented", never))
     for step, kind, cb in used:
         rev, digest, name = latest[kind]
         if (cb["revision"], cb["sha256"]) != (rev, digest):

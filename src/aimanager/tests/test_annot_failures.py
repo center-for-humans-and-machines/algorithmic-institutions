@@ -380,6 +380,28 @@ def test_review_against_regenerated_base_is_rejected(tmp_path):
         latest_codebook(run, "what")
 
 
+def test_never_implemented_revisions_and_legacy_migration(tmp_path):
+    from aimanager.annotation.common import migrate_never_implemented
+
+    run = Run(tmp_path, "n")
+    legacy = run.path("codebook", "never_implemented.yml")
+    legacy.write_text(yaml.safe_dump({"codes": [{"name": "reward"}]}))
+    write_manifest(run, "consolidate-what", [], [legacy])
+    v1 = migrate_never_implemented(run)
+    assert v1.read_bytes() == legacy.read_bytes()
+    review_begin(run, "never_implemented")
+    v2 = run.dir / "codebook" / "never_implemented.v2.yml"
+    doc = yaml.safe_load(v2.read_text())
+    doc["codes"].append({"name": "timeout_conditioned"})
+    v2.write_text(yaml.safe_dump(doc))
+    rev, path, codes = latest_codebook(run, "never_implemented")
+    assert rev == 2 and [c["name"] for c in codes] == ["reward", "timeout_conditioned"]
+    # a v1 that is not the file consolidate-what wrote is rejected
+    v1.write_text(yaml.safe_dump({"codes": []}))
+    with pytest.raises(SystemExit, match="not the file consolidate-what wrote"):
+        latest_codebook(run, "never_implemented")
+
+
 def test_parse_present_is_strict():
     assert parse_present("Yes", "s") is True and parse_present(0, "s") is False
     assert parse_present("", "s") is None and parse_present(None, "s") is None

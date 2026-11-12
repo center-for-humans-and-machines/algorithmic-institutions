@@ -175,7 +175,9 @@ def test_stage_a_outputs(run_dir):
     v1 = yaml.safe_load((run_dir / "codebook" / "what.v1.yml").read_text())
     # one merge in each fake consolidation pass; candidates may add codes
     assert len(v1["codes"]) >= len(draft["codes"]) - 2 >= 2
-    never = yaml.safe_load((run_dir / "codebook" / "never_implemented.yml").read_text())
+    never = yaml.safe_load(
+        (run_dir / "codebook" / "never_implemented.v1.yml").read_text()
+    )
     assert "reward_cooperators" in [c["name"] for c in never["codes"]]
     members = yaml.safe_load(
         (run_dir / "codebook" / "what.draft.members.yml").read_text()
@@ -227,7 +229,9 @@ def test_stage_b_join_and_agreement(run_dir):
     with open(run_dir / "analysis" / "version_codes.csv") as f:
         rows = list(csv.DictReader(f))
     v1 = yaml.safe_load((run_dir / "codebook" / "what.v1.yml").read_text())
-    never = yaml.safe_load((run_dir / "codebook" / "never_implemented.yml").read_text())
+    never = yaml.safe_load(
+        (run_dir / "codebook" / "never_implemented.v1.yml").read_text()
+    )
     assert len(rows) == 12 * (len(v1["codes"]) + len(never["codes"]))
     assert {"introduced", "kept"} <= {r["event"] for r in rows}
     reward = [r for r in rows if r["what_code"] == "reward_cooperators"]

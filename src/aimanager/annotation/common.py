@@ -227,7 +227,8 @@ def slugify(name):
     return s[:60]
 
 
-_REV = re.compile(r"^(what|why|basis)\.v(\d+)\.yml$")
+KINDS = ("what", "why", "basis", "never_implemented")
+_REV = re.compile(r"^(what|why|basis|never_implemented)\.v(\d+)\.yml$")
 
 
 def codebook_revisions(run, kind):
@@ -246,7 +247,12 @@ CODEBOOK_STEP = {
     "what": "consolidate-what",
     "why": "consolidate-why",
     "basis": "consolidate-basis",
+    "never_implemented": "consolidate-what",
 }
+# runs made before the never-implemented list had revisions: consolidate-what
+# wrote codebook/never_implemented.yml; a byte-identical never_implemented.v1.yml
+# next to it is accepted as v1 (see migrate_never_implemented)
+LEGACY_V1 = {"never_implemented": "codebook/never_implemented.yml"}
 
 
 def check_revision_chain(run, kind):
@@ -263,7 +269,8 @@ def check_revision_chain(run, kind):
         raise SystemExit(f"codebook/{kind}: revisions must be v1, v2, ... without gaps")
     step = CODEBOOK_STEP[kind]
     rel = f"codebook/{kind}.v1.yml"
-    made = require(run, step)["outputs"].get(rel)
+    outputs = require(run, step)["outputs"]
+    made = outputs.get(rel) or outputs.get(LEGACY_V1.get(kind, ""))
     if made != file_hash(revs[0][1]):
         raise SystemExit(f"{rel} is not the file {step} wrote; rerun {step}")
     for (prev, ppath), (rev, path) in zip(revs, revs[1:]):
@@ -276,6 +283,26 @@ def check_revision_chain(run, kind):
                 f"{ppath.name} (`review begin`), or delete {path.name}"
             )
     return revs
+
+
+def migrate_never_implemented(run):
+    """Give a run made before revisions of the never-implemented list its v1:
+    copy codebook/never_implemented.yml byte for byte to never_implemented.v1.yml.
+    The consolidate-what manifest stays as it is; the hash check accepts the copy.
+    Returns the v1 path (existing or new)."""
+    d = run.dir / "codebook"
+    v1, old = d / "never_implemented.v1.yml", d / "never_implemented.yml"
+    if v1.exists():
+        return v1
+    if not old.exists():
+        raise SystemExit(f"no {old} to migrate")
+    made = require(run, "consolidate-what")["outputs"].get(
+        LEGACY_V1["never_implemented"]
+    )
+    if made != file_hash(old):
+        raise SystemExit(f"{old} is not the file consolidate-what wrote")
+    atomic_write_text(v1, old.read_text(encoding="utf-8"))
+    return v1
 
 
 def latest_codebook(run, kind):

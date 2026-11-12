@@ -20,6 +20,7 @@ from .common import (
     file_hash,
     latest_codebook,
     log,
+    migrate_never_implemented,
     quote_in_source,
     read_json,
     read_jsonl,
@@ -507,7 +508,7 @@ def _merged_members(codes, *assignments):
 
 def consolidate_what(run, cfg, client, limit=None):
     """Merges and families over draft, accepted and never-implemented codes, then
-    what.v1.yml and never_implemented.yml, and a fresh assignment of the free
+    what.v1.yml and never_implemented.v1.yml, and a fresh assignment of the free
     codes (against v1) and the notes ideas (against v1 + never implemented)."""
     require(run, "coverage")
     pre = run.dir / "codebook" / "what.premerge.yml"
@@ -528,7 +529,7 @@ def consolidate_what(run, cfg, client, limit=None):
         log(f"  consolidate-what: codes without members after reassignment: {empty}")
     outs = {
         "v1": run.path("codebook", "what.v1.yml"),
-        "never": run.path("codebook", "never_implemented.yml"),
+        "never": run.path("codebook", "never_implemented.v1.yml"),
         "members": run.path("codebook", "what.v1.members.yml"),
         "merges": run.path("codebook", "what.merges.yml"),
         "unassigned": run.path("codebook", "what.v1.unassigned.yml"),
@@ -671,14 +672,25 @@ def why_codebook(run, cfg, client, limit=None):
 
 
 def _basis_items(records):
-    """Reasons with an evidence phrase: (reason id, phrase)."""
-    return [
-        (r["id"], r["evidence"].strip())
-        for rec in records.values()
-        for m in rec["mechanisms"]
-        for r in m["reasons"]
-        if (r.get("evidence") or "").strip()
-    ]
+    """Reasons with an evidence phrase: (reason id, phrase plus a labelled
+    context line with the reason it supports and its evidence pointer)."""
+    out = []
+    for rec in records.values():
+        for m in rec["mechanisms"]:
+            for r in m["reasons"]:
+                phrase = (r.get("evidence") or "").strip()
+                if not phrase:
+                    continue
+                ref = r.get("evidence_ref") or "not stated"
+                out.append(
+                    (
+                        r["id"],
+                        f"{phrase}\n(context, not to be coded: evidence for the "
+                        f"reason \"{r['description']}\" ({r['stance']} the "
+                        f"mechanism); it points to: {ref})",
+                    )
+                )
+    return out
 
 
 def basis_codebook(run, cfg, client, limit=None):
@@ -771,6 +783,14 @@ def apply_rules(run, cfg, client, limit=None):
 # --- 5b ------------------------------------------------------------------
 
 
+def latest_never(run):
+    """(revision, path, codes) of the latest never-implemented list. A run made
+    before the list had revisions is migrated first (v1 = the file as written)."""
+    if not (run.dir / "codebook" / "never_implemented.v1.yml").exists():
+        migrate_never_implemented(run)
+    return latest_codebook(run, "never_implemented")
+
+
 def notes_what_codes(run):
     """(latest what codebook revision, path, codes) plus the never-implemented codes.
 
@@ -778,8 +798,7 @@ def notes_what_codes(run):
     visible in the analysis.
     """
     rev, path, codes = latest_codebook(run, "what")
-    require(run, "consolidate-what")
-    never = read_yaml(run.dir / "codebook" / "never_implemented.yml")["codes"]
+    _, _, never = latest_never(run)
     clash = {c["name"] for c in codes} & {c["name"] for c in never}
     if clash:
         raise SystemExit(
@@ -803,14 +822,34 @@ def apply_notes(run, cfg, client, limit=None):
     records = load_records(run)
     if limit:
         records = dict(list(records.items())[:limit])
+    _, npath, _ = latest_never(run)
+    wfams = {**codebook_families(npath), **codebook_families(wpath)}
     what, wfailed = assign(
-        client, cfg, "apply-notes", wcodes + never, _mechanism_items(records), "what"
+        client,
+        cfg,
+        "apply-notes",
+        wcodes + never,
+        _mechanism_items(records),
+        "what",
+        families=wfams,
     )
     why, yfailed = assign(
-        client, cfg, "apply-notes", ycodes, _reason_items(records), "why"
+        client,
+        cfg,
+        "apply-notes",
+        ycodes,
+        _reason_items(records),
+        "why",
+        families=codebook_families(ypath),
     )
     basis, bfailed = assign(
-        client, cfg, "apply-notes", bcodes, _basis_items(records), "basis"
+        client,
+        cfg,
+        "apply-notes",
+        bcodes,
+        _basis_items(records),
+        "basis",
+        families=codebook_families(bpath),
     )
     wfail, yfail = {i for i, _ in wfailed}, {i for i, _ in yfailed}
     bfail = {i for i, _ in bfailed}
@@ -849,7 +888,7 @@ def apply_notes(run, cfg, client, limit=None):
         outs.append(run.path("records_coded", f"{stem}.json"))
         write_json(outs[-1], rec)
     _remove_stale(run.dir / "records_coded", outs)
-    never_path = run.dir / "codebook" / "never_implemented.yml"
+    nrev, never_path, _ = latest_never(run)
     write_manifest(
         run,
         "apply-notes",
@@ -863,7 +902,7 @@ def apply_notes(run, cfg, client, limit=None):
             "what": _codebook_info(wrev, wpath),
             "why": _codebook_info(yrev, ypath),
             "basis": _codebook_info(brev, bpath),
-            "never_implemented": {"file": never_path.name},
+            "never_implemented": _codebook_info(nrev, never_path),
         },
         model=client.model,
         limit=limit,

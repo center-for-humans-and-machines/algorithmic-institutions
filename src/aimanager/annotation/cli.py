@@ -58,14 +58,22 @@ def _parser():
     e.add_argument("--sheets", help="directory of filled sheets (ingest)")
     r = sub.add_parser("review", parents=[common])
     r.add_argument("action", choices=["status", "begin"])
-    r.add_argument("--kind", choices=["what", "why", "basis"], help="codebook (begin)")
+    r.add_argument(
+        "--kind",
+        choices=["what", "why", "basis", "never_implemented"],
+        help="codebook (begin)",
+    )
     sub.add_parser("join", parents=[common])
     sub.add_parser("analyse", parents=[common], help="7: tables, figures, report")
     return p
 
 
 def review_status(run):
-    for kind in ("what", "why", "basis"):
+    for kind in ("what", "why", "basis", "never_implemented"):
+        if kind == "never_implemented":
+            from .steps import latest_never
+
+            latest_never(run)  # migrates a run made before the list had revisions
         revs = check_revision_chain(run, kind)
         rev, path = revs[-1]
         others = ", ".join(p.name for _, p in revs[:-1]) or "none"
@@ -80,6 +88,10 @@ def review_status(run):
 
 def review_begin(run, kind):
     """Copy the latest revision to the next one, with `based_on` filled in."""
+    if kind == "never_implemented":
+        from .steps import latest_never
+
+        latest_never(run)  # migrates a run made before the list had revisions
     rev, path = check_revision_chain(run, kind)[-1]
     doc = read_yaml(path)
     nxt = path.with_name(f"{kind}.v{rev + 1}.yml")
@@ -140,7 +152,9 @@ def main(argv=None):
     elif args.command == "review":
         if args.action == "begin":
             if not args.kind:
-                raise SystemExit("review begin needs --kind what|why|basis")
+                raise SystemExit(
+                    "review begin needs --kind what|why|basis|never_implemented"
+                )
             review_begin(run, args.kind)
         else:
             review_status(run)
