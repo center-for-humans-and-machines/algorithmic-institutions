@@ -150,7 +150,9 @@ def join(run, cfg, limit=None):
             for m in rec["mechanisms"]:
                 if m.get("what_code"):
                     by_code[m["what_code"]].append(m)
-        theory = sorted({t["name"] for t in rec["theory_mentions"]}) if rec else []
+        theory = sorted(
+            {t["name"] for t in (rec or {}).get("theory_mentions", []) if _named(t)}
+        )
         for code in names + never_names:
             never_impl = code in never_names
             mechs = by_code.get(code, [])
@@ -217,6 +219,12 @@ def join(run, cfg, limit=None):
         f"join: {len(out)} rows ({len(versions)} versions x {len(names)} codes "
         f"+ {len(never_names)} never implemented)"
     )
+
+
+def _named(mention):
+    """A theory mention counts only if the notes contain its name (older records
+    without the flag count)."""
+    return mention.get("name_ok", True)
 
 
 def _codes(reasons, stance=None):
@@ -288,7 +296,7 @@ def _quality(run, versions, records, rule_rows, coder, in_rule, names):
             [r["quote_ok"] for r in rule_rows if r["coder"].startswith("rater:")]
         ),
     }
-    explicit = [bool(r["theory_mentions"]) for r in rec_list]
+    explicit = [any(map(_named, r["theory_mentions"])) for r in rec_list]
     return {
         "versions": len(versions),
         "records": len(records),
@@ -300,6 +308,9 @@ def _quality(run, versions, records, rule_rows, coder, in_rule, names):
             "rule_present_notes_not_adopted": _rate(done_not_said),
         },
         "records_with_theory_mentions": _rate(explicit),
+        "theory_mentions_named_in_notes": _rate(
+            [_named(t) for r in rec_list for t in r["theory_mentions"]]
+        ),
         "quote_check": quotes,
         "calls": _call_stats(run),
     }

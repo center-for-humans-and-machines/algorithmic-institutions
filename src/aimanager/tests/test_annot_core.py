@@ -114,7 +114,7 @@ def test_quote_check_and_kappa():
     assert k["agreement"] == 0.75 and 0 < k["kappa"] < 1
 
 
-def test_first_version_relation_is_not_stated():
+def test_record_relation_and_theory_name_checks():
     from types import SimpleNamespace
 
     from aimanager.annotation.schemas import NotesRecord
@@ -129,9 +129,16 @@ def test_first_version_relation_is_not_stated():
         source_version=None,
         reasons=[],
     )
-    value = NotesRecord(mechanisms=[mech], theory_mentions=[], unlinked_findings=[])
+    mentions = [
+        dict(name="herding", kind="concept", quote="q herding"),
+        dict(name="loss aversion", kind="concept", quote="q herding"),
+    ]
+    value = NotesRecord(
+        mechanisms=[mech], theory_mentions=mentions, unlinked_findings=[]
+    )
     res = SimpleNamespace(value=value)
-    first = _record("s", res, "q", first=True)
+    first = _record("s", res, "q herding", first=True)
+    assert [t["name_ok"] for t in first["theory_mentions"]] == [True, False]
     assert first["mechanisms"][0]["relation_to_previous"] == "not_stated"
     assert first["_relation_forced"] == 1
     later = _record("s-v2", res, "q", first=False)

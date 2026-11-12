@@ -183,6 +183,10 @@ def _record(stem, res, src, first=False):
     for key in ("theory_mentions", "unlinked_findings"):
         for x in rec[key]:
             x["quote_ok"] = quote_in_source(x["quote"], src)
+    # an explicit mention must name the term the notes use, not a label the
+    # model put on a finding
+    for x in rec["theory_mentions"]:
+        x["name_ok"] = bool(quote_in_source(x["name"], src))
     return {"version": stem, **rec, "_relation_forced": forced}
 
 
