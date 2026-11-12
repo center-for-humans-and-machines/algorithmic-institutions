@@ -1,0 +1,50 @@
+params:
+  thr:
+    definition: >-
+      upper line of the fined band: a member is fined only if its contribution
+      this round is below thr (members giving thr or more, the cooperators,
+      are never fined)
+    type: float
+  lo:
+    definition: >-
+      lower line of the fined band: a member is fined only if its contribution
+      this round is at least lo, so lo = 1 spares the zero-givers (who do not
+      respond to fines) and lo = 0 fines them too
+    type: int
+  fine:
+    definition: >-
+      flat fine for a member in the band in a fining round (floored to an
+      integer, so below 1 means never punish)
+    type: float
+  w:
+    definition: >-
+      fining rounds per 4-round block, counted from the block's first round
+      (0, 4, 8, ...): the manager fines only in the first w rounds of a block,
+      never in the switch-decision round (3, 7, 11, 15, 19)
+    type: int
+  first:
+    definition: >-
+      first fining block: no fines before round 4*first (0 = from round 0,
+      1 = after the first switch); never fines after round 19, the last
+      switch decision
+    type: int
+sweep_config:
+  thr: [2, 12]
+  lo: [0, 2]
+  fine: [0, 8]
+  w: [1, 3]
+  first: [0, 3]
+constraints:
+  - thr > 0
+  - lo >= 0
+  - fine >= 0
+  - w >= 1
+  - w <= 3
+  - first >= 0
+code: |
+  c_now = c[..., -1]
+  phase = t - 4 * th.floor(t / 4)
+  in_band = (c_now >= lo).float() * (c_now < thr).float()
+  window = (phase < w).float() * (t >= 4 * first).float() * (t <= 19).float()
+  mine = in_group[..., -1] * valid[..., -1]
+  punishment = fine * in_band * window * mine
