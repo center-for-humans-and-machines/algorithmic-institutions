@@ -1,4 +1,15 @@
-"""Joined tables: analysis/version_codes.csv and analysis/quality.json."""
+"""Joined tables: analysis/version_codes.csv, quality.json and agreement.csv.
+
+join refuses to run unless apply-rules and apply-notes used the latest codebook
+revisions. Never-implemented codes get rows too (in_rule false), so ideas the
+notes discuss but no rule implements stay in the analysis.
+
+Several notes mechanisms of one version can share a code. Their status is
+reduced by precedence adopted > rejected > considered, their relation to the
+previous version by new > modified > removed > kept > not_stated; the full
+sorted lists are in the *_all columns. `no_record` means the version has no
+notes record, `no_mechanism` that the record has no mechanism with the code.
+"""
 
 import csv
 import io
@@ -7,14 +18,19 @@ from collections import Counter, defaultdict
 
 from .common import (
     atomic_write_text,
+    file_hash,
     latest_codebook,
     log,
-    read_json,
     read_jsonl,
+    require,
     write_json,
 )
 from .corpus import load_versions
-from .steps import load_records
+from .expert import write_agreement
+from .steps import load_records, notes_what_codes
+
+STATUS_ORDER = ["adopted", "rejected", "considered"]
+RELATION_ORDER = ["new", "modified", "removed", "kept", "not_stated"]
 
 COLUMNS = [
     "campaign",
@@ -27,26 +43,56 @@ COLUMNS = [
     "score_status",
     "score_z",
     "what_code",
+    "code_source",
     "in_rule",
+    "switchable_off",
     "in_parent_rule",
     "event",
     "notes_status",
+    "notes_status_all",
+    "notes_relation",
+    "notes_relation_all",
     "notes_tested",
     "notes_source_versions",
     "why_codes",
+    "why_codes_for",
+    "why_codes_against",
+    "reason_evidence",
     "theory_mentions",
 ]
 
 
-def _coder(run, cfg, rows):
-    coder = cfg.get("join", {}).get("coder", "auto")
-    if coder != "auto":
-        return coder
-    meta = run.dir / "codes" / "apply_rules.meta.json"
-    if meta.exists():
-        return read_json(meta)["coder"]
-    llm = Counter(r["coder"] for r in rows if r["coder"].startswith("llm:"))
-    return llm.most_common(1)[0][0] if llm else None
+def _check_revisions(run, rule_rows):
+    """Fail unless stage B ran with the latest what and why codebooks."""
+    wrev, wpath, _ = latest_codebook(run, "what")
+    yrev, ypath, _ = latest_codebook(run, "why")
+    latest = {
+        "what": (wrev, file_hash(wpath), wpath.name),
+        "why": (yrev, file_hash(ypath), ypath.name),
+    }
+    ar = require(run, "apply-rules")
+    an = require(run, "apply-notes")
+    used = [("apply-rules", "what", ar["codebook"])]
+    used += [("apply-notes", k, an["codebooks"][k]) for k in ("what", "why")]
+    for step, kind, cb in used:
+        rev, digest, name = latest[kind]
+        if (cb["revision"], cb["sha256"]) != (rev, digest):
+            raise SystemExit(
+                f"{step} used {cb['file']} but the latest {kind} codebook is {name}; "
+                f"rerun stage B before join"
+            )
+    mine = [r for r in rule_rows if r["coder"] == ar["coder"]]
+    if len(mine) != ar["rows"] or any(r["codebook_revision"] != wrev for r in mine):
+        raise SystemExit(
+            "codes/rule_codes.jsonl does not hold the rows apply-rules wrote; "
+            "rerun apply-rules"
+        )
+    return ar["coder"], wpath
+
+
+def _reduce(values, order):
+    present = sorted(set(values), key=order.index)
+    return (present[0] if present else None), ";".join(present)
 
 
 def _z_scores(versions):
@@ -82,15 +128,17 @@ def _cell(v):
 
 def join(run, cfg, limit=None):
     versions = load_versions(run)
-    rev, path, codes = latest_codebook(run, "what")
-    names = [c["name"] for c in codes]
     rule_rows = read_jsonl(run.dir / "codes" / "rule_codes.jsonl")
-    coder = _coder(run, cfg, rule_rows)
-    in_rule = {
-        (r["version"], r["what_code"]): r["present"]
-        for r in rule_rows
-        if r["coder"] == coder
+    llm_coder, path = _check_revisions(run, rule_rows)
+    _, _, codes, never = notes_what_codes(run)
+    coder = cfg.get("join", {}).get("coder", "auto")
+    coder = llm_coder if coder == "auto" else coder
+    names = [c["name"] for c in codes]
+    never_names = [c["name"] for c in never]
+    rows_of = {
+        (r["version"], r["what_code"]): r for r in rule_rows if r["coder"] == coder
     }
+    in_rule = {k: r["present"] for k, r in rows_of.items()}
     records = load_records(run, coded=True)
     z = _z_scores(versions)
     out = []
@@ -103,11 +151,22 @@ def join(run, cfg, limit=None):
                 if m.get("what_code"):
                     by_code[m["what_code"]].append(m)
         theory = sorted({t["name"] for t in rec["theory_mentions"]}) if rec else []
-        for code in names:
+        for code in names + never_names:
+            never_impl = code in never_names
             mechs = by_code.get(code, [])
-            ir = in_rule.get((stem, code))
-            ip = in_rule.get((parent, code)) if parent else False
-            whys = {r["why_code"] for m in mechs for r in m["reasons"] if r["why_code"]}
+            if never_impl:
+                ir, ip, sw = False, (False if parent else None), None
+            else:
+                ir = in_rule.get((stem, code))
+                ip = in_rule.get((parent, code)) if parent else None
+                sw = (rows_of.get((stem, code)) or {}).get("switchable_off")
+            reasons = [r for m in mechs for r in m["reasons"]]
+            status, status_all = _reduce([m["status"] for m in mechs], STATUS_ORDER)
+            relation, relation_all = _reduce(
+                [m.get("relation_to_previous", "not_stated") for m in mechs],
+                RELATION_ORDER,
+            )
+            empty = "no_record" if rec is None else "no_mechanism"
             srcs = {m["source_version"] for m in mechs if m.get("source_version")}
             row = {
                 "campaign": v["campaign"],
@@ -120,15 +179,23 @@ def join(run, cfg, limit=None):
                 "score_status": v["score_status"],
                 "score_z": z.get(stem),
                 "what_code": code,
+                "code_source": "never_implemented" if never_impl else "codebook",
                 "in_rule": ir,
-                "in_parent_rule": ip if parent else None,
-                "event": _event(ir, ip, bool(parent)),
-                "notes_status": (
-                    ";".join(sorted({m["status"] for m in mechs})) if rec else None
-                ),
-                "notes_tested": any(m["tested"] for m in mechs) if rec else None,
+                "switchable_off": sw,
+                "in_parent_rule": ip,
+                "event": _event(ir, ip if parent else False, bool(parent)),
+                "notes_status": status or empty,
+                "notes_status_all": status_all,
+                "notes_relation": relation or empty,
+                "notes_relation_all": relation_all,
+                "notes_tested": any(m["tested"] for m in mechs) if mechs else None,
                 "notes_source_versions": ";".join(sorted(srcs)),
-                "why_codes": ";".join(sorted(whys)),
+                "why_codes": _codes(reasons),
+                "why_codes_for": _codes(reasons, "for"),
+                "why_codes_against": _codes(reasons, "against"),
+                "reason_evidence": " | ".join(
+                    sorted({r["evidence"] for r in reasons if r.get("evidence")})
+                ),
                 "theory_mentions": ";".join(theory),
             }
             out.append(row)
@@ -138,10 +205,30 @@ def join(run, cfg, limit=None):
     for row in out:
         w.writerow({k: _cell(row[k]) for k in COLUMNS})
     atomic_write_text(run.path("analysis", "version_codes.csv"), buf.getvalue())
+    agreement = write_agreement(run, rule_rows)
     quality = _quality(run, versions, records, rule_rows, coder, in_rule, names)
+    quality["agreement_overall"] = [
+        r for r in agreement if r["code"] == "__overall__"
+    ] or None
     quality["codebooks"] = {"what": path.name, "coder": coder}
+    quality["never_implemented_codes"] = len(never_names)
     write_json(run.path("analysis", "quality.json"), quality)
-    log(f"join: {len(out)} rows ({len(versions)} versions x {len(names)} codes)")
+    log(
+        f"join: {len(out)} rows ({len(versions)} versions x {len(names)} codes "
+        f"+ {len(never_names)} never implemented)"
+    )
+
+
+def _codes(reasons, stance=None):
+    return ";".join(
+        sorted(
+            {
+                r["why_code"]
+                for r in reasons
+                if r.get("why_code") and (stance is None or r["stance"] == stance)
+            }
+        )
+    )
 
 
 def _rate(flags):
@@ -155,6 +242,11 @@ def _rate(flags):
 
 def _quality(run, versions, records, rule_rows, coder, in_rule, names):
     mechs = [m for r in records.values() for m in r["mechanisms"]]
+    reasons = [r for m in mechs for r in m["reasons"]]
+    statuses = {
+        "mechanisms": dict(Counter(m.get("what_code_status") for m in mechs)),
+        "reasons": dict(Counter(r.get("why_code_status") for r in reasons)),
+    }
     cov = {"all": _rate([m.get("what_code") is not None for m in mechs])}
     for status in ("adopted", "considered", "rejected"):
         cov[status] = _rate(
@@ -177,7 +269,6 @@ def _quality(run, versions, records, rule_rows, coder, in_rule, names):
         for (s, c), present in in_rule.items()
         if present and s in records
     ]
-    reasons = [r for m in mechs for r in m["reasons"]]
     rec_list = list(records.values())
     free = read_jsonl(run.dir / "open" / "rule_free_codes.jsonl")
     quotes = {
@@ -203,6 +294,7 @@ def _quality(run, versions, records, rule_rows, coder, in_rule, names):
         "records": len(records),
         "what_codes": len(names),
         "coverage_what_on_notes_mechanisms": cov,
+        "assignment_status": statuses,
         "say_do_gap": {
             "notes_adopted_rule_absent": _rate(said_not_done),
             "rule_present_notes_not_adopted": _rate(done_not_said),
@@ -210,7 +302,6 @@ def _quality(run, versions, records, rule_rows, coder, in_rule, names):
         "records_with_theory_mentions": _rate(explicit),
         "quote_check": quotes,
         "calls": _call_stats(run),
-        "agreement_overall": _agreement(run),
     }
 
 
@@ -246,11 +337,3 @@ def _call_stats(run):
 
 def _round(counter):
     return {k: round(v, 2) if isinstance(v, float) else v for k, v in counter.items()}
-
-
-def _agreement(run):
-    path = run.dir / "analysis" / "agreement.csv"
-    if not path.exists():
-        return None
-    with path.open() as f:
-        return [r for r in csv.DictReader(f) if r["code"] == "__overall__"]

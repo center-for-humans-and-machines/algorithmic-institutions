@@ -29,10 +29,22 @@ llm:
   temperature: 0.0
   concurrency: 16
   connect_timeout: 10
-  read_timeout: 600
+  # seconds without a byte from the server; sized for the longest structured
+  # reply (12k tokens at a slow ~15 tokens/s under full batch load)
+  read_timeout: 900
+  # a read timeout is retried at most this many times
+  timeout_retries: 1
+  # backoff (seconds) between attempts after a 5xx, 429, connection error or a
+  # malformed 200
   backoff: [5, 10, 20, 40]
+  # abort the whole step after this many failed attempts in a row (any call):
+  # a dead or hung server should end the job, not stall it
+  max_consecutive_server_errors: 6
+  # abort the whole step after this many HTTP 4xx replies
+  max_client_errors: 3
   # Extra top-level request fields, by model. The first entry whose `match`
-  # is a substring of the model id wins; `default` applies otherwise.
+  # occurs in the model id (case-insensitive) wins; `default` applies otherwise.
+  # The chosen body is logged once per step.
   extra_body:
     default:
       chat_template_kwargs: {enable_thinking: false}
@@ -49,6 +61,17 @@ llm:
     assign: {first: 64, retry: 256}
     judge: {first: 6144, retry: 12288}
 
+# Share of calls of one pass kind that may fail in a step before the step
+# raises without writing anything (0: every call must succeed). Failed items
+# never count as evidence: a code is not dropped and a candidate not rejected
+# because of them.
+failure_budget:
+  open_rules: 0.05
+  open_notes: 0.05
+  assign: 0.02
+  propose: 0.0
+  judge: 0.0
+
 clustering:
   # proposal call sees at most this many items (seeded sample beyond that)
   max_items_in_proposal: 400
@@ -64,3 +87,25 @@ saturation:
 join:
   # rule coder whose codes count as in_rule; "auto" = the LLM judge
   coder: auto
+
+# Game setting per campaign, put into the per-document part of every prompt
+# that shows a rule or notes, and copied into corpus/versions.jsonl (`setting`).
+# Only facts stated in the agents' prompts (.claude/agents/*.md on the refs),
+# docs/reports/basics*.md, scripts/policy_finder/campaigns/*.yml and
+# configs/simulation/opponents/exp2_multi.yml on the campaign's branches.
+settings:
+  pf-20261104: |
+    Campaign pf-20261104 (two groups with switching, one opponent).
+    Eight players form two groups of four, each group with its own manager, and play 24 rounds (0-23). Each round every player receives 20 points and contributes 0-20 of them to their group's pool. After seeing the round's contributions, the manager deals each member of its own group a punishment of 0-30 points, deducted from that player's account and from the group's pool. The pool is 1.6 times the group's contributions minus its punishments, split equally among the members who contributed that round. After the 4th, 8th, 12th, 16th and 20th round (rounds 3, 7, 11, 15 and 19) every player may move to the other group, so a group can hold 0 to 8 players. A player who times out contributes 0, is not punished and gets no share of the pool that round.
+    The rule manages one group in simulation against artificial humans (models trained on the human experiments); the other group is managed by `ah`, a model trained on the human managers' punishments. The score is the rule's group's common pool, averaged over rounds and episodes (an empty group counts 0), compared with `ah`'s group's. Reference simulations available to the agent: `ah` and `zero` (never punishes) against each other.
+    The rule's code sees, per player of both groups and per round so far, the contributions `c`, `valid` (did not time out), the punishments `p` dealt by either manager, `in_group` (was in the rule's group) and the round `t`; it returns one `punishment` per player, clamped to 0-30, floored to integers and applied to the rule's own group only.
+  pf-20261105: |
+    Campaign pf-20261105 (one group, no switching, no opponent).
+    One group of 4 players with one manager plays 24 rounds (0-23); nobody joins or leaves, and there is no other group. Each round every player gets 20 points and contributes 0-20 of them to the group's pool. After seeing the round's contributions, the manager deals each valid player a punishment of 0-30 points, deducted from that player's payoff and also from the pool. The pool is 1.6 times the sum of contributions minus the sum of punishments over the round's valid players, shared equally among them: a valid player's round payoff is 20 - c - p + (1.6 * sum(c) - sum(p)) / n. A player who times out contributes nothing, cannot be punished and takes no part in that round's pool.
+    The score is the players' average payoff: per round the mean payoff of the valid players, summed over the 24 rounds, averaged over games. Punishing costs the group twice, the punished player's points and the pool's, so it pays only if it raises later contributions by more than it costs. Rules are tested in simulation, one group managed by the rule alone, against artificial humans trained on human pilot sessions (groups of 4 over 8 or 16 rounds, under a human manager or under a rule manager with random parameters). Reference simulations available to the agent: `zero` (never punishes) and `humanlike` (a model of the pilots' human managers).
+    The rule's code sees, per player and per round so far, the contributions `c`, `valid` (did not time out), the punishments `p` and the round `t`; it returns one `punishment` per player, clamped to 0-30 and floored to integers.
+  pf-20261106: |
+    Campaign pf-20261106 (two groups with switching, four unnamed opponents).
+    Eight players form two groups of four, each group with its own manager, and play 24 rounds (0-23). Each round every player receives 20 points and contributes 0-20 of them to their group's pool. After seeing the round's contributions, the manager deals each member of its own group a punishment of 0-30 points, deducted from that player's account and from the group's pool. The pool is 1.6 times the group's contributions minus its punishments, split equally among the members who contributed that round. After the 4th, 8th, 12th, 16th and 20th round (rounds 3, 7, 11, 15 and 19) every player may move to the other group, so a group can hold 0 to 8 players. A player who times out contributes 0, is not punished and gets no share of the pool that round.
+    The rule manages one group in simulation against artificial humans (models trained on the human experiments) while another manager runs the other group. Each rule plays four other managers, half the games from each group, and is scored by its group's common pool averaged over rounds and episodes (an empty group counts 0), then over the four. The agent was not told who they are and saw them only as `opponent_1` to `opponent_4`; the rule can tell them apart only by their punishments in `p`. They are: opponent_1, a sigmoid punishment rule at its common-pool optimum; opponent_2, `ah`, a clone of a human manager; opponent_3, the best rule of campaign pf-20261104 (pf-20261104-12-v7); opponent_4, a manager that never punishes.
+    The rule's code sees, per player of both groups and per round so far, the contributions `c`, `valid` (did not time out), the punishments `p` dealt by either manager, `in_group` (was in the rule's group) and the round `t`; it returns one `punishment` per player, clamped to 0-30, floored to integers and applied to the rule's own group only.

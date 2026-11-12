@@ -34,6 +34,8 @@ WHY = [
 ]
 THEORY = r"(equilibrium|conformity|deterren\w*|Ostrom|Fehr|reciproc\w*)"
 VARIANTS = ["", " in each round", " for valid members", " as the rule states"]
+RELATIONS = ["new", "kept", "modified", "kept", "removed", "not_stated"]
+EVIDENCE = ["analysis of the data", "result of the previous sweep", None]
 
 
 def _h(*parts):
@@ -84,16 +86,23 @@ def open_notes(meta):
         status = ["adopted"] * 3 + ["considered", "rejected"]
         src = re.search(r"pf-\d{8}-\d+(?:-v\d+)?", line)
         reasons = [
-            {"description": wl, "quote": _quote(line, stem + wn)}
+            {
+                "description": wl,
+                "quote": _quote(line, stem + wn),
+                "stance": "against" if _h(stem, wn) % 4 == 0 else "for",
+                "evidence": EVIDENCE[_h(stem, wn, "e") % len(EVIDENCE)],
+            }
             for wn, wl, wrx in WHY
             if re.search(wrx, line, re.I)
         ]
+        relation = RELATIONS[h % len(RELATIONS)] if meta.get("parent") else None
         mechs.append(
             {
                 "description": label + VARIANTS[h % len(VARIANTS)],
                 "quote": _quote(line, stem),
                 "status": status[h % len(status)],
                 "tested": bool(h % 3),
+                "relation_to_previous": relation or "not_stated",
                 "source_version": src.group(0) if src else None,
                 "reasons": reasons,
             }
@@ -102,7 +111,9 @@ def open_notes(meta):
     for line in doc.splitlines():
         m = re.search(THEORY, line, re.I)
         if m and len(theory) < 2:
-            theory.append({"name": m.group(1).lower(), "quote": line.strip()})
+            theory.append(
+                {"name": m.group(1).lower(), "kind": "concept", "quote": line.strip()}
+            )
     findings = [
         {"description": "a finding about players", "quote": line.strip()}
         for line in doc.splitlines()
@@ -117,7 +128,7 @@ def open_notes(meta):
 
 def propose(meta):
     vocab = _vocab(meta["kind"])
-    texts = [t for _, t in meta["items"]]
+    texts = [t.splitlines()[0] for _, t in meta["items"]]
     counts = {v[0]: sum(bool(re.search(v[2], t, re.I)) for t in texts) for v in vocab}
     existing = set(meta.get("existing", []))
     if meta.get("round", 0) == 0:
@@ -139,7 +150,7 @@ def propose(meta):
 
 
 def assign(meta):
-    text = meta["text"]
+    text = meta["text"].splitlines()[0]  # never the context line
     by_name = {v[0]: v for v in WHAT + WHY}
     for name in meta["codes"]:
         v = by_name.get(name)
@@ -155,7 +166,11 @@ def judge(meta):
     for name in meta["codes"]:
         v = by_name.get(name)
         line = _first_line(v[2], doc) if v else None
-        out[name] = {"present": bool(line), "quote": line or ""}
+        out[name] = {
+            "present": bool(line),
+            "switchable_off": bool(line) and _h(name, line) % 3 == 0,
+            "quote": line or "",
+        }
     return out
 
 

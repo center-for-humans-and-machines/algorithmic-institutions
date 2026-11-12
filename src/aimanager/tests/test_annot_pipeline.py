@@ -139,10 +139,14 @@ def run_dir(tmp_path_factory):
     main(["expert-check", "ingest"] + base)
     main(["join"] + base)
     # a reviewer writes the next revision; stage B must pick it up
-    v1 = yaml.safe_load((run / "codebook" / "what.v1.yml").read_text())
-    v1["codes"] = v1["codes"][:2]
-    write_yaml(run / "codebook" / "what.v2.yml", v1)
+    main(["review", "begin", "--kind", "what"] + base)
+    v2 = yaml.safe_load((run / "codebook" / "what.v2.yml").read_text())
+    v2["codes"] = v2["codes"][:2]
+    write_yaml(run / "codebook" / "what.v2.yml", v2)
     main(["apply-rules"] + fake)
+    # apply-notes still used what.v1.yml: join must refuse
+    with pytest.raises(SystemExit, match="apply-notes used what.v1.yml"):
+        main(["join"] + base)
     return run
 
 
@@ -181,8 +185,18 @@ def test_stage_b_join_and_agreement(run_dir):
     with open(run_dir / "analysis" / "version_codes.csv") as f:
         rows = list(csv.DictReader(f))
     v1 = yaml.safe_load((run_dir / "codebook" / "what.v1.yml").read_text())
-    assert len(rows) == 12 * len(v1["codes"])
+    never = yaml.safe_load((run_dir / "codebook" / "never_implemented.yml").read_text())
+    assert len(rows) == 12 * (len(v1["codes"]) + len(never["codes"]))
     assert {"introduced", "kept"} <= {r["event"] for r in rows}
+    reward = [r for r in rows if r["what_code"] == "reward_cooperators"]
+    assert {r["code_source"] for r in reward} == {"never_implemented"}
+    assert {r["in_rule"] for r in reward} == {"0"}
+    assert "considered" in {r["notes_status"] for r in reward}
+    assert {"no_mechanism", "adopted"} <= {r["notes_status"] for r in rows}
+    first = {r["notes_relation"] for r in rows if r["generation"] == "1"}
+    assert first <= {"not_stated", "no_mechanism"}
+    assert any(r["why_codes_for"] for r in rows)
+    assert any(r["reason_evidence"] for r in rows)
     with open(run_dir / "analysis" / "agreement.csv") as f:
         agree = list(csv.DictReader(f))
     overall = [r for r in agree if r["code"] == "__overall__"]

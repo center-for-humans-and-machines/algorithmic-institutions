@@ -2,10 +2,12 @@
 
 import csv
 import io
+import re
 from pathlib import Path
 
 from .common import (
     atomic_write_text,
+    file_hash,
     latest_codebook,
     log,
     quote_in_source,
@@ -18,7 +20,7 @@ from .common import (
 from .corpus import load_versions
 
 SHEET_HELP = (
-    "Fill in `rater` once. For every code set `present` to true or false and, "
+    "Fill in `rater` once. For every code set `present` to yes or no and, "
     "if true, copy into `quote` the line of the rule that implements it. "
     "Leave `present` empty to skip a code. Save the filled sheet into "
     "expert_check/filled/ (any file name ending in .yml)."
@@ -37,6 +39,8 @@ def export(run, cfg, limit=None):
             "instructions": SHEET_HELP,
             "version": stem,
             "codebook": path.name,
+            "codebook_revision": rev,
+            "codebook_sha256": file_hash(path),
             "rater": "",
             "rule": versions[stem]["rule"],
             "codes": [
@@ -55,10 +59,36 @@ def export(run, cfg, limit=None):
     log(f"expert-check export: {len(held_out)} sheets with {path.name}")
 
 
+_TRUE = {"yes", "true", "1", "y"}
+_FALSE = {"no", "false", "0", "n"}
+
+
+def parse_present(value, where):
+    """True, False or None (skipped) from a sheet cell; anything else is an error."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in _TRUE:
+        return True
+    if text in _FALSE:
+        return False
+    raise SystemExit(f"{where}: `present` must be yes/no/true/false/1/0, got {value!r}")
+
+
+def _revision(sheet):
+    rev = sheet.get("codebook_revision")
+    if rev is None:
+        m = re.search(r"\.v(\d+)\.yml$", sheet.get("codebook") or "")
+        rev = int(m.group(1)) if m else None
+    return rev
+
+
 def ingest(run, cfg, sheets_dir=None):
     d = Path(sheets_dir) if sheets_dir else run.dir / "expert_check" / "filled"
     versions = {v["stem"]: v for v in load_versions(run)}
-    new, raters = [], set()
+    new, replaced = [], set()
     for p in sorted(d.glob("*.yml")):
         sheet = read_yaml(p)
         rater = (sheet.get("rater") or "").strip()
@@ -66,12 +96,13 @@ def ingest(run, cfg, sheets_dir=None):
             log(f"  skip {p.name}: no rater")
             continue
         coder = f"rater:{rater}"
-        raters.add(coder)
+        replaced.add((coder, sheet["version"]))
         rule = versions[sheet["version"]]["rule"]
+        rev = _revision(sheet)
         for c in sheet["codes"]:
-            if c.get("present") is None:
+            present = parse_present(c.get("present"), f"{p.name}, code {c['code']}")
+            if present is None:
                 continue
-            present = bool(c["present"])
             new.append(
                 {
                     "version": sheet["version"],
@@ -81,14 +112,19 @@ def ingest(run, cfg, sheets_dir=None):
                     "quote_ok": (
                         quote_in_source(c.get("quote"), rule) if present else None
                     ),
+                    "switchable_off": None,
                     "coder": coder,
-                    "codebook": sheet.get("codebook"),
+                    "codebook_revision": rev,
                 }
             )
+    # a sheet replaces only that rater's earlier rows for that version
     out = run.path("codes", "rule_codes.jsonl")
-    keep = [r for r in read_jsonl(out) if r.get("coder") not in raters]
+    keep = [
+        r for r in read_jsonl(out) if (r.get("coder"), r["version"]) not in replaced
+    ]
     rows = keep + new
     write_jsonl(out, rows)
+    raters = {c for c, _ in replaced}
     log(f"expert-check ingest: {len(new)} rows from {len(raters)} rater(s)")
     write_agreement(run, rows)
 
@@ -117,11 +153,16 @@ def kappa_stats(pairs):
 
 
 def write_agreement(run, rows):
+    """analysis/agreement.csv: every rater against every LLM judge.
+
+    Rows are paired only within one codebook revision (key: version, code,
+    revision), so a judge rerun with a new revision is not compared with
+    sheets filled against an older one.
+    """
     by_coder = {}
     for r in rows:
-        by_coder.setdefault(r["coder"], {})[(r["version"], r["what_code"])] = r[
-            "present"
-        ]
+        key = (r["version"], r["what_code"], r.get("codebook_revision"))
+        by_coder.setdefault(r["coder"], {})[key] = r["present"]
     judges = sorted(c for c in by_coder if c.startswith("llm:"))
     raters = sorted(c for c in by_coder if c.startswith("rater:"))
     out = []

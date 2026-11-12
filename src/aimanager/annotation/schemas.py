@@ -17,12 +17,25 @@ class FreeCodes(BaseModel):
 
 # step 1b: notes record
 class Reason(Quoted):
-    pass
+    stance: Literal["for", "against"] = Field(
+        description="whether the reason argues for or against the mechanism"
+    )
+    evidence: Optional[str] = Field(
+        description="what the reason rests on, in the agent's own terms; null if "
+        "the notes do not say"
+    )
+
+
+RELATIONS = ("new", "kept", "modified", "removed", "not_stated")
 
 
 class Mechanism(Quoted):
     status: Literal["adopted", "rejected", "considered"]
     tested: bool
+    relation_to_previous: Literal[RELATIONS] = Field(
+        description="how the notes present this mechanism relative to the previous "
+        "version of the lineage"
+    )
     source_version: Optional[str] = Field(
         description="earlier version the notes credit for this idea, else null"
     )
@@ -31,6 +44,7 @@ class Mechanism(Quoted):
 
 class TheoryMention(BaseModel):
     name: str
+    kind: str = Field(description="e.g. concept, author, field, paper")
     quote: str
 
 
@@ -53,14 +67,25 @@ class Proposal(BaseModel):
     codes: List[ProposedCode]
 
 
+# answer values of an assignment that are not codes; no code may take these names
+RESERVED = ("none", "failed")
+
+
 def assignment_model(code_names):
     """{code: one of the code names or "none"}; fixed for one codebook."""
+    clash = set(code_names) & set(RESERVED)
+    if clash:
+        raise ValueError(f"code names {sorted(clash)} are reserved")
     choices = tuple(code_names) + ("none",)
     return create_model("Assignment", code=(Literal[choices], ...))
 
 
 class Judgement(BaseModel):
     present: bool
+    switchable_off: bool = Field(
+        description="true if a parameter value inside the declared sweep range "
+        "disables the mechanism entirely"
+    )
     quote: str
 
 

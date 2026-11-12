@@ -11,7 +11,7 @@ import re
 import subprocess
 from collections import defaultdict
 
-from .common import log, read_jsonl, write_json, write_jsonl
+from .common import log, read_jsonl, require, write_json, write_jsonl, write_manifest
 
 
 def _git(repo, *args):
@@ -165,12 +165,28 @@ def run_corpus(run, cfg, limit=None, repo=None):
     versions = []
     for ref in refs:
         versions.extend(read_lineage(repo, ref, ccfg))
+    settings = cfg.get("settings") or {}
+    missing = sorted({v["campaign"] for v in versions} - set(settings))
+    if missing:
+        raise SystemExit(f"no game setting in the config for campaigns {missing}")
     for v in versions:
+        v["setting"] = settings[v["campaign"]].strip()
         if v["rule"] is None or v["notes"] is None:
             log(f"warning: {v['stem']} lacks a rule or notes file")
-    write_jsonl(run.path("corpus", "versions.jsonl"), versions)
     split = make_split(versions, cfg["sampling"])
-    write_json(run.path("corpus", "split.json"), split)
+    out = [run.path("corpus", "versions.jsonl"), run.path("corpus", "split.json")]
+    write_jsonl(out[0], versions)
+    write_json(out[1], split)
+    commits = {ref: _git(repo, "rev-parse", ref).strip() for ref in refs}
+    write_manifest(
+        run,
+        "corpus",
+        [],
+        out,
+        expected=len(versions),
+        written=len(versions),
+        refs=commits,
+    )
     n_ok = sum(v["score_status"] == "ok" for v in versions)
     log(
         f"corpus: {len(refs)} refs, {len(versions)} versions, {n_ok} scored; "
@@ -181,7 +197,5 @@ def run_corpus(run, cfg, limit=None, repo=None):
 
 
 def load_versions(run):
-    rows = read_jsonl(run.dir / "corpus" / "versions.jsonl")
-    if not rows:
-        raise SystemExit(f"no corpus in {run.dir}; run `corpus` first")
-    return rows
+    require(run, "corpus")
+    return read_jsonl(run.dir / "corpus" / "versions.jsonl")
