@@ -1,0 +1,43 @@
+params:
+  k:
+    definition: >-
+      punishment points per point of shortfall, where a member's shortfall is how
+      far their contribution falls below thr times the mean contribution of the
+      other members of my group this round
+    type: float
+  thr:
+    definition: >-
+      the fraction of the other members' mean contribution a member must reach
+      to be spared (1 = match the group mean, 0.5 = give at least half of it)
+    type: float
+  w:
+    definition: >-
+      how many rounds at the start of each 4-round block (right after a switch
+      decision, where a punishment weighs least on the next decision) the rule
+      may punish in, rounds 0-19; 0 never punishes while a switch is still ahead
+    type: int
+  end:
+    definition: >-
+      multiplier on k in rounds 20-22, after the last switch decision, when no
+      member can leave any more (round 23 is never punished, nothing follows it)
+    type: float
+sweep_config:
+  k: [0.2, 4.0, log]
+  thr: [0.3, 1.3]
+  w: [0, 4]
+  end: [0.0, 3.0]
+constraints:
+  - k > 0
+  - thr > 0
+code: |
+  c_now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  n_mem = member.sum(dim=-1, keepdim=True)
+  sum_mem = (c_now * member).sum(dim=-1, keepdim=True)
+  n_others = n_mem - member
+  mean_others = (sum_mem - c_now * member) / th.clamp(n_others, min=1.0)
+  shortfall = th.relu(thr * mean_others - c_now) * (n_others > 0).float() * member
+  pos = th.remainder(t, 4.0)
+  open_phase = ((t < 20).float() * (pos < w).float())
+  end_phase = ((t >= 20).float() * (t < 23).float()) * end
+  punishment = k * shortfall * (open_phase + end_phase)
