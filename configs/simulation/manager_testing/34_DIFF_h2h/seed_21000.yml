@@ -1,0 +1,136 @@
+# Head-to-head of the exp2_diff campaign (docs/plans/policy-finder-pool-difference.md,
+# step 7), seed 21000: each row against ah in both seats, 2000 games per pairing.
+# Written by scripts/data_analysis/exp2_diff_h2h_configs.py.
+
+seed: 21000
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  zero:
+    type: dummy
+    constant_punishment: 0
+  prev_best:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 8.593831124672404
+      peer: 0.6021230646847561
+      ceil: 15.0
+      slope: 9.18944166018839
+      decay: 0.5553923088191522
+      stop: 3
+  cem_best:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261008-3-v6.yml
+    params: configs/managers/rule_based/params/pf-20261008-3-v6_best.json
+  pf_9_w0:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261106-9-v5.yml
+    params:
+      k0: 12.15253432568619
+      k1: 3.941831314044691
+      w: 0.0
+      s0: 1.0809098622263695
+      quiet: 2
+      t_end: 16
+    setting: exp2_multi
+  pf_5_v7:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-5-v7.yml
+    params:
+      D0: 17.027202849428637
+      K0: 1
+      D4: 23.997586827369325
+      D8: 22.73618236283069
+      hi: 6
+    setting: exp2_diff
+  pf_6_v6:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v6.yml
+    params:
+      lo: 1
+      hi: 5
+      amt: 21.407363518464027
+    setting: exp2_diff
+  pf_2_v7:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-2-v7.yml
+    params:
+      lead: 3.9082044547579704
+      gap: 3.9847175591885966
+      fine: 5.891675392632171
+      last_block: 4
+      n_min: 4
+    setting: exp2_diff
+pairings:
+- name: pf_5_v7_vs_ah
+  group_0: pf_5_v7
+  group_1: ah
+- name: ah_vs_pf_5_v7
+  group_0: ah
+  group_1: pf_5_v7
+- name: pf_6_v6_vs_ah
+  group_0: pf_6_v6
+  group_1: ah
+- name: ah_vs_pf_6_v6
+  group_0: ah
+  group_1: pf_6_v6
+- name: pf_2_v7_vs_ah
+  group_0: pf_2_v7
+  group_1: ah
+- name: ah_vs_pf_2_v7
+  group_0: ah
+  group_1: pf_2_v7
+- name: zero_vs_ah
+  group_0: zero
+  group_1: ah
+- name: ah_vs_zero
+  group_0: ah
+  group_1: zero
+- name: prev_best_vs_ah
+  group_0: prev_best
+  group_1: ah
+- name: ah_vs_prev_best
+  group_0: ah
+  group_1: prev_best
+- name: cem_best_vs_ah
+  group_0: cem_best
+  group_1: ah
+- name: ah_vs_cem_best
+  group_0: ah
+  group_1: cem_best
+- name: pf_9_w0_vs_ah
+  group_0: pf_9_w0
+  group_1: ah
+- name: ah_vs_pf_9_w0
+  group_0: ah
+  group_1: pf_9_w0
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 2000
+n_groups: 2
+n_agents: 8
+agent_groups:
+- 0
+- 0
+- 0
+- 0
+- 1
+- 1
+- 1
+- 1
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/34_DIFF_h2h/seed_21000
+figure_name: DIFF_h2h_21000
+save_per_round: true
+basedir: .
