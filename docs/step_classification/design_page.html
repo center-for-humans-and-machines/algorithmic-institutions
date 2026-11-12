@@ -676,6 +676,30 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
   </div>
   <p>These are partly limits of the small model. It ignored an explicit instruction against negated codes. The same comparison will be repeated with the production model before more prompt work.</p>
 
+  <h2>Revised run</h2>
+  <p class="meta">Run <code>viper3</code>, same model, with the changes above.</p>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Measure</th><th>Before (viper2)</th><th>Revised (viper3)</th></tr></thead>
+      <tbody>
+        <tr><td class="k">What codes</td><td>46, of which 15 negations</td><td>31, no negations</td></tr>
+        <tr><td class="k">Codes per rule, median</td><td>25</td><td>10</td></tr>
+        <tr><td class="k">Why codes</td><td>31</td><td>20, in 8 families</td></tr>
+        <tr><td class="k">Ideas no rule implements</td><td>3</td><td>4</td></tr>
+        <tr><td class="k">Judge agreement between its two passes</td><td>not measured</td><td>91% of answers, kappa 0.79</td></tr>
+        <tr><td class="k">Notes say adopted, rule does not have it</td><td>9.4%</td><td>8.3%</td></tr>
+        <tr><td class="k">Failed calls</td><td>0</td><td>0</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul class="tight">
+    <li><b>The why families separate on their own.</b> Reasons about the search itself, such as whether a mechanism is needed at all, ended up apart from reasons about how players respond, without being told to.</li>
+    <li><b>A refused idea becomes visible.</b> In lineage <code>pf-20261104-7</code>, punishing relative to the group mean is rejected in versions 1 and 3 and adopted in version 7. An opponent-dependent budget enters in version 4 and is dropped in version 5.</li>
+    <li><b>The judge is uneven across codes.</b> Five codes agree with themselves in only 59% to 82% of rules. They overlap with neighbouring codes, and the answer depends on where the code sits in the list.</li>
+    <li><b>Still weak:</b> some merges are wrong, one family is a grab bag, the third codebook came out with 36 codes where a handful was expected, and a second lineage is noisy.</li>
+  </ul>
+  <p>One more short round on viper tightens the merging and the third codebook. After that the comparison moves to the production model.</p>
+
   <h2>Also changed</h2>
   <ul class="tight">
     <li><b>What a reason rests on.</b> In the first run 525 of 713 reasons said "analysis of the data", which was one of the prompt's own examples. The field now records the agent's wording plus what it points to, such as an exploration or an earlier version. A third, small codebook is built from these.</li>
