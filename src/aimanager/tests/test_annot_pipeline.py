@@ -345,3 +345,41 @@ def test_analyse_tables_figures_and_report(run_dir):
     ctx = Context(Run(root, "t"), load_config(cfg_path))
     out = fig_lineages(idea_events(ctx)[0], a / "figures", min_versions=3)
     assert out and (a / out[0]["file"]).exists()
+
+
+def test_literature_file_shapes():
+    from aimanager.annotation.analyse import _literature
+
+    doc = {
+        "publications": {
+            "fg2000": {
+                "authors": ["Ernst Fehr", "Simon Gächter"],
+                "year": 2000,
+                "title": "Cooperation and Punishment",
+                "venue": "AER",
+                "doi": "10.1257/x",
+                "verified": True,
+            }
+        },
+        "codes": {
+            "what": {
+                "group_ref": {
+                    "links": [
+                        {
+                            "publication": "fg2000",
+                            "relation": "states",
+                            "connection": "c",
+                            "strength": "direct",
+                        }
+                    ]
+                },
+                "rounding": {"links": [], "note": "detail"},
+            }
+        },
+    }
+    lit = _literature(doc)
+    assert lit["rounding"] == []
+    (link,) = lit["group_ref"]
+    assert link["reference"].startswith("Fehr and Gächter (2000)")
+    assert link["verified"] and link["strength"] == "direct"
+    assert _literature({"x": [{"reference": "r"}]}) == {"x": [{"reference": "r"}]}

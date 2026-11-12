@@ -126,15 +126,53 @@ class Context:
             }
 
 
+def _reference(p):
+    authors = p.get("authors") or []
+    who = authors[0].split()[-1] + (" et al." if len(authors) > 2 else "")
+    if len(authors) == 2:
+        who = " and ".join(a.split()[-1] for a in authors)
+    return (
+        f"{who} ({p.get('year', 'n.d.')}). {p.get('title', '')}. {p.get('venue', '')}"
+    )
+
+
 def _literature(doc):
-    """{code: [publication]} from literature.yml (a mapping, or `codes:` list)."""
-    if not doc:
+    """{code: [publication dict]} from literature.yml.
+
+    Accepted shapes: the literature step's file (`publications: {id: {authors,
+    year, title, venue, doi, url, verified}}` and `codes: {kind: {code: {links:
+    [{publication: id, relation, connection, strength}]}}}`); a `codes:` list of
+    {code, publications}; or a plain mapping code -> [publication].
+    """
+    if not doc or not isinstance(doc, dict):
         return {}
-    if isinstance(doc, dict) and "codes" in doc and isinstance(doc["codes"], list):
-        return {c["code"]: c.get("publications") or [] for c in doc["codes"]}
-    if isinstance(doc, dict):
-        return {k: (v or []) for k, v in doc.items() if isinstance(v, list)}
-    return {}
+    codes = doc.get("codes")
+    if isinstance(codes, dict) and isinstance(doc.get("publications"), dict):
+        pubs, out = doc["publications"], {}
+        for by_code in codes.values():
+            for code, entry in (by_code or {}).items():
+                links = []
+                for link in (entry or {}).get("links") or []:
+                    p = pubs.get(link.get("publication"), {})
+                    links.append(
+                        {
+                            "id": link.get("publication"),
+                            "reference": (
+                                _reference(p) if p else link.get("publication")
+                            ),
+                            "doi": p.get("doi"),
+                            "url": p.get("url"),
+                            "verified": bool(p.get("verified")),
+                            "relation": link.get("relation"),
+                            "strength": link.get("strength"),
+                            "connection": link.get("connection"),
+                        }
+                    )
+                out[code] = links
+        return out
+    if isinstance(codes, list):
+        return {c["code"]: c.get("publications") or [] for c in codes}
+    return {k: (v or []) for k, v in doc.items() if isinstance(v, list)}
 
 
 def _write_csv(df, path):
@@ -585,6 +623,11 @@ def theory(ctx):
                     ),
                     verified=sum(
                         bool(p.get("verified")) for p in pubs if isinstance(p, dict)
+                    ),
+                    direct_links=sum(
+                        p.get("strength") == "direct"
+                        for p in pubs
+                        if isinstance(p, dict)
                     ),
                 )
             )

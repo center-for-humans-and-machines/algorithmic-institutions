@@ -1,6 +1,6 @@
 # Step classification: status and how to resume
 
-Last updated: 2026-11-13, 00:30. This file is the handover for picking the work up on another machine or in another session. Update it whenever the state changes.
+Last updated: 2026-11-13, 01:30. This file is the handover for picking the work up on another machine or in another session. Update it whenever the state changes.
 
 ## Where everything is
 
@@ -32,7 +32,7 @@ Last updated: 2026-11-13, 00:30. This file is the handover for picking the work 
 | `smoke-dais` | dais | Job-script tests with Qwen3-30B-A3B | 1-GPU test passes (job 878637); 2-GPU test (job 878812) cancelled unrun, the DeepSeek boot tested tensor-parallel 2 under the production container options; on S3 |
 | `dais0` | dais | First boot of DeepSeek V4.1 Flash plus a trial on 6 versions | First boot done (job 878977, 2 B200, TP 2): server ready in 22 min, preflight, probe and stage A on 6 versions all passed; on S3. Second boot (job 879378) also 22 min: the autotune reruns despite the cache; probe ok |
 | `prod1` | dais | Production run, DeepSeek-V4.1-Flash-1017 on 2 B200 (TP 2, `--max-model-len 65536`, client concurrency 128), code at commit 95e242d8 | Stage A done (job 879637: 25 min queue, 17 min load, 16 min serving, 0 failed calls), on S3 with `REPORT_stageA.md`. Codebooks v1: what 42 + 8 never implemented (9 families), why 112 (8 families), basis 27 (10 families). Next: the scientific lead reviews the codebooks; then stage B, expert check and join |
-| `prod2` | dais | Codebook steps of stage A rerun on prod1's open pass with commit 2f8e3e12; reviewed v2 codebooks (what 25, why 40, basis 16, never implemented 6 adopted from the reviewer's proposal) | Stage A done (job 880081). Review done. Stage B queued (job 880491, code at 086b5ccf); expert-check sheets being filled by two raters; `literature.yml` in progress |
+| `prod2` | dais | Codebook steps of stage A rerun on prod1's open pass; reviewed v2 codebooks (what 25, why 40, basis 16, never implemented 6 adopted from the reviewer's proposal) | Stage B done (job 880491, 15 min: 13 min load, 1.5 min serving, 0 failed calls); judge test-retest 0.994 (kappa 0.98), both raters vs judge 0.99; join and analyse done locally; unassigned under v2: what 15%, why 2%, basis 10%. On S3 with `REPORT_stageB.md` and `analysis/` |
 
 ## Next steps
 
@@ -40,7 +40,7 @@ viper1 to viper4 are done (reports in `runs/annotation/viper{1,3,4}/REPORT.md`, 
 
 Step 7 `analyse` is built and tested (fixture run and viper4): tables, figures, `summary.json` and a generated `REPORT.md` under `analysis/`. It needs `pandas` and `matplotlib` in `.venv-annot` (Mac only).
 
-1. Production run on dais (`prod1` open pass, `prod2` codebooks): the v2 codebooks of `prod2` are being reviewed; then stage B, expert check on the held-out rules, join and `analyse`.
+1. Production run on dais (`prod1` open pass, `prod2` codebooks and stage B) is complete through `analyse`; open issues are in `runs/annotation/prod2/REPORT_stageB.md` (what assigner abstains on 15% of notes ideas, `near_standard_nudge` placement, the switch-cycle code boundary, `end_cutoff` prevalence).
 2. Results into new tabs of the design page.
 
 ## Decisions taken
