@@ -28,7 +28,7 @@ Last updated: 2026-11-12, 19:00. This file is the handover for picking the work 
 | `viper1` | viper | First full run, both stages, Qwen3-30B-A3B, pass-through review, simulated expert check | Done, on S3, with `REPORT.md` |
 | `viper2` | viper | Same corpus after the prompt fixes of commit 732e137d; stage A, pass-through review and stage B in one job | Done, on S3; compared in viper1's `REPORT.md` |
 | `viper3` | viper | Design decisions of commit 0e990dd9: positive ideas, consolidated two-level codebooks, coverage judged with the draft and a prevalence cap, repeated judge with test-retest reliability, basis codebook | Done (jobs 13081258, 13082056), on S3 with `REPORT.md`; judge test-retest 0.91 (kappa 0.79); fixes f9827c51 and 68047187 not yet run |
-| `viper4` | viper | Commit 47631873: basis consolidation, every code placed in a family, merge reasons, unreliable judge codes, with fixes f9827c51 and 68047187 | Stage A running (job 13082961) |
+| `viper4` | viper | Commit 47631873: basis consolidation, every code placed in a family, merge reasons, unreliable judge codes, with fixes f9827c51 and 68047187 | Done (jobs 13082961, 13083896), on S3 with `REPORT.md`; judge test-retest 0.87 (kappa 0.73), 6 unreliable codes; merge rule not followed by the 30B model |
 | `smoke-dais` | dais | Job-script tests with Qwen3-30B-A3B | 1-GPU test passes (job 878637); 2-GPU test (job 878812) cancelled unrun, the DeepSeek boot tested tensor-parallel 2 under the production container options; on S3 |
 | `dais0` | dais | First boot of DeepSeek V4.1 Flash plus a trial on 6 versions | First boot done (job 878977, 2 B200, TP 2): server ready in 22 min, preflight, probe and stage A on 6 versions all passed; on S3. Second boot with the compile cache queued (job 879378) |
 
