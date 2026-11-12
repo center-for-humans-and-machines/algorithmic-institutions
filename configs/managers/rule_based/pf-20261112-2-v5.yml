@@ -1,0 +1,73 @@
+params:
+  lead:
+    definition: >-
+      race line: fine only when my group's per-capita common pool,
+      (1.6*sum of contributions - sum of punishments) per valid member,
+      averaged over the rounds of the current block so far, leads the other
+      group's by at least this many points (this round's punishments are not
+      known yet: mine count as 0, the other manager's are estimated by its
+      per-capita punishment of the previous round)
+    type: float
+  gap:
+    definition: >-
+      shortfall line: a member is fined only if the mean contribution of the
+      other valid members of my group this round exceeds his own by at least
+      gap points (a shirker relative to his own group)
+    type: float
+  fine:
+    definition: >-
+      flat fine for a member past both lines in a fining round (floored to
+      an integer, so below 1 means never punish)
+    type: float
+  last_block:
+    definition: >-
+      fining stops after block last_block - 1, i.e. no fines after round
+      4*last_block - 1 (2 = through the second switch decision in round 7,
+      6 = through the end of the game)
+    type: int
+sweep_config:
+  lead: [0, 25]
+  gap: [5, 15]
+  fine: [0, 6]
+  last_block: [1, 6]
+constraints:
+  - lead >= 0
+  - gap > 0
+  - fine >= 0
+  - last_block >= 1
+code: |
+  c_now = c[..., -1]
+  v_now = valid[..., -1]
+  g_now = in_group[..., -1]
+  # punishments aligned with rounds 0..t, this round's (unknown) set to 0
+  p_al = th.cat([p, th.zeros_like(c[..., :1])], -1)
+  # previous round's punishments and groups (zeros / this round's groups at t = 0)
+  p_prev = th.cat([th.zeros_like(c[..., :1]), p], -1)[..., -1]
+  g_prev = th.cat([in_group[..., :1], in_group], -1)[..., -2]
+  v_prev = th.cat([valid[..., :1], valid], -1)[..., -2]
+  o_prev = (1 - g_prev) * v_prev
+  ah_pun_prev = (p_prev * (1 - g_prev)).sum(-1) / th.maximum(o_prev.sum(-1), th.ones_like(o_prev.sum(-1)))
+  # per-capita pools of both groups, rounds 0..t
+  me = in_group * valid
+  ot = (1 - in_group) * valid
+  n_me = me.sum(-2)
+  n_ot = ot.sum(-2)
+  pc_me = (1.6 * (c * me).sum(-2) - (p_al * in_group).sum(-2)) / th.maximum(n_me, th.ones_like(n_me))
+  pc_ot = (1.6 * (c * ot).sum(-2) - (p_al * (1 - in_group)).sum(-2)) / th.maximum(n_ot, th.ones_like(n_ot))
+  r = th.arange(c.shape[-1], device=c.device).float()
+  is_now = (r == t).float()
+  pc_ot = pc_ot - is_now * ah_pun_prev.unsqueeze(-1)
+  b0 = 4 * th.floor(t / 4)
+  in_blk = (r >= b0).float()
+  race = ((pc_me - pc_ot) * in_blk).sum(-1) / in_blk.sum(-1)
+  # shortfall of each member below the other valid members of my group
+  mine = g_now * v_now
+  cm = c_now * mine
+  total = cm.sum(-1).unsqueeze(-1)
+  n_others = mine.sum(-1).unsqueeze(-1) - mine
+  others_mean = (total - cm) / th.maximum(n_others, th.ones_like(n_others))
+  shortfall = others_mean - c_now
+  target = (shortfall >= gap).float() * (n_others > 0).float() * mine
+  ahead = (race >= lead).float().unsqueeze(-1)
+  window = (t <= 4 * last_block - 1).float()
+  punishment = fine * target * ahead * window
