@@ -104,8 +104,35 @@ def test_quote_check_and_kappa():
     assert quote_in_source("gap = th.relu(mates_mean - cur)", src)
     assert quote_in_source("gap = ... punishment = raw", src)
     assert not quote_in_source("gap = mean - cur", src)
+    notes = "so: punish only `low` contributors, **never** the high ones"
+    assert quote_in_source("Punish only low contributors, never the high ones", notes)
+    assert not quote_in_source("Punish only low contributors, not the high", notes)
     assert quote_in_source("", src) is None
     no_var = kappa_stats([(False, False)] * 4)
     assert no_var["agreement"] == 1.0 and no_var["kappa"] is None
     k = kappa_stats([(True, True), (False, False), (True, False), (False, False)])
     assert k["agreement"] == 0.75 and 0 < k["kappa"] < 1
+
+
+def test_first_version_relation_is_not_stated():
+    from types import SimpleNamespace
+
+    from aimanager.annotation.schemas import NotesRecord
+    from aimanager.annotation.steps import _record
+
+    mech = dict(
+        description="d",
+        quote="q",
+        status="adopted",
+        tested=False,
+        relation_to_previous="new",
+        source_version=None,
+        reasons=[],
+    )
+    value = NotesRecord(mechanisms=[mech], theory_mentions=[], unlinked_findings=[])
+    res = SimpleNamespace(value=value)
+    first = _record("s", res, "q", first=True)
+    assert first["mechanisms"][0]["relation_to_previous"] == "not_stated"
+    assert first["_relation_forced"] == 1
+    later = _record("s-v2", res, "q", first=False)
+    assert later["mechanisms"][0]["relation_to_previous"] == "new"

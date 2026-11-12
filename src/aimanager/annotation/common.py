@@ -148,15 +148,22 @@ def _norm(text):
     return re.sub(r"\s+", " ", text or "").strip()
 
 
-def quote_in_source(quote, source):
-    """Whether a quote occurs in its source, whitespace-normalised.
+def _norm_quote(text):
+    """Whitespace, case and markdown emphasis (`, *) do not count as changes."""
+    return _norm(re.sub(r"[`*]", "", text or "")).casefold()
 
+
+def quote_in_source(quote, source):
+    """Whether a quote occurs in its source.
+
+    Compared after normalising whitespace, case and markdown emphasis marks (a
+    quote that only capitalises its first word or drops backticks is verbatim).
     Quotes elided with "..." pass if every part occurs. Empty quote -> None.
     """
-    q = _norm(quote).strip("\"'`")
+    q = _norm_quote(quote).strip("\"'")
     if not q:
         return None
-    src = _norm(source)
+    src = _norm_quote(source)
     parts = [p.strip() for p in re.split(r"\s*(?:\.\.\.|…)\s*", q) if p.strip()]
     return all(p in src for p in parts) if parts else None
 

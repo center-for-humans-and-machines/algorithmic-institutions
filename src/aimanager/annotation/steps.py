@@ -123,14 +123,18 @@ def open_notes(run, cfg, client, limit=None):
         for v in versions
     ]
     notes = {v["stem"]: v["notes"] for v in versions}
+    parents = {v["stem"]: v["parent"] for v in versions}
     records, failed = {}, []
     for res in client.map(calls):
         stem = res.call.item_id
         if res.ok:
-            records[stem] = _record(stem, res, notes[stem])
+            records[stem] = _record(stem, res, notes[stem], first=not parents[stem])
         else:
             failed.append((stem, res.error))
     check_failures(cfg, "open-notes", "open_notes", failed, len(versions))
+    forced = sum(r.pop("_relation_forced") for r in records.values())
+    if forced:
+        log(f"  open-notes: {forced} first-version relations set to not_stated")
     outs = []
     for stem, rec in records.items():
         outs.append(run.path("records", f"{stem}.json"))
@@ -146,6 +150,7 @@ def open_notes(run, cfg, client, limit=None):
         failed=[dict(version=s, error=e) for s, e in failed],
         model=client.model,
         settings={v["campaign"]: v["setting"] for v in versions},
+        first_version_relations_forced=forced,
         limit=limit,
     )
     log(f"open-notes: {len(records)} records, {len(failed)} failed")
@@ -159,10 +164,16 @@ def _remove_stale(directory, keep):
             p.unlink()
 
 
-def _record(stem, res, src):
+def _record(stem, res, src, first=False):
+    """Record with ids and quote checks. A first version has no previous version,
+    so every relation is not_stated whatever the model said (counted)."""
     rec = res.value.model_dump()
+    forced = 0
     for i, m in enumerate(rec["mechanisms"]):
         m["id"] = f"m:{stem}:{i}"
+        if first and m["relation_to_previous"] != "not_stated":
+            m["relation_to_previous"] = "not_stated"
+            forced += 1
         m["quote_ok"] = quote_in_source(m["quote"], src)
         m["what_code"] = None
         for j, r in enumerate(m["reasons"]):
@@ -172,7 +183,7 @@ def _record(stem, res, src):
     for key in ("theory_mentions", "unlinked_findings"):
         for x in rec[key]:
             x["quote_ok"] = quote_in_source(x["quote"], src)
-    return {"version": stem, **rec}
+    return {"version": stem, **rec, "_relation_forced": forced}
 
 
 def load_records(run, coded=False):

@@ -8,7 +8,8 @@ The right level of abstraction, shown with an unrelated domain (a library's rule
 - Not separate mechanisms: "the fee per day is 0.20" and "a parameter scales the daily fee" both belong to the fee mechanism.
 
 Guidelines:
-- Describe behaviour towards players (who is affected, when, how much, depending on what), not implementation details (tensor operations, clamping, numerical safeguards, variable names).
+- Describe behaviour towards players (who is affected, when, how much, depending on what), not implementation details (tensor operations, clamping, numerical safeguards, variable names). Restricting punishment to members of the rule's own group or to players who did not time out is enforced by the game (see the setting), not a mechanism of the rule.
+- Describe what a mechanism does over its whole sweep range: a factor whose range lies within [0, 1] reduces (or removes) punishment, it does not increase it. Describe the intent only if the code or a parameter definition states it.
 - One entry per mechanism. A parameter that only scales another mechanism is part of that mechanism, not a mechanism of its own; a condition that switches behaviour on or off (a time window, an eligibility condition) is its own mechanism.
 - Write each description as one plain sentence that someone who has not seen the code understands. Use general terms, not this rule's parameter names.
 - For each mechanism give a quote: the line of code or the parameter definition that most directly implements it, copied verbatim.
