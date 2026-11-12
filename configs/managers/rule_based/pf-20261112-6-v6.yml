@@ -1,0 +1,30 @@
+params:
+  lo:
+    definition: >-
+      lowest contribution that is punished: at round 4 a member who gave fewer than lo points is left alone.
+      lo 0 includes the members who gave nothing (hard-core free riders, whose response to the hit is the
+      noisiest and weakest), lo 1 spares them, lo 2 also spares the 1-givers
+    type: int
+  hi:
+    definition: >-
+      highest contribution that is punished: at round 4 a member who gave more than hi points is left alone.
+      Low givers (about 0-5) raise their giving for the rest of the game after one hard hit and mostly stay;
+      members who give 6 or more cut back or leave, so the band ends at 5 (fixed)
+    type: int
+  amt:
+    definition: >-
+      the punishment in points dealt once, at round 4 (the first round after the first switch decision, the
+      farthest from the next one, with 19 rounds left for the raised giving to carry), to every valid member
+      who gave between lo and hi points that round. A hard hit: 0-2 givers move only under 16+ points, and
+      low-giving stayers leave more after a moderate hit than after a hard one
+    type: float
+sweep_config:
+  lo: [0, 2]
+  hi: 5
+  amt: [14, 28]
+code: |
+  here = in_group[..., -1] * valid[..., -1]
+  cc = c[..., -1]
+  at4 = (t == 4).float()
+  band = (cc >= lo).float() * (cc <= hi).float()
+  punishment = at4 * here * band * amt
