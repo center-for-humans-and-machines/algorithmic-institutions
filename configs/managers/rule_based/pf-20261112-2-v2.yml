@@ -1,0 +1,47 @@
+params:
+  thr:
+    definition: >-
+      free-rider line: a member is fined only if both its mean contribution
+      in my group since the last arrival round (4, 8, 12, 16; round 0 for
+      the first block) and its contribution this round are below thr
+    type: float
+  fine:
+    definition: >-
+      flat fine for a free-rider in a fining round (floored to an integer,
+      so below 1 means never punish)
+    type: float
+  w:
+    definition: >-
+      fining window: the number of rounds of each 4-round block, ending
+      with the switch-decision round (3, 7, 11, 15, 19), in which free-riders
+      are fined; 1 = only the decision round, 4 = every round of the block
+    type: int
+  n_dec:
+    definition: >-
+      number of switch decisions the manager fines before (1-5); it never
+      fines after round 4*n_dec - 1, and never after the last decision
+      (round 19), when no one can be shown the door any more
+    type: int
+sweep_config:
+  thr: [0.5, 8]
+  fine: [0, 10]
+  w: [1, 4]
+  n_dec: [1, 5]
+constraints:
+  - thr > 0
+  - fine >= 0
+  - w >= 1
+  - w <= 4
+  - n_dec >= 1
+  - n_dec <= 5
+code: |
+  c_now = c[..., -1]
+  phase = t - 4 * th.floor(t / 4)
+  start = t - phase
+  idx = th.cumsum(th.ones_like(c), -1) - 1
+  blk = (idx >= start).float() * in_group * valid
+  blk_mean = (c * blk).sum(-1) / th.clamp(blk.sum(-1), min=1)
+  free_rider = (blk_mean < thr).float() * (c_now < thr).float()
+  in_window = (phase >= 4 - w).float() * (t <= 4 * n_dec - 1).float()
+  mine = in_group[..., -1] * valid[..., -1]
+  punishment = fine * free_rider * in_window * mine
