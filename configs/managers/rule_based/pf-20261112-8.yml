@@ -1,0 +1,41 @@
+params:
+  thr:
+    definition: >-
+      free-rider threshold; a member contributing this many points or fewer this
+      round is punished (the lowest contributors are the only ones whose
+      contribution rises after a punishment)
+    type: int
+  amount:
+    definition: >-
+      the flat punishment, in points, dealt to a free rider (below 1 it floors to
+      0, i.e. never punishing); the response is concave, so light amounts are the
+      efficient ones
+    type: float
+  last_pos:
+    definition: >-
+      latest position within a 4-round block (0 = first round after a switch
+      decision, 3 = the round right before the next decision) at which the rule
+      may punish; punishments close to a decision drive members out, early ones
+      barely do. From round 20 on nobody can leave, so every position is allowed
+    type: int
+  start:
+    definition: >-
+      first round in which the rule may punish; keeps the early rounds, which feed
+      the first and largest switch decision, free of punishment
+    type: int
+sweep_config:
+  thr: [0, 8]
+  amount: [0.8, 12, log]
+  last_pos: [0, 3]
+  start: [0, 12]
+code: |
+  ct = c[..., -1]
+  # every constant goes through a tensor: comparing a 0-d tensor with a bare
+  # Python number needs builtins the rule does not have
+  one = th.ones_like(t)
+  pos = th.remainder(t, 4 * one)
+  # rounds 20+ follow the last switch decision; rounds 22-23 leave too little time
+  # to recoup a punishment
+  timing = ((pos <= last_pos) | (t >= 20 * one)) & (t >= start) & (t <= 21 * one)
+  free_rider = (ct <= thr) & (valid[..., -1] > 0.5 * th.ones_like(ct))
+  punishment = amount * (free_rider & timing).to(ct.dtype)
