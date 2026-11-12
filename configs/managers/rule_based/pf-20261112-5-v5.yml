@@ -1,0 +1,52 @@
+params:
+  D0:
+    definition: >-
+      the shock at round 0, before any switch decision: punishment points dealt to each
+      targeted member of my group (members giving at most hi); 0 means no shock there
+    type: float
+  D4:
+    definition: >-
+      the shock at round 4, right after the first switch decision (the biggest reshuffle):
+      points dealt to each targeted newcomer (a member who was not in my group in round 3);
+      targeted stayers get s times this
+    type: float
+  D8:
+    definition: >-
+      the shock at round 8, right after the second switch decision: points dealt to each
+      targeted newcomer (not in my group in round 7); targeted stayers get s times this.
+      Nothing is dealt in any other round
+    type: float
+  s:
+    definition: >-
+      the stayers' share of the round-4 and round-8 dose: a targeted member who was already
+      in my group the round before gets s times the newcomer's dose (1 = no distinction,
+      0 = only newcomers are shocked), since a punished stayer leaves for the other group
+      more often than a punished newcomer
+    type: float
+  hi:
+    definition: >-
+      the highest contribution that is still targeted: members giving at most hi in a shock
+      round are punished, members giving more are spared
+    type: int
+sweep_config:
+  D0: [0.0, 30.0]
+  D4: [10.0, 30.0]
+  D8: [0.0, 30.0]
+  s: [0.0, 1.0]
+  hi: [3, 8]
+constraints:
+  - D0 >= 0
+  - D4 >= 0
+  - D8 >= 0
+  - s >= 0
+  - s <= 1
+code: |
+  c_now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  n_mem = member.sum(dim=-1, keepdim=True)
+  target = (c_now <= hi).float() * member * (n_mem > 1.5).float()
+  prev = th.cat([in_group[..., :1], in_group], dim=-1)[..., -2]
+  newcomer = (1.0 - prev) * in_group[..., -1]
+  weight = newcomer + s * (1.0 - newcomer)
+  dose = D0 * (t == 0).float() + (D4 * (t == 4).float() + D8 * (t == 8).float()) * weight
+  punishment = dose * target
