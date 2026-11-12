@@ -24,10 +24,11 @@ source "$ANNOT_JOB_ENV"
 source "${CFG_CODE_DIR:-$CFG_PROJECT}/scripts/annotation/cluster/common.sh"
 
 annot_container_flags() {
-    # --contain: no host /tmp or home leak into the image. --contain also gives
-    # a small private /dev/shm, but tensor-parallel workers exchange data
-    # through shared memory, so the host's is bound back in.
-    CONTAINER_FLAGS=(--nv --contain --bind /dais --bind /dev/shm)
+    # --contain: no host /tmp or home leak into the image. The container gets
+    # its own /dev with a private /dev/shm (tmpfs, half the node's RAM), shared
+    # by all processes of the server exec, so tensor-parallel workers are fine;
+    # a --bind /dev/shm is skipped by apptainer ("already mounted").
+    CONTAINER_FLAGS=(--nv --contain --bind /dais)
     # --cleanenv drops Slurm's device selection; forward it when set
     if [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then
         export APPTAINERENV_CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES"

@@ -52,6 +52,10 @@ cluster_config() {
         : "${CFG_SBATCH_EXTRA:=--account=mpib_inst --qos=normal}"
         : "${CFG_GRES_TYPE:=b200}"
         : "${CFG_WALL_BUFFER_MIN:=15}"
+        # job temp (container home, TMPDIR, per-job compile caches) on the
+        # node's /tmp: under --contain a home in the host /dev/shm cannot be
+        # mounted (job 878226 failed on it)
+        : "${CFG_JOB_TMP_BASE:=/tmp}"
         # where download_model.sh puts the production weights
         : "${CFG_PROD_MODEL:=deepseek-ai/DeepSeek-V4.1-Flash-1017}"
         : "${CFG_PROD_REVISION:=08c8657f02291e11b6f6b63e0e16014f8e748518}"

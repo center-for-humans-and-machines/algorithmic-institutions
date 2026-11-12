@@ -28,7 +28,9 @@ annot_init() {
     CODE_DIR="${CFG_CODE_DIR:-$CFG_PROJECT}"
     RUN_DIR="$CFG_RUNS_ROOT/$ANNOT_RUN_ID"
     LOG_DIR="$RUN_DIR/logs/job-${SLURM_JOB_ID}"
-    JOB_TMP="${JOB_SHMTMPDIR:-${TMPDIR:-/tmp}}/annot_${SLURM_JOB_ID}"
+    # CFG_JOB_TMP_BASE: a cluster whose image runs with --contain cannot use a
+    # home under the host /dev/shm (the container mounts its own /dev)
+    JOB_TMP="${CFG_JOB_TMP_BASE:-${JOB_SHMTMPDIR:-${TMPDIR:-/tmp}}}/annot_${SLURM_JOB_ID}"
     mkdir -p "$LOG_DIR" "$JOB_TMP"/{home,shim,tmp}
     cp "$ANNOT_JOB_ENV" "$LOG_DIR/job.env"
     cp "$CODE_DIR/CODE_VERSION" "$LOG_DIR/" 2>/dev/null || true
@@ -43,6 +45,8 @@ annot_init() {
 
     mark "job ${SLURM_JOB_ID} on $(hostname) cluster=$CFG_CLUSTER run=$ANNOT_RUN_ID"
     mark "command: $ANNOT_CMD"
+    mark "job tmp $JOB_TMP: $(df -h --output=fstype,size,avail "$JOB_TMP" | tail -1)" \
+        "gpus: SLURM_JOB_GPUS=${SLURM_JOB_GPUS:-} CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-}"
     mark "model=$CFG_MODEL@$CFG_REVISION image=$CFG_IMAGE tp=$CFG_TP gpus=$CFG_GPUS" \
         "max_model_len=$CFG_MAX_MODEL_LEN max_num_seqs=$CFG_MAX_NUM_SEQS" \
         "gpu_mem_util=$CFG_GPU_MEM_UTIL kv_dtype=$CFG_KV_DTYPE port=$PORT"
