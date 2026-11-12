@@ -1,0 +1,30 @@
+params:
+  thr:
+    definition: contribution at or below which a member counts as free-riding in a round
+    type: float
+  amount:
+    definition: punishment dealt to a persistent free rider each round (below 1 it floors to 0, i.e. never punish)
+    type: float
+  persist:
+    definition: consecutive rounds, ending with this one, a member must have free-ridden in this group before being punished
+    type: int
+  t_stop:
+    definition: last round in which punishment is dealt (later rounds leave too little time to repay its cost)
+    type: int
+sweep_config:
+  thr: [0, 6]
+  amount: [0.5, 16, log]
+  persist: [1, 4]
+  t_stop: [3, 23]
+constraints:
+  - persist >= 1
+  - amount > 0
+code: |
+  n_rounds = c.shape[-1]
+  ar = th.arange(n_rounds, device=c.device).to(c.dtype)
+  window = (ar >= (t + 1 - persist)).to(c.dtype)
+  bad = (c <= thr).to(c.dtype) * in_group * valid
+  streak = (bad * window).sum(-1)
+  flagged = (streak >= persist).to(c.dtype)
+  active = (t <= t_stop).to(c.dtype)
+  punishment = amount * flagged * active * in_group[..., -1]
