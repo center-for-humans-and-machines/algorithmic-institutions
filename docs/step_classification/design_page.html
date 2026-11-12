@@ -537,7 +537,7 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
 <section id="tab-progress" data-panel="progress" hidden>
   <p class="lead">Status of building and running the pipeline. Updated as work comes in. Results get their own tabs once there are any.</p>
   
-  <p class="meta">Last update: 12 Nov 2026, 21:30 · first production job done, codebooks being rebuilt</p>
+  <p class="meta">Last update: 12 Nov 2026, 23:00 · production run complete once, final checks under way</p>
 
   <h2>Where things stand</h2>
   <div class="tablebox">
@@ -551,8 +551,8 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
         <tr><td class="k">Cluster setup</td><td><span class="tag git">mostly done</span></td><td>Job scripts for both clusters and the S3 sync are in. Test jobs on viper pass. The job scripts were reviewed and the findings fixed.</td></tr>
         <tr><td class="k">Production model</td><td><span class="tag git">working</span></td><td>DeepSeek V4.1 Flash 1017 on two B200 GPUs. Booted twice, 22 minutes each.</td></tr>
         <tr><td class="k">End-to-end test, small model on viper</td><td><span class="tag git">done</span></td><td>Four full runs without a failed call. Tuning on the small model is finished; see the <a href="#testrun">Test run</a> tab.</td></tr>
-        <tr><td class="k">End-to-end run, production model on dais</td><td><span class="tag off">first job done</span></td><td>The open pass ran for all 110 versions without a failed call. The codebooks are too fine and are being rebuilt; see the <a href="#prod">Production run</a> tab. Review and final coding follow.</td></tr>
-        <tr><td class="k">Results in this page</td><td><span class="tag off">started</span></td><td>Test-run results are in tab 5. Production results follow.</td></tr>
+        <tr><td class="k">End-to-end run, production model on dais</td><td><span class="tag git">complete once</span></td><td>Every step has run: open pass, codebooks, review, literature links, final coding, expert check, analysis. One more coding pass and a second code review are under way; see the <a href="#prod">Production run</a> tab.</td></tr>
+        <tr><td class="k">Results in this page</td><td><span class="tag off">numbers in</span></td><td>Production numbers are in tab 6. Figures follow once the last coding pass is done.</td></tr>
       </tbody>
     </table>
   </div>
@@ -724,63 +724,130 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
 </section>
 
 <section id="tab-prod" data-panel="prod" hidden>
-  <p class="lead">The production run on dais with DeepSeek V4.1 Flash. The first job is done: the open pass and a first version of the three codebooks, for all 110 versions. The extraction is clearly better than with the small model. The codebooks came out too fine and are being rebuilt before the review.</p>
-  <p class="meta">Run <code>prod1</code>, first job, 12 Nov 2026. Review, final coding, expert check and analysis have not run yet.</p>
+  <p class="lead">The production run on dais with DeepSeek V4.1 Flash has gone through every step once: open pass, codebooks, review, literature links, final coding, expert check and analysis. The numbers below are from that first complete pass. One more coding pass is under way, so some of them will move.</p>
+  <p class="meta">Run <code>prod2</code>, 12 Nov 2026. The codebook review and the expert check were done by Claude, standing in for field experts.</p>
 
-  <h2>The job</h2>
+  <h2>Where the time went</h2>
   <div class="tablebox">
     <table>
-      <thead><tr><th>Phase</th><th>Time</th></tr></thead>
+      <thead><tr><th>Job</th><th>Queue</th><th>Loading the model</th><th>Work</th></tr></thead>
       <tbody>
-        <tr><td class="k">Waiting in the queue</td><td>25 minutes</td></tr>
-        <tr><td class="k">Loading the model</td><td>16.8 minutes</td></tr>
-        <tr><td class="k">The work itself</td><td>15.8 minutes</td></tr>
+        <tr><td class="k">Open pass and first codebooks</td><td>25 min</td><td>16.8 min</td><td>15.8 min</td></tr>
+        <tr><td class="k">Codebooks rebuilt</td><td>9 s</td><td>14 min</td><td>8 min</td></tr>
+        <tr><td class="k">Final coding</td><td>1 s</td><td>12.9 min</td><td>1.5 min</td></tr>
       </tbody>
     </table>
   </div>
-  <p>No call failed. Six long calls ran out of space on the first try and passed on the retry. The server's working memory peaked at 6% full, and 98% of prompt tokens were served from the shared prefix.</p>
+  <p>No call failed in any job. The model takes longer to load than the work takes to run.</p>
 
   <h2>Extraction: production model against the small model</h2>
   <div class="tablebox">
     <table>
-      <thead><tr><th>Measure</th><th>DeepSeek (prod1)</th><th>Qwen 30B (viper4)</th></tr></thead>
+      <thead><tr><th>Measure</th><th>DeepSeek</th><th>Qwen 30B</th></tr></thead>
       <tbody>
         <tr><td class="k">Quotes from rules found verbatim</td><td>100%</td><td>97%</td></tr>
         <tr><td class="k">Quotes from notes found verbatim</td><td>99.8 to 100%</td><td>84 to 88%</td></tr>
         <tr><td class="k">Ideas still worded as a negation</td><td>1.6%</td><td>21%</td></tr>
         <tr><td class="k">Mechanisms found in the notes</td><td>982</td><td>838</td></tr>
-        <tr><td class="k">Theory mentions that are really methods</td><td>2 of 30</td><td>9 of 37</td></tr>
-        <tr><td class="k">Judge agreement between two passes, coverage step</td><td>97.5%, kappa 0.84</td><td>not comparable</td></tr>
       </tbody>
     </table>
   </div>
-  <p>Of the 982 mechanisms in the notes, 442 are adopted, 516 rejected and 24 only considered. So the notes discuss more ideas that were refused than ideas that were used.</p>
+  <p>Of the 982 mechanisms in the notes, 442 are adopted, 516 rejected and 24 only considered. The notes discuss more ideas that were refused than ideas that were used.</p>
 
-  <h3>Read against the sources</h3>
-  <p>Five rules and five sets of notes were read side by side with their extractions, the same ones as in the test runs.</p>
-  <ul class="tight">
-    <li>The free codes match the parts of each rule, with nothing missed and nothing invented.</li>
-    <li>Every idea the notes list as "not modelled" now appears as a rejected mechanism with its reason.</li>
-    <li>A mechanism removed in a later version is recorded as removed, with the earlier version named as its source.</li>
-    <li>"Tested" now separates ideas the agent checked with a calculation from ideas it only argued.</li>
-    <li>Small faults remain: a few duplicated rejected ideas, and 104 reasons where the notes give no evidence.</li>
-  </ul>
-
-  <h2>Theory named in the notes</h2>
-  <p>30 explicit mentions across the 110 notes. The most frequent are herding (9), conformity (5), conditional cooperation (5) and regression to the mean (4). No notes cite a publication.</p>
-
-  <h2>Codebooks: too fine</h2>
+  <h2>The codebooks after review</h2>
   <div class="tablebox">
     <table>
-      <thead><tr><th>Codebook</th><th>Codes</th><th>Families</th><th>Comment</th></tr></thead>
+      <thead><tr><th>Codebook</th><th>Codes</th><th>Families</th></tr></thead>
       <tbody>
-        <tr><td class="k">What</td><td>42, plus 8 ideas no rule implements</td><td>9</td><td>Reviewable, but uneven: one family has 11 codes, another has 1.</td></tr>
-        <tr><td class="k">Why</td><td>112</td><td>8</td><td>Too many. The codes are single claims, not kinds of justification. Reasons about the search itself sit in their own family.</td></tr>
-        <tr><td class="k">What a reason rests on</td><td>27</td><td>10</td><td>Most families are kinds of support. Two describe the content of findings.</td></tr>
+        <tr><td class="k">What</td><td>25, plus 6 ideas no rule implements</td><td>The contribution standard; amount and limits; the game clock; the switch cycle; player history; group and rival state</td></tr>
+        <tr><td class="k">Why</td><td>40</td><td>How individuals respond; group context and peers; timing and persistence; exit and membership; direct cost; rival and group competition; evidence from the search; design economy and constraints</td></tr>
+        <tr><td class="k">What a reason rests on</td><td>16</td><td>Rule scores; measurements of behaviour; reasoning; cited results; missing or weak evidence</td></tr>
       </tbody>
     </table>
   </div>
-  <p>The stronger model draws finer distinctions than the small one, and one of its long list-generating calls repeated the same name 29 times. The codebook steps are being rerun with a stated level for a code, a target size, and a guard against repeated names. The open pass is kept as it is.</p>
+  <p>The model's own codebooks were too fine at first (112 why codes) and were rebuilt with a stated level for a code. The review then undid wrong merges, separated opposite claims, and made the time-related levers decidable. It left 12 open questions for human experts.</p>
+
+  <h2>How reliable the rule coding is</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Check</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Judge against itself, codes in a different order</td><td>99.4% of answers agree, kappa 0.98. No code is flagged unreliable.</td></tr>
+        <tr><td class="k">Least stable codes</td><td>The two switch-cycle codes, at 94.5% and 96.4%. They exclude each other and the disagreements sit on that boundary.</td></tr>
+        <tr><td class="k">Judge against each rater, 30 held-out rules</td><td>99% of answers agree, kappa about 0.97.</td></tr>
+        <tr><td class="k">The two raters against each other</td><td>749 of 750 answers agree.</td></tr>
+        <tr><td class="k">Codes per rule</td><td>Median 5, range 2 to 9. No code is in more than 82% of rules.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout">
+    <p>The two raters are both Claude. They did not see each other's answers or the judge's, but they read alike, so their agreement is not a baseline for how much two people would disagree. That needs the second run with real experts.</p>
+  </div>
+
+  <h2>Idea flow</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>State of an idea in a version</th><th>Count</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Introduced into the rule</td><td>256</td></tr>
+        <tr><td class="k">Kept from the previous version</td><td>298</td></tr>
+        <tr><td class="k">Dropped</td><td>69</td></tr>
+        <tr><td class="k">Tested and refused</td><td>109</td></tr>
+        <tr><td class="k">Refused without a test</td><td>199</td></tr>
+        <tr><td class="k">Considered only</td><td>15</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <ul class="tight">
+    <li><b>pf-20261104-7.</b> A budget tied to the opponent enters in version 4 and leaves in version 5. Handling of repeat offenders enters in 5 and leaves in 6. A bar relative to the group is refused in versions 1 to 3 and adopted in version 7.</li>
+    <li><b>pf-20261105-3.</b> A separate rule for the late phase enters in version 4, where the score jumps. A bar relative to the group is refused in all seven versions.</li>
+    <li><b>What an idea is worth.</b> Only three mechanisms were introduced five times or more with a score before and after. That is too few to rank ideas by their effect on the score.</li>
+  </ul>
+
+  <h2>Reasons</h2>
+  <ul class="tight">
+    <li><b>Reasons follow mechanisms in a plausible way.</b> Time-related levers are argued with claims about timing, the contribution standard with claims about how individuals respond, the switch cycle with claims about players leaving.</li>
+    <li><b>Refusals have their own pattern.</b> Ideas the manager cannot act on are refused on design grounds. Ideas about a player's history are mostly refused as tested without gain.</li>
+    <li><b>What reasons rest on changes along a lineage.</b> The share resting on measurements of behaviour falls from 45% in first versions to 11% in sixth versions. The share resting on results cited from earlier versions rises from 7% to 31%.</li>
+  </ul>
+
+  <h2>Theory</h2>
+  <p>The notes name concepts but cite nothing: 30 explicit mentions, led by herding (9), conformity (5) and conditional cooperation (5). The link to the literature is made through the codebook. 64 publications were confirmed online and attached to the codes.</p>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Codebook</th><th>Direct link</th><th>Related</th><th>Loose</th><th>No link</th></tr></thead>
+      <tbody>
+        <tr><td class="k">What, 25 codes</td><td>6</td><td>14</td><td>1</td><td>4</td></tr>
+        <tr><td class="k">Why, 40 codes</td><td>12</td><td>15</td><td>7</td><td>6</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <h3>Main theories and anchor publications</h3>
+  <ul class="tight">
+    <li><b>Punishment in public goods games:</b> Fehr and Gächter 2000, 2002.</li>
+    <li><b>Centralised sanctioning:</b> Andreoni and Gee 2012; O'Gorman et al. 2009.</li>
+    <li><b>Conditional cooperation and conformity:</b> Fischbacher et al. 2001; Fischbacher and Gächter 2010.</li>
+    <li><b>Marginal deterrence and repeat offenders:</b> Shavell 1992; Polinsky and Shavell 1998, 2000.</li>
+    <li><b>Graduated sanctions:</b> Ostrom 1990.</li>
+    <li><b>Voting with one's feet and competing institutions:</b> Tiebout 1956; Gürerk et al. 2006, 2014.</li>
+    <li><b>Yardstick competition:</b> Besley and Case 1995.</li>
+  </ul>
+  <h3>Where the agents' ideas go beyond or against the literature</h3>
+  <ul class="tight">
+    <li><b>Milder before the switch decision.</b> Elected judges get harsher before re-election. These managers get milder, because members answer harshness by leaving.</li>
+    <li><b>Following the rival manager.</b> In experiments with competing institutions the regimes are fixed. Two adaptive managers reacting to each other has no experimental precedent that the search found.</li>
+    <li><b>Milder on the already punished.</b> This runs against graduated sanctions and against results on repeat offenders.</li>
+    <li><b>Caps on punishment.</b> These give up marginal deterrence.</li>
+    <li><b>No end-game anticipation.</b> The simulated players cannot see the round number, so they show none of the end effects people show. Rules tuned on this may do worse with real players.</li>
+  </ul>
+  <p class="meta">Eleven further references could not be confirmed online and were left out. Two of the 64 rest on less than a full abstract and are flagged in the data.</p>
+
+  <h2>What still looks wrong</h2>
+  <ul class="tight">
+    <li><b>Ideas in the notes without a what code:</b> 15%, against the 5 to 10% the reviewer expected. Some clear fits are missed and compound ideas have no place. A further coding pass lets an idea take more than one code.</li>
+    <li><b>The cutoff before the end of the game</b> is mostly a constant that drops the last round. It is in most rules while the notes rarely present it as a choice, which inflates the count of mechanisms present but not adopted in the notes (39%).</li>
+    <li><b>The boundary between the two switch-cycle codes</b> is unstable. This is one of the reviewer's open questions.</li>
+  </ul>
 </section>
 
 <footer>Sources: the <code>policy-finder/*</code> branches and the policy-finder scripts in the repository, the policy-finder Slack threads, and the paper blueprint.</footer>
