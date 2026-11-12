@@ -29,7 +29,7 @@ Last updated: 2026-11-12, 19:00. This file is the handover for picking the work 
 | `viper2` | viper | Same corpus after the prompt fixes of commit 732e137d; stage A, pass-through review and stage B in one job | Done, on S3; compared in viper1's `REPORT.md` |
 | `viper3` | viper | Design decisions of commit 0e990dd9: positive ideas, consolidated two-level codebooks, coverage judged with the draft and a prevalence cap, repeated judge with test-retest reliability, basis codebook | Stage A running (job 13081258) |
 | `smoke-dais` | dais | Job-script tests with Qwen3-30B-A3B | 1-GPU test passes (job 878637); 2-GPU test (job 878812) cancelled unrun, the DeepSeek boot tests tensor-parallel 2 under the production container options |
-| `dais0` | dais | First boot of DeepSeek V4.1 Flash plus a trial on 6 versions | Queued: job 878977 on `gpu1` (2 B200, 5 h), estimated start 2026-11-12 20:51 |
+| `dais0` | dais | First boot of DeepSeek V4.1 Flash plus a trial on 6 versions | Running: job 878977 on `gpu1` (2 B200, 5 h), started 2026-11-12 19:06, first boot in progress |
 
 ## Next steps
 
