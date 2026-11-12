@@ -11,7 +11,7 @@ import time
 from . import prompting as P
 from .client import Abort, Call
 from .common import log
-from .consolidate import consolidation_call
+from .consolidate import consolidation_call, placement_call
 from .schemas import (
     FreeCodes,
     NotesRecord,
@@ -105,6 +105,9 @@ def _calls():
             meta,
         ),
         consolidation_call("preflight", "what", CODES),
+        placement_call(
+            "preflight", "what", CODES[1:], {"punishment_size": "how much to punish"}
+        ),
     ]
 
 

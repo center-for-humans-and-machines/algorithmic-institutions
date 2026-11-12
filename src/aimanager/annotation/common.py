@@ -245,7 +245,7 @@ def codebook_revisions(run, kind):
 CODEBOOK_STEP = {
     "what": "consolidate-what",
     "why": "consolidate-why",
-    "basis": "basis-codebook",
+    "basis": "consolidate-basis",
 }
 
 

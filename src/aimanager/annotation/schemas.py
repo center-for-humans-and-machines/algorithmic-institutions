@@ -100,6 +100,14 @@ def consolidation_model(code_names):
     Merge = create_model(
         "Merge",
         codes=(List[Name], Field(description="the codes that are one code")),
+        reason=(
+            str,
+            Field(
+                description="why they are one code: a rule implementing one "
+                "necessarily implements the other, or they are the increase and "
+                "decrease variants of the same lever"
+            ),
+        ),
         keep=(Name, Field(description="the name that survives, one of `codes`")),
         label=(str, ...),
         definition=(str, Field(description="rewritten definition of the merged code")),
@@ -115,6 +123,16 @@ def consolidation_model(code_names):
         merges=(List[Merge], Field(max_length=60)),
         families=(List[Family], Field(max_length=20)),
     )
+
+
+def placement_model(code_names, family_names):
+    """A family (one of the existing ones) for each code left unplaced."""
+    Placement = create_model(
+        "Placement",
+        code=(Literal[tuple(code_names)], ...),
+        family=(Literal[tuple(family_names)], ...),
+    )
+    return create_model("Placements", placements=(List[Placement], ...))
 
 
 class Judgement(BaseModel):

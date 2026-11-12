@@ -491,7 +491,7 @@ def consolidate_what(run, cfg, client, limit=None):
     pre = run.dir / "codebook" / "what.premerge.yml"
     npre = run.dir / "codebook" / "never_implemented.premerge.yml"
     codes = read_yaml(pre)["codes"] + read_yaml(npre)["codes"]
-    survivors, defs, audit, unplaced = consolidate_codes(
+    survivors, defs, audit, placement = consolidate_codes(
         client, cfg, "consolidate-what", "what", codes
     )
     v1 = [c for c in survivors if c.get("implemented")]
@@ -525,7 +525,7 @@ def consolidate_what(run, cfg, client, limit=None):
         {
             "merges": audit,
             "families": families_doc(defs, survivors),
-            "unplaced": unplaced,
+            "placement": placement,
         },
     )
     write_manifest(
@@ -536,7 +536,7 @@ def consolidate_what(run, cfg, client, limit=None):
         codes_in=len(codes),
         codes_out=len(survivors),
         families=len(defs),
-        unplaced=unplaced,
+        placement=placement,
         codes_without_members=empty,
         failed=[dict(item=i, error=e) for i, e in a_rules[1] + a_notes[1]],
         model=client.model,
@@ -545,26 +545,27 @@ def consolidate_what(run, cfg, client, limit=None):
     log(f"consolidate-what: {len(v1)} codes, {len(never)} never implemented")
 
 
-def consolidate_why(run, cfg, client, limit=None):
-    """Merges and families of the proposed why codes (families by kind of
-    justification), then why.v1.yml and a fresh assignment of the reasons."""
-    require(run, "why-codebook")
-    draft_path = run.dir / "codebook" / "why.draft.yml"
+def _consolidate_single(run, cfg, client, kind, src_step, items, limit=None):
+    """consolidate-why / consolidate-basis: merges and families of a proposed
+    codebook, then <kind>.v1.yml and a fresh assignment of its items."""
+    step = f"consolidate-{kind}"
+    require(run, src_step)
+    draft_path = run.dir / "codebook" / f"{kind}.draft.yml"
     codes = read_yaml(draft_path)["codes"]
-    survivors, defs, audit, unplaced = consolidate_codes(
-        client, cfg, "consolidate-why", "why", codes
+    survivors, defs, audit, placement = consolidate_codes(
+        client, cfg, step, kind, codes
     )
-    items = _limit(_reason_items(load_records(run)), limit)
-    a = assign(client, cfg, "consolidate-why", survivors, items, "why")
+    items = _limit(items, limit)
+    a = assign(client, cfg, step, survivors, items, kind)
     mem = _merged_members(survivors, a)
     outs = {
-        "v1": run.path("codebook", "why.v1.yml"),
-        "members": run.path("codebook", "why.v1.members.yml"),
-        "merges": run.path("codebook", "why.merges.yml"),
+        "v1": run.path("codebook", f"{kind}.v1.yml"),
+        "members": run.path("codebook", f"{kind}.v1.members.yml"),
+        "merges": run.path("codebook", f"{kind}.merges.yml"),
     }
     write_yaml(
         outs["v1"],
-        _codebook_doc("why", 1, survivors, families=families_doc(defs, survivors)),
+        _codebook_doc(kind, 1, survivors, families=families_doc(defs, survivors)),
     )
     write_yaml(outs["members"], mem)
     write_yaml(
@@ -572,23 +573,37 @@ def consolidate_why(run, cfg, client, limit=None):
         {
             "merges": audit,
             "families": families_doc(defs, survivors),
-            "unplaced": unplaced,
+            "placement": placement,
         },
     )
     write_manifest(
         run,
-        "consolidate-why",
+        step,
         [draft_path, *_record_files(run)],
         list(outs.values()),
         codes_in=len(codes),
         codes_out=len(survivors),
         families=len(defs),
-        unplaced=unplaced,
+        placement=placement,
         failed=[dict(item=i, error=e) for i, e in a[1]],
         model=client.model,
         limit=limit,
     )
-    log(f"consolidate-why: {len(survivors)} codes in {len(defs)} families")
+    log(f"{step}: {len(survivors)} codes in {len(defs)} families")
+
+
+def consolidate_why(run, cfg, client, limit=None):
+    """Merges and families of the proposed why codes (families by kind of
+    justification), then why.v1.yml and a fresh assignment of the reasons."""
+    items = _reason_items(load_records(run))
+    _consolidate_single(run, cfg, client, "why", "why-codebook", items, limit)
+
+
+def consolidate_basis(run, cfg, client, limit=None):
+    """Merges and families of the proposed basis codes (families: the kinds of
+    support a reason rests on), then basis.v1.yml and a fresh assignment."""
+    items = _basis_items(load_records(run))
+    _consolidate_single(run, cfg, client, "basis", "basis-codebook", items, limit)
 
 
 # --- 3 -------------------------------------------------------------------
@@ -646,11 +661,11 @@ def basis_codebook(run, cfg, client, limit=None):
         client, cfg, "basis-codebook", "basis", items, "notes"
     )
     outs = [
-        run.path("codebook", "basis.v1.yml"),
-        run.path("codebook", "basis.v1.members.yml"),
-        run.path("codebook", "basis.v1.history.json"),
+        run.path("codebook", "basis.draft.yml"),
+        run.path("codebook", "basis.draft.members.yml"),
+        run.path("codebook", "basis.draft.history.json"),
     ]
-    write_yaml(outs[0], _codebook_doc("basis", 1, codes))
+    write_yaml(outs[0], _codebook_doc("basis", 0, codes))
     write_yaml(outs[1], members(codes, assignment, failed))
     write_json(outs[2], hist)
     write_manifest(
@@ -817,6 +832,7 @@ STAGE_A = [
     ("why-codebook", why_codebook),
     ("consolidate-why", consolidate_why),
     ("basis-codebook", basis_codebook),
+    ("consolidate-basis", consolidate_basis),
 ]
 STAGE_B = [("apply-rules", apply_rules), ("apply-notes", apply_notes)]
 STEPS = dict(STAGE_A + STAGE_B)

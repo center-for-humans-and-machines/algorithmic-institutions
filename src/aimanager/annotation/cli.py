@@ -23,6 +23,7 @@ LLM_COMMANDS = [
     "why-codebook",
     "consolidate-why",
     "basis-codebook",
+    "consolidate-basis",
     "apply-rules",
     "apply-notes",
 ]

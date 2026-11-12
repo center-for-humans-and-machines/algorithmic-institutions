@@ -196,7 +196,13 @@ def test_stage_a_outputs(run_dir):
     )
     assert "proportional_punishment" not in v1_members
     assert (run_dir / "codebook" / "non_discriminating.yml").exists()
-    assert yaml.safe_load((run_dir / "codebook" / "basis.v1.yml").read_text())["codes"]
+    # the fake leaves one code out of the families: it is placed on the re-ask
+    assert merges["placement"]["placed_on_reask"]
+    assert "unplaced" not in {c["family"] for c in v1["codes"]}
+    assert all(m["reason"] for m in merges["merges"] if m["applied"])
+    basis = yaml.safe_load((run_dir / "codebook" / "basis.v1.yml").read_text())
+    assert basis["codes"] and all(c["family"] for c in basis["codes"])
+    assert (run_dir / "codebook" / "basis.merges.yml").exists()
     # candidates were judged together with the draft codes
     summary = json.loads((run_dir / "coverage" / "summary.json").read_text())
     assert set(summary["prevalence"]) >= {c["name"] for c in draft["codes"]}
@@ -223,7 +229,10 @@ def test_stage_b_join_and_agreement(run_dir):
     assert first <= {"not_stated", "no_mechanism"}
     assert any(r["why_codes_for"] for r in rows)
     assert any(r["reason_evidence"] for r in rows)
-    assert any(r["basis_codes"] for r in rows)
+    assert any(r["basis_codes"] for r in rows) and any(
+        r["basis_families"] for r in rows
+    )
+    assert {r["event_unreliable_code"] for r in rows if r["event"] == "absent"} == {""}
     with open(run_dir / "analysis" / "theory_mentions.csv") as f:
         assert len(list(csv.DictReader(f))) == 12
     # judge: repeats disagree in the fake, so tie-breaks and re-asks ran (the
@@ -248,6 +257,9 @@ def test_stage_b_join_and_agreement(run_dir):
     assert len(q["judge_reliability"]["least_reliable"]) == 5
     assert q["codes_per_rule"]["rules"] == 12 and "codes_above_max_prevalence" in q
     assert q["judge_flags"]["tiebreaks"] > 0
+    assert "codes" in q["judge_reliability"]["unreliable_codes"]
+    assert {"0", "1"} <= set(next(iter(q["judge_present_share_by_repeat"].values())))
+    assert set(q["family_sizes"]) == {"what", "why", "basis"}
     # apply-rules reran with the reviewer's what.v2.yml, keeping rater rows
     codes = read_jsonl(run_dir / "codes" / "rule_codes.jsonl")
     llm = [r for r in codes if r["coder"].startswith("llm:")]

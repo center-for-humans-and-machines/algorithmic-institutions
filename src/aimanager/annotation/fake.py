@@ -176,12 +176,16 @@ def judge(meta):
     doc = meta["doc"]
     by_name = {v[0]: v for v in WHAT}
     out = {}
+    flip = meta.get("repeat") == "r1" and not meta.get("reask")
+    unsupported_done = False
     for name in meta["codes"]:
         v = by_name.get(name)
         line = _first_line(v[2], doc) if v else None
         present, evidence = bool(line), line or ""
-        flip = meta.get("repeat") == "r1" and not meta.get("reask")
-        if flip and _h(meta.get("stem"), name) % 5 == 0:
+        if flip and not line and not unsupported_done:
+            # the first absent code of a rule: present without evidence
+            present, unsupported_done = True, True
+        elif flip and _h(meta.get("stem"), name) % 5 == 0:
             present, evidence = not present, ""
         out[name] = {
             "evidence": evidence,
@@ -200,6 +204,7 @@ def consolidate(meta):
         merges.append(
             {
                 "codes": pair,
+                "reason": "a rule implementing one implements the other",
                 "keep": pair[0],
                 "label": "punish the shortfall",
                 "definition": "Punishment grows with the shortfall below a reference.",
@@ -207,14 +212,24 @@ def consolidate(meta):
         )
     gone = {"proportional_punishment"} if merges else set()
     fams = {}
-    for n in names:
-        if n not in gone:
-            fams.setdefault(f"family_{_h(n) % 2}", []).append(n)
+    left = [n for n in names if n not in gone]
+    # the last code is left out, so the placement re-ask runs
+    for n in left[:-1] if len(left) > 2 else left:
+        fams.setdefault(f"family_{_h(n) % 2}", []).append(n)
     families = [
         {"name": f, "definition": f"codes of {f}", "codes": cs}
         for f, cs in sorted(fams.items())
     ]
     return {"merges": merges, "families": families}
+
+
+def place(meta):
+    """Every unplaced code into the first family."""
+    return {
+        "placements": [
+            {"code": n, "family": meta["families"][0]} for n in meta["codes"]
+        ]
+    }
 
 
 def respond(call):
@@ -225,5 +240,6 @@ def respond(call):
         "assign": assign,
         "judge": judge,
         "consolidate": consolidate,
+        "place": place,
     }[call.kind]
     return json.dumps(fn(call.meta))

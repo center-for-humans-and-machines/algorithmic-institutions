@@ -48,6 +48,7 @@ COLUMNS = [
     "switchable_off",
     "in_parent_rule",
     "event",
+    "event_unreliable_code",
     "notes_status",
     "notes_status_all",
     "notes_relation",
@@ -60,6 +61,7 @@ COLUMNS = [
     "reason_evidence",
     "reason_evidence_refs",
     "basis_codes",
+    "basis_families",
     "theory_mentions",
 ]
 
@@ -141,6 +143,9 @@ def join(run, cfg, limit=None):
         (r["version"], r["what_code"]): r for r in rule_rows if r["coder"] == coder
     }
     in_rule = {k: r["present"] for k, r in rows_of.items()}
+    unreliable = set(_unreliable_codes(run, cfg))
+    _, bpath, bcodes = latest_codebook(run, "basis")
+    basis_family = {c["name"]: c.get("family") for c in bcodes}
     records = load_records(run, coded=True)
     z = _z_scores(versions)
     out = []
@@ -171,6 +176,7 @@ def join(run, cfg, limit=None):
                 RELATION_ORDER,
             )
             empty = "no_record" if rec is None else "no_mechanism"
+            event = _event(ir, ip if parent else False, bool(parent))
             srcs = {m["source_version"] for m in mechs if m.get("source_version")}
             row = {
                 "campaign": v["campaign"],
@@ -187,7 +193,12 @@ def join(run, cfg, limit=None):
                 "in_rule": ir,
                 "switchable_off": sw,
                 "in_parent_rule": ip,
-                "event": _event(ir, ip if parent else False, bool(parent)),
+                "event": event,
+                "event_unreliable_code": (
+                    (code in unreliable)
+                    if event in ("introduced", "kept", "dropped")
+                    else None
+                ),
                 "notes_status": status or empty,
                 "notes_status_all": status_all,
                 "notes_relation": relation or empty,
@@ -208,6 +219,15 @@ def join(run, cfg, limit=None):
                 "basis_codes": ";".join(
                     sorted({r["basis_code"] for r in reasons if r.get("basis_code")})
                 ),
+                "basis_families": ";".join(
+                    sorted(
+                        {
+                            basis_family.get(r["basis_code"]) or ""
+                            for r in reasons
+                            if r.get("basis_code")
+                        }
+                    )
+                ),
                 "theory_mentions": ";".join(theory),
             }
             out.append(row)
@@ -221,7 +241,13 @@ def join(run, cfg, limit=None):
     agreement = write_agreement(run, rule_rows)
     quality = _quality(run, versions, records, rule_rows, coder, in_rule, names)
     quality.update(_rule_code_stats(cfg, rule_rows, coder, names))
-    quality["judge_reliability"] = _reliability_summary(run)
+    quality["judge_reliability"] = _reliability_summary(run) or {}
+    quality["judge_reliability"]["unreliable_codes"] = {
+        "min_agreement": cfg.get("judge", {}).get("min_agreement", 0.8),
+        "codes": sorted(unreliable),
+    }
+    quality["judge_present_share_by_repeat"] = _present_by_repeat(run)
+    quality["family_sizes"] = _family_sizes(run)
     quality["agreement_overall"] = [
         r for r in agreement if r["code"] == "__overall__"
     ] or None
@@ -303,6 +329,50 @@ def _rule_code_stats(cfg, rule_rows, coder, names):
             "unsupported": sum(bool(r.get("unsupported")) for r in mine),
         },
     }
+
+
+def _reliability_rows(run):
+    path = run.dir / "analysis" / "judge_reliability.csv"
+    if not path.exists():
+        return []
+    with path.open() as f:
+        return list(csv.DictReader(f))
+
+
+def _unreliable_codes(run, cfg):
+    """Codes whose judge test-retest agreement is below judge.min_agreement."""
+    floor = cfg.get("judge", {}).get("min_agreement", 0.8)
+    return [
+        r["code"]
+        for r in _reliability_rows(run)
+        if r["code"] != "__overall__"
+        and r["agreement"] not in ("", None)
+        and float(r["agreement"]) < floor
+    ]
+
+
+def _present_by_repeat(run):
+    """Per code the share of `present` answers in each judge repeat (and the
+    tie-break), so one-sided splits between repeats are visible."""
+    rows = read_jsonl(run.dir / "codes" / "judge_repeats.jsonl")
+    tally = defaultdict(lambda: defaultdict(lambda: [0, 0]))
+    for r in rows:
+        t = tally[r["what_code"]][str(r["repeat"])]
+        t[0] += bool(r["present"])
+        t[1] += 1
+    return {
+        code: {rep: round(y / n, 4) for rep, (y, n) in sorted(reps.items()) if n}
+        for code, reps in sorted(tally.items())
+    }
+
+
+def _family_sizes(run):
+    """Codes per family in the latest what, why and basis codebooks."""
+    out = {}
+    for kind in ("what", "why", "basis"):
+        _, _, codes = latest_codebook(run, kind)
+        out[kind] = dict(Counter(c.get("family") or "none" for c in codes))
+    return out
 
 
 def _reliability_summary(run):

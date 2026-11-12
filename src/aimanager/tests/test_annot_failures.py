@@ -14,7 +14,11 @@ from aimanager.annotation.cluster import (
     is_negated,
     to_codebook_entries,
 )
-from aimanager.annotation.consolidate import UNPLACED, apply_consolidation
+from aimanager.annotation.consolidate import (
+    UNPLACED,
+    apply_consolidation,
+    apply_placements,
+)
 from aimanager.annotation.judge import code_order, resolve
 from aimanager.annotation.common import (
     Run,
@@ -243,6 +247,20 @@ def test_apply_consolidation_merges_and_families():
     assert set(defs) == {"fam_one", UNPLACED}
 
 
+def test_unplaced_codes_are_reasked_then_get_their_own_family():
+    surv = [
+        {"name": "a", "family": "f1", "definition": "A"},
+        {"name": "b", "family": UNPLACED, "definition": "B"},
+        {"name": "c", "family": UNPLACED, "definition": "C"},
+    ]
+    defs = {"f1": "first", UNPLACED: "x"}
+    placements = [{"code": "b", "family": "f1"}, {"code": "a", "family": "f1"}]
+    defs, replaced, own = apply_placements(surv, defs, placements)
+    assert replaced == ["b"] and own == ["c"]
+    assert [c["family"] for c in surv] == ["f1", "f1", "c"]
+    assert defs == {"f1": "first", "c": "C"}
+
+
 def test_judge_order_and_resolution():
     codes = [{"name": f"c{i}", "family": "f" + str(i % 2)} for i in range(6)]
     assert code_order(codes, 0, 1) == codes
@@ -307,4 +325,4 @@ def test_preflight(tmp_path):
         return httpx.Response(200, json=_reply("not json"))
 
     client, _, _ = _client(tmp_path, handler, use_cache=False)
-    assert preflight(client) == 6
+    assert preflight(client) == 7

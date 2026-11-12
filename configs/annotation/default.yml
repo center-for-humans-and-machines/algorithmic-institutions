@@ -67,6 +67,7 @@ llm:
     assign: {first: 64, retry: 256}
     judge: {first: 6144, retry: 12288}
     consolidate: {first: 8192, retry: 16384}
+    place: {first: 1024, retry: 4096}
 
 # Share of calls of one pass kind that may fail in a step before the step
 # raises without writing anything (0: every call must succeed). Failed items
@@ -79,6 +80,7 @@ failure_budget:
   propose: 0.0
   judge: 0.0
   consolidate: 0.0
+  place: 0.0
 
 clustering:
   # proposal call sees at most this many items, and only as many as fit the
@@ -104,6 +106,9 @@ judge:
   # disagreements go to one tie-break run. Repeats 1 and 2 give the judge's
   # test-retest reliability (analysis/judge_reliability.csv), so keep >= 2.
   repeats: 2
+  # codes whose test-retest agreement is below this are listed as
+  # unreliable_codes in quality.json, and join marks events involving them
+  min_agreement: 0.8
 
 join:
   # rule coder whose codes count as in_rule; "auto" = the LLM judge
