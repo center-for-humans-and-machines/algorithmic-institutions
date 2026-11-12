@@ -144,3 +144,12 @@ def test_record_relation_and_theory_name_checks():
     assert first["_relation_forced"] == 1
     later = _record("s-v2", res, "q", first=False)
     assert later["mechanisms"][0]["relation_to_previous"] == "new"
+
+
+def test_positive_idea():
+    from aimanager.annotation.steps import positive
+
+    assert positive("Does not cap repeated punishments.") == "cap repeated punishments."
+    assert positive("the manager does not punish x") == "punish x"
+    assert positive("Punishes x") == "Punishes x"
+    assert positive("notifies players") == "notifies players"

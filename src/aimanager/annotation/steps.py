@@ -7,6 +7,7 @@ writes its own manifest last.
 
 import csv
 import io
+import re
 
 from . import prompting as P
 from .client import Call
@@ -209,9 +210,22 @@ def _record_files(run, coded=False):
     return sorted(d.glob("*.json"))
 
 
+_LEAD_NEG = re.compile(
+    r"^(the manager |the rule )?(does not|do not|doesn't|don't|never|will not)\s+",
+    re.I,
+)
+
+
+def positive(text):
+    """A leading negation removed: "does not punish x" -> "punish x". The model
+    still writes about a fifth of the rejected ideas negatively (viper3)."""
+    out = _LEAD_NEG.sub("", text.strip(), count=1)
+    return out[:1].lower() + out[1:] if out != text.strip() else out
+
+
 def idea_of(m):
     """The positive statement of a mechanism (older records: the description)."""
-    return m.get("idea") or m["description"]
+    return positive(m.get("idea") or m["description"])
 
 
 def _mechanism_items(records):
