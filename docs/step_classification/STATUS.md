@@ -27,8 +27,8 @@ Last updated: 2026-11-12, 18:40. This file is the handover for picking the work 
 | `viper0` | viper | Trial on a few versions, Qwen3-30B-A3B | Done, on S3 |
 | `viper1` | viper | First full run, both stages, Qwen3-30B-A3B, pass-through review, simulated expert check | Done, on S3, with `REPORT.md` |
 | `viper2` | viper | Same corpus after the prompt fixes of commit 732e137d; stage A, pass-through review and stage B in one job | Done, on S3; compared in viper1's `REPORT.md` |
-| `smoke-dais` | dais | Job-script tests with Qwen3-30B-A3B | 1-GPU test passes, 2-GPU test queued |
-| `dais0` | dais | First boot of DeepSeek V4.1 Flash plus a trial on 6 versions | Not started |
+| `smoke-dais` | dais | Job-script tests with Qwen3-30B-A3B | 1-GPU test passes (job 878637); 2-GPU test (job 878812, `gpudev`) queued, estimated start 2026-11-12 19:53 |
+| `dais0` | dais | First boot of DeepSeek V4.1 Flash plus a trial on 6 versions | Queued: job 878977 on `gpu1` (2 B200, 5 h), after job 878812; `gpu1` backlog puts the estimated start at 2026-11-13 about 11:00 |
 
 ## Next steps
 
