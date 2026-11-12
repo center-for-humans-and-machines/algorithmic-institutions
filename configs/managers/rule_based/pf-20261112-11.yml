@@ -1,0 +1,23 @@
+params:
+  threshold:
+    definition: contribution (0-20) below which a member is punished; the shortfall below it sets the punishment
+    type: float
+  slope:
+    definition: punishment points per point of contribution shortfall below the threshold
+    type: float
+  cap:
+    definition: the most punishment any member gets in one round
+    type: float
+  last_round:
+    definition: last round (0-23) in which the manager punishes at all; no punishment after it
+    type: int
+sweep_config:
+  threshold: [1, 14]
+  slope: [0.1, 5, log]
+  cap: [1, 20, log]
+  last_round: [3, 22]
+code: |
+  shortfall = th.clamp(threshold - c[..., -1], min=0.0)
+  amount = th.minimum(slope * shortfall, cap * th.ones_like(shortfall))
+  active = (t <= last_round).float()
+  punishment = amount * active * valid[..., -1]
