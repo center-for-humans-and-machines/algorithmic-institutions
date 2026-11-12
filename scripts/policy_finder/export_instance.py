@@ -138,6 +138,7 @@ SETTINGS = {
             "docs/reports/basics.md",
             "docs/reports/basics_exp1.md",
             "docs/reports/basics_exp2_multi.md",
+            "plots/simulation/29_EXP1_reference",
         ),
         "agent": ".claude/agents/policy-finder-exp2-diff.md",
     },

@@ -230,13 +230,15 @@ def test_an_exp2_diff_export_has_its_own_game_doc_and_the_ah_reference(layout):
     _write(wt, "docs/reports/basics_exp2_multi.md", "multi game\n")
     _write(wt, "docs/reports/basics_exp2_diff.md", "the lead over ah\n")
     _write(wt, "configs/simulation/opponents/exp2_diff.yml", "ah: {name: ah}\n")
+    _write(wt, "plots/simulation/29_EXP1_reference/x.jpg", "jpg")
     export = Path(ex.build(wt, main, exports))
     files = _files(export)
     agent = (export / ".claude/agents/policy-finder.md").read_text()
     assert agent.startswith("---\nname: policy-finder\n") and "Lead over ah." in agent
     assert "docs/reports/basics_exp2_diff.md" in files
     for gone in ("docs/reports/basics.md", "docs/reports/basics_exp2_multi.md",
-                 "configs/simulation/opponents/exp2_diff.yml"):
+                 "configs/simulation/opponents/exp2_diff.yml",
+                 "plots/simulation/29_EXP1_reference/x.jpg"):
         assert gone not in files
     assert any(f.startswith("plots/simulation/25_LEVIN") for f in files)
 
