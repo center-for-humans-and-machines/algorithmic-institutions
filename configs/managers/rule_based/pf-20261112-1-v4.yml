@@ -1,0 +1,41 @@
+params:
+  n_full:
+    definition: the group size (members this round) from which the manager pushes free riders at a switch decision; with at least n_full of the 8 players in my group, ah's group holds at most 8 - n_full, so a pushed free rider lands there (nearly) alone, carrying my punishment as his previous punishment, which ah answers by punishing him round after round
+    type: int
+  bar:
+    definition: free-rider bar; only a member whose mean contribution over the current 4-round window (up to this round, valid rounds only) is at most bar can be pushed
+    type: int
+  amount:
+    definition: punishment dealt to each pushed member in the decision round; a larger dose makes him likelier to leave and makes ah punish him harder once there, but costs my pool the points dealt
+    type: int
+  n_push:
+    definition: most members pushed at one decision, the lowest window-mean contributors among those at or below the bar
+    type: int
+  last_dec:
+    definition: index of the last switch decision with a push (decision d follows round 3+4d; pushes start at decision 1, round 7, since groups start at 4 and are never full at decision 0); later pushes have fewer rounds left to pay back
+    type: int
+sweep_config:
+  n_full: 7
+  bar: [3, 8]
+  amount: [14, 30]
+  n_push: [1, 3]
+  last_dec: [2, 3]
+constraints:
+  - n_push >= 1
+  - amount >= 1
+  - n_full >= 1
+code: |
+  rounds = th.arange(c.shape[-1], device=c.device)
+  win_now = th.div(t, 4, rounding_mode='floor')
+  in_win = (th.div(rounds, 4, rounding_mode='floor') == win_now).float()
+  w = valid * in_win
+  c_win = (c * w).sum(-1) / th.clamp(w.sum(-1), min=1.0)
+  member = in_group[..., -1]
+  n_mem = member.sum(-1, keepdim=True)
+  eligible = member * valid[..., -1] * (c_win <= bar).float()
+  idx = th.arange(c.shape[1], device=c.device).float()
+  score = c_win + 0.001 * idx + 1000.0 * (1.0 - eligible)
+  rank = th.argsort(th.argsort(score, dim=-1), dim=-1).float()
+  push = eligible * (rank < n_push).float() * (n_mem >= n_full).float()
+  is_dec = (th.remainder(t + 1, 4) == 0) * (t >= 7) * (win_now <= last_dec)
+  punishment = amount * push * is_dec
