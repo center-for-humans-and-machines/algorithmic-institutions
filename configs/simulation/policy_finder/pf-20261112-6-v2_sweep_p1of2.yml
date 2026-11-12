@@ -1,0 +1,930 @@
+# Sweep of /home/kappablanca/pf_runs/worktrees_diff/pf-20261112-6/configs/managers/rule_based/pf-20261112-6-v2.yml (#227), written by scripts/policy_finder/generate_sim_config.py:
+# 128 of 256 distinct design points (256 Sobol points), each against `ah` in both seats (configs/simulation/opponents/exp2_diff.yml); stack and sim parameters from
+# configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 42
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261112-6-v2_s000:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 8, streak: 2, amt: 2.147010873616479}
+    setting: exp2_diff
+  pf-20261112-6-v2_s001:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 4, streak: 2, amt: 9.774696660394415}
+    setting: exp2_diff
+  pf-20261112-6-v2_s002:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 4, streak: 1, amt: 1.46173286412653}
+    setting: exp2_diff
+  pf-20261112-6-v2_s003:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 0, streak: 3, amt: 3.4152489827459407}
+    setting: exp2_diff
+  pf-20261112-6-v2_s004:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 6, streak: 2, amt: 5.250928353922688}
+    setting: exp2_diff
+  pf-20261112-6-v2_s005:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 2, streak: 2, amt: 0.8005664754123712}
+    setting: exp2_diff
+  pf-20261112-6-v2_s006:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 7, streak: 3, amt: 7.571193073817377}
+    setting: exp2_diff
+  pf-20261112-6-v2_s007:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 3, streak: 1, amt: 2.346491486814904}
+    setting: exp2_diff
+  pf-20261112-6-v2_s008:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 5, streak: 3, amt: 1.1162669326095986}
+    setting: exp2_diff
+  pf-20261112-6-v2_s009:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 0, streak: 1, amt: 5.077722809962185}
+    setting: exp2_diff
+  pf-20261112-6-v2_s010:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 8, streak: 2, amt: 2.9336584855124492}
+    setting: exp2_diff
+  pf-20261112-6-v2_s011:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 3, streak: 2, amt: 6.857567048692939}
+    setting: exp2_diff
+  pf-20261112-6-v2_s012:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 7, streak: 1, amt: 10.562715081289015}
+    setting: exp2_diff
+  pf-20261112-6-v2_s013:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 2, streak: 3, amt: 1.6123105418380272}
+    setting: exp2_diff
+  pf-20261112-6-v2_s014:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 6, streak: 1, amt: 3.9245921088184934}
+    setting: exp2_diff
+  pf-20261112-6-v2_s015:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 1, streak: 3, amt: 1.2161488846706463}
+    setting: exp2_diff
+  pf-20261112-6-v2_s016:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 6, streak: 1, amt: 8.080615191459433}
+    setting: exp2_diff
+  pf-20261112-6-v2_s017:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 1, streak: 3, amt: 2.489542208932558}
+    setting: exp2_diff
+  pf-20261112-6-v2_s018:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 7, streak: 2, amt: 6.046949926412939}
+    setting: exp2_diff
+  pf-20261112-6-v2_s019:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 2, streak: 2, amt: 0.9373040469412259}
+    setting: exp2_diff
+  pf-20261112-6-v2_s020:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 8, streak: 3, amt: 1.4174856890725396}
+    setting: exp2_diff
+  pf-20261112-6-v2_s021:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 3, streak: 1, amt: 3.3670291963938412}
+    setting: exp2_diff
+  pf-20261112-6-v2_s022:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 5, streak: 3, amt: 1.9398216113152482}
+    setting: exp2_diff
+  pf-20261112-6-v2_s023:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 0, streak: 1, amt: 8.778943865854723}
+    setting: exp2_diff
+  pf-20261112-6-v2_s024:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 6, streak: 3, amt: 4.02317235345366}
+    setting: exp2_diff
+  pf-20261112-6-v2_s025:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 3, streak: 1, amt: 1.2409018781012797}
+    setting: exp2_diff
+  pf-20261112-6-v2_s026:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 5, streak: 3, amt: 11.637161532223551}
+    setting: exp2_diff
+  pf-20261112-6-v2_s027:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 1, streak: 1, amt: 1.8034771931172096}
+    setting: exp2_diff
+  pf-20261112-6-v2_s028:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 4, streak: 2, amt: 2.7359651475063944}
+    setting: exp2_diff
+  pf-20261112-6-v2_s029:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 0, streak: 2, amt: 6.493643621327027}
+    setting: exp2_diff
+  pf-20261112-6-v2_s030:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 7, streak: 1, amt: 0.9635508229443919}
+    setting: exp2_diff
+  pf-20261112-6-v2_s031:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 4, streak: 3, amt: 4.3629381751269944}
+    setting: exp2_diff
+  pf-20261112-6-v2_s032:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 4, streak: 2, amt: 9.2320616765075}
+    setting: exp2_diff
+  pf-20261112-6-v2_s033:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 1, streak: 2, amt: 2.007514268652747}
+    setting: exp2_diff
+  pf-20261112-6-v2_s034:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 8, streak: 3, amt: 3.1853749483786666}
+    setting: exp2_diff
+  pf-20261112-6-v2_s035:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 4, streak: 1, amt: 1.3767384832531395}
+    setting: exp2_diff
+  pf-20261112-6-v2_s036:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 7, streak: 1, amt: 0.9057090182285745}
+    setting: exp2_diff
+  pf-20261112-6-v2_s037:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 3, streak: 3, amt: 5.750108261634613}
+    setting: exp2_diff
+  pf-20261112-6-v2_s038:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 5, streak: 1, amt: 2.563248136478005}
+    setting: exp2_diff
+  pf-20261112-6-v2_s039:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 2, streak: 3, amt: 8.541333914571224}
+    setting: exp2_diff
+  pf-20261112-6-v2_s040:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 8, streak: 1, amt: 4.587369271032182}
+    setting: exp2_diff
+  pf-20261112-6-v2_s041:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 3, streak: 3, amt: 0.9973400445405743}
+    setting: exp2_diff
+  pf-20261112-6-v2_s042:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 5, streak: 2, amt: 6.142290397899265}
+    setting: exp2_diff
+  pf-20261112-6-v2_s043:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 0, streak: 2, amt: 2.6577560345743265}
+    setting: exp2_diff
+  pf-20261112-6-v2_s044:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 6, streak: 3, amt: 1.7423968271589685}
+    setting: exp2_diff
+  pf-20261112-6-v2_s045:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 1, streak: 1, amt: 11.067728444485189}
+    setting: exp2_diff
+  pf-20261112-6-v2_s046:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 7, streak: 2, amt: 1.2774291297747924}
+    setting: exp2_diff
+  pf-20261112-6-v2_s047:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 2, streak: 2, amt: 4.253257690971829}
+    setting: exp2_diff
+  pf-20261112-6-v2_s048:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 7, streak: 3, amt: 2.231668657529505}
+    setting: exp2_diff
+  pf-20261112-6-v2_s049:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 2, streak: 1, amt: 7.3147592586331704}
+    setting: exp2_diff
+  pf-20261112-6-v2_s050:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 6, streak: 3, amt: 0.8463517138235994}
+    setting: exp2_diff
+  pf-20261112-6-v2_s051:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 1, streak: 1, amt: 5.4055001868090065}
+    setting: exp2_diff
+  pf-20261112-6-v2_s052:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 5, streak: 1, amt: 3.535009459469453}
+    setting: exp2_diff
+  pf-20261112-6-v2_s053:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 0, streak: 3, amt: 1.5369234355579235}
+    setting: exp2_diff
+  pf-20261112-6-v2_s054:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 8, streak: 2, amt: 9.49529674818368}
+    setting: exp2_diff
+  pf-20261112-6-v2_s055:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 3, streak: 2, amt: 2.030845289425058}
+    setting: exp2_diff
+  pf-20261112-6-v2_s056:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 5, streak: 2, amt: 1.1564468941671031}
+    setting: exp2_diff
+  pf-20261112-6-v2_s057:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 1, streak: 2, amt: 3.7922942293540935}
+    setting: exp2_diff
+  pf-20261112-6-v2_s058:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 6, streak: 1, amt: 1.704238566330417}
+    setting: exp2_diff
+  pf-20261112-6-v2_s059:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 2, streak: 3, amt: 10.875447651553383}
+    setting: exp2_diff
+  pf-20261112-6-v2_s060:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 8, streak: 3, amt: 7.096864106234691}
+    setting: exp2_diff
+  pf-20261112-6-v2_s061:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 4, streak: 1, amt: 3.0850738152607495}
+    setting: exp2_diff
+  pf-20261112-6-v2_s062:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 4, streak: 3, amt: 4.931765969502725}
+    setting: exp2_diff
+  pf-20261112-6-v2_s063:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 0, streak: 1, amt: 1.056045034013077}
+    setting: exp2_diff
+  pf-20261112-6-v2_s064:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 5, streak: 3, amt: 3.737813205865079}
+    setting: exp2_diff
+  pf-20261112-6-v2_s065:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 2, streak: 1, amt: 1.1276315653233897}
+    setting: exp2_diff
+  pf-20261112-6-v2_s066:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 7, streak: 3, amt: 10.578361288976831}
+    setting: exp2_diff
+  pf-20261112-6-v2_s067:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 3, streak: 1, amt: 1.674995225950659}
+    setting: exp2_diff
+  pf-20261112-6-v2_s068:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 8, streak: 1, amt: 3.0076967411644713}
+    setting: exp2_diff
+  pf-20261112-6-v2_s069:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 4, streak: 3, amt: 6.996080893676463}
+    setting: exp2_diff
+  pf-20261112-6-v2_s070:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 5, streak: 2, amt: 1.0377549693267538}
+    setting: exp2_diff
+  pf-20261112-6-v2_s071:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 1, streak: 2, amt: 4.797823132133775}
+    setting: exp2_diff
+  pf-20261112-6-v2_s072:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 7, streak: 2, amt: 7.500291701470887}
+    setting: exp2_diff
+  pf-20261112-6-v2_s073:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 2, streak: 2, amt: 2.264622927507025}
+    setting: exp2_diff
+  pf-20261112-6-v2_s074:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 6, streak: 1, amt: 5.498841831705874}
+    setting: exp2_diff
+  pf-20261112-6-v2_s075:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 1, streak: 3, amt: 0.8702825141518046}
+    setting: exp2_diff
+  pf-20261112-6-v2_s076:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 5, streak: 2, amt: 1.55987191876031}
+    setting: exp2_diff
+  pf-20261112-6-v2_s077:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 0, streak: 2, amt: 3.62408099964639}
+    setting: exp2_diff
+  pf-20261112-6-v2_s078:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 8, streak: 3, amt: 2.0886178437099154}
+    setting: exp2_diff
+  pf-20261112-6-v2_s079:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 3, streak: 1, amt: 9.657636126595532}
+    setting: exp2_diff
+  pf-20261112-6-v2_s080:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 8, streak: 2, amt: 1.0143681375135691}
+    setting: exp2_diff
+  pf-20261112-6-v2_s081:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 3, streak: 2, amt: 4.717541202408292}
+    setting: exp2_diff
+  pf-20261112-6-v2_s082:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 5, streak: 3, amt: 2.7246750653080754}
+    setting: exp2_diff
+  pf-20261112-6-v2_s083:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 0, streak: 1, amt: 6.233667574113336}
+    setting: exp2_diff
+  pf-20261112-6-v2_s084:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 6, streak: 1, amt: 11.379932712693972}
+    setting: exp2_diff
+  pf-20261112-6-v2_s085:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 1, streak: 3, amt: 1.7724334387515701}
+    setting: exp2_diff
+  pf-20261112-6-v2_s086:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 7, streak: 1, amt: 4.315806299875242}
+    setting: exp2_diff
+  pf-20261112-6-v2_s087:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 2, streak: 3, amt: 1.3098126609232221}
+    setting: exp2_diff
+  pf-20261112-6-v2_s088:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 4, streak: 1, amt: 1.953047892370923}
+    setting: exp2_diff
+  pf-20261112-6-v2_s089:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 0, streak: 3, amt: 9.072756614027725}
+    setting: exp2_diff
+  pf-20261112-6-v2_s090:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 8, streak: 1, amt: 1.3572052584504615}
+    setting: exp2_diff
+  pf-20261112-6-v2_s091:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 4, streak: 3, amt: 3.1056676835211308}
+    setting: exp2_diff
+  pf-20261112-6-v2_s092:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 6, streak: 3, amt: 5.651833370254587}
+    setting: exp2_diff
+  pf-20261112-6-v2_s093:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 2, streak: 1, amt: 0.8809878109807927}
+    setting: exp2_diff
+  pf-20261112-6-v2_s094:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 5, streak: 2, amt: 8.328957468137801}
+    setting: exp2_diff
+  pf-20261112-6-v2_s095:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 1, streak: 2, amt: 2.526468746775749}
+    setting: exp2_diff
+  pf-20261112-6-v2_s096:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 7, streak: 1, amt: 1.272144619680568}
+    setting: exp2_diff
+  pf-20261112-6-v2_s097:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 3, streak: 3, amt: 4.083018717049126}
+    setting: exp2_diff
+  pf-20261112-6-v2_s098:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 6, streak: 2, amt: 1.8342712435294743}
+    setting: exp2_diff
+  pf-20261112-6-v2_s099:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 2, streak: 2, amt: 11.967394960944121}
+    setting: exp2_diff
+  pf-20261112-6-v2_s100:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 4, streak: 3, amt: 6.589130943212734}
+    setting: exp2_diff
+  pf-20261112-6-v2_s101:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 0, streak: 1, amt: 2.8053197465303152}
+    setting: exp2_diff
+  pf-20261112-6-v2_s102:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 8, streak: 2, amt: 4.486016008125829}
+    setting: exp2_diff
+  pf-20261112-6-v2_s103:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 4, streak: 2, amt: 0.9801624275384199}
+    setting: exp2_diff
+  pf-20261112-6-v2_s104:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 6, streak: 3, amt: 2.4542173078870286}
+    setting: exp2_diff
+  pf-20261112-6-v2_s105:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 1, streak: 1, amt: 7.878404729032448}
+    setting: exp2_diff
+  pf-20261112-6-v2_s106:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 7, streak: 3, amt: 0.9118749917881454}
+    setting: exp2_diff
+  pf-20261112-6-v2_s107:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 2, streak: 1, amt: 5.942613655095668}
+    setting: exp2_diff
+  pf-20261112-6-v2_s108:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 8, streak: 2, amt: 3.283305282087003}
+    setting: exp2_diff
+  pf-20261112-6-v2_s109:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 3, streak: 2, amt: 1.3971447465576028}
+    setting: exp2_diff
+  pf-20261112-6-v2_s110:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 5, streak: 1, amt: 8.628914397711133}
+    setting: exp2_diff
+  pf-20261112-6-v2_s111:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 0, streak: 3, amt: 1.8868768748344542}
+    setting: exp2_diff
+  pf-20261112-6-v2_s112:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 5, streak: 1, amt: 4.939020212399821}
+    setting: exp2_diff
+  pf-20261112-6-v2_s113:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 0, streak: 3, amt: 1.097114121428902}
+    setting: exp2_diff
+  pf-20261112-6-v2_s114:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 8, streak: 1, amt: 6.759040840596468}
+    setting: exp2_diff
+  pf-20261112-6-v2_s115:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 4, thr: 3, streak: 3, amt: 2.8605564640303274}
+    setting: exp2_diff
+  pf-20261112-6-v2_s116:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 7, streak: 2, amt: 1.584388339115876}
+    setting: exp2_diff
+  pf-20261112-6-v2_s117:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 2, streak: 2, amt: 10.275853418242745}
+    setting: exp2_diff
+  pf-20261112-6-v2_s118:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 6, streak: 3, amt: 1.185644990334266}
+    setting: exp2_diff
+  pf-20261112-6-v2_s119:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 1, streak: 1, amt: 3.868853623530649}
+    setting: exp2_diff
+  pf-20261112-6-v2_s120:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 7, streak: 3, amt: 9.94349799974285}
+    setting: exp2_diff
+  pf-20261112-6-v2_s121:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 4, streak: 1, amt: 2.2077209785069316}
+    setting: exp2_diff
+  pf-20261112-6-v2_s122:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 1, thr: 4, streak: 2, amt: 3.5018692510547034}
+    setting: exp2_diff
+  pf-20261112-6-v2_s123:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 0, streak: 2, amt: 1.4833158463163911}
+    setting: exp2_diff
+  pf-20261112-6-v2_s124:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 3, thr: 5, streak: 1, amt: 0.823341686086214}
+    setting: exp2_diff
+  pf-20261112-6-v2_s125:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 0, thr: 1, streak: 3, amt: 5.340709426751734}
+    setting: exp2_diff
+  pf-20261112-6-v2_s126:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 2, thr: 6, streak: 2, amt: 2.381524913191772}
+    setting: exp2_diff
+  pf-20261112-6-v2_s127:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-6-v2.yml
+    params: {n_blocks: 5, thr: 2, streak: 2, amt: 7.761954203132244}
+    setting: exp2_diff
+pairings:
+- {name: pf-20261112-6-v2_s000_vs_ah, group_0: pf-20261112-6-v2_s000, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s000, group_0: ah, group_1: pf-20261112-6-v2_s000}
+- {name: pf-20261112-6-v2_s001_vs_ah, group_0: pf-20261112-6-v2_s001, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s001, group_0: ah, group_1: pf-20261112-6-v2_s001}
+- {name: pf-20261112-6-v2_s002_vs_ah, group_0: pf-20261112-6-v2_s002, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s002, group_0: ah, group_1: pf-20261112-6-v2_s002}
+- {name: pf-20261112-6-v2_s003_vs_ah, group_0: pf-20261112-6-v2_s003, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s003, group_0: ah, group_1: pf-20261112-6-v2_s003}
+- {name: pf-20261112-6-v2_s004_vs_ah, group_0: pf-20261112-6-v2_s004, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s004, group_0: ah, group_1: pf-20261112-6-v2_s004}
+- {name: pf-20261112-6-v2_s005_vs_ah, group_0: pf-20261112-6-v2_s005, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s005, group_0: ah, group_1: pf-20261112-6-v2_s005}
+- {name: pf-20261112-6-v2_s006_vs_ah, group_0: pf-20261112-6-v2_s006, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s006, group_0: ah, group_1: pf-20261112-6-v2_s006}
+- {name: pf-20261112-6-v2_s007_vs_ah, group_0: pf-20261112-6-v2_s007, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s007, group_0: ah, group_1: pf-20261112-6-v2_s007}
+- {name: pf-20261112-6-v2_s008_vs_ah, group_0: pf-20261112-6-v2_s008, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s008, group_0: ah, group_1: pf-20261112-6-v2_s008}
+- {name: pf-20261112-6-v2_s009_vs_ah, group_0: pf-20261112-6-v2_s009, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s009, group_0: ah, group_1: pf-20261112-6-v2_s009}
+- {name: pf-20261112-6-v2_s010_vs_ah, group_0: pf-20261112-6-v2_s010, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s010, group_0: ah, group_1: pf-20261112-6-v2_s010}
+- {name: pf-20261112-6-v2_s011_vs_ah, group_0: pf-20261112-6-v2_s011, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s011, group_0: ah, group_1: pf-20261112-6-v2_s011}
+- {name: pf-20261112-6-v2_s012_vs_ah, group_0: pf-20261112-6-v2_s012, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s012, group_0: ah, group_1: pf-20261112-6-v2_s012}
+- {name: pf-20261112-6-v2_s013_vs_ah, group_0: pf-20261112-6-v2_s013, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s013, group_0: ah, group_1: pf-20261112-6-v2_s013}
+- {name: pf-20261112-6-v2_s014_vs_ah, group_0: pf-20261112-6-v2_s014, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s014, group_0: ah, group_1: pf-20261112-6-v2_s014}
+- {name: pf-20261112-6-v2_s015_vs_ah, group_0: pf-20261112-6-v2_s015, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s015, group_0: ah, group_1: pf-20261112-6-v2_s015}
+- {name: pf-20261112-6-v2_s016_vs_ah, group_0: pf-20261112-6-v2_s016, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s016, group_0: ah, group_1: pf-20261112-6-v2_s016}
+- {name: pf-20261112-6-v2_s017_vs_ah, group_0: pf-20261112-6-v2_s017, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s017, group_0: ah, group_1: pf-20261112-6-v2_s017}
+- {name: pf-20261112-6-v2_s018_vs_ah, group_0: pf-20261112-6-v2_s018, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s018, group_0: ah, group_1: pf-20261112-6-v2_s018}
+- {name: pf-20261112-6-v2_s019_vs_ah, group_0: pf-20261112-6-v2_s019, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s019, group_0: ah, group_1: pf-20261112-6-v2_s019}
+- {name: pf-20261112-6-v2_s020_vs_ah, group_0: pf-20261112-6-v2_s020, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s020, group_0: ah, group_1: pf-20261112-6-v2_s020}
+- {name: pf-20261112-6-v2_s021_vs_ah, group_0: pf-20261112-6-v2_s021, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s021, group_0: ah, group_1: pf-20261112-6-v2_s021}
+- {name: pf-20261112-6-v2_s022_vs_ah, group_0: pf-20261112-6-v2_s022, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s022, group_0: ah, group_1: pf-20261112-6-v2_s022}
+- {name: pf-20261112-6-v2_s023_vs_ah, group_0: pf-20261112-6-v2_s023, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s023, group_0: ah, group_1: pf-20261112-6-v2_s023}
+- {name: pf-20261112-6-v2_s024_vs_ah, group_0: pf-20261112-6-v2_s024, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s024, group_0: ah, group_1: pf-20261112-6-v2_s024}
+- {name: pf-20261112-6-v2_s025_vs_ah, group_0: pf-20261112-6-v2_s025, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s025, group_0: ah, group_1: pf-20261112-6-v2_s025}
+- {name: pf-20261112-6-v2_s026_vs_ah, group_0: pf-20261112-6-v2_s026, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s026, group_0: ah, group_1: pf-20261112-6-v2_s026}
+- {name: pf-20261112-6-v2_s027_vs_ah, group_0: pf-20261112-6-v2_s027, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s027, group_0: ah, group_1: pf-20261112-6-v2_s027}
+- {name: pf-20261112-6-v2_s028_vs_ah, group_0: pf-20261112-6-v2_s028, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s028, group_0: ah, group_1: pf-20261112-6-v2_s028}
+- {name: pf-20261112-6-v2_s029_vs_ah, group_0: pf-20261112-6-v2_s029, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s029, group_0: ah, group_1: pf-20261112-6-v2_s029}
+- {name: pf-20261112-6-v2_s030_vs_ah, group_0: pf-20261112-6-v2_s030, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s030, group_0: ah, group_1: pf-20261112-6-v2_s030}
+- {name: pf-20261112-6-v2_s031_vs_ah, group_0: pf-20261112-6-v2_s031, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s031, group_0: ah, group_1: pf-20261112-6-v2_s031}
+- {name: pf-20261112-6-v2_s032_vs_ah, group_0: pf-20261112-6-v2_s032, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s032, group_0: ah, group_1: pf-20261112-6-v2_s032}
+- {name: pf-20261112-6-v2_s033_vs_ah, group_0: pf-20261112-6-v2_s033, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s033, group_0: ah, group_1: pf-20261112-6-v2_s033}
+- {name: pf-20261112-6-v2_s034_vs_ah, group_0: pf-20261112-6-v2_s034, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s034, group_0: ah, group_1: pf-20261112-6-v2_s034}
+- {name: pf-20261112-6-v2_s035_vs_ah, group_0: pf-20261112-6-v2_s035, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s035, group_0: ah, group_1: pf-20261112-6-v2_s035}
+- {name: pf-20261112-6-v2_s036_vs_ah, group_0: pf-20261112-6-v2_s036, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s036, group_0: ah, group_1: pf-20261112-6-v2_s036}
+- {name: pf-20261112-6-v2_s037_vs_ah, group_0: pf-20261112-6-v2_s037, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s037, group_0: ah, group_1: pf-20261112-6-v2_s037}
+- {name: pf-20261112-6-v2_s038_vs_ah, group_0: pf-20261112-6-v2_s038, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s038, group_0: ah, group_1: pf-20261112-6-v2_s038}
+- {name: pf-20261112-6-v2_s039_vs_ah, group_0: pf-20261112-6-v2_s039, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s039, group_0: ah, group_1: pf-20261112-6-v2_s039}
+- {name: pf-20261112-6-v2_s040_vs_ah, group_0: pf-20261112-6-v2_s040, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s040, group_0: ah, group_1: pf-20261112-6-v2_s040}
+- {name: pf-20261112-6-v2_s041_vs_ah, group_0: pf-20261112-6-v2_s041, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s041, group_0: ah, group_1: pf-20261112-6-v2_s041}
+- {name: pf-20261112-6-v2_s042_vs_ah, group_0: pf-20261112-6-v2_s042, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s042, group_0: ah, group_1: pf-20261112-6-v2_s042}
+- {name: pf-20261112-6-v2_s043_vs_ah, group_0: pf-20261112-6-v2_s043, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s043, group_0: ah, group_1: pf-20261112-6-v2_s043}
+- {name: pf-20261112-6-v2_s044_vs_ah, group_0: pf-20261112-6-v2_s044, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s044, group_0: ah, group_1: pf-20261112-6-v2_s044}
+- {name: pf-20261112-6-v2_s045_vs_ah, group_0: pf-20261112-6-v2_s045, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s045, group_0: ah, group_1: pf-20261112-6-v2_s045}
+- {name: pf-20261112-6-v2_s046_vs_ah, group_0: pf-20261112-6-v2_s046, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s046, group_0: ah, group_1: pf-20261112-6-v2_s046}
+- {name: pf-20261112-6-v2_s047_vs_ah, group_0: pf-20261112-6-v2_s047, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s047, group_0: ah, group_1: pf-20261112-6-v2_s047}
+- {name: pf-20261112-6-v2_s048_vs_ah, group_0: pf-20261112-6-v2_s048, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s048, group_0: ah, group_1: pf-20261112-6-v2_s048}
+- {name: pf-20261112-6-v2_s049_vs_ah, group_0: pf-20261112-6-v2_s049, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s049, group_0: ah, group_1: pf-20261112-6-v2_s049}
+- {name: pf-20261112-6-v2_s050_vs_ah, group_0: pf-20261112-6-v2_s050, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s050, group_0: ah, group_1: pf-20261112-6-v2_s050}
+- {name: pf-20261112-6-v2_s051_vs_ah, group_0: pf-20261112-6-v2_s051, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s051, group_0: ah, group_1: pf-20261112-6-v2_s051}
+- {name: pf-20261112-6-v2_s052_vs_ah, group_0: pf-20261112-6-v2_s052, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s052, group_0: ah, group_1: pf-20261112-6-v2_s052}
+- {name: pf-20261112-6-v2_s053_vs_ah, group_0: pf-20261112-6-v2_s053, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s053, group_0: ah, group_1: pf-20261112-6-v2_s053}
+- {name: pf-20261112-6-v2_s054_vs_ah, group_0: pf-20261112-6-v2_s054, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s054, group_0: ah, group_1: pf-20261112-6-v2_s054}
+- {name: pf-20261112-6-v2_s055_vs_ah, group_0: pf-20261112-6-v2_s055, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s055, group_0: ah, group_1: pf-20261112-6-v2_s055}
+- {name: pf-20261112-6-v2_s056_vs_ah, group_0: pf-20261112-6-v2_s056, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s056, group_0: ah, group_1: pf-20261112-6-v2_s056}
+- {name: pf-20261112-6-v2_s057_vs_ah, group_0: pf-20261112-6-v2_s057, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s057, group_0: ah, group_1: pf-20261112-6-v2_s057}
+- {name: pf-20261112-6-v2_s058_vs_ah, group_0: pf-20261112-6-v2_s058, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s058, group_0: ah, group_1: pf-20261112-6-v2_s058}
+- {name: pf-20261112-6-v2_s059_vs_ah, group_0: pf-20261112-6-v2_s059, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s059, group_0: ah, group_1: pf-20261112-6-v2_s059}
+- {name: pf-20261112-6-v2_s060_vs_ah, group_0: pf-20261112-6-v2_s060, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s060, group_0: ah, group_1: pf-20261112-6-v2_s060}
+- {name: pf-20261112-6-v2_s061_vs_ah, group_0: pf-20261112-6-v2_s061, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s061, group_0: ah, group_1: pf-20261112-6-v2_s061}
+- {name: pf-20261112-6-v2_s062_vs_ah, group_0: pf-20261112-6-v2_s062, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s062, group_0: ah, group_1: pf-20261112-6-v2_s062}
+- {name: pf-20261112-6-v2_s063_vs_ah, group_0: pf-20261112-6-v2_s063, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s063, group_0: ah, group_1: pf-20261112-6-v2_s063}
+- {name: pf-20261112-6-v2_s064_vs_ah, group_0: pf-20261112-6-v2_s064, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s064, group_0: ah, group_1: pf-20261112-6-v2_s064}
+- {name: pf-20261112-6-v2_s065_vs_ah, group_0: pf-20261112-6-v2_s065, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s065, group_0: ah, group_1: pf-20261112-6-v2_s065}
+- {name: pf-20261112-6-v2_s066_vs_ah, group_0: pf-20261112-6-v2_s066, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s066, group_0: ah, group_1: pf-20261112-6-v2_s066}
+- {name: pf-20261112-6-v2_s067_vs_ah, group_0: pf-20261112-6-v2_s067, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s067, group_0: ah, group_1: pf-20261112-6-v2_s067}
+- {name: pf-20261112-6-v2_s068_vs_ah, group_0: pf-20261112-6-v2_s068, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s068, group_0: ah, group_1: pf-20261112-6-v2_s068}
+- {name: pf-20261112-6-v2_s069_vs_ah, group_0: pf-20261112-6-v2_s069, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s069, group_0: ah, group_1: pf-20261112-6-v2_s069}
+- {name: pf-20261112-6-v2_s070_vs_ah, group_0: pf-20261112-6-v2_s070, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s070, group_0: ah, group_1: pf-20261112-6-v2_s070}
+- {name: pf-20261112-6-v2_s071_vs_ah, group_0: pf-20261112-6-v2_s071, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s071, group_0: ah, group_1: pf-20261112-6-v2_s071}
+- {name: pf-20261112-6-v2_s072_vs_ah, group_0: pf-20261112-6-v2_s072, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s072, group_0: ah, group_1: pf-20261112-6-v2_s072}
+- {name: pf-20261112-6-v2_s073_vs_ah, group_0: pf-20261112-6-v2_s073, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s073, group_0: ah, group_1: pf-20261112-6-v2_s073}
+- {name: pf-20261112-6-v2_s074_vs_ah, group_0: pf-20261112-6-v2_s074, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s074, group_0: ah, group_1: pf-20261112-6-v2_s074}
+- {name: pf-20261112-6-v2_s075_vs_ah, group_0: pf-20261112-6-v2_s075, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s075, group_0: ah, group_1: pf-20261112-6-v2_s075}
+- {name: pf-20261112-6-v2_s076_vs_ah, group_0: pf-20261112-6-v2_s076, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s076, group_0: ah, group_1: pf-20261112-6-v2_s076}
+- {name: pf-20261112-6-v2_s077_vs_ah, group_0: pf-20261112-6-v2_s077, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s077, group_0: ah, group_1: pf-20261112-6-v2_s077}
+- {name: pf-20261112-6-v2_s078_vs_ah, group_0: pf-20261112-6-v2_s078, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s078, group_0: ah, group_1: pf-20261112-6-v2_s078}
+- {name: pf-20261112-6-v2_s079_vs_ah, group_0: pf-20261112-6-v2_s079, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s079, group_0: ah, group_1: pf-20261112-6-v2_s079}
+- {name: pf-20261112-6-v2_s080_vs_ah, group_0: pf-20261112-6-v2_s080, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s080, group_0: ah, group_1: pf-20261112-6-v2_s080}
+- {name: pf-20261112-6-v2_s081_vs_ah, group_0: pf-20261112-6-v2_s081, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s081, group_0: ah, group_1: pf-20261112-6-v2_s081}
+- {name: pf-20261112-6-v2_s082_vs_ah, group_0: pf-20261112-6-v2_s082, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s082, group_0: ah, group_1: pf-20261112-6-v2_s082}
+- {name: pf-20261112-6-v2_s083_vs_ah, group_0: pf-20261112-6-v2_s083, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s083, group_0: ah, group_1: pf-20261112-6-v2_s083}
+- {name: pf-20261112-6-v2_s084_vs_ah, group_0: pf-20261112-6-v2_s084, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s084, group_0: ah, group_1: pf-20261112-6-v2_s084}
+- {name: pf-20261112-6-v2_s085_vs_ah, group_0: pf-20261112-6-v2_s085, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s085, group_0: ah, group_1: pf-20261112-6-v2_s085}
+- {name: pf-20261112-6-v2_s086_vs_ah, group_0: pf-20261112-6-v2_s086, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s086, group_0: ah, group_1: pf-20261112-6-v2_s086}
+- {name: pf-20261112-6-v2_s087_vs_ah, group_0: pf-20261112-6-v2_s087, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s087, group_0: ah, group_1: pf-20261112-6-v2_s087}
+- {name: pf-20261112-6-v2_s088_vs_ah, group_0: pf-20261112-6-v2_s088, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s088, group_0: ah, group_1: pf-20261112-6-v2_s088}
+- {name: pf-20261112-6-v2_s089_vs_ah, group_0: pf-20261112-6-v2_s089, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s089, group_0: ah, group_1: pf-20261112-6-v2_s089}
+- {name: pf-20261112-6-v2_s090_vs_ah, group_0: pf-20261112-6-v2_s090, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s090, group_0: ah, group_1: pf-20261112-6-v2_s090}
+- {name: pf-20261112-6-v2_s091_vs_ah, group_0: pf-20261112-6-v2_s091, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s091, group_0: ah, group_1: pf-20261112-6-v2_s091}
+- {name: pf-20261112-6-v2_s092_vs_ah, group_0: pf-20261112-6-v2_s092, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s092, group_0: ah, group_1: pf-20261112-6-v2_s092}
+- {name: pf-20261112-6-v2_s093_vs_ah, group_0: pf-20261112-6-v2_s093, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s093, group_0: ah, group_1: pf-20261112-6-v2_s093}
+- {name: pf-20261112-6-v2_s094_vs_ah, group_0: pf-20261112-6-v2_s094, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s094, group_0: ah, group_1: pf-20261112-6-v2_s094}
+- {name: pf-20261112-6-v2_s095_vs_ah, group_0: pf-20261112-6-v2_s095, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s095, group_0: ah, group_1: pf-20261112-6-v2_s095}
+- {name: pf-20261112-6-v2_s096_vs_ah, group_0: pf-20261112-6-v2_s096, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s096, group_0: ah, group_1: pf-20261112-6-v2_s096}
+- {name: pf-20261112-6-v2_s097_vs_ah, group_0: pf-20261112-6-v2_s097, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s097, group_0: ah, group_1: pf-20261112-6-v2_s097}
+- {name: pf-20261112-6-v2_s098_vs_ah, group_0: pf-20261112-6-v2_s098, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s098, group_0: ah, group_1: pf-20261112-6-v2_s098}
+- {name: pf-20261112-6-v2_s099_vs_ah, group_0: pf-20261112-6-v2_s099, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s099, group_0: ah, group_1: pf-20261112-6-v2_s099}
+- {name: pf-20261112-6-v2_s100_vs_ah, group_0: pf-20261112-6-v2_s100, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s100, group_0: ah, group_1: pf-20261112-6-v2_s100}
+- {name: pf-20261112-6-v2_s101_vs_ah, group_0: pf-20261112-6-v2_s101, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s101, group_0: ah, group_1: pf-20261112-6-v2_s101}
+- {name: pf-20261112-6-v2_s102_vs_ah, group_0: pf-20261112-6-v2_s102, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s102, group_0: ah, group_1: pf-20261112-6-v2_s102}
+- {name: pf-20261112-6-v2_s103_vs_ah, group_0: pf-20261112-6-v2_s103, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s103, group_0: ah, group_1: pf-20261112-6-v2_s103}
+- {name: pf-20261112-6-v2_s104_vs_ah, group_0: pf-20261112-6-v2_s104, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s104, group_0: ah, group_1: pf-20261112-6-v2_s104}
+- {name: pf-20261112-6-v2_s105_vs_ah, group_0: pf-20261112-6-v2_s105, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s105, group_0: ah, group_1: pf-20261112-6-v2_s105}
+- {name: pf-20261112-6-v2_s106_vs_ah, group_0: pf-20261112-6-v2_s106, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s106, group_0: ah, group_1: pf-20261112-6-v2_s106}
+- {name: pf-20261112-6-v2_s107_vs_ah, group_0: pf-20261112-6-v2_s107, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s107, group_0: ah, group_1: pf-20261112-6-v2_s107}
+- {name: pf-20261112-6-v2_s108_vs_ah, group_0: pf-20261112-6-v2_s108, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s108, group_0: ah, group_1: pf-20261112-6-v2_s108}
+- {name: pf-20261112-6-v2_s109_vs_ah, group_0: pf-20261112-6-v2_s109, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s109, group_0: ah, group_1: pf-20261112-6-v2_s109}
+- {name: pf-20261112-6-v2_s110_vs_ah, group_0: pf-20261112-6-v2_s110, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s110, group_0: ah, group_1: pf-20261112-6-v2_s110}
+- {name: pf-20261112-6-v2_s111_vs_ah, group_0: pf-20261112-6-v2_s111, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s111, group_0: ah, group_1: pf-20261112-6-v2_s111}
+- {name: pf-20261112-6-v2_s112_vs_ah, group_0: pf-20261112-6-v2_s112, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s112, group_0: ah, group_1: pf-20261112-6-v2_s112}
+- {name: pf-20261112-6-v2_s113_vs_ah, group_0: pf-20261112-6-v2_s113, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s113, group_0: ah, group_1: pf-20261112-6-v2_s113}
+- {name: pf-20261112-6-v2_s114_vs_ah, group_0: pf-20261112-6-v2_s114, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s114, group_0: ah, group_1: pf-20261112-6-v2_s114}
+- {name: pf-20261112-6-v2_s115_vs_ah, group_0: pf-20261112-6-v2_s115, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s115, group_0: ah, group_1: pf-20261112-6-v2_s115}
+- {name: pf-20261112-6-v2_s116_vs_ah, group_0: pf-20261112-6-v2_s116, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s116, group_0: ah, group_1: pf-20261112-6-v2_s116}
+- {name: pf-20261112-6-v2_s117_vs_ah, group_0: pf-20261112-6-v2_s117, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s117, group_0: ah, group_1: pf-20261112-6-v2_s117}
+- {name: pf-20261112-6-v2_s118_vs_ah, group_0: pf-20261112-6-v2_s118, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s118, group_0: ah, group_1: pf-20261112-6-v2_s118}
+- {name: pf-20261112-6-v2_s119_vs_ah, group_0: pf-20261112-6-v2_s119, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s119, group_0: ah, group_1: pf-20261112-6-v2_s119}
+- {name: pf-20261112-6-v2_s120_vs_ah, group_0: pf-20261112-6-v2_s120, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s120, group_0: ah, group_1: pf-20261112-6-v2_s120}
+- {name: pf-20261112-6-v2_s121_vs_ah, group_0: pf-20261112-6-v2_s121, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s121, group_0: ah, group_1: pf-20261112-6-v2_s121}
+- {name: pf-20261112-6-v2_s122_vs_ah, group_0: pf-20261112-6-v2_s122, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s122, group_0: ah, group_1: pf-20261112-6-v2_s122}
+- {name: pf-20261112-6-v2_s123_vs_ah, group_0: pf-20261112-6-v2_s123, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s123, group_0: ah, group_1: pf-20261112-6-v2_s123}
+- {name: pf-20261112-6-v2_s124_vs_ah, group_0: pf-20261112-6-v2_s124, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s124, group_0: ah, group_1: pf-20261112-6-v2_s124}
+- {name: pf-20261112-6-v2_s125_vs_ah, group_0: pf-20261112-6-v2_s125, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s125, group_0: ah, group_1: pf-20261112-6-v2_s125}
+- {name: pf-20261112-6-v2_s126_vs_ah, group_0: pf-20261112-6-v2_s126, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s126, group_0: ah, group_1: pf-20261112-6-v2_s126}
+- {name: pf-20261112-6-v2_s127_vs_ah, group_0: pf-20261112-6-v2_s127, group_1: ah}
+- {name: ah_vs_pf-20261112-6-v2_s127, group_0: ah, group_1: pf-20261112-6-v2_s127}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 250
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261112-6-v2_sweep_p1of2
+figure_name: pf-20261112-6-v2_sweep_p1of2
+save_per_round: true
+basedir: .
+sweep_metric: pool_diff_vs_opponents
+sweep_opponents:
+- ah
+sweep: true
