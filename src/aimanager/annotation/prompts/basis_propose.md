@@ -6,5 +6,4 @@ Guidelines:
 - A code is one kind of basis for a reason, at the level of abstraction of these examples from an unrelated domain (what a librarian's reasons rest on): "statistics from the library's own records", "a trial run at one branch", "what other libraries report", "the librarian's expectation". A code must be specific enough that one can decide for any phrase whether it fits.
 - A code names the kind of basis, not a specific number, dataset or exploration: "a regression on last year's loans" and "a table of loans by fee size" are both statistics from the library's own records.
 - Expect few codes. Codes should not overlap: a phrase should fit exactly one code. Merge near-duplicates.
-- Never define a code as the absence of something.
 - `name`: short snake_case identifier (not `none` or `failed`); `label`: a few words; `definition`: one or two sentences saying what counts; `fits`: two short examples that fit; `does_not_fit`: one or two near misses that belong elsewhere.

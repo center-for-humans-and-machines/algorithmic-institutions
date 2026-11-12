@@ -247,6 +247,41 @@ def test_apply_consolidation_merges_and_families():
     assert set(defs) == {"fam_one", UNPLACED}
 
 
+def test_negated_or_excluding_codes_never_merge_into_positive_codes():
+    codes = [
+        {"name": "punish_based_on_group_size", "label": "x", "definition": "Scales."},
+        {"name": "exclude_group_size_from_punishment", "label": "x", "definition": "x"},
+        {"name": "late_punishment_has_no_benefit", "label": "x", "definition": "x"},
+        {"name": "no_effect_late", "label": "x", "definition": "No effect late."},
+    ]
+    merges = [
+        {
+            "codes": [
+                "punish_based_on_group_size",
+                "exclude_group_size_from_punishment",
+            ],
+            "keep": "punish_based_on_group_size",
+            "reason": "same lever",
+            "label": "l",
+            "definition": "d",
+        },
+        {
+            "codes": ["late_punishment_has_no_benefit", "no_effect_late"],
+            "keep": "late_punishment_has_no_benefit",
+            "reason": "same claim",
+            "label": "l",
+            "definition": "Late punishment has no benefit.",
+        },
+    ]
+    fams = [{"name": "f", "definition": "f", "codes": [c["name"] for c in codes]}]
+    surv, _, audit, _ = apply_consolidation(codes, merges, fams)
+    assert len(surv) == 4 and not any(a["applied"] for a in audit)
+    assert "negated or excluding" in audit[0]["why"] and audit[0]["reason"]
+    # reasons (why, basis) are allowed to be negative: no guard there
+    surv, _, audit, _ = apply_consolidation(codes, merges, fams, guard_negation=False)
+    assert [a["applied"] for a in audit] == [True, True] and len(surv) == 2
+
+
 def test_unplaced_codes_are_reasked_then_get_their_own_family():
     surv = [
         {"name": "a", "family": "f1", "definition": "A"},

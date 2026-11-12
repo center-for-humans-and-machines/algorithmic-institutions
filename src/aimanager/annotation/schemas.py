@@ -103,9 +103,8 @@ def consolidation_model(code_names):
         reason=(
             str,
             Field(
-                description="why they are one code: a rule implementing one "
-                "necessarily implements the other, or they are the increase and "
-                "decrease variants of the same lever"
+                description="why they are one code: anything that fits one "
+                "necessarily fits the other, and the other way round"
             ),
         ),
         keep=(Name, Field(description="the name that survives, one of `codes`")),

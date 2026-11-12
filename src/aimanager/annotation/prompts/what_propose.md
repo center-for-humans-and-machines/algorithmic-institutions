@@ -5,6 +5,7 @@ Below is a numbered list of short descriptions of mechanisms that manager rules 
 Guidelines:
 - A code is one mechanism at the level of what the manager does to players. For the level of abstraction, examples from an unrelated domain (a library's rules for overdue books): "fee grows with the days overdue", "borrowing suspended after repeated lateness", "grace period before any fee". A code must be specific enough that one can decide for any rule whether it implements the code.
 - A code names the mechanism, not an implementation detail or a parameter value: different rates or lengths of one idea are one code ("a fee of 0.20 per day" and "a fee of 0.50 per day" are both "fee grows with the days overdue").
+- Define each code by the lever, i.e. what the punishment depends on (for example "fee depends on the days overdue"), not by the direction or size of the effect: a rule that raises the fee with the days overdue and one that lowers it fit the same code.
 - Codes should not overlap: an item should fit exactly one code. Prefer merging near-duplicates over splitting by minor variants.
 - A code is something a manager does. Never define a code as the absence of a mechanism ("does not ...", "avoids ...", "ignores ..."): such an item describes a rejected idea, and its code is the idea itself. Decisions about the search or the rule's parameters (removing, fixing or keeping a parameter) are not mechanisms and get no code.
 - Cover the frequent mechanisms; rare idiosyncratic items may stay without a code.

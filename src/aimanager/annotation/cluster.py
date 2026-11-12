@@ -53,6 +53,19 @@ def is_negated(name, label="", definition=""):
     return False
 
 
+_EXCLUSION = re.compile(r"^(exclude|excludes|excluding|forbid|forbids|omit|omits)(_|$)")
+
+
+def is_negated_or_exclusion(code):
+    """Merge guard for mechanisms: a negated code, or one that excludes a
+    feature (`exclude_group_size_from_punishment`), never merges with another."""
+    name = code.get("name", "")
+    return bool(
+        is_negated(name, code.get("label", ""), code.get("definition", ""))
+        or _EXCLUSION.match(name)
+    )
+
+
 def drop_negated(codes, step, what):
     """(kept, rejected names) of proposed codes; logs what was rejected."""
     kept, rejected = [], []
@@ -184,6 +197,10 @@ def _propose(client, cfg, step, kind, items, codes, rnd):
     if not res.ok:
         check_failures(cfg, step, "propose", [(call.item_id, res.error)], 1)
         return [], []
+    # only mechanisms: reasons and kinds of support are often legitimately
+    # negative ("late punishment has no future benefit", "no data available")
+    if kind != "what":
+        return list(res.value.codes), []
     return drop_negated(res.value.codes, step, kind)
 
 

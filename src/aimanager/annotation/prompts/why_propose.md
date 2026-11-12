@@ -7,6 +7,6 @@ Guidelines:
 - Group by the kind of justification, not by the mechanism: the same kind of reason given for different mechanisms is one code, and different reasons for one mechanism are different codes. Do not split by stance either.
 - A code names the kind of reason, not a specific number or result: "a 0.20 fee halved late returns" and "fees reduce late returns" fit the same code.
 - Codes should not overlap: an item should fit exactly one code. Merge near-duplicates.
-- A code is a reason that is given. Never define a code as the absence of something ("does not ...", "no effect ...", "avoids ..."); name what the reason claims instead (for example "the effect is too small to measure").
+- A code names what a reason claims. A claim that something is absent is a valid reason ("late fees bring no extra returns"); name the claim itself.
 - Cover the frequent reasons; rare idiosyncratic items may stay without a code.
 - `name`: short snake_case identifier (not `none` or `failed`); `label`: a few words; `definition`: one or two sentences saying what counts; `fits`: two short examples that fit; `does_not_fit`: one or two near misses that belong elsewhere.

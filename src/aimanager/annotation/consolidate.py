@@ -13,7 +13,7 @@ codebook/<kind>.merges.yml, each merge with the model's stated reason.
 
 from . import prompting as P
 from .client import Call
-from .cluster import is_negated
+from .cluster import is_negated, is_negated_or_exclusion
 from .common import StepFailed, log, slugify
 from .schemas import consolidation_model, placement_model
 
@@ -46,8 +46,23 @@ KIND_TEXT = {
 }
 
 
+KIND_RULES = {
+    "what": (
+        'Never define a code or a family as the absence of something ("does not '
+        '...", "avoids ...", "ignores ..."), and never merge a code that is a '
+        "negation or an exclusion into a positive code."
+    ),
+    "why": "",
+    "basis": "",
+}
+
+
 def consolidation_call(step, kind, codes):
-    instr = P.load("consolidate").replace("$kind_text", KIND_TEXT[kind])
+    instr = (
+        P.load("consolidate")
+        .replace("$kind_text", KIND_TEXT[kind])
+        .replace("$kind_rules", KIND_RULES[kind])
+    )
     names = [c["name"] for c in codes]
     return Call(
         step,
@@ -59,24 +74,44 @@ def consolidation_call(step, kind, codes):
     )
 
 
-def apply_consolidation(codes, merges, families):
+def apply_consolidation(codes, merges, families, guard_negation=True):
     """(surviving codes with `family`, {family: definition}, audit, unplaced).
 
     `codes` are codebook entries (an `implemented` flag is carried through: a
     survivor is implemented if any merged code was); `merges` and `families`
-    are plain dicts from the reply.
+    are plain dicts from the reply. With `guard_negation` (mechanisms), a merge
+    that involves a negated or excluding code is not applied, and a negated
+    rewritten definition keeps the old one.
     """
     by = {c["name"]: dict(c) for c in codes}
     gone, audit = {}, []
     for m in merges:
         group = [n for n in dict.fromkeys(m["codes"]) if n in by and n not in gone]
         if len(group) < 2:
-            audit.append({"merge": m["codes"], "applied": False, "why": "fewer than 2"})
+            audit.append(
+                {
+                    "merge": m["codes"],
+                    "applied": False,
+                    "why": "fewer than 2",
+                    "reason": m.get("reason", ""),
+                }
+            )
+            continue
+        negs = [n for n in group if guard_negation and is_negated_or_exclusion(by[n])]
+        if negs:
+            audit.append(
+                {
+                    "merge": group,
+                    "applied": False,
+                    "why": f"negated or excluding code {negs}",
+                    "reason": m.get("reason", ""),
+                }
+            )
             continue
         keep = m["keep"] if m["keep"] in group else group[0]
         surv = by[keep]
         note = None
-        if is_negated(keep, m["label"], m["definition"]):
+        if guard_negation and is_negated(keep, m["label"], m["definition"]):
             note = "rewritten definition is a negation; old one kept"
         else:
             surv["label"], surv["definition"] = m["label"], m["definition"]
@@ -164,7 +199,7 @@ def consolidate_codes(client, cfg, step, kind, codes):
         raise StepFailed(f"{step}: the consolidation call failed: {res.error[:300]}")
     value = res.value.model_dump()
     survivors, defs, audit, unplaced = apply_consolidation(
-        codes, value["merges"], value["families"]
+        codes, value["merges"], value["families"], guard_negation=kind == "what"
     )
     placement = {"unplaced_first": unplaced, "placed_on_reask": [], "own_family": []}
     if unplaced:
