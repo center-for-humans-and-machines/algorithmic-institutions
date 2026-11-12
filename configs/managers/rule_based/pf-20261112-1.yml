@@ -1,0 +1,34 @@
+params:
+  thr:
+    definition: contribution bar; a member giving less than thr this round is punished in proportion to the shortfall thr - c, a member at or above it never is
+    type: int
+  k:
+    definition: punishment points per point of shortfall below the bar
+    type: float
+  cap:
+    definition: most punishment points dealt to one player in one round (the response to punishment is concave and big punishments drive players out)
+    type: int
+  t_start:
+    definition: first round in which the manager punishes at all; earlier rounds go unpunished to win members at the early switch decisions
+    type: int
+  dec_w:
+    definition: multiplier on the punishment in the rounds that end with a switch decision (3, 7, 11, 15, 19); below 1 spares players right before they choose a group, above 1 pushes low givers out
+    type: float
+sweep_config:
+  thr: [2, 16]
+  k: [0.1, 3.0, log]
+  cap: [1, 15]
+  t_start: [0, 22]
+  dec_w: [0.0, 2.0]
+constraints:
+  - thr >= 1
+  - cap >= 1
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  shortfall = th.clamp(thr - now, min=0.0)
+  amount = th.minimum(k * shortfall, cap * th.ones_like(now))
+  decision = th.remainder(t + 1, 4) == 0
+  w = th.where(decision, dec_w, th.ones_like(dec_w))
+  active = (t >= t_start) * (t < 23)
+  punishment = amount * w * active * member
