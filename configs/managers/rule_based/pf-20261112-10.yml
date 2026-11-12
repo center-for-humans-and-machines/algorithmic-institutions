@@ -1,0 +1,30 @@
+params:
+  thr:
+    definition: free-rider line; a member contributing strictly less than thr this round is punished
+    type: int
+  amt:
+    definition: flat punishment dealt to each free rider (points)
+    type: int
+  quiet:
+    definition: number of rounds right before each switch decision (the last quiet rounds of rounds 0-19's 4-round blocks) in which nobody is punished, as punishment close to a switch drives members out
+    type: int
+  t_end:
+    definition: last round (0-23) in which anyone is punished; later rounds go unpunished as too few rounds remain for the contribution gain to repay the pool cost
+    type: int
+sweep_config:
+  thr: [1, 12]
+  amt: [1, 8]
+  quiet: [0, 3]
+  t_end: [3, 23]
+constraints:
+  - thr >= 1
+  - amt >= 1
+  - quiet <= 3
+code: |
+  now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  free_rider = (now < thr).float()
+  pos = t - 4.0 * th.floor(t / 4.0)
+  before_switch = (t < 20).float() * (pos >= 4.0 - quiet).float()
+  active = (t <= t_end).float() * (1.0 - before_switch)
+  punishment = amt * free_rider * member * active
