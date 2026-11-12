@@ -1,0 +1,42 @@
+params:
+  D:
+    definition: >-
+      the punishment points dealt to each targeted member in an open round (a flat
+      nudge, the same whatever the size of the shortfall)
+    type: float
+  hi:
+    definition: >-
+      the highest contribution that is still punished; members giving more are spared
+    type: int
+  first:
+    definition: >-
+      the first 4-round block (block b = rounds 4b..4b+3) in which punishing is allowed;
+      0 starts at round 0, before the first switch decision, 1 right after it (round 4)
+    type: int
+  nblocks:
+    definition: >-
+      how many consecutive blocks, from block `first` on, are open for punishment
+      (never beyond round 19: after the last decision punishment only costs)
+    type: int
+  w:
+    definition: >-
+      how many rounds at the start of each open block, right after a switch decision,
+      are open (1 = only the round right after a decision)
+    type: int
+sweep_config:
+  D: [2.0, 24.0, log]
+  hi: [2, 12]
+  first: [0, 2]
+  nblocks: [1, 3]
+  w: [1, 2]
+constraints:
+  - D > 0
+code: |
+  c_now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  n_mem = member.sum(dim=-1, keepdim=True)
+  target = (c_now <= hi).float() * member * (n_mem > 1.5).float()
+  pos = th.remainder(t, 4.0)
+  blk = th.floor(t / 4.0)
+  gate = (pos < w).float() * (blk >= first).float() * (blk < first + nblocks).float() * (t < 19.5).float()
+  punishment = D * target * gate
