@@ -158,6 +158,7 @@ footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); border-top: 1
   <a href="#formats" data-tab="formats">3 · Data formats</a>
   <a href="#progress" data-tab="progress">4 · Progress</a>
   <a href="#testrun" data-tab="testrun">5 · Test run</a>
+  <a href="#prod" data-tab="prod">6 · Production run</a>
 </nav>
 
 <!-- ============ TAB 1 ============ -->
@@ -536,7 +537,7 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
 <section id="tab-progress" data-panel="progress" hidden>
   <p class="lead">Status of building and running the pipeline. Updated as work comes in. Results get their own tabs once there are any.</p>
   
-  <p class="meta">Last update: 12 Nov 2026, 20:15 · production model works on dais, production run queued</p>
+  <p class="meta">Last update: 12 Nov 2026, 21:30 · first production job done, codebooks being rebuilt</p>
 
   <h2>Where things stand</h2>
   <div class="tablebox">
@@ -550,7 +551,7 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
         <tr><td class="k">Cluster setup</td><td><span class="tag git">mostly done</span></td><td>Job scripts for both clusters and the S3 sync are in. Test jobs on viper pass. The job scripts were reviewed and the findings fixed.</td></tr>
         <tr><td class="k">Production model</td><td><span class="tag git">working</span></td><td>DeepSeek V4.1 Flash 1017 on two B200 GPUs. Booted twice, 22 minutes each.</td></tr>
         <tr><td class="k">End-to-end test, small model on viper</td><td><span class="tag git">done</span></td><td>Four full runs without a failed call. Tuning on the small model is finished; see the <a href="#testrun">Test run</a> tab.</td></tr>
-        <tr><td class="k">End-to-end run, production model on dais</td><td><span class="tag off">queued</span></td><td>The model boots and passes all checks on two GPUs. The first production job, everything up to the three codebooks, is waiting in the queue.</td></tr>
+        <tr><td class="k">End-to-end run, production model on dais</td><td><span class="tag off">first job done</span></td><td>The open pass ran for all 110 versions without a failed call. The codebooks are too fine and are being rebuilt; see the <a href="#prod">Production run</a> tab. Review and final coding follow.</td></tr>
         <tr><td class="k">Results in this page</td><td><span class="tag off">started</span></td><td>Test-run results are in tab 5. Production results follow.</td></tr>
       </tbody>
     </table>
@@ -722,12 +723,72 @@ pf-20261106-3   fine grows on repeats   no        expert A</pre>
   </ul>
 </section>
 
+<section id="tab-prod" data-panel="prod" hidden>
+  <p class="lead">The production run on dais with DeepSeek V4.1 Flash. The first job is done: the open pass and a first version of the three codebooks, for all 110 versions. The extraction is clearly better than with the small model. The codebooks came out too fine and are being rebuilt before the review.</p>
+  <p class="meta">Run <code>prod1</code>, first job, 12 Nov 2026. Review, final coding, expert check and analysis have not run yet.</p>
+
+  <h2>The job</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Phase</th><th>Time</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Waiting in the queue</td><td>25 minutes</td></tr>
+        <tr><td class="k">Loading the model</td><td>16.8 minutes</td></tr>
+        <tr><td class="k">The work itself</td><td>15.8 minutes</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>No call failed. Six long calls ran out of space on the first try and passed on the retry. The server's working memory peaked at 6% full, and 98% of prompt tokens were served from the shared prefix.</p>
+
+  <h2>Extraction: production model against the small model</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Measure</th><th>DeepSeek (prod1)</th><th>Qwen 30B (viper4)</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Quotes from rules found verbatim</td><td>100%</td><td>97%</td></tr>
+        <tr><td class="k">Quotes from notes found verbatim</td><td>99.8 to 100%</td><td>84 to 88%</td></tr>
+        <tr><td class="k">Ideas still worded as a negation</td><td>1.6%</td><td>21%</td></tr>
+        <tr><td class="k">Mechanisms found in the notes</td><td>982</td><td>838</td></tr>
+        <tr><td class="k">Theory mentions that are really methods</td><td>2 of 30</td><td>9 of 37</td></tr>
+        <tr><td class="k">Judge agreement between two passes, coverage step</td><td>97.5%, kappa 0.84</td><td>not comparable</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Of the 982 mechanisms in the notes, 442 are adopted, 516 rejected and 24 only considered. So the notes discuss more ideas that were refused than ideas that were used.</p>
+
+  <h3>Read against the sources</h3>
+  <p>Five rules and five sets of notes were read side by side with their extractions, the same ones as in the test runs.</p>
+  <ul class="tight">
+    <li>The free codes match the parts of each rule, with nothing missed and nothing invented.</li>
+    <li>Every idea the notes list as "not modelled" now appears as a rejected mechanism with its reason.</li>
+    <li>A mechanism removed in a later version is recorded as removed, with the earlier version named as its source.</li>
+    <li>"Tested" now separates ideas the agent checked with a calculation from ideas it only argued.</li>
+    <li>Small faults remain: a few duplicated rejected ideas, and 104 reasons where the notes give no evidence.</li>
+  </ul>
+
+  <h2>Theory named in the notes</h2>
+  <p>30 explicit mentions across the 110 notes. The most frequent are herding (9), conformity (5), conditional cooperation (5) and regression to the mean (4). No notes cite a publication.</p>
+
+  <h2>Codebooks: too fine</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Codebook</th><th>Codes</th><th>Families</th><th>Comment</th></tr></thead>
+      <tbody>
+        <tr><td class="k">What</td><td>42, plus 8 ideas no rule implements</td><td>9</td><td>Reviewable, but uneven: one family has 11 codes, another has 1.</td></tr>
+        <tr><td class="k">Why</td><td>112</td><td>8</td><td>Too many. The codes are single claims, not kinds of justification. Reasons about the search itself sit in their own family.</td></tr>
+        <tr><td class="k">What a reason rests on</td><td>27</td><td>10</td><td>Most families are kinds of support. Two describe the content of findings.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>The stronger model draws finer distinctions than the small one, and one of its long list-generating calls repeated the same name 29 times. The codebook steps are being rerun with a stated level for a code, a target size, and a guard against repeated names. The open pass is kept as it is.</p>
+</section>
+
 <footer>Sources: the <code>policy-finder/*</code> branches and the policy-finder scripts in the repository, the policy-finder Slack threads, and the paper blueprint.</footer>
 </div>
 
 <script>
 (function () {
-  var tabs = ["artifacts", "pipeline", "formats", "progress", "testrun"];
+  var tabs = ["artifacts", "pipeline", "formats", "progress", "testrun", "prod"];
   function show() {
     var h = (location.hash || "").replace("#", "");
     var anchor = h;
