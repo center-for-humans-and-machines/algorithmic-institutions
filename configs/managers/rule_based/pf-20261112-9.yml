@@ -1,0 +1,31 @@
+params:
+  frac:
+    definition: >-
+      free-rider line as a fraction of the group's mean contribution this round;
+      a member giving less than frac * group mean is punished for the shortfall
+      (0 never punishes)
+    type: float
+  rate:
+    definition: punishment points per point of contribution below the free-rider line
+    type: float
+  cap:
+    definition: most punishment any one member gets in a round
+    type: float
+  t_stop:
+    definition: first round in which the manager stops punishing altogether (24 never stops)
+    type: int
+sweep_config:
+  frac: [0.0, 1.2]
+  rate: [0.1, 4.0, log]
+  cap: [1.0, 30.0, log]
+  t_stop: [4, 24]
+code: |
+  ct = c[..., -1]
+  ok = valid[..., -1] * in_group[..., -1]
+  n = ok.sum(dim=1, keepdim=True)
+  gmean = (ct * ok).sum(dim=1, keepdim=True) / th.clamp(n, min=1.0)
+  line = frac * gmean
+  short = th.clamp(line - ct, min=0.0)
+  pun = th.minimum(rate * short, cap * th.ones_like(ct))
+  active = (t < t_stop).float()
+  punishment = pun * ok * active
