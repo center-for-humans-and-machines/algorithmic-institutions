@@ -1,6 +1,6 @@
 # Step classification: status and how to resume
 
-Last updated: 2026-11-12, 19:00. This file is the handover for picking the work up on another machine or in another session. Update it whenever the state changes.
+Last updated: 2026-11-12, 20:15. This file is the handover for picking the work up on another machine or in another session. Update it whenever the state changes.
 
 ## Where everything is
 
@@ -34,10 +34,10 @@ Last updated: 2026-11-12, 19:00. This file is the handover for picking the work 
 
 ## Next steps
 
-1. Read the viper run report (`runs/annotation/viper1/REPORT.md`, also on S3) and settle the prompts.
-2. First boot of the production model on dais (2 B200, tensor-parallel 2; fall back to 4 if memory is short).
-3. Production run on dais: stage A, then literature links and codebook review (by Claude in this first run), then stage B, expert check on the held-out rules, join and analysis.
-4. Results into new tabs of the design page.
+viper1 to viper4 are done (reports in `runs/annotation/viper{1,3,4}/REPORT.md`, also on S3). Tuning on the small model (Qwen3-30B-A3B on viper) is finished: the remaining errors (merges, judge order effects on overlapping codes, relation errors) are the small model not following instructions and are to be re-measured on the production model before any further prompt work.
+
+1. Production run `prod1` on dais with `deepseek-ai/DeepSeek-V4.1-Flash-1017`, once the dais bring-up (first boot, `dais0`) has reported: stage A, then literature links and codebook review (by Claude in this first run), then stage B, expert check on the held-out rules, join and analysis.
+2. Results into new tabs of the design page.
 
 ## Decisions taken
 
