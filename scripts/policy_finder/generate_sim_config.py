@@ -75,7 +75,7 @@ SETTINGS = {
         "overrides": {"sweep_metric": "pool_vs_opponents"},
     },
     # experiment 2 scored by the rule's group's lead in pool over `ah`'s, in
-    # the same game, both seats (docs/plans/policy-finder-pool-difference.md)
+    # the same game, both seats (docs/plans/archive/policy-finder-pool-difference.md)
     "exp2_diff": {
         "template": TEMPLATE,
         "anchor": None,

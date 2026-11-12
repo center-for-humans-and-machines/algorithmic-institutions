@@ -1,4 +1,4 @@
-"""Score the exp2_diff head-to-head (34_DIFF_h2h, docs/plans/policy-finder-pool-difference.md
+"""Score the exp2_diff head-to-head (34_DIFF_h2h, docs/plans/archive/policy-finder-pool-difference.md
 step 7): each row's lead in common pool over ah's group in the same game, both seats
 pooled, with the two pools, the two group sizes, the row's fines, and the same per round
 (for the page's charts). Writes plots/simulation/34_DIFF_h2h/h2h_summary.json.

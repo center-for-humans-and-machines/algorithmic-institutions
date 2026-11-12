@@ -1,4 +1,4 @@
-"""Write the exp2_diff head-to-head configs (docs/plans/policy-finder-pool-difference.md,
+"""Write the exp2_diff head-to-head configs (docs/plans/archive/policy-finder-pool-difference.md,
 step 7): the campaign's top rules at their GP peaks, `zero` and the earlier campaigns' best
 rules, each against `ah` in both seats, 2000 games per pairing, on the 33_MULTI_h2h seeds
 (20000-25000), which no sweep or final of this campaign used.
@@ -20,7 +20,7 @@ REFERENCE = Path("configs/simulation/manager_testing/32_LEVIN_multi_reference.ym
 MULTI = Path("configs/simulation/manager_testing/33_MULTI_h2h/seed_20000_ablation.yml")
 OUT = Path("configs/simulation/manager_testing/34_DIFF_h2h")
 REFS = ["zero", "prev_best", "cem_best"]
-HEADER = """# Head-to-head of the exp2_diff campaign (docs/plans/policy-finder-pool-difference.md,
+HEADER = """# Head-to-head of the exp2_diff campaign (docs/plans/archive/policy-finder-pool-difference.md,
 # step 7), seed {seed}: each row against ah in both seats, 2000 games per pairing.
 # Written by scripts/data_analysis/exp2_diff_h2h_configs.py.
 

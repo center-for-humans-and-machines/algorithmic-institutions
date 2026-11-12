@@ -1,4 +1,4 @@
-# [ACTIVE] Policy finder scored by the lead over `ah` (experiment 2)
+# [DONE] Policy finder scored by the lead over `ah` (experiment 2)
 
 Task: `docs/tasks/a_new_kind_of_autoresearch.md`.
 
@@ -113,3 +113,27 @@ This is the proxy campaign's budget:
   - `pfsmoke-diff-v2` (`--iterate-on`, full size: 256 × 250 per seat, final 6 × 1000 per
     seat): lead 16.4 ± 1.4 (own 61.8, ah 45.4) in 27 min.
 - 2026-11-12 16:30: campaign `exp2-diff-2026-11` started on `pf-diff`.
+- 2026-11-12 21:10: campaign done.
+  - 36 versions, all scored, in 4 h 40 min; $49.5 API-equivalent.
+  - 9 of the 12 first finals collapsed to never punishing (16.76 on the finals' seed, the games
+    `zero` plays).
+  - Lineage bests: `-5-v7` 19.28, `-6-v6` 18.85, `-2-v7` 18.62, `-1-v6` 17.70.
+- 2026-11-12: steps 7–8 done.
+  - Head-to-head (`34_DIFF_h2h`, seeds 20000–31000, 48,000 games each, against `ah` in both
+    seats):
+
+    | Manager | Lead over `ah` |
+    |---|---|
+    | multi `-9-v5`, w = 0 | 17.11 ± 0.33 |
+    | `-6-v6` | 15.96 |
+    | `-2-v7` | 15.88 |
+    | `-5-v7` | 15.65 |
+    | Cem's best | 15.08 |
+    | `prev_best` | 14.89 |
+    | `zero` | 14.23 ± 0.29 |
+
+    The new rules beat `zero` by 1.4–1.7. None beats the multi rule.
+  - Sweep noise: lead se about 2.9 per point. Shared random streams by design index: point 245
+    gives `zero`-like rules 20.83.
+  - Report: `docs/reports/policy_finder_pool_difference.md`.
+  - Page: https://claude.ai/artifact/HXiGzw3FpZkv8Hq4arGrAk.
