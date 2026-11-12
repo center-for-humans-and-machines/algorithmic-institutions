@@ -74,6 +74,14 @@ SETTINGS = {
         "opponents": Path("configs/simulation/opponents/exp2_multi.yml"),
         "overrides": {"sweep_metric": "pool_vs_opponents"},
     },
+    # experiment 2 scored by the rule's group's lead in pool over `ah`'s, in
+    # the same game, both seats (docs/plans/policy-finder-pool-difference.md)
+    "exp2_diff": {
+        "template": TEMPLATE,
+        "anchor": None,
+        "opponents": Path("configs/simulation/opponents/exp2_diff.yml"),
+        "overrides": {"sweep_metric": "pool_diff_vs_opponents"},
+    },
     "exp1": {
         "template": Path("configs/simulation/manager_testing/29_EXP1_reference.yml"),
         "anchor": None,
@@ -291,6 +299,8 @@ def _against(setting):
     if anchor:
         return f" against `{anchor}`"
     rivals = opponents(setting)
+    if len(rivals) == 1:
+        return f" against `{next(iter(rivals))}` in both seats ({SETTINGS[setting]['opponents']})"
     if rivals:
         return (
             f" against each of {len(rivals)} opponents in both seats"
@@ -415,7 +425,7 @@ def main():
             f.write(header)
             yaml.safe_dump(config, f, sort_keys=False, width=1000)
         pairs = pairings_per_point(args.setting)
-        each = f" x {pairs // 2} opponents x 2 seats" if pairs > 1 else ""
+        each = f" x {pairs // 2} opponent(s) x 2 seats" if pairs > 1 else ""
         print(
             f"Wrote {out}: {n_points} design points{each} x {args.n_episodes} episodes"
             f" = {n_points * pairs * args.n_episodes} episodes"

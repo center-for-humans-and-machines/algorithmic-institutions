@@ -3,7 +3,7 @@
 #
 # Usage:
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
-#       [--sobol-points N] [--prompt TEXT] [--setting exp2|exp1]
+#       [--sobol-points N] [--prompt TEXT] [--setting exp2|exp1|exp2_multi|exp2_diff]
 #   scripts/policy_finder/new_instance.sh --iterate-on <name> [--after-failure]
 #       [the same options]
 #

@@ -77,6 +77,9 @@ SETTINGS = {
 #: exp2_multi: experiment 2's game and inputs; only the policy finder's score
 #: differs (its sweeps play several governors, generate_sim_config.py).
 SETTINGS["exp2_multi"] = dict(SETTINGS["exp2"])
+#: exp2_diff: experiment 2's game and inputs, scored by the rule's group's lead
+#: in common pool over `ah`'s group (generate_sim_config.py).
+SETTINGS["exp2_diff"] = dict(SETTINGS["exp2"])
 DEFAULT_SETTING = "exp2"
 #: Names no param may take, in any setting.
 ALL_INPUTS = tuple(dict.fromkeys(n for s in SETTINGS.values() for n in s["inputs"]))

@@ -281,3 +281,34 @@ def test_seated_takes_group_0_against_the_opponent_only():
     }))
     scores = seated(df, "b")
     assert list(scores) == ["a"] and scores["a"]["pool"].tolist() == [16.0]
+
+
+# -- pool_diff_vs_opponents: the lead over the opponent's group ---------------
+
+
+def test_the_diff_score_is_the_lead_over_the_opponents_group_in_the_same_game():
+    config = _multi_config({"toy_s000": 0.5, "toy_s001": 1.5}, rivals=("ah",))
+    config["sweep_metric"] = "pool_diff_vs_opponents"
+    df = _frame(
+        {
+            # point in group 0: 14 vs 8 (lead 6), 32 vs 8 (lead 24)
+            "toy_s000_vs_ah": [[(10, 2, 0), (5, 0, 1)], [(20, 0, 0), (5, 0, 1)]],
+            # point in group 1: 16 vs 8 (lead 8), 8 vs 32 (lead -24)
+            "ah_vs_toy_s000": [[(5, 0, 0), (10, 0, 1)], [(20, 0, 0), (5, 0, 1)]],
+            # group 0 empty: 0 vs 8, in both seats
+            "toy_s001_vs_ah": [[(5, 0, 1)], [(5, 0, 1)]],
+            "ah_vs_toy_s001": [[(5, 0, 0)], [(5, 0, 0)]],
+        }
+    )
+    result = sweep_result(df, config)
+    s000, s001 = result["points"]
+    assert s000["pool"] == pytest.approx((6 + 24 + 8 - 24) / 4)
+    assert s000["own"] == pytest.approx((14 + 32 + 16 + 8) / 4)
+    assert s000["other"] == pytest.approx((8 + 8 + 8 + 32) / 4)
+    assert s000["members"] == 1 and s000["other_members"] == 1
+    assert s000["pools"]["ah"]["pool"] == pytest.approx(s000["pool"])
+    assert s000["n_episodes"] == 4
+    assert s001["pool"] == pytest.approx(-8.0) and s001["members"] == 0
+    assert result["best_name"] == "toy_s000"
+    assert result["metric"] == "pool_diff_vs_opponents" and result["opponents"] == ["ah"]
+    check_sweep(config)

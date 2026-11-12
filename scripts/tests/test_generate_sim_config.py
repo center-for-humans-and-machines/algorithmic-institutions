@@ -343,3 +343,36 @@ def test_multi_parts_seed_past_every_pairing(multi):
     points = len({p["group_0"] for p in first["pairings"]} - {"opponent_1", "opponent_2"})
     batch = first["episode_batch_size"]
     assert second["seed"] == first["seed"] + -(-points * 4 * 300 // batch)
+
+
+# -- exp2_diff: every point against ah in both seats, scored by the lead -------
+
+
+def test_the_diff_opponent_is_the_templates_ah():
+    """exp2_diff's opponents file holds `ah` exactly as exp2 plays it."""
+    path = gen.ROOT / gen.SETTINGS["exp2_diff"]["opponents"]
+    template = yaml.safe_load((gen.ROOT / gen.TEMPLATE).read_text())
+    assert list(yaml.safe_load(path.read_text())) == ["ah"]
+    assert gen.opponents("exp2_diff") == {"ah": template["managers"]["ah"]}
+
+
+def test_a_diff_sweep_plays_ah_in_both_seats(repo):
+    path = repo / gen.SETTINGS["exp2_diff"]["opponents"]
+    path.parent.mkdir(parents=True)
+    shutil.copy(Path(__file__).resolve().parents[2] / gen.SETTINGS["exp2_diff"]["opponents"], path)
+    rule = "configs/managers/rule_based/toy.yml"
+    design = validate_rule(rule, n_points=4)
+    config = gen.build_sim_config(rule, design, n_episodes=5, setting="exp2_diff")
+
+    assert config["sweep_metric"] == "pool_diff_vs_opponents"
+    assert config["sweep_opponents"] == ["ah"]
+    assert config["pairings"] == [
+        pairing
+        for i in range(4)
+        for pairing in (
+            {"name": f"toy_s{i:03d}_vs_ah", "group_0": f"toy_s{i:03d}", "group_1": "ah"},
+            {"name": f"ah_vs_toy_s{i:03d}", "group_0": "ah", "group_1": f"toy_s{i:03d}"},
+        )
+    ]
+    assert config["managers"]["toy_s000"]["setting"] == "exp2_diff"
+    assert gen.pairings_per_point("exp2_diff") == 2

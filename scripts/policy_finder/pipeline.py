@@ -72,10 +72,10 @@ STEPS = (
 #: with PF_SWEEP_EPISODES and PF_FINAL_EPISODES); a setting whose points play
 #: several opponents counts them per pairing, one per opponent and seat
 #: (SETTING_EPISODES: 8 pairings x 64 = 512 per sweep point, x 1000 = 8000
-#: per final point)
+#: per final point; exp2_diff 2 x 250 = 500 and 2 x 1000 = 2000, exp2's)
 N_EPISODES = 500
 FINAL_EPISODES = 2000
-SETTING_EPISODES = {"exp2_multi": (64, 1000)}
+SETTING_EPISODES = {"exp2_multi": (64, 1000), "exp2_diff": (250, 1000)}
 #: A setting's opponents (generate_sim_config.py SETTINGS), in the worktree
 OPPONENTS = "configs/simulation/opponents/{}.yml"
 #: One sim job holds this many episodes (16 GB): 256 points x 500 = 2 parts
@@ -462,6 +462,9 @@ class Version:
             "best_of_n_name": top["name"], "best_of_n_params": top["params"],
             "n_points": final["n_points"],
         }
+        for key in ("own", "other"):  # the two groups' pools (pool_diff_vs_opponents)
+            if key in gp:
+                self.data["score"][key] = gp[key]
         if "pools" in gp:  # against each opponent (pool_vs_opponents)
             self.data["score"]["pools"] = {
                 k: {"pool": v["pool"], "pool_se": v["pool_se"]} for k, v in gp["pools"].items()

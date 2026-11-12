@@ -2,12 +2,14 @@
 
 A sweep config (scripts/policy_finder/generate_sim_config.py writes them)
 plays every design point of one rule, each point a `rule_based` manager with
-its params inline, in one of three ways (`sweep_metric`):
+its params inline, in one of four ways (`sweep_metric`):
   - `pool_vs_anchor`: against one anchor governor, pairings
     `<point>_vs_<anchor>`, the point in group 0;
   - `pool_vs_opponents`: against every governor in `sweep_opponents` in
     both seats, pairings `<point>_vs_<opponent>` (the point in group 0) and
     `<opponent>_vs_<point>` (in group 1);
+  - `pool_diff_vs_opponents`: the same games, scored by how far the point's
+    group's pool is ahead of the opponent's group's in the same game;
   - `group_payoff`: alone with the clones, no pairings (experiment 1).
 The sim then skips its plots and writes `sweep.json`: every point's params
 and its score (pool_scores), and under `best` the params of the point with
@@ -44,7 +46,14 @@ BEST_PLOTS = ("comparison_pairing_side.jpg", "group_size_evolution_global.jpg")
 #: scores the average payoff (pool_scores.group_payoff_scores).
 POOL_VS_ANCHOR = "pool_vs_anchor"
 POOL_VS_OPPONENTS = "pool_vs_opponents"
-METRICS = (POOL_VS_ANCHOR, POOL_VS_OPPONENTS, GROUP_PAYOFF)
+#: `pool_diff_vs_opponents` plays as pool_vs_opponents and scores, per game,
+#: the point's group's pool minus the opponent's group's pool, then the mean
+#: over the opponents (the own and the opponent's pools are kept as `own` and
+#: `other`).
+POOL_DIFF_VS_OPPONENTS = "pool_diff_vs_opponents"
+#: The metrics whose points play `sweep_opponents` in both seats
+OPPONENT_METRICS = (POOL_VS_OPPONENTS, POOL_DIFF_VS_OPPONENTS)
+METRICS = (POOL_VS_ANCHOR, POOL_VS_OPPONENTS, POOL_DIFF_VS_OPPONENTS, GROUP_PAYOFF)
 #: group_payoff's plot of its best point.
 ROUND_PLOT = "best_rounds.jpg"
 SCORE_TEXT = {
@@ -58,6 +67,14 @@ SCORE_TEXT = {
         " sum(p) per round against each, empty group-rounds 0, mean over rounds"
         " then episodes; pool_se its standard error (the opponents' errors"
         " combined); `pools` the pool against each opponent"
+    ),
+    POOL_DIFF_VS_OPPONENTS: (
+        "the mean over the opponents of the group's lead in common pool over the"
+        " opponent's group in the same game: per round each group's pool 1.6*sum(c)"
+        " - sum(p), empty group-rounds 0, mean over rounds, own minus the"
+        " opponent's per episode, mean over episodes, both seats pooled; pool_se"
+        " its standard error over episodes (the opponents' errors combined);"
+        " `own` and `other` the two groups' pools; `pools` the same per opponent"
     ),
     GROUP_PAYOFF: (
         "experiment 1's average payoff: per round the mean payoff of the"
@@ -83,7 +100,7 @@ def check_sweep(config: dict) -> str:
     """Check a `sweep: true` config before the sim runs; return its rule path."""
     if metric_of(config) == GROUP_PAYOFF:
         return _check_alone(config)
-    if metric_of(config) == POOL_VS_OPPONENTS:
+    if metric_of(config) in OPPONENT_METRICS:
         return _check_opponents(config)
     managers, pairings = config.get("managers", {}), config.get("pairings")
     if SWEEP_ANCHOR not in managers:
@@ -130,12 +147,13 @@ def _check_alone(config: dict) -> str:
 
 
 def _check_opponents(config: dict) -> str:
-    """check_sweep for a pool_vs_opponents sweep: every design point plays
-    every opponent in `sweep_opponents` exactly once in each seat."""
+    """check_sweep for a sweep against opponents (OPPONENT_METRICS): every
+    design point plays every opponent in `sweep_opponents` exactly once in
+    each seat."""
     managers, pairings = config.get("managers", {}), config.get("pairings") or []
     rivals = config.get("sweep_opponents") or []
     if not rivals:
-        raise ValueError("sweep: pool_vs_opponents needs `sweep_opponents`")
+        raise ValueError(f"sweep: {metric_of(config)} needs `sweep_opponents`")
     missing = [r for r in rivals if r not in managers]
     if missing:
         raise ValueError(f"sweep: opponents without a manager: {missing}")
@@ -185,15 +203,30 @@ def _summary(s) -> dict:
     }
 
 
+def _diff_summary(s) -> dict:
+    """_summary of the per-episode lead over the opponent's group, with the
+    two groups' pools (`own`, `other`) and the opponent's group size."""
+    lead = s.assign(pool=s["pool"] - s["other"])
+    return {
+        **_summary(lead),
+        "own": float(s["pool"].mean()),
+        "other": float(s["other"].mean()),
+        "other_members": float(s["other_members"].mean()),
+    }
+
+
 def _opponent_points(df, config: dict) -> list:
-    """pool_vs_opponents: each point's mean pool over the opponents, its
-    combined standard error, and the pool against each under `pools`."""
+    """OPPONENT_METRICS: each point's mean score over the opponents (its pool,
+    or for pool_diff_vs_opponents its lead over the opponent's group), its
+    combined standard error, and the same against each under `pools`."""
     rivals = config["sweep_opponents"]
+    diff = metric_of(config) == POOL_DIFF_VS_OPPONENTS
+    summary = _diff_summary if diff else _summary
     df = add_pool(df)
     against = {r: against_anchor(df, r) for r in rivals}
     points = []
     for name in _point_names(config):
-        pools = {r: _summary(against[r][name]) for r in rivals}
+        pools = {r: summary(against[r][name]) for r in rivals}
         ses = [pools[r]["pool_se"] for r in rivals]
         se = (
             math.sqrt(sum(s * s for s in ses)) / len(rivals)
@@ -210,13 +243,16 @@ def _opponent_points(df, config: dict) -> list:
                 "pools": pools,
             }
         )
+        if diff:
+            for key in ("own", "other", "other_members"):
+                points[-1][key] = sum(pools[r][key] for r in rivals) / len(rivals)
     return points
 
 
 def sweep_result(df, config: dict) -> dict:
     """The contents of sweep.json, from the sim's per-round frame."""
     metric = metric_of(config)
-    if metric == POOL_VS_OPPONENTS:
+    if metric in OPPONENT_METRICS:
         points = _opponent_points(df, config)
     else:
         if metric == GROUP_PAYOFF:
@@ -240,7 +276,7 @@ def sweep_result(df, config: dict) -> dict:
         "episode_batch_size": config.get("episode_batch_size", 1),
         "points": points,
     }
-    if metric == POOL_VS_OPPONENTS:
+    if metric in OPPONENT_METRICS:
         result["opponents"] = list(config["sweep_opponents"])
     return result
 

@@ -46,7 +46,9 @@ def episode_members(sub: pd.DataFrame, group: int) -> pd.Series:
 
 
 def against_anchor(df: pd.DataFrame, anchor: str) -> dict:
-    """Manager -> per-episode (pool, members) of its group against the anchor.
+    """Manager -> per-episode (pool, members, other, other_members) of its
+    group against the anchor; `other` and `other_members` are the anchor's
+    group in the same episodes, for scores that compare the two.
 
     Pools every pairing of the manager with the anchor, in either position.
     The anchor's own entry comes from `anchor_vs_anchor`, both groups.
@@ -63,7 +65,12 @@ def against_anchor(df: pd.DataFrame, anchor: str) -> dict:
             if other != anchor:
                 continue
             frame = pd.DataFrame(
-                {"pool": ep[group], "members": episode_members(sub, group)}
+                {
+                    "pool": ep[group],
+                    "members": episode_members(sub, group),
+                    "other": ep[1 - group],
+                    "other_members": episode_members(sub, 1 - group),
+                }
             )
             scores.setdefault(manager, []).append(frame)
     return {m: pd.concat(f, ignore_index=True) for m, f in scores.items()}

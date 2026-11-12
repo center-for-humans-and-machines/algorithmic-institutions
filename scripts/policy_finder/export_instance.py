@@ -70,7 +70,11 @@ DENY = (
 SETTINGS = {
     "exp2": {
         "agent_data": AGENT_DATA,
-        "deny": ("docs/reports/basics_exp1.md", "docs/reports/basics_exp2_multi.md"),
+        "deny": (
+            "docs/reports/basics_exp1.md",
+            "docs/reports/basics_exp2_multi.md",
+            "docs/reports/basics_exp2_diff.md",
+        ),
         "agent": ".claude/agents/policy-finder.md",
     },
     "exp1": {
@@ -81,6 +85,7 @@ SETTINGS = {
         "deny": (
             "docs/reports/basics.md",
             "docs/reports/basics_exp2_multi.md",
+            "docs/reports/basics_exp2_diff.md",
             "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched",
             "artifacts/manager",
         ),
@@ -94,6 +99,7 @@ SETTINGS = {
         "deny": (
             "docs/reports/basics.md",
             "docs/reports/basics_exp1.md",
+            "docs/reports/basics_exp2_diff.md",
             "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched",
             "plots/simulation/29_EXP1_reference",
             "configs/simulation/manager_testing",
@@ -122,6 +128,17 @@ SETTINGS = {
             r"sigmoid_opt",
             r"opponents/exp2_multi",
         ),
+    },
+    # experiment 2 scored by the lead over `ah`'s group: exp2's view (the
+    # reference sims against `ah`), with its own game doc and agent
+    "exp2_diff": {
+        "agent_data": AGENT_DATA,
+        "deny": (
+            "docs/reports/basics.md",
+            "docs/reports/basics_exp1.md",
+            "docs/reports/basics_exp2_multi.md",
+        ),
+        "agent": ".claude/agents/policy-finder-exp2-diff.md",
     },
 }
 #: Folders that hold one entry per instance or version; only the lineage's own

@@ -218,3 +218,30 @@ def test_other_exports_hold_no_opponents_file(layout):
     files = _files(Path(ex.build(wt, main, exports)))
     assert "configs/simulation/opponents/exp2_multi.yml" not in files
     assert "docs/reports/basics_exp2_multi.md" not in files
+
+
+def test_an_exp2_diff_export_has_its_own_game_doc_and_the_ah_reference(layout):
+    wt, main, exports = layout
+    _write(wt, ".claude/policy_finder.json", json.dumps(
+        {"name": NAME, "version": 2, "rule_name": f"{NAME}-v2", "setting": "exp2_diff"}))
+    _write(wt, ".claude/agents/policy-finder-exp2-diff.md",
+           "---\nname: policy-finder-exp2-diff\nmodel: opus\n---\n\nLead over ah.\n")
+    _write(wt, "docs/reports/basics.md", "exp2 game\n")
+    _write(wt, "docs/reports/basics_exp2_multi.md", "multi game\n")
+    _write(wt, "docs/reports/basics_exp2_diff.md", "the lead over ah\n")
+    _write(wt, "configs/simulation/opponents/exp2_diff.yml", "ah: {name: ah}\n")
+    export = Path(ex.build(wt, main, exports))
+    files = _files(export)
+    agent = (export / ".claude/agents/policy-finder.md").read_text()
+    assert agent.startswith("---\nname: policy-finder\n") and "Lead over ah." in agent
+    assert "docs/reports/basics_exp2_diff.md" in files
+    for gone in ("docs/reports/basics.md", "docs/reports/basics_exp2_multi.md",
+                 "configs/simulation/opponents/exp2_diff.yml"):
+        assert gone not in files
+    assert any(f.startswith("plots/simulation/25_LEVIN") for f in files)
+
+
+def test_other_exports_hold_no_diff_game_doc(layout):
+    wt, main, exports = layout
+    _write(wt, "docs/reports/basics_exp2_diff.md", "the lead over ah\n")
+    assert "docs/reports/basics_exp2_diff.md" not in _files(Path(ex.build(wt, main, exports)))

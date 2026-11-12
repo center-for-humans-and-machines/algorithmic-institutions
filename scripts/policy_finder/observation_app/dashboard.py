@@ -40,7 +40,8 @@ LANDSCAPES = "landscapes.json"
 FINAL = "final"
 #: The game the shown instances play (manager/rule.py SETTINGS): exp2, two
 #: groups scored by the pool against `ah`; exp2_multi, the mean pool against
-#: several governors; or exp1, one group scored by the average payoff
+#: several governors; exp2_diff, the lead in pool over `ah`'s group in the same
+#: game; or exp1, one group scored by the average payoff
 #: (PF_SETTING; the instances of one worktree root share it).
 SETTING = os.environ.get("PF_SETTING", "exp2")
 #: The words for the score in each setting, so exp2 reads as before.
@@ -55,6 +56,9 @@ TERMS = {
                    "against": "against the four opponents", "root": "never punish",
                    "start": "never punishing", "members": "members",
                    "subtitle": "swept against four governors"},
+    "exp2_diff": {"score": "lead", "vs": " over ah", "against": "over ah, both seats",
+                  "root": "ah vs ah", "start": "ah against ah", "members": "members",
+                  "subtitle": "scored by the lead in common pool over the AH manager"},
 }[SETTING]
 #: exp2_multi's opponents: opaque key (what sweeps and agents see) -> name
 OPPONENTS_FILE = MAIN / "configs/simulation/opponents/exp2_multi.yml"
@@ -77,6 +81,7 @@ REFERENCE = MAIN / {
     "exp2": "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched",
     "exp1": "plots/simulation/29_EXP1_reference",
     "exp2_multi": "plots/simulation/32_LEVIN_multi_reference",
+    "exp2_diff": "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched",
 }[SETTING]
 REFRESH_S = 5
 
@@ -574,6 +579,8 @@ def scores_vs_ah(per_round: str, mtime: float) -> pd.DataFrame:
         return pd.DataFrame(rows)
     else:
         scores = against_anchor(add_pool(df), "ah")
+        if SETTING == "exp2_diff":  # the lead over ah's group, game by game
+            scores = {m: s.assign(pool=s["pool"] - s["other"]) for m, s in scores.items()}
     return pd.DataFrame(
         [
             {
@@ -839,6 +846,14 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
         tiles = [
             (f"Final best{TERMS['vs']}", f"{final['pool']:.1f}<small>± {final['pool_se']:.1f}</small>"),
             (TERMS["members"].capitalize(), f"{final['members']:.2f}"),
+        ]
+        if "own" in final:  # exp2_diff: the two pools the lead is made of
+            tiles[1] = (
+                "Own pool · ah's pool",
+                f"{final['own']:.1f} · {final['other']:.1f}"
+                f"<small>{final['members']:.2f} · {final['other_members']:.2f} members</small>",
+            )
+        tiles += [
             ("Fit predicted", predicted),
             (
                 "Final run",
@@ -857,7 +872,7 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
         f" median point {points.pool.median():.1f}."
     )
     out = [("html", stats_html(tiles))]
-    if final and final.get("pools"):
+    if final and final.get("pools") and OPPONENTS:
         out += [
             ("section", "Against each opponent"),
             ("caption", "The final best's pool against each governor it plays, the"
@@ -1188,8 +1203,10 @@ def version_row(wt: Path, version: str, key: str, summary: dict) -> dict:
         row.update(
             {"best pool": best["pool"], "se": best["pool_se"], "members": best["members"]}
         )
-        for k, v in (best.get("pools") or {}).items():
+        for k, v in (best.get("pools") or {}).items() if OPPONENTS else ():
             row[f"vs {OPPONENTS.get(k, k)}"] = v["pool"]
+        if "own" in best:  # exp2_diff
+            row.update({"own pool": best["own"], "ah pool": best["other"]})
     notes = read(wt / "notes/policy_finder" / f"{version}.md")
     if notes:
         sections = parse_notes(notes)
