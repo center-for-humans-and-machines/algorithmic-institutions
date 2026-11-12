@@ -1,0 +1,34 @@
+params:
+  thr:
+    definition: >-
+      free-riding threshold in contribution points; only a member contributing
+      less than thr this round is punished (cooperators are never touched)
+    type: float
+  k:
+    definition: >-
+      punishment points per contribution point a member falls short of thr
+      (punishment = k * (thr - contribution)); small k*thr floors to 0, i.e. no punishment
+    type: float
+  t_start:
+    definition: >-
+      first round in which punishment is allowed; 20 or later means only after
+      the last switch decision, 23 means never punish
+    type: int
+  w:
+    definition: >-
+      before round 20, punishment is allowed only in the first w rounds of each
+      4-round block (the rounds farthest from the next switch decision); 4 = every round
+    type: int
+sweep_config:
+  thr: [0.5, 12]
+  k: [0.15, 5, log]
+  t_start: [0, 23]
+  w: [1, 4]
+code: |
+  cur = c[..., -1]
+  shortfall = th.clamp(thr - cur, min=0.0)
+  pos = th.remainder(t, 4.0)
+  started = (t >= t_start).float()
+  not_last = (t < 23).float()
+  in_window = th.maximum((t >= 20).float(), (pos < w).float())
+  punishment = k * shortfall * started * not_last * in_window * valid[..., -1]
