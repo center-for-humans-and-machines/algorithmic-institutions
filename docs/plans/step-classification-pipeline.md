@@ -24,13 +24,14 @@ This first run is a full dry run without stops. The two human steps (codebook re
 
 The four formats of the design page, with the additions the two goals need. Everything is JSON Lines or YAML under one run directory.
 
-- `corpus/versions.jsonl`: stem, campaign, lineage, version, parent, rule text, notes text, score, score_se, score status.
+- `corpus/versions.jsonl`: stem, campaign, lineage, version, parent, rule text, notes text, score, score_se, score status, `setting` (the campaign's game setting from `settings` in the config, verified against the agents' prompts, `docs/reports/basics*.md` and the campaign files on the branches).
 - `open/rule_free_codes.jsonl`: version, description, quote.
-- `records/<stem>.json` (notes record): version; `mechanisms[]` with description, quote, `status` (adopted, rejected, considered), `tested` (did an exploration check it), `source_version` (earlier version the notes credit, if any), `what_code` (added later), `reasons[]` with description, quote, `why_code` (added later); `theory_mentions[]` (theories, concepts or literature the notes name explicitly, with quote); `unlinked_findings[]`.
-- `codebook/what.yml`, `codebook/why.yml`: name, definition, examples (fits, does not fit), theory_link. Each revision is kept (`what.v1.yml`, ...).
+- `records/<stem>.json` (notes record): version; `mechanisms[]` with description, quote, `status` (adopted, rejected, considered), `tested` (did an exploration check it), `relation_to_previous` (new, kept, modified, removed, not_stated: how the notes present it relative to the previous version; always not_stated for a first version), `source_version` (earlier version the notes credit, if any), `what_code` and `what_code_status` (coded, none, failed; added later), `reasons[]` with description, quote, `stance` (for or against the mechanism), `evidence` (a short free-text phrase in the agent's terms for what the reason rests on, or null), `why_code` and `why_code_status` (added later); `theory_mentions[]` (theories, concepts or literature the notes name explicitly, with `kind`, free text such as concept, author, field, paper, and quote); `unlinked_findings[]`.
+- `codebook/what.yml`, `codebook/why.yml`: name, definition, examples (fits, does not fit), theory_link. Each revision is kept (`what.v1.yml`, ...); every revision above v1 carries `based_on` (revision and sha256 of the revision it reviewed) and is rejected if that base has changed. `codebook/never_implemented.yml` has the same shape. Code names `none` and `failed` are reserved.
 - `codebook/literature.yml`: per code, publications with full reference and DOI or URL, one sentence on the connection, and whether the link was verified against the source.
-- `codes/rule_codes.jsonl`: version, what_code, present, quote, coder.
-- `analysis/`: joined tables and figures.
+- `codes/rule_codes.jsonl`: version, what_code, present, `switchable_off` (a parameter value inside the declared sweep range disables the mechanism entirely), quote, coder, codebook_revision.
+- `analysis/`: joined tables and figures. `version_codes.csv` has one row per version and code, including never-implemented codes (`code_source`, `in_rule` false); notes status and relation reduced by precedence (adopted > rejected > considered; new > modified > removed > kept > not_stated) with the full lists in `*_all` columns and `no_record` / `no_mechanism` kept apart; why codes overall, for and against; the reasons' evidence phrases; `switchable_off`. `agreement.csv` pairs rater and judge rows within one codebook revision.
+- `manifests/<step>.json`: written last by every step: inputs and outputs with sha256, expected and written counts, failed items, codebook revisions used, model, timestamp. Consumers check it and fail on a missing, stale or modified upstream.
 
 ## Steps
 
@@ -40,12 +41,12 @@ The four formats of the design page, with the additions the two goals need. Ever
 | 1a | `open-rules` | cluster | Free coding of a stratified sample of rules (config: `free_coding.sample`). Reports new codes per batch as a saturation check. |
 | 1b | `open-notes` | cluster | Extraction of a notes record for every version. |
 | 2a | `what-codebook` | cluster | Cluster the rule free codes into mechanisms. |
-| 2b | `coverage` | cluster | Assign what codes to the mechanisms in the notes records. Cluster the unmatched ones into candidate codes, run the rule judge for those candidates on all rules, add a candidate to the codebook only if some rule implements it. The rest go to `codebook/never_implemented.yml`. |
+| 2b | `coverage` | cluster | Assign what codes to the mechanisms in the notes records. Cluster the unmatched ones into candidate codes, run the rule judge for those candidates on the rules outside the expert check, add a candidate to the codebook only if some rule implements it. The rest go to `codebook/never_implemented.yml`. |
 | 3 | `why-codebook` | cluster | Cluster the extracted reasons. No scheme is given. |
 | 4a | `literature` | Mac, Claude | Link codes to publications. Web search, references verified. Not run on the cluster model, which has no web access. |
 | 4b | `review` | Mac, Claude now, experts later | Reads `codebook/*.v1.yml`, writes `*.v2.yml` plus `review/comments.md`. |
 | 5a | `apply-rules` | cluster | One judge call per rule against the whole what codebook. Yes or no per code with a quoted line. |
-| 5b | `apply-notes` | cluster | Final what and why codes on the records. |
+| 5b | `apply-notes` | cluster | Final what and why codes on the records; mechanisms against the what codebook plus the never-implemented codes, reasons with their mechanism and stance as uncoded context. |
 | 6 | `expert-check` | Mac, Claude now, experts later | `export` writes a coding sheet for held-out rules (not in the free-coding sample). `ingest` reads filled sheets and writes rows to `rule_codes.jsonl` with the rater as coder. Agreement per code and overall. |
 | 7 | `analyse` | Mac | Joins and figures, see below. |
 
@@ -65,8 +66,8 @@ Stage A is steps 1a to 3 in one cluster job against one resident server. Stage B
 - Package `src/aimanager/annotation/`, CLI `python -m aimanager.annotation <step> --run <run_id> [--config ...]`. It must import without torch or PyG, since it runs on the Mac and inside the inference container.
 - One LLM client for every step: OpenAI-compatible endpoint, top-level `response_format` JSON schema from pydantic models, thinking off, explicit `max_tokens`, bounded window of outstanding requests that is refilled continuously, timeouts, backoff on 5xx, fail fast on 400, never retry `finish_reason == "length"` unchanged.
 - Exact-result cache keyed on model, messages, schema and sampling parameters, so steps resume and reruns are free. Every call is logged with tokens and latency.
-- Prompt order: system, shared instructions and codebook, then the document, so the shared part is a byte-identical prefix. One fixed schema per pass.
-- Steps are idempotent and judged by rows written, not exit code.
+- Prompt order: system, shared instructions and codebook, then the per-document part (context section with the campaign's game setting and, for notes, the version's position in its lineage; then the document), so the shared part is a byte-identical prefix. One fixed schema per pass. Prompt examples come from an unrelated domain so the first pass stays bottom-up.
+- Steps are idempotent. A step whose failed calls exceed its failure budget (config `failure_budget`, 0 for proposals and judge calls) exits non-zero and writes nothing; failed calls never count as evidence. A dead server aborts the step after a few consecutive failed attempts. `preflight` checks every schema against the endpoint before a stage.
 - A `--backend fake` mode with canned responses makes the whole pipeline testable locally with `pytest`.
 - Config in `configs/annotation/`. Sample sizes, model names and concurrency live there, not in code.
 
