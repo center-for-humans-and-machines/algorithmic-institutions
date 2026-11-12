@@ -1,0 +1,66 @@
+# Step classification of the policy-finder search.
+# Spec: docs/plans/step-classification-pipeline.md
+# CLI: python -m aimanager.annotation <command> --run <run_id> [--config this file]
+
+corpus:
+  repo: .
+  # git ref globs, read with git ls-tree / git show (no checkout)
+  refs:
+    - origin/policy-finder/pf-20261104-*
+    - origin/policy-finder/pf-20261105-*
+    - origin/policy-finder/pf-20261106-*
+  rule_dir: configs/managers/rule_based
+  notes_dir: notes/policy_finder
+  sweep_path: plots/simulation/policy_finder/{stem}_sweep/final/sweep.json
+  # Versions without a sweep.json get status "missing" unless listed here.
+  score_status_overrides:
+    pf-20261104-1-v2: not_run
+    pf-20261104-11-v2: not_run
+    pf-20261104-7-v7: failed
+
+sampling:
+  seed: 20261112
+  # free coding (step 1a): versions per lineage, alternating early and late
+  free_coding_per_lineage: 1
+  # expert check (step 6): held-out versions, stratified by campaign
+  expert_check_n: 30
+
+llm:
+  temperature: 0.0
+  concurrency: 16
+  connect_timeout: 10
+  read_timeout: 600
+  backoff: [5, 10, 20, 40]
+  # Extra top-level request fields, by model. The first entry whose `match`
+  # is a substring of the model id wins; `default` applies otherwise.
+  extra_body:
+    default:
+      chat_template_kwargs: {enable_thinking: false}
+    models:
+      - match: DeepSeek
+        body: {chat_template_kwargs: {thinking: false}}
+      - match: GLM
+        body: {chat_template_kwargs: {enable_thinking: false}}
+  # max_tokens per pass kind; on finish_reason == length one retry with `retry`
+  max_tokens:
+    open_rules: {first: 2048, retry: 4096}
+    open_notes: {first: 6144, retry: 12288}
+    propose: {first: 6144, retry: 12288}
+    assign: {first: 64, retry: 256}
+    judge: {first: 6144, retry: 12288}
+
+clustering:
+  # proposal call sees at most this many items (seeded sample beyond that)
+  max_items_in_proposal: 400
+  refine_rounds: 2
+  # a refinement round runs only if at least this many items are unassigned
+  min_unassigned: 3
+  # codes with fewer members after the last assignment are dropped
+  min_members: 1
+
+saturation:
+  batch_size: 6
+
+join:
+  # rule coder whose codes count as in_rule; "auto" = the LLM judge
+  coder: auto

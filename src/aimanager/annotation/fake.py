@@ -1,0 +1,170 @@
+"""Deterministic fake LLM: schema-valid canned replies derived from the input.
+
+Uses keyword vocabularies so that free coding, clustering, coverage, judging,
+apply and agreement all produce non-trivial output on small corpora.
+"""
+
+import hashlib
+import json
+import re
+
+# (code name, label, regex on the text)
+WHAT = [
+    ("punish_below_group_mean", "punish shortfall below the group mean", r"\bmean"),
+    ("punishment_cap", "cap the punishment per player", r"\bcap\b|largest"),
+    ("tolerance_band", "tolerate small shortfalls", r"\btol\b|toleran|slack"),
+    (
+        "stop_after_round",
+        "stop punishing after a round",
+        r"t_stop|t_end|last round|stop punish",
+    ),
+    ("spare_switch_rounds", "spare the rounds before a switch", r"switch"),
+    ("proportional_punishment", "punish in proportion", r"slope|\brate\b|proportion"),
+    ("absolute_threshold", "punish below a fixed threshold", r"threshold"),
+    ("target_newcomers", "target newcomers", r"newcomer|arriv"),
+    ("group_size_gate", "depend on group size", r"group size|n_big"),
+    ("reward_cooperators", "reward high contributors", r"reward|bonus"),
+]
+WHY = [
+    ("raises_contributions", "punishment raises contributions", r"rais|lift"),
+    ("members_leave", "punishment drives members away", r"leave|lose|members"),
+    ("punishment_costs_score", "punishment costs score", r"\bcost|loss"),
+    ("conformity", "players conform to the group", r"conform|herd"),
+    ("human_managers", "human managers did it", r"\bhuman"),
+]
+THEORY = r"(equilibrium|conformity|deterren\w*|Ostrom|Fehr|reciproc\w*)"
+VARIANTS = ["", " in each round", " for valid members", " as the rule states"]
+
+
+def _h(*parts):
+    return int(hashlib.sha256("|".join(map(str, parts)).encode()).hexdigest(), 16)
+
+
+def _first_line(regex, text):
+    for line in (text or "").splitlines():
+        if re.search(regex, line, re.I) and line.strip():
+            return line.strip()
+    return None
+
+
+def _match(vocab, text):
+    return [v for v in vocab if re.search(v[2], text or "", re.I)]
+
+
+def _quote(line, salt):
+    # one quote in eight is "paraphrased" so the quote check has work to do
+    return line if _h(salt, line) % 8 else f"roughly: {line}"
+
+
+def _vocab(kind):
+    return WHY if kind == "why" else WHAT
+
+
+def open_rules(meta):
+    doc = meta["doc"]
+    mechs = []
+    for name, label, rx in WHAT:
+        line = _first_line(rx, doc)
+        if line:
+            var = VARIANTS[_h(meta["stem"], name) % len(VARIANTS)]
+            mechs.append(
+                {"description": label + var, "quote": _quote(line, meta["stem"])}
+            )
+    return {"mechanisms": mechs}
+
+
+def open_notes(meta):
+    doc, stem = meta["doc"], meta["stem"]
+    mechs = []
+    for name, label, rx in WHAT:
+        line = _first_line(rx, doc)
+        if not line:
+            continue
+        h = _h(stem, name)
+        status = ["adopted"] * 3 + ["considered", "rejected"]
+        src = re.search(r"pf-\d{8}-\d+(?:-v\d+)?", line)
+        reasons = [
+            {"description": wl, "quote": _quote(line, stem + wn)}
+            for wn, wl, wrx in WHY
+            if re.search(wrx, line, re.I)
+        ]
+        mechs.append(
+            {
+                "description": label + VARIANTS[h % len(VARIANTS)],
+                "quote": _quote(line, stem),
+                "status": status[h % len(status)],
+                "tested": bool(h % 3),
+                "source_version": src.group(0) if src else None,
+                "reasons": reasons,
+            }
+        )
+    theory = []
+    for line in doc.splitlines():
+        m = re.search(THEORY, line, re.I)
+        if m and len(theory) < 2:
+            theory.append({"name": m.group(1).lower(), "quote": line.strip()})
+    findings = [
+        {"description": "a finding about players", "quote": line.strip()}
+        for line in doc.splitlines()
+        if re.search(r"\d", line) and not _match(WHAT, line)
+    ][:2]
+    return {
+        "mechanisms": mechs,
+        "theory_mentions": theory,
+        "unlinked_findings": findings,
+    }
+
+
+def propose(meta):
+    vocab = _vocab(meta["kind"])
+    texts = [t for _, t in meta["items"]]
+    counts = {v[0]: sum(bool(re.search(v[2], t, re.I)) for t in texts) for v in vocab}
+    existing = set(meta.get("existing", []))
+    if meta.get("round", 0) == 0:
+        chosen = [v for v in vocab if counts[v[0]] >= 2]
+        chosen = chosen[:-1] if len(chosen) > 1 else chosen  # leave work to refine
+    else:
+        chosen = [v for v in vocab if counts[v[0]] >= 1 and v[0] not in existing]
+    codes = [
+        {
+            "name": name,
+            "label": label,
+            "definition": f"The manager rule or reason fits: {label}.",
+            "fits": [label],
+            "does_not_fit": ["something else"],
+        }
+        for name, label, _ in chosen
+    ]
+    return {"codes": codes}
+
+
+def assign(meta):
+    text = meta["text"]
+    by_name = {v[0]: v for v in WHAT + WHY}
+    for name in meta["codes"]:
+        v = by_name.get(name)
+        if v and re.search(v[2], text, re.I):
+            return {"code": name}
+    return {"code": "none"}
+
+
+def judge(meta):
+    doc = meta["doc"]
+    by_name = {v[0]: v for v in WHAT}
+    out = {}
+    for name in meta["codes"]:
+        v = by_name.get(name)
+        line = _first_line(v[2], doc) if v else None
+        out[name] = {"present": bool(line), "quote": line or ""}
+    return out
+
+
+def respond(call):
+    fn = {
+        "open_rules": open_rules,
+        "open_notes": open_notes,
+        "propose": propose,
+        "assign": assign,
+        "judge": judge,
+    }[call.kind]
+    return json.dumps(fn(call.meta))
