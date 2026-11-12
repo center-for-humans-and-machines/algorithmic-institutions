@@ -1,0 +1,47 @@
+params:
+  D0:
+    definition: >-
+      the shock at round 0, before any switch decision: punishment points dealt to each member of
+      my group giving at most hi; 0 means no shock there
+    type: float
+  D4:
+    definition: >-
+      the shock at round 4, right after the first switch decision (the biggest reshuffle): points
+      dealt to each member of my group giving between lo and hi
+    type: float
+  D8:
+    definition: >-
+      the shock at round 8, right after the second switch decision: points dealt to each member
+      of my group giving between lo and hi. Nothing is dealt in any other round
+    type: float
+  lo:
+    definition: >-
+      the lowest contribution shocked at rounds 4 and 8: members giving less than lo right after
+      a switch decision are spared, since they answer a shock about half as much as members
+      giving 3-5 (0 = nobody is spared, the v3-v5 rule)
+    type: int
+  hi:
+    definition: >-
+      the highest contribution that is still shocked: members giving more than hi are spared in
+      every shock round
+    type: int
+sweep_config:
+  D0: [0.0, 30.0]
+  D4: [10.0, 30.0]
+  D8: [0.0, 30.0]
+  lo: [0, 4]
+  hi: [4, 7]
+constraints:
+  - D0 >= 0
+  - D4 >= 0
+  - D8 >= 0
+  - lo <= hi
+code: |
+  c_now = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  n_mem = member.sum(dim=-1, keepdim=True)
+  base = member * (n_mem > 1.5).float() * (c_now <= hi).float()
+  floor_ok = (c_now >= lo).float()
+  dose0 = D0 * (t == 0).float()
+  dose48 = (D4 * (t == 4).float() + D8 * (t == 8).float()) * floor_ok
+  punishment = (dose0 + dose48) * base
