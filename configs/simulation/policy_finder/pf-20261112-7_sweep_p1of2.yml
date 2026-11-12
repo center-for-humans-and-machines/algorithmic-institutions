@@ -1,0 +1,930 @@
+# Sweep of /home/kappablanca/pf_runs/worktrees_diff/pf-20261112-7/configs/managers/rule_based/pf-20261112-7.yml (#227), written by scripts/policy_finder/generate_sim_config.py:
+# 128 of 256 distinct design points (256 Sobol points), each against `ah` in both seats (configs/simulation/opponents/exp2_diff.yml); stack and sim parameters from
+# configs/simulation/manager_testing/25_LEVIN_run1_ah_zero_pairings_batched.yml.
+
+seed: 42
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261112-7_s000:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.103512803092599, amount: 12.612916671798905, persist: 2, t_stop: 10}
+    setting: exp2_diff
+  pf-20261112-7_s001:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.6520149633288383, amount: 2.721537946768005, persist: 3, t_stop: 22}
+    setting: exp2_diff
+  pf-20261112-7_s002:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.04584382474422455, amount: 3.2409118620809325, persist: 1, t_stop: 7}
+    setting: exp2_diff
+  pf-20261112-7_s003:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.970856638625264, amount: 0.704053760993645, persist: 4, t_stop: 14}
+    setting: exp2_diff
+  pf-20261112-7_s004:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.582803277298808, amount: 5.38972023671483, persist: 3, t_stop: 17}
+    setting: exp2_diff
+  pf-20261112-7_s005:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.1313340701162815, amount: 1.1405454746462487, persist: 2, t_stop: 3}
+    setting: exp2_diff
+  pf-20261112-7_s006:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.5137789212167263, amount: 7.887171027799841, persist: 4, t_stop: 20}
+    setting: exp2_diff
+  pf-20261112-7_s007:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.438820322975516, amount: 1.6577837711817243, persist: 1, t_stop: 11}
+    setting: exp2_diff
+  pf-20261112-7_s008:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.906307857483625, amount: 4.236933146222814, persist: 4, t_stop: 5}
+    setting: exp2_diff
+  pf-20261112-7_s009:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.98269266448915, amount: 0.6089705196826108, persist: 1, t_stop: 17}
+    setting: exp2_diff
+  pf-20261112-7_s010:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.8506985139101744, amount: 14.696846810021496, persist: 3, t_stop: 13}
+    setting: exp2_diff
+  pf-20261112-7_s011:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.3005727119743824, amount: 2.1267115131776353, persist: 2, t_stop: 19}
+    setting: exp2_diff
+  pf-20261112-7_s012:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.43871608376503, amount: 9.840177699757477, persist: 1, t_stop: 23}
+    setting: exp2_diff
+  pf-20261112-7_s013:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.5151180792599916, amount: 1.4642427311065316, persist: 4, t_stop: 8}
+    setting: exp2_diff
+  pf-20261112-7_s014:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.3710189405828714, amount: 6.075077564693115, persist: 2, t_stop: 15}
+    setting: exp2_diff
+  pf-20261112-7_s015:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.820910282433033, amount: 0.8978881251267523, persist: 3, t_stop: 6}
+    setting: exp2_diff
+  pf-20261112-7_s016:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.507802182808518, amount: 5.987274474444784, persist: 1, t_stop: 20}
+    setting: exp2_diff
+  pf-20261112-7_s017:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.456343837082386, amount: 0.8159604105737145, persist: 4, t_stop: 11}
+    setting: exp2_diff
+  pf-20261112-7_s018:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.5652911961078644, amount: 8.702739082274986, persist: 2, t_stop: 18}
+    setting: exp2_diff
+  pf-20261112-7_s019:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.137322263792157, amount: 1.1940860310176664, persist: 3, t_stop: 4}
+    setting: exp2_diff
+  pf-20261112-7_s020:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.0284744929522276, amount: 14.100965009373049, persist: 4, t_stop: 7}
+    setting: exp2_diff
+  pf-20261112-7_s021:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.9770447798073292, amount: 1.9861897544454983, persist: 1, t_stop: 14}
+    setting: exp2_diff
+  pf-20261112-7_s022:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.097313206642866, amount: 3.647781478192947, persist: 3, t_stop: 9}
+    setting: exp2_diff
+  pf-20261112-7_s023:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.669372862204909, amount: 0.5103415860121195, persist: 2, t_stop: 21}
+    setting: exp2_diff
+  pf-20261112-7_s024:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.388645764440298, amount: 7.181355244597694, persist: 3, t_stop: 15}
+    setting: exp2_diff
+  pf-20261112-7_s025:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.8151741828769445, amount: 1.6369805415956675, persist: 2, t_stop: 6}
+    setting: exp2_diff
+  pf-20261112-7_s026:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.4444407504051924, amount: 4.403561740289144, persist: 4, t_stop: 23}
+    setting: exp2_diff
+  pf-20261112-7_s027:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.4974798001348972, amount: 1.0106038615030375, persist: 1, t_stop: 9}
+    setting: exp2_diff
+  pf-20261112-7_s028:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.8562346547842026, amount: 3.031174698396092, persist: 2, t_stop: 12}
+    setting: exp2_diff
+  pf-20261112-7_s029:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.28278026171028614, amount: 0.6764910916477486, persist: 3, t_stop: 19}
+    setting: exp2_diff
+  pf-20261112-7_s030:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.9241117630153894, amount: 10.586070331910477, persist: 1, t_stop: 4}
+    setting: exp2_diff
+  pf-20261112-7_s031:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.977167956531048, amount: 2.3466383021534067, persist: 4, t_stop: 16}
+    setting: exp2_diff
+  pf-20261112-7_s032:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.900154823437333, amount: 3.3355730904486203, persist: 3, t_stop: 21}
+    setting: exp2_diff
+  pf-20261112-7_s033:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.848587043583393, amount: 0.7648989564192626, persist: 2, t_stop: 10}
+    setting: exp2_diff
+  pf-20261112-7_s034:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.21913334727287292, amount: 11.609792658482037, persist: 4, t_stop: 13}
+    setting: exp2_diff
+  pf-20261112-7_s035:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.791146533563733, amount: 2.6443463397884828, persist: 1, t_stop: 7}
+    setting: exp2_diff
+  pf-20261112-7_s036:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.3853447269648314, amount: 8.117648534107012, persist: 2, t_stop: 3}
+    setting: exp2_diff
+  pf-20261112-7_s037:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.333748359233141, amount: 1.8010752915530304, persist: 3, t_stop: 18}
+    setting: exp2_diff
+  pf-20261112-7_s038:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.6929678730666637, amount: 4.9608710429761, persist: 1, t_stop: 12}
+    setting: exp2_diff
+  pf-20261112-7_s039:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.26495242677629, amount: 1.1081519611521227, persist: 4, t_stop: 21}
+    setting: exp2_diff
+  pf-20261112-7_s040:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.734643038362265, amount: 15.91343804901478, persist: 1, t_stop: 16}
+    setting: exp2_diff
+  pf-20261112-7_s041:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.161143561825156, amount: 2.181491012502141, persist: 4, t_stop: 4}
+    setting: exp2_diff
+  pf-20261112-7_s042:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.052386013790965, amount: 4.13060757368857, persist: 2, t_stop: 18}
+    setting: exp2_diff
+  pf-20261112-7_s043:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.10530561581254, amount: 0.5624236700934395, persist: 3, t_stop: 12}
+    setting: exp2_diff
+  pf-20261112-7_s044:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.261197611689568, amount: 6.577705872045008, persist: 4, t_stop: 9}
+    setting: exp2_diff
+  pf-20261112-7_s045:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.6876809913665056, amount: 0.9209792628246346, persist: 1, t_stop: 23}
+    setting: exp2_diff
+  pf-20261112-7_s046:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.5668527875095606, amount: 9.593365823868464, persist: 3, t_stop: 6}
+    setting: exp2_diff
+  pf-20261112-7_s047:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.6197552010416985, amount: 1.3523407736640274, persist: 2, t_stop: 15}
+    setting: exp2_diff
+  pf-20261112-7_s048:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.710205653682351, amount: 8.956308365942515, persist: 4, t_stop: 10}
+    setting: exp2_diff
+  pf-20261112-7_s049:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.258873037993908, amount: 1.297327519439468, persist: 1, t_stop: 20}
+    setting: exp2_diff
+  pf-20261112-7_s050:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.3914126604795456, amount: 5.510715413707826, persist: 3, t_stop: 3}
+    setting: exp2_diff
+  pf-20261112-7_s051:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.316499145701528, amount: 0.7928460036403586, persist: 2, t_stop: 17}
+    setting: exp2_diff
+  pf-20261112-7_s052:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.2250586431473494, amount: 3.7542147923863873, persist: 1, t_stop: 14}
+    setting: exp2_diff
+  pf-20261112-7_s053:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.7736974395811558, amount: 0.5544880540028975, persist: 4, t_stop: 8}
+    setting: exp2_diff
+  pf-20261112-7_s054:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.9176153503358364, amount: 12.978422607770751, persist: 2, t_stop: 22}
+    setting: exp2_diff
+  pf-20261112-7_s055:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.842673202976584, amount: 1.9298997348369196, persist: 3, t_stop: 10}
+    setting: exp2_diff
+  pf-20261112-7_s056:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.5612193159759045, amount: 4.768257574530298, persist: 2, t_stop: 5}
+    setting: exp2_diff
+  pf-20261112-7_s057:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.6376677807420492, amount: 1.0365628335155395, persist: 3, t_stop: 15}
+    setting: exp2_diff
+  pf-20261112-7_s058:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.2432964872568846, amount: 7.001394490255624, persist: 1, t_stop: 8}
+    setting: exp2_diff
+  pf-20261112-7_s059:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.6933258958160877, amount: 1.5117525741852085, persist: 4, t_stop: 23}
+    setting: exp2_diff
+  pf-20261112-7_s060:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.034673303365707, amount: 11.462639871034025, persist: 3, t_stop: 19}
+    setting: exp2_diff
+  pf-20261112-7_s061:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.11110462434589863, amount: 2.4068836441994046, persist: 2, t_stop: 13}
+    setting: exp2_diff
+  pf-20261112-7_s062:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.72883259691298, amount: 2.9553323458063323, persist: 4, t_stop: 17}
+    setting: exp2_diff
+  pf-20261112-7_s063:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.178844816982746, amount: 0.6247647376697241, persist: 1, t_stop: 5}
+    setting: exp2_diff
+  pf-20261112-7_s064:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.240818854421377, amount: 5.013238771802021, persist: 4, t_stop: 14}
+    setting: exp2_diff
+  pf-20261112-7_s065:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.7893703784793615, amount: 1.0825248797124538, persist: 1, t_stop: 5}
+    setting: exp2_diff
+  pf-20261112-7_s066:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.18319240026175976, amount: 8.147997627112382, persist: 3, t_stop: 23}
+    setting: exp2_diff
+  pf-20261112-7_s067:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.1081630028784275, amount: 1.7713735187158326, persist: 2, t_stop: 8}
+    setting: exp2_diff
+  pf-20261112-7_s068:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.7259715646505356, amount: 12.12844399136931, persist: 1, t_stop: 13}
+    setting: exp2_diff
+  pf-20261112-7_s069:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.274540277197957, amount: 2.5641214528650895, persist: 4, t_stop: 19}
+    setting: exp2_diff
+  pf-20261112-7_s070:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.6569954548031092, amount: 3.508253395930295, persist: 2, t_stop: 5}
+    setting: exp2_diff
+  pf-20261112-7_s071:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.58198320120573, amount: 0.7366899151944546, persist: 3, t_stop: 16}
+    setting: exp2_diff
+  pf-20261112-7_s072:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.862756187096238, amount: 9.557696057131182, persist: 2, t_stop: 20}
+    setting: exp2_diff
+  pf-20261112-7_s073:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.9390887692570686, amount: 1.3750254765997065, persist: 3, t_stop: 11}
+    setting: exp2_diff
+  pf-20261112-7_s074:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.8070984184741974, amount: 6.509039090769942, persist: 1, t_stop: 17}
+    setting: exp2_diff
+  pf-20261112-7_s075:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.257011966779828, amount: 0.942788212553938, persist: 4, t_stop: 3}
+    setting: exp2_diff
+  pf-20261112-7_s076:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.389296455308795, amount: 3.9272682108016186, persist: 3, t_stop: 8}
+    setting: exp2_diff
+  pf-20261112-7_s077:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.46565767005085945, amount: 0.5839559315298151, persist: 2, t_stop: 14}
+    setting: exp2_diff
+  pf-20261112-7_s078:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.3215566091239452, amount: 15.23282787653274, persist: 4, t_stop: 10}
+    setting: exp2_diff
+  pf-20261112-7_s079:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.771498745307326, amount: 2.249729429250946, persist: 1, t_stop: 22}
+    setting: exp2_diff
+  pf-20261112-7_s080:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.651013296097517, amount: 13.473071552232618, persist: 3, t_stop: 4}
+    setting: exp2_diff
+  pf-20261112-7_s081:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.5995127614587545, amount: 1.8343984052722995, persist: 2, t_stop: 16}
+    setting: exp2_diff
+  pf-20261112-7_s082:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.7084534596651793, amount: 3.871009154750595, persist: 4, t_stop: 12}
+    setting: exp2_diff
+  pf-20261112-7_s083:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.280533868819475, amount: 0.5306290271367384, persist: 1, t_stop: 18}
+    setting: exp2_diff
+  pf-20261112-7_s084:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.1658290922641754, amount: 5.604673114344938, persist: 2, t_stop: 23}
+    setting: exp2_diff
+  pf-20261112-7_s085:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.11434574611485, amount: 0.7900286006545553, persist: 3, t_stop: 9}
+    setting: exp2_diff
+  pf-20261112-7_s086:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.2346246782690287, amount: 9.170880453842654, persist: 1, t_stop: 16}
+    setting: exp2_diff
+  pf-20261112-7_s087:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.806722231209278, amount: 1.2839964511583577, persist: 4, t_stop: 6}
+    setting: exp2_diff
+  pf-20261112-7_s088:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.339188853278756, amount: 2.866108463219466, persist: 1, t_stop: 9}
+    setting: exp2_diff
+  pf-20261112-7_s089:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.7657565996050835, amount: 0.6528435213996472, persist: 4, t_stop: 21}
+    setting: exp2_diff
+  pf-20261112-7_s090:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.39502714574337, amount: 11.041583021948616, persist: 2, t_stop: 7}
+    setting: exp2_diff
+  pf-20261112-7_s091:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.4480139929801226, amount: 2.5321390696875956, persist: 3, t_stop: 13}
+    setting: exp2_diff
+  pf-20261112-7_s092:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.812628535553813, amount: 6.837717523072819, persist: 4, t_stop: 18}
+    setting: exp2_diff
+  pf-20261112-7_s093:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.23922491446137428, amount: 1.527478646724324, persist: 1, t_stop: 3}
+    setting: exp2_diff
+  pf-20261112-7_s094:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.880554672330618, amount: 4.688414783911151, persist: 3, t_stop: 21}
+    setting: exp2_diff
+  pf-20261112-7_s095:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.933570107445121, amount: 1.040280030647021, persist: 2, t_stop: 11}
+    setting: exp2_diff
+  pf-20261112-7_s096:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.044057231396437, amount: 7.499652289394209, persist: 1, t_stop: 6}
+    setting: exp2_diff
+  pf-20261112-7_s097:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.9925288017839193, amount: 1.7210575042242884, persist: 4, t_stop: 15}
+    setting: exp2_diff
+  pf-20261112-7_s098:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.3630791734904051, amount: 5.159718220940097, persist: 2, t_stop: 9}
+    setting: exp2_diff
+  pf-20261112-7_s099:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.935040134936571, amount: 1.1760897919734041, persist: 3, t_stop: 23}
+    setting: exp2_diff
+  pf-20261112-7_s100:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.5233791768550873, amount: 3.2292257812305363, persist: 4, t_stop: 19}
+    setting: exp2_diff
+  pf-20261112-7_s101:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.4718336034566164, amount: 0.7157925698638411, persist: 1, t_stop: 12}
+    setting: exp2_diff
+  pf-20261112-7_s102:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.8310514632612467, amount: 12.482654140166295, persist: 3, t_stop: 16}
+    setting: exp2_diff
+  pf-20261112-7_s103:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.402995236217976, amount: 2.7857070755666262, persist: 2, t_stop: 4}
+    setting: exp2_diff
+  pf-20261112-7_s104:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.684494832530618, amount: 6.345757386514009, persist: 3, t_stop: 11}
+    setting: exp2_diff
+  pf-20261112-7_s105:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.1109531447291374, amount: 0.8707344540545188, persist: 2, t_stop: 20}
+    setting: exp2_diff
+  pf-20261112-7_s106:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.0021888464689255, amount: 10.348429548950058, persist: 4, t_stop: 4}
+    setting: exp2_diff
+  pf-20261112-7_s107:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.0551578123122454, amount: 1.4103827187226754, persist: 1, t_stop: 18}
+    setting: exp2_diff
+  pf-20261112-7_s108:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.21691164188087, amount: 14.850510395276054, persist: 2, t_stop: 13}
+    setting: exp2_diff
+  pf-20261112-7_s109:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.6433413662016392, amount: 2.07776358409302, persist: 3, t_stop: 7}
+    setting: exp2_diff
+  pf-20261112-7_s110:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.5225235782563686, amount: 4.252350186120323, persist: 1, t_stop: 21}
+    setting: exp2_diff
+  pf-20261112-7_s111:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.5754639115184546, amount: 0.5989954582764446, persist: 4, t_stop: 9}
+    setting: exp2_diff
+  pf-20261112-7_s112:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.848294552415609, amount: 3.562859248124748, persist: 2, t_stop: 17}
+    setting: exp2_diff
+  pf-20261112-7_s113:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.396909734234214, amount: 0.5155922768294096, persist: 3, t_stop: 5}
+    setting: exp2_diff
+  pf-20261112-7_s114:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.5294532459229231, amount: 13.866229988314029, persist: 1, t_stop: 19}
+    setting: exp2_diff
+  pf-20261112-7_s115:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 4.454579059034586, amount: 1.9930875649228297, persist: 4, t_stop: 12}
+    setting: exp2_diff
+  pf-20261112-7_s116:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.36899833381176, amount: 8.4409482658643, persist: 3, t_stop: 8}
+    setting: exp2_diff
+  pf-20261112-7_s117:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.9175963718444109, amount: 1.2476275826248657, persist: 2, t_stop: 22}
+    setting: exp2_diff
+  pf-20261112-7_s118:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.0615124497562647, amount: 5.7679945731694335, persist: 4, t_stop: 6}
+    setting: exp2_diff
+  pf-20261112-7_s119:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.9866210743784904, amount: 0.8583379351110559, persist: 1, t_stop: 15}
+    setting: exp2_diff
+  pf-20261112-7_s120:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.516884798184037, amount: 10.76534848154315, persist: 4, t_stop: 22}
+    setting: exp2_diff
+  pf-20261112-7_s121:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.593382604420185, amount: 2.3385322978064105, persist: 1, t_stop: 10}
+    setting: exp2_diff
+  pf-20261112-7_s122:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 1.1990043818950653, amount: 3.103444441080003, persist: 3, t_stop: 14}
+    setting: exp2_diff
+  pf-20261112-7_s123:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.6489916015416384, amount: 0.6696062824158371, persist: 2, t_stop: 7}
+    setting: exp2_diff
+  pf-20261112-7_s124:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 3.9844822715967894, amount: 4.5709403617974775, persist: 1, t_stop: 3}
+    setting: exp2_diff
+  pf-20261112-7_s125:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 0.060951489955186844, amount: 0.9607023478292035, persist: 4, t_stop: 17}
+    setting: exp2_diff
+  pf-20261112-7_s126:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 2.6786896996200085, amount: 7.404031423821728, persist: 2, t_stop: 11}
+    setting: exp2_diff
+  pf-20261112-7_s127:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261112-7.yml
+    params: {thr: 5.128648286685348, amount: 1.566719712076382, persist: 3, t_stop: 20}
+    setting: exp2_diff
+pairings:
+- {name: pf-20261112-7_s000_vs_ah, group_0: pf-20261112-7_s000, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s000, group_0: ah, group_1: pf-20261112-7_s000}
+- {name: pf-20261112-7_s001_vs_ah, group_0: pf-20261112-7_s001, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s001, group_0: ah, group_1: pf-20261112-7_s001}
+- {name: pf-20261112-7_s002_vs_ah, group_0: pf-20261112-7_s002, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s002, group_0: ah, group_1: pf-20261112-7_s002}
+- {name: pf-20261112-7_s003_vs_ah, group_0: pf-20261112-7_s003, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s003, group_0: ah, group_1: pf-20261112-7_s003}
+- {name: pf-20261112-7_s004_vs_ah, group_0: pf-20261112-7_s004, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s004, group_0: ah, group_1: pf-20261112-7_s004}
+- {name: pf-20261112-7_s005_vs_ah, group_0: pf-20261112-7_s005, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s005, group_0: ah, group_1: pf-20261112-7_s005}
+- {name: pf-20261112-7_s006_vs_ah, group_0: pf-20261112-7_s006, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s006, group_0: ah, group_1: pf-20261112-7_s006}
+- {name: pf-20261112-7_s007_vs_ah, group_0: pf-20261112-7_s007, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s007, group_0: ah, group_1: pf-20261112-7_s007}
+- {name: pf-20261112-7_s008_vs_ah, group_0: pf-20261112-7_s008, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s008, group_0: ah, group_1: pf-20261112-7_s008}
+- {name: pf-20261112-7_s009_vs_ah, group_0: pf-20261112-7_s009, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s009, group_0: ah, group_1: pf-20261112-7_s009}
+- {name: pf-20261112-7_s010_vs_ah, group_0: pf-20261112-7_s010, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s010, group_0: ah, group_1: pf-20261112-7_s010}
+- {name: pf-20261112-7_s011_vs_ah, group_0: pf-20261112-7_s011, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s011, group_0: ah, group_1: pf-20261112-7_s011}
+- {name: pf-20261112-7_s012_vs_ah, group_0: pf-20261112-7_s012, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s012, group_0: ah, group_1: pf-20261112-7_s012}
+- {name: pf-20261112-7_s013_vs_ah, group_0: pf-20261112-7_s013, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s013, group_0: ah, group_1: pf-20261112-7_s013}
+- {name: pf-20261112-7_s014_vs_ah, group_0: pf-20261112-7_s014, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s014, group_0: ah, group_1: pf-20261112-7_s014}
+- {name: pf-20261112-7_s015_vs_ah, group_0: pf-20261112-7_s015, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s015, group_0: ah, group_1: pf-20261112-7_s015}
+- {name: pf-20261112-7_s016_vs_ah, group_0: pf-20261112-7_s016, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s016, group_0: ah, group_1: pf-20261112-7_s016}
+- {name: pf-20261112-7_s017_vs_ah, group_0: pf-20261112-7_s017, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s017, group_0: ah, group_1: pf-20261112-7_s017}
+- {name: pf-20261112-7_s018_vs_ah, group_0: pf-20261112-7_s018, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s018, group_0: ah, group_1: pf-20261112-7_s018}
+- {name: pf-20261112-7_s019_vs_ah, group_0: pf-20261112-7_s019, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s019, group_0: ah, group_1: pf-20261112-7_s019}
+- {name: pf-20261112-7_s020_vs_ah, group_0: pf-20261112-7_s020, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s020, group_0: ah, group_1: pf-20261112-7_s020}
+- {name: pf-20261112-7_s021_vs_ah, group_0: pf-20261112-7_s021, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s021, group_0: ah, group_1: pf-20261112-7_s021}
+- {name: pf-20261112-7_s022_vs_ah, group_0: pf-20261112-7_s022, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s022, group_0: ah, group_1: pf-20261112-7_s022}
+- {name: pf-20261112-7_s023_vs_ah, group_0: pf-20261112-7_s023, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s023, group_0: ah, group_1: pf-20261112-7_s023}
+- {name: pf-20261112-7_s024_vs_ah, group_0: pf-20261112-7_s024, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s024, group_0: ah, group_1: pf-20261112-7_s024}
+- {name: pf-20261112-7_s025_vs_ah, group_0: pf-20261112-7_s025, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s025, group_0: ah, group_1: pf-20261112-7_s025}
+- {name: pf-20261112-7_s026_vs_ah, group_0: pf-20261112-7_s026, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s026, group_0: ah, group_1: pf-20261112-7_s026}
+- {name: pf-20261112-7_s027_vs_ah, group_0: pf-20261112-7_s027, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s027, group_0: ah, group_1: pf-20261112-7_s027}
+- {name: pf-20261112-7_s028_vs_ah, group_0: pf-20261112-7_s028, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s028, group_0: ah, group_1: pf-20261112-7_s028}
+- {name: pf-20261112-7_s029_vs_ah, group_0: pf-20261112-7_s029, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s029, group_0: ah, group_1: pf-20261112-7_s029}
+- {name: pf-20261112-7_s030_vs_ah, group_0: pf-20261112-7_s030, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s030, group_0: ah, group_1: pf-20261112-7_s030}
+- {name: pf-20261112-7_s031_vs_ah, group_0: pf-20261112-7_s031, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s031, group_0: ah, group_1: pf-20261112-7_s031}
+- {name: pf-20261112-7_s032_vs_ah, group_0: pf-20261112-7_s032, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s032, group_0: ah, group_1: pf-20261112-7_s032}
+- {name: pf-20261112-7_s033_vs_ah, group_0: pf-20261112-7_s033, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s033, group_0: ah, group_1: pf-20261112-7_s033}
+- {name: pf-20261112-7_s034_vs_ah, group_0: pf-20261112-7_s034, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s034, group_0: ah, group_1: pf-20261112-7_s034}
+- {name: pf-20261112-7_s035_vs_ah, group_0: pf-20261112-7_s035, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s035, group_0: ah, group_1: pf-20261112-7_s035}
+- {name: pf-20261112-7_s036_vs_ah, group_0: pf-20261112-7_s036, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s036, group_0: ah, group_1: pf-20261112-7_s036}
+- {name: pf-20261112-7_s037_vs_ah, group_0: pf-20261112-7_s037, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s037, group_0: ah, group_1: pf-20261112-7_s037}
+- {name: pf-20261112-7_s038_vs_ah, group_0: pf-20261112-7_s038, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s038, group_0: ah, group_1: pf-20261112-7_s038}
+- {name: pf-20261112-7_s039_vs_ah, group_0: pf-20261112-7_s039, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s039, group_0: ah, group_1: pf-20261112-7_s039}
+- {name: pf-20261112-7_s040_vs_ah, group_0: pf-20261112-7_s040, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s040, group_0: ah, group_1: pf-20261112-7_s040}
+- {name: pf-20261112-7_s041_vs_ah, group_0: pf-20261112-7_s041, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s041, group_0: ah, group_1: pf-20261112-7_s041}
+- {name: pf-20261112-7_s042_vs_ah, group_0: pf-20261112-7_s042, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s042, group_0: ah, group_1: pf-20261112-7_s042}
+- {name: pf-20261112-7_s043_vs_ah, group_0: pf-20261112-7_s043, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s043, group_0: ah, group_1: pf-20261112-7_s043}
+- {name: pf-20261112-7_s044_vs_ah, group_0: pf-20261112-7_s044, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s044, group_0: ah, group_1: pf-20261112-7_s044}
+- {name: pf-20261112-7_s045_vs_ah, group_0: pf-20261112-7_s045, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s045, group_0: ah, group_1: pf-20261112-7_s045}
+- {name: pf-20261112-7_s046_vs_ah, group_0: pf-20261112-7_s046, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s046, group_0: ah, group_1: pf-20261112-7_s046}
+- {name: pf-20261112-7_s047_vs_ah, group_0: pf-20261112-7_s047, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s047, group_0: ah, group_1: pf-20261112-7_s047}
+- {name: pf-20261112-7_s048_vs_ah, group_0: pf-20261112-7_s048, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s048, group_0: ah, group_1: pf-20261112-7_s048}
+- {name: pf-20261112-7_s049_vs_ah, group_0: pf-20261112-7_s049, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s049, group_0: ah, group_1: pf-20261112-7_s049}
+- {name: pf-20261112-7_s050_vs_ah, group_0: pf-20261112-7_s050, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s050, group_0: ah, group_1: pf-20261112-7_s050}
+- {name: pf-20261112-7_s051_vs_ah, group_0: pf-20261112-7_s051, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s051, group_0: ah, group_1: pf-20261112-7_s051}
+- {name: pf-20261112-7_s052_vs_ah, group_0: pf-20261112-7_s052, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s052, group_0: ah, group_1: pf-20261112-7_s052}
+- {name: pf-20261112-7_s053_vs_ah, group_0: pf-20261112-7_s053, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s053, group_0: ah, group_1: pf-20261112-7_s053}
+- {name: pf-20261112-7_s054_vs_ah, group_0: pf-20261112-7_s054, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s054, group_0: ah, group_1: pf-20261112-7_s054}
+- {name: pf-20261112-7_s055_vs_ah, group_0: pf-20261112-7_s055, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s055, group_0: ah, group_1: pf-20261112-7_s055}
+- {name: pf-20261112-7_s056_vs_ah, group_0: pf-20261112-7_s056, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s056, group_0: ah, group_1: pf-20261112-7_s056}
+- {name: pf-20261112-7_s057_vs_ah, group_0: pf-20261112-7_s057, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s057, group_0: ah, group_1: pf-20261112-7_s057}
+- {name: pf-20261112-7_s058_vs_ah, group_0: pf-20261112-7_s058, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s058, group_0: ah, group_1: pf-20261112-7_s058}
+- {name: pf-20261112-7_s059_vs_ah, group_0: pf-20261112-7_s059, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s059, group_0: ah, group_1: pf-20261112-7_s059}
+- {name: pf-20261112-7_s060_vs_ah, group_0: pf-20261112-7_s060, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s060, group_0: ah, group_1: pf-20261112-7_s060}
+- {name: pf-20261112-7_s061_vs_ah, group_0: pf-20261112-7_s061, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s061, group_0: ah, group_1: pf-20261112-7_s061}
+- {name: pf-20261112-7_s062_vs_ah, group_0: pf-20261112-7_s062, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s062, group_0: ah, group_1: pf-20261112-7_s062}
+- {name: pf-20261112-7_s063_vs_ah, group_0: pf-20261112-7_s063, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s063, group_0: ah, group_1: pf-20261112-7_s063}
+- {name: pf-20261112-7_s064_vs_ah, group_0: pf-20261112-7_s064, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s064, group_0: ah, group_1: pf-20261112-7_s064}
+- {name: pf-20261112-7_s065_vs_ah, group_0: pf-20261112-7_s065, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s065, group_0: ah, group_1: pf-20261112-7_s065}
+- {name: pf-20261112-7_s066_vs_ah, group_0: pf-20261112-7_s066, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s066, group_0: ah, group_1: pf-20261112-7_s066}
+- {name: pf-20261112-7_s067_vs_ah, group_0: pf-20261112-7_s067, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s067, group_0: ah, group_1: pf-20261112-7_s067}
+- {name: pf-20261112-7_s068_vs_ah, group_0: pf-20261112-7_s068, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s068, group_0: ah, group_1: pf-20261112-7_s068}
+- {name: pf-20261112-7_s069_vs_ah, group_0: pf-20261112-7_s069, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s069, group_0: ah, group_1: pf-20261112-7_s069}
+- {name: pf-20261112-7_s070_vs_ah, group_0: pf-20261112-7_s070, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s070, group_0: ah, group_1: pf-20261112-7_s070}
+- {name: pf-20261112-7_s071_vs_ah, group_0: pf-20261112-7_s071, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s071, group_0: ah, group_1: pf-20261112-7_s071}
+- {name: pf-20261112-7_s072_vs_ah, group_0: pf-20261112-7_s072, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s072, group_0: ah, group_1: pf-20261112-7_s072}
+- {name: pf-20261112-7_s073_vs_ah, group_0: pf-20261112-7_s073, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s073, group_0: ah, group_1: pf-20261112-7_s073}
+- {name: pf-20261112-7_s074_vs_ah, group_0: pf-20261112-7_s074, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s074, group_0: ah, group_1: pf-20261112-7_s074}
+- {name: pf-20261112-7_s075_vs_ah, group_0: pf-20261112-7_s075, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s075, group_0: ah, group_1: pf-20261112-7_s075}
+- {name: pf-20261112-7_s076_vs_ah, group_0: pf-20261112-7_s076, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s076, group_0: ah, group_1: pf-20261112-7_s076}
+- {name: pf-20261112-7_s077_vs_ah, group_0: pf-20261112-7_s077, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s077, group_0: ah, group_1: pf-20261112-7_s077}
+- {name: pf-20261112-7_s078_vs_ah, group_0: pf-20261112-7_s078, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s078, group_0: ah, group_1: pf-20261112-7_s078}
+- {name: pf-20261112-7_s079_vs_ah, group_0: pf-20261112-7_s079, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s079, group_0: ah, group_1: pf-20261112-7_s079}
+- {name: pf-20261112-7_s080_vs_ah, group_0: pf-20261112-7_s080, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s080, group_0: ah, group_1: pf-20261112-7_s080}
+- {name: pf-20261112-7_s081_vs_ah, group_0: pf-20261112-7_s081, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s081, group_0: ah, group_1: pf-20261112-7_s081}
+- {name: pf-20261112-7_s082_vs_ah, group_0: pf-20261112-7_s082, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s082, group_0: ah, group_1: pf-20261112-7_s082}
+- {name: pf-20261112-7_s083_vs_ah, group_0: pf-20261112-7_s083, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s083, group_0: ah, group_1: pf-20261112-7_s083}
+- {name: pf-20261112-7_s084_vs_ah, group_0: pf-20261112-7_s084, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s084, group_0: ah, group_1: pf-20261112-7_s084}
+- {name: pf-20261112-7_s085_vs_ah, group_0: pf-20261112-7_s085, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s085, group_0: ah, group_1: pf-20261112-7_s085}
+- {name: pf-20261112-7_s086_vs_ah, group_0: pf-20261112-7_s086, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s086, group_0: ah, group_1: pf-20261112-7_s086}
+- {name: pf-20261112-7_s087_vs_ah, group_0: pf-20261112-7_s087, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s087, group_0: ah, group_1: pf-20261112-7_s087}
+- {name: pf-20261112-7_s088_vs_ah, group_0: pf-20261112-7_s088, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s088, group_0: ah, group_1: pf-20261112-7_s088}
+- {name: pf-20261112-7_s089_vs_ah, group_0: pf-20261112-7_s089, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s089, group_0: ah, group_1: pf-20261112-7_s089}
+- {name: pf-20261112-7_s090_vs_ah, group_0: pf-20261112-7_s090, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s090, group_0: ah, group_1: pf-20261112-7_s090}
+- {name: pf-20261112-7_s091_vs_ah, group_0: pf-20261112-7_s091, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s091, group_0: ah, group_1: pf-20261112-7_s091}
+- {name: pf-20261112-7_s092_vs_ah, group_0: pf-20261112-7_s092, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s092, group_0: ah, group_1: pf-20261112-7_s092}
+- {name: pf-20261112-7_s093_vs_ah, group_0: pf-20261112-7_s093, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s093, group_0: ah, group_1: pf-20261112-7_s093}
+- {name: pf-20261112-7_s094_vs_ah, group_0: pf-20261112-7_s094, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s094, group_0: ah, group_1: pf-20261112-7_s094}
+- {name: pf-20261112-7_s095_vs_ah, group_0: pf-20261112-7_s095, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s095, group_0: ah, group_1: pf-20261112-7_s095}
+- {name: pf-20261112-7_s096_vs_ah, group_0: pf-20261112-7_s096, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s096, group_0: ah, group_1: pf-20261112-7_s096}
+- {name: pf-20261112-7_s097_vs_ah, group_0: pf-20261112-7_s097, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s097, group_0: ah, group_1: pf-20261112-7_s097}
+- {name: pf-20261112-7_s098_vs_ah, group_0: pf-20261112-7_s098, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s098, group_0: ah, group_1: pf-20261112-7_s098}
+- {name: pf-20261112-7_s099_vs_ah, group_0: pf-20261112-7_s099, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s099, group_0: ah, group_1: pf-20261112-7_s099}
+- {name: pf-20261112-7_s100_vs_ah, group_0: pf-20261112-7_s100, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s100, group_0: ah, group_1: pf-20261112-7_s100}
+- {name: pf-20261112-7_s101_vs_ah, group_0: pf-20261112-7_s101, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s101, group_0: ah, group_1: pf-20261112-7_s101}
+- {name: pf-20261112-7_s102_vs_ah, group_0: pf-20261112-7_s102, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s102, group_0: ah, group_1: pf-20261112-7_s102}
+- {name: pf-20261112-7_s103_vs_ah, group_0: pf-20261112-7_s103, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s103, group_0: ah, group_1: pf-20261112-7_s103}
+- {name: pf-20261112-7_s104_vs_ah, group_0: pf-20261112-7_s104, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s104, group_0: ah, group_1: pf-20261112-7_s104}
+- {name: pf-20261112-7_s105_vs_ah, group_0: pf-20261112-7_s105, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s105, group_0: ah, group_1: pf-20261112-7_s105}
+- {name: pf-20261112-7_s106_vs_ah, group_0: pf-20261112-7_s106, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s106, group_0: ah, group_1: pf-20261112-7_s106}
+- {name: pf-20261112-7_s107_vs_ah, group_0: pf-20261112-7_s107, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s107, group_0: ah, group_1: pf-20261112-7_s107}
+- {name: pf-20261112-7_s108_vs_ah, group_0: pf-20261112-7_s108, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s108, group_0: ah, group_1: pf-20261112-7_s108}
+- {name: pf-20261112-7_s109_vs_ah, group_0: pf-20261112-7_s109, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s109, group_0: ah, group_1: pf-20261112-7_s109}
+- {name: pf-20261112-7_s110_vs_ah, group_0: pf-20261112-7_s110, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s110, group_0: ah, group_1: pf-20261112-7_s110}
+- {name: pf-20261112-7_s111_vs_ah, group_0: pf-20261112-7_s111, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s111, group_0: ah, group_1: pf-20261112-7_s111}
+- {name: pf-20261112-7_s112_vs_ah, group_0: pf-20261112-7_s112, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s112, group_0: ah, group_1: pf-20261112-7_s112}
+- {name: pf-20261112-7_s113_vs_ah, group_0: pf-20261112-7_s113, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s113, group_0: ah, group_1: pf-20261112-7_s113}
+- {name: pf-20261112-7_s114_vs_ah, group_0: pf-20261112-7_s114, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s114, group_0: ah, group_1: pf-20261112-7_s114}
+- {name: pf-20261112-7_s115_vs_ah, group_0: pf-20261112-7_s115, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s115, group_0: ah, group_1: pf-20261112-7_s115}
+- {name: pf-20261112-7_s116_vs_ah, group_0: pf-20261112-7_s116, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s116, group_0: ah, group_1: pf-20261112-7_s116}
+- {name: pf-20261112-7_s117_vs_ah, group_0: pf-20261112-7_s117, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s117, group_0: ah, group_1: pf-20261112-7_s117}
+- {name: pf-20261112-7_s118_vs_ah, group_0: pf-20261112-7_s118, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s118, group_0: ah, group_1: pf-20261112-7_s118}
+- {name: pf-20261112-7_s119_vs_ah, group_0: pf-20261112-7_s119, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s119, group_0: ah, group_1: pf-20261112-7_s119}
+- {name: pf-20261112-7_s120_vs_ah, group_0: pf-20261112-7_s120, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s120, group_0: ah, group_1: pf-20261112-7_s120}
+- {name: pf-20261112-7_s121_vs_ah, group_0: pf-20261112-7_s121, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s121, group_0: ah, group_1: pf-20261112-7_s121}
+- {name: pf-20261112-7_s122_vs_ah, group_0: pf-20261112-7_s122, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s122, group_0: ah, group_1: pf-20261112-7_s122}
+- {name: pf-20261112-7_s123_vs_ah, group_0: pf-20261112-7_s123, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s123, group_0: ah, group_1: pf-20261112-7_s123}
+- {name: pf-20261112-7_s124_vs_ah, group_0: pf-20261112-7_s124, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s124, group_0: ah, group_1: pf-20261112-7_s124}
+- {name: pf-20261112-7_s125_vs_ah, group_0: pf-20261112-7_s125, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s125, group_0: ah, group_1: pf-20261112-7_s125}
+- {name: pf-20261112-7_s126_vs_ah, group_0: pf-20261112-7_s126, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s126, group_0: ah, group_1: pf-20261112-7_s126}
+- {name: pf-20261112-7_s127_vs_ah, group_0: pf-20261112-7_s127, group_1: ah}
+- {name: ah_vs_pf-20261112-7_s127, group_0: ah, group_1: pf-20261112-7_s127}
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 250
+n_groups: 2
+n_agents: 8
+agent_groups: [0, 0, 0, 0, 1, 1, 1, 1]
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1000
+output_dir: plots/simulation/policy_finder/pf-20261112-7_sweep_p1of2
+figure_name: pf-20261112-7_sweep_p1of2
+save_per_round: true
+basedir: .
+sweep_metric: pool_diff_vs_opponents
+sweep_opponents:
+- ah
+sweep: true
