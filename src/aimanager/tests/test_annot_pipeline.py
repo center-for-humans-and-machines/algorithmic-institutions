@@ -270,6 +270,9 @@ def test_stage_b_join_and_agreement(run_dir):
     assert "codes" in q["judge_reliability"]["unreliable_codes"]
     assert {"0", "1"} <= set(next(iter(q["judge_present_share_by_repeat"].values())))
     assert set(q["family_sizes"]) == {"what", "why", "basis"}
+    un = q["unassigned_by_codebook"]
+    assert "v1" in un["why"] and "v1_stage_b" in un["why"]
+    assert (run_dir / "unassigned" / "basis.v1.stage_b.yml").exists()
     # apply-rules reran with the reviewer's what.v2.yml, keeping rater rows
     codes = read_jsonl(run_dir / "codes" / "rule_codes.jsonl")
     llm = [r for r in codes if r["coder"].startswith("llm:")]

@@ -17,6 +17,7 @@ import statistics
 from collections import Counter, defaultdict
 
 from .common import (
+    read_yaml,
     atomic_write_text,
     file_hash,
     latest_codebook,
@@ -248,6 +249,7 @@ def join(run, cfg, limit=None):
     }
     quality["judge_present_share_by_repeat"] = _present_by_repeat(run)
     quality["family_sizes"] = _family_sizes(run)
+    quality["unassigned_by_codebook"] = _unassigned_shares(run)
     quality["agreement_overall"] = [
         r for r in agreement if r["code"] == "__overall__"
     ] or None
@@ -364,6 +366,31 @@ def _present_by_repeat(run):
         code: {rep: round(y / n, 4) for rep, (y, n) in sorted(reps.items()) if n}
         for code, reps in sorted(tally.items())
     }
+
+
+def _unassigned_shares(run):
+    """Share of items no code covers, per codebook: v1 from stage A (members
+    files) and the revision stage B used (apply-notes manifest)."""
+    out = {}
+    for kind in ("what", "why", "basis"):
+        entry = {}
+        mpath = run.dir / "codebook" / f"{kind}.v1.members.yml"
+        if mpath.exists():
+            mem = read_yaml(mpath) or {}
+            total = sum(len(v) for v in mem.values())
+            n = len(mem.get("none", []))
+            entry["v1"] = {
+                "n": n,
+                "of": total,
+                "share": round(n / total, 4) if total else None,
+            }
+        out[kind] = entry
+    stage_b = require(run, "apply-notes").get("unassigned") or {}
+    for kind, d in stage_b.items():
+        out.setdefault(kind, {})[f"v{d['revision']}_stage_b"] = {
+            k: d[k] for k in ("n", "of", "share")
+        }
+    return out
 
 
 def _family_sizes(run):

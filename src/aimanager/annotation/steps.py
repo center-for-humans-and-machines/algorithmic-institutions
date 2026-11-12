@@ -814,6 +814,23 @@ def apply_notes(run, cfg, client, limit=None):
     )
     wfail, yfail = {i for i, _ in wfailed}, {i for i, _ in yfailed}
     bfail = {i for i, _ in bfailed}
+    # items the reviewed codebooks do not cover, per codebook revision
+    unassigned, un_paths = {}, []
+    for kind, rev, mapping, items in (
+        ("what", wrev, what, _mechanism_items(records)),
+        ("why", yrev, why, _reason_items(records)),
+        ("basis", brev, basis, _basis_items(records)),
+    ):
+        none = [i for i, _ in items if i in mapping and not mapping[i]]
+        # stage A's codebook/<kind>.v1.unassigned.yml stays as consolidate wrote it
+        un_paths.append(run.path("unassigned", f"{kind}.v{rev}.stage_b.yml"))
+        write_unassigned(un_paths[-1], {"none": none}, items)
+        unassigned[kind] = {
+            "revision": rev,
+            "n": len(none),
+            "of": len(items),
+            "share": round(len(none) / len(items), 4) if items else None,
+        }
     never_names = {c["name"] for c in never}
     outs = []
     for stem, rec in records.items():
@@ -837,7 +854,8 @@ def apply_notes(run, cfg, client, limit=None):
         run,
         "apply-notes",
         [*_record_files(run), wpath, ypath, bpath, never_path],
-        outs,
+        outs + un_paths,
+        unassigned=unassigned,
         expected=len(records),
         written=len(outs),
         failed=[dict(item=i, error=e) for i, e in wfailed + yfailed + bfailed],

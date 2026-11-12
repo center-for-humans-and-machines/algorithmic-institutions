@@ -24,27 +24,39 @@ UNITS = {
     "basis": "what a stated reason rests on, in the search agent's words",
 }
 
-# A code is something that is done or claimed; a code defined as an absence
-# ("does not punish ...") is true of almost every rule and is rejected.
+# A mechanism code that states that something is NOT conditioned on or NOT used
+# ("ignore the opponent", "does not depend on history", "exclude group size as
+# a factor") is true of almost every rule and is rejected. Time-gating levers
+# ("no punishment in round X", "stops punishing after round T", "suspends
+# punishment before a switch") are positive levers about when punishment
+# applies and pass.
+_FACTOR = (
+    r"(based_on|depend|depends|dependent|dependence|condition|conditioned|"
+    r"conditioning|conditional|use|uses|using|react|reacts|reacting|respond|"
+    r"adjust|adjusts|adjusting|account|consider|considering|track|tracks|tracking)"
+)
 _NEG_NAME = re.compile(
-    r"^(do_not|dont|does_not|doesn_t|avoid|avoids|ignore|ignores|never|no|not|"
-    r"refrain|refrains|without)(_|$)"
+    r"(^|_)(ignore|ignores|ignoring|disregard|disregards|independent_of)(_|$)"
+    r"|(^|_)(do|does|dont|doesn_t|do_not|does_not|should_not|must_not|never|"
+    r"avoid|avoids|avoiding|not|no)_(\w+_)*?" + _FACTOR + r"(_|$)"
+    r"|(^|_)as_a_factor(_|$)"
 )
 _NEG_TEXT = re.compile(
-    r"^(do not|does not|don't|doesn't|avoids?\b|avoiding\b|ignores?\b|ignoring\b|"
-    r"never\b|no\b|not\b|refrains?\b|without\b)"
+    r"^(ignores?\b|ignoring\b|disregards?\b"
+    r"|(does|do|is|are) not (depend|use|condition|react|respond|adjust|take|"
+    r"account|consider|track|vary)\w*"
+    r"|(is |are )?not (conditioned|based|dependent) on"
+    r"|(is |are )?independent of"
+    r"|no (dependence|reaction|adjustment) (on|to)"
+    r"|exclud\w* \S+( \S+)? as a factor)"
 )
 _SUBJECT = re.compile(r"^(the )?(manager|rule|manager rule|agent)( rule)? ", re.I)
 
 
-# a negation in the middle of a name: punishment_should_not_be_applied_to_x
-_NEG_INNER = re.compile(r"_(should|must|need|can|does|do|is|are)_not_|_never_")
-
-
 def is_negated(name, label="", definition=""):
-    """Whether a code's name, label or definition starts with a negation, or its
-    name centres on one (`..._should_not_...`, `..._never_...`)."""
-    if _NEG_NAME.match(name or "") or _NEG_INNER.search(name or ""):
+    """Whether a mechanism code says that something is not conditioned on or not
+    used, by its name or by how its label or definition starts."""
+    if _NEG_NAME.search(name or ""):
         return True
     for text in (label, definition):
         t = _SUBJECT.sub("", (text or "").strip().lower())

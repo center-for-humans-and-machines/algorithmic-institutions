@@ -214,13 +214,25 @@ def test_proposal_items_fit_the_token_budget():
 
 
 def test_negated_codes_are_recognised():
+    # not conditioned on / not used: rejected
     assert is_negated("do_not_punish_based_on_history")
     assert is_negated("ignore_group_norm_erosion_triggers")
+    assert is_negated("avoid_adjusting_target_for_initial_lineup")
     assert is_negated("x", definition="The manager does not adjust to the opponent.")
-    assert is_negated("x", label="No reaction to the opponent")
-    assert is_negated("punishment_should_not_be_applied_to_timed_out_players")
-    assert not is_negated("punish_only_low_contributors", "Punish low", "Punishes.")
-    assert not is_negated("notify_players", definition="Notifies players.")
+    assert is_negated("x", label="No dependence on the opponent")
+    assert is_negated("x", definition="Excludes group size as a factor.")
+    assert is_negated("punishment_independent_of_group_state")
+    # time-gating levers and other positive levers: kept
+    for name, definition in [
+        ("end_cutoff_no_punishment", "No punishment is applied after a cutoff round."),
+        ("final_rounds_exemption", "No punishment in the final rounds of the game."),
+        ("stop_punishing_after_round", "Stops punishing after round T."),
+        ("pre_switch_window_suspension", "Suspends punishment before a switch."),
+        ("never_punish_in_last_round", "Never punishes in the last round."),
+        ("punish_only_low_contributors", "Punishes low contributors."),
+        ("notify_players", "Notifies players."),
+    ]:
+        assert not is_negated(name, definition=definition), name
 
 
 def test_apply_consolidation_merges_and_families():
@@ -231,7 +243,7 @@ def test_apply_consolidation_merges_and_families():
     merges = [
         {"codes": ["a", "a_2"], "keep": "a", "label": "A", "definition": "Does A."},
         {"codes": ["a_2", "b"], "keep": "b", "label": "x", "definition": "x"},
-        {"codes": ["c", "d"], "keep": "zz", "label": "n", "definition": "Never d."},
+        {"codes": ["c", "d"], "keep": "zz", "label": "n", "definition": "Ignores d."},
     ]
     families = [{"name": "Fam One", "definition": "f1", "codes": ["a_2", "c"]}]
     surv, defs, audit, unplaced = apply_consolidation(codes, merges, families)
@@ -282,7 +294,7 @@ def test_negated_or_excluding_codes_never_merge_into_positive_codes():
         {"name": "punish_based_on_group_size", "label": "x", "definition": "Scales."},
         {"name": "exclude_group_size_from_punishment", "label": "x", "definition": "x"},
         {"name": "late_punishment_has_no_benefit", "label": "x", "definition": "x"},
-        {"name": "no_effect_late", "label": "x", "definition": "No effect late."},
+        {"name": "ignore_lateness", "label": "x", "definition": "Ignores lateness."},
     ]
     merges = [
         {
@@ -296,7 +308,7 @@ def test_negated_or_excluding_codes_never_merge_into_positive_codes():
             "definition": "d",
         },
         {
-            "codes": ["late_punishment_has_no_benefit", "no_effect_late"],
+            "codes": ["late_punishment_has_no_benefit", "ignore_lateness"],
             "keep": "late_punishment_has_no_benefit",
             "reason": "same claim",
             "label": "l",
