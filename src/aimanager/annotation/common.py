@@ -227,7 +227,7 @@ def slugify(name):
     return s[:60]
 
 
-_REV = re.compile(r"^(what|why)\.v(\d+)\.yml$")
+_REV = re.compile(r"^(what|why|basis)\.v(\d+)\.yml$")
 
 
 def codebook_revisions(run, kind):
@@ -242,7 +242,11 @@ def codebook_revisions(run, kind):
     return sorted(out)
 
 
-CODEBOOK_STEP = {"what": "coverage", "why": "why-codebook"}
+CODEBOOK_STEP = {
+    "what": "consolidate-what",
+    "why": "consolidate-why",
+    "basis": "basis-codebook",
+}
 
 
 def check_revision_chain(run, kind):
@@ -278,3 +282,9 @@ def latest_codebook(run, kind):
     """(revision, path, codes) of the highest checked codebook revision."""
     rev, path = check_revision_chain(run, kind)[-1]
     return rev, path, read_yaml(path)["codes"]
+
+
+def codebook_families(path):
+    """{family: definition} of a codebook file (empty if it has no families)."""
+    doc = read_yaml(path) or {}
+    return {f["name"]: f.get("definition", "") for f in doc.get("families") or []}

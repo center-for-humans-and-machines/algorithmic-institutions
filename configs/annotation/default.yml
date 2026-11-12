@@ -27,8 +27,9 @@ sampling:
 
 llm:
   temperature: 0.0
-  # requests in flight; the server batches up to --max-num-seqs (128)
-  concurrency: 64
+  # requests in flight, = --max-num-seqs (128): on viper the server never
+  # queued at 64 (viper1/viper2), so the client was the bottleneck
+  concurrency: 128
   # the server's context length; a cluster job overrides it with
   # ANNOT_MAX_MODEL_LEN (= --max-model-len). Proposal prompts are cut to fit
   # it together with max_tokens.propose.retry.
@@ -65,6 +66,7 @@ llm:
     propose: {first: 6144, retry: 12288}
     assign: {first: 64, retry: 256}
     judge: {first: 6144, retry: 12288}
+    consolidate: {first: 8192, retry: 16384}
 
 # Share of calls of one pass kind that may fail in a step before the step
 # raises without writing anything (0: every call must succeed). Failed items
@@ -76,6 +78,7 @@ failure_budget:
   assign: 0.02
   propose: 0.0
   judge: 0.0
+  consolidate: 0.0
 
 clustering:
   # proposal call sees at most this many items, and only as many as fit the
@@ -89,6 +92,18 @@ clustering:
 
 saturation:
   batch_size: 6
+
+coverage:
+  # a candidate code from the notes is added only if the judge finds it in at
+  # least one rule and in at most this share of the rules judged; above it, it
+  # goes to codebook/non_discriminating.yml. join flags every code above it.
+  max_prevalence: 0.9
+
+judge:
+  # rule judge runs per rule, each with the codes in a different seeded order;
+  # disagreements go to one tie-break run. Repeats 1 and 2 give the judge's
+  # test-retest reliability (analysis/judge_reliability.csv), so keep >= 2.
+  repeats: 2
 
 join:
   # rule coder whose codes count as in_rule; "auto" = the LLM judge

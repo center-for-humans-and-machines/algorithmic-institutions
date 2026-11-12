@@ -123,6 +123,7 @@ def test_record_relation_and_theory_name_checks():
     mech = dict(
         description="d",
         quote="q",
+        idea="i",
         status="adopted",
         tested=False,
         relation_to_previous="new",

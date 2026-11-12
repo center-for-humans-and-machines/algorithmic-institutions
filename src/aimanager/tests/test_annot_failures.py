@@ -8,7 +8,14 @@ import yaml
 
 from aimanager.annotation.cli import main, review_begin
 from aimanager.annotation.client import Call, LLMClient
-from aimanager.annotation.cluster import est_tokens, fit_items, to_codebook_entries
+from aimanager.annotation.cluster import (
+    est_tokens,
+    fit_items,
+    is_negated,
+    to_codebook_entries,
+)
+from aimanager.annotation.consolidate import UNPLACED, apply_consolidation
+from aimanager.annotation.judge import code_order, resolve
 from aimanager.annotation.common import (
     Run,
     latest_codebook,
@@ -200,6 +207,58 @@ def test_proposal_items_fit_the_token_budget():
     assert len(fit_items(items, 10**6, 400, 1)) == 400
 
 
+def test_negated_codes_are_recognised():
+    assert is_negated("do_not_punish_based_on_history")
+    assert is_negated("ignore_group_norm_erosion_triggers")
+    assert is_negated("x", definition="The manager does not adjust to the opponent.")
+    assert is_negated("x", label="No reaction to the opponent")
+    assert not is_negated("punish_only_low_contributors", "Punish low", "Punishes.")
+    assert not is_negated("notify_players", definition="Notifies players.")
+
+
+def test_apply_consolidation_merges_and_families():
+    codes = [
+        {"name": n, "label": n, "definition": n, "implemented": n != "c"}
+        for n in ("a", "a_2", "b", "c", "d")
+    ]
+    merges = [
+        {"codes": ["a", "a_2"], "keep": "a", "label": "A", "definition": "Does A."},
+        {"codes": ["a_2", "b"], "keep": "b", "label": "x", "definition": "x"},
+        {"codes": ["c", "d"], "keep": "zz", "label": "n", "definition": "Never d."},
+    ]
+    families = [{"name": "Fam One", "definition": "f1", "codes": ["a_2", "c"]}]
+    surv, defs, audit, unplaced = apply_consolidation(codes, merges, families)
+    by = {c["name"]: c for c in surv}
+    assert list(by) == ["a", "b", "c"]
+    assert by["a"]["definition"] == "Does A." and by["a"]["merged_from"] == ["a_2"]
+    # a_2 was already merged; keep not in the group -> first name; negated
+    # rewritten definition -> the old one stays; implemented if any member is
+    assert by["c"]["merged_from"] == ["d"] and by["c"]["definition"] == "c"
+    assert by["c"]["implemented"] is True
+    assert [a["applied"] for a in audit] == [True, False, True]
+    # a family listing a merged name places its survivor; unlisted -> unplaced
+    assert by["a"]["family"] == "fam_one" and by["c"]["family"] == "fam_one"
+    assert unplaced == ["b"] and by["b"]["family"] == UNPLACED
+    assert set(defs) == {"fam_one", UNPLACED}
+
+
+def test_judge_order_and_resolution():
+    codes = [{"name": f"c{i}", "family": "f" + str(i % 2)} for i in range(6)]
+    assert code_order(codes, 0, 1) == codes
+    o1 = code_order(codes, 1, 1)
+    assert o1 == code_order(codes, 1, 1) and sorted(map(str, o1)) == sorted(
+        map(str, codes)
+    )
+    fams = [c["family"] for c in o1]
+    assert fams == sorted(fams, key=fams.index)  # families stay together
+    yes = {"present": True, "evidence": "x"}
+    no = {"present": False, "evidence": ""}
+    assert resolve([yes, dict(yes)]) == (yes, False)
+    assert resolve([yes, no], tiebreak=no) == (no, True)
+    with pytest.raises(ValueError):
+        resolve([yes, no])
+
+
 def test_reserved_code_names():
     proposed = [
         ProposedCode(name=n, label="l", definition="d", fits=[], does_not_fit=[])
@@ -215,12 +274,12 @@ def test_review_against_regenerated_base_is_rejected(tmp_path):
     run = Run(tmp_path, "c")
     v1 = run.path("codebook", "what.v1.yml")
     v1.write_text(yaml.safe_dump({"codes": [{"name": "a"}]}))
-    write_manifest(run, "coverage", [], [v1])
+    write_manifest(run, "consolidate-what", [], [v1])
     review_begin(run, "what")
     assert latest_codebook(run, "what")[0] == 2
     # coverage reruns and writes a different v1: the review no longer applies
     v1.write_text(yaml.safe_dump({"codes": [{"name": "b"}]}))
-    write_manifest(run, "coverage", [], [v1])
+    write_manifest(run, "consolidate-what", [], [v1])
     with pytest.raises(SystemExit, match="reviewed against a different"):
         latest_codebook(run, "what")
 
@@ -247,4 +306,4 @@ def test_preflight(tmp_path):
         return httpx.Response(200, json=_reply("not json"))
 
     client, _, _ = _client(tmp_path, handler, use_cache=False)
-    assert preflight(client) == 5
+    assert preflight(client) == 6

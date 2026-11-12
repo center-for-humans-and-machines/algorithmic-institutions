@@ -39,18 +39,37 @@ def lineage_position(version):
     )
 
 
-def render_codebook(codes, title="Codebook"):
+def _render_code(c):
+    lines = [f"- `{c['name']}` ({c.get('label', '')}): {c['definition']}"]
+    ex = c.get("examples") or {}
+    if ex.get("fits"):
+        lines.append("  fits: " + "; ".join(ex["fits"]))
+    if ex.get("does_not_fit"):
+        lines.append("  does not fit: " + "; ".join(ex["does_not_fit"]))
+    return lines
+
+
+def render_codebook(codes, title="Codebook", families=None):
+    """Codes in the given order. Codes with a `family` are listed under their
+    family (families in order of first appearance), which helps keep
+    neighbouring codes apart; `families` maps family name -> definition."""
     lines = [f"## {title}", ""]
-    for c in codes:
-        lines.append(f"- `{c['name']}` ({c.get('label', '')}): {c['definition']}")
-        ex = c.get("examples") or {}
-        if ex.get("fits"):
-            lines.append("  fits: " + "; ".join(ex["fits"]))
-        if ex.get("does_not_fit"):
-            lines.append("  does not fit: " + "; ".join(ex["does_not_fit"]))
+    if codes and all(c.get("family") for c in codes):
+        defs = families or {}
+        order = list(dict.fromkeys(c["family"] for c in codes))
+        for fam in order:
+            head = f"### Family `{fam}`"
+            lines.append(head + (f": {defs[fam]}" if defs.get(fam) else ""))
+            for c in codes:
+                if c["family"] == fam:
+                    lines.extend(_render_code(c))
+            lines.append("")
+    else:
+        for c in codes:
+            lines.extend(_render_code(c))
     if not codes:
         lines.append("(empty)")
-    return "\n".join(lines)
+    return "\n".join(lines).rstrip()
 
 
 def render_items(items):

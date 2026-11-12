@@ -32,10 +32,15 @@ WHY = [
     ("conformity", "players conform to the group", r"conform|herd"),
     ("human_managers", "human managers did it", r"\bhuman"),
 ]
+BASIS = [
+    ("own_data_analysis", "an analysis of the data", r"analysis"),
+    ("earlier_result", "a result of an earlier sweep", r"result|sweep"),
+]
 THEORY = r"(equilibrium|conformity|deterren\w*|Ostrom|Fehr|reciproc\w*)"
 VARIANTS = ["", " in each round", " for valid members", " as the rule states"]
 RELATIONS = ["new", "kept", "modified", "kept", "removed", "not_stated"]
 EVIDENCE = ["analysis of the data", "result of the previous sweep", None]
+REFS = ["exploration 1", "none", None]
 
 
 def _h(*parts):
@@ -59,7 +64,7 @@ def _quote(line, salt):
 
 
 def _vocab(kind):
-    return WHY if kind == "why" else WHAT
+    return {"why": WHY, "basis": BASIS}.get(kind, WHAT)
 
 
 def open_rules(meta):
@@ -91,16 +96,22 @@ def open_notes(meta):
                 "quote": _quote(line, stem + wn),
                 "stance": "against" if _h(stem, wn) % 4 == 0 else "for",
                 "evidence": EVIDENCE[_h(stem, wn, "e") % len(EVIDENCE)],
+                "evidence_ref": REFS[_h(stem, wn, "r") % len(REFS)],
             }
             for wn, wl, wrx in WHY
             if re.search(wrx, line, re.I)
         ]
         relation = RELATIONS[h % len(RELATIONS)] if meta.get("parent") else None
+        st = status[h % len(status)]
+        # a rejected idea is described negatively, as small models do; the idea
+        # field carries the positive form
+        desc = ("does not " if st == "rejected" else "") + label
         mechs.append(
             {
-                "description": label + VARIANTS[h % len(VARIANTS)],
+                "description": desc + VARIANTS[h % len(VARIANTS)],
                 "quote": _quote(line, stem),
-                "status": status[h % len(status)],
+                "idea": label,
+                "status": st,
                 "tested": bool(h % 3),
                 "relation_to_previous": relation or "not_stated",
                 "source_version": src.group(0) if src else None,
@@ -151,7 +162,7 @@ def propose(meta):
 
 def assign(meta):
     text = meta["text"].splitlines()[0]  # never the context line
-    by_name = {v[0]: v for v in WHAT + WHY}
+    by_name = {v[0]: v for v in WHAT + WHY + BASIS}
     for name in meta["codes"]:
         v = by_name.get(name)
         if v and re.search(v[2], text, re.I):
@@ -160,18 +171,50 @@ def assign(meta):
 
 
 def judge(meta):
+    """Regex judge. Repeat r1 flips some answers (so repeats disagree and the
+    tie-break runs); a flip to present has no evidence (so the re-ask runs)."""
     doc = meta["doc"]
     by_name = {v[0]: v for v in WHAT}
     out = {}
     for name in meta["codes"]:
         v = by_name.get(name)
         line = _first_line(v[2], doc) if v else None
+        present, evidence = bool(line), line or ""
+        flip = meta.get("repeat") == "r1" and not meta.get("reask")
+        if flip and _h(meta.get("stem"), name) % 5 == 0:
+            present, evidence = not present, ""
         out[name] = {
-            "present": bool(line),
-            "switchable_off": bool(line) and _h(name, line) % 3 == 0,
-            "quote": line or "",
+            "evidence": evidence,
+            "present": present,
+            "switchable_off": present and _h(name, evidence) % 3 == 0,
         }
     return out
+
+
+def consolidate(meta):
+    """Merge proportional_punishment into punish_below_group_mean; two families."""
+    names = meta["codes"]
+    merges = []
+    pair = ["punish_below_group_mean", "proportional_punishment"]
+    if all(n in names for n in pair):
+        merges.append(
+            {
+                "codes": pair,
+                "keep": pair[0],
+                "label": "punish the shortfall",
+                "definition": "Punishment grows with the shortfall below a reference.",
+            }
+        )
+    gone = {"proportional_punishment"} if merges else set()
+    fams = {}
+    for n in names:
+        if n not in gone:
+            fams.setdefault(f"family_{_h(n) % 2}", []).append(n)
+    families = [
+        {"name": f, "definition": f"codes of {f}", "codes": cs}
+        for f, cs in sorted(fams.items())
+    ]
+    return {"merges": merges, "families": families}
 
 
 def respond(call):
@@ -181,5 +224,6 @@ def respond(call):
         "propose": propose,
         "assign": assign,
         "judge": judge,
+        "consolidate": consolidate,
     }[call.kind]
     return json.dumps(fn(call.meta))

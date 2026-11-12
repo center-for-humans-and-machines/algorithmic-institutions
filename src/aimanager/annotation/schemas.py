@@ -22,8 +22,13 @@ class Reason(Quoted):
         description="whether the reason argues for or against the mechanism"
     )
     evidence: Optional[str] = Field(
-        description="what the reason rests on, in the agent's own terms; null if "
-        "the notes do not say"
+        description="what the reason rests on, in the agent's own terms taken from "
+        "the notes; null if the notes do not say"
+    )
+    evidence_ref: Optional[str] = Field(
+        description="what the evidence points to: an exploration number of these "
+        "notes (e.g. 'exploration 3'), an earlier version's stem, 'none', or null "
+        "if not stated"
     )
 
 
@@ -31,6 +36,10 @@ RELATIONS = ("new", "kept", "modified", "removed", "not_stated")
 
 
 class Mechanism(Quoted):
+    idea: str = Field(
+        description="the mechanism stated positively as something a manager does, "
+        "whether or not the notes adopt it"
+    )
     status: Literal["adopted", "rejected", "considered"]
     tested: bool
     relation_to_previous: Literal[RELATIONS] = Field(
@@ -81,17 +90,48 @@ def assignment_model(code_names):
     return create_model("Assignment", code=(Literal[choices], ...))
 
 
+# consolidation of a codebook: merges and families, over a fixed list of codes
+def consolidation_model(code_names):
+    """Merges of the given codes and a family for every surviving code.
+
+    Code names are enums, so a reply can only name codes that exist.
+    """
+    Name = Literal[tuple(code_names)]
+    Merge = create_model(
+        "Merge",
+        codes=(List[Name], Field(description="the codes that are one code")),
+        keep=(Name, Field(description="the name that survives, one of `codes`")),
+        label=(str, ...),
+        definition=(str, Field(description="rewritten definition of the merged code")),
+    )
+    Family = create_model(
+        "Family",
+        name=(str, Field(description="short snake_case identifier")),
+        definition=(str, Field(description="one sentence")),
+        codes=(List[Name], ...),
+    )
+    return create_model(
+        "Consolidation",
+        merges=(List[Merge], Field(max_length=60)),
+        families=(List[Family], Field(max_length=20)),
+    )
+
+
 class Judgement(BaseModel):
+    # evidence first: the model has to find the line before it decides
+    evidence: str = Field(
+        description="the line of the rule that implements the code, copied "
+        "verbatim; empty if the rule does not implement it"
+    )
     present: bool
     switchable_off: bool = Field(
         description="true if a parameter value inside the declared sweep range "
         "disables the mechanism entirely"
     )
-    quote: str
 
 
 def judge_model(code_names):
-    """One {present, quote} field per code, so every code gets an answer.
+    """One {evidence, present, switchable_off} field per code, in the given order.
 
     Fields are c0, c1, ... aliased to the code names, so a code name can never
     clash with a pydantic attribute; read answers with judge_answers().

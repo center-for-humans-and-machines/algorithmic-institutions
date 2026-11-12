@@ -191,6 +191,10 @@ class FakeBackend:
         }
 
 
+def _prompt_chars(call):
+    return sum(len(m.get("content") or "") for m in call.messages)
+
+
 _THINK = re.compile(r"^\s*<think>.*?</think>\s*", re.S)
 
 
@@ -343,7 +347,8 @@ class LLMClient:
         return Result(call, error="length")
 
     def map(self, calls, label=None):
-        """Run calls with a continuously refilled window; results in input order."""
+        """Run calls with a continuously refilled window, longest prompts first;
+        results in input order."""
         calls = list(calls)
         if not calls:
             return []
@@ -358,7 +363,9 @@ class LLMClient:
         every = max(len(calls) // 4, 50)
         ex = ThreadPoolExecutor(max_workers=self.cfg.get("concurrency", 16))
         try:
-            futs = {ex.submit(self._one, c): i for i, c in enumerate(calls)}
+            # longest prompts first, so the slowest calls do not start last
+            order = sorted(range(len(calls)), key=lambda i: -_prompt_chars(calls[i]))
+            futs = {ex.submit(self._one, calls[i]): i for i in order}
             for done, fut in enumerate(as_completed(futs), 1):
                 res = fut.result()  # a worker exception ends the step here
                 results[futs[fut]] = res

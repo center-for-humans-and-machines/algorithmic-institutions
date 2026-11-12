@@ -58,22 +58,23 @@ COLUMNS = [
     "why_codes_for",
     "why_codes_against",
     "reason_evidence",
+    "reason_evidence_refs",
+    "basis_codes",
     "theory_mentions",
 ]
 
 
 def _check_revisions(run, rule_rows):
-    """Fail unless stage B ran with the latest what and why codebooks."""
-    wrev, wpath, _ = latest_codebook(run, "what")
-    yrev, ypath, _ = latest_codebook(run, "why")
-    latest = {
-        "what": (wrev, file_hash(wpath), wpath.name),
-        "why": (yrev, file_hash(ypath), ypath.name),
-    }
+    """Fail unless stage B ran with the latest what, why and basis codebooks."""
+    latest = {}
+    for kind in ("what", "why", "basis"):
+        rev, path, _ = latest_codebook(run, kind)
+        latest[kind] = (rev, file_hash(path), path.name)
+    wpath = run.dir / "codebook" / latest["what"][2]
     ar = require(run, "apply-rules")
     an = require(run, "apply-notes")
     used = [("apply-rules", "what", ar["codebook"])]
-    used += [("apply-notes", k, an["codebooks"][k]) for k in ("what", "why")]
+    used += [("apply-notes", k, an["codebooks"][k]) for k in ("what", "why", "basis")]
     for step, kind, cb in used:
         rev, digest, name = latest[kind]
         if (cb["revision"], cb["sha256"]) != (rev, digest):
@@ -82,6 +83,7 @@ def _check_revisions(run, rule_rows):
                 f"rerun stage B before join"
             )
     mine = [r for r in rule_rows if r["coder"] == ar["coder"]]
+    wrev = latest["what"][0]
     if len(mine) != ar["rows"] or any(r["codebook_revision"] != wrev for r in mine):
         raise SystemExit(
             "codes/rule_codes.jsonl does not hold the rows apply-rules wrote; "
@@ -198,6 +200,14 @@ def join(run, cfg, limit=None):
                 "reason_evidence": " | ".join(
                     sorted({r["evidence"] for r in reasons if r.get("evidence")})
                 ),
+                "reason_evidence_refs": " | ".join(
+                    sorted(
+                        {r["evidence_ref"] for r in reasons if r.get("evidence_ref")}
+                    )
+                ),
+                "basis_codes": ";".join(
+                    sorted({r["basis_code"] for r in reasons if r.get("basis_code")})
+                ),
                 "theory_mentions": ";".join(theory),
             }
             out.append(row)
@@ -207,8 +217,11 @@ def join(run, cfg, limit=None):
     for row in out:
         w.writerow({k: _cell(row[k]) for k in COLUMNS})
     atomic_write_text(run.path("analysis", "version_codes.csv"), buf.getvalue())
+    _write_theory(run, versions, records)
     agreement = write_agreement(run, rule_rows)
     quality = _quality(run, versions, records, rule_rows, coder, in_rule, names)
+    quality.update(_rule_code_stats(cfg, rule_rows, coder, names))
+    quality["judge_reliability"] = _reliability_summary(run)
     quality["agreement_overall"] = [
         r for r in agreement if r["code"] == "__overall__"
     ] or None
@@ -219,6 +232,99 @@ def join(run, cfg, limit=None):
         f"join: {len(out)} rows ({len(versions)} versions x {len(names)} codes "
         f"+ {len(never_names)} never implemented)"
     )
+
+
+def _write_theory(run, versions, records):
+    """analysis/theory_mentions.csv: per version the named mentions (name found
+    in the notes), their kinds, and mentions whose name the notes lack."""
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(
+        [
+            "campaign",
+            "lineage",
+            "version",
+            "generation",
+            "mentions",
+            "kinds",
+            "mentions_not_in_notes",
+        ]
+    )
+    for v in versions:
+        ms = (records.get(v["stem"]) or {}).get("theory_mentions", [])
+        ok = [t for t in ms if _named(t)]
+        w.writerow(
+            [
+                v["campaign"],
+                v["lineage"],
+                v["stem"],
+                v["version"],
+                ";".join(t["name"] for t in ok),
+                ";".join(t["kind"] for t in ok),
+                ";".join(t["name"] for t in ms if not _named(t)),
+            ]
+        )
+    atomic_write_text(run.path("analysis", "theory_mentions.csv"), buf.getvalue())
+
+
+def _rule_code_stats(cfg, rule_rows, coder, names):
+    """Prevalence of every code over the judged rules, codes above
+    coverage.max_prevalence flagged, codes per rule, judge flags."""
+    mine = [r for r in rule_rows if r["coder"] == coder]
+    rules = sorted({r["version"] for r in mine})
+    n = max(len(rules), 1)
+    prev = {c: 0 for c in names}
+    per_rule = Counter()
+    for r in mine:
+        if r["present"]:
+            prev[r["what_code"]] = prev.get(r["what_code"], 0) + 1
+            per_rule[r["version"]] += 1
+    share = {c: round(k / n, 4) for c, k in prev.items()}
+    max_prev = cfg.get("coverage", {}).get("max_prevalence", 0.9)
+    counts = sorted(per_rule.get(s, 0) for s in rules)
+    q = statistics.quantiles(counts, n=4) if len(counts) > 1 else counts * 3
+    return {
+        "code_prevalence": dict(sorted(share.items(), key=lambda kv: -kv[1])),
+        "codes_above_max_prevalence": {
+            "max_prevalence": max_prev,
+            "codes": [c for c, v in share.items() if v > max_prev],
+        },
+        "codes_never_present": [c for c, v in share.items() if not v],
+        "codes_per_rule": {
+            "rules": len(rules),
+            "min": counts[0] if counts else None,
+            "q1": q[0] if q else None,
+            "median": statistics.median(counts) if counts else None,
+            "q3": q[2] if q else None,
+            "max": counts[-1] if counts else None,
+        },
+        "judge_flags": {
+            "tiebreaks": sum(bool(r.get("tiebreak")) for r in mine),
+            "unsupported": sum(bool(r.get("unsupported")) for r in mine),
+        },
+    }
+
+
+def _reliability_summary(run):
+    """Overall test-retest agreement of the rule judge and the five least
+    reliable codes, from analysis/judge_reliability.csv (apply-rules)."""
+    path = run.dir / "analysis" / "judge_reliability.csv"
+    if not path.exists():
+        return None
+    with path.open() as f:
+        rows = list(csv.DictReader(f))
+
+    def num(x):
+        return float(x) if x not in ("", None) else None
+
+    overall = next((r for r in rows if r["code"] == "__overall__"), None)
+    codes = [r for r in rows if r["code"] != "__overall__"]
+    codes.sort(key=lambda r: (num(r["agreement"]) or 0, num(r["kappa"]) or 0))
+    keep = ("code", "n", "agreement", "kappa", "a_only", "b_only")
+    return {
+        "overall": overall and {k: overall[k] for k in keep},
+        "least_reliable": [{k: r[k] for k in keep} for r in codes[:5]],
+    }
 
 
 def _named(mention):

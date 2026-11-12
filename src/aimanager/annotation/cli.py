@@ -19,7 +19,10 @@ LLM_COMMANDS = [
     "open-notes",
     "what-codebook",
     "coverage",
+    "consolidate-what",
     "why-codebook",
+    "consolidate-why",
+    "basis-codebook",
     "apply-rules",
     "apply-notes",
 ]
@@ -54,13 +57,13 @@ def _parser():
     e.add_argument("--sheets", help="directory of filled sheets (ingest)")
     r = sub.add_parser("review", parents=[common])
     r.add_argument("action", choices=["status", "begin"])
-    r.add_argument("--kind", choices=["what", "why"], help="codebook (begin)")
+    r.add_argument("--kind", choices=["what", "why", "basis"], help="codebook (begin)")
     sub.add_parser("join", parents=[common])
     return p
 
 
 def review_status(run):
-    for kind in ("what", "why"):
+    for kind in ("what", "why", "basis"):
         revs = check_revision_chain(run, kind)
         rev, path = revs[-1]
         others = ", ".join(p.name for _, p in revs[:-1]) or "none"
@@ -135,7 +138,7 @@ def main(argv=None):
     elif args.command == "review":
         if args.action == "begin":
             if not args.kind:
-                raise SystemExit("review begin needs --kind what|why")
+                raise SystemExit("review begin needs --kind what|why|basis")
             review_begin(run, args.kind)
         else:
             review_status(run)

@@ -11,6 +11,7 @@ import time
 from . import prompting as P
 from .client import Abort, Call
 from .common import log
+from .consolidate import consolidation_call
 from .schemas import (
     FreeCodes,
     NotesRecord,
@@ -61,7 +62,7 @@ def _calls():
     items = [("1", "punish below the top"), ("2", "punish the gap to the best")]
     version = {"stem": "s", "lineage": "s", "version": 1, "parent": None}
     notes_ctx = f"{SAMPLE_SETTING}\n\n{P.lineage_position(version)}"
-    meta = {"doc": SAMPLE_RULE, "stem": "s", "codes": names}
+    meta = {"doc": SAMPLE_RULE, "stem": "s", "codes": names, "repeat": "r0"}
     return [
         Call(
             "preflight",
@@ -103,6 +104,7 @@ def _calls():
             "judge",
             meta,
         ),
+        consolidation_call("preflight", "what", CODES),
     ]
 
 

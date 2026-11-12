@@ -46,6 +46,7 @@ def export(run, cfg, limit=None):
             "codes": [
                 {
                     "code": c["name"],
+                    "family": c.get("family"),
                     "label": c.get("label", ""),
                     "definition": c["definition"],
                     "present": None,

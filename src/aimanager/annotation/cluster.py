@@ -11,6 +11,7 @@ belonged to it.
 """
 
 import random
+import re
 
 from . import prompting as P
 from .client import Call
@@ -20,7 +21,44 @@ from .schemas import RESERVED, Proposal, assignment_model
 UNITS = {
     "what": "a mechanism, i.e. something a manager does to players",
     "why": "a reason given for or against a manager mechanism",
+    "basis": "what a stated reason rests on, in the search agent's words",
 }
+
+# A code is something that is done or claimed; a code defined as an absence
+# ("does not punish ...") is true of almost every rule and is rejected.
+_NEG_NAME = re.compile(
+    r"^(do_not|dont|does_not|doesn_t|avoid|avoids|ignore|ignores|never|no|not|"
+    r"refrain|refrains|without)(_|$)"
+)
+_NEG_TEXT = re.compile(
+    r"^(do not|does not|don't|doesn't|avoids?\b|avoiding\b|ignores?\b|ignoring\b|"
+    r"never\b|no\b|not\b|refrains?\b|without\b)"
+)
+_SUBJECT = re.compile(r"^(the )?(manager|rule|manager rule|agent)( rule)? ", re.I)
+
+
+def is_negated(name, label="", definition=""):
+    """Whether a code's name, label or definition starts with a negation."""
+    if _NEG_NAME.match(name or ""):
+        return True
+    for text in (label, definition):
+        t = _SUBJECT.sub("", (text or "").strip().lower())
+        if _NEG_TEXT.match(t):
+            return True
+    return False
+
+
+def drop_negated(codes, step, what):
+    """(kept, rejected names) of proposed codes; logs what was rejected."""
+    kept, rejected = [], []
+    for c in codes:
+        if is_negated(c.name, c.label, c.definition):
+            rejected.append(c.name)
+        else:
+            kept.append(c)
+    if rejected:
+        log(f"  {step}: rejected {len(rejected)} negated {what} codes: {rejected}")
+    return kept, rejected
 
 
 def to_codebook_entries(proposed, taken, source):
@@ -140,8 +178,8 @@ def _propose(client, cfg, step, kind, items, codes, rnd):
     (res,) = client.map([call])
     if not res.ok:
         check_failures(cfg, step, "propose", [(call.item_id, res.error)], 1)
-        return []
-    return res.value.codes
+        return [], []
+    return drop_negated(res.value.codes, step, kind)
 
 
 def cluster(client, cfg, step, kind, items, source, taken=None):
@@ -149,10 +187,15 @@ def cluster(client, cfg, step, kind, items, source, taken=None):
     ccfg = cfg["clustering"]
     taken = set(taken or ())
     items = list(items)
-    codes = to_codebook_entries(
-        _propose(client, cfg, step, kind, items, [], 0), taken, source
-    )
-    history = [{"round": 0, "new_codes": [c["name"] for c in codes]}]
+    proposed, rejected = _propose(client, cfg, step, kind, items, [], 0)
+    codes = to_codebook_entries(proposed, taken, source)
+    history = [
+        {
+            "round": 0,
+            "new_codes": [c["name"] for c in codes],
+            "rejected_negated": rejected,
+        }
+    ]
     rounds = ccfg.get("refine_rounds", 2)
     for rnd in range(rounds + 1):
         assignment, failed = assign(client, cfg, step, codes, items, kind)
@@ -162,12 +205,17 @@ def cluster(client, cfg, step, kind, items, source, taken=None):
         log(f"  {step}: round {rnd}, {len(codes)} codes, {len(unassigned)} unassigned")
         if rnd == rounds or len(unassigned) < ccfg.get("min_unassigned", 3):
             break
-        new = to_codebook_entries(
-            _propose(client, cfg, step, kind, unassigned, codes, rnd + 1),
-            taken,
-            source,
+        proposed, rejected = _propose(
+            client, cfg, step, kind, unassigned, codes, rnd + 1
         )
-        history.append({"round": rnd + 1, "new_codes": [c["name"] for c in new]})
+        new = to_codebook_entries(proposed, taken, source)
+        history.append(
+            {
+                "round": rnd + 1,
+                "new_codes": [c["name"] for c in new],
+                "rejected_negated": rejected,
+            }
+        )
         if not new:
             break
         codes = codes + new
