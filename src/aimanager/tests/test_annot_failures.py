@@ -212,6 +212,7 @@ def test_negated_codes_are_recognised():
     assert is_negated("ignore_group_norm_erosion_triggers")
     assert is_negated("x", definition="The manager does not adjust to the opponent.")
     assert is_negated("x", label="No reaction to the opponent")
+    assert is_negated("punishment_should_not_be_applied_to_timed_out_players")
     assert not is_negated("punish_only_low_contributors", "Punish low", "Punishes.")
     assert not is_negated("notify_players", definition="Notifies players.")
 

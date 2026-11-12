@@ -37,9 +37,14 @@ _NEG_TEXT = re.compile(
 _SUBJECT = re.compile(r"^(the )?(manager|rule|manager rule|agent)( rule)? ", re.I)
 
 
+# a negation in the middle of a name: punishment_should_not_be_applied_to_x
+_NEG_INNER = re.compile(r"_(should|must|need|can|does|do|is|are)_not_|_never_")
+
+
 def is_negated(name, label="", definition=""):
-    """Whether a code's name, label or definition starts with a negation."""
-    if _NEG_NAME.match(name or ""):
+    """Whether a code's name, label or definition starts with a negation, or its
+    name centres on one (`..._should_not_...`, `..._never_...`)."""
+    if _NEG_NAME.match(name or "") or _NEG_INNER.search(name or ""):
         return True
     for text in (label, definition):
         t = _SUBJECT.sub("", (text or "").strip().lower())
