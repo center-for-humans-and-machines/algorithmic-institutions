@@ -111,6 +111,21 @@ def read_jsonl(path):
         return [json.loads(line) for line in f if line.strip()]
 
 
+def rule_rows_sorted(rows):
+    """codes/rule_codes.jsonl in one canonical order (judge rows first, then
+    raters, each by version and code), whichever step wrote it last, so that
+    rerunning apply-rules or ingest gives a byte-identical file."""
+    return sorted(
+        rows,
+        key=lambda r: (
+            not str(r.get("coder", "")).startswith("llm:"),
+            str(r.get("coder", "")),
+            str(r.get("version", "")),
+            str(r.get("what_code", "")),
+        ),
+    )
+
+
 def write_json(path, obj):
     atomic_write_text(path, json.dumps(obj, indent=2, ensure_ascii=False) + "\n")
 

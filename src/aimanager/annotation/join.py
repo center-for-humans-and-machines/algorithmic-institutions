@@ -538,7 +538,8 @@ def _call_stats(run):
             s["prompt_tokens"] += r["prompt_tokens"] or 0
             s["completion_tokens"] += r["completion_tokens"] or 0
             s["latency_s"] += r["latency_s"] or 0
-        if r["status"] == "length":
+        if r["status"] == "length" and not r["cache_hit"]:
+            # a replay from the cache is not a new length finish
             s["length_finishes"] += 1
         last[(r["step"], r["kind"], r["item"])] = r["status"]
     for (step, _, _), status in last.items():

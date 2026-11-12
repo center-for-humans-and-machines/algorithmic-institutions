@@ -383,3 +383,77 @@ def test_literature_file_shapes():
     assert link["reference"].startswith("Fehr and Gächter (2000)")
     assert link["verified"] and link["strength"] == "direct"
     assert _literature({"x": [{"reference": "r"}]}) == {"x": [{"reference": "r"}]}
+
+
+def _digest(run):
+    import hashlib
+
+    files = [run / "codes" / "rule_codes.jsonl", *sorted(run.glob("records_coded/*"))]
+    files += sorted(run.glob("unassigned/*")) + sorted(run.glob("analysis/*.csv"))
+    return {
+        p.relative_to(run).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in files
+    }
+
+
+def _copy_run(run_dir, tmp_path):
+    import shutil
+
+    root = tmp_path / "runs"
+    shutil.copytree(run_dir, root / "t")
+    cfg = run_dir.parent.parent / "cfg.yml"
+    return root, ["--run", "t", "--runs-root", str(root), "--config", str(cfg)]
+
+
+def test_resume_skips_and_cached_rerun_is_byte_identical(run_dir, tmp_path):
+    root, base = _copy_run(run_dir, tmp_path)
+    run = root / "t"
+    fake = base + ["--backend", "fake"]
+    main(["stage", "B"] + fake)  # bring stage B up to date with what.v2
+    main(["join"] + base)
+    before = _digest(run)
+    calls = run / "logs" / "calls.jsonl"
+    n0 = len(read_jsonl(calls))
+    # no server: up-to-date steps skip without creating a client
+    offline = base + ["--base-url", "http://127.0.0.1:9/v1", "--model", "fake"]
+    main(["stage", "B"] + offline)
+    assert len(read_jsonl(calls)) == n0
+    # forced: every call is answered from the cache, outputs are identical
+    main(["stage", "B", "--force"] + offline)
+    new = read_jsonl(calls)[n0:]
+    assert new and all(r["cache_hit"] for r in new)
+    main(["join"] + base)
+    assert _digest(run) == before
+    # a changed input makes the step run again
+    m = json.loads((run / "manifests" / "apply-notes.json").read_text())
+    assert m["fingerprint"]
+
+
+def test_interrupted_step_resumes_to_the_same_result(run_dir, tmp_path, monkeypatch):
+    from aimanager.annotation import fake as fake_mod
+
+    root_a, base_a = _copy_run(run_dir, tmp_path / "a")
+    root_b, base_b = _copy_run(run_dir, tmp_path / "b")
+    args_a = base_a + ["--backend", "fake", "--force", "--concurrency", "1"]
+    real = fake_mod.respond
+    seen = {"n": 0}
+
+    def crash_midway(call):
+        seen["n"] += 1
+        if seen["n"] == 15:
+            raise KeyboardInterrupt("simulated kill")
+        return real(call)
+
+    for p in (root_a / "t" / "cache", root_b / "t" / "cache"):
+        import shutil
+
+        shutil.rmtree(p, ignore_errors=True)
+    monkeypatch.setattr(fake_mod, "respond", crash_midway)
+    with pytest.raises(KeyboardInterrupt):
+        main(["apply-notes"] + args_a)
+    monkeypatch.setattr(fake_mod, "respond", real)
+    main(["apply-notes"] + args_a)
+    main(["apply-notes"] + base_b + ["--backend", "fake", "--force"])
+    a = {k: v for k, v in _digest(root_a / "t").items() if k.startswith("records")}
+    b = {k: v for k, v in _digest(root_b / "t").items() if k.startswith("records")}
+    assert a and a == b

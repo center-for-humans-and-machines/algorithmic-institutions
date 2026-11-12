@@ -26,6 +26,7 @@ from .common import (
     read_jsonl,
     read_yaml,
     require,
+    rule_rows_sorted,
     write_json,
     write_jsonl,
     write_manifest,
@@ -746,7 +747,7 @@ def apply_rules(run, cfg, client, limit=None):
         r["codebook_revision"] = rev
     out = run.path("codes", "rule_codes.jsonl")
     kept = [r for r in read_jsonl(out) if r.get("coder") != coder]
-    write_jsonl(out, kept + rows)
+    write_jsonl(out, rule_rows_sorted(kept + rows))
     rep_path = run.path("codes", "judge_repeats.jsonl")
     write_jsonl(rep_path, [{**r, "codebook_revision": rev} for r in repeat_rows])
     rel = reliability(repeat_rows)
@@ -923,3 +924,78 @@ STAGE_A = [
 ]
 STAGE_B = [("apply-rules", apply_rules), ("apply-notes", apply_notes)]
 STEPS = dict(STAGE_A + STAGE_B)
+
+
+# --- resuming ------------------------------------------------------------
+
+
+def _cb(run, name):
+    return run.dir / "codebook" / name
+
+
+def _latest_path(run, kind):
+    return latest_codebook(run, kind)[1]
+
+
+# The files each step reads now; a step is up to date when its manifest lists
+# exactly these files with these hashes (and its fingerprint is unchanged).
+STEP_INPUTS = {
+    "open-rules": lambda run: _corpus_files(run),
+    "open-notes": lambda run: _corpus_files(run),
+    "what-codebook": lambda run: [
+        run.dir / "open" / "rule_free_codes.jsonl",
+        run.dir / "corpus" / "split.json",
+    ],
+    "coverage": lambda run: [
+        _cb(run, "what.draft.yml"),
+        *_record_files(run),
+        *_corpus_files(run),
+    ],
+    "consolidate-what": lambda run: [
+        _cb(run, "what.premerge.yml"),
+        _cb(run, "never_implemented.premerge.yml"),
+        run.dir / "open" / "rule_free_codes.jsonl",
+        *_record_files(run),
+    ],
+    "why-codebook": lambda run: _record_files(run),
+    "consolidate-why": lambda run: [_cb(run, "why.draft.yml"), *_record_files(run)],
+    "basis-codebook": lambda run: _record_files(run),
+    "consolidate-basis": lambda run: [
+        _cb(run, "basis.draft.yml"),
+        *_record_files(run),
+    ],
+    "apply-rules": lambda run: [*_corpus_files(run), _latest_path(run, "what")],
+    "apply-notes": lambda run: [
+        *_record_files(run),
+        _latest_path(run, "what"),
+        _latest_path(run, "why"),
+        _latest_path(run, "basis"),
+        latest_never(run)[1],
+    ],
+}
+
+
+def up_to_date(run, step, fp, model=None):
+    """(True, why) if the step can be skipped: its manifest is current
+    (`require`), it read exactly the files it would read now, its fingerprint
+    matches (manifests written before fingerprints are judged on their inputs)
+    and, if a model is given, the same model wrote it."""
+    path = run.dir / "manifests" / f"{step}.json"
+    if not path.exists():
+        return False, "no manifest"
+    try:
+        doc = require(run, step)
+        current = {
+            str(p.resolve().relative_to(run.dir.resolve())): file_hash(p)
+            for p in STEP_INPUTS[step](run)
+        }
+    except (SystemExit, FileNotFoundError) as e:
+        return False, f"stale: {e}"
+    if current != doc["inputs"]:
+        return False, "inputs changed"
+    if doc.get("fingerprint") not in (None, fp):
+        return False, "prompts, step logic or config changed"
+    if model and doc.get("model") not in (None, model):
+        return False, f"written by model {doc.get('model')}"
+    legacy = "" if doc.get("fingerprint") else " (manifest has no fingerprint)"
+    return True, f"up to date{legacy}"

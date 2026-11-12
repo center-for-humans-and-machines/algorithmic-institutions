@@ -43,6 +43,11 @@ def _parser():
     llm.add_argument("--base-url", default=os.environ.get("ANNOT_BASE_URL"))
     llm.add_argument("--model", default=os.environ.get("ANNOT_MODEL"))
     llm.add_argument("--concurrency", type=int, help="overrides llm.concurrency")
+    llm.add_argument(
+        "--force",
+        action="store_true",
+        help="rerun steps whose manifest is up to date (otherwise they are skipped)",
+    )
 
     p = argparse.ArgumentParser(prog="python -m aimanager.annotation")
     sub = p.add_subparsers(dest="command", required=True)
@@ -130,18 +135,36 @@ def main(argv=None):
         return 1 if preflight(client) else 0
     elif args.command in LLM_COMMANDS or args.command == "stage":
         from .client import LLMClient
-        from .steps import STAGE_A, STAGE_B, STEPS
+        from .common import read_json, write_json
+        from .prompting import fingerprint
+        from .steps import STAGE_A, STAGE_B, STEPS, up_to_date
 
-        client = LLMClient(
-            run, cfg, backend=args.backend, base_url=args.base_url, model=args.model
-        )
         if args.command == "stage":
             todo = STAGE_A if args.which == "A" else STAGE_B
         else:
             todo = [(args.command, STEPS[args.command])]
+        client = None  # created only when a step runs, so skipping needs no server
         for name, fn in todo:
-            log(f"== {name}")
+            fp = fingerprint(name, cfg)
+            if not args.force and not args.limit:
+                ok, why = up_to_date(run, name, fp, args.model)
+                if ok:
+                    log(f"== {name}: skipped, {why} (--force to rerun)")
+                    continue
+                log(f"== {name}: {why}")
+            else:
+                log(f"== {name}")
+            if client is None:
+                client = LLMClient(
+                    run,
+                    cfg,
+                    backend=args.backend,
+                    base_url=args.base_url,
+                    model=args.model,
+                )
             fn(run, cfg, client, limit=args.limit)
+            mpath = run.dir / "manifests" / f"{name}.json"
+            write_json(mpath, {**read_json(mpath), "fingerprint": fp})
     elif args.command == "expert-check":
         from . import expert
 

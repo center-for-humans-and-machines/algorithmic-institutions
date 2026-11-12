@@ -6,6 +6,8 @@ last part is per item: the context (game setting of the campaign, position in
 the lineage), then the document. This maximises server-side prefix-cache reuse.
 """
 
+import hashlib
+import json
 from pathlib import Path
 
 PROMPT_DIR = Path(__file__).parent / "prompts"
@@ -83,3 +85,45 @@ def render_items(items):
     return "\n".join(
         f"{i}. " + text.replace("\n", "\n   ") for i, (_, text) in enumerate(items, 1)
     )
+
+
+# Prompts each LLM step reads and a logic version per step (bump it when a
+# step's coding logic changes without a prompt change). Together with the
+# config that shapes the results they form the step's fingerprint, which the
+# manifest records; a step whose fingerprint changed is rerun.
+_CONSOLIDATE = ["system", "consolidate", "consolidate_merge", "place", "assign"]
+STEP_PROMPTS = {
+    "open-rules": ["system", "open_rules"],
+    "open-notes": ["system", "open_notes"],
+    "what-codebook": ["system", "what_propose", "refine", "assign"],
+    "coverage": ["system", "what_propose", "refine", "assign", "judge"],
+    "consolidate-what": _CONSOLIDATE,
+    "why-codebook": ["system", "why_propose", "refine", "assign"],
+    "consolidate-why": _CONSOLIDATE,
+    "basis-codebook": ["system", "basis_propose", "refine", "assign"],
+    "consolidate-basis": _CONSOLIDATE,
+    "apply-rules": ["system", "judge"],
+    "apply-notes": ["system", "assign"],
+}
+STEP_VERSION = {step: 1 for step in STEP_PROMPTS}
+_CFG_KEYS = ("clustering", "codebook", "coverage", "judge", "sampling", "settings")
+_LLM_KEYS = (
+    "temperature",
+    "temperature_generate",
+    "seed_generate",
+    "max_tokens",
+    "extra_body",
+)
+
+
+def fingerprint(step, cfg):
+    """sha256 over the step's prompts, logic version and result-shaping config."""
+    h = hashlib.sha256(f"{step}:{STEP_VERSION.get(step, 0)}".encode())
+    for name in STEP_PROMPTS.get(step, []):
+        path = PROMPT_DIR / f"{name}.md"
+        if path.exists():
+            h.update(name.encode() + path.read_bytes())
+    sub = {k: cfg.get(k) for k in _CFG_KEYS}
+    sub["llm"] = {k: (cfg.get("llm") or {}).get(k) for k in _LLM_KEYS}
+    h.update(json.dumps(sub, sort_keys=True, default=str).encode())
+    return h.hexdigest()

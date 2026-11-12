@@ -14,6 +14,7 @@ from .common import (
     read_json,
     read_jsonl,
     read_yaml,
+    rule_rows_sorted,
     write_jsonl,
     write_yaml,
 )
@@ -123,7 +124,7 @@ def ingest(run, cfg, sheets_dir=None):
     keep = [
         r for r in read_jsonl(out) if (r.get("coder"), r["version"]) not in replaced
     ]
-    rows = keep + new
+    rows = rule_rows_sorted(keep + new)
     write_jsonl(out, rows)
     raters = {c for c, _ in replaced}
     log(f"expert-check ingest: {len(new)} rows from {len(raters)} rater(s)")
