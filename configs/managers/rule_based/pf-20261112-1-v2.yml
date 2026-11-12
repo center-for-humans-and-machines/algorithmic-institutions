@@ -1,0 +1,25 @@
+params:
+  bar:
+    definition: free-rider bar; a member whose mean contribution over the current 4-round window (up to this round) is at most bar is a free rider; a negative bar marks nobody, i.e. the manager never punishes
+    type: int
+  amount:
+    definition: punishment dealt to each free rider in a decision round (the last round before a switch decision), meant to push him to the other group
+    type: int
+  first_dec:
+    definition: index (0-4) of the first switch decision at which free riders are pushed (decision d follows round 3+4d); 5 means never
+    type: int
+sweep_config:
+  bar: [-2, 5]
+  amount: [1, 30]
+  first_dec: [0, 5]
+code: |
+  rounds = th.arange(c.shape[-1], device=c.device)
+  win_now = th.div(t, 4, rounding_mode='floor')
+  in_win = (th.div(rounds, 4, rounding_mode='floor') == win_now).float()
+  w = valid * in_win
+  n_win = th.clamp(w.sum(-1), min=1.0)
+  c_win = (c * w).sum(-1) / n_win
+  member = in_group[..., -1] * valid[..., -1]
+  is_dec = (th.remainder(t + 1, 4) == 0) * (t < 20) * (win_now >= first_dec)
+  free_rider = (c_win <= bar).float()
+  punishment = amount * free_rider * member * is_dec
