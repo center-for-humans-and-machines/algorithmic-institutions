@@ -203,6 +203,18 @@ def _record(stem, res, src, first=False):
     return {"version": stem, **rec, "_relation_forced": forced}
 
 
+def codebook_records(run, cfg):
+    """Notes records that may shape a codebook: with
+    held_out.exclude_notes_from_codebook (default true) the notes of the
+    expert-check hold-out versions are left out of candidate building,
+    clustering and consolidation; they are coded only in stage B."""
+    records = load_records(run)
+    if not (cfg.get("held_out") or {}).get("exclude_notes_from_codebook", True):
+        return records
+    held = set(read_json(run.dir / "corpus" / "split.json")["expert_check"])
+    return {k: v for k, v in records.items() if k not in held}
+
+
 def load_records(run, coded=False):
     """{stem: record} exactly as listed in the producing step's manifest."""
     manifest = require(run, "apply-notes" if coded else "open-notes")
@@ -345,7 +357,7 @@ def coverage(run, cfg, client, limit=None):
     require(run, "what-codebook")
     draft_path = run.dir / "codebook" / "what.draft.yml"
     draft = read_yaml(draft_path)["codes"]
-    records = load_records(run)
+    records = codebook_records(run, cfg)
     if not records:
         raise StepFailed("coverage: no notes records; rerun open-notes")
     items = _limit(_mechanism_items(records), limit)
@@ -395,6 +407,17 @@ def coverage(run, cfg, client, limit=None):
             nondisc.append({**c, "prevalence": prevalence[n], "rules": n_rules[n]})
         else:
             accepted.append(c)
+    # draft codes above the cap are kept (the reviewer decides) but listed
+    draft_high = [
+        {
+            **c,
+            "prevalence": prevalence[c["name"]],
+            "rules": n_rules[c["name"]],
+            "kept_pending_review": True,
+        }
+        for c in draft
+        if prevalence[c["name"]] > max_prev
+    ]
     if nondisc:
         log(
             f"coverage: {len(nondisc)} candidates present in more than {max_prev:.0%} "
@@ -446,7 +469,9 @@ def coverage(run, cfg, client, limit=None):
     )
     write_yaml(
         outs["nondisc"],
-        _codebook_doc("non_discriminating", 0, nondisc, max_prevalence=max_prev),
+        _codebook_doc(
+            "non_discriminating", 0, nondisc + draft_high, max_prevalence=max_prev
+        ),
     )
     summary = {
         "notes_mechanisms": len(items),
@@ -539,7 +564,7 @@ def consolidate_what(run, cfg, client, limit=None):
     v1 = [c for c in survivors if c.get("implemented")]
     never = [c for c in survivors if not c.get("implemented")]
     rules_items = _limit(_free_code_items(run), limit)
-    notes_items = _limit(_mechanism_items(load_records(run)), limit)
+    notes_items = _limit(_mechanism_items(codebook_records(run, cfg)), limit)
     a_rules = assign(client, cfg, "consolidate-what", v1, rules_items, "what")
     a_notes = assign(client, cfg, "consolidate-what", v1 + never, notes_items, "what")
     mem = _merged_members(v1 + never, a_rules, a_notes)
@@ -643,14 +668,14 @@ def _consolidate_single(run, cfg, client, kind, src_step, items, limit=None):
 def consolidate_why(run, cfg, client, limit=None):
     """Merges and families of the proposed why codes (families by kind of
     justification), then why.v1.yml and a fresh assignment of the reasons."""
-    items = _reason_items(load_records(run))
+    items = _reason_items(codebook_records(run, cfg))
     _consolidate_single(run, cfg, client, "why", "why-codebook", items, limit)
 
 
 def consolidate_basis(run, cfg, client, limit=None):
     """Merges and families of the proposed basis codes (families: the kinds of
     support a reason rests on), then basis.v1.yml and a fresh assignment."""
-    items = _basis_items(load_records(run))
+    items = _basis_items(codebook_records(run, cfg))
     _consolidate_single(run, cfg, client, "basis", "basis-codebook", items, limit)
 
 
@@ -658,7 +683,7 @@ def consolidate_basis(run, cfg, client, limit=None):
 
 
 def why_codebook(run, cfg, client, limit=None):
-    items = _limit(_reason_items(load_records(run)), limit)
+    items = _limit(_reason_items(codebook_records(run, cfg)), limit)
     if not items:
         raise StepFailed("why-codebook: no reasons in the notes records")
     codes, assignment, failed, hist = cluster(
@@ -714,7 +739,7 @@ def _basis_items(records):
 
 def basis_codebook(run, cfg, client, limit=None):
     """A small codebook of what reasons rest on, from the evidence phrases."""
-    items = _limit(_basis_items(load_records(run)), limit)
+    items = _limit(_basis_items(codebook_records(run, cfg)), limit)
     if not items:
         raise StepFailed("basis-codebook: no evidence phrases in the notes records")
     codes, assignment, failed, hist = cluster(
@@ -751,18 +776,26 @@ def llm_coder(client):
 
 
 def apply_rules(run, cfg, client, limit=None):
-    """Judge every rule against the latest what codebook (codes under their
-    families), with repeats in seeded orders and a tie-break; writes the final
-    rows, every repeat's answers and the judge's test-retest reliability."""
+    """Judge every rule against the latest what codebook and the latest
+    never-implemented list (in the same calls, each code under its family), with
+    repeats in seeded orders and a tie-break; writes the final rows, every
+    repeat's answers and the judge's test-retest reliability. A never-implemented
+    code the judge finds in a rule is reported by join for the reviewer."""
     rev, path, codes = latest_codebook(run, "what")
+    nrev, npath, never = latest_never(run)
+    never_names = {c["name"] for c in never}
     versions = _limit([v for v in load_versions(run) if v["rule"]], limit)
+    families = {**codebook_families(npath), **codebook_families(path)}
     rows, repeat_rows, failed = judge_rules(
-        client, cfg, "apply-rules", codes, versions, codebook_families(path)
+        client, cfg, "apply-rules", codes + never, versions, families
     )
     coder = llm_coder(client)
     for r in rows:
         r["coder"] = coder
-        r["codebook_revision"] = rev
+        r["code_source"] = (
+            "never_implemented" if r["what_code"] in never_names else "codebook"
+        )
+        r["codebook_revision"] = nrev if r["what_code"] in never_names else rev
     out = run.path("codes", "rule_codes.jsonl")
     kept = [r for r in read_jsonl(out) if r.get("coder") != coder]
     write_jsonl(out, rule_rows_sorted(kept + rows))
@@ -781,8 +814,9 @@ def apply_rules(run, cfg, client, limit=None):
     write_manifest(
         run,
         "apply-rules",
-        [*_corpus_files(run), path],
+        [*_corpus_files(run), path, npath],
         [rep_path, rel_path],
+        never_implemented=_codebook_info(nrev, npath),
         repeats=int(cfg.get("judge", {}).get("repeats", 2)),
         tiebreaks=sum(r["tiebreak"] for r in rows),
         unsupported=sum(r["unsupported"] for r in rows),
@@ -980,7 +1014,11 @@ STEP_INPUTS = {
         _cb(run, "basis.draft.yml"),
         *_record_files(run),
     ],
-    "apply-rules": lambda run: [*_corpus_files(run), _latest_path(run, "what")],
+    "apply-rules": lambda run: [
+        *_corpus_files(run),
+        _latest_path(run, "what"),
+        latest_never(run)[1],
+    ],
     "apply-notes": lambda run: [
         *_record_files(run),
         _latest_path(run, "what"),

@@ -211,7 +211,9 @@ def judge_rules(client, cfg, step, codes, versions, families=None):
                     "quote_ok": (
                         quote_in_source(a["evidence"], rule) if a["present"] else None
                     ),
-                    "unsupported": a["unsupported"],
+                    # unsupported if any repeat (or the tie-break) was
+                    "unsupported": any(m["unsupported"] for m in mine)
+                    or bool(tb.get(n, {}).get("unsupported")),
                     "repeats": [m["present"] for m in mine],
                     "tiebreak": used_tb,
                 }

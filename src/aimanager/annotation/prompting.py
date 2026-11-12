@@ -59,14 +59,14 @@ def render_codebook(codes, title="Codebook", families=None):
     family (families in order of first appearance), which helps keep
     neighbouring codes apart; `families` maps family name -> definition."""
     lines = [f"## {title}", ""]
-    if codes and all(c.get("family") for c in codes):
+    if codes and any(c.get("family") for c in codes):
         defs = families or {}
-        order = list(dict.fromkeys(c["family"] for c in codes))
+        order = list(dict.fromkeys(c.get("family") for c in codes))
         for fam in order:
-            head = f"### Family `{fam}`"
+            head = f"### Family `{fam}`" if fam else "### Without a family"
             lines.append(head + (f": {defs[fam]}" if defs.get(fam) else ""))
             for c in codes:
-                if c["family"] == fam:
+                if c.get("family") == fam:
                     lines.extend(_render_code(c))
             lines.append("")
     else:
@@ -109,7 +109,17 @@ STEP_VERSION = {step: 1 for step in STEP_PROMPTS}
 # 2: notes ideas get up to three what codes, with description and quote as
 # context; compound reasons are coded by their main claim
 STEP_VERSION["apply-notes"] = 2
-_CFG_KEYS = ("clustering", "codebook", "coverage", "judge", "sampling", "settings")
+# 2: the never-implemented codes are judged too
+STEP_VERSION["apply-rules"] = 2
+_CFG_KEYS = (
+    "clustering",
+    "codebook",
+    "coverage",
+    "held_out",
+    "judge",
+    "sampling",
+    "settings",
+)
 _LLM_KEYS = (
     "temperature",
     "temperature_generate",

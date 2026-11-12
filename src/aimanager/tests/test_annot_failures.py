@@ -222,6 +222,9 @@ def test_negated_codes_are_recognised():
     assert is_negated("x", label="No dependence on the opponent")
     assert is_negated("x", definition="Excludes group size as a factor.")
     assert is_negated("punishment_independent_of_group_state")
+    assert is_negated("unconditional_punishment")
+    assert is_negated("punish_regardless_of_history")
+    assert is_negated("no_response_to_opponent")
     # time-gating levers and other positive levers: kept
     for name, definition in [
         ("end_cutoff_no_punishment", "No punishment is applied after a cutoff round."),
@@ -229,6 +232,8 @@ def test_negated_codes_are_recognised():
         ("stop_punishing_after_round", "Stops punishing after round T."),
         ("pre_switch_window_suspension", "Suspends punishment before a switch."),
         ("never_punish_in_last_round", "Never punishes in the last round."),
+        ("no_punishment_until_condition_met", "No punishment until a condition."),
+        ("no_punishment_after_account_empty", "No punishment once it is spent."),
         ("punish_only_low_contributors", "Punishes low contributors."),
         ("notify_players", "Notifies players."),
     ]:
@@ -369,12 +374,16 @@ def test_reserved_code_names():
 def test_review_against_regenerated_base_is_rejected(tmp_path):
     run = Run(tmp_path, "c")
     v1 = run.path("codebook", "what.v1.yml")
-    v1.write_text(yaml.safe_dump({"codes": [{"name": "a"}]}))
+    v1.write_text(
+        yaml.safe_dump({"codes": [{"name": "a", "label": "a", "definition": "a"}]})
+    )
     write_manifest(run, "consolidate-what", [], [v1])
     review_begin(run, "what")
     assert latest_codebook(run, "what")[0] == 2
     # coverage reruns and writes a different v1: the review no longer applies
-    v1.write_text(yaml.safe_dump({"codes": [{"name": "b"}]}))
+    v1.write_text(
+        yaml.safe_dump({"codes": [{"name": "b", "label": "b", "definition": "b"}]})
+    )
     write_manifest(run, "consolidate-what", [], [v1])
     with pytest.raises(SystemExit, match="reviewed against a different"):
         latest_codebook(run, "what")
@@ -385,14 +394,18 @@ def test_never_implemented_revisions_and_legacy_migration(tmp_path):
 
     run = Run(tmp_path, "n")
     legacy = run.path("codebook", "never_implemented.yml")
-    legacy.write_text(yaml.safe_dump({"codes": [{"name": "reward"}]}))
+    legacy.write_text(
+        yaml.safe_dump({"codes": [{"name": "reward", "label": "r", "definition": "r"}]})
+    )
     write_manifest(run, "consolidate-what", [], [legacy])
     v1 = migrate_never_implemented(run)
     assert v1.read_bytes() == legacy.read_bytes()
     review_begin(run, "never_implemented")
     v2 = run.dir / "codebook" / "never_implemented.v2.yml"
     doc = yaml.safe_load(v2.read_text())
-    doc["codes"].append({"name": "timeout_conditioned"})
+    doc["codes"].append(
+        {"name": "timeout_conditioned", "label": "t", "definition": "t"}
+    )
     v2.write_text(yaml.safe_dump(doc))
     rev, path, codes = latest_codebook(run, "never_implemented")
     assert rev == 2 and [c["name"] for c in codes] == ["reward", "timeout_conditioned"]

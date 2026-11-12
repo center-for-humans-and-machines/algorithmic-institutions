@@ -17,6 +17,7 @@ import statistics
 from collections import Counter, defaultdict
 
 from .common import (
+    read_json,
     read_yaml,
     atomic_write_text,
     file_hash,
@@ -83,6 +84,8 @@ def _check_revisions(run, rule_rows):
         rev, path, _ = latest_codebook(run, "never_implemented")
         latest["never_implemented"] = (rev, file_hash(path), path.name)
         used.append(("apply-notes", "never_implemented", never))
+        if ar.get("never_implemented"):  # apply-rules judged the list too
+            used.append(("apply-rules", "never_implemented", ar["never_implemented"]))
     for step, kind, cb in used:
         rev, digest, name = latest[kind]
         if (cb["revision"], cb["sha256"]) != (rev, digest):
@@ -92,7 +95,10 @@ def _check_revisions(run, rule_rows):
             )
     mine = [r for r in rule_rows if r["coder"] == ar["coder"]]
     wrev = latest["what"][0]
-    if len(mine) != ar["rows"] or any(r["codebook_revision"] != wrev for r in mine):
+    codebook_rows = [r for r in mine if r.get("code_source", "codebook") == "codebook"]
+    if len(mine) != ar["rows"] or any(
+        r["codebook_revision"] != wrev for r in codebook_rows
+    ):
         raise SystemExit(
             "codes/rule_codes.jsonl does not hold the rows apply-rules wrote; "
             "rerun apply-rules"
@@ -149,7 +155,9 @@ def join(run, cfg, limit=None):
         (r["version"], r["what_code"]): r for r in rule_rows if r["coder"] == coder
     }
     in_rule = {k: r["present"] for k, r in rows_of.items()}
-    unreliable = set(_unreliable_codes(run, cfg))
+    judged_never = any(c in set(never_names) for (_, c) in rows_of)
+    rel_class = _reliability_classes(run, cfg)
+    unreliable = {c for c, k in rel_class.items() if k == "unreliable"}
     _, bpath, bcodes = latest_codebook(run, "basis")
     basis_family = {c["name"]: c.get("family") for c in bcodes}
     records = load_records(run, coded=True)
@@ -169,7 +177,8 @@ def join(run, cfg, limit=None):
         for code in names + never_names:
             never_impl = code in never_names
             mechs = by_code.get(code, [])
-            if never_impl:
+            if never_impl and not judged_never:
+                # runs before the judge saw the list: asserted, not measured
                 ir, ip, sw = False, (False if parent else None), None
             else:
                 ir = in_rule.get((stem, code))
@@ -248,10 +257,21 @@ def join(run, cfg, limit=None):
     quality = _quality(run, versions, records, rule_rows, coder, in_rule, names)
     quality.update(_rule_code_stats(cfg, rule_rows, coder, names))
     quality["judge_reliability"] = _reliability_summary(run) or {}
+    jcfg = cfg.get("judge", {})
     quality["judge_reliability"]["unreliable_codes"] = {
-        "min_agreement": cfg.get("judge", {}).get("min_agreement", 0.8),
+        "rule": (
+            "kappa < judge.min_kappa or positive agreement < "
+            "judge.min_positive_agreement; codes with fewer than judge.min_positives "
+            "positives in either repeat are rare, not rated"
+        ),
+        "min_kappa": jcfg.get("min_kappa", 0.8),
+        "min_positive_agreement": jcfg.get("min_positive_agreement", 0.85),
+        "min_positives": jcfg.get("min_positives", 5),
         "codes": sorted(unreliable),
+        "rare": sorted(c for c, k in rel_class.items() if k == "rare"),
     }
+    quality["never_implemented_found"] = _never_found(rule_rows, coder, never_names)
+    quality["draft_codes_above_max_prevalence"] = _draft_above_cap(run, cfg)
     quality["judge_present_share_by_repeat"] = _present_by_repeat(run)
     quality["family_sizes"] = _family_sizes(run)
     quality["unassigned_by_codebook"] = _unassigned_shares(run)
@@ -260,7 +280,9 @@ def join(run, cfg, limit=None):
     ] or None
     quality["codebooks"] = {"what": path.name, "coder": coder}
     quality["never_implemented_codes"] = len(never_names)
+    quality["never_implemented_judged"] = judged_never
     write_json(run.path("analysis", "quality.json"), quality)
+    _write_join_manifest(run, coder, len(out))
     log(
         f"join: {len(out)} rows ({len(versions)} versions x {len(names)} codes "
         f"+ {len(never_names)} never implemented)"
@@ -316,7 +338,7 @@ def _rule_code_stats(cfg, rule_rows, coder, names):
     prev = {c: 0 for c in names}
     per_rule = Counter()
     for r in mine:
-        if r["present"]:
+        if r["present"] and r["what_code"] in prev:  # codebook codes only
             prev[r["what_code"]] = prev.get(r["what_code"], 0) + 1
             per_rule[r["version"]] += 1
     share = {c: round(k / n, 4) for c, k in prev.items()}
@@ -353,16 +375,89 @@ def _reliability_rows(run):
         return list(csv.DictReader(f))
 
 
-def _unreliable_codes(run, cfg):
-    """Codes whose judge test-retest agreement is below judge.min_agreement."""
-    floor = cfg.get("judge", {}).get("min_agreement", 0.8)
-    return [
-        r["code"]
+def reliability_class(row, cfg):
+    """reliable, unreliable or rare for one judge_reliability.csv row.
+
+    Raw agreement says little when most rules lack a code, so a code is
+    unreliable when Cohen's kappa of the two primary repeats is below
+    judge.min_kappa or the positive agreement 2*both / (pos1 + pos2) is below
+    judge.min_positive_agreement; with fewer than judge.min_positives positives
+    in either repeat it is `rare` and not rated.
+    """
+    jcfg = cfg.get("judge", {})
+    both = int(row["both_yes"])
+    pos1, pos2 = both + int(row["a_only"]), both + int(row["b_only"])
+    if min(pos1, pos2) < jcfg.get("min_positives", 5):
+        return "rare"
+    kappa = float(row["kappa"]) if row.get("kappa") not in ("", None) else 1.0
+    pos_agree = 2 * both / (pos1 + pos2)
+    if kappa < jcfg.get("min_kappa", 0.8) or pos_agree < jcfg.get(
+        "min_positive_agreement", 0.85
+    ):
+        return "unreliable"
+    return "reliable"
+
+
+def _reliability_classes(run, cfg):
+    return {
+        r["code"]: reliability_class(r, cfg)
         for r in _reliability_rows(run)
         if r["code"] != "__overall__"
-        and r["agreement"] not in ("", None)
-        and float(r["agreement"]) < floor
+    }
+
+
+def _never_found(rule_rows, coder, never_names):
+    """Never-implemented codes the judge found in some rule, with the rules and
+    quoted lines, for the reviewer to promote into the codebook."""
+    found = defaultdict(list)
+    for r in rule_rows:
+        if r["coder"] == coder and r["what_code"] in never_names and r["present"]:
+            found[r["what_code"]].append({"version": r["version"], "quote": r["quote"]})
+    return {k: sorted(v, key=lambda d: d["version"]) for k, v in sorted(found.items())}
+
+
+def _draft_above_cap(run, cfg):
+    """Draft codes the coverage judge found in more than coverage.max_prevalence
+    of the rules: kept, but listed for the reviewer."""
+    p = run.dir / "coverage" / "summary.json"
+    if not p.exists():
+        return []
+    s = read_json(p)
+    cap = s.get("max_prevalence", cfg.get("coverage", {}).get("max_prevalence", 0.9))
+    cands = set(s.get("accepted", [])) | set(s.get("never_implemented", []))
+    cands |= set(s.get("non_discriminating", []))
+    return [
+        {"code": c, "prevalence": v, "kept_pending_review": True}
+        for c, v in sorted((s.get("prevalence") or {}).items())
+        if v > cap and c not in cands
     ]
+
+
+def _write_join_manifest(run, coder, n_rows):
+    """manifests/join.json: what join read (rule codes incl. expert rows, coded
+    records, every codebook revision used) and wrote; analyse requires it."""
+    from .common import write_manifest
+
+    revs = {}
+    inputs = [run.dir / "codes" / "rule_codes.jsonl"]
+    inputs += sorted((run.dir / "records_coded").glob("*.json"))
+    for kind in ("what", "why", "basis", "never_implemented"):
+        try:
+            rev, path, _ = latest_codebook(run, kind)
+        except SystemExit:
+            continue
+        inputs.append(path)
+        revs[kind] = {"file": path.name, "revision": rev, "sha256": file_hash(path)}
+    outs = [
+        run.dir / "analysis" / n
+        for n in (
+            "version_codes.csv",
+            "quality.json",
+            "agreement.csv",
+            "theory_mentions.csv",
+        )
+    ]
+    write_manifest(run, "join", inputs, outs, codebooks=revs, coder=coder, rows=n_rows)
 
 
 def _present_by_repeat(run):
@@ -380,21 +475,33 @@ def _present_by_repeat(run):
     }
 
 
+UNASSIGNED_DENOMINATOR = {
+    "what": "notes ideas (mechanisms of the notes records)",
+    "why": "reasons",
+    "basis": "reasons with an evidence phrase",
+}
+
+
 def _unassigned_shares(run):
-    """Share of items no code covers, per codebook: v1 from stage A (members
-    files) and the revision stage B used (apply-notes manifest)."""
+    """Share of items no code covers, per codebook revision, on the same
+    denominator (UNASSIGNED_DENOMINATOR): v1 from stage A (members files; for
+    what only the notes ideas, not the rule free codes) and the revision stage B
+    used (apply-notes manifest)."""
     out = {}
     for kind in ("what", "why", "basis"):
-        entry = {}
+        entry = {"denominator": UNASSIGNED_DENOMINATOR[kind]}
         mpath = run.dir / "codebook" / f"{kind}.v1.members.yml"
         if mpath.exists():
             mem = read_yaml(mpath) or {}
-            total = sum(len(v) for v in mem.values())
-            n = len(mem.get("none", []))
+            ids = [i for v in mem.values() for i in v]
+            none = mem.get("none", [])
+            if kind == "what":  # notes ideas only, comparable with stage B
+                ids = [i for i in ids if str(i).startswith("m:")]
+                none = [i for i in none if str(i).startswith("m:")]
             entry["v1"] = {
-                "n": n,
-                "of": total,
-                "share": round(n / total, 4) if total else None,
+                "n": len(none),
+                "of": len(ids),
+                "share": round(len(none) / len(ids), 4) if ids else None,
             }
         out[kind] = entry
     stage_b = require(run, "apply-notes").get("unassigned") or {}
@@ -479,23 +586,6 @@ def _quality(run, versions, records, rule_rows, coder, in_rule, names):
         cov[status] = _rate(
             [m.get("what_code") is not None for m in mechs if m["status"] == status]
         )
-    # say-do gap
-    adopted = defaultdict(set)
-    for stem, rec in records.items():
-        for m in rec["mechanisms"]:
-            if m["status"] == "adopted":
-                adopted[stem].update(_codes_of(m))
-    said_not_done = [
-        not in_rule[(s, c)]
-        for s, cs in adopted.items()
-        for c in cs
-        if (s, c) in in_rule
-    ]
-    done_not_said = [
-        c not in adopted.get(s, set())
-        for (s, c), present in in_rule.items()
-        if present and s in records
-    ]
     rec_list = list(records.values())
     free = read_jsonl(run.dir / "open" / "rule_free_codes.jsonl")
     quotes = {
@@ -525,10 +615,6 @@ def _quality(run, versions, records, rule_rows, coder, in_rule, names):
         "what_codes_per_idea": {
             str(k): {"n": n_codes.get(k, 0), "share": round(n_codes.get(k, 0) / tot, 4)}
             for k in range(4)
-        },
-        "say_do_gap": {
-            "notes_adopted_rule_absent": _rate(said_not_done),
-            "rule_present_notes_not_adopted": _rate(done_not_said),
         },
         "records_with_theory_mentions": _rate(explicit),
         "theory_mentions_named_in_notes": _rate(
@@ -563,6 +649,11 @@ def _call_stats(run):
             steps[step]["failed_items"] += 1
             steps[step][f"failed_{status}"] += 1
     out = {k: _round(v) for k, v in sorted(steps.items())}
+    # steps whose outputs were copied from another run have no calls here
+    for mp in sorted((run.dir / "manifests").glob("*.json")):
+        prov = read_json(mp).get("provenance")
+        if prov:
+            out.setdefault(mp.stem, {})["provenance"] = prov
     total = Counter()
     for v in steps.values():
         total.update(v)

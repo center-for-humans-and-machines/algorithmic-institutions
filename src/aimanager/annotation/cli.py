@@ -7,6 +7,7 @@ import sys
 from .common import (
     Run,
     check_revision_chain,
+    validate_codebook,
     file_hash,
     load_config,
     log,
@@ -61,6 +62,11 @@ def _parser():
     e = sub.add_parser("expert-check", parents=[common])
     e.add_argument("action", choices=["export", "ingest"])
     e.add_argument("--sheets", help="directory of filled sheets (ingest)")
+    e.add_argument(
+        "--allow-old-revision",
+        action="store_true",
+        help="keep sheets of an older what revision apart instead of rejecting them",
+    )
     r = sub.add_parser("review", parents=[common])
     r.add_argument("action", choices=["status", "begin"])
     r.add_argument(
@@ -81,6 +87,7 @@ def review_status(run):
             latest_never(run)  # migrates a run made before the list had revisions
         revs = check_revision_chain(run, kind)
         rev, path = revs[-1]
+        validate_codebook(path)
         others = ", ".join(p.name for _, p in revs[:-1]) or "none"
         print(f"{kind}: current {path.name} (older: {others})")
         print(
@@ -171,7 +178,12 @@ def main(argv=None):
         if args.action == "export":
             expert.export(run, cfg, limit=args.limit)
         else:
-            expert.ingest(run, cfg, sheets_dir=args.sheets)
+            expert.ingest(
+                run,
+                cfg,
+                sheets_dir=args.sheets,
+                allow_old_revision=args.allow_old_revision,
+            )
     elif args.command == "review":
         if args.action == "begin":
             if not args.kind:

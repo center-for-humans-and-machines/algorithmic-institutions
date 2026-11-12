@@ -115,6 +115,13 @@ codebook:
   why: {target_codes: 25}
   basis: {target_codes: 10}
 
+held_out:
+  # The notes of the expert-check hold-out versions are extracted in the open
+  # pass but left out of candidate building, clustering and consolidation, so
+  # no codebook decision sees a held-out version (its rule never did); they are
+  # coded in stage B like all others. prod2 predates this setting.
+  exclude_notes_from_codebook: true
+
 coverage:
   # a candidate code from the notes is added only if the judge finds it in at
   # least one rule and in at most this share of the rules judged; above it, it
@@ -126,9 +133,14 @@ judge:
   # disagreements go to one tie-break run. Repeats 1 and 2 give the judge's
   # test-retest reliability (analysis/judge_reliability.csv), so keep >= 2.
   repeats: 2
-  # codes whose test-retest agreement is below this are listed as
-  # unreliable_codes in quality.json, and join marks events involving them
-  min_agreement: 0.8
+  # A code is unreliable (listed in quality.json; join marks events involving
+  # it) when Cohen's kappa of the two primary repeats is below min_kappa or its
+  # positive agreement 2*both/(pos1+pos2) is below min_positive_agreement.
+  # Raw agreement says little when most rules lack a code. A code with fewer
+  # than min_positives positives in either repeat is `rare`, not rated.
+  min_kappa: 0.8
+  min_positive_agreement: 0.85
+  min_positives: 5
 
 join:
   # rule coder whose codes count as in_rule; "auto" = the LLM judge

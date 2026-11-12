@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .common import (
     atomic_write_text,
+    codebook_families,
     file_hash,
     latest_codebook,
     log,
@@ -20,9 +21,15 @@ from .common import (
 )
 from .corpus import load_versions
 
+SHEET_FORMAT = 2
 SHEET_HELP = (
     "Fill in `rater` once. For every code set `present` to yes or no and, "
-    "if true, copy into `quote` the line of the rule that implements it. "
+    "if true, copy into `quote` the line of the rule that implements it. A code "
+    "is present if the rule's code does what the definition says for some "
+    "parameter values within the declared sweep ranges, even if another value "
+    "in the range would switch it off; a parameter definition alone is not "
+    "enough if the code does not use it that way. Codes are listed under their "
+    "families with the same definitions and examples the model judge sees. "
     "Leave `present` empty to skip a code. Save the filled sheet into "
     "expert_check/filled/ (any file name ending in .yml)."
 )
@@ -30,6 +37,7 @@ SHEET_HELP = (
 
 def export(run, cfg, limit=None):
     rev, path, codes = latest_codebook(run, "what")
+    families = codebook_families(path)
     versions = {v["stem"]: v for v in load_versions(run)}
     split = read_json(run.dir / "corpus" / "split.json")
     held_out = [s for s in split["expert_check"] if versions[s]["rule"]]
@@ -37,8 +45,15 @@ def export(run, cfg, limit=None):
         held_out = held_out[:limit]
     for stem in held_out:
         sheet = {
+            "sheet_format": SHEET_FORMAT,
             "instructions": SHEET_HELP,
             "version": stem,
+            "game_setting": versions[stem]["setting"],
+            "families": [
+                {"name": f, "definition": families.get(f, "")}
+                for f in dict.fromkeys(c.get("family") for c in codes)
+                if f
+            ],
             "codebook": path.name,
             "codebook_revision": rev,
             "codebook_sha256": file_hash(path),
@@ -50,6 +65,8 @@ def export(run, cfg, limit=None):
                     "family": c.get("family"),
                     "label": c.get("label", ""),
                     "definition": c["definition"],
+                    "fits": (c.get("examples") or {}).get("fits") or [],
+                    "does_not_fit": (c.get("examples") or {}).get("does_not_fit") or [],
                     "present": None,
                     "quote": "",
                 }
@@ -87,20 +104,72 @@ def _revision(sheet):
     return rev
 
 
-def ingest(run, cfg, sheets_dir=None):
+def rater_id(name):
+    """Rater names are compared trimmed, case-insensitive, whitespace collapsed."""
+    return "rater:" + re.sub(r"\s+", " ", (name or "").strip()).lower()
+
+
+def _norm_coder(coder):
+    c = str(coder or "")
+    return rater_id(c[len("rater:") :]) if c.startswith("rater:") else c
+
+
+def ingest(run, cfg, sheets_dir=None, allow_old_revision=False):
+    """Read filled sheets into codes/rule_codes.jsonl and write agreement.csv.
+
+    Every sheet must have been exported against the current what codebook
+    (`codebook_revision` and `codebook_sha256`), else it is rejected naming the
+    file; with `allow_old_revision` it is kept, flagged `current_revision: false`
+    and never paired with the current judge (pairing is per revision). Code
+    names must be exactly those of the sheet's codebook revision.
+    """
     d = Path(sheets_dir) if sheets_dir else run.dir / "expert_check" / "filled"
     versions = {v["stem"]: v for v in load_versions(run)}
-    new, replaced = [], set()
+    rev_now, path_now, codes_now = latest_codebook(run, "what")
+    sha_now = file_hash(path_now)
+    new, replaced, old = [], set(), []
     for p in sorted(d.glob("*.yml")):
         sheet = read_yaml(p)
-        rater = (sheet.get("rater") or "").strip()
-        if not rater:
+        if not (sheet.get("rater") or "").strip():
             log(f"  skip {p.name}: no rater")
             continue
-        coder = f"rater:{rater}"
+        coder = rater_id(sheet["rater"])
+        if sheet.get("version") not in versions:
+            raise SystemExit(f"{p.name}: unknown version {sheet.get('version')!r}")
+        rev = _revision(sheet)
+        current = rev == rev_now and sheet.get("codebook_sha256") == sha_now
+        if not current:
+            if not allow_old_revision:
+                raise SystemExit(
+                    f"{p.name}: exported against {sheet.get('codebook')} (revision "
+                    f"{rev}, sha256 {str(sheet.get('codebook_sha256'))[:12]}), but the "
+                    f"current what codebook is {path_now.name} (revision {rev_now}, "
+                    f"sha256 {sha_now[:12]}). Re-export, or pass --allow-old-revision "
+                    "to keep it apart from the current judge"
+                )
+            old.append(p.name)
+        rev_path = run.dir / "codebook" / f"what.v{rev}.yml"
+        expected = (
+            {c["name"] for c in codes_now}
+            if current
+            else (
+                {c["name"] for c in read_yaml(rev_path)["codes"]}
+                if rev_path.exists()
+                else None
+            )
+        )
+        names = [c.get("code") for c in sheet["codes"]]
+        if expected is not None:
+            unknown = sorted(set(map(str, names)) - expected)
+            missing = sorted(expected - set(map(str, names)))
+            dups = sorted({n for n in names if names.count(n) > 1})
+            if unknown or missing or dups:
+                raise SystemExit(
+                    f"{p.name}: code names do not match {rev_path.name}: unknown "
+                    f"{unknown}, missing {missing}, duplicated {dups}"
+                )
         replaced.add((coder, sheet["version"]))
         rule = versions[sheet["version"]]["rule"]
-        rev = _revision(sheet)
         for c in sheet["codes"]:
             present = parse_present(c.get("present"), f"{p.name}, code {c['code']}")
             if present is None:
@@ -117,12 +186,17 @@ def ingest(run, cfg, sheets_dir=None):
                     "switchable_off": None,
                     "coder": coder,
                     "codebook_revision": rev,
+                    "current_revision": current,
                 }
             )
+    if old:
+        log(f"  kept {len(old)} sheets of an older codebook revision apart: {old}")
     # a sheet replaces only that rater's earlier rows for that version
     out = run.path("codes", "rule_codes.jsonl")
     keep = [
-        r for r in read_jsonl(out) if (r.get("coder"), r["version"]) not in replaced
+        r
+        for r in read_jsonl(out)
+        if (_norm_coder(r.get("coder")), r["version"]) not in replaced
     ]
     rows = rule_rows_sorted(keep + new)
     write_jsonl(out, rows)
@@ -155,7 +229,9 @@ def kappa_stats(pairs):
 
 
 def write_agreement(run, rows):
-    """analysis/agreement.csv: every rater against every LLM judge.
+    """analysis/agreement.csv: every rater against every LLM judge
+    (pair_type rater-judge) and every pair of raters (pair_type rater-rater),
+    per code and overall.
 
     Rows are paired only within one codebook revision (key: version, code,
     revision), so a judge rerun with a new revision is not compared with
@@ -168,27 +244,38 @@ def write_agreement(run, rows):
     judges = sorted(c for c in by_coder if c.startswith("llm:"))
     raters = sorted(c for c in by_coder if c.startswith("rater:"))
     out = []
-    for rater in raters:
-        for judge in judges:
-            r_codes, j_codes = by_coder[rater], by_coder[judge]
-            common = sorted(set(r_codes) & set(j_codes))
-            per_code = {}
-            for key in common:
-                per_code.setdefault(key[1], []).append((r_codes[key], j_codes[key]))
-            for code in sorted(per_code):
-                out.append(
-                    dict(
-                        rater=rater,
-                        judge=judge,
-                        code=code,
-                        **kappa_stats(per_code[code]),
-                    )
-                )
-            allp = [(r_codes[k], j_codes[k]) for k in common]
+    pairs = [(r, j, "rater-judge") for r in raters for j in judges]
+    pairs += [
+        (a, b, "rater-rater") for i, a in enumerate(raters) for b in raters[i + 1 :]
+    ]
+    for rater, judge, kind in pairs:
+        r_codes, j_codes = by_coder[rater], by_coder[judge]
+        common = sorted(set(r_codes) & set(j_codes))
+        per_code = {}
+        for key in common:
+            per_code.setdefault(key[1], []).append((r_codes[key], j_codes[key]))
+        for code in sorted(per_code):
             out.append(
-                dict(rater=rater, judge=judge, code="__overall__", **kappa_stats(allp))
+                dict(
+                    pair_type=kind,
+                    rater=rater,
+                    judge=judge,
+                    code=code,
+                    **kappa_stats(per_code[code]),
+                )
             )
+        allp = [(r_codes[k], j_codes[k]) for k in common]
+        out.append(
+            dict(
+                pair_type=kind,
+                rater=rater,
+                judge=judge,
+                code="__overall__",
+                **kappa_stats(allp),
+            )
+        )
     cols = [
+        "pair_type",
         "rater",
         "judge",
         "code",

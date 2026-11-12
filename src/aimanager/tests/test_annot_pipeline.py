@@ -253,7 +253,13 @@ def test_stage_b_join_and_agreement(run_dir):
     # coverage judge, over all codes; apply-rules last ran with 2 codes)
     with open(run_dir / "analysis" / "judge_reliability.csv") as f:
         rel = {r["code"]: r for r in csv.DictReader(f)}
-    assert int(rel["__overall__"]["n"]) == 12 * 2
+    n_never = len(
+        yaml.safe_load((run_dir / "codebook" / "never_implemented.v1.yml").read_text())[
+            "codes"
+        ]
+    )
+    # what.v2 has 2 codes; the never-implemented list is judged in the same calls
+    assert int(rel["__overall__"]["n"]) == 12 * (2 + n_never)
     with open(run_dir / "coverage" / "judge_reliability.csv") as f:
         rel = {r["code"]: r for r in csv.DictReader(f)}
     assert 0 < float(rel["__overall__"]["agreement"]) < 1
@@ -303,35 +309,48 @@ def test_stage_b_join_and_agreement(run_dir):
     # apply-rules reran with the reviewer's what.v2.yml, keeping rater rows
     codes = read_jsonl(run_dir / "codes" / "rule_codes.jsonl")
     llm = [r for r in codes if r["coder"].startswith("llm:")]
-    assert {r["codebook_revision"] for r in llm} == {2}
-    assert len(llm) == 12 * 2
+    cb_rows = [r for r in llm if r["code_source"] == "codebook"]
+    assert {r["codebook_revision"] for r in cb_rows} == {2}
+    assert len(cb_rows) == 12 * 2
+    # the never-implemented list was judged in the same calls
+    assert {r["code_source"] for r in llm} == {"codebook", "never_implemented"}
     assert any(r["coder"] == "rater:sim" for r in codes)
 
 
 def test_idea_state_and_evidence_kinds():
     from aimanager.annotation.analyse import idea_state, ref_kind
 
+    assert idea_state(True, "introduced", "none", False, False) == "initial"
     assert idea_state(True, "introduced", "none", False) == "introduced"
-    assert idea_state(True, "kept", "rejected", True) == "kept"
+    assert idea_state(True, "kept", "adopted", True) == "kept"
+    assert idea_state(True, "kept", "rejected", True) == "done_but_refused"
     assert idea_state(False, "dropped", "adopted", False) == "dropped"
+    assert idea_state(False, "absent", "adopted", True) == "said_not_done"
     assert idea_state(False, "absent", "rejected", True) == "tested_and_refused"
     assert idea_state(False, "absent", "rejected", False) == "refused_untested"
     assert idea_state(False, "absent", "considered", False) == "considered"
-    assert idea_state(False, "absent", "adopted", True) == "absent"
+    assert idea_state(None, "", "adopted", False) == "not_judged"
+    assert idea_state(False, "absent", "none", False) == "absent"
+    assert ref_kind("v3 finding 2") == "earlier_version"
     assert ref_kind("exploration 3") == "own_exploration"
     assert ref_kind("pf-20261104-7-v6") == "earlier_version"
     assert ref_kind("none") == "none" and ref_kind(None) == "not_stated"
 
 
-def test_analyse_tables_figures_and_report(run_dir):
+def test_analyse_tables_figures_and_report(run_dir, tmp_path):
     pytest.importorskip("pandas")
     pytest.importorskip("matplotlib")
     from aimanager.annotation.analyse import Context, fig_lineages, idea_events
     from aimanager.annotation.common import Run, load_config
 
-    root = run_dir.parent
-    cfg_path = root.parent / "cfg.yml"
-    base = ["--run", "t", "--runs-root", str(root), "--config", str(cfg_path)]
+    root, base = _copy_run(run_dir, tmp_path)
+    cfg_path = run_dir.parent.parent / "cfg.yml"
+    run_dir = root / "t"
+    # the fixture left join stale (apply-rules reran with what.v2): analyse refuses
+    with pytest.raises(SystemExit, match="join"):
+        main(["analyse"] + base)
+    main(["stage", "B", "--backend", "fake"] + base)
+    main(["join"] + base)
     main(["analyse"] + base)
     a = run_dir / "analysis"
     summary = json.loads((a / "summary.json").read_text())
@@ -352,7 +371,7 @@ def test_analyse_tables_figures_and_report(run_dir):
     assert len(ev) == len(read_jsonl(run_dir / "corpus" / "versions.jsonl")) * len(
         {r["what_code"] for r in ev}
     )
-    assert {"introduced", "kept"} <= {r["idea_state"] for r in ev}
+    assert {"initial", "kept"} <= {r["idea_state"] for r in ev}
     assert {"said_not_done", "done_not_said", "code_unreliable"} <= set(ev[0])
     with open(a / "idea_value.csv") as f:
         val = list(csv.DictReader(f))
@@ -362,12 +381,26 @@ def test_analyse_tables_figures_and_report(run_dir):
     assert any(f.startswith("figures/prevalence_") for f in figs)
     for f in figs:
         assert (a / f).stat().st_size > 1000
+    sd = summary["tables"]["idea_events"]["headline"]["say_do"]
+    assert set(sd) == {
+        "introductions_without_adopted_mention",
+        "kept_without_adopted_mention",
+        "said_not_done",
+    }
+    with open(a / "idea_value.csv") as f:
+        assert "introduced_solo_mean" in next(csv.DictReader(f))
+    q = json.loads((a / "quality.json").read_text())
+    assert "say_do_gap" not in q and q["never_implemented_judged"] is True
     report = (a / "REPORT.md").read_text()
     assert "idea_events.csv" in report and "literature.yml" in report
     # the fixture lineages have 3 versions; the lineage figure renders at 3
     ctx = Context(Run(root, "t"), load_config(cfg_path))
     out = fig_lineages(idea_events(ctx)[0], a / "figures", min_versions=3)
     assert out and (a / out[0]["file"]).exists()
+    # a newer codebook revision makes the join (and so analyse) stale
+    main(["review", "begin", "--kind", "why"] + base)
+    with pytest.raises(SystemExit, match="latest why codebook"):
+        main(["analyse"] + base)
 
 
 def test_literature_file_shapes():
@@ -480,3 +513,159 @@ def test_interrupted_step_resumes_to_the_same_result(run_dir, tmp_path, monkeypa
     a = {k: v for k, v in _digest(root_a / "t").items() if k.startswith("records")}
     b = {k: v for k, v in _digest(root_b / "t").items() if k.startswith("records")}
     assert a and a == b
+
+
+def test_never_implemented_judged_and_found():
+    from aimanager.annotation.join import _never_found
+
+    rows = [
+        {
+            "coder": "llm:m",
+            "version": "v1",
+            "what_code": "reward",
+            "present": True,
+            "quote": "bonus = 2",
+        },
+        {
+            "coder": "llm:m",
+            "version": "v2",
+            "what_code": "reward",
+            "present": False,
+            "quote": "",
+        },
+        {
+            "coder": "rater:a",
+            "version": "v1",
+            "what_code": "reward",
+            "present": True,
+            "quote": "x",
+        },
+    ]
+    assert _never_found(rows, "llm:m", ["reward", "expel"]) == {
+        "reward": [{"version": "v1", "quote": "bonus = 2"}]
+    }
+
+
+def test_reliability_classes():
+    from aimanager.annotation.join import reliability_class
+
+    cfg = {
+        "judge": {"min_kappa": 0.8, "min_positive_agreement": 0.85, "min_positives": 5}
+    }
+
+    def row(both_yes, a_only, b_only, kappa):
+        return {
+            "both_yes": both_yes,
+            "a_only": a_only,
+            "b_only": b_only,
+            "kappa": kappa,
+        }
+
+    assert reliability_class(row(50, 1, 1, 0.95), cfg) == "reliable"
+    assert reliability_class(row(3, 0, 1, 0.8), cfg) == "rare"
+    assert reliability_class(row(20, 6, 6, 0.75), cfg) == "unreliable"
+    assert reliability_class(row(10, 3, 3, 0.9), cfg) == "unreliable"  # pos 0.77
+
+
+def test_codebook_validation(tmp_path):
+    from aimanager.annotation.common import validate_codebook
+
+    path = tmp_path / "what.v2.yml"
+    ok = {
+        "families": [{"name": "f"}],
+        "codes": [
+            {"name": "a", "label": "A", "definition": "d", "family": "f"},
+            {"name": "b", "label": "B", "definition": "d", "family": "f"},
+        ],
+    }
+    assert len(validate_codebook(path, ok)) == 2
+    bad = [
+        ({"codes": [{"name": "a", "label": "A", "definition": "d"}] * 2}, "duplicate"),
+        ({"codes": [{"name": "none", "label": "N", "definition": "d"}]}, "reserved"),
+        ({"codes": [{"name": "a", "definition": "d"}]}, "label"),
+        (
+            {
+                "codes": [
+                    {"name": "a", "label": "A", "definition": "d", "family": "f"},
+                    {"name": "b", "label": "B", "definition": "d"},
+                ]
+            },
+            "family",
+        ),
+        (
+            {
+                "families": [{"name": "f"}],
+                "codes": [
+                    {"name": "a", "label": "A", "definition": "d", "family": "g"}
+                ],
+            },
+            "not in",
+        ),
+    ]
+    for doc, msg in bad:
+        with pytest.raises(SystemExit, match=msg):
+            validate_codebook(path, doc)
+
+
+def test_ingest_validation_and_rater_pairs(run_dir, tmp_path):
+    import shutil
+
+    root, base = _copy_run(run_dir, tmp_path)
+    run = root / "t"
+    main(["stage", "B", "--backend", "fake"] + base)
+    main(["expert-check", "export"] + base)
+    filled = run / "expert_check" / "filled"
+    shutil.rmtree(filled)
+    filled.mkdir()
+    sheets = sorted((run / "expert_check" / "sheets").glob("*.yml"))
+    for i, p in enumerate(sheets):
+        sheet = yaml.safe_load(p.read_text())
+        assert sheet["sheet_format"] == 2 and sheet["game_setting"]
+        assert "fits" in sheet["codes"][0] and sheet["families"]
+        for rater in ("  Rater A ", "rater b"):
+            sheet["rater"] = rater
+            for j, c in enumerate(sheet["codes"]):
+                c["present"] = (i + j + len(rater)) % 3 == 0
+            write_yaml(filled / f"{p.stem}.{rater.strip()[-1]}.yml", sheet)
+    main(["expert-check", "ingest"] + base)
+    rows = read_jsonl(run / "codes" / "rule_codes.jsonl")
+    # names are normalised (trimmed, lower case); the fixture's earlier rater
+    # stays, since a sheet replaces only its own rater's rows
+    assert {r["coder"] for r in rows if r["coder"].startswith("rater:")} >= {
+        "rater:rater a",
+        "rater:rater b",
+    }
+    with open(run / "analysis" / "agreement.csv") as f:
+        agree = list(csv.DictReader(f))
+    assert {r["pair_type"] for r in agree} == {"rater-judge", "rater-rater"}
+    # a sheet of another codebook state is rejected, naming the file
+    bad = filled / f"{sheets[0].stem}.A.yml"
+    sheet = yaml.safe_load(bad.read_text())
+    sheet["codebook_sha256"] = "0" * 64
+    write_yaml(bad, sheet)
+    with pytest.raises(SystemExit, match=bad.name):
+        main(["expert-check", "ingest"] + base)
+    main(["expert-check", "ingest", "--allow-old-revision"] + base)
+    rows = read_jsonl(run / "codes" / "rule_codes.jsonl")
+    assert any(r.get("current_revision") is False for r in rows)
+    # unknown code names are an error
+    sheet["codebook_sha256"] = yaml.safe_load(
+        (filled / f"{sheets[1].stem}.A.yml").read_text()
+    )["codebook_sha256"]
+    sheet["codes"][0]["code"] = "misspelt_code"
+    write_yaml(bad, sheet)
+    with pytest.raises(SystemExit, match="misspelt_code"):
+        main(["expert-check", "ingest"] + base)
+
+
+def test_held_out_notes_are_left_out_of_codebooks(run_dir):
+    from aimanager.annotation.common import Run, load_config, read_json
+    from aimanager.annotation.steps import codebook_records
+
+    run = Run(run_dir.parent, "t")
+    held = set(read_json(run_dir / "corpus" / "split.json")["expert_check"])
+    cfg = load_config()
+    kept = codebook_records(run, cfg)
+    assert held and not held & set(kept) and len(kept) == 12 - len(held)
+    cfg["held_out"] = {"exclude_notes_from_codebook": False}
+    assert len(codebook_records(run, cfg)) == 12

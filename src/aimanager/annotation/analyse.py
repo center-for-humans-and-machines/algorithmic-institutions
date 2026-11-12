@@ -13,6 +13,7 @@ the inference container without them.
 
 import json
 import math
+import re
 from collections import Counter
 
 from .common import (
@@ -29,22 +30,31 @@ from .corpus import load_versions
 from .steps import idea_of, load_records
 
 STATES = [
+    "initial",
     "introduced",
     "kept",
     "dropped",
+    "done_but_refused",
+    "said_not_done",
     "tested_and_refused",
     "refused_untested",
     "considered",
+    "not_judged",
     "absent",
 ]
-# Okabe-Ito, colour-blind safe; absent is a light grey
+# Okabe-Ito plus two of Paul Tol's colours, colour-blind safe; absent is a light
+# grey and not_judged (no rule, or the judge failed) a mid grey
 STATE_COLOURS = {
+    "initial": "#117733",
     "introduced": "#009E73",
     "kept": "#0072B2",
     "dropped": "#D55E00",
+    "done_but_refused": "#882255",
+    "said_not_done": "#F0E442",
     "tested_and_refused": "#CC79A7",
     "refused_untested": "#E69F00",
     "considered": "#56B4E9",
+    "not_judged": "#AAAAAA",
     "absent": "#EEEEEE",
 }
 LINE_COLOURS = [
@@ -58,6 +68,7 @@ LINE_COLOURS = [
     "#000000",
 ]
 NOTES_NONE = ("no_mechanism", "no_record", "", None)
+LINK_STRENGTHS = ("direct", "related")
 
 
 # --- loading -----------------------------------------------------------------
@@ -71,59 +82,75 @@ class Context:
 
         self.run, self.cfg = run, cfg
         adir = run.dir / "analysis"
-        vc_path = adir / "version_codes.csv"
-        if not vc_path.exists():
-            raise SystemExit(f"no {vc_path}; run join first")
-        self.vc = pd.read_csv(vc_path, keep_default_na=False, na_values=[""])
+        self.join_manifest = require_join(run)
+        self.vc = pd.read_csv(
+            adir / "version_codes.csv", keep_default_na=False, na_values=[""]
+        )
         self.quality = read_json(adir / "quality.json")
         self.versions = {v["stem"]: v for v in load_versions(run)}
         self.records = load_records(run, coded=True)
         self.families = {}
         self.family_defs = {}
         self.code_info = {}
+        used = self.join_manifest["codebooks"]
         for kind in ("what", "why", "basis"):
-            rev, path, codes = latest_codebook(run, kind)
+            path = run.dir / "codebook" / used[kind]["file"]
+            codes = read_yaml(path)["codes"]
             defs = codebook_families(path) or codebook_families(
                 run.dir / "codebook" / f"{kind}.v1.yml"
             )
             fams = {c["name"]: c.get("family") or "none" for c in codes}
-            if kind == "what":
-                npath = run.dir / "codebook" / "never_implemented.yml"
-                nrevs = [
-                    p
-                    for p in sorted(
-                        (run.dir / "codebook").glob("never_implemented.v*.yml")
-                    )
-                    if p.stem.split(".v")[-1].isdigit()
-                ]
-                if nrevs:
-                    npath = max(nrevs, key=lambda p: int(p.stem.split(".v")[-1]))
-                if npath.exists():
-                    never = read_yaml(npath).get("codes") or []
-                    fams.update({c["name"]: c.get("family") or "none" for c in never})
-                    defs = {**codebook_families(npath), **defs}
-                    codes = codes + never
+            if kind == "what" and "never_implemented" in used:
+                npath = run.dir / "codebook" / used["never_implemented"]["file"]
+                never = read_yaml(npath).get("codes") or []
+                fams.update({c["name"]: c.get("family") or "none" for c in never})
+                defs = {**codebook_families(npath), **defs}
+                codes = codes + never
             self.families[kind] = fams
             self.family_defs[kind] = defs
             self.code_info[kind] = {c["name"]: c for c in codes}
+        self.never = set()
+        if "never_implemented" in used:
+            npath = run.dir / "codebook" / used["never_implemented"]["file"]
+            self.never = {c["name"] for c in read_yaml(npath).get("codes") or []}
         lit = run.dir / "codebook" / "literature.yml"
         self.literature = _literature(read_yaml(lit)) if lit.exists() else None
-        self.min_agreement = cfg.get("judge", {}).get("min_agreement", 0.8)
         self.reliability = []
         rel = adir / "judge_reliability.csv"
         if rel.exists():
             self.reliability = pd.read_csv(rel).to_dict("records")
-        jr = (self.quality.get("judge_reliability") or {}).get("unreliable_codes")
-        if jr:
-            self.unreliable = set(jr["codes"])
-        else:
-            self.unreliable = {
-                r["code"]
-                for r in self.reliability
-                if r["code"] != "__overall__"
-                and isinstance(r.get("agreement"), float)
-                and r["agreement"] < self.min_agreement
-            }
+        from .join import reliability_class
+
+        self.rel_class = {
+            r["code"]: reliability_class(
+                {k: ("" if v != v else v) for k, v in r.items()}, cfg
+            )
+            for r in self.reliability
+            if r["code"] != "__overall__"
+        }
+        self.unreliable = {c for c, k in self.rel_class.items() if k == "unreliable"}
+        self.rare = {c for c, k in self.rel_class.items() if k == "rare"}
+
+
+def require_join(run):
+    """The join manifest, after checking that join is current: nothing it read
+    (rule codes incl. expert rows, coded records, codebook revisions) or wrote
+    changed since, and no newer codebook revision exists."""
+    path = run.dir / "manifests" / "join.json"
+    if not path.exists():
+        raise SystemExit(f"no {path}: run join (again) before analyse")
+    try:
+        doc = require(run, "join")
+    except SystemExit as e:
+        raise SystemExit(f"join is stale, rerun join before analyse: {e}")
+    for kind, used in (doc.get("codebooks") or {}).items():
+        _, latest, _ = latest_codebook(run, kind)
+        if latest.name != used["file"]:
+            raise SystemExit(
+                f"join used {used['file']} but the latest {kind} codebook is "
+                f"{latest.name}: rerun stage B and join before analyse"
+            )
+    return doc
 
 
 def _reference(p):
@@ -198,12 +225,26 @@ def _r(x, k=4):
 # --- 1. idea events ----------------------------------------------------------
 
 
-def idea_state(in_rule, event, notes_status, tested):
-    """One label per version and code from the rule codes and the notes."""
+def idea_state(in_rule, event, notes_status, tested, has_parent=True):
+    """One label per version and code from the rule codes and the notes.
+
+    in_rule None means the rule was not judged (no rule, or a failed judge
+    call): `not_judged`, never `absent`. A rule that has the code while the notes
+    reject it is `done_but_refused`; notes that adopt a code the rule lacks are
+    `said_not_done`. A first version's codes are `initial`, not `introduced`.
+    """
+    if in_rule is None:
+        return "not_judged"
     if in_rule:
+        if notes_status == "rejected":
+            return "done_but_refused"
+        if not has_parent:
+            return "initial"
         return "introduced" if event == "introduced" else "kept"
     if event == "dropped":
         return "dropped"
+    if notes_status == "adopted":
+        return "said_not_done"
     if notes_status == "rejected":
         return "tested_and_refused" if tested else "refused_untested"
     if notes_status == "considered":
@@ -218,19 +259,24 @@ def idea_events(ctx):
         ~vc["notes_status"].isin(NOTES_NONE[:2]), "none"
     )
     vc["notes_status_label"] = vc["notes_status_label"].fillna("none")
+    judged = vc["in_rule"].notna()
     in_rule = vc["in_rule"].fillna(0).astype(float) == 1
     tested = vc["notes_tested"].fillna(0).astype(float) == 1
+    has_parent = vc["parent"].notna()
     vc["family"] = vc["what_code"].map(ctx.families["what"]).fillna("none")
     vc["score_z_parent"] = vc["parent"].map(z)
     vc["score_z_change"] = vc["score_z"] - vc["score_z_parent"]
     vc["code_unreliable"] = vc["what_code"].isin(ctx.unreliable)
     vc["idea_state"] = [
-        idea_state(r, e, n, t)
-        for r, e, n, t in zip(in_rule, vc["event"], vc["notes_status_label"], tested)
+        idea_state(r if j else None, e, n, t, hp)
+        for r, j, e, n, t, hp in zip(
+            in_rule, judged, vc["event"], vc["notes_status_label"], tested, has_parent
+        )
     ]
     has_record = vc["notes_status"] != "no_record"
-    vc["said_not_done"] = (vc["notes_status_label"] == "adopted") & ~in_rule
-    vc["done_not_said"] = in_rule & (vc["notes_status_label"] == "none") & has_record
+    adopted = vc["notes_status_label"] == "adopted"
+    vc["said_not_done"] = adopted & ~in_rule & judged
+    vc["done_not_said"] = in_rule & ~adopted & has_record
     cols = [
         "campaign",
         "lineage",
@@ -269,8 +315,33 @@ def idea_events(ctx):
         "versions": int(out["version"].nunique()),
         "codes": int(out["what_code"].nunique()),
         "idea_states": {s: counts.get(s, 0) for s in STATES},
-        "said_not_done": int(out["said_not_done"].sum()),
-        "done_not_said": int(out["done_not_said"].sum()),
+        "say_do": say_do(vc, judged, in_rule, adopted, has_parent, has_record),
+    }
+
+
+def _share(k, n):
+    return {"n": int(n), "yes": int(k), "share": round(k / n, 4) if n else None}
+
+
+def say_do(vc, judged, in_rule, adopted, has_parent, has_record):
+    """The one say-do definition (cells of version x code with a notes record):
+
+    - introductions_without_adopted_mention: of the rule introductions that have
+      a parent, the share whose notes do not adopt the code;
+    - kept_without_adopted_mention: the same for kept codes (notes rarely
+      re-argue what they keep, so it is reported apart);
+    - said_not_done: of the cells whose notes adopt the code, the share whose
+      judged rule lacks it.
+    """
+    intro = (vc["event"] == "introduced") & has_parent & judged & has_record
+    kept = (vc["event"] == "kept") & judged & has_record
+    said = adopted & judged
+    return {
+        "introductions_without_adopted_mention": _share(
+            (intro & ~adopted).sum(), intro.sum()
+        ),
+        "kept_without_adopted_mention": _share((kept & ~adopted).sum(), kept.sum()),
+        "said_not_done": _share((said & ~in_rule).sum(), said.sum()),
     }
 
 
@@ -392,9 +463,20 @@ def _stats(xs):
     )
 
 
+IDEA_VALUE_CAVEAT = (
+    "Descriptive and confounded: several codes often change in one step, the "
+    "agent chose what to change, and scores differ in noise. n_transitions "
+    "counts the other codes changing in the same step; the solo_* columns use "
+    "only steps where exactly one code changed."
+)
+
+
 def idea_value(ev):
     import pandas as pd
 
+    changes = ev[ev["event"].isin(["introduced", "dropped"]) & ev["parent"].notna()]
+    per_step = changes.groupby("version")["what_code"].count()
+    ev = ev.assign(n_transitions=ev["version"].map(per_step).fillna(0).astype(int) - 1)
     usable = ev[
         ev["event"].isin(["introduced", "dropped"])
         & ev["parent"].notna()
@@ -417,11 +499,22 @@ def idea_value(ev):
             row[f"{event}_small_n"] = s_rel["n"] < 5
             for k, v in s_all.items():
                 row[f"{event}_{k}_unfiltered"] = v
+            ev_rows = u[u["event"] == event]
+            row[f"{event}_mean_n_transitions"] = (
+                round(float(ev_rows["n_transitions"].mean()), 2)
+                if len(ev_rows)
+                else None
+            )
+            solo = ev_rows[ev_rows["n_transitions"] == 0]["score_z_change"].tolist()
+            for k, v in _stats([] if row["code_unreliable"] else solo).items():
+                row[f"{event}_solo_{k}"] = v
         rows.append(row)
     df = pd.DataFrame(rows)
     ok = df[(df["introduced_n"] >= 5)].sort_values("introduced_mean", ascending=False)
     return df, {
+        "caveat": IDEA_VALUE_CAVEAT,
         "events_used": int(len(usable)),
+        "solo_steps": int((usable["n_transitions"] == 0).sum()),
         "codes_with_5plus_introductions": int(len(ok)),
         "top_introductions": ok.head(3)[
             ["what_code", "introduced_n", "introduced_mean", "introduced_se"]
@@ -439,11 +532,17 @@ def why_by_what(ctx):
     import pandas as pd
 
     rows = []
+    omitted = Counter()
     for rec in ctx.records.values():
         for m in rec["mechanisms"]:
             codes = m.get("what_codes")
             if codes is None:
                 codes = [m["what_code"]] if m.get("what_code") else []
+            for r in m["reasons"]:
+                if not codes:
+                    omitted["mechanism_without_what_code"] += 1
+                elif not r.get("why_code"):
+                    omitted["reason_without_why_code"] += 1
             for code in codes:
                 for r in m["reasons"]:
                     if not r.get("why_code"):
@@ -482,6 +581,8 @@ def why_by_what(ctx):
         raw,
         {
             "reasons_coded": int(len(raw)),
+            "reasons_omitted": dict(omitted),
+            "note": "a reason counts once per what code of its mechanism",
             "for": int((raw["stance"] == "for").sum()),
             "against": int((raw["stance"] == "against").sum()),
             "top_family_pairs": [
@@ -501,7 +602,9 @@ def ref_kind(ref):
     r = str(ref).lower()
     if r == "none":
         return "none"
-    if "pf-" in r:
+    import re
+
+    if "pf-" in r or re.search(r"\bv\d+\b", r):
         return "earlier_version"
     if "explor" in r or "finding" in r or "entry" in r:
         return "own_exploration"
@@ -517,13 +620,17 @@ def basis_by_generation(ctx):
         for m in rec["mechanisms"]:
             for r in m["reasons"]:
                 bc = r.get("basis_code")
+                if bc:
+                    fam = ctx.families["basis"].get(bc, "none")
+                elif not (r.get("evidence") or "").strip():
+                    fam = "no_evidence_phrase"
+                else:
+                    fam = "no_fitting_code"
                 rows.append(
                     dict(
                         campaign=v["campaign"],
                         generation=v["version"],
-                        basis_family=(
-                            ctx.families["basis"].get(bc, "none") if bc else "uncoded"
-                        ),
+                        basis_family=fam,
                         evidence_ref=ref_kind(r.get("evidence_ref")),
                     )
                 )
@@ -634,51 +741,105 @@ def theory(ctx):
                 )
             )
     cd = pd.DataFrame(codes)
-    linked = {
-        r["code"]
-        for r in codes
-        if r["kind"] == "what" and (r["theory_candidates"] or r["n_publications"])
-    }
+    # linked: the code has at least one literature link of strength direct or
+    # related (theory_candidates do not count); not computed without literature
+    lit = ctx.literature
+    linked = (
+        None
+        if lit is None
+        else {
+            code
+            for code, pubs in lit.items()
+            if any(
+                isinstance(p, dict) and p.get("strength", "related") in LINK_STRENGTHS
+                for p in pubs
+            )
+        }
+    )
     mech = []
     for stem, rec in ctx.records.items():
-        explicit = any(_named(t) for t in rec.get("theory_mentions", []))
+        v = ctx.versions[stem]
+        names = [t["name"] for t in rec.get("theory_mentions", []) if _named(t)]
+        pats = [re.compile(r"\b" + re.escape(n) + r"\b", re.I) for n in names]
         for m in rec["mechanisms"]:
-            if m["status"] != "adopted":
+            if m["status"] not in ("adopted", "rejected"):
                 continue
             codes = m.get("what_codes")
             if codes is None:
-                codes = [m.get("what_code")]
-            implicit = any(c in linked for c in codes)
+                codes = [m["what_code"]] if m.get("what_code") else []
+            texts = [m.get("description", ""), m.get("quote", "")]
+            for r in m["reasons"]:
+                texts += [r.get("description", ""), r.get("quote", "")]
+            hits = sorted(
+                {
+                    n
+                    for n, pat in zip(names, pats)
+                    if any(pat.search(t or "") for t in texts)
+                }
+            )
+            explicit = bool(hits)
+            is_linked = None if linked is None else any(c in linked for c in codes)
+            if is_linked is None:
+                combo = "explicit" if explicit else "not_explicit"
+            else:
+                combo = (
+                    ("explicit" if explicit else "not_explicit")
+                    + "_"
+                    + ("linked" if is_linked else "not_linked")
+                )
             mech.append(
                 dict(
+                    campaign=v["campaign"],
+                    generation=v["version"],
                     version=stem,
-                    what_code=m.get("what_code"),
+                    status=m["status"],
+                    what_codes=";".join(codes),
                     idea=idea_of(m),
+                    theory_names=";".join(hits),
                     explicit=explicit,
-                    implicit=implicit,
-                    link=(
-                        "explicit" if explicit else ("implicit" if implicit else "none")
-                    ),
+                    linked=is_linked,
+                    combination=combo,
                 )
             )
     md = pd.DataFrame(mech)
-    names = Counter(n for s in pv["mentions"] if s for n in s.split(";"))
+    combos = (
+        md.groupby(["status", "campaign", "generation", "combination"])
+        .size()
+        .reset_index(name="n")
+        if len(md)
+        else pd.DataFrame(
+            columns=["status", "campaign", "generation", "combination", "n"]
+        )
+    )
+    overall = {
+        st: dict(Counter(md[md["status"] == st]["combination"])) if len(md) else {}
+        for st in ("adopted", "rejected")
+    }
+    mention_names = Counter(n for s_ in pv["mentions"] if s_ for n in s_.split(";"))
+    explicit_names = Counter(
+        n for s_ in md.get("theory_names", []) if s_ for n in s_.split(";")
+    )
     return (
         pv,
         by_gen,
         cd,
         md,
+        combos,
         {
             "versions_with_mention": int((pv["n_mentions"] > 0).sum()),
             "versions_with_record": int(pv["has_record"].sum()),
-            "top_mentions": names.most_common(8),
-            "adopted_mechanisms": int(len(md)),
-            "adopted_explicit": int((md["link"] == "explicit").sum()) if len(md) else 0,
-            "adopted_implicit_only": (
-                int((md["link"] == "implicit").sum()) if len(md) else 0
+            "theory_names": mention_names.most_common(),
+            "names_tied_to_mechanisms": explicit_names.most_common(),
+            "combinations_adopted": overall["adopted"],
+            "combinations_rejected": overall["rejected"],
+            "definition": (
+                "explicit: a theory name of the record occurs (case-insensitive, "
+                "word boundary) in the description or quote of the mechanism or "
+                "of one of its reasons; linked: a what code of the mechanism has "
+                "a literature link of strength direct or related"
             ),
-            "literature_present": ctx.literature is not None,
-            "codes_with_theory_link": len(linked),
+            "literature_present": lit is not None,
+            "codes_linked": None if linked is None else len(linked),
         },
     )
 
@@ -686,7 +847,7 @@ def theory(ctx):
 # --- 8. quality --------------------------------------------------------------
 
 
-def quality_table(ctx):
+def quality_table(ctx, say_do_headline):
     import pandas as pd
 
     q = ctx.quality
@@ -702,7 +863,14 @@ def quality_table(ctx):
     for r in ctx.reliability:
         if r["code"] != "__overall__":
             add("judge_agreement", r["code"], _r(r["agreement"]))
+            add("judge_kappa", r["code"], _r(r["kappa"]))
+            add("judge_class", r["code"], ctx.rel_class.get(r["code"]))
     add("judge", "unreliable_codes", ";".join(sorted(ctx.unreliable)))
+    add("judge", "rare_codes", ";".join(sorted(ctx.rare)))
+    for code, hits in (q.get("never_implemented_found") or {}).items():
+        add("never_implemented_found", code, len(hits))
+    for d in q.get("draft_codes_above_max_prevalence") or []:
+        add("draft_above_max_prevalence", d["code"], d["prevalence"])
     for code, share in (q.get("code_prevalence") or {}).items():
         add("prevalence", code, share)
     cov = (q.get("coverage_what_on_notes_mechanisms") or {}).get("all") or {}
@@ -710,13 +878,17 @@ def quality_table(ctx):
     unassigned = q.get("unassigned_by_codebook") or _unassigned_from_members(ctx)
     for kind, revs in unassigned.items():
         for rev, d in revs.items():
-            add("unassigned", f"{kind}:{rev}", d.get("share"))
+            if isinstance(d, dict):
+                add("unassigned", f"{kind}:{rev}", d.get("share"))
     for k, d in (q.get("quote_check") or {}).items():
         add("quote_check", k, d.get("rate"))
-    for k, d in (q.get("say_do_gap") or {}).items():
-        add("say_do_gap", k, d.get("rate"))
+    for k, d in say_do_headline.items():
+        add("say_do", k, d.get("share"))
     for d in q.get("agreement_overall") or []:
-        add("expert_check", f"{d['rater']} vs {d['judge']}", _r(d.get("agreement")))
+        pair = f"{d['rater']} vs {d['judge']}"
+        kind = d.get("pair_type", "rater-judge")
+        add(f"agreement_{kind}", pair, _r(d.get("agreement")))
+        add(f"kappa_{kind}", pair, _r(d.get("kappa")))
     tot = ((q.get("calls") or {}).get("total")) or {}
     add("failures", "failed_items", tot.get("failed_items", 0))
     add("failures", "length_finishes", tot.get("length_finishes", 0))
@@ -725,16 +897,24 @@ def quality_table(ctx):
         "judge_agreement": overall and _r(overall["agreement"]),
         "judge_kappa": overall and _r(overall["kappa"]),
         "unreliable_codes": sorted(ctx.unreliable),
+        "rare_codes": sorted(ctx.rare),
+        "never_implemented_found": {
+            k: len(v) for k, v in (q.get("never_implemented_found") or {}).items()
+        },
         "coverage_what": cov.get("rate"),
         "unassigned": {
-            k: {r: d.get("share") for r, d in v.items()} for k, v in unassigned.items()
+            k: {r: (d.get("share") if isinstance(d, dict) else d) for r, d in v.items()}
+            for k, v in unassigned.items()
         },
-        "say_do_gap": {
-            k: d.get("rate") for k, d in (q.get("say_do_gap") or {}).items()
-        },
+        "say_do": {k: d.get("share") for k, d in say_do_headline.items()},
         "failed_items": tot.get("failed_items", 0),
-        "expert_check": [
-            {"rater": d["rater"], "agreement": _r(d.get("agreement"))}
+        "agreement": [
+            {
+                "pair": f"{d['rater']} vs {d['judge']}",
+                "type": d.get("pair_type", "rater-judge"),
+                "agreement": _r(d.get("agreement")),
+                "kappa": _r(d.get("kappa")),
+            }
             for d in q.get("agreement_overall") or []
         ],
     }
@@ -804,7 +984,14 @@ def fig_prevalence(ev, flow, figdir):
         n_per_gen = g.groupby("generation")["n_versions"].max()
         ax.set_xticklabels([f"v{x}\nn={int(n_per_gen.get(x, 0))}" for x in gens])
         ax.set_yticks(range(len(codes)))
-        ax.set_yticklabels([f"{c}  [{fam.get(c, '')}]" for c in codes], fontsize=7)
+        never = set(ev[ev["code_source"] == "never_implemented"]["what_code"])
+        ax.set_yticklabels(
+            [
+                f"{c}  [{fam.get(c, '')}]" + ("  (never impl.)" if c in never else "")
+                for c in codes
+            ],
+            fontsize=7,
+        )
         prev = None
         for i, c in enumerate(codes):
             if prev is not None and fam.get(c) != prev:
@@ -847,6 +1034,7 @@ def fig_lineages(ev, figdir, min_versions=4):
         )
         mat = [[idx[piv.loc[c, s]] for s in stems] for c in codes]
         unrel = set(g[g["code_unreliable"]]["what_code"])
+        never_codes = set(g[g["code_source"] == "never_implemented"]["what_code"])
         z = g.drop_duplicates("version").set_index("version")["score_z"]
         fig, (ax0, ax1) = plt.subplots(
             2,
@@ -862,7 +1050,13 @@ def fig_lineages(ev, figdir, min_versions=4):
         ax1.imshow(mat, aspect="auto", cmap=cmap, vmin=-0.5, vmax=len(STATES) - 0.5)
         ax1.set_yticks(range(len(codes)))
         ax1.set_yticklabels(
-            [c + (" *" if c in unrel else "") for c in codes], fontsize=7
+            [
+                c
+                + (" *" if c in unrel else "")
+                + (" (never impl.)" if c in never_codes else "")
+                for c in codes
+            ],
+            fontsize=7,
         )
         ax1.set_xticks(range(len(stems)))
         ax1.set_xticklabels(
@@ -1097,33 +1291,66 @@ def fig_theory(by_gen, figdir):
     )
 
 
+RELIABILITY_COLOURS = {
+    "reliable": "#0072B2",
+    "unreliable": "#D55E00",
+    "rare": "#AAAAAA",
+}
+
+
 def fig_reliability(ctx, figdir):
     plt = _plt()
+    from matplotlib.patches import Patch
 
     rows = [
         r
         for r in ctx.reliability
-        if r["code"] != "__overall__" and _num(r.get("agreement")) is not None
+        if r["code"] != "__overall__" and _num(r.get("kappa")) is not None
+    ]
+    rows += [
+        r
+        for r in ctx.reliability
+        if r["code"] != "__overall__" and _num(r.get("kappa")) is None
     ]
     if not rows:
         return []
-    rows.sort(key=lambda r: r["agreement"])
-    fig, ax = plt.subplots(figsize=(6, 0.5 + 0.22 * len(rows)))
-    colours = [
-        "#D55E00" if r["agreement"] < ctx.min_agreement else "#0072B2" for r in rows
+    rows.sort(
+        key=lambda r: _num(r.get("kappa")) if _num(r.get("kappa")) is not None else 2.0
+    )
+    fig, ax = plt.subplots(figsize=(6, 0.6 + 0.22 * len(rows)))
+    cls = [ctx.rel_class.get(r["code"], "reliable") for r in rows]
+    vals = [
+        _num(r.get("kappa")) if _num(r.get("kappa")) is not None else 1.0 for r in rows
     ]
-    ax.barh(range(len(rows)), [r["agreement"] for r in rows], color=colours)
-    ax.axvline(ctx.min_agreement, color="#000000", lw=0.8, ls="--")
+    ax.barh(range(len(rows)), vals, color=[RELIABILITY_COLOURS[c] for c in cls])
+    kappa_floor = ctx.cfg.get("judge", {}).get("min_kappa", 0.8)
+    ax.axvline(kappa_floor, color="#000000", lw=0.8, ls="--")
     ax.set_yticks(range(len(rows)))
-    ax.set_yticklabels([r["code"] for r in rows], fontsize=7)
-    ax.set_xlim(0, 1)
-    ax.set_xlabel("test-retest agreement of the rule judge (repeat 1 vs 2)")
+    ax.set_yticklabels(
+        [
+            r["code"] + (" [never impl.]" if r["code"] in ctx.never else "")
+            for r in rows
+        ],
+        fontsize=7,
+    )
+    ax.set_xlim(0, 1.02)
+    ax.set_xlabel(
+        "Cohen's kappa of the rule judge, repeat 0 vs repeat 1 (judge_repeats.jsonl)"
+    )
+    ax.legend(
+        handles=[Patch(color=v, label=k) for k, v in RELIABILITY_COLOURS.items()],
+        fontsize=7,
+        frameon=False,
+        loc="lower right",
+    )
     _save(fig, figdir / "reliability.png")
     return [
         dict(
             file="figures/reliability.png",
-            caption="Per-code test-retest agreement of the rule judge, sorted; codes "
-            f"below {ctx.min_agreement} (dashed) are treated as unreliable.",
+            caption="Per-code test-retest kappa of the rule judge (repeats 0 and 1), "
+            f"sorted; unreliable: kappa below {kappa_floor} (dashed) or positive "
+            "agreement below the configured floor; rare: too few positives to rate. "
+            "Codes without variation are drawn at 1.",
         )
     ]
 
@@ -1191,7 +1418,6 @@ def render_report(summary):
 
 
 def analyse(run, cfg, limit=None):
-    require(run, "apply-notes")
     ctx = Context(run, cfg)
     adir = run.dir / "analysis"
     figdir = adir / "figures"
@@ -1214,16 +1440,18 @@ def analyse(run, cfg, limit=None):
     table("why_by_what", wbw, h)
     bbg, braw, h = basis_by_generation(ctx)
     table("basis_by_generation", bbg, h)
-    pv, tgen, tcodes, tmech, h = theory(ctx)
+    pv, tgen, tcodes, tmech, tcombo, h = theory(ctx)
     table("theory", pv, h)
     _write_csv(tgen, adir / "theory_by_generation.csv")
     _write_csv(tcodes, adir / "theory_codes.csv")
     _write_csv(tmech, adir / "theory_mechanisms.csv")
+    _write_csv(tcombo, adir / "theory_combinations.csv")
     if ctx.literature is None:
         not_computed.append(
-            "publications per code: codebook/literature.yml is not present yet"
+            "publications per code and the `linked` side of the theory table: "
+            "codebook/literature.yml is not present yet"
         )
-    qt, h = quality_table(ctx)
+    qt, h = quality_table(ctx, tables["idea_events"]["headline"]["say_do"])
     table("quality", qt, h)
     if not ctx.reliability:
         not_computed.append("judge reliability: analysis/judge_reliability.csv missing")
@@ -1243,9 +1471,7 @@ def analyse(run, cfg, limit=None):
 
     summary = {
         "run": run.run_id,
-        "codebooks": {
-            k: latest_codebook(run, k)[1].name for k in ("what", "why", "basis")
-        },
+        "codebooks": {k: d["file"] for k, d in ctx.join_manifest["codebooks"].items()},
         "families": {
             k: dict(Counter(ctx.families[k].values())) for k in ("what", "why", "basis")
         },

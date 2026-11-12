@@ -42,9 +42,14 @@ _FACTOR = (
     r"adjust|adjusts|adjusting|account|consider|considering|track|tracks|tracking)"
 )
 _NEG_NAME = re.compile(
-    r"(^|_)(ignore|ignores|ignoring|disregard|disregards|independent_of)(_|$)"
+    r"(^|_)(ignore|ignores|ignoring|disregard|disregards|independent_of|"
+    r"unconditional|unconditionally|regardless_of)(_|$)"
+    # a negation followed within two words by what is not used or followed
     r"|(^|_)(do|does|dont|doesn_t|do_not|does_not|should_not|must_not|never|"
-    r"avoid|avoids|avoiding|not|no)_(\w+_)*?" + _FACTOR + r"(_|$)"
+    r"avoid|avoids|avoiding|not)_(\w+_){0,2}?" + _FACTOR + r"(_|$)"
+    # `no_` only directly before the dependence itself: no_response_to_x, but
+    # not no_punishment_until_condition_met (a time-gating lever)
+    r"|(^|_)no_(dependence|reaction|response|adjustment|conditioning)(_|$)"
     r"|(^|_)as_a_factor(_|$)"
 )
 _NEG_TEXT = re.compile(
@@ -85,15 +90,19 @@ def is_negated_or_exclusion(code):
 
 
 def drop_negated(codes, step, what):
-    """(kept, rejected names) of proposed codes; logs what was rejected."""
+    """(kept, rejected) of proposed codes; rejected codes are kept with their
+    label and definition for the history file, and logged."""
     kept, rejected = [], []
     for c in codes:
         if is_negated(c.name, c.label, c.definition):
-            rejected.append(c.name)
+            rejected.append(
+                {"name": c.name, "label": c.label, "definition": c.definition}
+            )
         else:
             kept.append(c)
     if rejected:
-        log(f"  {step}: rejected {len(rejected)} negated {what} codes: {rejected}")
+        names = [r["name"] for r in rejected]
+        log(f"  {step}: rejected {len(rejected)} negated {what} codes: {names}")
     return kept, rejected
 
 

@@ -1,6 +1,6 @@
 # Step classification: status and how to resume
 
-Last updated: 2026-11-13, 02:30. This file is the handover for picking the work up on another machine or in another session. Update it whenever the state changes.
+Last updated: 2026-11-13, 04:00. This file is the handover for picking the work up on another machine or in another session. Update it whenever the state changes.
 
 ## Where everything is
 
@@ -40,6 +40,8 @@ viper1 to viper4 are done (reports in `runs/annotation/viper{1,3,4}/REPORT.md`, 
 
 Step 7 `analyse` is built and tested (fixture run and viper4): tables, figures, `summary.json` and a generated `REPORT.md` under `analysis/`. It needs `pandas` and `matplotlib` in `.venv-annot` (Mac only).
 
+
+Notes on prod2: its raters filled the shorter sheet format 1 (codes with definitions only, no families, examples, game setting or sweep-range instruction); sheet format 2 shows all of that. Its what codebook was built before `held_out.exclude_notes_from_codebook`, so it saw the held-out versions' notes (never their rules). Its open pass (corpus, free codes, notes records, cache) was copied from prod1; the manifests say so.
 1. Production run on dais (`prod1` open pass, `prod2` codebooks and stage B) is complete through `analyse`; open issues are in `runs/annotation/prod2/REPORT_stageB.md` (what assigner abstains on 15% of notes ideas, `near_standard_nudge` placement, the switch-cycle code boundary, `end_cutoff` prevalence).
 2. Results into new tabs of the design page.
 

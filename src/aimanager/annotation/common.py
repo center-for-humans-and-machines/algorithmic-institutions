@@ -320,10 +320,46 @@ def migrate_never_implemented(run):
     return v1
 
 
+RESERVED_NAMES = ("none", "failed")
+
+
+def validate_codebook(path, doc=None):
+    """Check a codebook file as a reviewer may have edited it: every code has a
+    name, label and definition; names are unique and not reserved; and if the
+    file has families, every code has one of them (a codebook where some codes
+    lack a family would silently lose all family headings in the prompts).
+    Raises SystemExit naming the file and the code."""
+    doc = read_yaml(path) if doc is None else doc
+    codes = (doc or {}).get("codes")
+    if not isinstance(codes, list) or not codes:
+        raise SystemExit(f"{path.name}: no `codes` list")
+    seen = set()
+    fams = {f.get("name") for f in doc.get("families") or []}
+    with_family = [c for c in codes if c.get("family")]
+    for i, c in enumerate(codes):
+        name = c.get("name")
+        where = f"{path.name}, code {name or f'#{i + 1}'}"
+        for field in ("name", "label", "definition"):
+            if not str(c.get(field) or "").strip():
+                raise SystemExit(f"{where}: missing `{field}`")
+        if name in RESERVED_NAMES:
+            raise SystemExit(f"{where}: the name is reserved")
+        if name in seen:
+            raise SystemExit(f"{where}: duplicate name")
+        seen.add(name)
+        if with_family and not c.get("family"):
+            raise SystemExit(f"{where}: no `family` while other codes have one")
+        if fams and c.get("family") and c["family"] not in fams:
+            raise SystemExit(
+                f"{where}: family {c['family']!r} is not in the file's `families`"
+            )
+    return codes
+
+
 def latest_codebook(run, kind):
-    """(revision, path, codes) of the highest checked codebook revision."""
+    """(revision, path, codes) of the highest checked and validated revision."""
     rev, path = check_revision_chain(run, kind)[-1]
-    return rev, path, read_yaml(path)["codes"]
+    return rev, path, validate_codebook(path)
 
 
 def codebook_families(path):
