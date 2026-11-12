@@ -1,0 +1,649 @@
+<title>Autoresearch Step Classification</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+/* Layout: one reading column (~760px) under a tab bar; wide tables scroll in their own box. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #1b2330;
+  --muted: #5a6577;
+  --rule: #d9dee6;
+  --accent: #1f5f8b;
+  --accent-soft: #e3eef6;
+  --git: #2f7d4f;
+  --git-soft: #e2f1e7;
+  --off: #a2560f;
+  --off-soft: #f8ecdf;
+  --code-bg: #eef1f5;
+  --f-display: "IBM Plex Serif", Georgia, serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161d; --surface: #1a2029; --fg: #e3e8ef; --muted: #9aa5b5; --rule: #2c3542;
+  --accent: #7db7e0; --accent-soft: #1c2e3e; --git: #7fcb9b; --git-soft: #1a3024;
+  --off: #e6a866; --off-soft: #3a2a18; --code-bg: #212833; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a2029; --fg: #e3e8ef; --muted: #9aa5b5; --rule: #2c3542;
+  --accent: #7db7e0; --accent-soft: #1c2e3e; --git: #7fcb9b; --git-soft: #1a3024;
+  --off: #e6a866; --off-soft: #3a2a18; --code-bg: #212833; color-scheme: dark; }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 800px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 64px; }
+header .eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--f-display); font-weight: 600; font-size: 30px; line-height: 1.2; margin: 6px 0 4px; text-wrap: balance; }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: 21px; margin: 40px 0 8px; text-wrap: balance; }
+h3 { font-size: 15px; font-weight: 600; margin: 20px 0 4px; }
+p { margin: 0 0 12px; max-width: 68ch; }
+.lead { font-size: 16.5px; }
+.meta { color: var(--muted); font-size: 13px; }
+code, .mono { font-family: var(--f-mono); font-size: 12.5px; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+a { color: var(--accent); }
+
+nav.tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--rule); margin: 22px 0 8px; }
+nav.tabs a { text-decoration: none; color: var(--muted); padding: 8px 12px; border-bottom: 2px solid transparent; font-weight: 500; font-size: 14px; }
+nav.tabs a[aria-current="page"] { color: var(--fg); border-bottom-color: var(--accent); }
+nav.tabs a .soon { font-family: var(--f-mono); font-size: 10.5px; color: var(--muted); margin-left: 4px; }
+nav.tabs a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 20px 0 8px; }
+.stat { border-top: 2px solid var(--fg); padding-top: 8px; }
+.stat b { display: block; font-family: var(--f-display); font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 13px; color: var(--muted); }
+
+/* hierarchy */
+.tree { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 14px 0; }
+.tree > div { padding: 12px 14px; border: 1px solid var(--rule); background: var(--surface); position: relative; }
+.tree > div + div { border-left: none; }
+.tree .lvl { font-family: var(--f-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.tree .name { font-weight: 600; margin: 2px 0 4px; }
+.tree p { font-size: 13.5px; margin: 0; }
+.tree > div:last-child { background: var(--accent-soft); border-color: var(--accent); }
+@media (max-width: 620px) { .tree { grid-template-columns: 1fr; } .tree > div + div { border-left: 1px solid var(--rule); border-top: none; } .tree > div:last-child { border-top: 1px solid var(--accent); } }
+
+/* pipeline */
+ol.pipe { list-style: none; padding: 0; margin: 14px 0; counter-reset: s; }
+ol.pipe li { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--rule); counter-increment: s; }
+ol.pipe li::before { content: counter(s); font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+ol.pipe .what b { font-weight: 600; }
+ol.pipe .what div { font-size: 13.5px; color: var(--muted); }
+ol.pipe .out { font-family: var(--f-mono); font-size: 11.5px; text-align: right; }
+ol.pipe li[id], h2[id], tr[id] { scroll-margin-top: 12px; }
+ol.pipe li.agent { background: var(--accent-soft); margin: 0 -10px; padding-left: 10px; padding-right: 10px; border-radius: 6px; border-bottom-color: transparent; }
+@media (max-width: 560px) { ol.pipe li { grid-template-columns: 26px minmax(0, 1fr); } ol.pipe .out { grid-column: 2; text-align: left; } }
+
+.tag { display: inline-block; font-family: var(--f-mono); font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.tag.git { background: var(--git-soft); color: var(--git); }
+.tag.off { background: var(--off-soft); color: var(--off); }
+.tag.none { background: var(--code-bg); color: var(--muted); }
+
+.tablebox { overflow-x: auto; margin: 14px 0; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 720px; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--rule); }
+th { font-size: 11.5px; font-family: var(--f-mono); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 500; background: var(--bg); }
+tr:last-child td { border-bottom: none; }
+td.k { font-weight: 600; white-space: nowrap; }
+td .p { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); display: block; overflow-wrap: anywhere; }
+.signal { display: inline-flex; gap: 2px; }
+.signal i { width: 8px; height: 8px; border-radius: 2px; background: var(--rule); display: inline-block; }
+.signal i.on { background: var(--accent); }
+
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin: 14px 0; }
+@media (max-width: 680px) { .pair { grid-template-columns: 1fr; } }
+.specimen { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; min-width: 0; }
+.specimen .cap { font-family: var(--f-mono); font-size: 11px; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--rule); overflow-wrap: anywhere; }
+.specimen + p, .tablebox + h2 { margin-top: 14px; }
+.specimen .toggle { display: flex; gap: 4px; padding: 6px; }
+.toggle button { font: 500 12px var(--f-body); color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 4px 10px; cursor: pointer; }
+.toggle button:hover { color: var(--fg); }
+.toggle button[aria-pressed="true"] { color: var(--fg); background: var(--accent-soft); border-color: var(--accent); }
+.toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.specimen pre { margin: 0; padding: 12px; overflow-x: auto; font-family: var(--f-mono); font-size: 11.5px; line-height: 1.55; white-space: pre; }
+.specimen .prose { padding: 12px; font-size: 13px; }
+.specimen .prose p { margin: 0 0 8px; }
+
+.callout { border-left: 3px solid var(--off); background: var(--off-soft); padding: 12px 14px; border-radius: 0 6px 6px 0; margin: 14px 0; }
+.callout p:last-child { margin-bottom: 0; }
+.callout.info { border-left-color: var(--accent); background: var(--accent-soft); }
+
+ul.tight { margin: 6px 0 12px; padding-left: 20px; }
+ul.tight li { margin: 3px 0; max-width: 68ch; }
+
+.planned { border: 1px dashed var(--rule); border-radius: 8px; padding: 18px; background: var(--surface); margin-top: 18px; }
+.planned h2 { margin-top: 0; }
+/* pipeline diagram */
+.diagram { overflow-x: auto; margin: 16px 0 6px; background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 4px; }
+.diagram svg { display: block; width: 100%; min-width: 560px; height: auto; font-family: var(--f-body); }
+.diagram .b { fill: var(--surface); stroke: var(--rule); stroke-width: 1.25; }
+.diagram .llm { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.25; }
+.diagram .hum { fill: var(--off-soft); stroke: var(--off); stroke-width: 1.5; }
+.diagram .dash { stroke-dasharray: 5 4; }
+.diagram .t { fill: var(--fg); font-size: 13.5px; font-weight: 600; }
+.diagram .s { fill: var(--muted); font-size: 11.5px; }
+.diagram .st { fill: var(--fg); font-size: 12.5px; font-weight: 600; }
+.diagram .ss { fill: var(--muted); font-size: 11px; }
+.diagram .ar { stroke: var(--muted); stroke-width: 1.25; fill: none; }
+.diagram .ah { fill: var(--muted); }
+.diagram .sep { stroke: var(--rule); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 10px; border-radius: 3px; display: inline-block; border: 1.25px solid; }
+.legend .l1 { background: var(--accent-soft); border-color: var(--accent); }
+.legend .l2 { background: var(--off-soft); border-color: var(--off); }
+.legend .l3 { background: var(--surface); border-color: var(--rule); }
+.levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 12px 0; }
+.levels > div { border: 1px solid var(--rule); background: var(--surface); padding: 10px 12px; min-width: 0; }
+.levels > div + div { border-left: none; }
+.levels b { display: block; font-size: 14px; }
+.levels .n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
+.levels p { font-size: 13px; margin: 4px 0 0; }
+@media (max-width: 620px) { .levels { grid-template-columns: 1fr; } .levels > div + div { border-left: 1px solid var(--rule); border-top: none; } }
+footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 12px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Algorithmic Institutions · rule annotation pipeline (ANNOT)</div>
+  <h1>Autoresearch step classification</h1>
+  <div class="meta">As of 12 Nov 2026 · working page for designing the classifier of policy-finder steps</div>
+</header>
+
+<nav class="tabs" aria-label="Sections">
+  <a href="#artifacts" data-tab="artifacts">1 · What we can analyse</a>
+  <a href="#pipeline" data-tab="pipeline">2 · Pipeline</a>
+  <a href="#formats" data-tab="formats">3 · Data formats</a>
+  <a href="#progress" data-tab="progress">4 · Progress</a>
+</nav>
+
+<!-- ============ TAB 1 ============ -->
+<section id="tab-artifacts" data-panel="artifacts">
+  <p class="lead">Each autoresearch step leaves a rule and a notes file with its reasoning in git. The full agent transcript also exists, but only on the machine that ran the agent. Policy-finder steps open no PRs, so there is no PR text to classify.</p>
+
+  <div class="stats">
+    <div class="stat"><b>3</b><span>campaigns on <code>policy-finder/*</code> branches</span></div>
+    <div class="stat"><b>36</b><span>lineages</span></div>
+    <div class="stat"><b>110</b><span>versions with a rule and notes</span></div>
+  </div>
+  <p class="meta">Counted from the notes files on the remote branches.</p>
+
+  <h2>The unit is the version</h2>
+  <p>A step in the search is one version of one lineage. Each version is a fresh agent that sees only its own lineage's history.</p>
+  <div class="tree">
+    <div><div class="lvl">Campaign</div><div class="name">pf-20261106</div><p>One run of the search, with a fixed game setting and a set of lineages.</p></div>
+    <div><div class="lvl">Lineage</div><div class="name">pf-20261106-9</div><p>One branch. Starts from a fresh agent and is iterated if it scores well.</p></div>
+    <div><div class="lvl">Version · the step</div><div class="name">pf-20261106-9-v7</div><p>One agent run. Sees earlier versions of its own lineage, never other lineages.</p></div>
+  </div>
+
+  <h2>What happens in one version</h2>
+  <p>Only the second stage involves the LLM. Everything after it turns the rule into a score.</p>
+  <ol class="pipe">
+    <li><span class="what"><b>export</b><div>Builds the agent's read-only copy of the repo, with other lineages removed.</div></span></li>
+    <li class="agent"><span class="what"><b>agent</b><div>Explores the data, writes the rule, keeps notes.</div></span><span class="out">rule · notes · scripts · transcript</span></li>
+    <li><span class="what"><b>collect</b><div>Copies the work back and commits it.</div></span></li>
+    <li><span class="what"><b>sweep, fit, final</b><div>Runs the rule over its parameter ranges, fits the landscape, reruns the best points.</div></span><span class="out">score</span></li>
+    <li><span class="what"><b>summarize</b><div>A separate skill sorts each rule into categories for the observation app.</div></span><span class="out">summary</span></li>
+  </ol>
+
+  <h2>What each version leaves behind</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Artifact</th><th>What it tells us</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="k">Rule config<span class="p">configs/managers/rule_based/&lt;stem&gt;.yml</span></td>
+          <td><em>What</em> the rule does: the code, with a one-line definition of each parameter.</td>
+          <td><span class="tag git">git</span></td>
+        </tr>
+        <tr>
+          <td class="k">Notes<span class="p">notes/policy_finder/&lt;stem&gt;.md</span></td>
+          <td><em>Why</em>: what the agent explored, what it found, and how it justifies the rule.</td>
+          <td><span class="tag git">git</span></td>
+        </tr>
+        <tr>
+          <td class="k">Agent transcript</td>
+          <td>Everything the agent did, including dead ends the notes may leave out. Could be used to check the notes.</td>
+          <td><span class="tag off">agent host only</span></td>
+        </tr>
+        <tr>
+          <td class="k">Analysis scripts<span class="p">scripts/policy_finder/&lt;name&gt;/</span></td>
+          <td>The code behind each exploration. Not coded.</td>
+          <td><span class="tag git">git</span></td>
+        </tr>
+        <tr>
+          <td class="k">Sweep and final results</td>
+          <td>The score. An outcome, not a rationale; joined in at the end.</td>
+          <td><span class="tag git">git</span></td>
+        </tr>
+        <tr>
+          <td class="k">Observatory summary</td>
+          <td>An existing set of categories, made bottom-up by the summarize skill. A comparison for our codebook.</td>
+          <td><span class="tag off">Raven</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Rule and notes, side by side</h2>
+  <p>From <code>pf-20261106-3</code>. The rule shows a fine that scales with the rival's harshness. Only the notes say why.</p>
+  <div class="pair">
+    <div class="specimen">
+      <div class="cap">Rule config · excerpt</div>
+<pre>params:
+  thr:    contribution bar; shortfall below it is punished
+  slope:  points per point of shortfall, vs a rival that never punishes
+  alpha:  increase of slope per point of the rival's mean punishment
+  m_dec:  multiplier in switch-decision rounds (3, 7, 11, 15, 19)
+  t_stop: last round in which the manager punishes
+code: |
+  short  = th.clamp(thr - cn, min=0.0)
+  scale  = slope * (1.0 + alpha * rival_p)
+  is_dec = ((t % 4) == 3).float() * (t &lt; 20).float()
+  tf     = (m_dec * is_dec + (1.0 - is_dec)) * (t &lt;= t_stop).float()
+  punishment = scale[..., None] * short * tf</pre>
+    </div>
+    <div class="specimen">
+      <div class="cap">Notes · excerpts</div>
+      <div class="prose">
+        <p><b>Exploration 1.</b> Logit of switching: own punishment +0.17/pt, the <em>other</em> group's mean punishment −0.20/pt. "A harsh rival manager pushes people toward us."</p>
+        <p><b>Exploration 5.</b> A point of punishment returns about 0.26 pool next round: "break-even at best… punishment cannot be the main lever; membership is."</p>
+        <p><b>Exploration 6.</b> Drafts the rule: scale enforcement by the rival's harshness, ease off in decision rounds, stop before the end.</p>
+      </div>
+    </div>
+  </div>
+  <p>This is why the <a href="#pipeline">pipeline</a> codes the rule for <em>what</em> and the notes for <em>what</em> and <em>why</em>.</p>
+
+  <h2>Agent transcripts are not archived</h2>
+  <div class="callout">
+    <p>The transcripts are kept on the host that ran the agent containers, which for the recent campaigns is Yannik's setup. They are not committed or copied anywhere else.</p>
+    <p><b>Action:</b> ask Yannik to archive them for the three campaigns, with a map from run to version, before that host is cleaned up.</p>
+  </div>
+</section>
+
+<section id="tab-pipeline" data-panel="pipeline" hidden>
+  <p class="lead">A design sketch for discussion. Rules are coded for <em>what</em> they do, notes for <em>what</em> and <em>why</em>. The rule coding is the result that has to hold up, so it gets the expert check. What is not decided is listed under "Open" at the end.</p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 760 852" role="img" aria-label="Classification pipeline: open pass on rules and notes, what codebook with coverage check, why codebook, expert review, apply, validate, analyse">
+      <defs><marker id="pa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path class="ah" d="M0 0L10 5L0 10z"/></marker></defs>
+
+      <!-- step labels -->
+      <text class="st" x="16" y="48">1 Open pass</text>
+      <text class="ss" x="16" y="66">no categories given</text>
+      <text class="st" x="16" y="174">2 What codebook</text>
+      <text class="ss" x="16" y="192">from rules only,</text>
+      <text class="ss" x="16" y="207">checked on notes</text>
+      <text class="st" x="16" y="300">3 Why codebook</text>
+      <text class="ss" x="16" y="318">from notes only</text>
+      <text class="st" x="16" y="426">4 Human check</text>
+      <text class="ss" x="16" y="444">on paper, no coding</text>
+      <text class="st" x="16" y="538">5 Apply</text>
+      <text class="st" x="16" y="652">6 Validate</text>
+      <text class="ss" x="16" y="670">after the fact</text>
+      <text class="st" x="16" y="778">7 Analyse</text>
+      <line class="sep" x1="138" y1="24" x2="138" y2="828"/>
+
+      <!-- row 1: open pass -->
+      <rect class="llm" x="150" y="24" width="260" height="84" rx="8"/>
+      <text class="t" x="280" y="50" text-anchor="middle">Rule · free coding</text>
+      <text class="s" x="280" y="70" text-anchor="middle">a sample of rules, described</text>
+      <text class="s" x="280" y="86" text-anchor="middle">in the LLM's own words</text>
+      <rect class="llm" x="440" y="24" width="260" height="84" rx="8"/>
+      <text class="t" x="570" y="50" text-anchor="middle">Notes · extraction</text>
+      <text class="s" x="570" y="70" text-anchor="middle">notes become records of</text>
+      <text class="s" x="570" y="86" text-anchor="middle">what and why, with quotes</text>
+      <path class="ar" d="M280 108V148" marker-end="url(#pa)"/>
+      <path class="ar" d="M570 108V148" marker-end="url(#pa)"/>
+
+      <!-- row 2: what codebook + coverage -->
+      <rect class="llm" x="150" y="150" width="260" height="84" rx="8"/>
+      <text class="t" x="280" y="176" text-anchor="middle">What codebook</text>
+      <text class="s" x="280" y="196" text-anchor="middle">cluster the rule codes</text>
+      <text class="s" x="280" y="212" text-anchor="middle">into mechanisms</text>
+      <rect class="llm" x="440" y="150" width="260" height="84" rx="8"/>
+      <text class="t" x="570" y="176" text-anchor="middle">Coverage check</text>
+      <text class="s" x="570" y="196" text-anchor="middle">do the mechanisms in the notes</text>
+      <text class="s" x="570" y="212" text-anchor="middle">fit the what codebook?</text>
+      <path class="ar" d="M412 192H438" marker-start="url(#pa)" marker-end="url(#pa)"/>
+      <path class="ar" d="M280 234V400" marker-end="url(#pa)"/>
+      <path class="ar" d="M570 234V274" marker-end="url(#pa)"/>
+
+      <!-- row 3: why codebook -->
+      <rect class="llm" x="440" y="276" width="260" height="84" rx="8"/>
+      <text class="t" x="570" y="302" text-anchor="middle">Why codebook</text>
+      <text class="s" x="570" y="322" text-anchor="middle">cluster the extracted</text>
+      <text class="s" x="570" y="338" text-anchor="middle">reasons</text>
+      <path class="ar" d="M570 360V400" marker-end="url(#pa)"/>
+
+      <!-- row 4: expert review -->
+      <rect class="hum" x="150" y="402" width="550" height="70" rx="8"/>
+      <text class="t" x="425" y="430" text-anchor="middle">Expert review of both codebooks</text>
+      <text class="s" x="425" y="450" text-anchor="middle">definitions, boundaries, theory links</text>
+      <path class="ar" d="M280 472V512" marker-end="url(#pa)"/>
+      <path class="ar" d="M570 472V512" marker-end="url(#pa)"/>
+
+      <!-- row 5: apply -->
+      <rect class="llm" x="150" y="514" width="260" height="88" rx="8"/>
+      <text class="t" x="280" y="540" text-anchor="middle">Rule judge</text>
+      <text class="s" x="280" y="560" text-anchor="middle">what codes, each with a quoted line</text>
+      <text class="s" x="280" y="580" text-anchor="middle">sees only the rule</text>
+      <rect class="llm" x="440" y="514" width="260" height="88" rx="8"/>
+      <text class="t" x="570" y="540" text-anchor="middle">Notes judge</text>
+      <text class="s" x="570" y="560" text-anchor="middle">what and why codes on the records</text>
+      <text class="s" x="570" y="580" text-anchor="middle">sees only the notes</text>
+      <path class="ar" d="M280 602V626" marker-end="url(#pa)"/>
+      <path class="ar" d="M570 602V752" marker-end="url(#pa)"/>
+
+      <!-- row 6: validate -->
+      <rect class="hum" x="150" y="628" width="260" height="84" rx="8"/>
+      <text class="t" x="280" y="654" text-anchor="middle">Expert check, rules</text>
+      <text class="s" x="280" y="674" text-anchor="middle">held-out rules, agreement</text>
+      <text class="s" x="280" y="690" text-anchor="middle">with the LLM judge</text>
+      <text class="ss" x="582" y="670">exploratory:</text>
+      <text class="ss" x="582" y="685">no human validation</text>
+      <path class="ar" d="M280 712V752" marker-end="url(#pa)"/>
+
+      <!-- row 7: analyse -->
+      <rect class="b" x="150" y="754" width="550" height="70" rx="8"/>
+      <text class="t" x="425" y="782" text-anchor="middle">Join per version</text>
+      <text class="s" x="425" y="802" text-anchor="middle">what × why × score × lineage</text>
+    </svg>
+  </div>
+  <div class="legend"><span><i class="l1"></i>LLM step</span><span><i class="l2"></i>Human step</span><span><i class="l3"></i>Analysis</span></div>
+
+  <h2>Steps</h2>
+  <p class="meta">The output on the right of each step links to its format in <a href="#formats">Data formats</a>.</p>
+  <ol class="pipe">
+    <li id="pipeline-s1"><span class="what"><b>Open pass</b><div>With no categories given, the LLM describes the mechanisms in a sample of rules, and extracts from the notes what the agent did and why.</div></span><span class="out"><a href="#formats-free">rule free codes</a> · <a href="#formats-records">notes records</a></span></li>
+    <li id="pipeline-s2"><span class="what"><b>What codebook, with a coverage check</b><div>Cluster the rule codes into mechanisms. Then check whether the mechanisms found in the notes fit.</div></span><span class="out"><a href="#formats-codebook">what codebook</a></span></li>
+    <li id="pipeline-s3"><span class="what"><b>Why codebook</b><div>Cluster the reasons extracted from the notes.</div></span><span class="out"><a href="#formats-codebook">why codebook</a></span></li>
+    <li id="pipeline-s4"><span class="what"><b>Expert review of both codebooks</b><div>Field experts read the codebooks and comment on definitions, boundaries and theory links. No coding.</div></span><span class="out"><a href="#formats-codebook">codebooks final</a></span></li>
+    <li id="pipeline-s5"><span class="what"><b>Apply</b><div>One judge codes each rule, another codes each notes record. Every code carries a quote.</div></span><span class="out"><a href="#formats-rulecodes">rule codes</a> · <a href="#formats-records">coded records</a></span></li>
+    <li id="pipeline-s6"><span class="what"><b>Expert check after the fact</b><div>Experts code rules that were not used to build the codebook. Their agreement with the LLM judge is reported.</div></span><span class="out"><a href="#formats-rulecodes">expert rule codes</a></span></li>
+    <li id="pipeline-s7"><span class="what"><b>Join and analyse</b><div>Codes joined with each version's score and its place in the lineage.</div></span><span class="out"><a href="#formats-join">analysis table</a></span></li>
+  </ol>
+
+  <h2>The two codebooks</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th></th><th>What · mechanisms</th><th>Why · reasons</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Built from</td><td>Rules</td><td>Notes</td></tr>
+        <tr><td class="k">Applied to</td><td>Rules and notes</td><td>Notes</td></tr>
+        <tr><td class="k">Status</td><td>Validated by experts on rules</td><td>Exploratory</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Principles</h2>
+  <ul class="tight">
+    <li><b>Open first, classify second.</b> Rules and notes are first described in free text with quotes. Categories come afterwards and are applied to those descriptions.</li>
+    <li><b>Separate what from why.</b> A mechanism and the reason for it are coded apart.</li>
+    <li><b>The what codebook comes from rules only.</b> The notes can show that it is missing a mechanism some rule implements. Ideas that no rule implements are listed separately.</li>
+    <li><b>The reasons are stated reasons.</b> The notes are the agent's own account.</li>
+  </ul>
+
+  <h2>What this could give us</h2>
+  <ul class="tight">
+    <li><b>From the rule codes, validated:</b> which mechanisms the search converges on, and what a mechanism is worth when it enters a lineage.</li>
+    <li><b>From the notes codes, exploratory:</b> which ideas were considered but not adopted, whether the code does what the notes claim, and which reasons go with which mechanisms.</li>
+  </ul>
+
+  <h2>Open</h2>
+  <ul class="tight">
+    <li><b>The rule sample.</b> How many rules to free-code and how to draw them.</li>
+    <li><b>Granularity.</b> How many mechanisms, and how fine.</li>
+    <li><b>How to classify reasons.</b> One proposal: empirical (the agent ran an analysis), theoretical (what it knows about how people behave) and authoritative (it worked before). These may overlap. To be decided after the open pass.</li>
+    <li><b>Scope of the extraction.</b> All notes, or a sample first.</li>
+    <li><b>The expert check.</b> How many rules, how many raters, which agreement measure.</li>
+  </ul>
+</section>
+
+<section id="tab-formats" data-panel="formats" hidden>
+  <p class="lead">The <a href="#pipeline">pipeline</a> passes four kinds of data between its steps. This tab sketches each one. It is a draft: the field names are placeholders.</p>
+  <p>Each format can be shown as a description of its fields or as an example. The examples are illustrative. They are built from the <code>pf-20261106-3</code> excerpt in <a href="#artifacts">tab 1</a>, and the category names in them are made up.</p>
+
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Format</th><th>What it holds</th><th>One per</th></tr></thead>
+      <tbody>
+        <tr><td class="k"><a href="#formats-free">Rule free codes</a></td><td>Mechanisms found in rules, in free text</td><td>Mechanism in a rule</td></tr>
+        <tr><td class="k"><a href="#formats-records">Notes records</a></td><td>What the agent did and why, taken from the notes</td><td>Version</td></tr>
+        <tr><td class="k"><a href="#formats-codebook">Codebook</a></td><td>The categories: one for <em>what</em>, one for <em>why</em></td><td>Category</td></tr>
+        <tr><td class="k"><a href="#formats-rulecodes">Rule codes</a></td><td>Which mechanisms each rule contains</td><td>Rule and mechanism</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Which step writes what</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Step</th><th>Writes</th></tr></thead>
+      <tbody>
+        <tr><td class="k"><a href="#pipeline-s1">1 Open pass</a></td><td>Rule free codes and notes records</td></tr>
+        <tr><td class="k"><a href="#pipeline-s2">2 What codebook</a></td><td>The what codebook. Adds what codes to the notes records.</td></tr>
+        <tr><td class="k"><a href="#pipeline-s3">3 Why codebook</a></td><td>The why codebook</td></tr>
+        <tr><td class="k"><a href="#pipeline-s4">4 Expert review</a></td><td>Both codebooks, revised</td></tr>
+        <tr><td class="k"><a href="#pipeline-s5">5 Apply</a></td><td>Rule codes. Adds final what and why codes to the notes records.</td></tr>
+        <tr><td class="k"><a href="#pipeline-s6">6 Expert check</a></td><td>Rule codes, filled in by experts</td></tr>
+        <tr><td class="k"><a href="#pipeline-s7">7 Join</a></td><td>Nothing new. It combines rule codes and notes records.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="formats-free">Rule free codes</h2>
+  <p>The LLM reads a rule and lists the mechanisms it sees, with no categories given. These entries are the raw material for the what codebook.</p>
+  <div class="specimen" data-fmt>
+    <div class="cap toggle" role="group" aria-label="Show rule free codes as"><button type="button" id="fmt-free-desc" data-view="desc" aria-pressed="true">Description</button><button type="button" id="fmt-free-ex" data-view="ex" aria-pressed="false">Example</button></div>
+<pre data-view="desc">version        which rule
+description    the mechanism, in the LLM's own words
+quote          the code it is read from</pre>
+<pre data-view="ex" hidden># illustrative: three entries for one rule
+- version:     pf-20261106-3
+  description: Fines the shortfall below a contribution bar, in proportion to its size
+  quote:       "short = th.clamp(thr - cn, min=0.0)"
+
+- version:     pf-20261106-3
+  description: Fines harder when the rival manager punishes more
+  quote:       "scale = slope * (1.0 + alpha * rival_p)"
+
+- version:     pf-20261106-3
+  description: Stops punishing after a set round
+  quote:       "t_stop: last round in which the manager punishes"</pre>
+  </div>
+
+  <h2 id="formats-records">Notes records</h2>
+  <p>The LLM reads a version's notes once and turns them into one record. The record lists the mechanisms the agent wrote about and, under each, the reasons it gave. Later steps add codes to the same record.</p>
+  <p><b>What a reason is.</b> Anything the notes say about why the agent put a mechanism into the rule, or why it left one out. It is recorded in the agent's own terms, with the passage it comes from, and is not sorted into kinds at this point. A reason can be a result from the agent's own analysis, an expectation about how players behave, or the fact that something worked in an earlier version. A mechanism can have several reasons, or none when the notes give none. How reasons are sorted afterwards is an <a href="#pipeline">open question</a>.</p>
+  <div class="specimen" data-fmt>
+    <div class="cap toggle" role="group" aria-label="Show notes records as"><button type="button" id="fmt-records-desc" data-view="desc" aria-pressed="true">Description</button><button type="button" id="fmt-records-ex" data-view="ex" aria-pressed="false">Example</button></div>
+<pre data-view="desc">version
+mechanisms             every mechanism the notes mention
+  description          in the agent's terms
+  quote                the passage it comes from
+  what code            added later; empty if no category fits
+  reasons              why the agent adopted or dropped it; none, one or several
+    description        the reason, in the agent's terms
+    quote              the passage it comes from
+    why code           added later
+unlinked findings      results the notes do not tie to a mechanism</pre>
+<pre data-view="ex" hidden># illustrative: one mechanism of one record
+version: pf-20261106-3
+mechanisms:
+  - description: Scale enforcement by the rival manager's harshness
+    quote:       (the passage in Exploration 6 that drafts the rule)
+    what code:   rival-dependent fine          # added in steps 2 and 5
+    reasons:
+      - description: Players move towards a group whose rival punishes harder
+        quote:       "A harsh rival manager pushes people toward us."
+        why code:    (added in step 5)
+unlinked findings:
+  - quote: "break-even at best… punishment cannot be the main lever;
+            membership is."</pre>
+  </div>
+  <p>A mechanism with an empty what code is one the what codebook does not cover. That is the coverage check.</p>
+
+  <h2 id="formats-codebook">Codebook</h2>
+  <p>The what codebook and the why codebook have the same shape: a list of categories.</p>
+  <div class="specimen" data-fmt>
+    <div class="cap toggle" role="group" aria-label="Show codebook as"><button type="button" id="fmt-codebook-desc" data-view="desc" aria-pressed="true">Description</button><button type="button" id="fmt-codebook-ex" data-view="ex" aria-pressed="false">Example</button></div>
+<pre data-view="desc">name           short label, used as the code
+definition     what counts and what does not
+examples       one case that fits, one that does not
+theory link    references</pre>
+<pre data-view="ex" hidden># illustrative: one entry of the what codebook
+name:        rival-dependent fine
+definition:  The size of the fine depends on how the other group's manager
+             punishes. Fines that depend only on the own group do not count.
+examples:
+  fits:         pf-20261106-3, "scale = slope * (1.0 + alpha * rival_p)"
+  does not fit: a rule whose fine depends only on the player's shortfall
+theory link: (filled in when the codebook is written and reviewed)</pre>
+  </div>
+
+  <h2 id="formats-rulecodes">Rule codes</h2>
+  <p>For each rule and each category in the what codebook, a yes or no. The LLM judge and the experts fill in the same format, so their agreement is a comparison of rows.</p>
+  <div class="specimen" data-fmt>
+    <div class="cap toggle" role="group" aria-label="Show rule codes as"><button type="button" id="fmt-rulecodes-desc" data-view="desc" aria-pressed="true">Description</button><button type="button" id="fmt-rulecodes-ex" data-view="ex" aria-pressed="false">Example</button></div>
+<pre data-view="desc">version
+what code
+present        yes or no
+quote          the line the judgement rests on
+coder          the LLM judge, or a person</pre>
+<pre data-view="ex" hidden># illustrative: one rule, two categories, two coders
+version         what code               present   coder       quote
+pf-20261106-3   rival-dependent fine    yes       LLM judge   "scale = slope * (1.0 + alpha * rival_p)"
+pf-20261106-3   rival-dependent fine    yes       expert A    "alpha: increase of slope per point of the rival's…"
+pf-20261106-3   fine grows on repeats   no        LLM judge
+pf-20261106-3   fine grows on repeats   no        expert A</pre>
+  </div>
+
+  <h2 id="formats-join">The join</h2>
+  <p>The analysis needs no format of its own. It combines the rule codes and the notes records by version and what code, and adds each version's parent and score from git.</p>
+
+  <h2>Open</h2>
+  <ul class="tight">
+    <li><b>Level.</b> Whether each mechanism in a notes record also says how far the idea got: considered, tested or adopted.</li>
+    <li><b>Shape of the why code.</b> One category per reason, or several attributes. This depends on how reasons are classified.</li>
+    <li><b>In the code, or in use.</b> Whether the join also records that a mechanism is switched off at the final parameters. This would come from the sweep.</li>
+  </ul>
+</section>
+
+<section id="tab-progress" data-panel="progress" hidden>
+  <p class="lead">Status of building and running the pipeline. Updated as work comes in. Results get their own tabs once there are any.</p>
+  <div class="callout">
+    <p><b>Blocked on cluster access.</b> The SSH connections to viper and dais dropped at about 16:30 and need a second factor. Running <code>ssh viper</code> and <code>ssh dais</code> in a terminal reopens them. Until then no job can be submitted or checked.</p>
+  </div>
+  <p class="meta">Last update: 12 Nov 2026, 17:30 · code and cluster setup done, waiting for cluster access</p>
+
+  <h2>Where things stand</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Stage</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Access and credentials</td><td><span class="tag git">done</span></td><td>See below.</td></tr>
+        <tr><td class="k">Survey of existing setups and data</td><td><span class="tag git">done</span></td><td>See "What the surveys found".</td></tr>
+        <tr><td class="k">Plan</td><td><span class="tag git">done</span></td><td><code>docs/plans/step-classification-pipeline.md</code> on the branch.</td></tr>
+        <tr><td class="k">Pipeline code</td><td><span class="tag git">done</span></td><td>All steps run end to end on a test backend over the real 110 versions. Reviewed once; 2 blockers and 10 other findings fixed. 18 tests pass.</td></tr>
+        <tr><td class="k">Cluster setup</td><td><span class="tag git">mostly done</span></td><td>Job scripts for both clusters and the S3 sync are in. Test jobs on viper pass. A test job on dais was queued when access dropped and is unchecked. The job scripts are under review.</td></tr>
+        <tr><td class="k">Production model</td><td><span class="tag git">downloaded</span></td><td>DeepSeek V4.1 Flash 1017 is on dais scratch and its checksums are verified. It has not been loaded yet.</td></tr>
+        <tr><td class="k">End-to-end test, small model on viper</td><td><span class="tag none">not started</span></td><td></td></tr>
+        <tr><td class="k">End-to-end run, production model on dais</td><td><span class="tag none">not started</span></td><td></td></tr>
+        <tr><td class="k">Results in this page</td><td><span class="tag none">not started</span></td><td></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>First measurements</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>Test on viper, Qwen3-30B-A3B on two GPUs</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Job start to server ready</td><td>512 s, of which 272 s is reading the weights</td></tr>
+        <tr><td class="k">Structured replies</td><td>96 requests, none violated the schema</td></tr>
+        <tr><td class="k">Shared prompt prefix reused</td><td>93% of prompt tokens</td></tr>
+        <tr><td class="k">Output speed under load</td><td>about 7,950 tokens per second</td></tr>
+        <tr><td class="k">Thinking switched off</td><td>no reasoning text in the replies</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>For the production model the plan is 2 of the 8 GPUs of a B200 node. The workload is small, so the weights decide the size of the request, not the number of documents. One GPU is too small for the weights.</p>
+
+  <h2>What the surveys found</h2>
+  <ul class="tight">
+    <li><b>Corpus.</b> 110 versions on 36 branches, each with a rule and notes. 107 have a final score. Three do not: two were never run and one failed.</li>
+    <li><b>Notes.</b> All 110 follow the same four headings: Explorations, Key findings, Hypothesis, Justification.</li>
+    <li><b>Scores.</b> The three campaigns use different units, so scores are only compared within a campaign.</li>
+    <li><b>Parent.</b> Always the previous version of the same lineage. It is not recorded anywhere and is derived from the name. Some notes credit an older version for an idea, so the extraction records which version the notes name.</li>
+    <li><b>viper.</b> Its GPU nodes are AMD. An inference setup that works there already exists in a sibling project, with a mid-sized model downloaded.</li>
+    <li><b>dais.</b> A working job setup exists in a sibling project. It needs a newer inference version for the production model.</li>
+  </ul>
+
+  <h2>Changes to the design</h2>
+  <p>The two goals for the final outcome (how ideas flow through the search, and how they relate to theory) need a little more than the <a href="#formats">data formats</a> tab shows. The plan adds:</p>
+  <ul class="tight">
+    <li><b>Status of each mechanism in the notes:</b> adopted, rejected or considered, and whether an exploration tested it. This settles the open question about levels.</li>
+    <li><b>Theory named in the notes:</b> any theory, concept or literature the agent mentions explicitly, with the passage.</li>
+    <li><b>Literature for the codebook:</b> a separate file linking each category to publications. It is written by Claude with web search, because the model on the cluster has no web access.</li>
+  </ul>
+  <p>The formats tab will be brought in line once the code is settled.</p>
+
+  <h2>Access</h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th>What</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="k">viper and dais</td><td>SSH works on both without a prompt.</td></tr>
+        <tr><td class="k">Project bucket</td><td><code>chm-algorithmic-institutions</code> is readable and writable with the credentials from the sibling projects.</td></tr>
+        <tr><td class="k">Hugging Face</td><td>A valid token is available for downloading weights.</td></tr>
+        <tr><td class="k">Storage for weights</td><td>dais: scratch, 8 TB quota, about 2 TB used. viper: <code>/ptmp</code>, which removes files not accessed for 12 weeks. Neither is the home directory.</td></tr>
+        <tr><td class="k">B200 node</td><td>8 GPUs with 183 GB each. 24-hour limit per job.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Working assumptions</h2>
+  <ul class="tight">
+    <li><b>Branch.</b> <code>annot/step-classification</code>, started from <code>yannik/handover</code> and pushed. Rules and notes are read from the 36 <code>policy-finder/*</code> branches without merging them.</li>
+    <li><b>Production model.</b> DeepSeek V4.1 Flash 1017, with GLM-5.3 as a possible second judge.</li>
+    <li><b>Development model on viper.</b> Qwen3-30B-A3B, which is already there.</li>
+    <li><b>Human steps in this first run.</b> The expert review of the codebooks and the expert check of rule codes are done by Claude, in the same formats a person would use, so a second run can swap in real experts.</li>
+    <li><b>Samples.</b> Free coding uses one version from each of the 36 lineages. The expert check uses 30 of the remaining versions. Both are settings, chosen to get the first run going, not validated choices.</li>
+  </ul>
+</section>
+
+<footer>Sources: the <code>policy-finder/*</code> branches and the policy-finder scripts in the repository, the policy-finder Slack threads, and the paper blueprint.</footer>
+</div>
+
+<script>
+(function () {
+  var tabs = ["artifacts", "pipeline", "formats", "progress"];
+  function show() {
+    var h = (location.hash || "").replace("#", "");
+    var anchor = h;
+    h = h.split("-")[0];
+    if (tabs.indexOf(h) < 0) { h = "artifacts"; anchor = h; }
+    document.querySelectorAll("[data-panel]").forEach(function (el) { el.hidden = el.getAttribute("data-panel") !== h; });
+    document.querySelectorAll("nav.tabs a").forEach(function (a) {
+      if (a.getAttribute("data-tab") === h) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+    var target = anchor !== h ? document.getElementById(anchor) : null;
+    if (target) target.scrollIntoView(); else window.scrollTo(0, 0);
+  }
+  document.querySelectorAll("[data-fmt]").forEach(function (box) {
+    var buttons = box.querySelectorAll("button[data-view]");
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var view = btn.getAttribute("data-view");
+        buttons.forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
+        box.querySelectorAll("pre[data-view]").forEach(function (p) { p.hidden = p.getAttribute("data-view") !== view; });
+      });
+    });
+  });
+  window.addEventListener("hashchange", show);
+  show();
+})();
+</script>
