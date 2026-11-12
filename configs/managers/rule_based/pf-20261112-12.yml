@@ -1,0 +1,40 @@
+params:
+  thr:
+    definition: >-
+      free-rider line: a member contributing less than thr this round is
+      punished in proportion to the shortfall (thr - c); thr near 0 punishes
+      no one (the `zero` manager)
+    type: float
+  k:
+    definition: punishment points per point of contribution shortfall below thr
+    type: float
+  quiet:
+    definition: >-
+      rounds 0-19 only: number of rounds just before each switch decision
+      (the last `quiet` rounds of each 4-round block) in which no one is
+      punished, since punishment there drives members out; 4 = never punish
+      before the final block
+    type: int
+  min_left:
+    definition: >-
+      final block (rounds 20-23, no switch follows): punish in round t only
+      if at least min_left rounds remain after it (23 - t >= min_left), so
+      that the bought contributions have time to repay the punishment; 4 =
+      never punish in the final block
+    type: int
+sweep_config:
+  thr: [0, 12]
+  k: [0.2, 4, log]
+  quiet: [0, 4]
+  min_left: [1, 4]
+constraints:
+  - thr >= 0
+  - k > 0
+code: |
+  cur = c[..., -1]
+  pos = th.remainder(t, 4)
+  before_final = (t < 20) & (pos < 4 - quiet)
+  in_final = (t >= 20) & (23 - t >= min_left)
+  gate = (before_final | in_final).float()
+  shortfall = th.clamp(thr - cur, min=0.0)
+  punishment = k * shortfall * gate * valid[..., -1] * in_group[..., -1]
