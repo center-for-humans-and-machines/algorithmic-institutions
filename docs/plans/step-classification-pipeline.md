@@ -52,7 +52,7 @@ The four formats of the design page, with the additions the two goals need. Ever
 | 5a | `apply-rules` | cluster | Judge calls per rule against the whole what codebook (codes under their families): per code the verbatim evidence first, then present and switchable_off. `judge.repeats` (2) runs in seeded code orders; present without evidence is re-asked once; disagreements go to one tie-break run. Writes the judge's test-retest reliability. |
 | 5b | `apply-notes` | cluster | Final what, why and basis codes on the records; mechanism ideas against the what codebook plus the never-implemented codes, reasons with their mechanism and stance as uncoded context, evidence phrases against the basis codebook. |
 | 6 | `expert-check` | Mac, Claude now, experts later | `export` writes a coding sheet for held-out rules (not in the free-coding sample). `ingest` reads filled sheets and writes rows to `rule_codes.jsonl` with the rater as coder. Agreement per code and overall. |
-| 7 | `analyse` | Mac | Joins and figures, see below. |
+| 7 | `analyse` | Mac | Tables, figures, `summary.json` and a generated `REPORT.md` from the join outputs, see below and the package README. |
 
 Stage A is steps 1a to 3d in one cluster job against one resident server. Stage B is steps 5a and 5b in a second job. Between them sit literature and review.
 

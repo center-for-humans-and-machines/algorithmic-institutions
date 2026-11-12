@@ -9,6 +9,8 @@ The package needs only the standard library, `pydantic` v2, `pyyaml` and `httpx`
 ```bash
 uv venv .venv-annot --python 3.9
 VIRTUAL_ENV=.venv-annot uv pip install "pydantic>=2" pyyaml httpx pytest
+# for `analyse` only (Mac): imported lazily, never needed in the container
+VIRTUAL_ENV=.venv-annot uv pip install pandas matplotlib
 ```
 
 Run everything with `PYTHONPATH=src .venv-annot/bin/python ...`; tests: `PYTHONPATH=src .venv-annot/bin/python -m pytest src/aimanager/tests/test_annot_*.py`.
@@ -33,6 +35,8 @@ $A expert-check export --run R          # expert_check/sheets/<stem>.yml
 $A expert-check ingest --run R          # reads expert_check/filled/*.yml
 $A join --run R                         # analysis/version_codes.csv, quality.json,
                                         # agreement.csv, theory_mentions.csv
+$A analyse --run R                      # 7 (Mac): analysis tables, figures/,
+                                        # summary.json, REPORT.md
 ```
 
 Proposal prompts hold at most `clustering.max_items_in_proposal` items and only as many as fit the context length (`llm.max_model_len`, or `ANNOT_MAX_MODEL_LEN` from the job) next to `max_tokens.propose.retry`; the rest are sampled out with a seed and the step logs how many. Each step can also be run alone (`$A coverage --run R ...`). Every validated LLM reply (and every `length` reply) is cached under `cache/` keyed on model, messages, schema and sampling parameters, so a rerun repeats only missing or failed calls; invalid replies are never cached. Every call is logged in `logs/calls.jsonl`.
@@ -79,5 +83,11 @@ Prompts are shared instructions (then the codebook, if any) followed by a per-do
 - `codebook/what.draft.yml` (from rules), `what.premerge.yml` and `never_implemented.premerge.yml` (coverage), `what.v1.yml` and `never_implemented.yml` (consolidated, with families), `non_discriminating.yml`, `why.draft.yml`, `why.v1.yml`, `basis.draft.yml`, `basis.v1.yml`, `*.merges.yml` (consolidation audit), `*.members.yml` (item ids per code, for auditing), `*.history.json` (proposal rounds, rejected negated codes), `what_saturation.csv`
 - `coverage/` (notes ideas against the draft, candidate codes, the judgements of draft and candidates together, `judge_repeats.jsonl`, `judge_reliability.csv`, `summary.json` with prevalence)
 - `codes/rule_codes.jsonl` (LLM judge and expert rows: `present`, `switchable_off`, `quote`, `coder`, `codebook_revision`; judge rows also `unsupported`, `repeats`, `tiebreak`), `codes/judge_repeats.jsonl`, `records_coded/<stem>.json` (mechanisms coded against the latest what codebook plus the never-implemented codes, reasons with why and basis codes)
-- `analysis/version_codes.csv` (one row per version and code, never-implemented codes included with `code_source`), `analysis/quality.json`, `analysis/agreement.csv`, `analysis/judge_reliability.csv`, `analysis/theory_mentions.csv`
+- `analysis/version_codes.csv` (one row per version and code, never-implemented codes included with `code_source`), `analysis/quality.json`, `analysis/agreement.csv`, `analysis/judge_reliability.csv`, `analysis/theory_mentions.csv` (join)
+- `unassigned/<kind>.v<rev>.stage_b.yml` (items the codebooks stage B used do not cover)
+- from `analyse`: `analysis/idea_events.csv`, `idea_flow_by_generation.csv`, `idea_first_seen.csv`, `idea_value.csv`, `why_by_what.csv`, `basis_by_generation.csv`, `theory.csv` (+ `theory_by_generation.csv`, `theory_codes.csv`, `theory_mechanisms.csv`), `quality.csv`, `summary.json`, `REPORT.md`, `figures/*.png`
+
+## Analyse (step 7, Mac only)
+
+`analyse --run R` needs a finished join. It reads the join outputs, the coded records, the highest codebook revisions with their families, the quality files and `codebook/literature.yml` if present (per code a list of publications with `reference`, `doi` or `url`, `connection` and `verified`; either a mapping `code: [publications]` or `codes: [{code, publications}]`). Every event gets an `idea_state` from the rule and the notes: introduced, kept, dropped (rule), tested_and_refused, refused_untested, considered (notes), absent; plus say-do flags. Idea value is the change in within-campaign standardised score from a scored parent to a scored child when a code is introduced or dropped, without codes below `judge.min_agreement` (raw numbers in `*_unfiltered`). Figures: prevalence per campaign, one idea-flow grid per lineage with at least 4 versions, a funnel per what family, idea value, why by what, basis and theory by version index, judge reliability (Okabe-Ito colours, PNG at 200 dpi). `summary.json` holds every headline number and figure caption; `REPORT.md` is generated from it.
 - `manifests/<step>.json`

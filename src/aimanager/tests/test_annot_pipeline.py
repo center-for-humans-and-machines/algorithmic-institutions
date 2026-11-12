@@ -279,3 +279,65 @@ def test_stage_b_join_and_agreement(run_dir):
     assert {r["codebook_revision"] for r in llm} == {2}
     assert len(llm) == 12 * 2
     assert any(r["coder"] == "rater:sim" for r in codes)
+
+
+def test_idea_state_and_evidence_kinds():
+    from aimanager.annotation.analyse import idea_state, ref_kind
+
+    assert idea_state(True, "introduced", "none", False) == "introduced"
+    assert idea_state(True, "kept", "rejected", True) == "kept"
+    assert idea_state(False, "dropped", "adopted", False) == "dropped"
+    assert idea_state(False, "absent", "rejected", True) == "tested_and_refused"
+    assert idea_state(False, "absent", "rejected", False) == "refused_untested"
+    assert idea_state(False, "absent", "considered", False) == "considered"
+    assert idea_state(False, "absent", "adopted", True) == "absent"
+    assert ref_kind("exploration 3") == "own_exploration"
+    assert ref_kind("pf-20261104-7-v6") == "earlier_version"
+    assert ref_kind("none") == "none" and ref_kind(None) == "not_stated"
+
+
+def test_analyse_tables_figures_and_report(run_dir):
+    pytest.importorskip("pandas")
+    pytest.importorskip("matplotlib")
+    from aimanager.annotation.analyse import Context, fig_lineages, idea_events
+    from aimanager.annotation.common import Run, load_config
+
+    root = run_dir.parent
+    cfg_path = root.parent / "cfg.yml"
+    base = ["--run", "t", "--runs-root", str(root), "--config", str(cfg_path)]
+    main(["analyse"] + base)
+    a = run_dir / "analysis"
+    summary = json.loads((a / "summary.json").read_text())
+    assert set(summary["tables"]) == {
+        "idea_events",
+        "idea_flow_by_generation",
+        "idea_first_seen",
+        "idea_value",
+        "why_by_what",
+        "basis_by_generation",
+        "theory",
+        "quality",
+    }
+    for t in summary["tables"].values():
+        assert (a / t["file"]).exists()
+    with open(a / "idea_events.csv") as f:
+        ev = list(csv.DictReader(f))
+    assert len(ev) == len(read_jsonl(run_dir / "corpus" / "versions.jsonl")) * len(
+        {r["what_code"] for r in ev}
+    )
+    assert {"introduced", "kept"} <= {r["idea_state"] for r in ev}
+    assert {"said_not_done", "done_not_said", "code_unreliable"} <= set(ev[0])
+    with open(a / "idea_value.csv") as f:
+        val = list(csv.DictReader(f))
+    assert "introduced_mean_unfiltered" in val[0]
+    figs = {f["file"] for f in summary["figures"]}
+    assert {"figures/funnel.png", "figures/reliability.png"} <= figs
+    assert any(f.startswith("figures/prevalence_") for f in figs)
+    for f in figs:
+        assert (a / f).stat().st_size > 1000
+    report = (a / "REPORT.md").read_text()
+    assert "idea_events.csv" in report and "literature.yml" in report
+    # the fixture lineages have 3 versions; the lineage figure renders at 3
+    ctx = Context(Run(root, "t"), load_config(cfg_path))
+    out = fig_lineages(idea_events(ctx)[0], a / "figures", min_versions=3)
+    assert out and (a / out[0]["file"]).exists()

@@ -60,6 +60,7 @@ def _parser():
     r.add_argument("action", choices=["status", "begin"])
     r.add_argument("--kind", choices=["what", "why", "basis"], help="codebook (begin)")
     sub.add_parser("join", parents=[common])
+    sub.add_parser("analyse", parents=[common], help="7: tables, figures, report")
     return p
 
 
@@ -147,6 +148,10 @@ def main(argv=None):
         from .join import join
 
         join(run, cfg, limit=args.limit)
+    elif args.command == "analyse":
+        from .analyse import analyse
+
+        analyse(run, cfg, limit=args.limit)
     return 0
 
 
