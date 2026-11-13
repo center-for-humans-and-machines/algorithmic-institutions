@@ -312,3 +312,41 @@ def test_the_diff_score_is_the_lead_over_the_opponents_group_in_the_same_game():
     assert result["best_name"] == "toy_s000"
     assert result["metric"] == "pool_diff_vs_opponents" and result["opponents"] == ["ah"]
     check_sweep(config)
+
+
+def test_a_baseline_gives_every_point_its_paired_gain():
+    config = _multi_config({"toy_s000": 0.5}, rivals=("ah",))
+    config.update(sweep_metric="pool_diff_vs_opponents", sweep_baseline="zero", seed_cycle=1)
+    config["managers"]["zero"] = {"type": "dummy", "constant_punishment": 0}
+    config["pairings"] += [{"name": "zero_vs_ah", "group_0": "zero", "group_1": "ah"},
+                           {"name": "ah_vs_zero", "group_0": "ah", "group_1": "zero"}]
+    df = _frame(
+        {
+            # the point: leads 6 and 24 in seat 0, 8 and -24 in seat 1
+            "toy_s000_vs_ah": [[(10, 2, 0), (5, 0, 1)], [(20, 0, 0), (5, 0, 1)]],
+            "ah_vs_toy_s000": [[(5, 0, 0), (10, 0, 1)], [(20, 0, 0), (5, 0, 1)]],
+            # zero in the same games: leads 8 and 8, then 0 and 0
+            "zero_vs_ah": [[(10, 0, 0), (5, 0, 1)], [(10, 0, 0), (5, 0, 1)]],
+            "ah_vs_zero": [[(5, 0, 0), (5, 0, 1)], [(5, 0, 0), (5, 0, 1)]],
+        }
+    )
+    result = sweep_result(df, config)
+    (point,) = result["points"]
+    assert point["name"] == "toy_s000"
+    # game by game: 6-8, 24-8, 8-0, -24-0
+    assert point["gain"] == pytest.approx((-2 + 16 + 8 - 24) / 4)
+    assert point["gain_se"] == pytest.approx(pd.Series([-2, 16, 8, -24]).std() / 2)
+    assert result["baseline"]["name"] == "zero"
+    assert result["baseline"]["pool"] == pytest.approx(4.0)
+
+
+def test_a_baseline_needs_common_games():
+    config = _multi_config({"toy_s000": 0.5}, rivals=("ah",))
+    config.update(sweep_metric="pool_diff_vs_opponents", sweep_baseline="zero")
+    config["managers"]["zero"] = {"type": "dummy", "constant_punishment": 0}
+    config["pairings"] += [{"name": "zero_vs_ah", "group_0": "zero", "group_1": "ah"},
+                           {"name": "ah_vs_zero", "group_0": "ah", "group_1": "zero"}]
+    with pytest.raises(ValueError, match="seed_cycle"):
+        check_sweep(config)
+    config["seed_cycle"] = 1
+    assert check_sweep(config) == RULE_PATH

@@ -462,7 +462,7 @@ class Version:
             "best_of_n_name": top["name"], "best_of_n_params": top["params"],
             "n_points": final["n_points"],
         }
-        for key in ("own", "other"):  # the two groups' pools (pool_diff_vs_opponents)
+        for key in ("own", "other", "gain", "gain_se"):  # pool_diff_vs_opponents; a baseline
             if key in gp:
                 self.data["score"][key] = gp[key]
         if "pools" in gp:  # against each opponent (pool_vs_opponents)

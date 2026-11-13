@@ -853,6 +853,10 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
                 f"{final['own']:.1f} · {final['other']:.1f}"
                 f"<small>{final['members']:.2f} · {final['other_members']:.2f} members</small>",
             )
+        if final.get("gain") is not None:  # a final paired with a baseline
+            tiles.insert(1, (
+                "Gain over zero, same games",
+                f"{final['gain']:+.2f}<small>± {final['gain_se']:.2f}</small>"))
         tiles += [
             ("Fit predicted", predicted),
             (
@@ -1207,6 +1211,8 @@ def version_row(wt: Path, version: str, key: str, summary: dict) -> dict:
             row[f"vs {OPPONENTS.get(k, k)}"] = v["pool"]
         if "own" in best:  # exp2_diff
             row.update({"own pool": best["own"], "ah pool": best["other"]})
+        if best.get("gain") is not None:  # paired with a baseline in its final
+            row["gain"] = best["gain"]
     notes = read(wt / "notes/policy_finder" / f"{version}.md")
     if notes:
         sections = parse_notes(notes)

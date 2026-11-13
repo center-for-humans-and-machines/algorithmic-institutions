@@ -46,9 +46,12 @@ def episode_members(sub: pd.DataFrame, group: int) -> pd.Series:
 
 
 def against_anchor(df: pd.DataFrame, anchor: str) -> dict:
-    """Manager -> per-episode (pool, members, other, other_members) of its
-    group against the anchor; `other` and `other_members` are the anchor's
-    group in the same episodes, for scores that compare the two.
+    """Manager -> per-episode (pool, members, other, other_members, seat,
+    episode) of its group against the anchor; `other` and `other_members` are
+    the anchor's group in the same episodes, for scores that compare the two;
+    `seat` the manager's group and `episode` the episode within its pairing,
+    which together name a game (for pairing managers that played the same
+    games).
 
     Pools every pairing of the manager with the anchor, in either position.
     The anchor's own entry comes from `anchor_vs_anchor`, both groups.
@@ -70,6 +73,8 @@ def against_anchor(df: pd.DataFrame, anchor: str) -> dict:
                     "members": episode_members(sub, group),
                     "other": ep[1 - group],
                     "other_members": episode_members(sub, 1 - group),
+                    "seat": group,
+                    "episode": ep.index.to_numpy(),
                 }
             )
             scores.setdefault(manager, []).append(frame)

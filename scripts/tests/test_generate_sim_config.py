@@ -376,3 +376,57 @@ def test_a_diff_sweep_plays_ah_in_both_seats(repo):
     ]
     assert config["managers"]["toy_s000"]["setting"] == "exp2_diff"
     assert gen.pairings_per_point("exp2_diff") == 2
+
+
+# -- exp2_diff with common games: same games per point, fresh seeds, a baseline --
+
+
+@pytest.fixture
+def diff(repo):
+    path = repo / gen.SETTINGS["exp2_diff"]["opponents"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(Path(__file__).resolve().parents[2] / gen.SETTINGS["exp2_diff"]["opponents"], path)
+    return repo
+
+
+def test_common_batches_hold_one_point_each():
+    assert gen.common_batches(250, 2, 1000) == (500, 1)   # sweep: a point per batch
+    assert gen.common_batches(1000, 2, 1000) == (1000, 2)  # final: a pairing per batch
+    assert gen.common_batches(50, 2, 1000) == (100, 1)
+    assert gen.common_batches(1500, 2, 1000) == (750, 4)
+
+
+def test_a_diff_sweep_gives_every_point_the_same_games(diff):
+    rule = "configs/managers/rule_based/toy.yml"
+    design = validate_rule(rule, n_points=16)
+    parts = gen.build_sim_configs(rule, design, n_episodes=250, seed=7, n_parts=2,
+                                  setting="exp2_diff")
+    for _, config in parts:
+        assert config["episode_batch_size"] == 500 and config["seed_cycle"] == 1
+        assert config["seed"] == 7  # every part plays the same games
+        assert "sweep_baseline" not in config
+
+
+def test_version_seeds_differ_by_version_and_kind():
+    seeds = {gen.version_seed(s, k) for s in ("pf-1", "pf-1-v2", "pf-2") for k in ("sweep", "final")}
+    assert len(seeds) == 6 and all(1_000_000 <= s < 10_000_000 for s in seeds)
+    assert gen.version_seed("pf-1", "sweep") == gen.version_seed("pf-1", "sweep")
+
+
+def test_a_diff_final_plays_the_baseline_on_the_same_games(diff):
+    rule = "configs/managers/rule_based/toy.yml"
+    design = validate_rule(rule, n_points=2)
+    config = gen.build_sim_config(rule, design, n_episodes=1000, seed=5, setting="exp2_diff",
+                                  baseline=True)
+    assert config["sweep_baseline"] == "zero"
+    assert config["managers"]["zero"] == {"type": "dummy", "constant_punishment": 0}
+    assert [p["name"] for p in config["pairings"]][-2:] == ["zero_vs_ah", "ah_vs_zero"]
+    # a pairing per batch, cycled per point: every point's seat-0 games are batch 0's
+    assert config["episode_batch_size"] == 1000 and config["seed_cycle"] == 2
+
+
+def test_other_settings_keep_their_seeding(repo):
+    rule = "configs/managers/rule_based/toy.yml"
+    design = validate_rule(rule, n_points=4)
+    config = gen.build_sim_config(rule, design, n_episodes=5)
+    assert "seed_cycle" not in config and "sweep_baseline" not in config

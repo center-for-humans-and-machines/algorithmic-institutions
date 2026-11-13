@@ -115,8 +115,16 @@ class Campaign:
         path = self.wt_root / f"{stem_of(name, version)}.state.json"
         return json.loads(path.read_text()) if path.exists() else None
 
+    @staticmethod
+    def rank_score(score):
+        """What ranks a final: its paired gain over the setting's baseline
+        when it has one (generate_sim_config.py SETTINGS `baseline`; each
+        version's final plays its own games), else its score."""
+        return score["gain"] if score.get("gain") is not None else score["pool"]
+
     def lineage_best(self, name, upto=None):
-        """The highest GP-peak final of the lineage's scored versions (<= upto)."""
+        """The highest GP-peak final of the lineage's scored versions (<= upto),
+        by rank_score."""
         best = -math.inf
         conf = self.conf(name)
         last = conf.get("version", 1) if conf else 0
@@ -124,7 +132,7 @@ class Campaign:
             state = self.version_state(name, v) or {}
             score = state.get("data", {}).get("score")
             if state.get("status") == "scored" and score:
-                best = max(best, score["pool"])
+                best = max(best, self.rank_score(score))
         return best
 
     def select(self):
@@ -178,7 +186,10 @@ class Campaign:
             status = state.get("status")
             if status in ("scored", "failed"):
                 self.log(f"{stem}: {status}" + (
-                    f" {state['data']['score']['pool']:.2f}" if status == "scored" else
+                    f" {state['data']['score']['pool']:.2f}"
+                    + (f" (gain {state['data']['score']['gain']:+.2f})"
+                       if state['data']['score'].get('gain') is not None else "")
+                    if status == "scored" else
                     f" at {self._failed_step(state)}"))
                 return status
             if state and status == "error":
@@ -307,6 +318,7 @@ class Campaign:
                     "failed_step": (self._failed_step(state)
                                     if state.get("status") == "failed" else None),
                     "pool": score.get("pool"), "pool_se": score.get("pool_se"),
+                    "gain": score.get("gain"), "gain_se": score.get("gain_se"),
                     "best_of_n": score.get("best_of_n"),
                     "best_of_n_se": score.get("best_of_n_se"),
                     "n_points": score.get("n_points"),
@@ -328,10 +340,12 @@ class Campaign:
         # against each opponent, when the setting has several (exp2_multi)
         rivals = sorted({k for r in rows for k in (r.get("pools") or {})})
         extra = "".join(f" {k} |" for k in rivals)
+        gains = any(r.get("gain") is not None for r in rows)
+        extra = (" gain over baseline |" if gains else "") + extra
         lines = [f"# Campaign {self.path.stem}", "",
                  f"| gen | version | status | GP peak | best of n |{extra}"
                  " agent, API-equivalent $ |",
-                 "|---|---|---|---|---|" + "---|" * len(rivals) + "---|"]
+                 "|---|---|---|---|---|" + "---|" * (len(rivals) + gains) + "---|"]
         for r in rows:
             status = r["status"] + (f" ({r['failed_step']})" if r["failed_step"] else "")
             pools = r.get("pools") or {}
@@ -339,6 +353,8 @@ class Campaign:
                 f" {num(pools[k]['pool'], pools[k]['pool_se']) if k in pools else ''} |"
                 for k in rivals
             )
+            if gains:
+                cells = f" {num(r.get('gain'), r.get('gain_se'))} |" + cells
             lines.append(f"| {r['generation']} | {r['stem']} | {status} "
                          f"| {num(r['pool'], r['pool_se'])} "
                          f"| {num(r['best_of_n'], r['best_of_n_se'])} |{cells}"

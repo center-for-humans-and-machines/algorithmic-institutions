@@ -7,7 +7,10 @@ its params inline, in one of four ways (`sweep_metric`):
     `<point>_vs_<anchor>`, the point in group 0;
   - `pool_vs_opponents`: against every governor in `sweep_opponents` in
     both seats, pairings `<point>_vs_<opponent>` (the point in group 0) and
-    `<opponent>_vs_<point>` (in group 1);
+    `<opponent>_vs_<point>` (in group 1); `sweep_baseline` names one more
+    manager that plays the opponents the same way but is no design point: each
+    point's `gain` is its score minus the baseline's, game by game, which
+    needs the sim to play every point's games alike (`seed_cycle`);
   - `pool_diff_vs_opponents`: the same games, scored by how far the point's
     group's pool is ahead of the opponent's group's in the same game;
   - `group_payoff`: alone with the clones, no pairings (experiment 1).
@@ -154,6 +157,11 @@ def _check_opponents(config: dict) -> str:
     rivals = config.get("sweep_opponents") or []
     if not rivals:
         raise ValueError(f"sweep: {metric_of(config)} needs `sweep_opponents`")
+    baseline = config.get("sweep_baseline")
+    if baseline is not None and (baseline not in managers or baseline in rivals):
+        raise ValueError(f"sweep: the baseline `{baseline}` needs a manager of its own")
+    if baseline is not None and not config.get("seed_cycle"):
+        raise ValueError("sweep: a baseline is paired game by game and needs `seed_cycle`")
     missing = [r for r in rivals if r not in managers]
     if missing:
         raise ValueError(f"sweep: opponents without a manager: {missing}")
@@ -170,6 +178,10 @@ def _check_opponents(config: dict) -> str:
     rules = set()
     want = sorted((r, s) for r in rivals for s in (0, 1))
     for point, seats in played.items():
+        if point == baseline:
+            if sorted(seats) != want:
+                raise ValueError(f"sweep: the baseline must play every opponent once in each seat")
+            continue
         if sorted(seats) != want:
             raise ValueError(
                 f"sweep: `{point}` must play every opponent once in each seat, got {seats}"
@@ -187,9 +199,11 @@ def _point_names(config: dict) -> list:
     if metric_of(config) == GROUP_PAYOFF:
         return list(config["managers"])
     rivals = set(config.get("sweep_opponents") or ())
-    return list(dict.fromkeys(
+    names = dict.fromkeys(
         p["group_1"] if p["group_0"] in rivals else p["group_0"] for p in config["pairings"]
-    ))
+    )
+    names.pop(config.get("sweep_baseline"), None)
+    return list(names)
 
 
 def _summary(s) -> dict:
@@ -224,9 +238,13 @@ def _opponent_points(df, config: dict) -> list:
     summary = _diff_summary if diff else _summary
     df = add_pool(df)
     against = {r: against_anchor(df, r) for r in rivals}
+    baseline = config.get("sweep_baseline")
     points = []
     for name in _point_names(config):
         pools = {r: summary(against[r][name]) for r in rivals}
+        if baseline:
+            for r in rivals:
+                pools[r].update(_gain(against[r][name], against[r][baseline], diff))
         ses = [pools[r]["pool_se"] for r in rivals]
         se = (
             math.sqrt(sum(s * s for s in ses)) / len(rivals)
@@ -246,7 +264,37 @@ def _opponent_points(df, config: dict) -> list:
         if diff:
             for key in ("own", "other", "other_members"):
                 points[-1][key] = sum(pools[r][key] for r in rivals) / len(rivals)
+        if baseline:
+            points[-1]["gain"] = sum(pools[r]["gain"] for r in rivals) / len(rivals)
+            points[-1]["gain_se"] = (
+                math.sqrt(sum(pools[r]["gain_se"] ** 2 for r in rivals)) / len(rivals))
     return points
+
+
+def _gain(point, base, diff: bool) -> dict:
+    """The point's score minus the baseline's in the same games (matched on
+    seat and episode), its mean and standard error over the games."""
+    def score(s):
+        return (s["pool"] - s["other"]) if diff else s["pool"]
+    a = point.assign(score=score(point)).set_index(["seat", "episode"])["score"]
+    b = base.assign(score=score(base)).set_index(["seat", "episode"])["score"]
+    d = (a - b).dropna()
+    if len(d) != len(a) or len(d) != len(b):
+        raise ValueError("sweep: the baseline did not play the points' games")
+    se = float(d.std(ddof=1) / math.sqrt(len(d))) if len(d) > 1 else None
+    return {"gain": float(d.mean()), "gain_se": se}
+
+
+def _baseline_summary(df, config: dict) -> dict:
+    """The baseline's own score against the opponents, as a point's."""
+    rivals = config["sweep_opponents"]
+    diff = metric_of(config) == POOL_DIFF_VS_OPPONENTS
+    summary = _diff_summary if diff else _summary
+    df = add_pool(df)
+    base = config["sweep_baseline"]
+    pools = {r: summary(against_anchor(df, r)[base]) for r in rivals}
+    return {"name": base, "pool": sum(v["pool"] for v in pools.values()) / len(rivals),
+            "pools": pools}
 
 
 def sweep_result(df, config: dict) -> dict:
@@ -278,6 +326,8 @@ def sweep_result(df, config: dict) -> dict:
     }
     if metric in OPPONENT_METRICS:
         result["opponents"] = list(config["sweep_opponents"])
+    if config.get("sweep_baseline"):
+        result["baseline"] = _baseline_summary(df, config)
     return result
 
 

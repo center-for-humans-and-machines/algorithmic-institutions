@@ -1,0 +1,17 @@
+# The lead over ah again, with common games, fresh seeds per version and finals paired
+# with zero (docs/plans/policy-finder-common-games.md): the same shape and budget as
+# exp2-diff-2026-11.yml, which ran without them, to test whether they improve the search.
+# Run: PF_RUNS=... PF_WORKTREE_ROOT=$PF_RUNS/worktrees_crn PF_BASE=pf-crn \
+#      python scripts/policy_finder/campaign.py run <this file>
+prefix: pf-20261113
+setting: exp2_diff
+n_fresh: 12
+generations: 6
+top_k: 4
+min_params: 1
+max_params: 5
+sobol_points: 256
+parallel: 12
+error_retries: 3
+retry_wait: 600
+summarize: null
