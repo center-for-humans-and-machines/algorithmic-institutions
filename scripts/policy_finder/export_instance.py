@@ -58,6 +58,7 @@ DENY = (
     "configs/simulation/opponents",
     "configs/simulation/manager_testing/32_LEVIN_multi_reference.yml",
     "configs/simulation/manager_testing/33_MULTI_h2h",
+    "configs/simulation/manager_testing/34_DIFF_h2h",
     "scripts/policy_finder/observation_app",
     "scripts/policy_finder/campaign.py",
     "scripts/policy_finder/campaigns",
