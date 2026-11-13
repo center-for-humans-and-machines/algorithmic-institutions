@@ -57,3 +57,15 @@ of the gain is the method and how much could be luck.
 ## Progress
 
 - 2026-11-13: plan; implementation started on `pf-crn`.
+- 2026-11-13: changes 1–4 built and tested (`1a864f06`).
+  - A local sim of a final with a non-punishing point gives a gain over `zero` of exactly 0.0, game
+    for game.
+  - Evaluation scripts: `exp2_diff_crn_h2h_configs.py` and `exp2_diff_h2h.py --paired`.
+- 2026-11-13 16:51: blocked at the smoke.
+  - The policy-finder subagent's first Opus request is stopped by the API's safety classifier
+    (`reasoning_extraction`), every attempt.
+  - It happens with yesterday's unchanged agent definition too (`yannik/handover`), so it is not
+    this branch's edits.
+  - Request IDs: `req_011Ch1GoTnfARuH2rZxJA4Xw`, `req_011Ch1GqieBGWvyf76y1o1D8`,
+    `req_011Ch1GwivTa61sqXe696cMe`, `req_011Ch1Gyyb5HXjhQMF5HkJJh`.
+  - No campaign started.
