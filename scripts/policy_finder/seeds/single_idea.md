@@ -10,8 +10,8 @@
 
 ## Hypothesis
 
-A manager punishes each member in proportion to how far the member's contribution falls short of full contribution. One parameter: `alpha`, the punishment points per point of shortfall below 20, swept log-uniformly over 0.02 to 1.5 (at 1.5 a member who contributes nothing gets the maximum of 30).
+A manager that never punishes: every member gets 0 punishment points in every round, whatever the member contributed. No parameters, so the sweep is a single point.
 
 ### Justification
 
-None. The rule is the starting point that later versions change by one idea each. It does not treat a timed-out member differently from one who contributed nothing, does not depend on the round, the switch decisions, the group or the other manager.
+None. The rule is the starting point that later versions change by one idea each. It does not depend on the contributions, the round, the switch decisions, the group or the other manager.

@@ -8,7 +8,7 @@ A campaign is a YAML file (scripts/policy_finder/campaigns/*.yml):
     top_k: 4                # ... on the lineages with the highest lineage best
     min_params: 1           # generation 1's param bounds; later versions
     max_params: 5           #   may declare any number (new_instance.sh),
-    iterate_max_params: null  # or at most this many, when set
+    iterate_max_params: null  # or 0 to this many, when set
     sobol_points: 256
     parallel: 12            # versions running at once (agents are capped
                             #   separately by agent_runner's slots)
@@ -172,7 +172,7 @@ class Campaign:
             if previous.get("status") == "failed":
                 command.append("--after-failure")
             if s["iterate_max_params"] is not None:
-                command += ["--min-params", 1, "--max-params", s["iterate_max_params"]]
+                command += ["--min-params", 0, "--max-params", s["iterate_max_params"]]
             return command
         raise CampaignError(f"{name} is at version {current}, cannot run version {version}")
 

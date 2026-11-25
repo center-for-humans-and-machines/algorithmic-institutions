@@ -136,3 +136,26 @@ def test_main_writes_landscapes_beside_the_sweep(tmp_path, monkeypatch):
     assert len(out["profiles"]["x"]["x"]) == fs.PROFILE_POINTS
     assert out["profiles"]["a"]["x"][0] == pytest.approx(0.1)
     assert out["profiles"]["a"]["x"][-1] == pytest.approx(10)
+
+
+def test_a_rule_without_a_ranged_param_has_nothing_to_fit(tmp_path, monkeypatch):
+    """No params (the single-idea seed): the one point as measured is the peak."""
+    (tmp_path / "zero.yml").write_text(
+        "params: {}\nsweep_config: {}\ncode: |\n"
+        "  punishment = th.zeros_like(c[..., -1])\n"
+    )
+    rule, _ = read_rule(tmp_path / "zero.yml")
+    assert sobol_design(rule) == [{}]
+    sim = tmp_path / "zero_sweep"
+    sim.mkdir()
+    point = {"name": "zero_s000", "params": {}, "pool": 61.5, "pool_se": 0.4}
+    (sim / "sweep.json").write_text(
+        json.dumps({"rule": "zero.yml", "metric": "pool_vs_anchor", "points": [point]})
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["fit_surrogate.py", str(sim)])
+    fs.main()
+    land = json.loads((sim / "landscapes.json").read_text())
+    assert land["peak"] == {"params": {}, "mean": 61.5, "sd": 0.4, "at_edge": []}
+    assert land["params"] == {} and land["profiles"] == {}
+    assert land["points"] == [{"name": "zero_s000", "mean": 61.5, "sd": 0.4}]

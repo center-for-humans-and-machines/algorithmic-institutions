@@ -92,8 +92,8 @@ if [[ ! "$NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
     exit 2
 fi
 for n in "$MAX_PARAMS" "$MIN_PARAMS"; do
-    if [[ ! "$n" =~ ^[1-9][0-9]*$ ]]; then
-        echo "--max-params and --min-params must be positive integers: $n" >&2
+    if [[ ! "$n" =~ ^[0-9]+$ ]]; then
+        echo "--max-params and --min-params must be integers from 0: $n" >&2
         exit 2
     fi
 done

@@ -5,7 +5,7 @@ run locally; `api_manager.RuleBasedManager` builds on it.
 
 A rule YAML:
 
-    params:                # every fittable param
+    params:                # every fittable param ({}: a rule without any)
       c0:
         definition: contribution at which punishment starts
         type: int          # int or float
@@ -284,9 +284,10 @@ def read_rule(rule_path, setting=None):
     Checked here:
       - the only top-level keys are `params`, `sweep_config`, `constraints`
         and `code`
-      - `params` declares every fittable param with exactly a non-empty
-        `definition` and a `type`; none may take the name of an input
-        (RULE_INPUTS), th, punishment or `best`
+      - `params` is a mapping (empty for a rule without params) that
+        declares every fittable param with exactly a non-empty `definition`
+        and a `type`; none may take the name of an input (RULE_INPUTS), th,
+        punishment or `best`
       - `sweep_config` (optional here; `validate_rule` requires it) covers
         exactly the declared params; a fixed `int` is an integer, a range has
         low < high, and an `int` range has integer bounds
@@ -305,8 +306,8 @@ def read_rule(rule_path, setting=None):
         raise ValueError(f"{rule_path}: unknown keys {unknown}")
 
     declared = rule.get("params")
-    if not isinstance(declared, dict) or not declared:
-        raise ValueError(f"{rule_path}: needs a non-empty `params` mapping")
+    if not isinstance(declared, dict):
+        raise ValueError(f"{rule_path}: needs a `params` mapping")
     reserved = sorted(
         set(declared) & {*ALL_INPUTS, *RULE_MODULES, RULE_OUTPUT, PARAMS_BEST}
     )

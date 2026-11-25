@@ -361,10 +361,20 @@ class Version:
             return 1
         return 2 * len(yaml.safe_load(path.read_text()))
 
+    def design_points(self):
+        """The most points the sweep's design holds: the instance's
+        `sobol_points`, or one for a rule without a ranged param (the seed of
+        a single-idea instance), whose design is a single point."""
+        rule = self.wt / self.rule
+        if rule.exists():
+            sweep = (yaml.safe_load(rule.read_text()) or {}).get("sweep_config") or {}
+            if not any(isinstance(spec, list) for spec in sweep.values()):
+                return 1
+        return self.conf.get("sobol_points", 256)
+
     def parts(self):
-        sobol = self.conf.get("sobol_points", 256)
         per_point = self.pairings() * self.data["episodes"]["sweep"]
-        n = -(-sobol * per_point // MAX_JOB_EPISODES)
+        n = -(-self.design_points() * per_point // MAX_JOB_EPISODES)
         if n == 1:
             return [f"{self.stem}_sweep"]
         return [f"{self.stem}_sweep_p{k}of{n}" for k in range(1, n + 1)]

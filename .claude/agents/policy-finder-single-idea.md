@@ -68,8 +68,9 @@ history.
 
 Your worktree holds every earlier version of your instance: version 1 under
 `<name>`, version j under `<name>-v<j>`. Version 1 is a seed rule that was
-given, not designed: a punishment proportional to the shortfall below full
-contribution. Every later version changed one idea in an earlier one. Their
+given, not designed: it never punishes (`punishment = 0`) and has no
+parameters, so its sweep is a single point and its `landscapes.json` holds
+that point's pool, no fitted surface. Every later version changed one idea in an earlier one. Their
 files stay as they are, read-only, except the shared scripts folder, which
 you may extend or rework.
 
@@ -143,7 +144,8 @@ the manager clamps to 0-30 and floors to integers; it is applied to the
 players of your group only. Before the sweep, the code must run without error
 at rounds 0, 11 and 23 on every point of the design. No imports and no Python
 builtins: do the maths with `th`. The example above only shows the format;
-every declared parameter must be read by the code.
+every declared parameter must be read by the code. A rule without parameters
+writes `params: {}` and `sweep_config: {}`; its sweep is then a single point.
 
 After you finish, a sweep plays `sobol_points` points drawn over your
 `sweep_config` (a Sobol design; an `int` range gives each of its integers the

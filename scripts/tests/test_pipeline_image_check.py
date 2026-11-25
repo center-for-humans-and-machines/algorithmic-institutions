@@ -130,7 +130,16 @@ def test_single_idea_version_1_is_the_seed(tmp_path, monkeypatch):
     v.step_agent()
     v.step_collect()
     rule = (wt / "configs/managers/rule_based/pf-s.yml").read_text()
-    assert "punishment = alpha * (20.0 - c[..., -1])" in rule
+    assert "punishment = th.zeros_like(c[..., -1])" in rule
+    # no parameters: the design is one point, so the sweep is one part
+    monkeypatch.setattr(pl, "MAX_JOB_EPISODES", 1000)
+    v.state = {"data": {"episodes": {"sweep": 500}}}
+    v.conf["sobol_points"] = 256
+    assert v.design_points() == 1 and v.parts() == ["pf-s_sweep"]
+    (wt / "configs/managers/rule_based/pf-s.yml").write_text(
+        "params: {a: {definition: d, type: float}}\nsweep_config: {a: [0, 1]}\n"
+        "code: |\n  punishment = a\n")
+    assert v.design_points() == 256 and len(v.parts()) == 128
     notes = (wt / "notes/policy_finder/pf-s.md").read_text()
     assert notes.startswith("# pf-s\n") and "### Justification" in notes
     (wt / ".claude/policy_finder.json").write_text(json.dumps(
