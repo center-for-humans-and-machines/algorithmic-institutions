@@ -9,7 +9,9 @@ without redoing finished steps or resubmitting jobs it already submitted.
 Steps (STEPS):
   export        the agent's copy of the instance (export_instance.py)
   agent         the agent in its container (agent_runner.py); its report in
-                <stem>.report.md, its run (cost, tokens, models) in the state
+                <stem>.report.md, its run (cost, tokens, models) in the state,
+                its transcripts copied to <stem>.transcripts/<run id>/ (the
+                spawner's run homes are not kept for good)
   collect       the rule, notes and scripts back into the worktree; a file
                 written anywhere else in the write folders fails the version
                 (version 1 of a single-idea instance has no agent: these
@@ -276,6 +278,7 @@ class Version:
                     self.log(f"agent run {run_id} started")
                 record = agent_runner.finish(run_id, log=self.log)
             report = record.pop("report")
+            record["transcripts"] = self.keep_transcripts(run_id)
             rule_written = (self.exports / self.stem / self.rule).exists()
             ok = record["status"] == "succeeded" and report.strip() and rule_written
             home = os.path.join(agent_runner.SPAWNER_STATE, "runs", run_id, "home")
@@ -299,6 +302,29 @@ class Version:
                 (self.wt_root / f"{self.stem}.report.md").write_text(report + "\n")
                 return
         raise Failed(f"the agent failed {AGENT_ATTEMPTS} times: {attempts[-1]}")
+
+    def keep_transcripts(self, run_id):
+        """Copy an agent run's session transcripts next to the state file.
+
+        Every attempt is kept, also a failed one: they are the record of what
+        the agent ran. Returns the number of files copied (0, with a log line,
+        when the run home is not mounted here).
+        """
+        home = Path(agent_runner.SPAWNER_STATE) / "runs" / run_id / "home"
+        source = home / ".claude" / "projects"
+        target = self.wt_root / f"{self.stem}.transcripts" / run_id
+        count = 0
+        try:
+            for path in sorted(source.rglob("*.jsonl")):
+                dest = target / path.relative_to(source)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, dest)
+                count += 1
+        except OSError as e:
+            self.log(f"transcripts of {run_id} not copied: {e}")
+        if not count:
+            self.log(f"no transcripts of {run_id} under {source}")
+        return count
 
     def step_collect(self):
         if self.seeded:

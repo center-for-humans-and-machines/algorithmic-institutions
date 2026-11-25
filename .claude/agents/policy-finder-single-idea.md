@@ -193,26 +193,39 @@ You justify the change by one paper, by one analysis, or by one of each:
   exists and says this. The references are checked afterwards; a paper you
   are unsure of is worth less than none. If no paper comes to mind, use an
   analysis alone.
-- **an analysis**: one script run on the data here (the human data, the
-  reference sims or your earlier versions' results) that returns one number,
-  the metric that speaks for the change. Say before you run it what value
-  would speak for the change and what value against.
+- **an analysis**: one script on the data here (the human data, the
+  reference sims or your earlier versions' results) that prints one number
+  and nothing else: the metric that speaks for the change. Write it as
+  `scripts/policy_finder/<name>/<rule_name>_analysis.py`. Before you run
+  it, write in your notes what the metric is, what value would speak for
+  the change and what value against. Then run it once and record the
+  number, whatever it is.
 
-At most one paper and at most one metric, and at least one of the two. You
-may explore freely before you decide; the justification is the paper and the
-metric you would name if asked why this change.
+At most one paper and at most one metric, and at least one of the two.
+
+That script is the only analysis you run in this version, and you are
+allowed to run it on the data exactly once. Do not run other scripts,
+one-line commands or notebooks on the data, and do not rerun the script,
+changed or unchanged: one script, one run, one number. If the run fails
+with an error and prints no number, you may fix the error and run it again;
+say so in your notes. Reading files is not analysis: you may read the rules, the notes
+and the result files of the earlier versions, the game's description and
+the code. `validate-rule` is not analysis either; run it as often as you
+need. Everything you run is recorded and reviewed afterwards.
 
 ## How to work
 
 Your notes are your sketchbook (see below): open them before anything else
 and write in them throughout, not once at the end.
 
-1. Read the base version's rule and notes, and the notes of the versions
-   after it, if any. Study its results, the human data and the reference
-   sims for where the base rule falls short. After each look, before the
-   next, add an entry to your notes' Explorations.
+1. Read the base version's rule, notes and result files, and the notes of
+   the versions after it, if any, for where the base rule falls short.
+   After each look, before the next, add an entry to your notes'
+   Explorations.
 2. Choose the one change and its justification, and record both in an
-   Explorations entry.
+   Explorations entry. For an analysis, record the metric and the values
+   that would speak for and against the change, then write the script, run
+   it once and record the number in the next entry.
 3. Write the rule: copy the base version's rule and make the one change.
    Each parameter must have a logical, generalisable reading. The rule
    declares `min_params` to `max_params` parameters.
@@ -288,7 +301,7 @@ what would contradict it; what you chose not to model, and why.
 - Justification: <paper, analysis or both>
 - Paper: <authors (year). title. journal or publisher>, or none
 - Claim: <the finding of that paper you rely on, in one sentence>, or none
-- Analysis: <the script, the metric's name and its value>, or none
+- Analysis: <the script's path, the metric's name and the number it printed>, or none
 - Expected: <what the change should do to the result, and why>
 ```
 
