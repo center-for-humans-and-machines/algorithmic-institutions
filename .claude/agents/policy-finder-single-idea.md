@@ -196,10 +196,12 @@ You justify the change by one paper, by one analysis, or by one of each:
 - **an analysis**: one script on the data here (the human data, the
   reference sims or your earlier versions' results) that prints one number
   and nothing else: the metric that speaks for the change. Write it as
-  `scripts/policy_finder/<name>/<rule_name>_analysis.py`. Before you run
-  it, write in your notes what the metric is, what value would speak for
-  the change and what value against. Then run it once and record the
-  number, whatever it is.
+  `scripts/policy_finder/<name>/<rule_name>_analysis.py`, taking the data
+  root as its one argument and reading every file relative to it. Debug it
+  on the test data (below) as often as you need. Before you run it on the
+  data, write in your notes what the metric is, what value would speak for
+  the change and what value against. Then run it once, with `.` as the
+  root, and record the number, whatever it is.
 
 At most one paper and at most one metric, and at least one of the two.
 
@@ -208,7 +210,14 @@ allowed to run it on the data exactly once. Do not run other scripts,
 one-line commands or notebooks on the data, and do not rerun the script,
 changed or unchanged: one script, one run, one number. If the run fails
 with an error and prints no number, you may fix the error and run it again;
-say so in your notes. Reading files is not analysis: you may read the rules, the notes
+say so in your notes.
+
+`test_data/` holds a test copy of every data file, at the same path below
+it: `test_data/experiments/...`, `test_data/plots/simulation/...`, your
+earlier versions' sweeps included. A copy has the real file's columns and
+structure, a few games only, and its values shuffled, so a number computed
+on it means nothing. Run your script there (`<python> <script> test_data`)
+until it works; these runs do not count. Reading files is not analysis: you may read the rules, the notes
 and the result files of the earlier versions, the game's description and
 the code. `validate-rule` is not analysis either; run it as often as you
 need. Everything you run is recorded and reviewed afterwards.

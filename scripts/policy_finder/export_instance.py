@@ -20,6 +20,10 @@ a text file. Last, the version's write folders are made (they are mounted
 read-write) and every file in them is hashed into `.export_manifest.json`,
 outside the export.
 
+A single-idea instance's export also holds `test_data/`: scrambled copies of
+its data files (scramble_data.py), read-only, which the agent debugs its one
+analysis script on.
+
 `collect` copies the version's rule and notes and the instance's scripts
 folder back into the worktree, and returns the files in the write folders
 that the version may not touch but did: a new file other than its rule, notes
@@ -326,6 +330,11 @@ def build(wt, main, exports):
         for f in matched:
             shutil.copy2(os.path.join(source_dir, f), os.path.join(export, base, f))
     _prune(export, name, setting["deny"])
+    if conf.get("mode") == "single_idea":
+        # scrambled copies the agent debugs its one analysis script on
+        import scramble_data
+
+        scramble_data.build(export)
     found = leaks(export, name, setting.get("leak_terms", ()))
     if found:
         listing = ", ".join(f"{p} ({n})" for p, n in found[:20])
