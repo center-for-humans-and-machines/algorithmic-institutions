@@ -12,6 +12,8 @@ Steps (STEPS):
                 <stem>.report.md, its run (cost, tokens, models) in the state
   collect       the rule, notes and scripts back into the worktree; a file
                 written anywhere else in the write folders fails the version
+                (version 1 of a single-idea instance has no agent: these
+                three steps write the seed rule of seeds/ and its notes)
   check         check_instance.sh --commit: the acceptance check, and the
                 commit of the agent's work on policy-finder/<name>
   sweep_config  the sweep's sim configs (generate_sim_config.py), committed
@@ -63,6 +65,7 @@ import export_instance  # noqa: E402
 import usage  # noqa: E402
 
 MAIN = HERE.parents[1]
+SEEDS = HERE / "seeds"
 STEPS = (
     "export", "agent", "collect", "check",
     "sweep_config", "sweep_snap", "image_check", "sweep_jobs", "sweep_fetch", "fit",
@@ -121,6 +124,8 @@ class Version:
         # the game (manager/rule.py SETTINGS); absent: exp2
         self.setting = self.conf.get("setting", "exp2")
         self.version = self.conf.get("version", 1)
+        # version 1 of a single-idea instance is the given seed rule
+        self.seeded = self.conf.get("mode") == "single_idea" and self.version == 1
         self.rule = f"configs/managers/rule_based/{self.stem}.yml"
         self.sweep = f"{OUT_DIR}/{self.stem}_sweep"
         self.final = f"{self.sweep}/final"
@@ -235,12 +240,23 @@ class Version:
         return self.state
 
     def step_export(self):
+        if self.seeded:
+            notes = self.wt / f"notes/policy_finder/{self.stem}.md"
+            for path in (self.wt / self.rule, notes):
+                path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(SEEDS / "single_idea.yml", self.wt / self.rule)
+            notes.write_text((SEEDS / "single_idea.md").read_text().replace(
+                "{stem}", self.stem))
+            self.log("seed rule written, no agent")
+            return
         try:
             export_instance.build(self.wt, MAIN, self.exports)
         except export_instance.ExportError as e:
             raise Failed(str(e)) from None
 
     def step_agent(self):
+        if self.seeded:
+            return
         write_dirs = export_instance.write_dirs(self.name, self.stem)
         attempts = self.data.setdefault("agent_runs", [])
         while len(attempts) < AGENT_ATTEMPTS:
@@ -285,6 +301,8 @@ class Version:
         raise Failed(f"the agent failed {AGENT_ATTEMPTS} times: {attempts[-1]}")
 
     def step_collect(self):
+        if self.seeded:
+            return
         strays = export_instance.collect(self.wt, self.exports)
         if strays:
             raise Failed("the agent wrote outside its paths: " + ", ".join(strays))

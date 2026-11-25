@@ -18,6 +18,13 @@
 # passing `validate-rule` (#227) within the instance's min_params and
 # max_params (null: no upper bound) on its sobol_points design, run with the
 # instance's python. Prints what is wrong otherwise.
+# A single-idea instance (the instance file's `mode`, new_instance.sh --mode)
+# also needs, from version 2 on, the notes' last section `## Change` with the
+# lines `- Base version:` (the instance's `base_version`), `- Operation:`
+# (add, remove or modify), `- Idea:`, `- Justification:` (paper, analysis or
+# both) and, filled, `- Paper:` and `- Claim:` under paper, `- Analysis:`
+# under analysis, all three under both. Whether one idea changed, and whether the paper exists, is not
+# checked here.
 # --commit then commits the write paths on the instance's branch, since the
 # agent has no git. PF_BASE, PF_RUNS and PF_WORKTREE_ROOT as in
 # new_instance.sh; PF_PYTHON overrides the instance's python.
@@ -54,12 +61,14 @@ git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null \
 # the current version, from the instance file (instance_settings.py)
 CONF="$WT/.claude/policy_finder.json"
 { read -r PY; read -r STEM; read -r START; read -r MIN_PARAMS; read -r MAX_PARAMS
-  read -r SOBOL_POINTS; read -r SETTING; } < <(
+  read -r SOBOL_POINTS; read -r SETTING; read -r MODE; read -r VERSION
+  read -r BASE_VERSION; } < <(
     python3 -c 'import json, sys
 c = json.load(open(sys.argv[1]))
 print(c["python"], c.get("rule_name") or sys.argv[2], c.get("start_commit") or "",
       c["min_params"], "none" if c["max_params"] is None else c["max_params"],
-      c.get("sobol_points", 256), c.get("setting", "exp2"), sep="\n")' "$CONF" "$NAME"
+      c.get("sobol_points", 256), c.get("setting", "exp2"), c.get("mode", "free"),
+      c.get("version", 1), c.get("base_version") or "", sep="\n")' "$CONF" "$NAME"
 ) || { echo "FAIL: cannot read the instance from $CONF" >&2; exit 1; }
 PY="${PF_PYTHON:-$PY}"
 RULE="configs/managers/rule_based/$STEM.yml"
@@ -111,6 +120,50 @@ for heading in "## Explorations" "## Key findings" "## Hypothesis" \
     fi
     last="$line"
 done
+
+# a single-idea version's one change and its justification
+if [[ "$MODE" == single_idea && "$VERSION" -gt 1 ]]; then
+    line="$(grep -n -x -F -- "## Change" "$WT/$NOTES" | head -1 | cut -d: -f1 || true)"
+    if [[ -z "$line" || "$line" -le "$last" ]]; then
+        echo "FAIL: $NOTES needs the section '## Change', after the Justification" >&2
+        exit 1
+    fi
+    change="$(tail -n "+$((line + 1))" "$WT/$NOTES")"
+    # the value of a `- <label>: <value>` line of the section, trimmed
+    field() {
+        printf '%s\n' "$change" | sed -n "s/^- $1:[[:space:]]*//p" | head -1 \
+            | sed 's/[[:space:]]*$//'
+    }
+    filled() { [[ -n "$1" && "$1" != none && "$1" != "<"* ]]; }
+    if [[ "$(field "Base version")" != "$BASE_VERSION" ]]; then
+        echo "FAIL: $NOTES: '- Base version:' must be $BASE_VERSION" >&2
+        exit 1
+    fi
+    case "$(field Operation)" in
+        add|remove|modify) ;;
+        *) echo "FAIL: $NOTES: '- Operation:' must be add, remove or modify" >&2; exit 1 ;;
+    esac
+    filled "$(field Idea)" \
+        || { echo "FAIL: $NOTES: '- Idea:' is empty" >&2; exit 1; }
+    kind="$(field Justification)"
+    case "$kind" in
+        paper|analysis|both) ;;
+        *) echo "FAIL: $NOTES: '- Justification:' must be paper, analysis or both" >&2
+           exit 1 ;;
+    esac
+    if [[ "$kind" != analysis ]]; then
+        filled "$(field Paper)" && filled "$(field Claim)" || {
+            echo "FAIL: $NOTES: a paper justification needs '- Paper:' and '- Claim:'" >&2
+            exit 1
+        }
+    fi
+    if [[ "$kind" != paper ]]; then
+        filled "$(field Analysis)" || {
+            echo "FAIL: $NOTES: an analysis justification needs '- Analysis:'" >&2
+            exit 1
+        }
+    fi
+fi
 
 # the rule passes validate-rule (#227) within the instance's limits
 if ! (cd "$WT" && PYTHONPATH="$WT/src${PYTHONPATH:+:$PYTHONPATH}" "$PY" -m aimanager validate-rule "$RULE" \

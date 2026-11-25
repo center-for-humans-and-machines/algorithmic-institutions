@@ -154,6 +154,8 @@ PER_INSTANCE = (
     "scripts/policy_finder",
 )
 #: What stays of .claude/
+#: The agent definition of an instance whose `mode` is not free
+MODE_AGENTS = {"single_idea": ".claude/agents/policy-finder-single-idea.md"}
 CLAUDE_KEEP = ("agents/policy-finder.md", "agents/policy-finder-host.md", "policy_finder.json")
 #: An instance's name, as new_instance.sh and the campaign make them
 INSTANCE_NAME = re.compile(r"pf-\d{8}-\d+")
@@ -296,10 +298,12 @@ def build(wt, main, exports):
     shutil.copytree(
         wt, export, symlinks=False, ignore=shutil.ignore_patterns(".git")
     )
-    agent = os.path.join(export, setting["agent"])
+    # a single-idea instance has its own agent (instance_settings.py)
+    agent_path = MODE_AGENTS.get(conf.get("mode", "free"), setting["agent"])
+    agent = os.path.join(export, agent_path)
     target = os.path.join(export, ".claude/agents/policy-finder.md")
     if not os.path.isfile(agent):
-        raise ExportError(f"no agent definition {setting['agent']} in {wt}")
+        raise ExportError(f"no agent definition {agent_path} in {wt}")
     if agent != target:
         # policy-finder-host starts the subagent by its frontmatter name
         text = Path(agent).read_text()

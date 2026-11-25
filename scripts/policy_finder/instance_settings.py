@@ -9,6 +9,13 @@ commit the version starts from, which check_instance.sh checks the changes
 since), `min_params`, `max_params` (null: no upper bound), `sobol_points` and
 `python` (the interpreter the agent and the check run).
 
+A single-idea instance (`--mode single_idea`) also gets `mode`
+and, from version 2 on, `base_version`: the stem of the earlier version with
+the highest final result (the GP peak's `pool` in its final `sweep.json`; a
+tie goes to the earlier version; version 1 if none has a final), which the
+version changes one idea of. Its version 1 is the seed rule of
+scripts/policy_finder/seeds/, written by the pipeline, not by an agent.
+
 The write paths are the version's rule and notes and the instance's scripts
 folder, shared by every version. The agent runs in its own container
 (agent_runner.py): its copy of the instance (export_instance.py) is mounted
@@ -18,7 +25,7 @@ Claude Code permissions, sandbox settings or hooks are written.
 Usage:
     python scripts/policy_finder/instance_settings.py <worktree> <name>
         --version K --start-commit SHA --min-params N --max-params N|none
-        --sobol-points N --python PATH
+        --sobol-points N --python PATH [--mode free|single_idea]
 """
 
 import argparse
@@ -41,6 +48,30 @@ def write_paths(name: str, version: int) -> tuple:
     )
 
 
+def final_pool(wt: str, stem: str):
+    """The GP peak's pool in a version's final run, or None without one."""
+    path = os.path.join(
+        wt, "plots/simulation/policy_finder", f"{stem}_sweep", "final", "sweep.json"
+    )
+    try:
+        with open(path) as f:
+            final = json.load(f)
+        points = {p["name"]: p for p in final["points"]}
+        return float(points[final["best_name"]]["pool"])
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
+
+
+def base_version(wt: str, name: str, version: int) -> str:
+    """The earlier version with the highest final result (ties: the earlier)."""
+    best, best_pool = rule_name(name, 1), None
+    for v in range(1, version):
+        pool = final_pool(wt, rule_name(name, v))
+        if pool is not None and (best_pool is None or pool > best_pool):
+            best, best_pool = rule_name(name, v), pool
+    return best
+
+
 def write(args):
     wt = os.path.realpath(args.worktree)
     rule, notes, scripts = write_paths(args.name, args.version)
@@ -59,6 +90,12 @@ def write(args):
     # the game (manager/rule.py SETTINGS); absent means exp2
     if args.setting != "exp2":
         instance["setting"] = args.setting
+    if args.mode == "single_idea":
+        if args.setting != "exp2":
+            raise SystemExit("--mode single_idea has an agent for --setting exp2 only")
+        instance["mode"] = args.mode
+        if args.version > 1:
+            instance["base_version"] = base_version(wt, args.name, args.version)
     os.makedirs(os.path.join(wt, ".claude"), exist_ok=True)
     with open(os.path.join(wt, ".claude", "policy_finder.json"), "w") as f:
         json.dump(instance, f, indent=2)
@@ -80,6 +117,7 @@ def main():
     ap.add_argument("--sobol-points", type=int, default=256)
     ap.add_argument("--python", default="python3")
     ap.add_argument("--setting", default="exp2", choices=("exp2", "exp1", "exp2_multi", "exp2_diff"))
+    ap.add_argument("--mode", default="free", choices=("free", "single_idea"))
     write(ap.parse_args())
 
 

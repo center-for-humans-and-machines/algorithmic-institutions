@@ -1,0 +1,10 @@
+params:
+  alpha:
+    definition: punishment points per point a member contributes below full contribution (20)
+    type: float
+sweep_config:
+  alpha: [0.02, 1.5, log]
+constraints:
+  - alpha > 0
+code: |
+  punishment = alpha * (20.0 - c[..., -1])
