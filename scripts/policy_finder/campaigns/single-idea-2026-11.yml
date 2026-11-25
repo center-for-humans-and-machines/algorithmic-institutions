@@ -7,6 +7,8 @@
 # Five independent chains of fixed length: top_k equals n_fresh, so no chain is
 # dropped, and each runs the seed plus 20 changes. A version that fails its
 # check or lowers the result still takes its place in the chain.
+# No version declares more than 4 parameters (the seed has 1): the earlier
+# campaigns' best rules were carried by 2 to 4 of theirs.
 # Run: PF_RUNS=... PF_BASE=<a branch with this mode> \
 #      python scripts/policy_finder/campaign.py run <this file>
 prefix: pf-20261126
@@ -17,6 +19,7 @@ generations: 20
 top_k: 5
 min_params: 1
 max_params: 1
+iterate_max_params: 4
 sobol_points: 256
 parallel: 5
 error_retries: 3

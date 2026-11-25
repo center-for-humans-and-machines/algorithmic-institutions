@@ -181,6 +181,10 @@ the parameters that belong to the changed idea, and only those. You may
 re-centre the sweep range of an unchanged parameter where the base version's
 sweep shows the best values at an edge; say so in your notes.
 
+The rule may declare at most `max_params` parameters. Where the base rule is
+at that limit, an added idea must come without a parameter of its own (a
+fixed form), or your change is a removal or a modification.
+
 You justify the change by one paper, by one analysis, or by one of each:
 
 - **a paper**: a published study or theory you know that speaks for the
