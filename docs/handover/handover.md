@@ -21,11 +21,11 @@ host (this machine)
 └── spawned agent containers: no network but api.anthropic.com
 
 MPCDF Raven (your account)
-├── algoinst.sif           link to the shared image (torch 1.11, PyG 2.5)
+├── algoinst.sif           the shared image in /raven/ptmp/ykeller/... (read access)
 ├── ~/slurm_tools, ~/.venv the job template and slurm_job
 ├── ~/algorithmic-institutions/artifacts    the models every sim loads
 ├── ~/cc-snapshots/<sha>   one published commit per sweep
-└── ~/private/cc_secrets   WANDB_API_KEY
+└── ~/private/cc_secrets   WANDB_API_KEY (optional)
 ```
 
 Read `infra/claude_proxy/CLAUDE.md` once the repo is cloned; it is the
@@ -54,6 +54,17 @@ git clone https://github.com/yannikkellerde/container_spawner.git ~/claude_tools
 ```
 
 Stay on `main`. The rest of this guide calls the clone `<repo>`.
+
+The command server reads the Raven account from `env.yml` beside its code:
+
+```bash
+cd ~/claude_tools/CC_command_server
+cp env.yml.example env.yml
+```
+
+Set `raven_user` and `dais_user` to the human's MPCDF login (DAIS is not
+used, but the key must name a user). Leave the paths at their defaults: the
+algoinst paths assume `raven_repo_root: /u/{user}`.
 
 ## 2. Settings
 
@@ -91,30 +102,29 @@ Follow `infra/claude_proxy/secrets.example/README.md`. In short, under
 
 `--fix` creates the folders that hold no secrets (`~/tmp/...`,
 `~/pf_runs/exports`). Fix every FAIL. A WARN about missing images is fine
-until step 6. If it says `CC_command_server has RAVEN_USER fixed to ykeller`,
-stop: the clone from step 1 lacks a change only the repo owner can publish
-(see "If something is missing upstream" below).
+until step 6. It also checks that `env.yml` (step 1) names the same Raven
+user as `.env`.
 
 ## 5. Raven (**Human** logs in; you can prepare the commands)
 
-The script is idempotent and checks at the end. Copy it over and run it on a
-login node:
+The script is idempotent and checks at the end. The human logs in to a
+Raven login node the usual way (gateway, password, OTP) and runs:
 
 ```bash
-scp <repo>/infra/raven/raven_setup.sh <raven user>@raven.mpcdf.mpg.de:   # via the MPCDF gateway if outside the MPG network
-ssh <raven user>@raven.mpcdf.mpg.de
+curl -fsSLO https://raw.githubusercontent.com/center-for-humans-and-machines/algorithmic-institutions/main/infra/raven/raven_setup.sh
 bash raven_setup.sh
 ```
 
-It creates the `/ptmp/$USER/cc/...` folders, links the shared `algoinst.sif`,
-clones `slurm_tools` into `~/slurm_tools` with `~/.venv`, creates
-`~/private/cc_secrets` and smoke-tests the image. If it finds no Python 3.9
-or newer for `~/.venv`, load one (`module avail python`) and rerun. Then:
+It creates the `/ptmp/$USER/cc/...` folders every job binds, checks that the
+shared `algoinst.sif` is readable and runs it once, clones `slurm_tools` into
+`~/slurm_tools` with `~/.venv`, and creates `~/private/cc_secrets`. If it
+finds no Python 3.9 or newer for `~/.venv`, load one (`module avail python`)
+and rerun. Then:
 
-- put the W&B key in `~/private/cc_secrets` as `WANDB_API_KEY=...` (optional;
-  the file must exist either way),
-- rerun `bash raven_setup.sh --check`. The only expected WARN is the empty
-  `artifacts` folder, which step 7 fills.
+- optionally put the W&B key in `~/private/cc_secrets` as
+  `WANDB_API_KEY=...` (only runs with `wandb_mode: online` need it),
+- rerun `bash raven_setup.sh --check`. The expected WARNs are the empty
+  `artifacts` folder, which step 7 fills, and a missing W&B key.
 
 ## 6. Start the services
 
@@ -122,19 +132,23 @@ From `<repo>/infra/claude_proxy`, as in `container/CC_env/start_command.md`:
 
 ```bash
 C="docker compose -p algoinst -f container/CC_env/docker-compose.yml"
+$C build claude                                                      # first: the spawner copies this image at start-up
 $C up -d cc_command_server container_spawner --build
 $C exec cc_command_server bash -ic 'ssh -fN raven && sleep 0.5'      # Human: password + OTP
 $C run --build --rm claude                                           # the proxy session
 ```
 
+Build `claude` before starting the spawner: the spawner copies
+`algoinst_claude:latest` to its agent image once, when it starts, and fails
+if that image does not exist yet. If you started it too early,
+`$C restart container_spawner` after the build.
+
 The `ssh -fN raven` connection carries every Raven call. When it drops
 (network change, reboot, Raven maintenance), the command server's calls fail
 until the human opens it again with the same command.
 
-Building `claude` the first time also gives the spawner its agent image
-(`algoinst_claude:latest`). The proxy session is a new Claude Code session
-inside the container; the remaining steps run there, in
-`/opt/algorithmic-institutions`.
+The proxy session is a new Claude Code session inside the container; the
+remaining steps run there, in `/opt/algorithmic-institutions`.
 
 ## 7. Data and the Raven live checkout (inside the proxy)
 
@@ -202,15 +216,17 @@ scripts/policy_finder/campaigns/<file>.yml`. Instance names are
 | agent run fails at once, spawner logs mention the token | `claude_setup_token` is wrong or expired. **Human:** `claude setup-token` again, then `$C restart container_spawner`. |
 | agents pause for hours | The Claude plan's 5-hour or weekly limit; the pipeline waits for the reset and resumes. |
 | `image_check` fails but local `validate-rule` passed | The rule uses something torch 1.11 lacks. The agent's next version must avoid it. |
-| a job fails with a missing `/ptmp/...` or `cc_secrets` | Rerun `raven_setup.sh` on Raven. |
+| a job fails with a missing `/ptmp/...` folder | Rerun `raven_setup.sh` on Raven. |
+| Raven commands run as the wrong user, or fail on `/u/ykeller/...` | `raven_user` in `CC_command_server/env.yml` (step 1) and the `User` in `cc_ssh_keys/config` must both be the human's login. Restart `cc_command_server` after editing `env.yml`. |
+| container spawner exits at start: `could not seed algoinst_claude:cpu` | Build `claude` first, then restart the spawner (step 6). |
 | a pipeline stopped (crash, restart) | `python scripts/policy_finder/pipeline.py run <name>` resumes where it stopped. |
 
 ## If something is missing upstream
 
-Some pieces live in other repos that only their owner can change. The checks
-catch them. If you see one of these, tell the human to ask the repo owner
-(Yannik Keller), and do not work around it:
+Some pieces live in repos only their owner (Yannik Keller) can change. The
+checks catch them. If you see one of these, tell the human to ask him, and
+do not work around it:
 
-- `host_check.sh`: `CC_command_server has RAVEN_USER fixed to ykeller`.
+- `raven_setup.sh`: the shared image is not readable by the human's account.
 - `raven_setup.sh`: `template ... missing` or `slurm_tools still has ykeller's paths`.
-- `raven_setup.sh`: the shared image is not readable.
+- `host_check.sh`: `CC_command_server is too old (no env.yml support)` after a `git pull`.

@@ -30,11 +30,12 @@ needs another repo or the Raven account is listed with patches.
    example for Raven.
 10. `infra/raven/raven_setup.sh`: one idempotent script a new user runs on a
     Raven login node (folders, `slurm_tools` and `~/.venv`, `cc_secrets`,
-    link to the shared image, live checkout, image smoke test). `--check`
+    a read check and smoke test of the shared image, live checkout). `--check`
     only reports.
 11. `docs/handover/`: `handover.md` (instructions for the other agent),
-    `handover_leftover.md` (what could not be done from the proxy) and
-    `patches/` for `CC_command_server` and `slurm_tools`.
+    `handover_leftover.md` (what could not be done from the proxy). The
+    `CC_command_server` and `slurm_tools` changes were made by their owner
+    (`env.yml`, `cluster_layout.py`), not from patches.
 12. The manual policy-finder pipeline goes (git history keeps it):
     `run_sweep.sh`, `run_final.sh`, the observatory's Raven sync in
     `summarize.py`, and the `../policy-finder-worktrees` default (the worktree
@@ -55,3 +56,5 @@ needs another repo or the Raven account is listed with patches.
 - `preflight.py` passes in this proxy.
 - `raven_setup.sh` passes `bash -n` and shellcheck where available.
 - The existing policy-finder tests pass.
+- A second person, on their own machine and Raven account, follows
+  `docs/handover/handover.md` to a scored smoke instance (step 9).

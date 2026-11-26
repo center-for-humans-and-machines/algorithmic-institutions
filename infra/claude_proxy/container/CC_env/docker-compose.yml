@@ -130,9 +130,9 @@ services:
       CC_HOST: "0.0.0.0"
       CC_PORT: "8765"
       CC_PROJECT: "algoinst"
-      # Read by CC_command_server once docs/handover/patches/CC_command_server.patch
-      # is applied; ignored before.
-      CC_RAVEN_USER: "${RAVEN_USER:?set RAVEN_USER in infra/claude_proxy/container/CC_env/.env (copy .env.example there)}"
+      # The Raven account and paths come from env.yml beside the server's code
+      # ($CLAUDE_TOOLS/CC_command_server/env.yml); host_check.sh checks that
+      # its raven_user matches RAVEN_USER.
       PATH: "/app/CC_command_server/scripts:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     build:
       dockerfile: Dockerfile

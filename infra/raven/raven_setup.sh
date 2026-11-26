@@ -10,19 +10,22 @@
 # The command server reaches Raven as $USER and expects, for that user:
 #   /ptmp/$USER/cc/{tmp,container_outputs,cluster_transfer,cluster_sync,
 #                   container_cache,apptainer-home}       bound into every job
-#   /raven/ptmp/$USER/cc/containers/apptainer/algoinst.sif  (a link to the
-#                                                         shared image)
+#   read access to the shared image (CC_command_server's SIF_OWNER tree):
+#   /raven/ptmp/ykeller/cc/containers/apptainer/algoinst.sif
 #   ~/slurm_tools and ~/.venv with slurm_tools installed  (`slurm_job`)
 #   ~/algorithmic-institutions/artifacts                  models, read-only
 #                                                         in every job
 #   ~/cc-snapshots, ~/cc-snapshot-outputs                 one per commit
 #   ~/private/cc_secrets                                  WANDB_API_KEY=...
+#                                                         (optional: jobs warn
+#                                                         and run without it)
 #
 # The live checkout's contents come from the proxy: after this script,
 # POST /sync_to_cluster {"cluster": "raven", "includes": ["artifacts"]}
 # (docs/handover/handover.md). Nothing here needs git credentials or S3.
 #
-# Overrides: ALGOINST_SHARED_SIF (the shared image), SLURM_TOOLS_REPO,
+# Overrides: ALGOINST_SHARED_SIF (the image to check; jobs use the one
+# CC_command_server's SIF_OWNER names), SLURM_TOOLS_REPO,
 # PYTHON (a Python >= 3.9 for ~/.venv).
 
 set -uo pipefail
@@ -33,8 +36,7 @@ U="$(id -un)"
 SHARED_SIF="${ALGOINST_SHARED_SIF:-/raven/ptmp/ykeller/cc/containers/apptainer/algoinst.sif}"
 SLURM_TOOLS_REPO="${SLURM_TOOLS_REPO:-https://github.com/yannikkellerde/slurm_tools.git}"
 PTMP="/ptmp/$U/cc"
-SIF_DIR="/raven/ptmp/$U/cc/containers/apptainer"
-SIF="$SIF_DIR/algoinst.sif"
+SIF="$SHARED_SIF"
 TEMPLATE="$HOME/slurm_tools/slurm_tools/run_slurm_raven_apptainer_algoinst.sh"
 FAILS=0
 
@@ -53,7 +55,7 @@ fi
 
 echo "== folders"
 for d in "$PTMP/tmp" "$PTMP/container_outputs" "$PTMP/cluster_transfer" "$PTMP/cluster_sync" \
-         "$PTMP/container_cache/wandb" "$PTMP/apptainer-home" "$SIF_DIR" \
+         "$PTMP/container_cache/wandb" "$PTMP/apptainer-home" \
          "$HOME/cc-snapshots" "$HOME/cc-snapshot-outputs" "$HOME/algorithmic-institutions/artifacts"; do
     if [[ -d "$d" ]]; then
         pass "$d"
@@ -64,18 +66,12 @@ for d in "$PTMP/tmp" "$PTMP/container_outputs" "$PTMP/cluster_transfer" "$PTMP/c
     fi
 done
 
-echo "== image"
-if [[ -e "$SIF" ]]; then
-    pass "$SIF$( [[ -L "$SIF" ]] && echo " -> $(readlink "$SIF")")"
-elif [[ -r "$SHARED_SIF" ]]; then
-    if doing && ln -s "$SHARED_SIF" "$SIF"; then
-        pass "$SIF -> $SHARED_SIF (linked)"
-    else
-        fail "$SIF missing" "rerun without --check (links $SHARED_SIF)"
-    fi
+echo "== image (shared, used in place by the command server)"
+if [[ -r "$SIF" ]]; then
+    pass "$SIF readable"
 else
-    fail "$SIF missing and the shared image $SHARED_SIF is not readable" \
-        "ask its owner for read access, or set ALGOINST_SHARED_SIF"
+    fail "$SIF is not readable by $U" \
+        "its owner grants read on the file and execute on every parent folder"
 fi
 if [[ -r "$SIF" ]] && module load apptainer >/dev/null 2>&1; then
     if out="$(apptainer exec --cleanenv "$SIF" python -c \
@@ -99,7 +95,7 @@ fi
 if [[ -f "$TEMPLATE" ]]; then
     if [[ "$U" != ykeller ]] && grep -q "ykeller" "$TEMPLATE" "$HOME/slurm_tools/slurm_tools/do_slurm_job.py"; then
         fail "slurm_tools still has ykeller's paths" \
-            "pull a slurm_tools with docs/handover/patches/slurm_tools.patch applied (git -C ~/slurm_tools pull)"
+            "git -C ~/slurm_tools pull (GitHub has the user-neutral version since 2026-11-26)"
     else
         pass "template $TEMPLATE"
     fi
@@ -144,7 +140,7 @@ if [[ -f "$SECRETS" ]]; then
         warn "$SECRETS has no WANDB_API_KEY" "add WANDB_API_KEY=<your key>; only runs with wandb_mode online need it"
     fi
 else
-    fail "$SECRETS missing (every job loads it)" "rerun without --check"
+    warn "$SECRETS missing (jobs run without W&B credentials)" "rerun without --check"
 fi
 
 echo "== live checkout models"

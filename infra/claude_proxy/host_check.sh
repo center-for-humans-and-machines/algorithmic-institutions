@@ -102,15 +102,23 @@ need f "$CLAUDE_TOOLS/container_spawner/Dockerfile" \
     "git clone https://github.com/yannikkellerde/container_spawner.git $CLAUDE_TOOLS/container_spawner"
 need d "$CLAUDE_TOOLS/container_spawner/container_spawner" "a full clone of container_spawner"
 need d "$CLAUDE_TOOLS/container_spawner/proxy" "a full clone of container_spawner"
-if [[ -f "$CLAUDE_TOOLS/CC_command_server/constants.py" ]]; then
-    if grep -q "CC_RAVEN_USER" "$CLAUDE_TOOLS/CC_command_server/constants.py"; then
-        pass "CC_command_server reads CC_RAVEN_USER"
-    elif [[ "${RAVEN_USER:-}" == ykeller ]]; then
-        warn "CC_command_server has RAVEN_USER fixed to ykeller (fine for ykeller)"
+# The command server reads its Raven account from env.yml beside its code
+# (CC_command_server/env.yml.example); without it, every path is ykeller's.
+CC_ENV_YML="$CLAUDE_TOOLS/CC_command_server/env.yml"
+if [[ ! -f "$CLAUDE_TOOLS/CC_command_server/env_config.py" ]]; then
+    fail "CC_command_server is too old (no env.yml support)" "git -C $CLAUDE_TOOLS/CC_command_server pull"
+elif [[ -f "$CC_ENV_YML" ]]; then
+    cc_user="$(sed -nE 's/^raven_user:[[:space:]]*["'"'"']?([^"'"'"'[:space:]#]+).*/\1/p' "$CC_ENV_YML")"
+    if [[ -n "${RAVEN_USER:-}" && "$cc_user" == "$RAVEN_USER" ]]; then
+        pass "$CC_ENV_YML: raven_user $cc_user"
     else
-        fail "CC_command_server has RAVEN_USER fixed to ykeller" \
-            "apply docs/handover/patches/CC_command_server.patch (see docs/handover/handover.md)"
+        fail "$CC_ENV_YML has raven_user '$cc_user', .env has RAVEN_USER '${RAVEN_USER:-}'" "make them the same"
     fi
+elif [[ "${RAVEN_USER:-}" == ykeller ]]; then
+    pass "no $CC_ENV_YML: the command server's defaults are ykeller's"
+else
+    fail "$CC_ENV_YML missing: the command server would use ykeller's Raven paths" \
+        "cp $CLAUDE_TOOLS/CC_command_server/env.yml.example $CC_ENV_YML; set dais_user and raven_user to ${RAVEN_USER:-your MPCDF login}"
 fi
 
 echo "== secrets ($SECRETS_DIR, layout: infra/claude_proxy/secrets.example/README.md)"

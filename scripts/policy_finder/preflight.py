@@ -177,12 +177,13 @@ def check_raven():
         return
     if code != 0 and "torch" not in log:
         report("FAIL", f"login-node command in algoinst.sif exited {code}: {log[-600:]}",
-               "on Raven: bash infra/raven/raven_setup.sh --check (image, folders, live checkout)")
+               "on Raven: bash infra/raven/raven_setup.sh --check (image, folders, live checkout); "
+               "on the host: raven_user in CC_command_server/env.yml")
         return
     lines = log.splitlines()
     if user and not any(line.strip() == user for line in lines):
         report("FAIL", f"Raven commands do not run as {user}",
-               "the SSH config's User, or CC_command_server without docs/handover/patches/CC_command_server.patch")
+               "the User in cc_ssh_keys/config, and raven_user in CC_command_server/env.yml")
     else:
         report("PASS", f"Raven commands run as {user}")
     version = next((line for line in lines if line.startswith("torch ")), None)

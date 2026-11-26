@@ -17,7 +17,7 @@ A sibling container (`cc_command_server`) SSHes to the Raven login node, runs a 
 - Image and binds are fixed. `wandb_mode` (`offline` / `online`) and `checkout` (a snapshot sha, below) are the exceptions.
 - Concurrent jobs are capped at `CC_MAX_JOBS` (16). A further submit returns HTTP 409.
 - Live checkout on Raven: `/u/$RAVEN_USER/algorithmic-institutions`, inside the image at `/opt/algorithmic-institutions` with `PYTHONPATH=/opt/algorithmic-institutions/src`. A snapshot checkout is `/u/$RAVEN_USER/cc-snapshots/<sha>`, mounted at the same container path.
-- Image: `/raven/ptmp/$RAVEN_USER/cc/containers/apptainer/algoinst.sif` (Python 3.9, torch 1.11.0+cu113, PyG 2.5). If a job fails because the image is missing, stop and tell the user. Do not build it from here.
+- Image: `/raven/ptmp/ykeller/cc/containers/apptainer/algoinst.sif` (shared; the same for every user) (Python 3.9, torch 1.11.0+cu113, PyG 2.5). If a job fails because the image is missing, stop and tell the user. Do not build it from here.
 
 `WANDB_ENTITY=chm-ml` and `WANDB_PROJECT=algorithmic-institutions` are set on every container start. The API key is loaded from `/u/$RAVEN_USER/private/cc_secrets`. W&B defaults to offline; pass `"wandb_mode": "online"` to sync.
 
@@ -123,7 +123,7 @@ Sync body: `local_path`, `archive_path`, and optional `cluster` (`raven` only), 
 
 Rename: `{"source", "destination", "on_gpu"?, "time"?}`. Remove: `{"path", "on_gpu"?, "time"?}` runs `rm -rf`. Both paths must be strictly inside the algoinst root, with no trailing slash. A first read of a tape-only file blocks while the archive recalls it. Killing the SSH run does not `scancel` an `on_gpu` job — cancel the `cc-archive` job with `/cancel_job` on `raven`.
 
-The transfer runs in `/raven/ptmp/$RAVEN_USER/cc/containers/apptainer/archive.sif`, with this project's data mounts and without `--nv`. Do not SSH the archive yourself.
+The transfer runs in `/raven/ptmp/ykeller/cc/containers/apptainer/archive.sif` (shared), with this project's data mounts and without `--nv`. Do not SSH the archive yourself.
 
 ### `GET /runs/{run_id}` and `POST /runs/{run_id}/kill`
 
