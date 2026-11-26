@@ -5,8 +5,10 @@
 # for every call. After start-up,
 #   docker compose ... exec cc_command_server bash -ic 'ssh -fN raven'
 # opens the master connection once (password + OTP); every later call reuses
-# it for up to 72 h. The control sockets (master-*) are written into this
-# folder, so it must stay writable.
+# it for up to 72 h. The control sockets live in /var/run/cc_ssh inside the
+# container (the image creates it), not in this mounted folder: a shared
+# folder on macOS cannot hold sockets. The folder stays writable for
+# known_hosts.
 
 # Correctly resolve short names of gateway machines and HPC nodes
 Match originalhost gate*,cobra*,raven*,viper*,dais*
@@ -21,7 +23,7 @@ Match canonical host gate*
     ServerAliveInterval 120
     ControlMaster auto
     ControlPersist 72h
-    ControlPath ~/.ssh/master-%C
+    ControlPath /var/run/cc_ssh/master-%C
 
 # Touch ~/.ssh/use_gate2 (in this folder) to use gate2; remove it to use gate1.
 Match canonical host cobra*,raven*,viper*,dais* exec "test -f ~/.ssh/use_gate2"
@@ -33,5 +35,5 @@ Match canonical host cobra*,raven*,viper*,dais*
     Compression yes
     ControlMaster auto
     ControlPersist 72h
-    ControlPath ~/.ssh/master-%C
+    ControlPath /var/run/cc_ssh/master-%C
     ProxyJump gate1

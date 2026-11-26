@@ -12,6 +12,12 @@ docker compose -p algoinst -f container/CC_env/docker-compose.yml up -d cc_comma
 docker compose -p algoinst -f container/CC_env/docker-compose.yml run --build --rm claude
 ```
 
+On an Apple Silicon Mac, add `-f container/CC_env/docker-compose.amd64.yml`
+after each `-f container/CC_env/docker-compose.yml`: the proxy image needs
+amd64 (no Linux ARM wheels for PyG). On any Mac, the proxy logs in with
+`CLAUDE_CODE_OAUTH_TOKEN` from `~/secrets/.cc_env`
+(`docs/handover/handover.md`, On a Mac).
+
 Extra mounts the policy finder does not need (`algo-inst-otree`,
 `slurm_tools`): copy `docker-compose.extra.example.yml` to
 `docker-compose.extra.yml` and add `-f container/CC_env/docker-compose.extra.yml`

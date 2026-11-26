@@ -1,10 +1,11 @@
 # [DRAFT] Setting up the policy-finder pipeline on a new machine
 
-For a Claude agent with full permissions on a Linux host, working with its
-human. Follow the steps in order. Every step ends with a check; do not go on
-while it fails. Steps marked **Human** need the person: a login, a password, a
-one-time code (OTP) or a browser. Ask them and wait. For a command they should
-run in your session, suggest the `!` prefix.
+For a Claude agent with full permissions on a Linux host, or a Mac with Docker
+Desktop (read "On a Mac" below first), working with its human. Follow the
+steps in order. Every step ends with a check; do not go on while it fails.
+Steps marked **Human** need the person: a login, a password, a one-time code
+(OTP) or a browser. Ask them and wait. For a command they should run in your
+session, suggest the `!` prefix.
 
 When you are done, the human can say "run the policy finder" inside the proxy
 and get an instance that designs a rule, sweeps it on Raven and commits the
@@ -40,9 +41,10 @@ Ask the human for, and do not continue without:
 - CHM S3 credentials (an `.s3cfg` for `s3://chm-algorithmic-institutions`),
 - optional: a W&B API key (entity `chm-ml`), for runs with `wandb_mode: online`.
 
-The host needs Docker Engine with the Compose plugin 2.24 or newer, the user
-in the `docker` group, `git`, and Claude Code logged in (`~/.claude` and
-`~/.claude.json` exist). `host_check.sh` (step 4) checks all of this.
+The host needs Docker Engine (Docker Desktop on a Mac) with the Compose
+plugin 2.24 or newer, the user in the `docker` group (Linux), `git`, and
+Claude Code logged in (`~/.claude` and `~/.claude.json` exist).
+`host_check.sh` (step 4) checks all of this.
 
 ## 1. Clone
 
@@ -93,6 +95,7 @@ Follow `infra/claude_proxy/secrets.example/README.md`. In short, under
 | `cc_ssh_keys/config` | Copy `infra/claude_proxy/secrets.example/cc_ssh_keys/config.example` (the MPCDF FAQ config) and replace `<raven user>` in both places. The folder must stay writable: the SSH control sockets are created in it. |
 | `S3/.s3cfg` | **Human:** provides it. |
 | `algoinst_deploy_key/` | Create the folder. It may stay empty: the pipeline does not push. Put a GitHub key there (uid `HOST_UID`) if the proxy should push instance branches. |
+| `.cc_env` | Optional on Linux. **On a Mac, required:** `CLAUDE_CODE_OAUTH_TOKEN=<token>` (see "On a Mac"). |
 
 ## 4. Host check
 
@@ -138,10 +141,11 @@ $C exec cc_command_server bash -ic 'ssh -fN raven && sleep 0.5'      # Human: pa
 $C run --build --rm claude                                           # the proxy session
 ```
 
-Build `claude` before starting the spawner: the spawner copies
-`algoinst_claude:latest` to its agent image once, when it starts, and fails
-if that image does not exist yet. If you started it too early,
-`$C restart container_spawner` after the build.
+On an Apple Silicon Mac, add `-f container/CC_env/docker-compose.amd64.yml` to
+`C` (see "On a Mac"). Build `claude` before starting the spawner: the spawner
+copies `algoinst_claude:latest` to its agent image once, when it starts, and
+fails if that image does not exist yet. If you started it too early, `$C
+restart container_spawner` after the build.
 
 The `ssh -fN raven` connection carries every Raven call. When it drops
 (network change, reboot, Raven maintenance), the command server's calls fail
@@ -205,6 +209,33 @@ campaign, `python scripts/policy_finder/campaign.py run
 scripts/policy_finder/campaigns/<file>.yml`. Instance names are
 `pf-<YYYYMMDD>-<n>`.
 
+## On a Mac
+
+Docker Desktop runs the containers in a Linux VM, so most of this guide
+applies unchanged. `host_check.sh` checks the points below on macOS.
+
+- **The proxy's Claude login.** Claude Code on macOS keeps its login in the
+  Keychain, which the proxy container cannot read, so the proxy would start
+  logged out. **Human:** run `claude setup-token` and add
+  `CLAUDE_CODE_OAUTH_TOKEN=<token>` to `~/secrets/.cc_env`. The token in
+  `claude_setup_token` works; the proxy and the agents then share one plan's
+  limits. The agents are not affected either way.
+- **Apple Silicon (M1 to M4).** The VM is Linux ARM, and PyG's compiled
+  extensions have no Linux ARM wheels: the proxy image fails to build. Add
+  `-f container/CC_env/docker-compose.amd64.yml` after the main `-f` in every
+  compose command. The proxy and the agents then run as amd64 under
+  emulation, slower but working. Do not use the spawner's image rebuild
+  endpoint: it builds natively. An Intel Mac needs none of this.
+- **uid and gid.** A Mac user is usually `501:20`. Put those in `.env` and in
+  `user:` of `infra/claude_proxy/container/spawner_config/algoinst.yml`.
+- **File sharing.** Keep the repo, `~/claude_tools`, `~/secrets`, `~/tmp` and
+  `~/pf_runs` under `/Users/...`, which Docker Desktop shares by default.
+- **Memory.** Up to 4 agents take 4 GB each. Give Docker Desktop at least
+  16 GB, or add `PF_AGENT_SLOTS=2` to `~/secrets/.cc_env`.
+- **SSH.** Use `config.example` as it is: its connection sockets live inside
+  the command server container, because a folder shared from macOS cannot
+  hold sockets.
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
@@ -218,6 +249,9 @@ scripts/policy_finder/campaigns/<file>.yml`. Instance names are
 | `image_check` fails but local `validate-rule` passed | The rule uses something torch 1.11 lacks. The agent's next version must avoid it. |
 | a job fails with a missing `/ptmp/...` folder | Rerun `raven_setup.sh` on Raven. |
 | Raven commands run as the wrong user, or fail on `/u/ykeller/...` | `raven_user` in `CC_command_server/env.yml` (step 1) and the `User` in `cc_ssh_keys/config` must both be the human's login. Restart `cc_command_server` after editing `env.yml`. |
+| proxy session asks to log in (Mac) | No `CLAUDE_CODE_OAUTH_TOKEN` in `~/secrets/.cc_env` (On a Mac). |
+| proxy image build fails on PyG packages (Apple Silicon) | Missing `-f container/CC_env/docker-compose.amd64.yml` (On a Mac). |
+| `ssh -fN raven` fails with a `ControlPath` or bind error | The SSH config keeps its sockets in the mounted folder; use `config.example`'s `ControlPath /var/run/cc_ssh/master-%C`. |
 | container spawner exits at start: `could not seed algoinst_claude:cpu` | Build `claude` first, then restart the spawner (step 6). |
 | a pipeline stopped (crash, restart) | `python scripts/policy_finder/pipeline.py run <name>` resumes where it stopped. |
 

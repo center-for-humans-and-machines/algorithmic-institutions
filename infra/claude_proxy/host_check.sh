@@ -9,6 +9,9 @@
 # as. --fix creates the folders that hold no secrets (state dirs, PF_RUNS).
 # Exit code 1 on any FAIL. Inside the running proxy,
 # scripts/policy_finder/preflight.py checks the services and Raven.
+#
+# Runs on Linux and on macOS (bash 3.2, BSD tools); on macOS it also checks
+# what docs/handover/handover.md "On a Mac" covers.
 
 set -uo pipefail
 
@@ -19,6 +22,20 @@ SPAWNER_CONFIG="$HERE/container/spawner_config/algoinst.yml"
 FIX=0
 [[ "${1:-}" == "--fix" ]] && FIX=1
 FAILS=0
+OS="$(uname -s)"
+
+# ver_ge A B: version A >= version B (no sort -V on macOS)
+ver_ge() {
+    awk -v a="$1" -v b="$2" 'BEGIN {
+        n = split(a, x, "."); m = split(b, y, ".")
+        for (i = 1; i <= (n > m ? n : m); i++) {
+            if (x[i] + 0 > y[i] + 0) exit 0
+            if (x[i] + 0 < y[i] + 0) exit 1
+        }
+        exit 0 }'
+}
+# owner_uid PATH (GNU stat, else BSD stat)
+owner_uid() { stat -c %u "$1" 2>/dev/null || stat -f %u "$1"; }
 
 pass() { echo "[PASS] $1"; }
 warn() { echo "[WARN] $1"; [[ -n "${2:-}" ]] && echo "         -> $2"; return 0; }
@@ -43,12 +60,12 @@ if command -v docker >/dev/null; then
     if docker info >/dev/null 2>&1; then
         pass "Docker daemon reachable"
     else
-        fail "cannot talk to the Docker daemon" "start Docker; add your user to the docker group"
+        fail "cannot talk to the Docker daemon" "start Docker (Docker Desktop on a Mac); on Linux add your user to the docker group"
     fi
     v="$(docker compose version --short 2>/dev/null | sed 's/^v//')"
     if [[ -z "$v" ]]; then
         fail "docker compose v2 missing" "install the Docker Compose plugin"
-    elif [[ "$(printf '%s\n%s\n' 2.24.0 "$v" | sort -V | head -n1)" == 2.24.0 ]]; then
+    elif ver_ge "$v" 2.24.0; then
         pass "docker compose $v"
     else
         fail "docker compose $v is older than 2.24 (optional env_file)" "update the Docker Compose plugin"
@@ -133,12 +150,13 @@ fi
 need d "$SECRETS_DIR/cc_ssh_keys" "an SSH key for Raven and config (secrets.example/cc_ssh_keys/config.example)"
 if [[ -e "$SECRETS_DIR/cc_ssh_keys/config" ]]; then
     if [[ -r "$SECRETS_DIR/cc_ssh_keys/config" ]]; then
-        grep -qiE '^\s*(Host|Match)\s.*raven' "$SECRETS_DIR/cc_ssh_keys/config" \
+        grep -qiE '^[[:space:]]*(Host|Match)[[:space:]].*raven' "$SECRETS_DIR/cc_ssh_keys/config" \
             && pass "cc_ssh_keys/config covers raven" \
             || fail "cc_ssh_keys/config has no Host or Match line for raven" "see secrets.example/cc_ssh_keys/config.example"
         grep -q "<raven user>" "$SECRETS_DIR/cc_ssh_keys/config" \
             && fail "cc_ssh_keys/config still has <raven user>" "replace it with your MPCDF login"
-        [[ "$(stat -c %u "$SECRETS_DIR/cc_ssh_keys/config")" == 0 ]] \
+        # Docker Desktop (macOS) maps file owners itself; this applies to Linux
+        [[ "$OS" == Darwin || "$(owner_uid "$SECRETS_DIR/cc_ssh_keys/config")" == 0 ]] \
             || warn "cc_ssh_keys is not owned by root: if ssh in the command server says 'Bad owner or permissions', fix it with" \
                 "sudo chown -R root:root $SECRETS_DIR/cc_ssh_keys; sudo chmod 700 $SECRETS_DIR/cc_ssh_keys; sudo chmod 600 $SECRETS_DIR/cc_ssh_keys/*"
     else
@@ -178,6 +196,43 @@ if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
             warn "image $img not built yet" "start_command.md builds it (the spawner copies algoinst_claude:latest for the agents)"
         fi
     done
+fi
+
+if [[ "$OS" == Darwin ]]; then
+    echo "== macOS (docs/handover/handover.md, On a Mac)"
+    # The Mac's Claude Code keeps its login in the Keychain, which the proxy
+    # container cannot read: it needs a token in .cc_env.
+    if grep -qE '^CLAUDE_CODE_OAUTH_TOKEN=.+' "$SECRETS_DIR/.cc_env" 2>/dev/null; then
+        pass "CLAUDE_CODE_OAUTH_TOKEN in $SECRETS_DIR/.cc_env"
+    else
+        fail "no CLAUDE_CODE_OAUTH_TOKEN in $SECRETS_DIR/.cc_env: the proxy would start logged out" \
+            "claude setup-token, then add CLAUDE_CODE_OAUTH_TOKEN=<token> to $SECRETS_DIR/.cc_env"
+    fi
+    # Docker Desktop shares /Users, /Volumes, /private and /tmp by default
+    for var in REPO CLAUDE_TOOLS SECRETS_DIR CC_STATE_DIR PF_RUNS; do
+        case "${!var}" in
+            /Users/*|/Volumes/*|/private/*|/tmp/*) ;;
+            *) warn "$var=${!var} is outside Docker Desktop's default file sharing" \
+                   "add it under Docker Desktop > Settings > Resources > File sharing" ;;
+        esac
+    done
+    mem="$(docker info --format '{{.MemTotal}}' 2>/dev/null)"
+    if [[ -n "$mem" && "$mem" -lt 17000000000 ]]; then
+        warn "Docker Desktop has $((mem / 1000000000)) GB: up to 4 agents take 4 GB each" \
+            "raise Docker Desktop's memory, or add PF_AGENT_SLOTS=2 to $SECRETS_DIR/.cc_env"
+    fi
+    if [[ "$(uname -m)" == arm64 ]]; then
+        arch="$(docker image inspect -f '{{.Architecture}}' algoinst_claude:latest 2>/dev/null)"
+        if [[ "$arch" == amd64 ]]; then
+            pass "algoinst_claude:latest is amd64 (PyG has no Linux ARM wheels)"
+        elif [[ -n "$arch" ]]; then
+            fail "algoinst_claude:latest is $arch: PyG has no Linux ARM wheels" \
+                "rebuild with -f container/CC_env/docker-compose.amd64.yml (start_command.md)"
+        else
+            warn "Apple Silicon: build the proxy for amd64" \
+                "add -f container/CC_env/docker-compose.amd64.yml to the compose commands (start_command.md)"
+        fi
+    fi
 fi
 
 echo
