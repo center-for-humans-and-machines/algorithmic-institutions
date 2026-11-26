@@ -17,30 +17,17 @@
 
 ## Issues to decide before merging
 
-1. **Git LFS goes away on `main`.**
-   - Handover removed LFS on 2026-11-03 (`1a0d5dcf`). `*.csv`, `*.parquet` and `*.pt` are
-     gitignored, and `.gitattributes` has no LFS filters.
-   - `main` tracks 160 such files (the human datasets in `experiments/`, the clones' `.pt`, sim
-     outputs). After the merge none of them are tracked, and `git pull` deletes them from
-     everyone's checkout.
-   - They come back with `scripts/fetch_large_files.py` (`docs/large_files.md`). That needs
-     read access to `s3://chm-algorithmic-institutions`, or git-lfs plus `--lfs` for the 177
-     files that are only in the LFS history.
-   - Everyone working off `main` has to know this beforehand.
-2. **Branches that still use LFS will conflict later.**
-   - `dev` (Levin, 177 commits not in handover) changes 483 data files relative to `main`.
-     Merging `dev` into `main` afterwards gives modify/delete conflicts on deleted files.
-     Data files it adds would come in as plain LFS pointer text, because handover's
-     `.gitattributes` no longer has the filter.
-   - The same applies to the older `auto/*`, `llm-manager-*` and `base/*` branches.
-   - Levin's active `annot/step-classification` branched off handover (2026-11-06) and touches
-     no data files, so it is unaffected.
-3. **`dev` is not part of this merge.**
-   - `main` and `dev` already diverge: 5 commits only on `main`, 234 only on `dev`.
-   - After the merge, `main` carries the handover line, and `dev`'s RL / LLM-manager work stays
-     outside it.
-   - Decide with Levin and Cem which branch is the trunk. If it is `dev`, this merge goes
-     there instead, or both.
+1. **Git LFS goes away on `main`: intended (confirmed 2026-11-26).**
+   - `main`'s 160 LFS-tracked data files leave the tree.
+   - The team already fetches data from S3 (`docs/large_files.md`).
+2. **`dev` is not a concern.**
+   - Its last commit is `fddf37ad` (2026-09-22).
+   - On 2026-09-24 the team decided that `dev` stays a reference, not a base
+     (`docs/reports/merge-recommendations.md`).
+   - The wanted fixes were rebuilt on the #224 branch, and that branch is in handover.
+   - `dev` and the other old LFS branches stay as an evidence trail. Nobody needs to rebase or
+     merge them.
+3. (merged into 2)
 4. **Layout moves.** `doc/` and `reports/` move to `docs/`. Links, bookmarks and scripts that use
    the old paths break.
 5. **Deletions.**
@@ -66,7 +53,7 @@
 
 ## Steps
 
-1. Agree on 1–3 with Levin and Cem: the LFS removal, the trunk, and who fetches data how.
+1. Items 1–3: settled.
 2. Optional cleanup on handover, then push:
    - fix or xfail the two tests;
    - decide on the large rendered files;
@@ -77,9 +64,6 @@
    - or open a PR `yannik/handover` → `main` and merge it as a fast-forward / merge commit,
      without squashing, so the instance branches' history stays reachable.
 5. Announce:
-   - the LFS removal and `scripts/fetch_large_files.py`;
    - the `docs/` move;
-   - for `dev` and the other LFS branches, rebase or merge onto the new `main`, dropping
-     their LFS pointers.
 6. Keep working from `yannik/handover`, or move the workflow to `main`. This decides the base
    in the branch workflow.
