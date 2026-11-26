@@ -1,0 +1,94 @@
+Bootstrap: docker
+From: nvidia/cuda:11.3.1-cudnn8-devel-ubuntu20.04
+
+#-----------------------------------------------------------------------------
+# Apptainer image for algorithmic-institutions on Raven (A100).
+#
+# This is the frozen stack the repo already trains with:
+#   Ubuntu 20.04 / Python 3.9 / CUDA 11.3 / torch 1.11.0+cu113
+#   torch-scatter 2.0.9, torch-sparse 0.6.13, torch-cluster 1.6.0,
+#   torch-spline-conv 1.2.1, torch-geometric 2.5.0
+#
+# The local CPU and RTX 4090 Dockerfiles are a newer torch on purpose.
+# Do not rebuild this image from those.
+#
+# The checkout is not copied in. At runtime the command server bind-mounts
+# /u/<raven user>/algorithmic-institutions over /opt/algorithmic-institutions
+# and sets PYTHONPATH=/opt/algorithmic-institutions/src. --cleanenv drops
+# %environment, so the slurm template and the server exec line repeat
+# WANDB_ENTITY and WANDB_PROJECT.
+#
+# Build from infra/claude_proxy in the repo (so %files resolves):
+#
+#   apptainer build --fakeroot algoinst.sif container/CC_env/algoinst.def
+#
+# Upload the finished image to:
+#   /raven/ptmp/<raven user>/cc/containers/apptainer/algoinst.sif
+#-----------------------------------------------------------------------------
+
+%files
+    container/CC_env/requirements.raven.txt /opt/requirements.raven.txt
+    container/CC_env/constraints.raven.txt /opt/constraints.raven.txt
+
+%post
+    set -e
+    export DEBIAN_FRONTEND=noninteractive
+    export UV_NO_CACHE=1
+    export UV_LINK_MODE=copy
+    export UV_HTTP_TIMEOUT=900
+    export UV_VERSION=0.9.5
+
+    apt-get update
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl git \
+        build-essential pkg-config \
+        python3.9 python3.9-dev python3.9-venv python3-distutils \
+        libgomp1
+    rm -rf /var/lib/apt/lists/*
+
+    curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" \
+        | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
+    uv venv --python /usr/bin/python3.9 --seed /opt/venv
+
+    # cu113 wheels first. The constraint file blocks later steps from
+    # replacing torch 1.11 or pulling numpy>=1.24.
+    uv pip install --python /opt/venv/bin/python \
+        --index-url https://download.pytorch.org/whl/cu113 \
+        "numpy>=1.21.6,<1.24" \
+        "torch==1.11.0+cu113"
+    uv pip install --python /opt/venv/bin/python \
+        --find-links https://data.pyg.org/whl/torch-1.11.0+cu113.html \
+        "torch-scatter==2.0.9" \
+        "torch-sparse==0.6.13" \
+        "torch-cluster==1.6.0" \
+        "torch-spline-conv==1.2.1"
+    uv pip install --python /opt/venv/bin/python \
+        --extra-index-url https://download.pytorch.org/whl/cu113 \
+        -c /opt/constraints.raven.txt \
+        "torch-geometric==2.5.0" \
+        -r /opt/requirements.raven.txt
+
+    /opt/venv/bin/python - <<'PY'
+import torch
+import torch_scatter
+import torch_geometric
+print("torch", torch.__version__)
+print("torch_scatter", torch_scatter.__version__)
+print("torch_geometric", torch_geometric.__version__)
+assert torch.__version__.startswith("1.11.0")
+PY
+
+%environment
+    export PATH="/opt/venv/bin:/usr/local/bin:/usr/bin:/bin"
+    export VIRTUAL_ENV=/opt/venv
+    export PYTHONPATH=/opt/algorithmic-institutions/src
+    export WANDB_ENTITY=chm-ml
+    export WANDB_PROJECT=algorithmic-institutions
+    export PYTHONUNBUFFERED=1
+
+%runscript
+    exec python "$@"
+
+%labels
+    org.opencontainers.image.title algoinst
+    org.opencontainers.image.description Raven image for algorithmic-institutions (torch 1.11.0+cu113, PyG 2.5)

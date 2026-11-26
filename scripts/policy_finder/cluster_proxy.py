@@ -3,9 +3,9 @@
 The proxy has no Raven SSH keys; every cluster call is an HTTP request to the
 command server (the `run_on_cluster` skill in the proxy). A sim runs on an
 immutable snapshot of one commit: `snapshot(sha)` publishes the instance
-branch's commit to `/u/ykeller/cc-snapshots/<sha>/`, and a job or login-node
+branch's commit to `/u/$RAVEN_USER/cc-snapshots/<sha>/`, and a job or login-node
 command with `checkout=<sha>` runs on it. Its `plots/` and `.log/` are
-`/u/ykeller/cc-snapshot-outputs/<sha>/`, so instances never share a tree and
+`/u/$RAVEN_USER/cc-snapshot-outputs/<sha>/`, so instances never share a tree and
 nothing is staged in the live checkout. The AH models come from the live
 checkout's `artifacts/`, read-only.
 

@@ -27,9 +27,6 @@ Steps (STEPS):
   final_fetch   its output (rerun once without sweep.json), marked with
                 --score-final, committed: the version's result
 
-Only the cluster path through the command server (the Claude proxy) is
-implemented here; the SSH path stays run_sweep.sh and run_final.sh.
-
 Paths come from PF_RUNS (the root the container spawner's `pf_exports` root
 is the `exports` folder of): worktrees and side files in PF_RUNS/worktrees
 (PF_WORKTREE_ROOT overrides), exports in PF_RUNS/exports, agent slot locks in

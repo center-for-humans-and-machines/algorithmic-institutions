@@ -70,7 +70,6 @@ def run(config_path):
     result = subprocess.run(
         start_command, stdout=subprocess.PIPE, shell=True, check=True, text=True
     )
-    # "Submitted batch job <id>": scripts/policy_finder/run_sweep.sh waits on it
     print(result.stdout.strip())
 
 

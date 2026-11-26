@@ -1,0 +1,17 @@
+# Optional extra mounts for the proxy that the policy finder does not need.
+# Copy to docker-compose.extra.yml (gitignored) and add
+#   -f container/CC_env/docker-compose.extra.yml
+# after the main -f in the commands of start_command.md.
+services:
+  claude:
+    volumes:
+      - type: bind
+        source: ${HOME}/github_repos/algo-inst-otree
+        target: /opt/algo-inst-otree
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HOME}/github_repos/slurm_tools
+        target: /opt/slurm_tools
+        bind:
+          create_host_path: false

@@ -10,8 +10,8 @@
 # notes/policy_finder/<rule_name>.md and scripts/policy_finder/<name>/
 # (<rule_name> is <name> for version 1, <name>-v<k> after):
 # neither on branch policy-finder/<name> since the version's start_commit
-# (since policy-finder-base for an instance from before versions) nor in its
-# worktree (uncommitted or untracked files), its sweep (run_sweep.sh) aside;
+# (since the base branch for an instance from before versions) nor in its
+# worktree (uncommitted or untracked files), its sweep (pipeline.py) aside;
 # so an earlier version's rule, notes or results changed fail it. It also
 # needs the rule and its notes, with the notes' sections in order:
 # Explorations, Key findings, Hypothesis and its Justification, and the rule
@@ -42,10 +42,11 @@ done
 [[ -n "$NAME" ]] || usage
 
 MAIN="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-BASE="${PF_BASE:-yannik/handover}"
+BASE="${PF_BASE:-main}"
 BRANCH="policy-finder/$NAME"
 WT_ROOT="${PF_WORKTREE_ROOT:-${PF_RUNS:+$PF_RUNS/worktrees}}"
-WT="${WT_ROOT:-$(dirname "$MAIN")/policy-finder-worktrees}/$NAME"
+[[ -n "$WT_ROOT" ]] || { echo "set PF_RUNS (or PF_WORKTREE_ROOT)" >&2; exit 2; }
+WT="$WT_ROOT/$NAME"
 
 git -C "$MAIN" rev-parse --verify --quiet "$BRANCH" >/dev/null \
     || { echo "no branch $BRANCH" >&2; exit 1; }
@@ -65,7 +66,7 @@ PY="${PF_PYTHON:-$PY}"
 RULE="configs/managers/rule_based/$STEM.yml"
 NOTES="notes/policy_finder/$STEM.md"
 SCRIPTS="scripts/policy_finder/$NAME/"
-# what run_sweep.sh (#241) commits once the check passed
+# what pipeline.py commits once the check passed
 SWEEP_CONFIGS="configs/simulation/policy_finder/${STEM}_sweep"
 SWEEP="plots/simulation/policy_finder/${STEM}_sweep"
 # the version's changes: since its start, or since the base for an instance

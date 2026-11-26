@@ -1,0 +1,37 @@
+# Copy to $SECRETS_DIR/cc_ssh_keys/config and replace <raven user> with your
+# MPCDF login (both places). Taken from https://docs.mpcdf.mpg.de/faq/
+#
+# The command server mounts this folder at /root/.ssh and runs `ssh raven`
+# for every call. After start-up,
+#   docker compose ... exec cc_command_server bash -ic 'ssh -fN raven'
+# opens the master connection once (password + OTP); every later call reuses
+# it for up to 72 h. The control sockets (master-*) are written into this
+# folder, so it must stay writable.
+
+# Correctly resolve short names of gateway machines and HPC nodes
+Match originalhost gate*,cobra*,raven*,viper*,dais*
+    CanonicalDomains mpcdf.mpg.de
+    CanonicalizeFallbackLocal no
+    CanonicalizeHostname yes
+
+# Keep a tunnel open for the day when accessing the gate machines
+Match canonical host gate*
+    User <raven user>
+    Compression yes
+    ServerAliveInterval 120
+    ControlMaster auto
+    ControlPersist 72h
+    ControlPath ~/.ssh/master-%C
+
+# Touch ~/.ssh/use_gate2 (in this folder) to use gate2; remove it to use gate1.
+Match canonical host cobra*,raven*,viper*,dais* exec "test -f ~/.ssh/use_gate2"
+    ProxyJump gate2
+
+# Keep a tunnel open for the day when accessing the HPC nodes
+Match canonical host cobra*,raven*,viper*,dais*
+    User <raven user>
+    Compression yes
+    ControlMaster auto
+    ControlPersist 72h
+    ControlPath ~/.ssh/master-%C
+    ProxyJump gate1

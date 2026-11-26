@@ -1,0 +1,118 @@
+# syntax=docker/dockerfile:1.6
+# Local GPU image for algorithmic-institutions on an RTX 4090.
+#
+# Same CUDA base image as the MARL-LM local GPU Dockerfile
+# (nvidia/cuda:12.8.1 on Ubuntu 24.04). Python is 3.10, matching the
+# CPU proxy image. Torch is 2.5.1+cu124: the 4090 is compute capability
+# 8.9, which the Raven torch 1.11+cu113 wheels do not ship kernels for.
+# PyTorch's cu124 wheel carries its own CUDA runtime, so this runs on a
+# driver new enough for CUDA 12.4 even though the base image is 12.8.
+#
+# Not for Raven. Raven jobs use algoinst.def (torch 1.11+cu113).
+# Checkpoints do not move between the two stacks.
+
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV PIP_NO_CACHE_DIR=1 \
+    UV_NO_CACHE=1 \
+    UV_LINK_MODE=copy \
+    UV_HTTP_TIMEOUT=900 \
+    LC_ALL=C.UTF-8 \
+    LANG=C.UTF-8 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    PYTHONPATH=/opt/algorithmic-institutions/src \
+    WANDB_ENTITY=chm-ml \
+    WANDB_PROJECT=algorithmic-institutions
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        software-properties-common ca-certificates curl git gnupg openssh-client \
+        build-essential pkg-config \
+        libgomp1 \
+        locales \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3.10 python3.10-dev python3.10-venv \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
+    && locale-gen en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        jq ripgrep fd-find tree file xxd unzip zip xz-utils procps git-lfs \
+    && ln -sf /usr/bin/fdfind /usr/local/bin/fd \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g @anthropic-ai/claude-code \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
+
+RUN python3 -m pip install --upgrade pip setuptools wheel \
+    && python3 -m pip install "uv==0.9.5"
+
+COPY container/CC_env/requirements.local.txt /opt/requirements.local.txt
+COPY container/CC_env/constraints.local-gpu.txt /opt/constraints.local-gpu.txt
+
+RUN uv pip install --system \
+        --index-url https://download.pytorch.org/whl/cu124 \
+        "torch==2.5.1+cu124" \
+    && uv pip install --system \
+        --find-links https://data.pyg.org/whl/torch-2.5.0+cu124.html \
+        -c /opt/constraints.local-gpu.txt \
+        torch_scatter torch_sparse torch_cluster torch_spline_conv \
+    && uv pip install --system \
+        --extra-index-url https://download.pytorch.org/whl/cu124 \
+        -c /opt/constraints.local-gpu.txt \
+        "torch-geometric==2.6.1" \
+        -r /opt/requirements.local.txt
+
+RUN python3 - <<'PY'
+import torch
+import torch_scatter
+import torch_geometric
+print("torch", torch.__version__, "cuda", torch.version.cuda)
+assert torch.version.cuda and torch.version.cuda.startswith("12.")
+print("torch_geometric", torch_geometric.__version__)
+PY
+
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+RUN set -eux; \
+    if ! getent group "${GROUP_ID}" >/dev/null; then \
+        groupadd -g "${GROUP_ID}" claude; \
+    fi; \
+    if ! getent passwd "${USER_ID}" >/dev/null; then \
+        useradd -m -u "${USER_ID}" -g "${GROUP_ID}" -s /bin/bash claude; \
+    else \
+        existing_user="$(getent passwd "${USER_ID}" | cut -d: -f1)"; \
+        usermod -d /home/claude -m "${existing_user}" || true; \
+        usermod -l claude "${existing_user}" || true; \
+    fi; \
+    mkdir -p /home/claude /opt/algorithmic-institutions /opt/algoinst_proxy; \
+    chown -R "${USER_ID}:${GROUP_ID}" /home/claude /opt/algorithmic-institutions /opt/algoinst_proxy
+
+# Author of the commits the pipeline makes (compose passes these from .env).
+ARG GIT_USER_NAME="Claude Code"
+ARG GIT_USER_EMAIL=""
+RUN git config --file /home/claude/.gitconfig user.name "${GIT_USER_NAME}" \
+    && if [ -n "${GIT_USER_EMAIL}" ]; then \
+        git config --file /home/claude/.gitconfig user.email "${GIT_USER_EMAIL}"; \
+    fi \
+    && chown "${USER_ID}:${GROUP_ID}" /home/claude/.gitconfig
+
+ENV HOME=/home/claude
+
+USER ${USER_ID}:${GROUP_ID}
+
+WORKDIR /opt/algoinst_proxy
+
+CMD ["claude", "--dangerously-skip-permissions"]

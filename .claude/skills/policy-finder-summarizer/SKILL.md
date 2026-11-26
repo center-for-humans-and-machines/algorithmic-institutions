@@ -1,6 +1,6 @@
 ---
 name: policy-finder-summarizer
-description: Bring the policy-finder observation app's Summary up to date (new_instance.sh runs it headless after every sweep). Reads the rule config and sweep of every instance version not yet summarized, places each rule in the Summary's categories (adding one only when a rule needs it), records it in summary.json beside the instances, and republishes the shared artifact. Use when the user asks to update, refresh or redo the policy-finder summary.
+description: Bring the policy-finder observation app's Summary up to date. Reads the rule config and sweep of every instance version not yet summarized, places each rule in the Summary's categories (adding one only when a rule needs it), records it in summary.json beside the instances, and republishes the shared artifact. Use when the user asks to update, refresh or redo the policy-finder summary.
 argument-hint: "[artifact url]"
 ---
 
@@ -9,20 +9,13 @@ Update the Summary of the policy-finder observation app.
 $ARGUMENTS
 
 The Summary's categories (`summary.json`) and its reference pools
-(`references.json`) are kept on Raven, in `/u/certuer/policy-finder-observatory/`
-(one fixed folder for everyone, reached through the `raven` ssh alias), with
-working copies beside the instances in
-`../policy-finder-worktrees/`. `summarize.py` keeps the two in step: `status`
-pulls from Raven, and every `record` or `category` pulls, writes and pushes
-back. None of it is ever committed to `policy-finder-base`: every agent starts
-from that branch and can read all of it. The live app reads the working
-copies on every load; the shared artifact is a snapshot that this skill
+(`references.json`) live beside the instances, in the worktree root
+(`$PF_WORKTREE_ROOT`, else `$PF_RUNS/worktrees`), outside every worktree.
+None of it is ever committed to the base branch: every agent starts from it
+and must not read earlier rules and their results. The live app reads these
+files on every load; the shared artifact is a snapshot that this skill
 re-exports. Numbers (pool, se, members) and the inputs a rule reads are not
 stored: the app reads them from each sweep and rule.
-
-If `summarize.py` warns that Raven is unreachable, it works on the local
-copies: say so in the report, and run `summarize.py push` once `ssh raven`
-is up again.
 
 1. **What's new.** Run
 
@@ -70,9 +63,8 @@ is up again.
        --policy-category "<category>" --idea "<one line>"
    ```
 
-4. **Republish the artifact**, when this session has the Artifact tool.
-   A headless run (the launcher's, after a sweep) has none: skip this step
-   and say so; the session that launched the instance republishes it.
+4. **Republish the artifact**, when this session has the Artifact tool;
+   without it, skip this step and say so.
    Export the page as a fragment into the session's scratchpad (or
    `$CLAUDE_JOB_DIR/tmp`), then publish it with the Artifact tool to the
    shared artifact's URL: the argument if given, else

@@ -1,0 +1,225 @@
+# The algoinst Claude proxy and its two sibling services.
+#
+# Settings come from .env beside this file (copy .env.example; .env is
+# gitignored). Only RAVEN_USER is required; every host path has a default.
+# The repo mounts are relative to this file, so the checkout that holds this
+# file is the one the services see.
+#
+# Start (from infra/claude_proxy): see start_command.md.
+
+# Bind mounts fail if the host path is missing instead of creating it.
+x-require-host-path: &require-host-path
+  type: bind
+  bind:
+    create_host_path: false
+
+x-claude-environment: &claude-environment
+  CC_OUTPUT_DIR: "/var/cc_output"
+  BASH_MAX_TIMEOUT_MS: "21600000"
+  PYTHONPATH: "/opt/algorithmic-institutions/src"
+  PATH: "/home/claude/.local/bin:/opt/claude_tools/CC_command_server/scripts:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  RAVEN_USER: "${RAVEN_USER:?set RAVEN_USER in infra/claude_proxy/container/CC_env/.env (copy .env.example there)}"
+  PF_RUNS: "${PF_RUNS:-${HOME}/pf_runs}"
+
+x-claude-env-file: &claude-env-file
+  - path: "${SECRETS_DIR:-${HOME}/secrets}/.cc_env"
+    required: false
+
+# The proxy user must own what it writes in the repo and PF_RUNS: the host
+# user's uid and gid (`id -u`, `id -g`).
+x-claude-build-args: &claude-build-args
+  USER_ID: "${HOST_UID:-1000}"
+  GROUP_ID: "${HOST_GID:-1000}"
+  GIT_USER_NAME: "${GIT_USER_NAME:-Claude Code}"
+  GIT_USER_EMAIL: "${GIT_USER_EMAIL:-}"
+
+x-claude-volumes: &claude-volumes
+  - <<: *require-host-path
+    source: ${HOME}/.claude
+    target: /home/claude/.claude
+  - <<: *require-host-path
+    source: ${HOME}/.claude.json
+    target: /home/claude/.claude.json
+  - <<: *require-host-path
+    source: ../../../..
+    target: /opt/algorithmic-institutions
+  - <<: *require-host-path
+    source: ../..
+    target: /opt/algoinst_proxy
+  - <<: *require-host-path
+    source: ${SECRETS_DIR:-${HOME}/secrets}/algoinst_deploy_key
+    target: /home/claude/.ssh
+  - <<: *require-host-path
+    source: ${CC_STATE_DIR:-${HOME}/tmp}/cc_logs
+    target: /var/cc_output
+  - <<: *require-host-path
+    source: ${CC_STATE_DIR:-${HOME}/tmp}/cluster_transfer
+    target: /var/cluster_transfer
+  - <<: *require-host-path
+    source: ${CLAUDE_TOOLS:-${HOME}/claude_tools}
+    target: /opt/claude_tools
+    read_only: true
+  - <<: *require-host-path
+    source: ${CLAUDE_TOOLS:-${HOME}/claude_tools}/container_spawner/container_spawner
+    target: /opt/container_spawner
+    read_only: true
+  - <<: *require-host-path
+    source: ${CC_STATE_DIR:-${HOME}/tmp}/container_spawner
+    target: /var/spawner
+  # Same absolute path inside as on the host: the spawner hands paths under
+  # it to the Docker daemon.
+  - <<: *require-host-path
+    source: ${PF_RUNS:-${HOME}/pf_runs}
+    target: ${PF_RUNS:-${HOME}/pf_runs}
+
+services:
+  claude:
+    image: algoinst_claude:latest
+    build:
+      context: ../..
+      dockerfile: container/CC_env/Dockerfile
+      args: *claude-build-args
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment: *claude-environment
+    env_file: *claude-env-file
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stdin_open: true
+    tty: true
+    working_dir: /opt/algoinst_proxy
+    volumes: *claude-volumes
+    entrypoint: ["claude"]
+    command: ["--dangerously-skip-permissions"]
+    networks:
+      - cc_connection
+
+  claude-gpu:
+    image: algoinst_claude:gpu
+    profiles:
+      - gpu
+    build:
+      context: ../..
+      dockerfile: container/CC_env/Dockerfile.gpu
+      args: *claude-build-args
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    gpus: all
+    environment:
+      <<: *claude-environment
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+    env_file: *claude-env-file
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stdin_open: true
+    tty: true
+    working_dir: /opt/algoinst_proxy
+    volumes: *claude-volumes
+    entrypoint: ["claude"]
+    command: ["--dangerously-skip-permissions"]
+    networks:
+      - cc_connection
+
+  cc_command_server:
+    image: cc-cmd-server
+    environment:
+      CC_MAX_JOBS: "16"
+      CC_HOST: "0.0.0.0"
+      CC_PORT: "8765"
+      CC_PROJECT: "algoinst"
+      # Read by CC_command_server once docs/handover/patches/CC_command_server.patch
+      # is applied; ignored before.
+      CC_RAVEN_USER: "${RAVEN_USER:?set RAVEN_USER in infra/claude_proxy/container/CC_env/.env (copy .env.example there)}"
+      PATH: "/app/CC_command_server/scripts:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    build:
+      dockerfile: Dockerfile
+      context: ${CLAUDE_TOOLS:-${HOME}/claude_tools}/CC_command_server
+    volumes:
+      - <<: *require-host-path
+        source: ${SECRETS_DIR:-${HOME}/secrets}/cc_ssh_keys
+        target: /root/.ssh
+      - <<: *require-host-path
+        source: ${SECRETS_DIR:-${HOME}/secrets}/S3/.s3cfg
+        target: /root/.s3cfg
+        read_only: true
+      - <<: *require-host-path
+        source: ${CC_STATE_DIR:-${HOME}/tmp}/cc_logs
+        target: /var/cc_output
+      - <<: *require-host-path
+        source: ${CC_STATE_DIR:-${HOME}/tmp}/cluster_transfer
+        target: /var/cluster_transfer
+      - <<: *require-host-path
+        source: ../../../..
+        target: /opt/algorithmic-institutions
+      - <<: *require-host-path
+        source: ${CLAUDE_TOOLS:-${HOME}/claude_tools}/CC_command_server
+        target: /app/CC_command_server
+    networks:
+      - cc_connection
+
+  # Spawn allowlisted containers for this project. Callers on cc_connection
+  # reach it at http://container_spawner:8877. Spawned containers are not
+  # attached to cc_connection.
+  container_spawner:
+    image: container-spawner
+    build:
+      context: ${CLAUDE_TOOLS:-${HOME}/claude_tools}/container_spawner
+      dockerfile: Dockerfile
+    environment:
+      CC_PROJECT: algoinst
+      SPAWNER_HOST: "0.0.0.0"
+      SPAWNER_PORT: "8877"
+      SPAWNER_CONFIG_DIR: /config
+      SPAWNER_STATE_DIR: /var/spawner
+      # Host paths the spawner passes to the Docker daemon: absolute.
+      SPAWNER_STATE_HOST_DIR: ${CC_STATE_DIR:-${HOME}/tmp}/container_spawner
+      SPAWNER_ROOT_PF_EXPORTS: ${PF_RUNS:-${HOME}/pf_runs}/exports
+      CLAUDE_TOKEN_FILE: /run/secrets/claude_setup_token
+      # The docker CLI runs inside this container, so the build context has to
+      # be a path here. The daemon receives the uploaded files, not this path.
+      SPAWNER_PROXY_CONTEXT: /opt/spawner-proxy
+      SPAWNER_PROXY_IMAGE: container-spawner-proxy:latest
+      # Same rule as the proxy context: the docker CLI reads this path inside
+      # the spawner and uploads the files. Rebuild must not use the host path.
+      ALGOINST_BUILD_CONTEXT: /opt/algoinst-build
+    volumes:
+      - <<: *require-host-path
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+      - <<: *require-host-path
+        source: ${SECRETS_DIR:-${HOME}/secrets}/claude_setup_token
+        target: /run/secrets/claude_setup_token
+        read_only: true
+      - <<: *require-host-path
+        source: ${CC_STATE_DIR:-${HOME}/tmp}/container_spawner
+        target: /var/spawner
+      - <<: *require-host-path
+        source: ${CLAUDE_TOOLS:-${HOME}/claude_tools}/container_spawner/container_spawner
+        target: /app/container_spawner
+        read_only: true
+      # The project allowlist lives in this repo, not in the spawner repo.
+      - <<: *require-host-path
+        source: ../spawner_config
+        target: /config
+        read_only: true
+      - <<: *require-host-path
+        source: ${CLAUDE_TOOLS:-${HOME}/claude_tools}/container_spawner/proxy
+        target: /opt/spawner-proxy
+        read_only: true
+      - <<: *require-host-path
+        source: ../..
+        target: /opt/algoinst-build
+        read_only: true
+      - <<: *require-host-path
+        source: ${PF_RUNS:-${HOME}/pf_runs}
+        target: ${PF_RUNS:-${HOME}/pf_runs}
+        read_only: true
+    networks:
+      - cc_connection
+
+networks:
+  cc_connection:
+    external: false

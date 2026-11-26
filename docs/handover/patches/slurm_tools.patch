@@ -1,0 +1,141 @@
+diff --git a/slurm_tools/do_slurm_job.py b/slurm_tools/do_slurm_job.py
+index 09a9712..3ff1460 100644
+--- a/slurm_tools/do_slurm_job.py
++++ b/slurm_tools/do_slurm_job.py
+@@ -13,9 +13,11 @@ WANDB_MODE_CHOICES = ("offline", "online")
+ _COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+ # Keep these paths in step with CC_command_server.constants
+ # (RAVEN_CC_SNAPSHOTS / RAVEN_CC_SNAPSHOT_OUTPUTS) and snapshot_bind_flags.
+-_ALGOINST_LIVE_REPO = "/u/ykeller/algorithmic-institutions"
+-_ALGOINST_SNAPSHOTS = "/u/ykeller/cc-snapshots"
+-_ALGOINST_SNAPSHOT_OUTPUTS = "/u/ykeller/cc-snapshot-outputs"
++# $HOME is left for the job's shell to expand: the job runs as the user who
++# submits it, so the same script works for every Raven user.
++_ALGOINST_LIVE_REPO = "$HOME/algorithmic-institutions"
++_ALGOINST_SNAPSHOTS = "$HOME/cc-snapshots"
++_ALGOINST_SNAPSHOT_OUTPUTS = "$HOME/cc-snapshot-outputs"
+ _ALGOINST_CONTAINER_REPO = "/opt/algorithmic-institutions"
+ 
+ 
+diff --git a/slurm_tools/run_slurm_raven_apptainer_algoinst.sh b/slurm_tools/run_slurm_raven_apptainer_algoinst.sh
+index a2802bc..b2467e6 100644
+--- a/slurm_tools/run_slurm_raven_apptainer_algoinst.sh
++++ b/slurm_tools/run_slurm_raven_apptainer_algoinst.sh
+@@ -18,9 +18,13 @@ module purge
+ module load apptainer
+ 
+ export SRUN_CPUS_PER_TASK=$SLURM_CPUS_PER_TASK
+-export CCACHE=/ptmp/ykeller/cc/container_cache
++# Paths use $USER and $HOME (expanded here, as the submitting user), so the
++# template serves every Raven user. Every folder bound below is created.
++CC_PTMP=/ptmp/$USER/cc
++export CCACHE=$CC_PTMP/container_cache
+ 
+-mkdir -p /ptmp/ykeller/cc/cluster_sync /ptmp/ykeller/cc/container_cache/wandb
++mkdir -p $CC_PTMP/tmp $CC_PTMP/container_outputs $CC_PTMP/cluster_transfer \
++    $CC_PTMP/cluster_sync $CC_PTMP/apptainer-home $CCACHE/wandb
+ {snapshot_mkdir}
+ export CMD="{distribute} {program_call}"
+ 
+@@ -36,13 +40,13 @@ srun bash -c "{main_cuda_prefix}apptainer exec \
+     --bind /etc/hosts:/etc/hosts \
+     --bind /etc/resolv.conf:/etc/resolv.conf \
+     --nv \
+-    --bind /ptmp/ykeller/cc/tmp:/tmp \
+-    --bind /ptmp/ykeller/cc/container_outputs:/opt/outputs \
+-    --bind /ptmp/ykeller/cc/cluster_transfer:/opt/cluster_transfer \
+-    --bind /ptmp/ykeller/cc/cluster_sync:/opt/cluster_sync \
++    --bind $CC_PTMP/tmp:/tmp \
++    --bind $CC_PTMP/container_outputs:/opt/outputs \
++    --bind $CC_PTMP/cluster_transfer:/opt/cluster_transfer \
++    --bind $CC_PTMP/cluster_sync:/opt/cluster_sync \
+     --bind \$CCACHE:\$CCACHE \
+     {repo_binds} \
+-    --home /ptmp/ykeller/cc/apptainer-home:/home/\$USER \
++    --home $CC_PTMP/apptainer-home:/home/\$USER \
+     --env PATH=/opt/venv/bin:/usr/local/bin:/usr/bin:/bin \
+     --env PYTHONPATH=/opt/algorithmic-institutions/src \
+     --env WANDB_DIR=\$CCACHE/wandb \
+@@ -53,7 +57,7 @@ srun bash -c "{main_cuda_prefix}apptainer exec \
+     --env WANDB_NAME={job_id} \
+     --env JOB_DIR={job_dir} \
+     --env CUDA_VISIBLE_DEVICES={cuda_visible_devices} \
+-    --env-file /u/ykeller/private/cc_secrets \
++    --env-file $HOME/private/cc_secrets \
+     --pwd /opt/algorithmic-institutions \
+     {image} \
+     bash -c \"\$CMD\""
+diff --git a/tests/test_algoinst_template.py b/tests/test_algoinst_template.py
+index d49395b..e956cf7 100644
+--- a/tests/test_algoinst_template.py
++++ b/tests/test_algoinst_template.py
+@@ -41,7 +41,7 @@ def test_raven_algoinst_template_binds_image_and_wandb(tmp_path, monkeypatch):
+     assert "--nv" in text
+     assert ALGOINST_RAVEN in text
+     assert (
+-        "/u/ykeller/algorithmic-institutions:/opt/algorithmic-institutions" in text
++        "$HOME/algorithmic-institutions:/opt/algorithmic-institutions" in text
+     )
+     assert "--pwd /opt/algorithmic-institutions" in text
+     assert "--env WANDB_ENTITY=chm-ml" in text
+@@ -83,26 +83,26 @@ def test_raven_algoinst_checkout_binds_the_snapshot(tmp_path, monkeypatch):
+     assert len(scripts) == 1
+     text = scripts[0].read_text()
+     assert (
+-        f"--bind /u/ykeller/cc-snapshots/{sha}:/opt/algorithmic-institutions:ro"
++        f"--bind $HOME/cc-snapshots/{sha}:/opt/algorithmic-institutions:ro"
+         in text
+     )
+     assert (
+-        "--bind /u/ykeller/algorithmic-institutions:/opt/algorithmic-institutions"
++        "--bind $HOME/algorithmic-institutions:/opt/algorithmic-institutions"
+         not in text
+     )
+     assert (
+-        "--bind /u/ykeller/algorithmic-institutions/artifacts:"
++        "--bind $HOME/algorithmic-institutions/artifacts:"
+         "/opt/algorithmic-institutions/artifacts:ro" in text
+     )
+     assert (
+-        f"--bind /u/ykeller/cc-snapshot-outputs/{sha}/plots:"
++        f"--bind $HOME/cc-snapshot-outputs/{sha}/plots:"
+         "/opt/algorithmic-institutions/plots" in text
+     )
+     assert (
+-        f"--bind /u/ykeller/cc-snapshot-outputs/{sha}/.log:"
++        f"--bind $HOME/cc-snapshot-outputs/{sha}/.log:"
+         "/opt/algorithmic-institutions/.log" in text
+     )
+-    assert f"mkdir -p /u/ykeller/cc-snapshot-outputs/{sha}/plots" in text
++    assert f"mkdir -p $HOME/cc-snapshot-outputs/{sha}/plots" in text
+     assert f"snapshot {sha} is not on the cluster" in text
+ 
+ 
+@@ -128,3 +128,27 @@ def test_checkout_rejects_a_branch_name(tmp_path, monkeypatch):
+     )
+     with pytest.raises(ValueError, match="40-character"):
+         slurm_job(**vars(args))
++
++
++def test_raven_algoinst_template_has_no_fixed_user(tmp_path, monkeypatch):
++    """Every Raven user can run the template: paths come from $USER and $HOME."""
++    monkeypatch.setenv("HOME", str(tmp_path))
++    monkeypatch.chdir(tmp_path)
++    parser = obtain_parser()
++    args = parser.parse_args(
++        [
++            "--dry", "--skip_program_file_check",
++            "--program_call", "-m aimanager simulate configs/x.yml",
++            "--template_file", RAVEN,
++            "--run_group", "g",
++            "--image", "/raven/ptmp/someone/cc/containers/apptainer/algoinst.sif",
++            "--checkout", "b" * 40,
++            "--launcher", "python",
++        ]
++    )
++    slurm_job(**vars(args))
++    text = next((tmp_path / "runs" / "g").glob("*/slurm_script.sh")).read_text()
++    assert "ykeller" not in text
++    assert "--env-file $HOME/private/cc_secrets" in text
++    for d in ("tmp", "container_outputs", "cluster_transfer", "cluster_sync", "apptainer-home"):
++        assert f"$CC_PTMP/{d}" in text.split("srun", 1)[0], d
