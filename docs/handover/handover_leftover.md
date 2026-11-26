@@ -41,11 +41,12 @@ order (spawner up, then `run --build claude`) hits that. `handover.md` and
 ## Not verified yet
 
 `preflight.py` passes in full on this host (as `ykeller`, with the new
-`env.yml`-based command server), Raven included. Not yet tried:
+`env.yml`-based command server), Raven included, and `host_check.sh` passes
+on this host (its first run found the Docker-socket check testing for a
+regular file; fixed). Not yet tried:
 
-- Anything as a second user. `host_check.sh` has not run on a host,
-  `raven_setup.sh` has not run on Raven, and no smoke instance has run with
-  `env.yml` set to someone other than `ykeller`.
+- Anything as a second user: `raven_setup.sh` has not run on Raven, and no
+  smoke instance has run with `env.yml` set to someone other than `ykeller`.
 
 ## Not blocking, but smoother
 

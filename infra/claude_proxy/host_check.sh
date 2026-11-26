@@ -24,10 +24,11 @@ pass() { echo "[PASS] $1"; }
 warn() { echo "[WARN] $1"; [[ -n "${2:-}" ]] && echo "         -> $2"; return 0; }
 fail() { echo "[FAIL] $1"; [[ -n "${2:-}" ]] && echo "         -> $2"; FAILS=$((FAILS + 1)); }
 
-# need <d|f> <path> <hint> [fixable]
+# need <d|f|s> <path> <hint> [fixable]   (directory, file, socket)
 need() {
     local kind="$1" path="$2" hint="$3" fixable="${4:-0}"
-    if [[ "$kind" == d && -d "$path" ]] || [[ "$kind" == f && -f "$path" ]]; then
+    if [[ "$kind" == d && -d "$path" ]] || [[ "$kind" == f && -f "$path" ]] \
+        || [[ "$kind" == s && -S "$path" ]]; then
         pass "$path"
     elif [[ "$kind" == d && "$fixable" == 1 && "$FIX" == 1 ]]; then
         mkdir -p "$path" && pass "$path (created)"
@@ -55,7 +56,7 @@ if command -v docker >/dev/null; then
 else
     fail "docker not found" "install Docker Engine and the Compose plugin"
 fi
-need f /var/run/docker.sock "the spawner mounts the Docker socket"
+need s /var/run/docker.sock "the spawner mounts the Docker socket"
 
 echo "== settings ($ENV_FILE)"
 if [[ -f "$ENV_FILE" ]]; then
