@@ -23,6 +23,23 @@ Extra mounts the policy finder does not need (`algo-inst-otree`,
 `docker-compose.extra.yml` and add `-f container/CC_env/docker-compose.extra.yml`
 after each `-f container/CC_env/docker-compose.yml`.
 
+## OpenCode agents (harness opencode)
+
+Policy-finder agents on an open-weight model (`harness: opencode` in a
+campaign file, `scripts/policy_finder/agent_runner.py`) run through a second
+spawner, `container_spawner_oc` (project `algoinst_oc`, egress `openrouter.ai`
+only), whose token is the OpenRouter key in `~/secrets/openrouter_token` (one
+line, mode 600). Once, after the `claude` image is built:
+
+```bash
+mkdir -p "${CC_STATE_DIR:-$HOME/tmp}/container_spawner/oc"
+docker build -t algoinst_claude:opencode -f container/CC_env/Dockerfile.opencode .
+docker compose -p algoinst -f container/CC_env/docker-compose.yml --profile opencode up -d container_spawner_oc
+```
+
+Set `PF_OPENROUTER_MAX_USAGE` (the key's total usage in USD) where the
+pipeline runs to stop the agents before they start once the key reaches it.
+
 ## Raven image
 
 Raven jobs run `algoinst.sif`, built from `algoinst.def` (torch 1.11, CUDA

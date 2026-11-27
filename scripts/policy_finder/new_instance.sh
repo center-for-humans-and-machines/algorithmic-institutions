@@ -53,7 +53,8 @@
 #
 # The agent's container is its only sandbox: it sees its copy of the instance
 # (read-only but for the version's rule, notes and scripts folder) and has no
-# network but the Anthropic API. PF_RUNS must be the folder whose exports/ is
+# network but the Anthropic API (OpenRouter with --harness opencode). PF_RUNS
+# must be the folder whose exports/ is
 # the container spawner's pf_exports root.
 
 set -euo pipefail
