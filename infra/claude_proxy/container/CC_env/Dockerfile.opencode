@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1.6
+# The policy-finder agent image for harness opencode: the claude service's
+# image (Dockerfile) plus a pinned OpenCode. Its spawner project is
+# algoinst_oc (spawner_config/algoinst_oc.yml), whose only egress is
+# openrouter.ai, so nothing OpenCode would fetch at run time may be left to
+# the network: no update check, no model catalogue, no language servers, no
+# sharing, and the plugin package it installs into its config folders is
+# installed here (below).
+#
+# Build from infra/claude_proxy, after the claude service's image:
+#   docker build -t algoinst_claude:opencode -f container/CC_env/Dockerfile.opencode .
+
+FROM algoinst_claude:latest
+
+ARG OPENCODE_VERSION=1.19.6
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+USER root
+
+RUN npm install -g "opencode-ai@${OPENCODE_VERSION}" \
+    && rm -rf /root/.npm \
+    && test "$(opencode --version)" = "${OPENCODE_VERSION}"
+
+# OpenCode's global config folder lives in the image, not in the run's home
+# (a fresh folder per run): its defaults (opencode.json) and the plugin
+# package OpenCode installs into every config folder it loads, installed now
+# while the build has network. The instance's own config and agent come from
+# OPENCODE_CONFIG_DIR in the export (agent_runner.py).
+COPY container/CC_env/opencode/opencode.json /opt/opencode/config/opencode/opencode.json
+RUN mkdir -p /tmp/oc-warm \
+    && cd /tmp/oc-warm \
+    && HOME=/tmp/oc-warm XDG_CONFIG_HOME=/opt/opencode/config \
+        OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1 \
+        timeout 120 opencode run --pure "warm" >/dev/null 2>&1 || true; \
+    ls /opt/opencode/config/opencode \
+    && rm -rf /tmp/oc-warm \
+    && chown -R "${USER_ID}:${GROUP_ID}" /opt/opencode
+
+ENV XDG_CONFIG_HOME=/opt/opencode/config \
+    OPENCODE_DISABLE_AUTOUPDATE=1 \
+    OPENCODE_DISABLE_MODELS_FETCH=1 \
+    OPENCODE_DISABLE_LSP_DOWNLOAD=1 \
+    OPENCODE_DISABLE_CLAUDE_CODE=1 \
+    OPENCODE_DISABLE_DEFAULT_PLUGINS=1 \
+    OPENCODE_DISABLE_EXTERNAL_SKILLS=1
+
+USER ${USER_ID}:${GROUP_ID}

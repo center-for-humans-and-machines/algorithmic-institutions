@@ -1,0 +1,40 @@
+# Allowlist for CC_PROJECT=algoinst_oc: the policy-finder agents that run
+# OpenCode on an open-weight model through OpenRouter (harness opencode,
+# scripts/policy_finder/agent_runner.py). A second spawner project because the
+# spawner gives one project one token and one egress list: this one's token is
+# the OpenRouter key (${SECRETS_DIR}/openrouter_token, mounted into the
+# spawner only) and its only egress is openrouter.ai. The service is
+# container_spawner_oc in docker-compose.yml (compose profile `opencode`).
+#
+#   pf_exports -> SPAWNER_ROOT_PF_EXPORTS ($PF_RUNS/exports, set by compose)
+
+proxy_image: container-spawner-proxy:latest
+token_env: OPENROUTER_API_KEY
+egress_hosts:
+  - openrouter.ai
+
+max_cpus: 4
+default_cpus: 2
+max_memory_mb: 16384
+default_memory_mb: 8192
+max_pids: 512
+default_pids: 256
+max_timeout_seconds: 86400
+default_timeout_seconds: 21600
+max_concurrent: 8
+
+profiles:
+  cpu:
+    # The agent image with OpenCode (Dockerfile.opencode, on top of the
+    # claude service's image). Built by hand before the service starts:
+    # docker build -t algoinst_claude:opencode -f container/CC_env/Dockerfile.opencode .
+    image: algoinst_claude:opencode
+    user: "1000:1000"
+    home: /home/claude
+    dockerfile: container/CC_env/Dockerfile.opencode
+    context_env: ALGOINST_BUILD_CONTEXT
+
+mount_roots:
+  pf_exports:
+    host_path_env: SPAWNER_ROOT_PF_EXPORTS
+    writable: true
