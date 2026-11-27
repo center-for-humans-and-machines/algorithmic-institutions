@@ -13,12 +13,13 @@ Checked on 2026-11-27:
 | Levin's Mac | No Docker, 8 GB RAM, 6 GB free disk, Apple Silicon (amd64 emulation). Too small. |
 | MPCDF cloud VM `130.183.217.123` | Docker and network fine, but 7.7 GB RAM with 2 GB available, and it runs 13 database containers of other projects. Not safe to share. |
 | Everything on Raven | Needs a redesign (no Docker; the agents' network allowlist; long-running processes on login nodes). Days of work, one part possibly not allowed. Not for this run. |
-| Hetzner Cloud `cx53` | x86, 16 shared vCPUs, 32 GB RAM, 320 GB disk, 0.0563 EUR/h (35.09 EUR/month cap), price read from the Hetzner API. The existing setup runs unchanged. |
+| Hetzner Cloud | x86 with Docker; the existing setup runs unchanged. `cx53` (0.0563 EUR/h) was the first choice but has no capacity in `nbg1`, `fsn1` or `hel1`; see Decisions. |
+| The `mbbf-chm` Kubernetes cluster (chm-platform) | No Docker socket for the spawner (a privileged pod or a spawner rewrite), a platform built for web apps, default project limits of 8 GiB requested memory, and the cluster is being replaced. Not for this run. |
 
 ## Decisions
 
 - **Hetzner account:** the project behind `HETZNER_API_TOKEN` in `../life-hub/.env` (it holds the servers `lifeapp` and `behavioral-clones`). The SSH key `Laptop` registered there is this Mac's `~/.ssh/id_ed25519`. The `hetzner` and `hybridhive` entries in `~/.ssh/config` belong to another account and are not used.
-- **Server:** name `policy-finder`, type `cx53`, image `ubuntu-24.04`, location `nbg1`, firewall with inbound port 22 only. Expected cost for about 3 days: 4 to 5 EUR.
+- **Server:** name `policy-finder`, type `cpx62` (16 shared vCPUs, 32 GB RAM), image `ubuntu-24.04`, location `hel1`, firewall `policy-finder-fw` with inbound port 22 and ICMP only. About 0.21 EUR/h, so about 15 EUR for 3 days and about 130 EUR per month if it were left running. Approved by Levin on 2026-11-27, after `cx53` turned out to be unavailable in the EU and the fallback `cpx51` no longer orderable there.
 - **User on the server:** `pf`, uid and gid 1000, in the `docker` group. The pipeline does not run as root, and uid 1000 means the spawner's `user: "1000:1000"` stays as it is.
 - **Code:** the instances are cut from `policy-finder-single-idea` (`PF_BASE`), brought up to date with `main` first. PR #246 is retargeted to `main`. Merging the PR is Levin's decision and not part of this plan.
 - **Credentials:** Levin's Claude token and the SSH connection to Raven live on the Hetzner server for the duration of the run (accepted by Levin, 2026-11-27). No secret is committed or written to a log, a report or Slack.
@@ -85,6 +86,15 @@ Done when: all 5 chains have 21 scored or failed versions.
 2. Remove the secrets from the server.
 3. Delete the server and its firewall, after Levin confirms.
 
+## Status
+
+| Package | State (2026-11-27) |
+|---|---|
+| 1. Branch | Done and reviewed: merge commit `176ad254`, no conflicts, 201 tests passed and 3 skipped, PR #246 targets `main` and is mergeable. |
+| 2. Host | In progress: the first attempt created only the firewall (no `cx53` capacity); retry with `cpx62` in `hel1`. |
+| 3. Raven | Done and reviewed: `raven_setup.sh --check` shows no FAIL. Two WARNs: no W&B key, and `module load apptainer` conflicting with the `apptainer/1.2.2` that `~/.bashrc` loads (jobs purge modules first; the image test passed by hand). |
+| 4 to 6 | Not started. |
+
 ## Review (Fable)
 
 After each package the main session checks the agent's report against the "Done when" line by looking at the real state (the branch on GitHub, the server over SSH, Raven's check output), not at the report alone. A package that does not pass goes back to an Opus agent with the finding.
@@ -93,9 +103,9 @@ After each package the main session checks the agent's report against the "Done 
 
 | Risk | What we do |
 |---|---|
-| Hetzner refuses to create the server (creation limits since June 2026) | Try `fsn1` and `hel1`, then `cpx51` (0.1354 EUR/h); otherwise stop and tell Levin. |
+| Hetzner refuses to create the server | Happened for `cx53` (no capacity). The approval covers `cpx62` in `hel1` only; anything else goes back to Levin. |
 | The safety classifier blocks the agents' first request (seen on 2026-11-13) | Shows up in the smoke run. Do not reword prompts to get past it; report it. |
 | The Claude plan's 5-hour or weekly limit | The pipeline waits and resumes; the campaign then takes longer than the estimated 15 hours. |
 | A zero-parameter rule breaks a step on Raven that could not be tested locally (the sim config with empty `params`, the sim's plots) | The smoke run covers it before the campaign. |
 | The Raven connection drops during the campaign | Levin reopens it; `campaign.py run` resumes. |
-| The server is forgotten and keeps billing | Capped at 35.09 EUR per month; package 6 deletes it. |
+| The server is forgotten and keeps billing | About 130 EUR per month; package 6 deletes it. |
