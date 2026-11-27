@@ -161,8 +161,8 @@ def write_tsv(path, rows):
                                 lineterminator="\n")
         writer.writeheader()
         for r in rows:
-            writer.writerow({k: (f"{v:.4f}" if isinstance(v, float) else v)
-                             for k, v in r.items()})
+            writer.writerow({k: ("NA" if v is None else f"{v:.4f}" if isinstance(v, float)
+                                 else v) for k, v in r.items()})
 
 
 def main():
