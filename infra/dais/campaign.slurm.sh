@@ -137,7 +137,8 @@ core_range() {  # core_range <first core> <n cores>: their CPUs, one list
 SERVER_CPUS=$(core_range 0 "$SERVER_CORES")
 DRIVER_CPUS=$(core_range "$SERVER_CORES" "$DRIVER_CORES")
 first=$(( SERVER_CORES + DRIVER_CORES ))
-export PF_AGENT_POOL_CPUS=$(core_range "$first" "$AGENT_CORES")
+PF_AGENT_POOL_CPUS=$(core_range "$first" "$AGENT_CORES")
+export PF_AGENT_POOL_CPUS
 first=$(( first + AGENT_CORES ))
 PF_POOL_CPUS=$( { python3 "$PF_HERE/cpu_slots.py" slots "$first" 1 | cut -d, -f1
                   python3 "$PF_HERE/cpu_slots.py" slots "$first" 1 | cut -s -d, -f2
@@ -164,7 +165,7 @@ stop_all() {
   [ -n "${DRIVER_PID:-}" ] && kill -TERM $DRIVER_PID 2>/dev/null || true
   cleanup
   local cg procs
-  cg=$(sed -n 's/^0:://p' /proc/self/cgroup)
+  cg=$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null || true)
   if [ -n "$cg" ] && [ -r "/sys/fs/cgroup$cg/cgroup.procs" ]; then
     procs=$(grep -vx -e "$$" -e "$BASHPID" "/sys/fs/cgroup$cg/cgroup.procs" || true)
     [ -n "$procs" ] && kill -TERM $procs 2>/dev/null || true
@@ -192,14 +193,21 @@ CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
 wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
 
-# server_report: vLLM's request counters (errors included) and its log's tail
+# server_report: vLLM's request counters (errors included), /health's
+# latency and its log's tail. A report: it never fails (a subshell without
+# errexit or pipefail, whatever grep finds).
 server_report() {
-  echo "-- model server at $(date +%T): $(kill -0 "$SERVER_PID" 2>/dev/null && echo alive || echo DEAD)"
-  curl -s -m 20 -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/metrics" 2>/dev/null \
-    | grep -E '^vllm:(request_success_total|num_requests_running|num_requests_waiting|generation_tokens_total|prompt_tokens_total)' \
-    | sed 's/model_name="[^"]*"//; s/^/   metrics /' || echo "   metrics: no answer"
-  grep -ciE "error|exception|traceback" "$PF_RUN/vllm.log" | sed 's/^/   vllm.log lines with error\/exception: /'
-  tail -3 "$PF_RUN/vllm.log" | cut -c1-300 | sed 's/^/   vllm.log | /'
+  (
+    set +e +o pipefail
+    echo "-- model server at $(date +%T): $(kill -0 "$SERVER_PID" 2>/dev/null && echo alive || echo DEAD)"
+    curl -s -m 20 -o /dev/null -w '   /health %{http_code} in %{time_total} s\n' \
+      -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/health"
+    curl -s -m 20 -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/metrics" 2>/dev/null \
+      | grep -E '^vllm:(request_success_total|num_requests_running|num_requests_waiting|generation_tokens_total|prompt_tokens_total)' \
+      | sed 's/model_name="[^"]*"//; s/^/   metrics /'
+    echo "   vllm.log lines with error/exception: $(grep -ciE 'error|exception|traceback' "$PF_RUN/vllm.log")"
+    tail -3 "$PF_RUN/vllm.log" | cut -c1-300 | sed 's/^/   vllm.log | /'
+  ) || true
 }
 
 # the server watch: every 30 s the process must be alive and /health answer
@@ -208,21 +216,24 @@ server_report() {
 # versions stop as lost, resumable, rather than burning their agents' attempts
 # on a dead endpoint; the stage then fails and the job exits non-zero.
 SERVER_DOWN="$PF_RUN/server_down"
+WATCH_INTERVAL="${WATCH_INTERVAL:-30}"
+WATCH_FAILS="${WATCH_FAILS:-4}"
 watch_server() {
   local bad=0
-  while sleep 30; do
+  while sleep "$WATCH_INTERVAL"; do
     if kill -0 "$SERVER_PID" 2>/dev/null && [ "$(curl -s -m 20 -o /dev/null \
         -w '%{http_code}' -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/health")" = 200 ]; then
       bad=0
     else
       bad=$(( bad + 1 ))
-      echo "[$(date +%T)] model server check failed ($bad/4)"
-      if (( bad >= 4 )); then
+      echo "[$(date +%T)] model server check failed ($bad/$WATCH_FAILS)"
+      if (( bad >= WATCH_FAILS )); then
         echo "[$(date +%T)] FATAL: the model server is down: stopping every process" \
           | tee "$SERVER_DOWN"
+        # first the kill (the versions stop as lost), then the report
+        python3 "$PF_HERE/kill_job_children.py" || true
         server_report
-        python3 "$PF_HERE/kill_job_children.py"
-        return
+        return 0
       fi
     fi
   done
@@ -245,13 +256,20 @@ campaign_stage() {
     >> "$PF_RUN/$name.campaign.log" 2>&1 || rc=$?
   echo "[$(date +%T)] campaign $name: driver exit $rc after $(( SECONDS - t0 )) s"
   [ -e "$SERVER_DOWN" ] && { echo "campaign $name: stopped, the model server is down"; return 3; }
-  "$PF_PYTHON" "$PF_HERE/campaign_check.py" campaign "$file" --expect "$expect" || rc=1
+  # <expect>[/<n>]: with /n, at least n first-generation versions scored and
+  # no expired agent run (the load test)
+  local check=(--expect "${expect%%/*}")
+  [[ "$expect" == */* ]] && check+=(--min-first-scored "${expect##*/}" --no-expired)
+  "$PF_PYTHON" "$PF_HERE/campaign_check.py" campaign "$file" "${check[@]}" || rc=1
   local out="$PF_RUNS/reevaluate/$name"
   if [ "$rc" = 0 ] && [ -n "$slices" ] && [ -f "$out/summary.json" ]; then
     echo "[$(date +%T)] campaign $name: re-evaluation already done ($out)"
   elif [ "$rc" = 0 ] && [ -n "$slices" ]; then
-    # an earlier, partial re-evaluation keeps its folder; this one starts anew
-    [ -e "$out" ] && out="$out.$(date +%Y%m%d-%H%M%S)"
+    # an earlier, partial re-evaluation is moved aside; this one starts anew
+    # at the expected path
+    if [ -e "$out" ]; then
+      mv "$out" "$out.partial.$(date +%Y%m%d-%H%M%S)"
+    fi
     echo "[$(date +%T)] campaign $name: re-evaluation in $slices slices into $out"
     driver "$PF_PYTHON" "$PF_HERE/reevaluate.py" "$PF_RUNS/campaign/$name.json" \
       "$out" --slices "$slices" --seed 100000 \
@@ -313,7 +331,7 @@ case "$MODE" in
     echo "driver exit $rc after $SECONDS s"
     "$PF_PYTHON" "$PF_HERE/campaign_check.py" resume "$@" --expect "${PF_EXPECT:-scored}" || rc=1 ;;
   stages)
-    while read -r -u 3 kind rest; do
+    while read -r -u 3 kind rest || [ -n "${kind:-}" ]; do
       [[ -z "$kind" || "$kind" == \#* ]] && continue
       read -r -a args <<< "$rest"
       echo "== stage: $kind ${args[*]}"

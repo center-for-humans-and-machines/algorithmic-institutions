@@ -498,11 +498,20 @@ def server_health(tries=3, wait=10):
     return False, detail
 
 
+def provider_errors(result):
+    """A run summary's errors from the provider, as one text: its errors, its
+    final error and the runner's failures that quote them (an error event at
+    the end, the session's final error); not the runner's other failures,
+    which name its own time limit ("timeout": the model's run too long)."""
+    quoted = [f for f in result.get("failures") or []
+              if str(f).startswith(("OpenCode reported an error",
+                                    "the session ended in an error"))]
+    return json.dumps([result.get("errors"), result.get("final_error"), quoted])
+
+
 def endpoint_trouble(result):
     """Why a failed run is the endpoint's fault, or "" (the model's)."""
-    # the provider's own errors only: the runner's failures name its own
-    # time limit ("timeout"), which is the model's run taking too long
-    errors = json.dumps([result.get("errors"), result.get("final_error")])
+    errors = provider_errors(result)
     found = ENDPOINT_ERRORS.search(errors)
     healthy, detail = server_health()
     if not healthy:

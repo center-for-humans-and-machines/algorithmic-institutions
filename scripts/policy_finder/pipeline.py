@@ -312,8 +312,12 @@ class Version:
                 if run_id:
                     self.log(f"attaching to agent run {run_id}")
                 else:
+                    # a fresh copy for every run after the first: an earlier
+                    # run (failed, expired, lost, or on a failing endpoint)
+                    # may have written into this one
                     if (attempts or self.data.get("limited_runs")
-                            or self.data.get("lost_runs")):
+                            or self.data.get("lost_runs")
+                            or self.data.get("endpoint_runs")):
                         # a fresh copy for the retry: the failed run may have written
                         export_instance.build(self.wt, MAIN, self.exports)
                     if self.harness == "claude":

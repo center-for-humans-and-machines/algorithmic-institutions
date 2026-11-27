@@ -19,6 +19,7 @@ AGENT_SIF="${AGENT_SIF:-/dais/fs/scratch/$USER/policy-finder-agents/images/algoi
 MAIN="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 PY="${PF_PYTHON:-/dais/fs/scratch/$USER/policy-finder-agents/venv/bin/python}"
 TMP=$(mktemp -d)
+# shellcheck disable=SC2154  # w: the trap's own loop variable
 trap 'for w in "$TMP"/wt-*; do git -C "$MAIN" worktree remove --force "$w" 2>/dev/null || true; done; rm -rf "$TMP"' EXIT
 fails=0
 # named by a definition but not in a fresh version 1's export, by design:
@@ -34,7 +35,7 @@ for setting in "${@:-exp2 exp1}"; do
       | git -C "$wt" sparse-checkout set --no-cone --stdin
     "$PY" "$MAIN/scripts/policy_finder/instance_settings.py" "$wt" "$name" \
       --version 1 --start-commit "$(git -C "$wt" rev-parse HEAD)" --min-params 1 \
-      --max-params none --sobol-points 256 --python "${PF_AGENT_PYTHON:-python3}" \
+      --max-params 5 --sobol-points 256 --python "${PF_AGENT_PYTHON:-python3}" \
       --setting "$s" --mode free \
       --harness opencode --model Qwen/Qwen3-Coder-Next --base-url '{env:PF_LLM_BASE_URL}'
     export_dir=$("$PY" "$MAIN/scripts/policy_finder/export_instance.py" build "$wt" "$MAIN" "$TMP/exports" | tail -1)
@@ -64,15 +65,19 @@ c = json.load(open(sys.argv[1]))
 print(c["python"], c["rule_name"], c["min_params"],
       "none" if c["max_params"] is None else c["max_params"], c["sobol_points"])' \
       "$export_dir/.claude/policy_finder.json")
-    ref=$([ "$s" = exp1 ] && echo pf-20261105-7-v3 || echo pf-20261104-12-v7)
+    # a 5-parameter rule of the reference campaign of the setting (the
+    # campaigns' bounds are 1 to 5)
+    ref=$([ "$s" = exp1 ] && echo pf-20261105-8-v7 || echo pf-20261104-5-v7)
     cp "$MAIN/configs/managers/rule_based/$ref.yml" "$export_dir/configs/managers/rule_based/$rule.yml"
     mkdir -p "$TMP/home-$name" "$TMP/tmp-$name"
     cmd="PYTHONPATH=src $ipy -m aimanager validate-rule configs/managers/rule_based/$rule.yml --min-params $mn --max-params $mx --sobol-points $sp --setting $s"
     if apptainer exec --containall --cleanenv --no-mount cwd,tmp,bind-paths \
         --home "$TMP/home-$name:/home/claude" --bind "$TMP/tmp-$name:/tmp" \
         --bind "$export_dir:/opt/algorithmic-institutions:ro" --pwd /opt/algorithmic-institutions \
-        "$AGENT_SIF" /bin/bash -c "$cmd" > "$TMP/validate-$name.log" 2>&1; then
-      echo "  ok      in the container: $cmd"
+        --bind "$MAIN/infra/dais/agent_shell.sh:/opt/pf-agent/shell:ro" \
+        --bind "$MAIN/infra/dais/noinet.py:/opt/pf-agent/noinet.py:ro" \
+        "$AGENT_SIF" /opt/pf-agent/shell -c "$cmd" > "$TMP/validate-$name.log" 2>&1; then
+      echo "  ok      in the container, through the filtered shell: $cmd"
     else
       echo "  FAILED  in the container: $cmd"; tail -5 "$TMP/validate-$name.log" | sed 's/^/          /'
       fails=$((fails + 1))

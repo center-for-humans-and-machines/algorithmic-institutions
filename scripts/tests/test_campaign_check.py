@@ -24,3 +24,11 @@ def test_failures_of_the_agent_and_of_the_infrastructure():
     assert not cc.failure(agent)[2]
     agent["data"]["agent_runs"][0]["result"]["errors"] = ["no rule written"]
     assert cc.failure(agent)[2]
+    # no attempt of the agent's: all its runs were lost
+    lost = {"status": "failed", "done": DONE[:1], "error": "4 agent runs lost: x",
+            "data": {"lost_runs": [{}] * 4}}
+    assert not cc.failure(lost)[2]
+    # check_instance.sh could not read the worktree: the driver's side
+    driver = {"status": "failed", "done": DONE[:3],
+              "error": "check_instance.sh failed:\nFAIL: cannot diff a..b"}
+    assert not cc.failure(driver)[2]

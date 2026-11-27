@@ -12,6 +12,8 @@ audit findings) and exits 1 when the expectation is not met. Reads PF_RUNS.
 
 import argparse
 import json
+import re
+import statistics
 import os
 import sys
 from pathlib import Path
@@ -35,13 +37,17 @@ def failure(state):
     reason = reason[0][:300] if reason else ""
     data = state.get("data") or {}
     own = step in AGENT_STEPS
+    error = state.get("error") or ""
+    if step == "agent" and not data.get("agent_runs"):
+        own = False  # no attempt of the agent's: its runs were lost
+    if step == "check" and re.search(r"FAIL: cannot (read|diff|list)", error):
+        own = False  # check_instance.sh could not read the worktree
     if step == "agent":
         # an agent run that failed on the endpoint is not the agent's
         import agent_apptainer
 
         for r in data.get("agent_runs") or []:
-            errors = json.dumps([(r.get("result") or {}).get("errors"),
-                                 (r.get("result") or {}).get("final_error")])
+            errors = agent_apptainer.provider_errors(r.get("result") or {})
             if agent_apptainer.ENDPOINT_ERRORS.search(errors):
                 own = False
     return step, reason, own
@@ -70,6 +76,10 @@ def main():
     ap.add_argument("mode", choices=("campaign", "resume"))
     ap.add_argument("target")
     ap.add_argument("--expect", choices=("scored", "finished"), default="scored")
+    ap.add_argument("--min-first-scored", type=int,
+                    help="at least this many first-generation versions scored")
+    ap.add_argument("--no-expired", action="store_true",
+                    help="no agent run may have expired (its time limit)")
     args = ap.parse_args()
     ok_status = ("scored",) if args.expect == "scored" else ("scored", "failed")
     pf_runs = Path(os.environ["PF_RUNS"])
@@ -85,14 +95,24 @@ def main():
             bad.append(f"{sum(bool(g.get('finished')) for g in gens)} of {want}"
                        " generations finished")
         members = [(m["name"], m["version"]) for g in gens for m in g["members"]]
+        first = {(m["name"], m["version"]) for m in (gens[0]["members"] if gens else [])}
     else:
         conf = json.loads((wt_root / args.target / ".claude/policy_finder.json").read_text())
         members = [(args.target, conf.get("version", 1))]
+        first = set(members)
+    seconds, first_scored, expired = [], 0, []
     for name, version in members:
         stem = name if version == 1 else f"{name}-v{version}"
         path = wt_root / f"{stem}.state.json"
         state = json.loads(path.read_text()) if path.exists() else {}
         print(describe(stem, state))
+        for r in (state.get("data") or {}).get("agent_runs") or []:
+            if (r.get("result") or {}).get("seconds") is not None:
+                seconds.append(r["result"]["seconds"])
+            if r.get("status") == "expired":
+                expired.append(f"{stem} {r.get('run_id')}")
+        if (name, version) in first and state.get("status") == "scored":
+            first_scored += 1
         if state.get("status") == "failed":
             step, reason, own = failure(state)
             print(f"  failed at {step} ({'the agent' if own else 'INFRASTRUCTURE'}):"
@@ -102,6 +122,17 @@ def main():
                 continue
         if state.get("status") not in ok_status:
             bad.append(f"{stem} is {state.get('status')}")
+    if seconds:
+        q = statistics.quantiles(seconds, n=4) if len(seconds) > 1 else seconds * 3
+        print(f"agent run seconds: n {len(seconds)}, min {min(seconds)}, quartiles "
+              f"{[round(x) for x in q]}, max {max(seconds)}")
+    print(f"first generation: {first_scored} of {len(first)} scored; expired runs: "
+          f"{len(expired)}")
+    if args.min_first_scored is not None and first_scored < args.min_first_scored:
+        bad.append(f"{first_scored} first-generation versions scored, fewer than "
+                   f"{args.min_first_scored}")
+    if args.no_expired and expired:
+        bad.append(f"expired agent runs: {', '.join(expired)}")
     if bad:
         print("NOT AS EXPECTED: " + "; ".join(bad))
         return 1

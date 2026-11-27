@@ -142,6 +142,12 @@ def test_a_failed_run_on_a_failing_server_is_not_an_attempt(env, monkeypatch):
     fake_apptainer(env, f"echo '{bad}'; exit 4")
     with pytest.raises(ar.EndpointError, match="endpoint error"):
         aa.finish(aa.start("pf-x-v2", [], "p"), log=lambda m: None)
+    # an error only in the runner's failures (OpenCode's final error event)
+    quoted = json.dumps({"result": "", "is_error": True, "failures": [
+        "OpenCode reported an error at the end: {\"message\": \"fetch failed\"}"]})
+    fake_apptainer(env, f"echo '{quoted}'; exit 4")
+    with pytest.raises(ar.EndpointError, match="endpoint error"):
+        aa.finish(aa.start("pf-x-v2", [], "p"), log=lambda m: None)
     # the model's own failure (its time limit, no report): one of its attempts
     own = json.dumps({"result": "", "is_error": True,
                       "failures": ["OpenCode stopped at its timeout of 60 s"]})
