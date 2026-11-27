@@ -137,9 +137,13 @@ def replay(a):
             b["scaler"].transform(call["X"])
         )
     np.savez_compressed(a.out, **out)
+    import sklearn
+
     print(
         "torch",
         th.__version__,
+        "sklearn",
+        sklearn.__version__,
         "replayed",
         {k: v + 1 for k, v in counts.items()},
         "AH calls,",
