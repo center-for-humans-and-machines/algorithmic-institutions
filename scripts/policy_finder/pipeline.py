@@ -87,6 +87,11 @@ OUT_DIR = "plots/simulation/policy_finder"
 CONFIG_DIR = "configs/simulation/policy_finder"
 #: Agent runs and sim parts tried this many times
 AGENT_ATTEMPTS = 2
+#: Harness opencode: attempts, and the wait before the next one (seconds,
+#: times the attempts so far). A failed run counts, rate limits included:
+#: the Claude plan's limit handling (usage.py) is for harness claude only
+OPENCODE_ATTEMPTS = 3
+OPENCODE_RETRY_WAIT = int(os.environ.get("PF_AGENT_RETRY_WAIT", "120"))
 #: validate-rule on the Raven login node: at most this many at once, tries
 #: when it does not run (not a verdict), seconds between them (times the try)
 IMAGE_CHECK_SLOTS = 2
@@ -261,7 +266,11 @@ class Version:
             return
         write_dirs = export_instance.write_dirs(self.name, self.stem)
         attempts = self.data.setdefault("agent_runs", [])
-        while len(attempts) < AGENT_ATTEMPTS:
+        limit = AGENT_ATTEMPTS if self.harness == "claude" else OPENCODE_ATTEMPTS
+        while len(attempts) < limit:
+            if self.harness != "claude" and attempts and not self.data.get("agent_current"):
+                # bounded back-off after a failed attempt (a rate limit, say)
+                time.sleep(OPENCODE_RETRY_WAIT * len(attempts))
             with agent_runner.slot(self.locks):
                 run_id = self.data.get("agent_current")
                 if run_id:
@@ -290,7 +299,8 @@ class Version:
             rule_written = (self.exports / self.stem / self.rule).exists()
             ok = record["status"] == "succeeded" and report.strip() and rule_written
             home = agent_runner.run_home(run_id, self.harness)
-            hits = [] if ok else usage.limited({**record, "report": report}, home)
+            hits = ([] if ok or self.harness != "claude"
+                    else usage.limited({**record, "report": report}, home))
             if hits:
                 # the account's limit, not the agent: not one of its attempts
                 self.data.setdefault("limited_runs", []).append(record)
@@ -314,7 +324,7 @@ class Version:
             if ok:
                 (self.wt_root / f"{self.stem}.report.md").write_text(report + "\n")
                 return
-        raise Failed(f"the agent failed {AGENT_ATTEMPTS} times: {attempts[-1]}")
+        raise Failed(f"the agent failed {limit} times: {attempts[-1]}")
 
     def keep_transcripts(self, run_id):
         """Copy an agent run's session transcripts next to the state file.

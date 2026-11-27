@@ -123,3 +123,12 @@ def test_opencode_at_the_cap_is_not_an_agent_failure(spawner):
     spawner["stdout"] = json.dumps({"budget_exhausted": True, "error": "at the cap"})
     with pytest.raises(ar.BudgetError, match="at the cap"):
         ar.finish("abc", log=lambda m: None, harness="opencode")
+
+
+def test_opencode_runner_verdict_fails_the_run(spawner):
+    spawner["stdout"] = json.dumps({**SUMMARY, "is_error": True,
+                                    "failures": ["the session ended in an error"]})
+    record = ar.finish("abc", log=lambda m: None, harness="opencode")
+    assert record["status"] == "failed" and "ended in an error" in record["error"]
+    spawner["stdout"] = "no summary\n"
+    assert ar.finish("abc", log=lambda m: None, harness="opencode")["status"] == "failed"

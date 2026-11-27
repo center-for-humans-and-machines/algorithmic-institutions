@@ -248,11 +248,17 @@ def finish(run_id, log=print, harness="claude"):
     result = parse_result(logs.get("stdout", ""))
     if (result or {}).get("budget_exhausted"):
         raise BudgetError(f"agent run {run_id}: {result.get('error')}")
+    status, error = run["status"], run.get("error")
+    if harness == "opencode" and status == "succeeded" and (
+            result is None or result.get("is_error")):
+        # the runner's verdict (opencode_run.failures), or no summary at all
+        status = "failed"
+        error = "; ".join((result or {}).get("failures") or ["no summary from the runner"])
     return {
         "run_id": run_id,
-        "status": run["status"],
+        "status": status,
         "exit_code": run.get("exit_code"),
-        "error": run.get("error"),
+        "error": error,
         "started_at": run.get("started_at"),
         "finished_at": run.get("finished_at"),
         "waited_seconds": round(time.time() - started),

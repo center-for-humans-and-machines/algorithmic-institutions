@@ -3,6 +3,8 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 SCRIPT = Path(__file__).resolve().parents[1] / "policy_finder/opencode_run.py"
 SPEC = importlib.util.spec_from_file_location("opencode_run", SCRIPT)
 oc = importlib.util.module_from_spec(SPEC)
@@ -43,3 +45,44 @@ def test_redact_tree(tmp_path):
     assert hits == [str(tmp_path / "a/notes.md")]
     assert (tmp_path / "a/notes.md").read_text() == "key [redacted] here\n"
     assert oc.redact_tree(tmp_path, "") == []
+
+
+GOOD = {"result": "the report", "models": ["openrouter/q/c"], "agent": "policy-finder",
+        "final_error": None}
+
+
+def test_the_report_is_the_final_message():
+    session = {"messages": [_assistant("Let me look at the data.", 10, 0, tools=1),
+                            _assistant("", 10, 0, tools=1)]}
+    assert oc.summarize(session)["result"] == ""
+
+
+@pytest.mark.parametrize("change, code, stderr, event, reason", [
+    ({}, 1, "", None, "exited with 1"),
+    ({}, 0, 'agent "policy-finder" not found. Falling back to default agent', None,
+     "did not load"),
+    ({"agent": "build"}, 0, "", None, "ran agent build"),
+    ({"final_error": {"name": "APIError"}}, 0, "", None, "ended in an error"),
+    ({}, 0, "", '{"name": "APIError"}', "reported an error"),
+    ({"result": "  "}, 0, "", None, "no text"),
+    ({"models": ["openrouter/other/m"]}, 0, "", None, "not openrouter/q/c"),
+])
+def test_failures(change, code, stderr, event, reason):
+    assert oc.failures(GOOD, 0, "", "openrouter/q/c", None) == []
+    why = oc.failures({**GOOD, **change}, code, stderr, "openrouter/q/c", event)
+    assert len(why) == 1 and reason in why[0]
+
+
+def test_a_local_model_is_compared_by_its_served_name():
+    good = {**GOOD, "models": ["local/Qwen/Qwen3-Coder-Next"]}
+    assert oc.failures(good, 0, "", "local/Qwen/Qwen3-Coder-Next", None) == []
+
+
+def test_last_event_error(tmp_path):
+    events = tmp_path / "e.jsonl"
+    events.write_text('{"type": "error", "error": {"name": "Retry"}}\n'
+                      '{"type": "step_finish"}\n')
+    assert oc.last_event_error(events) is None
+    with open(events, "a") as f:
+        f.write('{"type": "error", "error": {"name": "APIError"}}\n')
+    assert "APIError" in oc.last_event_error(events)
