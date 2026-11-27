@@ -109,6 +109,12 @@ def test_start_finish_and_timeout(env, monkeypatch):
     assert record["cpus"] in ([8, 9], [10, 11])
     assert record["network_audit"] == {"tool_calls": 0, "findings": []}
 
+    # the runner's verdict: a summary with is_error fails a run that exited 0
+    bad = json.dumps({"result": "r", "is_error": True, "failures": ["the session used x"]})
+    fake_apptainer(env, f"echo '{bad}'")
+    record = aa.finish(aa.start("pf-x-v2", [], "p"), log=lambda m: None)
+    assert record["status"] == "failed" and "the session used x" in record["error"]
+
     monkeypatch.setattr(ar, "TIMEOUT", 1)
     fake_apptainer(env, "sleep 30")
     record = aa.finish(aa.start("pf-x-v2", [], "p"), log=lambda m: None)

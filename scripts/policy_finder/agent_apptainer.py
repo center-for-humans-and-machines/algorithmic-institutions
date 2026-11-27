@@ -409,14 +409,20 @@ def finish(run_id, log=print, harness="opencode"):
         run / "stdout.log").exists() else ""
     stderr = (run / "stderr.log").read_text(errors="replace") if (
         run / "stderr.log").exists() else ""
-    result = ar.parse_result(stdout) or {}
+    parsed = ar.parse_result(stdout)
+    result = parsed or {}
+    verdict, error = state["status"], state.get("error")
+    if verdict == "succeeded" and (parsed is None or result.get("is_error")):
+        # the runner's verdict (opencode_run.failures), as agent_runner.finish
+        verdict = "failed"
+        error = "; ".join(result.get("failures") or ["no summary from the runner"])
     source, paths = ar.transcripts(run_id, harness)
     return {
         "run_id": run_id,
         "backend": "apptainer",
-        "status": state["status"],
+        "status": verdict,
         "exit_code": state.get("exit_code"),
-        "error": state.get("error"),
+        "error": error,
         "started_at": state.get("started_at"),
         "finished_at": state.get("finished_at"),
         "waited_seconds": round(time.time() - started),

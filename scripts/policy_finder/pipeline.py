@@ -333,7 +333,7 @@ class Version:
                 self.data.pop("agent_current", None)
                 self.save()
                 self.log(f"agent run {run_id} lost (its job ended); starting a new one")
-                if len(lost) > AGENT_ATTEMPTS:
+                if len(lost) > limit:
                     raise Failed(f"{len(lost)} agent runs lost: {record.get('error')}")
                 continue
             rule_written = (self.exports / self.stem / self.rule).exists()
