@@ -8,7 +8,9 @@ command server's network, with its log and transfer folders mounted).
         snapshots REF; on the login node, in the Raven image, checksums the
         model files and captures and replays the models' forward pass
         (gpusim_forward.py); submits one sim job per config; waits; fetches
-        each job's output dir and the forward files into OUT_DIR.
+        each job's output dir and the forward files into OUT_DIR. Resumable:
+        OUT_DIR/state.json keeps the snapshot, the job ids and what is
+        fetched. --no-fetch stops after the wait.
 """
 
 import argparse
@@ -39,6 +41,9 @@ def main():
     ap.add_argument("ref")
     ap.add_argument("out_dir")
     ap.add_argument("--configs", nargs="*", default=CONFIGS)
+    ap.add_argument(
+        "--no-fetch", action="store_true", help="stop once the jobs have left the queue"
+    )
     a = ap.parse_args()
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -79,6 +84,8 @@ def main():
 
     cp.wait(list(jobs.values()), poll=60)
     print("queue empty", flush=True)
+    if a.no_fetch:
+        return
 
     fetched = state.setdefault("fetched", [])
     for config in a.configs:
