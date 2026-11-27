@@ -14,6 +14,10 @@ PY="${PF_PYTHON:-/dais/fs/scratch/$USER/policy-finder-agents/venv/bin/python}"
 TMP=$(mktemp -d)
 trap 'for w in "$TMP"/wt-*; do git -C "$MAIN" worktree remove --force "$w" 2>/dev/null || true; done; rm -rf "$TMP"' EXIT
 fails=0
+# named by a definition but not in a fresh version 1's export, by design:
+# `final/` (a sweep's subfolder, from version 2 on), and exp1's mention of
+# basics.md ("if present, is a different game"; the export denies it)
+EXPECTED_ABSENT="exp2:final exp1:final exp1:docs/reports/basics.md"
 for setting in "${@:-exp2 exp1}"; do
   for s in $setting; do
     name="pfcheck$(echo "$s" | tr -d _)-1"
@@ -31,8 +35,16 @@ for setting in "${@:-exp2 exp1}"; do
     echo "== $s: export $export_dir"
     while read -r path; do
       p="${path%/}"
-      if [ -f "$export_dir/$p" ] || { [ -d "$export_dir/$p" ] && [ -n "$(ls -A "$export_dir/$p")" ]; }; then
+      found=""
+      for q in "$p" "src/aimanager/$p"; do  # the definitions name some paths under src/aimanager
+        if [ -f "$export_dir/$q" ] || { [ -d "$export_dir/$q" ] && [ -n "$(ls -A "$export_dir/$q")" ]; }; then
+          found="$q"; break
+        fi
+      done
+      if [ -n "$found" ]; then
         echo "  ok      $path"
+      elif [[ " $EXPECTED_ABSENT " == *" $s:$p "* ]]; then
+        echo "  absent  $path (as intended)"
       else
         echo "  MISSING $path"; fails=$((fails + 1))
       fi
