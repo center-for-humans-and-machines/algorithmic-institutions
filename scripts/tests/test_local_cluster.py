@@ -4,6 +4,7 @@ snapshots and the pool, on the host (PF_LOCAL_CONTAINER=none) with a fake
 
 import importlib.util
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -14,6 +15,11 @@ import pytest
 HERE = Path(__file__).resolve().parents[1] / "policy_finder"
 sys.path.insert(0, str(HERE))
 import local_cluster as lc  # noqa: E402
+
+SPEC = importlib.util.spec_from_file_location(
+    "reevaluate", HERE.parents[1] / "infra/dais/reevaluate.py")
+rv = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(rv)
 
 FAKE_SIM = """import json, os, sys
 config = sys.argv[2]
@@ -38,7 +44,7 @@ def test_the_switch(monkeypatch):
     assert load_proxy(monkeypatch, "raven").submit.__module__ == "cluster_proxy_t"
     local = load_proxy(monkeypatch, "local")
     for name in ("snapshot", "run", "validate_rule", "submit", "queue", "wait", "fetch",
-                 "sweep_parts"):
+                 "sweep_parts", "cleanup"):
         assert getattr(local, name) is getattr(lc, name)
     with pytest.raises(ImportError):
         load_proxy(monkeypatch, "slurm")
@@ -120,3 +126,45 @@ def test_a_dead_worker_leaves_the_queue(repo):
     assert "local-99" not in lc.queue()
     (folder / "worker.json").write_text(json.dumps({"host": "elsewhere", "pid": 1}))
     assert "local-99" not in lc.queue()
+
+
+def test_cleanup_keeps_a_snapshot_in_use(repo):
+    sha = lc.snapshot("HEAD")
+    folder = lc.root() / "jobs" / "local-7"
+    folder.mkdir(parents=True)
+    (folder / "job.json").write_text(json.dumps({"sha": sha}))
+    (folder / "worker.json").write_text(
+        json.dumps({"host": socket.gethostname(), "pid": os.getpid()}))
+    assert not lc.cleanup(sha) and lc.tree(sha).exists()  # a live job runs on it
+    (folder / "status.json").write_text(json.dumps({"state": "done"}))
+    assert lc.cleanup(sha) and not (lc.root() / "snapshots" / sha).exists()
+    assert lc.snapshot(sha) == sha and lc.tree(sha).exists()  # made afresh
+
+
+def test_reevaluate_keeps_only_the_gp_peak():
+    final = {"seed": 1000, "n_episodes": 2000, "episode_batch_size": 1000,
+             "managers": {"ah": {}, "r-v2_gp": {"params": {"a": 1}}, "r-v2_s003": {}},
+             "pairings": [{"name": "x", "group_0": "r-v2_gp", "group_1": "ah"},
+                          {"name": "y", "group_0": "r-v2_s003", "group_1": "ah"}]}
+    config = rv.gp_config(final, "r-v2_gp", 100000, "plots/x")
+    assert list(config["managers"]) == ["ah", "r-v2_gp"] and len(config["pairings"]) == 1
+    assert config["seed"] == 100000 and rv.batches(config) == 2
+    assert rv.combine([(70.0, 1.2), (72.0, 1.2)]) == (71.0, pytest.approx(1.2 / 2 ** 0.5))
+
+
+def test_reevaluate_curve_selects_on_recorded_scores():
+    rows = [
+        {"generation": 1, "stem": "a", "recorded": 70.0, "recorded_se": 1,
+         "reevaluated": 68.0, "reevaluated_se": 0.3},
+        {"generation": 1, "stem": "b", "recorded": 69.0, "recorded_se": 1,
+         "reevaluated": 69.5, "reevaluated_se": 0.3},
+        {"generation": 2, "stem": "b-v2", "recorded": None, "recorded_se": None,
+         "reevaluated": None, "reevaluated_se": None},  # no final
+        {"generation": 3, "stem": "a-v3", "recorded": 71.0, "recorded_se": 1,
+         "reevaluated": 70.0, "reevaluated_se": 0.4},
+    ]
+    points = rv.curve(rows)
+    assert [p["best_so_far"] for p in points] == ["a", "a", "a-v3"]
+    gain = rv.improvement(points)
+    assert gain["improvement"] == pytest.approx(2.0) and gain["bar_70"] == pytest.approx(1.4)
+    assert gain["improvement_se"] == pytest.approx(0.5)

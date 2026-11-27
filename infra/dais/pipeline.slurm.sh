@@ -4,10 +4,19 @@
 # one single-threaded sim per hyperthread, pinned, in the unchanged sim image.
 #
 #   cd <checkout>    # see "The pipeline on DAIS" in infra/dais/README.md
-#   sbatch infra/dais/pipeline.slurm.sh instance <name> [new_instance.sh options]
-#   sbatch infra/dais/pipeline.slurm.sh resume <name>
-#   sbatch infra/dais/pipeline.slurm.sh campaign <campaign.yml>
-#   sbatch infra/dais/pipeline.slurm.sh python <script> [args]   # e.g. rescore.py
+#   E="--export=ALL,PF_SWEEP_EPISODES=default,PF_FINAL_EPISODES=default"
+#   sbatch $E infra/dais/pipeline.slurm.sh instance <name> [new_instance.sh options]
+#   sbatch $E infra/dais/pipeline.slurm.sh resume <name>
+#   sbatch $E infra/dais/pipeline.slurm.sh campaign <campaign.yml>
+#   sbatch --export=ALL infra/dais/pipeline.slurm.sh python <script> [args]
+#       (e.g. infra/dais/reevaluate.py, rescore.py)
+#
+# instance, resume and campaign need PF_SWEEP_EPISODES and PF_FINAL_EPISODES,
+# each a number or `default` (the pipeline's per-setting defaults: 500 and 2000
+# for exp2), so that a smoke run cannot silently run at the real size. DAIS
+# sets SBATCH_EXPORT so that a job inherits nothing: pass them with
+#   sbatch --export=ALL,PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 ...
+# A version keeps the sizes it started with (its state file), also on resume.
 #
 # State (worktrees, state files, campaign state, snapshots, the pool's jobs)
 # lives in PF_RUNS (default $PF_SCRATCH/pf_runs), so a later job resumes a
@@ -29,6 +38,20 @@
 set -euo pipefail
 MODE="${1:?instance, resume, campaign or python}"
 shift
+if [ "$MODE" != python ]; then
+  for var in PF_SWEEP_EPISODES PF_FINAL_EPISODES; do
+    value="${!var:-}"
+    if [ "$value" = default ]; then
+      unset "$var"
+    elif [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+      echo "FATAL: set $var to a number or 'default' (sbatch --export=ALL,$var=...)," \
+        "not '$value'" >&2
+      exit 2
+    fi
+  done
+  echo "episodes: sweep ${PF_SWEEP_EPISODES:-default}, final ${PF_FINAL_EPISODES:-default}" \
+    "(a version that already started keeps its own)"
+fi
 export PF_SCRATCH="${PF_SCRATCH:-/dais/fs/scratch/$USER/policy-finder-pipe}"
 export PF_REPO="${PF_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 source "$PF_REPO/infra/dais/common.sh"

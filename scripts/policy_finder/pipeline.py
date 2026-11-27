@@ -229,6 +229,7 @@ class Version:
                 self.save()
             self.state["status"] = "scored"
             self.log(f"scored: {json.dumps(self.data.get('score'))}")
+            self.release_snapshots()
         except Failed as e:
             self.state["status"] = "failed"
             self.state["error"] = str(e)[-6000:]
@@ -240,6 +241,18 @@ class Version:
             self.log(f"ERROR: {traceback.format_exc()}")
         self.save()
         return self.state
+
+    def release_snapshots(self):
+        """A scored version's snapshots: its results are fetched and
+        committed, so the backend may remove them (cluster_proxy.cleanup; a
+        failed version's stay, for debugging). Never fails the version."""
+        for key in ("sweep_sha", "final_sha"):
+            sha = self.data.get(key)
+            try:
+                if sha and cluster_proxy.cleanup(sha):
+                    self.log(f"snapshot {sha[:12]} removed")
+            except Exception as e:  # noqa: BLE001 - only disk space is at stake
+                self.log(f"snapshot {sha[:12]} not removed: {e}")
 
     def step_export(self):
         if self.seeded:
