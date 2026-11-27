@@ -22,23 +22,28 @@ RUN npm install -g "opencode-ai@${OPENCODE_VERSION}" \
     && test "$(opencode --version)" = "${OPENCODE_VERSION}"
 
 # OpenCode's global config folder lives in the image, not in the run's home
-# (a fresh folder per run): its defaults (opencode/opencode.json: one
-# provider, no sharing, snapshots, language servers or formatters, web tools
-# off). The instance's model and agent come from OPENCODE_CONFIG_DIR, a
-# folder of the export (export_instance.py). At start OpenCode installs its
-# plugin package (@opencode-ai/plugin) from npm into the global config folder
-# in the background; a run that cannot reach npm logs the failure and goes
-# on. It is installed here while the build has network (`debug wait` starts
-# an instance and gives the install time), so the agent tries nothing but
-# OpenRouter.
+# (a fresh folder per run), owned by root: the agent cannot change it. It
+# holds the defaults (opencode/opencode.json: one provider; no sharing,
+# snapshots, language servers or formatters; the tools of the Claude
+# definition only: read, grep, glob, edit/write, bash, todowrite). The
+# instance's model and agent come from the export's .opencode/ folder
+# (export_instance.py), which OpenCode loads from the working directory.
+# At start OpenCode installs its plugin package (@opencode-ai/plugin) from
+# npm into the global config folder in the background; a run that cannot
+# reach npm logs the failure and goes on. It is installed here while the
+# build has network (`debug wait` starts an instance and gives the install
+# time), so the agent tries nothing but OpenRouter. With the package and the
+# .gitignore OpenCode writes in place, it needs no write access there.
 COPY container/CC_env/opencode/opencode.json /opt/opencode/config/opencode/opencode.json
 RUN mkdir -p /tmp/oc-warm && cd /tmp/oc-warm \
     && HOME=/tmp/oc-warm XDG_CONFIG_HOME=/opt/opencode/config \
         OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1 \
         timeout 60 opencode debug wait >/dev/null 2>&1; \
     test -d /opt/opencode/config/opencode/node_modules/@opencode-ai/plugin \
+    && test -f /opt/opencode/config/opencode/.gitignore \
     && rm -rf /tmp/oc-warm /root/.npm \
-    && chown -R "${USER_ID}:${GROUP_ID}" /opt/opencode
+    && chown -R root:root /opt/opencode \
+    && chmod -R a-w,a+rX /opt/opencode
 
 ENV XDG_CONFIG_HOME=/opt/opencode/config \
     OPENCODE_DISABLE_AUTOUPDATE=1 \

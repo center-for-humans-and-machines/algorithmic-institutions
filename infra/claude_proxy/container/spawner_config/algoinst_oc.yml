@@ -3,7 +3,9 @@
 # scripts/policy_finder/agent_runner.py). A second spawner project because the
 # spawner gives one project one token and one egress list: this one's token is
 # the OpenRouter key (${SECRETS_DIR}/openrouter_token, mounted into the
-# spawner only) and its only egress is openrouter.ai. The service is
+# spawner only) and its only egress is openrouter.ai. The agent can read the
+# key from its environment, and openrouter.ai serves any model: use a
+# dedicated key with a credit limit set at OpenRouter (start_command.md). The service is
 # container_spawner_oc in docker-compose.yml (compose profile `opencode`).
 #
 #   pf_exports -> SPAWNER_ROOT_PF_EXPORTS ($PF_RUNS/exports, set by compose)

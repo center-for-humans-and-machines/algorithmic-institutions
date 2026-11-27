@@ -6,28 +6,45 @@ it runs with the container's environment: the endpoint's key in `--key-env`
 egress proxy in HTTPS_PROXY. It needs nothing of Docker or the spawner: any
 backend that starts it in the export with OpenCode installed can use it.
 
-1. with `--usage-url` (OpenRouter's key endpoint), reads the key's usage and
-   refuses to start once it is at `--max-usage` USD (the development cap;
-   exit 3); without it (a local server), usage is not read;
-2. runs `opencode run --agent policy-finder --format json` on the prompt in
+1. writes a salted hash of the key to <out>/../.key_hash.json, so that the
+   pipeline can find the key in what it copies without being given it
+   (agent_runner.scrub);
+2. with `--usage-url` (OpenRouter's key endpoint), reads the key's usage
+   and credit limit, warns when the key has no limit, and refuses to start
+   (exit 3) once the usage is at `--max-usage` USD or, with
+   `--require-key-limit`, when the key has no limit; without it (a local
+   server), nothing is read;
+3. runs `opencode run --agent policy-finder --format json` on the prompt in
    the repo (the export, whose .opencode/ holds the model and the agent),
-   its JSON events to <out>/events.jsonl, its stderr to <out>/stderr.log;
-3. exports the session (`opencode export`, the transcript with every
-   message's tokens and cost) to <out>/session.json and copies OpenCode's log;
-4. reads the key's usage again: the difference is what OpenRouter billed
-   while the agent ran (other runs on the same key at the time included);
-5. replaces the key wherever it was written (the out folder, the log, the
-   version's write folders) and removes OpenCode's database, which holds the
-   same transcript unredacted;
+   its JSON events to <out>/events.jsonl, its stderr to <out>/stderr.log,
+   killed with its process group after `--timeout` seconds (below the
+   container's, so that this runner always gets to the redaction);
+4. exports the session (`opencode export`, the transcript with every
+   message's tokens and cost, `--export-timeout`) to <out>/session.json;
+5. reads the key's usage again: the difference is what OpenRouter billed
+   while the agent ran, every other run on the same key at the time
+   included;
 6. decides whether the run succeeded (`failures`): not when OpenCode exited
-   non-zero, the agent did not load (OpenCode's fallback to its default
-   agent), the session ended in an error, the final message has no text, or
-   the session used another model than the export's config names; a failed
-   run exits non-zero (4 when OpenCode itself exited 0);
-7. prints one JSON line, the summary agent_runner.py reads: the report (the
-   final assistant message's text), tokens, OpenCode's cost (its own price
-   catalogue, not OpenRouter's bill), the models, the usage difference and
-   the failures.
+   non-zero or timed out, the agent did not load (OpenCode's fallback to its
+   default agent), the session ended in an error, the final message has no
+   text, or the session used another model than the export's config names;
+   a failed run exits non-zero (4 when OpenCode itself exited 0);
+7. in any case (`finally`): copies OpenCode's logs to the out folder,
+   replaces the key wherever this run wrote it (the out folder, the
+   version's write folders) and deletes OpenCode's logs and database in the
+   home, which hold the same transcript unredacted;
+8. prints one JSON line, the summary agent_runner.py reads, with the key
+   redacted: the report (the final assistant message's text), tokens,
+   OpenCode's cost (its own price catalogue, not OpenRouter's bill), the
+   models, the usage difference and the failures.
+
+What this protects against: accidental copies of the literal key. The
+redaction is an exact byte match (a base64 copy, or one split by a space, is
+not found), and nothing stops an agent from printing its environment into
+the model's context; with the key and a shell, an agent can also call any
+model through openrouter.ai, past the provider pin and the cap above. The
+control is a dedicated key with a credit limit set at OpenRouter, which
+unattended use requires.
 
 Usage (in the container):
     python3 -c "<source>" <prompt> --title T --out DIR --repo DIR
@@ -36,9 +53,11 @@ Usage (in the container):
 
 import argparse
 import glob
+import hashlib
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -48,21 +67,10 @@ KEY_ENV = "OPENROUTER_API_KEY"
 #: OpenRouter's endpoint for a key's usage (agent_runner.py passes it)
 KEY_URL = "https://openrouter.ai/api/v1/key"
 REDACTED = "[redacted]"
+#: The salted hash of the key, in the run's home beside the out folder
+KEY_HASH = ".key_hash.json"
 #: OpenCode's data folder in the run's home (its database and logs)
 DATA = os.path.expanduser("~/.local/share/opencode")
-
-
-def key_usage(url, key_env=KEY_ENV):
-    """The key's usage in USD so far, or None when it cannot be read."""
-    key = os.environ.get(key_env, "")
-    if not key or not url:
-        return None
-    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
-    try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            return float(json.loads(r.read().decode())["data"]["usage"])
-    except Exception:  # noqa: BLE001 - any failure: unknown
-        return None
 
 
 def session_id(events_path):
@@ -196,6 +204,10 @@ def redact_file(path, secret):
     return True
 
 
+def redact_text(text, secret):
+    return text.replace(secret, REDACTED) if secret else text
+
+
 def redact_tree(root, secret):
     """Redact every file under `root`; return the paths that held it."""
     hits = []
@@ -205,6 +217,66 @@ def redact_tree(root, secret):
             if not os.path.islink(path) and redact_file(path, secret):
                 hits.append(path)
     return hits
+
+
+def key_info(url, key_env=KEY_ENV):
+    """The key's `usage`, `limit` and `limit_remaining` (USD), or None."""
+    key = os.environ.get(key_env, "")
+    if not key or not url:
+        return None
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            data = json.loads(r.read().decode())["data"]
+        return {"usage": float(data["usage"]), "limit": data.get("limit"),
+                "limit_remaining": data.get("limit_remaining")}
+    except Exception:  # noqa: BLE001 - any failure: unknown
+        return None
+
+
+def key_hash(secret, salt=None):
+    """A salted hash of the key: lets the pipeline find the key in what it
+    copies (agent_runner.scrub) without being given the key."""
+    salt = salt or os.urandom(16).hex()
+    digest = hashlib.sha256((salt + secret).encode()).hexdigest()
+    return {"salt": salt, "sha256": digest, "length": len(secret)}
+
+
+def run_bounded(argv, timeout, **kwargs):
+    """Run `argv` in its own process group; kill the group at `timeout`.
+
+    Returns the exit code, or None when it was killed.
+    """
+    proc = subprocess.Popen(argv, start_new_session=True, **kwargs)
+    try:
+        return proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+        return None
+
+
+def scrub(args, secret, summary):
+    """Redact the key everywhere this run wrote it, copy and drop OpenCode's
+    own logs and database. Runs whatever happened before (`finally`)."""
+    for log in glob.glob(os.path.join(DATA, "log", "*.log")):
+        try:
+            shutil.copy(log, os.path.join(args.out, "opencode-" + os.path.basename(log)))
+        except OSError:
+            pass
+    hits = redact_tree(args.out, secret)
+    for rel in args.write_dir:
+        hits += redact_tree(os.path.join(args.repo, rel), secret)
+    summary["key_redacted_in"] = hits
+    for path in glob.glob(os.path.join(DATA, "opencode.db*")) + glob.glob(
+            os.path.join(DATA, "log", "*")):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def main(argv=None):
@@ -217,69 +289,94 @@ def main(argv=None):
     ap.add_argument("--key-env", default=KEY_ENV)
     ap.add_argument("--usage-url")
     ap.add_argument("--max-usage", type=float)
+    ap.add_argument("--require-key-limit", action="store_true",
+                    help="refuse to start when the key has no credit limit")
+    ap.add_argument("--timeout", type=float, default=6600,
+                    help="seconds for `opencode run`, below the container's")
+    ap.add_argument("--export-timeout", type=float, default=300)
     args = ap.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
+    secret = os.environ.get(args.key_env, "")
+    if secret:
+        # beside the transcripts, not among them: the pipeline's scrub reads it
+        with open(os.path.join(os.path.dirname(os.path.abspath(args.out)),
+                               KEY_HASH), "w") as f:
+            json.dump(key_hash(secret), f)
     summary = {"harness": "opencode"}
-    before = key_usage(args.usage_url, args.key_env)
+    info = key_info(args.usage_url, args.key_env)
+    before = info and info["usage"]
     summary["key_usage_before"] = before
+    if args.usage_url:
+        summary["key_limit"] = info and info["limit"]
+        summary["key_limit_remaining"] = info and info["limit_remaining"]
+        if info and info["limit"] is None:
+            summary["warnings"] = ["the key has no credit limit at OpenRouter: a "
+                                   "dedicated key with a limit is required for "
+                                   "unattended use"]
+    stop = None
     if args.usage_url and args.max_usage is not None and (
             before is None or before >= args.max_usage):
-        summary.update(is_error=True, budget_exhausted=True, exit_code=3,
-                       result="", error=f"key usage {before} USD is unknown or at "
-                       f"the cap of {args.max_usage} USD: not started")
-        print(json.dumps(summary), flush=True)
+        stop = (f"key usage {before} USD is unknown or at the cap of "
+                f"{args.max_usage} USD: not started")
+    elif args.usage_url and args.require_key_limit and (not info or info["limit"] is None):
+        stop = "the key has no credit limit at OpenRouter (or it is unknown): not started"
+    if stop:
+        summary.update(is_error=True, budget_exhausted=True, exit_code=3, result="",
+                       error=stop)
+        print(redact_text(json.dumps(summary), secret), flush=True)
         return 3
     events = os.path.join(args.out, "events.jsonl")
-    started = time.time()
-    with open(events, "w") as out, open(os.path.join(args.out, "stderr.log"), "w") as err:
-        code = subprocess.run(
-            ["opencode", "run", "--agent", "policy-finder", "--format", "json",
-             "--title", args.title, args.prompt],
-            cwd=args.repo, stdout=out, stderr=err,
-        ).returncode
-    summary["seconds"] = round(time.time() - started)
-    sid = session_id(events)
-    summary["session_id"] = sid
-    session_path = os.path.join(args.out, "session.json")
-    if sid:
-        with open(session_path, "w") as f:
-            subprocess.run(["opencode", "export", sid], cwd=args.repo, stdout=f,
-                           stderr=subprocess.DEVNULL)
+    code = 1
     try:
-        with open(session_path) as f:
-            summary.update(summarize(json.load(f)))
-    except (OSError, json.JSONDecodeError, AttributeError, TypeError):
-        summary.update(result="", errors=["no session export"])
-    for log in glob.glob(os.path.join(DATA, "log", "*.log")):
-        shutil.copy(log, os.path.join(args.out, "opencode-" + os.path.basename(log)))
-    after = None
-    if args.usage_url:
-        time.sleep(10)  # OpenRouter books a request's cost after it ends
-        after = key_usage(args.usage_url, args.key_env)
-    summary["key_usage_after"] = after
-    if before is not None and after is not None:
-        summary["key_usage_delta_usd"] = round(after - before, 6)
-    secret = os.environ.get(args.key_env, "")
-    hits = redact_tree(args.out, secret)
-    for rel in args.write_dir:
-        hits += redact_tree(os.path.join(args.repo, rel), secret)
-    summary["key_redacted_in"] = hits
-    for path in glob.glob(os.path.join(DATA, "opencode.db*")):
-        os.remove(path)
-    try:
-        with open(os.path.join(args.out, "stderr.log"), errors="replace") as f:
-            stderr = f.read()
-    except OSError:
-        stderr = ""
-    why = failures(summary, code, stderr, configured_model(args.repo),
-                   last_event_error(events))
+        started = time.time()
+        with open(events, "w") as out, open(os.path.join(args.out, "stderr.log"),
+                                            "w") as err:
+            code = run_bounded(
+                ["opencode", "run", "--agent", "policy-finder", "--format", "json",
+                 "--title", args.title, args.prompt],
+                args.timeout, cwd=args.repo, stdout=out, stderr=err)
+        summary["seconds"] = round(time.time() - started)
+        if code is None:
+            summary["timed_out"] = True
+            code = 124
+        sid = session_id(events)
+        summary["session_id"] = sid
+        session_path = os.path.join(args.out, "session.json")
+        if sid:
+            with open(session_path, "w") as f:
+                run_bounded(["opencode", "export", sid], args.export_timeout,
+                            cwd=args.repo, stdout=f, stderr=subprocess.DEVNULL)
+        try:
+            with open(session_path) as f:
+                summary.update(summarize(json.load(f)))
+        except (OSError, ValueError, AttributeError, TypeError):
+            summary.update(result="", errors=["no session export"])
+        if args.usage_url:
+            time.sleep(10)  # OpenRouter books a request's cost after it ends
+            after = key_info(args.usage_url, args.key_env)
+            summary["key_usage_after"] = after and after["usage"]
+            if before is not None and after is not None:
+                # every other run on the key in the meantime included
+                summary["key_usage_delta_usd"] = round(after["usage"] - before, 6)
+        try:
+            with open(os.path.join(args.out, "stderr.log"), errors="replace") as f:
+                stderr = f.read()
+        except OSError:
+            stderr = ""
+        why = failures(summary, code, stderr, configured_model(args.repo),
+                       last_event_error(events))
+    except Exception as e:  # noqa: BLE001 - the runner's own failure fails the run
+        why = [f"the runner failed: {type(e).__name__}: {e}"]
+        code = code or 1
+    finally:
+        scrub(args, secret, summary)
     summary["opencode_exit_code"] = code
     summary["failures"] = why
     summary["is_error"] = bool(why)
     # a failed session fails the run, whatever OpenCode's own exit code
     code = code or (4 if why else 0)
     summary["exit_code"] = code
-    print(json.dumps(summary), flush=True)
+    print(redact_text(json.dumps(summary), secret), flush=True)
     return code
 
 

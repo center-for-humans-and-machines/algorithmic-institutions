@@ -1,6 +1,9 @@
 """Tests for scripts/policy_finder/opencode_run.py: the summary and the redaction."""
 
 import importlib.util
+import json
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -86,3 +89,107 @@ def test_last_event_error(tmp_path):
     with open(events, "a") as f:
         f.write('{"type": "error", "error": {"name": "APIError"}}\n')
     assert "APIError" in oc.last_event_error(events)
+
+
+# -- main(), with a fake `opencode` on PATH and a dummy key ---------------------
+
+KEY = "sk-or-v1-" + "ab12" * 16
+FAKE = r'''#!/usr/bin/env python3
+import json, os, sys, time
+mode = os.environ["FAKE_MODE"]
+key = os.environ.get("OPENROUTER_API_KEY", "")
+if sys.argv[1] == "run":
+    print(json.dumps({"type": "step_start", "sessionID": "ses_1", "text": key}), flush=True)
+    if mode == "hang":
+        time.sleep(60)
+    sys.exit(1 if mode == "exit1" else 0)
+if sys.argv[1] == "export":
+    if mode == "badexport":
+        print("[]")
+    elif mode != "noexport":
+        print(json.dumps({"info": {"agent": "policy-finder"}, "messages": [
+            {"info": {"role": "assistant", "providerID": "openrouter", "modelID": "q/c",
+                      "tokens": {"input": 5, "output": 1}},
+             "parts": [{"type": "text", "text": "report, key " + key}]}]}))
+'''
+
+
+@pytest.fixture
+def fake(tmp_path, monkeypatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "opencode").write_text(FAKE.replace("/usr/bin/env python3", sys.executable))
+    (bin_dir / "opencode").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    monkeypatch.setenv("OPENROUTER_API_KEY", KEY)
+    repo = tmp_path / "repo"
+    (repo / ".opencode").mkdir(parents=True)
+    (repo / ".opencode/opencode.json").write_text('{"model": "openrouter/q/c"}')
+    (repo / "notes").mkdir()
+    (repo / "notes/n.md").write_text(f"my env said {KEY}\n")
+    data = tmp_path / "home/.local/share/opencode"
+    (data / "log").mkdir(parents=True)
+    (data / "log/x.log").write_text(f"log {KEY}\n")
+    (data / "opencode.db").write_text(KEY)
+    monkeypatch.setattr(oc, "DATA", str(data))
+    monkeypatch.setattr(oc.time, "sleep", lambda s: None)
+    out = tmp_path / "home/opencode"
+
+    def run(mode, *extra):
+        monkeypatch.setenv("FAKE_MODE", mode)
+        return oc.main(["Design.", "--title", "t", "--out", str(out), "--repo", str(repo),
+                        "--write-dir", "notes", *extra])
+    return run, out, repo, data
+
+
+def _summary(capsys):
+    printed = capsys.readouterr().out
+    assert KEY not in printed
+    return json.loads(printed.strip().splitlines()[-1])
+
+
+def _clean(out, repo, data):
+    for path in [*out.rglob("*"), *repo.rglob("*.md")]:
+        if path.is_file():
+            assert KEY not in path.read_text(errors="replace"), path
+    assert not list(data.rglob("*.db")) and not list((data / "log").iterdir())
+
+
+def test_main_success_redacts_everything(fake, capsys):
+    run, out, repo, data = fake
+    assert run("ok") == 0
+    s = _summary(capsys)
+    assert s["failures"] == [] and s["result"] == "report, key [redacted]"
+    _clean(out, repo, data)
+    # the salted hash beside the out folder, for the pipeline's scrub
+    info = json.loads((out.parent / oc.KEY_HASH).read_text())
+    assert oc.key_hash(KEY, info["salt"])["sha256"] == info["sha256"]
+
+
+@pytest.mark.parametrize("mode, reason", [
+    ("exit1", "exited with 1"),
+    ("noexport", "no text"),
+    ("badexport", "no text"),
+])
+def test_main_failures_exit_non_zero(fake, capsys, mode, reason):
+    run, out, repo, data = fake
+    assert run(mode) != 0
+    s = _summary(capsys)
+    assert s["is_error"] and any(reason in f for f in s["failures"])
+    _clean(out, repo, data)
+
+
+def test_main_timeout_kills_and_still_redacts(fake, capsys):
+    run, out, repo, data = fake
+    assert run("hang", "--timeout", "1") == 124
+    s = _summary(capsys)
+    assert s["timed_out"] and any("exited with 124" in f for f in s["failures"])
+    _clean(out, repo, data)
+
+
+def test_main_cap_with_unknown_usage_does_not_start(fake, capsys):
+    run, out, repo, data = fake
+    assert run("ok", "--usage-url", "http://127.0.0.1:9/key", "--max-usage", "5") == 3
+    s = _summary(capsys)
+    assert s["budget_exhausted"] and "unknown" in s["error"]
+    assert not (out / "events.jsonl").exists()

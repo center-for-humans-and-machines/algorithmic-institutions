@@ -22,6 +22,12 @@ The command is opencode_run.py, passed as `python3 -c`: it runs OpenCode,
 exports the session and prints a summary line, which takes the place of
 Claude's JSON result. Its transcripts are the files it writes to `opencode/`
 in the run's home (the spawner's state for that project, PF_SPAWNER_STATE_OC).
+The key: unattended use requires a dedicated OpenRouter key with a credit
+limit set at OpenRouter. The runner redacts accidental copies of the
+literal key, but an agent can read its environment, and with the key reach
+any model through openrouter.ai. PF_OPENROUTER_REQUIRE_LIMIT=1 refuses a key
+without a credit limit (else the runner warns); the cap below is a check
+before each start, not a limit on a running agent (runner_options).
 PF_OPENROUTER_MAX_USAGE (USD, the key's total usage) stops an opencode agent
 before it starts once the key is at it.
 
@@ -33,8 +39,10 @@ this node (agent_apptainer.py, for DAIS): the same `start`, `finish` and
 import contextlib
 import fcntl
 import glob
+import hashlib
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -60,6 +68,10 @@ SPAWNER_STATE_OC = os.environ.get("PF_SPAWNER_STATE_OC", f"{SPAWNER_STATE}/oc")
 OPENCODE_RUN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "opencode_run.py")
 OPENCODE_OUT = "opencode"
 MAX_USAGE = os.environ.get("PF_OPENROUTER_MAX_USAGE")
+#: Refuse to start an opencode agent whose OpenRouter key has no credit limit
+REQUIRE_KEY_LIMIT = os.environ.get("PF_OPENROUTER_REQUIRE_LIMIT", "") not in ("", "0")
+#: The runner's salted hash of the key, in the run's home (opencode_run.py)
+KEY_HASH = ".key_hash.json"
 
 
 class AgentError(Exception):
@@ -168,6 +180,84 @@ def command(prompt, harness="claude", title="policy-finder", write_dirs=(),
     ]
 
 
+def runner_options():
+    """opencode_run.py's own limits, appended to `command` by a backend:
+    OpenCode stops before the container's timeout (so the runner redacts),
+    and the key-limit requirement."""
+    out = ["--timeout", str(max(TIMEOUT - 600, 60))]
+    if REQUIRE_KEY_LIMIT:
+        out.append("--require-key-limit")
+    return out
+
+
+def _key_matcher(home):
+    """A function finding the key in a text, from the runner's salted hash in
+    the run's home, or None without one."""
+    try:
+        with open(os.path.join(home, KEY_HASH)) as f:
+            info = json.load(f)
+        salt, digest, length = info["salt"], info["sha256"], int(info["length"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if length < 16:
+        return None
+    token = re.compile(r"[A-Za-z0-9_.:+/=-]{%d,}" % length)
+
+    def find(text):
+        found = set()
+        for match in token.finditer(text):
+            run = match.group(0)
+            if len(run) > 4096:
+                continue
+            for i in range(len(run) - length + 1):
+                piece = run[i:i + length]
+                if hashlib.sha256((salt + piece).encode()).hexdigest() == digest:
+                    found.add(piece)
+        return found
+    return find
+
+
+def scrub(run_id, harness, paths=(), texts=()):
+    """Redact the key (found by the runner's salted hash) in `paths`, in the
+    run's own opencode/ folder, and in `texts` (returned redacted); delete
+    OpenCode's database and logs in the run's home. For a run whose runner
+    did not get to its own redaction (killed with its container). Returns
+    (redacted texts, paths that held the key)."""
+    home = run_home(run_id, harness)
+    find = _key_matcher(home)
+    hits = []
+    if harness == "opencode":
+        data = os.path.join(home, ".local", "share", "opencode")
+        for path in glob.glob(os.path.join(data, "opencode.db*")) + glob.glob(
+                os.path.join(data, "log", "*")):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+    if find is None:
+        return list(texts), hits
+    own = transcripts(run_id, harness)[1] if harness == "opencode" else []
+    for path in [*paths, *own]:
+        try:
+            with open(path, "rb") as f:
+                text = f.read().decode("utf-8", "replace")
+        except OSError:
+            continue
+        keys = find(text)
+        if keys:
+            for key in keys:
+                text = text.replace(key, "[redacted]")
+            with open(path, "w") as f:
+                f.write(text)
+            hits.append(str(path))
+    out = []
+    for text in texts:
+        for key in find(text):
+            text = text.replace(key, "[redacted]")
+        out.append(text)
+    return out, hits
+
+
 def transcripts(run_id, harness="claude"):
     """The run's transcript files: (folder, [paths under it])."""
     home = run_home(run_id, harness)
@@ -225,7 +315,8 @@ def start(stem, write_dirs, prompt, harness="claude"):
     """
     body = {
         "profile": PROFILE,
-        "command": command(prompt, harness, stem, write_dirs),
+        "command": command(prompt, harness, stem, write_dirs) + (
+            runner_options() if harness == "opencode" else []),
         "workdir": REPO,
         "mounts": mounts(stem, write_dirs),
         "cpus": CPUS,
@@ -245,7 +336,10 @@ def finish(run_id, log=print, harness="claude"):
     """Wait for the run; return its record (status, report, cost, models).
 
     Raises BudgetError when an opencode run did not start because the key is
-    at PF_OPENROUTER_MAX_USAGE: not the agent's failure, and not to retry.
+    at PF_OPENROUTER_MAX_USAGE (or has no credit limit, with
+    PF_OPENROUTER_REQUIRE_LIMIT): not the agent's failure. The pipeline then
+    stops the version (status `stopped`, resumable once there is budget) and
+    the campaign stops.
     """
     started = time.time()
     run = _request("GET", f"/runs/{run_id}", harness=harness)

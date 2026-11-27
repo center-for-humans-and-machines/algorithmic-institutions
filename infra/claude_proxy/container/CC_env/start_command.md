@@ -37,8 +37,25 @@ docker build -t algoinst_claude:opencode -f container/CC_env/Dockerfile.opencode
 docker compose -p algoinst -f container/CC_env/docker-compose.yml --profile opencode up -d container_spawner_oc
 ```
 
-Set `PF_OPENROUTER_MAX_USAGE` (the key's total usage in USD) where the
-pipeline runs to stop the agents before they start once the key reaches it.
+**The key must be a dedicated OpenRouter key with a credit limit set at
+OpenRouter for any unattended use.** That limit is the only control on what
+the key can spend. What else there is, and what it does not do:
+
+- `PF_OPENROUTER_MAX_USAGE` (the key's total usage in USD; in `CC_env/.env`,
+  passed to the proxy by the compose file, or `openrouter_max_usage` in the
+  campaign file) stops agents *before they start* once the key reaches it,
+  and the campaign then stops. It does not stop a running agent.
+  `PF_OPENROUTER_REQUIRE_LIMIT=1` also refuses to start an agent whose key has
+  no credit limit; without it the runner only warns (in the pipeline log).
+- The runner (`scripts/policy_finder/opencode_run.py`) and the pipeline
+  redact *accidental copies of the literal key* from transcripts, logs,
+  summaries and the agent's notes and scripts. It is an exact match: a
+  base64 copy, or one split by a space, is not found. Notes are committed
+  and published with the snapshots.
+- Nothing stops an agent from printing its environment, key included, into
+  the model's context. And `openrouter.ai`, the only egress, is a general
+  gateway: an agent with the key and a shell can call any model there,
+  past the provider pin and the cap above.
 
 ## Raven image
 

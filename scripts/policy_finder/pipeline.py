@@ -254,6 +254,11 @@ class Version:
             self.state["status"] = "failed"
             self.state["error"] = str(e)[-6000:]
             self.log(f"FAILED: {e}")
+        except agent_runner.BudgetError as e:
+            # the OpenRouter cap, not the version: the campaign stops here
+            self.state["status"] = "stopped"
+            self.state["error"] = str(e)[-6000:]
+            self.log(f"STOPPED: {e}")
         except Exception:
             # an unexpected error (the network, say): resumable, not a verdict
             self.state["status"] = "error"
@@ -311,6 +316,9 @@ class Version:
                     if self.harness == "claude":
                         # the plan's usage: wait while a window is over its ceiling
                         self.log(f"usage: {usage.describe(usage.gate(log=self.log))}")
+                    elif not agent_runner.MAX_USAGE and not self.conf.get("base_url"):
+                        self.log("WARNING: PF_OPENROUTER_MAX_USAGE is not set: no spend"
+                                 " cap before this agent starts")
                     run_id = agent_runner.start(self.stem, write_dirs, self.data["prompt"],
                                                 harness=self.harness)
                     self.data["agent_current"] = run_id
@@ -352,8 +360,14 @@ class Version:
             self.data.pop("agent_current", None)
             self.save()
             if self.harness == "opencode":
-                cost = (f"tokens {record['result'].get('tokens')}, OpenRouter key usage"
-                        f" +$ {record['result'].get('key_usage_delta_usd')}")
+                cost = (f"tokens {record['result'].get('tokens')}, OpenCode's catalogue"
+                        f" cost $ {record['result'].get('cost_catalog_usd')}, OpenRouter"
+                        f" key usage +$ {record['result'].get('key_usage_delta_usd')}"
+                        " (every run on the key in that time)")
+                for warning in record["result"].get("warnings") or []:
+                    self.log(f"WARNING: {warning}")
+                if record.get("error"):
+                    self.log(f"agent run {run_id} failed: {record['error']}")
             else:
                 cost = (f"API-equivalent cost $ {record['result'].get('total_cost_usd')}"
                         " (plan, not billed)")
@@ -380,15 +394,20 @@ class Version:
         """
         source, paths = agent_runner.transcripts(run_id, self.harness)
         target = self.wt_root / f"{self.stem}.transcripts" / run_id
-        count = 0
+        count, copied = 0, []
         try:
             for path in paths:
                 dest = target / os.path.relpath(path, source)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, dest)
+                copied.append(dest)
                 count += 1
         except OSError as e:
             self.log(f"transcripts of {run_id} not copied: {e}")
+        # the key, should the runner not have redacted it (killed, say)
+        _, hits = agent_runner.scrub(run_id, self.harness, copied)
+        if hits:
+            self.log(f"the key was in {len(hits)} transcript file(s) of {run_id}: redacted")
         if not count:
             self.log(f"no transcripts of {run_id} under {source}")
         return count

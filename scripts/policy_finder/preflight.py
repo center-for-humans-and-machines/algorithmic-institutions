@@ -245,6 +245,26 @@ def check_services():
     except (urllib.error.URLError, OSError) as e:
         report("FAIL", f"container spawner unreachable ({e})", "docker compose ... up -d container_spawner")
 
+    # harness opencode (agent_runner.py): the second spawner, whose project's
+    # token is the OpenRouter key and whose image is algoinst_claude:opencode
+    oc = os.environ.get("PF_SPAWNER_OC", "http://container_spawner_oc:8877")
+    hint = ("only for harness opencode: build algoinst_claude:opencode and start "
+            "container_spawner_oc (infra/claude_proxy/container/CC_env/start_command.md)")
+    try:
+        with urllib.request.urlopen(oc + "/health", timeout=10) as r:
+            health = json.loads(r.read().decode())
+        if health.get("ok") and health.get("project") == "algoinst_oc":
+            report("PASS", "OpenCode spawner (project algoinst_oc); its image is "
+                   "checked by the first run, which fails without it")
+        else:
+            report("WARN", f"OpenCode spawner answers {health}", hint)
+    except (urllib.error.URLError, OSError) as e:
+        report("WARN", f"OpenCode spawner unreachable ({e})", hint)
+    if not os.environ.get("PF_OPENROUTER_MAX_USAGE"):
+        report("WARN", "PF_OPENROUTER_MAX_USAGE is not set: harness opencode agents start "
+               "without a spend cap", "set it in CC_env/.env (or openrouter_max_usage in "
+               "the campaign file), and use a dedicated OpenRouter key with a credit limit")
+
     try:
         response = cluster_proxy._request("GET", f"/jobs?cluster={cluster_proxy.CLUSTER}")
         code, log = cluster_proxy.wait_run(response["run_id"], timeout=600)

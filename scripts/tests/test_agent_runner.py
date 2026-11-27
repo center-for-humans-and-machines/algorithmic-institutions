@@ -42,7 +42,7 @@ def spawner(tmp_path, monkeypatch):
                 stdout = state.get("stdout", "noise\n" + json.dumps(RESULT) + "\n")
                 return self._send(200, {"stdout": stdout, "stderr": ""})
             state["polls"] += 1
-            status = "running" if state["polls"] < 3 else "succeeded"
+            status = "running" if state["polls"] < 3 else state.get("final", "succeeded")
             self._send(200, {"id": "abc", "status": status, "exit_code": 0,
                              "home_host_path": "/h/runs/abc/home"})
 
@@ -108,6 +108,8 @@ def test_opencode_start_and_finish(spawner, tmp_path, monkeypatch):
     assert command[3] == "Design your rule."
     assert command[command.index("--write-dir") + 1] == "notes/policy_finder"
     assert command[command.index("--max-usage") + 1] == "21.3"
+    # OpenCode's own timeout, below the container's (opencode_run.py redacts after it)
+    assert float(command[command.index("--timeout") + 1]) < ar.TIMEOUT
     spawner["stdout"] = json.dumps(SUMMARY) + "\n"
     record = ar.finish("abc", log=lambda m: None, harness="opencode")
     assert record["report"] == "my report" and record["models"] == ["openrouter/q/c"]
@@ -132,3 +134,31 @@ def test_opencode_runner_verdict_fails_the_run(spawner):
     assert record["status"] == "failed" and "ended in an error" in record["error"]
     spawner["stdout"] = "no summary\n"
     assert ar.finish("abc", log=lambda m: None, harness="opencode")["status"] == "failed"
+
+
+def test_an_expired_run_is_not_a_success(spawner):
+    spawner["final"] = "expired"
+    spawner["stdout"] = ""  # killed before the runner printed
+    record = ar.finish("abc", log=lambda m: None, harness="opencode")
+    assert record["status"] == "expired" and record["report"] == ""
+
+
+def test_scrub_finds_the_key_by_its_hash(spawner, tmp_path):
+    spec = importlib.util.spec_from_file_location("opencode_run", ar.OPENCODE_RUN)
+    oc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(oc)
+    key = "sk-or-v1-" + "cd34" * 16
+    home = tmp_path / "oc/runs/abc/home"
+    (home / "opencode").mkdir(parents=True)
+    (home / ar.KEY_HASH).write_text(json.dumps(oc.key_hash(key)))
+    (home / "opencode/events.jsonl").write_text(f'{{"text": "key={key}"}}\n')
+    copy = tmp_path / "copy.jsonl"
+    copy.write_text(f"Bearer {key} and more\n")
+    data = home / ".local/share/opencode"
+    (data / "log").mkdir(parents=True)
+    (data / "opencode.db").write_text(key)
+    texts, hits = ar.scrub("abc", "opencode", [copy], texts=[f"report {key}"])
+    assert texts == ["report [redacted]"] and len(hits) == 2
+    assert key not in copy.read_text() and "[redacted]" in copy.read_text()
+    assert key not in (home / "opencode/events.jsonl").read_text()
+    assert not (data / "opencode.db").exists()
