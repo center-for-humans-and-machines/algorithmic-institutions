@@ -55,13 +55,14 @@ def capture(a):
             record["gnn"].append(
                 {
                     "role": role,
+                    # copies, not views: the env updates its state in place
                     "state": {
-                        k: v.detach().cpu().numpy()
+                        k: v.detach().cpu().numpy().copy()
                         for k, v in state.items()
                         if isinstance(v, th.Tensor)
                     },
                     "reset_rnn": bool(kwargs.get("reset_rnn", True)),
-                    "edge_index": kwargs["edge_index"].cpu().numpy(),
+                    "edge_index": kwargs["edge_index"].cpu().numpy().copy(),
                 }
             )
             return original(state, **kwargs)
