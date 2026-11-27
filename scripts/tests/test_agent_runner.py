@@ -39,10 +39,10 @@ def spawner(tmp_path, monkeypatch):
 
         def do_GET(self):
             if self.path.startswith("/runs/abc/logs"):
-                return self._send(200, {"stdout": "noise\n" + json.dumps(RESULT) + "\n",
-                                        "stderr": ""})
+                stdout = state.get("stdout", "noise\n" + json.dumps(RESULT) + "\n")
+                return self._send(200, {"stdout": stdout, "stderr": ""})
             state["polls"] += 1
-            status = "running" if state["polls"] < 3 else "succeeded"
+            status = "running" if state["polls"] < 3 else state.get("final", "succeeded")
             self._send(200, {"id": "abc", "status": status, "exit_code": 0,
                              "home_host_path": "/h/runs/abc/home"})
 
@@ -52,6 +52,8 @@ def spawner(tmp_path, monkeypatch):
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     monkeypatch.setattr(ar, "URL", f"http://127.0.0.1:{server.server_port}")
+    monkeypatch.setattr(ar, "URL_OC", f"http://127.0.0.1:{server.server_port}")
+    monkeypatch.setattr(ar, "SPAWNER_STATE_OC", str(tmp_path / "oc"))
     monkeypatch.setattr(ar.time, "sleep", lambda s: None)
     # a transcript in the run's home names the model
     home = tmp_path / "runs/abc/home/.claude/projects/-opt/s.jsonl"
@@ -90,3 +92,90 @@ def test_slots_are_exclusive(tmp_path):
     with ar.slot(tmp_path, slots=2) as a:
         with ar.slot(tmp_path, slots=2) as b:
             assert {a, b} == {0, 1}
+
+
+SUMMARY = {"harness": "opencode", "result": "my report", "models": ["openrouter/q/c"],
+           "tokens": {"input": 9, "output": 2}, "exit_code": 0, "is_error": False}
+
+
+def test_opencode_start_and_finish(spawner, tmp_path, monkeypatch):
+    monkeypatch.setattr(ar, "MAX_USAGE", "21.3")
+    spawner["busy"] = 0
+    ar.start("pf-x", ["notes/policy_finder"], "Design your rule.", harness="opencode")
+    command = spawner["posts"][-1]["command"]
+    # the runner's own source, run by the container's python, on the prompt
+    assert command[:2] == ["python3", "-c"] and "def summarize" in command[2]
+    assert command[3] == "Design your rule."
+    assert command[command.index("--write-dir") + 1] == "notes/policy_finder"
+    assert command[command.index("--max-usage") + 1] == "21.3"
+    # OpenCode's own timeout, below the container's (opencode_run.py redacts after it)
+    assert float(command[command.index("--timeout") + 1]) < ar.TIMEOUT
+    # the stray kill: the spawner's start path only, never in what others reuse
+    assert "--kill-strays" in command
+    assert "--kill-strays" not in ar.command("P", "opencode") + ar.runner_options()
+    spawner["stdout"] = json.dumps(SUMMARY) + "\n"
+    record = ar.finish("abc", log=lambda m: None, harness="opencode")
+    assert record["report"] == "my report" and record["models"] == ["openrouter/q/c"]
+    assert record["result"]["tokens"] == {"input": 9, "output": 2}
+    # its transcripts are the runner's files in the run's home
+    out = tmp_path / "oc/runs/abc/home/opencode"
+    out.mkdir(parents=True)
+    (out / "session.json").write_text("{}")
+    assert ar.transcripts("abc", "opencode") == (str(out), [str(out / "session.json")])
+
+
+def test_opencode_at_the_cap_is_not_an_agent_failure(spawner):
+    spawner["stdout"] = json.dumps({"budget_exhausted": True, "error": "at the cap"})
+    with pytest.raises(ar.BudgetError, match="at the cap"):
+        ar.finish("abc", log=lambda m: None, harness="opencode")
+
+
+def test_opencode_runner_verdict_fails_the_run(spawner):
+    spawner["stdout"] = json.dumps({**SUMMARY, "is_error": True,
+                                    "failures": ["the session ended in an error"]})
+    record = ar.finish("abc", log=lambda m: None, harness="opencode")
+    assert record["status"] == "failed" and "ended in an error" in record["error"]
+    spawner["stdout"] = "no summary\n"
+    assert ar.finish("abc", log=lambda m: None, harness="opencode")["status"] == "failed"
+
+
+def test_an_expired_run_is_not_a_success(spawner):
+    spawner["final"] = "expired"
+    spawner["stdout"] = ""  # killed before the runner printed
+    record = ar.finish("abc", log=lambda m: None, harness="opencode")
+    assert record["status"] == "expired" and record["report"] == ""
+
+
+def test_scrub_finds_the_key_by_its_hash(spawner, tmp_path):
+    spec = importlib.util.spec_from_file_location("opencode_run", ar.OPENCODE_RUN)
+    oc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(oc)
+    key = "sk-or-v1-" + "cd34" * 16
+    home = tmp_path / "oc/runs/abc/home"
+    (home / "opencode").mkdir(parents=True)
+    (home / ar.KEY_HASH).write_text(json.dumps(oc.key_hash(key)))
+    (home / "opencode/events.jsonl").write_text(f'{{"text": "key={key}"}}\n')
+    copy = tmp_path / "copy.jsonl"
+    copy.write_text(f"Bearer {key} and more\n")
+    data = home / ".local/share/opencode"
+    (data / "log").mkdir(parents=True)
+    (data / "opencode.db").write_text(key)
+    texts, hits = ar.scrub("abc", "opencode", [copy], texts=[f"report {key}"])
+    assert texts == ["report [redacted]"] and len(hits) == 2
+    assert key not in copy.read_text() and "[redacted]" in copy.read_text()
+    assert key not in (home / "opencode/events.jsonl").read_text()
+    assert not (data / "opencode.db").exists()
+
+
+def test_the_runners_reasons_reach_the_error(spawner):
+    spawner["final"] = "failed"
+    spawner["stdout"] = json.dumps({**SUMMARY, "is_error": True,
+                                    "failures": ["no assistant text in the final turn"]})
+    record = ar.finish("abc", log=lambda m: None, harness="opencode")
+    assert "no assistant text" in record["error"]
+
+
+def test_scrub_without_a_hash_says_so(spawner):
+    lines = []
+    ar.scrub("abc", "opencode", [], log=lines.append)
+    assert "not scanned" in lines[0]

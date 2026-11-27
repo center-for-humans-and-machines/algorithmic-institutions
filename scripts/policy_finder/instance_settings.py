@@ -22,10 +22,18 @@ folder, shared by every version. The agent runs in its own container
 read-only except these paths, and the container is the only sandbox. No
 Claude Code permissions, sandbox settings or hooks are written.
 
+An instance whose agent runs on OpenCode (`--harness opencode`, see
+agent_runner.py) also gets `harness`, `model` (an OpenRouter model id) and,
+if given, `providers` (OpenRouter's upstream providers to route to, in
+order, with no fallback), which export_instance.py turns into the agent's
+OpenCode config. A later version keeps them unless they are given again.
+The default harness, claude, writes none of these keys.
+
 Usage:
     python scripts/policy_finder/instance_settings.py <worktree> <name>
         --version K --start-commit SHA --min-params N --max-params N|none
         --sobol-points N --python PATH [--mode free|single_idea]
+        [--harness claude|opencode --model ID [--providers A,B]]
 """
 
 import argparse
@@ -72,8 +80,29 @@ def base_version(wt: str, name: str, version: int) -> str:
     return best
 
 
+def harness(args, previous):
+    """The harness keys of the instance file: given, else the previous version's."""
+    if args.harness is None:
+        return {k: previous[k] for k in ("harness", "model", "providers") if k in previous}
+    if args.harness == "claude":
+        if args.model or args.providers:
+            raise SystemExit("--model and --providers are for --harness opencode")
+        return {}
+    if not args.model:
+        raise SystemExit("--harness opencode needs --model (an OpenRouter model id)")
+    out = {"harness": args.harness, "model": args.model}
+    if args.providers:
+        out["providers"] = [p for p in args.providers.split(",") if p]
+    return out
+
+
 def write(args):
     wt = os.path.realpath(args.worktree)
+    path = os.path.join(wt, ".claude", "policy_finder.json")
+    previous = {}
+    if os.path.isfile(path):
+        with open(path) as f:
+            previous = json.load(f)
     rule, notes, scripts = write_paths(args.name, args.version)
     for directory in (os.path.dirname(rule), os.path.dirname(notes), scripts):
         os.makedirs(os.path.join(wt, directory), exist_ok=True)
@@ -96,8 +125,9 @@ def write(args):
         instance["mode"] = args.mode
         if args.version > 1:
             instance["base_version"] = base_version(wt, args.name, args.version)
+    instance.update(harness(args, previous))
     os.makedirs(os.path.join(wt, ".claude"), exist_ok=True)
-    with open(os.path.join(wt, ".claude", "policy_finder.json"), "w") as f:
+    with open(path, "w") as f:
         json.dump(instance, f, indent=2)
         f.write("\n")
 
@@ -118,6 +148,10 @@ def main():
     ap.add_argument("--python", default="python3")
     ap.add_argument("--setting", default="exp2", choices=("exp2", "exp1", "exp2_multi", "exp2_diff"))
     ap.add_argument("--mode", default="free", choices=("free", "single_idea"))
+    ap.add_argument("--harness", choices=("claude", "opencode"),
+                    help="default: the previous version's, else claude")
+    ap.add_argument("--model", help="harness opencode: an OpenRouter model id")
+    ap.add_argument("--providers", help="harness opencode: upstream providers, a,b")
     write(ap.parse_args())
 
 

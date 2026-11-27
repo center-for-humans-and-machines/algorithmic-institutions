@@ -11,7 +11,8 @@ Steps (STEPS):
   agent         the agent in its container (agent_runner.py); its report in
                 <stem>.report.md, its run (cost, tokens, models) in the state,
                 its transcripts copied to <stem>.transcripts/<run id>/ (the
-                spawner's run homes are not kept for good)
+                spawner's run homes are not kept for good); the instance's
+                `harness` (claude, the default, or opencode) picks the agent
   collect       the rule, notes and scripts back into the worktree; a file
                 written anywhere else in the write folders fails the version
                 (version 1 of a single-idea instance has no agent: these
@@ -88,6 +89,11 @@ OUT_DIR = "plots/simulation/policy_finder"
 CONFIG_DIR = "configs/simulation/policy_finder"
 #: Agent runs and sim parts tried this many times
 AGENT_ATTEMPTS = 2
+#: Harness opencode: attempts, and the wait before the next one (seconds,
+#: times the attempts so far). A failed run counts, rate limits included:
+#: the Claude plan's limit handling (usage.py) is for harness claude only
+OPENCODE_ATTEMPTS = 3
+OPENCODE_RETRY_WAIT = int(os.environ.get("PF_AGENT_RETRY_WAIT", "120"))
 #: validate-rule on the Raven login node: at most this many at once, tries
 #: when it does not run (not a verdict), seconds between them (times the try)
 IMAGE_CHECK_SLOTS = 2
@@ -138,6 +144,8 @@ class Version:
         self.version = self.conf.get("version", 1)
         # version 1 of a single-idea instance is the given seed rule
         self.seeded = self.conf.get("mode") == "single_idea" and self.version == 1
+        # the agent's harness (agent_runner.py): claude, or opencode with `model`
+        self.harness = self.conf.get("harness", "claude")
         self.rule = f"configs/managers/rule_based/{self.stem}.yml"
         self.sweep = f"{OUT_DIR}/{self.stem}_sweep"
         self.final = f"{self.sweep}/final"
@@ -247,6 +255,11 @@ class Version:
             self.state["status"] = "failed"
             self.state["error"] = str(e)[-6000:]
             self.log(f"FAILED: {e}")
+        except agent_runner.BudgetError as e:
+            # the OpenRouter cap, not the version: the campaign stops here
+            self.state["status"] = "stopped"
+            self.state["error"] = str(e)[-6000:]
+            self.log(f"STOPPED: {e}")
         except Exception:
             # an unexpected error (the network, say): resumable, not a verdict
             self.state["status"] = "error"
@@ -287,7 +300,11 @@ class Version:
             return
         write_dirs = export_instance.write_dirs(self.name, self.stem)
         attempts = self.data.setdefault("agent_runs", [])
-        while len(attempts) < AGENT_ATTEMPTS:
+        limit = AGENT_ATTEMPTS if self.harness == "claude" else OPENCODE_ATTEMPTS
+        while len(attempts) < limit:
+            if self.harness != "claude" and attempts and not self.data.get("agent_current"):
+                # bounded back-off after a failed attempt (a rate limit, say)
+                time.sleep(OPENCODE_RETRY_WAIT * len(attempts))
             with agent_runner.slot(self.locks):
                 run_id = self.data.get("agent_current")
                 if run_id:
@@ -296,19 +313,31 @@ class Version:
                     if attempts or self.data.get("limited_runs"):
                         # a fresh copy for the retry: the failed run may have written
                         export_instance.build(self.wt, MAIN, self.exports)
-                    # the plan's usage: wait while a window is over its ceiling
-                    self.log(f"usage: {usage.describe(usage.gate(log=self.log))}")
-                    run_id = agent_runner.start(self.stem, write_dirs, self.data["prompt"])
+                    if self.harness == "claude":
+                        # the plan's usage: wait while a window is over its ceiling
+                        self.log(f"usage: {usage.describe(usage.gate(log=self.log))}")
+                    elif not agent_runner.MAX_USAGE and not self.conf.get("base_url"):
+                        self.log("WARNING: PF_OPENROUTER_MAX_USAGE is not set: no spend"
+                                 " cap before this agent starts")
+                    run_id = agent_runner.start(self.stem, write_dirs, self.data["prompt"],
+                                                harness=self.harness)
                     self.data["agent_current"] = run_id
                     self.save()
                     self.log(f"agent run {run_id} started")
-                record = agent_runner.finish(run_id, log=self.log)
+                try:
+                    record = agent_runner.finish(run_id, log=self.log, harness=self.harness)
+                except agent_runner.BudgetError:
+                    # not started: a resume starts a new run once there is budget
+                    self.data.pop("agent_current", None)
+                    self.save()
+                    raise
             report = record.pop("report")
             record["transcripts"] = self.keep_transcripts(run_id)
             rule_written = (self.exports / self.stem / self.rule).exists()
             ok = record["status"] == "succeeded" and report.strip() and rule_written
-            home = os.path.join(agent_runner.SPAWNER_STATE, "runs", run_id, "home")
-            hits = [] if ok else usage.limited({**record, "report": report}, home)
+            home = agent_runner.run_home(run_id, self.harness)
+            hits = ([] if ok or self.harness != "claude"
+                    else usage.limited({**record, "report": report}, home))
             if hits:
                 # the account's limit, not the agent: not one of its attempts
                 self.data.setdefault("limited_runs", []).append(record)
@@ -319,15 +348,26 @@ class Version:
             attempts.append(record)
             self.data.pop("agent_current", None)
             self.save()
+            if self.harness == "opencode":
+                cost = (f"tokens {record['result'].get('tokens')}, OpenCode's catalogue"
+                        f" cost $ {record['result'].get('cost_catalog_usd')}, OpenRouter"
+                        f" key usage +$ {record['result'].get('key_usage_delta_usd')}"
+                        " (every run on the key in that time)")
+                for warning in record["result"].get("warnings") or []:
+                    self.log(f"WARNING: {warning}")
+                if record.get("error"):
+                    self.log(f"agent run {run_id} failed: {record['error']}")
+            else:
+                cost = (f"API-equivalent cost $ {record['result'].get('total_cost_usd')}"
+                        " (plan, not billed)")
             self.log(
                 f"agent run {run_id}: {record['status']}, models {record['models']},"
-                f" API-equivalent cost $ {record['result'].get('total_cost_usd')} (plan, not billed),"
-                f" rule {'written' if rule_written else 'missing'}"
+                f" {cost}, rule {'written' if rule_written else 'missing'}"
             )
             if ok:
                 (self.wt_root / f"{self.stem}.report.md").write_text(report + "\n")
                 return
-        raise Failed(f"the agent failed {AGENT_ATTEMPTS} times: {attempts[-1]}")
+        raise Failed(f"the agent failed {limit} times: {attempts[-1]}")
 
     def keep_transcripts(self, run_id):
         """Copy an agent run's session transcripts next to the state file.
@@ -336,18 +376,22 @@ class Version:
         the agent ran. Returns the number of files copied (0, with a log line,
         when the run home is not mounted here).
         """
-        home = Path(agent_runner.SPAWNER_STATE) / "runs" / run_id / "home"
-        source = home / ".claude" / "projects"
+        source, paths = agent_runner.transcripts(run_id, self.harness)
         target = self.wt_root / f"{self.stem}.transcripts" / run_id
-        count = 0
+        count, copied = 0, []
         try:
-            for path in sorted(source.rglob("*.jsonl")):
-                dest = target / path.relative_to(source)
+            for path in paths:
+                dest = target / os.path.relpath(path, source)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, dest)
+                copied.append(dest)
                 count += 1
         except OSError as e:
             self.log(f"transcripts of {run_id} not copied: {e}")
+        # the key, should the runner not have redacted it (killed, say)
+        _, hits = agent_runner.scrub(run_id, self.harness, copied, log=self.log)
+        if hits:
+            self.log(f"the key was in {len(hits)} transcript file(s) of {run_id}: redacted")
         if not count:
             self.log(f"no transcripts of {run_id} under {source}")
         return count

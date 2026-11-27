@@ -71,3 +71,14 @@ def test_no_claude_settings(wt, monkeypatch):
     """The container is the sandbox: no permissions, sandbox or hooks."""
     write(wt, monkeypatch)
     assert sorted(p.name for p in (wt / ".claude").iterdir()) == ["policy_finder.json"]
+
+
+def test_harness_opencode_is_kept_by_later_versions(wt, monkeypatch):
+    first = write(wt, monkeypatch, "--harness", "opencode", "--model", "qwen/qwen3-coder-next",
+                  "--providers", "parasail/bf16")
+    assert (first["harness"], first["model"], first["providers"]) == (
+        "opencode", "qwen/qwen3-coder-next", ["parasail/bf16"])
+    second = write(wt, monkeypatch, "--version", "2")
+    assert second["harness"] == "opencode" and second["providers"] == ["parasail/bf16"]
+    with pytest.raises(SystemExit):
+        write(wt, monkeypatch, "--harness", "opencode")  # no model

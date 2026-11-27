@@ -1,0 +1,359 @@
+{
+  "info": {
+    "id": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+    "slug": "stellar-planet",
+    "projectID": "global",
+    "directory": "/w/proj",
+    "path": "w/proj",
+    "title": "t",
+    "agent": "policy-finder",
+    "model": {
+      "id": "fake",
+      "providerID": "local",
+      "variant": "default"
+    },
+    "version": "1.19.6",
+    "summary": {
+      "additions": 0,
+      "deletions": 0,
+      "files": 0
+    },
+    "cost": 0,
+    "tokens": {
+      "input": 4100,
+      "output": 70,
+      "reasoning": 0,
+      "cache": {
+        "read": 0,
+        "write": 0
+      }
+    },
+    "permission": [
+      {
+        "permission": "question",
+        "pattern": "*",
+        "action": "deny"
+      },
+      {
+        "permission": "plan_enter",
+        "pattern": "*",
+        "action": "deny"
+      },
+      {
+        "permission": "plan_exit",
+        "pattern": "*",
+        "action": "deny"
+      }
+    ],
+    "time": {
+      "created": 1795809986855,
+      "updated": 1795809988185
+    }
+  },
+  "messages": [
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1795809986875
+        },
+        "agent": "policy-finder",
+        "model": {
+          "providerID": "local",
+          "modelID": "fake"
+        },
+        "id": "msg_21e9dc93b001HsK62YJuuj2J7r",
+        "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "text": "go",
+          "id": "prt_21e9dc93f0011O8Z8ozg6rG4cX",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dc93b001HsK62YJuuj2J7r"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_21e9dc93b001HsK62YJuuj2J7r",
+        "role": "assistant",
+        "mode": "policy-finder",
+        "agent": "policy-finder",
+        "path": {
+          "cwd": "/w/proj",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 3950,
+          "input": 3900,
+          "output": 50,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 0
+          }
+        },
+        "modelID": "fake",
+        "providerID": "local",
+        "time": {
+          "created": 1795809987555,
+          "completed": 1795809988116
+        },
+        "finish": "tool-calls",
+        "id": "msg_21e9dcbe300137kGRO5M9Pxbd7",
+        "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "id": "prt_21e9dccf5001DAqR19PROkSLbE",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dcbe300137kGRO5M9Pxbd7"
+        },
+        {
+          "type": "tool",
+          "tool": "bash",
+          "callID": "call_1",
+          "state": {
+            "status": "completed",
+            "input": {
+              "command": "echo hi",
+              "description": "say hi"
+            },
+            "output": "hi\n",
+            "metadata": {
+              "output": "hi\n",
+              "exit": 0,
+              "truncated": false
+            },
+            "title": "echo hi",
+            "time": {
+              "start": 1795809987837,
+              "end": 1795809988108
+            }
+          },
+          "id": "prt_21e9dccf7001dwoLFtSU2lmvY2",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dcbe300137kGRO5M9Pxbd7"
+        },
+        {
+          "reason": "tool-calls",
+          "type": "step-finish",
+          "tokens": {
+            "total": 3950,
+            "input": 3900,
+            "output": 50,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 0
+            }
+          },
+          "cost": 0,
+          "id": "prt_21e9dce10001Fecx08DoYRbS1j",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dcbe300137kGRO5M9Pxbd7"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "user",
+        "model": {
+          "providerID": "local",
+          "modelID": "fake"
+        },
+        "agent": "policy-finder",
+        "time": {
+          "created": 1795809988117
+        },
+        "id": "msg_21e9dce15001COYIlCR5ElB1Qk",
+        "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR"
+      },
+      "parts": [
+        {
+          "type": "compaction",
+          "auto": true,
+          "overflow": false,
+          "id": "prt_21e9dce160019SSTJFfeII61Cq",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dce15001COYIlCR5ElB1Qk"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "assistant",
+        "parentID": "msg_21e9dce15001COYIlCR5ElB1Qk",
+        "mode": "compaction",
+        "agent": "compaction",
+        "summary": true,
+        "path": {
+          "cwd": "/w/proj",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 110,
+          "input": 100,
+          "output": 10,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 0
+          }
+        },
+        "modelID": "fake",
+        "providerID": "local",
+        "time": {
+          "created": 1795809988123,
+          "completed": 1795809988138
+        },
+        "finish": "stop",
+        "id": "msg_21e9dce1b0015fI2KRcKSEzbqs",
+        "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "id": "prt_21e9dce22001HpGcP6tmgQgnSP",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dce1b0015fI2KRcKSEzbqs"
+        },
+        {
+          "type": "text",
+          "text": "SUMMARY OF THE SESSION",
+          "time": {
+            "start": 1795809988131,
+            "end": 1795809988133
+          },
+          "id": "prt_21e9dce23001VDN45OwIZmJLdy",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dce1b0015fI2KRcKSEzbqs"
+        },
+        {
+          "reason": "stop",
+          "type": "step-finish",
+          "tokens": {
+            "total": 110,
+            "input": 100,
+            "output": 10,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 0
+            }
+          },
+          "cost": 0,
+          "id": "prt_21e9dce27001yKNJuf9ydp50qo",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dce1b0015fI2KRcKSEzbqs"
+        }
+      ]
+    },
+    {
+      "info": {
+        "role": "user",
+        "time": {
+          "created": 1795809988139
+        },
+        "agent": "policy-finder",
+        "model": {
+          "providerID": "local",
+          "modelID": "fake"
+        },
+        "id": "msg_21e9dce2b001a73uYJMLDZACgK",
+        "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR"
+      },
+      "parts": [
+        {
+          "type": "text",
+          "metadata": {
+            "compaction_continue": true
+          },
+          "synthetic": true,
+          "text": "Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.",
+          "time": {
+            "start": 1795809988140,
+            "end": 1795809988140
+          },
+          "id": "prt_21e9dce2c001nmnFX1GuD66NxR",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dce2b001a73uYJMLDZACgK"
+        }
+      ]
+    },
+    {
+      "info": {
+        "parentID": "msg_21e9dce2b001a73uYJMLDZACgK",
+        "role": "assistant",
+        "mode": "policy-finder",
+        "agent": "policy-finder",
+        "path": {
+          "cwd": "/w/proj",
+          "root": "/"
+        },
+        "cost": 0,
+        "tokens": {
+          "total": 110,
+          "input": 100,
+          "output": 10,
+          "reasoning": 0,
+          "cache": {
+            "write": 0,
+            "read": 0
+          }
+        },
+        "modelID": "fake",
+        "providerID": "local",
+        "time": {
+          "created": 1795809988142,
+          "completed": 1795809988169
+        },
+        "finish": "stop",
+        "id": "msg_21e9dce2e00157imsd3IVjzVWB",
+        "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR"
+      },
+      "parts": [
+        {
+          "type": "step-start",
+          "id": "prt_21e9dce3f0015BTfYSW77gqtvT",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dce2e00157imsd3IVjzVWB"
+        },
+        {
+          "type": "text",
+          "text": "FINAL REPORT",
+          "time": {
+            "start": 1795809988161,
+            "end": 1795809988163
+          },
+          "id": "prt_21e9dce41001ZDki2BdEINFub3",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dce2e00157imsd3IVjzVWB"
+        },
+        {
+          "reason": "stop",
+          "type": "step-finish",
+          "tokens": {
+            "total": 110,
+            "input": 100,
+            "output": 10,
+            "reasoning": 0,
+            "cache": {
+              "write": 0,
+              "read": 0
+            }
+          },
+          "cost": 0,
+          "id": "prt_21e9dce45001z5k4di4BXrBuxx",
+          "sessionID": "ses_de16236d8ffeDnSXSKdfqgYkQR",
+          "messageID": "msg_21e9dce2e00157imsd3IVjzVWB"
+        }
+      ]
+    }
+  ]
+}

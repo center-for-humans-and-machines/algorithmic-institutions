@@ -4,7 +4,8 @@
 # Usage:
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
 #       [--sobol-points N] [--prompt TEXT] [--setting exp2|exp1|exp2_multi|exp2_diff]
-#       [--mode free|single_idea]
+#       [--mode free|single_idea] [--harness claude|opencode --model ID
+#       [--providers A,B]]
 #   scripts/policy_finder/new_instance.sh --iterate-on <name> [--after-failure]
 #       [the same options]
 #
@@ -32,6 +33,10 @@
 # version one changed idea of the instance's best earlier version, with the
 # agent of .claude/agents/policy-finder-single-idea.md; an instance keeps its
 # mode across versions.
+# --harness opencode runs the agent with OpenCode on the OpenRouter model
+# --model (an OpenRouter id such as qwen/qwen3-coder-next), routed to
+# --providers in that order if given (agent_runner.py); a later version keeps
+# them unless they are given again.
 #
 # --iterate-on <name> starts the next version of an existing instance on its
 # own branch and worktree instead: the worktree must be clean and its current
@@ -48,7 +53,8 @@
 #
 # The agent's container is its only sandbox: it sees its copy of the instance
 # (read-only but for the version's rule, notes and scripts folder) and has no
-# network but the Anthropic API. PF_RUNS must be the folder whose exports/ is
+# network but the Anthropic API (OpenRouter with --harness opencode). PF_RUNS
+# must be the folder whose exports/ is
 # the container spawner's pf_exports root.
 
 set -euo pipefail
@@ -70,6 +76,7 @@ ITERATE=0
 PARAMS_GIVEN=0
 SOBOL_GIVEN=0
 AFTER_FAILURE=0
+HARNESS_ARGS=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --iterate-on) [[ -z "$NAME" ]] || usage; ITERATE=1; NAME="${2:-}"; shift 2 ;;
@@ -80,6 +87,7 @@ while [[ $# -gt 0 ]]; do
         --setting) SETTING="${2:-}"; SETTING_GIVEN=1; shift 2 ;;
         --mode) MODE="${2:-}"; shift 2 ;;
         --after-failure) AFTER_FAILURE=1; shift ;;
+        --harness|--model|--providers) HARNESS_ARGS+=("$1" "${2:-}"); shift 2 ;;
         -h|--help) usage ;;
         -*) echo "unknown option: $1" >&2; usage ;;
         *) [[ -z "$NAME" ]] || usage; NAME="$1"; shift ;;
@@ -192,7 +200,7 @@ grep -v '^#' "$MAIN/scripts/policy_finder/instance_paths" \
     --version "$VERSION" --start-commit "$(git -C "$WT" rev-parse HEAD)" \
     --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
     --sobol-points "$SOBOL_POINTS" --python "$PYTHON" --setting "$SETTING" \
-    --mode "$MODE"
+    --mode "$MODE" ${HARNESS_ARGS[@]+"${HARNESS_ARGS[@]}"}
 STEM="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["rule_name"])' \
     "$WT/.claude/policy_finder.json")"
 

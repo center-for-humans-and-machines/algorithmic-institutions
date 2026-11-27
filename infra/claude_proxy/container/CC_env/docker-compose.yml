@@ -20,6 +20,11 @@ x-claude-environment: &claude-environment
   PATH: "/home/claude/.local/bin:/opt/claude_tools/CC_command_server/scripts:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
   RAVEN_USER: "${RAVEN_USER:?set RAVEN_USER in infra/claude_proxy/container/CC_env/.env (copy .env.example there)}"
   PF_RUNS: "${PF_RUNS:-${HOME}/pf_runs}"
+  # harness opencode (agent_runner.py): the OpenRouter key's total usage in
+  # USD at which agents no longer start, and 1 to refuse a key without a
+  # credit limit at OpenRouter (unattended use needs a dedicated, limited key)
+  PF_OPENROUTER_MAX_USAGE: "${PF_OPENROUTER_MAX_USAGE:-}"
+  PF_OPENROUTER_REQUIRE_LIMIT: "${PF_OPENROUTER_REQUIRE_LIMIT:-}"
 
 x-claude-env-file: &claude-env-file
   - path: "${SECRETS_DIR:-${HOME}/secrets}/.cc_env"
@@ -201,6 +206,65 @@ services:
         target: /app/container_spawner
         read_only: true
       # The project allowlist lives in this repo, not in the spawner repo.
+      - <<: *require-host-path
+        source: ../spawner_config
+        target: /config
+        read_only: true
+      - <<: *require-host-path
+        source: ${CLAUDE_TOOLS:-${HOME}/claude_tools}/container_spawner/proxy
+        target: /opt/spawner-proxy
+        read_only: true
+      - <<: *require-host-path
+        source: ../..
+        target: /opt/algoinst-build
+        read_only: true
+      - <<: *require-host-path
+        source: ${PF_RUNS:-${HOME}/pf_runs}
+        target: ${PF_RUNS:-${HOME}/pf_runs}
+        read_only: true
+    networks:
+      - cc_connection
+
+  # The same spawner for the OpenCode agents (agent_runner.py, harness
+  # opencode): project algoinst_oc (spawner_config/algoinst_oc.yml), whose
+  # token is the OpenRouter key and whose only egress is openrouter.ai.
+  # Callers reach it at http://container_spawner_oc:8877. Its state is a
+  # subfolder of the first spawner's, so the proxy container sees its run
+  # homes at /var/spawner/oc. Only with `--profile opencode`; needs
+  # ${SECRETS_DIR}/openrouter_token, the folder
+  # ${CC_STATE_DIR}/container_spawner/oc and the image algoinst_claude:opencode
+  # (Dockerfile.opencode).
+  container_spawner_oc:
+    image: container-spawner
+    profiles:
+      - opencode
+    environment:
+      CC_PROJECT: algoinst_oc
+      SPAWNER_HOST: "0.0.0.0"
+      SPAWNER_PORT: "8877"
+      SPAWNER_CONFIG_DIR: /config
+      SPAWNER_STATE_DIR: /var/spawner
+      SPAWNER_STATE_HOST_DIR: ${CC_STATE_DIR:-${HOME}/tmp}/container_spawner/oc
+      SPAWNER_ROOT_PF_EXPORTS: ${PF_RUNS:-${HOME}/pf_runs}/exports
+      CLAUDE_TOKEN_FILE: /run/secrets/openrouter_token
+      SPAWNER_PROXY_CONTEXT: /opt/spawner-proxy
+      SPAWNER_PROXY_IMAGE: container-spawner-proxy:latest
+      ALGOINST_BUILD_CONTEXT: /opt/algoinst-build
+    volumes:
+      - <<: *require-host-path
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+      - <<: *require-host-path
+        source: ${SECRETS_DIR:-${HOME}/secrets}/openrouter_token
+        target: /run/secrets/openrouter_token
+        read_only: true
+      - <<: *require-host-path
+        source: ${CC_STATE_DIR:-${HOME}/tmp}/container_spawner/oc
+        target: /var/spawner
+      - <<: *require-host-path
+        source: ${CLAUDE_TOOLS:-${HOME}/claude_tools}/container_spawner/container_spawner
+        target: /app/container_spawner
+        read_only: true
       - <<: *require-host-path
         source: ../spawner_config
         target: /config

@@ -179,3 +179,55 @@ def test_a_version_run_ahead_is_adopted(tmp_path, monkeypatch):
     campaign.run()
     rows = {r["stem"] for r in campaign.rows()}
     assert "pf-20990101-3-v2" not in rows  # never selected: an extra, outside the campaign
+
+
+def test_harness_opencode_reaches_new_instance(tmp_path, monkeypatch):
+    campaign, fake = make(tmp_path, monkeypatch, harness="opencode",
+                          model="qwen/qwen3-coder-next", providers=["parasail/bf16"])
+    command = [str(a) for a in campaign.start_command("pf-20990101-1", 1)]
+    i = command.index("--harness")
+    assert command[i:i + 6] == ["--harness", "opencode", "--model", "qwen/qwen3-coder-next",
+                                "--providers", "parasail/bf16"]
+    # the default campaign passes no harness
+    plain, _ = make(tmp_path / "plain", monkeypatch)
+    assert "--harness" not in [str(a) for a in plain.start_command("pf-20990101-1", 1)]
+
+
+
+@pytest.mark.parametrize("settings, match", [
+    ({"harness": "opencode"}, "needs model"),
+    ({"harness": "opencode", "model": "q/c", "providers": "parasail/bf16"}, "list"),
+    ({"harness": "claude", "model": "q/c"}, "for harness opencode"),
+    ({"harness": "codex"}, "claude or opencode"),
+    ({"harness": "opencode", "model": "q/c", "openrouter_max_usage": "21"}, "number"),
+])
+def test_harness_settings_are_validated(tmp_path, monkeypatch, settings, match):
+    with pytest.raises(cm.CampaignError, match=match):
+        make(tmp_path, monkeypatch, **settings)
+
+
+def test_a_budget_stop_ends_the_campaign(tmp_path, monkeypatch):
+    campaign, fake = make(tmp_path, monkeypatch,
+                          outcomes={"pf-20990101-1": [("stopped",)]},
+                          harness="opencode", model="q/c", openrouter_max_usage=21.3)
+    assert campaign.env()["PF_OPENROUTER_MAX_USAGE"] == "21.3"
+    with pytest.raises(cm.CampaignError, match="stopped"):
+        campaign.run_version("pf-20990101-1", 1)
+    # the next `campaign run` resumes it (here: the budget was raised)
+    fake.outcomes["pf-20990101-1"] = [("scored", 61.0)]
+    assert campaign.run_version("pf-20990101-1", 1) == "scored"
+    assert fake.commands[-1][1].endswith("pipeline.py")
+
+
+def test_an_opencode_summary_shows_tokens_and_catalogue_cost(tmp_path, monkeypatch):
+    campaign, fake = make(tmp_path, monkeypatch, harness="opencode", model="q/c")
+    campaign.state["generations"] = [{"index": 1, "members": [
+        {"name": "pf-20990101-1", "version": 1}]}]
+    fake(["new_instance.sh", "pf-20990101-1"], None)
+    state_path = campaign.wt_root / "pf-20990101-1.state.json"
+    state = json.loads(state_path.read_text())
+    state["data"]["agent_runs"] = [{"result": {"cost_catalog_usd": 0.15, "tokens": {
+        "input": 290000, "cache_read": 1500000, "output": 13000}}}]
+    state_path.write_text(json.dumps(state))
+    text = campaign.write_summary()
+    assert "OpenCode catalogue $" in text and "0.15, 290 / 1500 / 13" in text
