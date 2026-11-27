@@ -179,3 +179,15 @@ def test_a_version_run_ahead_is_adopted(tmp_path, monkeypatch):
     campaign.run()
     rows = {r["stem"] for r in campaign.rows()}
     assert "pf-20990101-3-v2" not in rows  # never selected: an extra, outside the campaign
+
+
+def test_harness_opencode_reaches_new_instance(tmp_path, monkeypatch):
+    campaign, fake = make(tmp_path, monkeypatch, harness="opencode",
+                          model="qwen/qwen3-coder-next", providers=["parasail/bf16"])
+    command = [str(a) for a in campaign.start_command("pf-20990101-1", 1)]
+    i = command.index("--harness")
+    assert command[i:i + 6] == ["--harness", "opencode", "--model", "qwen/qwen3-coder-next",
+                                "--providers", "parasail/bf16"]
+    # the default campaign passes no harness
+    plain, _ = make(tmp_path / "plain", monkeypatch)
+    assert "--harness" not in [str(a) for a in plain.start_command("pf-20990101-1", 1)]

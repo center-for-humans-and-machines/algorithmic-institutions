@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -283,3 +284,39 @@ def test_other_exports_hold_no_test_data(layout):
     wt, main, exports = layout
     export = Path(ex.build(wt, main, exports))
     assert not (export / "test_data").exists()
+
+
+AGENT = Path(__file__).resolve().parents[2] / ".claude/agents/policy-finder-single-idea.md"
+
+
+def test_opencode_agent_keeps_the_text():
+    text = AGENT.read_text()
+    port = ex.opencode_agent(text)
+    head, _, body = port.partition("\n---\n")
+    assert head.startswith("---\ndescription: ") and "\nmode: primary" in head
+    assert "policy-finder-host" not in head and "model:" not in head
+    # only the tool's name changes in the body
+    original = text.partition("\n---\n")[2]
+    assert body != original
+    assert body == re.sub(r"the(\s+)Edit(\s+)tool", r"the\1edit\2tool", original)
+
+
+def test_an_opencode_export(layout):
+    wt, main, exports = layout
+    _write(wt, ".claude/policy_finder.json", json.dumps({
+        "name": NAME, "version": 2, "rule_name": f"{NAME}-v2",
+        "harness": "opencode", "model": "qwen/qwen3-coder-next",
+        "providers": ["parasail/bf16"]}))
+    _write(wt, ".claude/agents/policy-finder.md", AGENT.read_text())
+    _write(wt, "src/aimanager/AGENTS.md", "repo rules\n")
+    export = Path(ex.build(wt, main, exports))
+    files = _files(export)
+    assert ".opencode/agents/policy-finder.md" in files
+    assert "src/aimanager/AGENTS.md" not in files
+    assert (export / ".opencode/.gitignore").read_text() == ex.OPENCODE_GITIGNORE
+    config = json.loads((export / ".opencode/opencode.json").read_text())
+    assert config["model"] == "openrouter/qwen/qwen3-coder-next"
+    router = config["provider"]["openrouter"]
+    assert router["options"] == {"apiKey": "{env:OPENROUTER_API_KEY}"}
+    assert router["models"]["qwen/qwen3-coder-next"]["options"]["provider"] == {
+        "order": ["parasail/bf16"], "allow_fallbacks": False}
