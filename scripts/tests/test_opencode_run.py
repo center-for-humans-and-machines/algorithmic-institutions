@@ -54,10 +54,28 @@ GOOD = {"result": "the report", "models": ["openrouter/q/c"], "agent": "policy-f
         "final_error": None}
 
 
-def test_the_report_is_the_final_message():
-    session = {"messages": [_assistant("Let me look at the data.", 10, 0, tools=1),
-                            _assistant("", 10, 0, tools=1)]}
+def test_the_report_is_the_final_turns_last_text():
+    user = {"info": {"role": "user"}, "parts": [{"type": "text", "text": "Design."}]}
+    # the report, then a todowrite call, then an empty final message: a success
+    session = {"messages": [user, _assistant("thinking aloud", 10, 0, tools=2),
+                            _assistant("the report", 10, 0, tools=1),
+                            _assistant("", 10, 0)]}
+    s = oc.summarize(session)
+    assert s["result"] == "the report"
+    assert oc.failures({**s, "agent": "policy-finder"}, 0, "", "openrouter/q/c", None) == []
+    # text of an earlier turn is not this turn's report
+    session = {"messages": [_assistant("old report", 10, 0), user, _assistant("", 10, 0)]}
     assert oc.summarize(session)["result"] == ""
+
+
+def test_interim_text_then_an_error_fails():
+    failed = _assistant("", 10, 0)
+    failed["info"]["error"] = {"name": "APIError", "data": {"message": "429"}}
+    session = {"messages": [_assistant("Let me look at the data.", 10, 0, tools=1), failed]}
+    s = {**oc.summarize(session), "agent": "policy-finder"}
+    assert s["result"] == "Let me look at the data."
+    why = oc.failures(s, 0, "", "openrouter/q/c", None)
+    assert len(why) == 1 and "ended in an error" in why[0]
 
 
 @pytest.mark.parametrize("change, code, stderr, event, reason", [
@@ -67,7 +85,7 @@ def test_the_report_is_the_final_message():
     ({"agent": "build"}, 0, "", None, "ran agent build"),
     ({"final_error": {"name": "APIError"}}, 0, "", None, "ended in an error"),
     ({}, 0, "", '{"name": "APIError"}', "reported an error"),
-    ({"result": "  "}, 0, "", None, "no text"),
+    ({"result": "  "}, 0, "", None, "no assistant text"),
     ({"models": ["openrouter/other/m"]}, 0, "", None, "not openrouter/q/c"),
 ])
 def test_failures(change, code, stderr, event, reason):
@@ -168,8 +186,8 @@ def test_main_success_redacts_everything(fake, capsys):
 
 @pytest.mark.parametrize("mode, reason", [
     ("exit1", "exited with 1"),
-    ("noexport", "no text"),
-    ("badexport", "no text"),
+    ("noexport", "no assistant text"),
+    ("badexport", "no assistant text"),
 ])
 def test_main_failures_exit_non_zero(fake, capsys, mode, reason):
     run, out, repo, data = fake
