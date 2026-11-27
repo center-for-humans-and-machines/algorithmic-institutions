@@ -243,8 +243,9 @@ class Campaign:
         while True:
             state = self.version_state(name, version) or {}
             status = state.get("status")
-            if status == "stopped":
-                # the agent's budget (agent_runner.BudgetError): not this version's
+            if status == "stopped" and ran:
+                # the agent's budget (agent_runner.BudgetError) in this run: not
+                # the version's; a later `campaign run` resumes it
                 raise CampaignError(f"{stem}: stopped: {state.get('error', '')[-800:]}")
             if status in ("scored", "failed"):
                 self.log(f"{stem}: {status}" + (
@@ -267,7 +268,7 @@ class Campaign:
                     retries += 1
                     self.log(f"{stem}: error, resuming "
                              f"({retries}/{self.settings['error_retries']})")
-            elif state and status == "running":
+            elif state and status in ("running", "stopped"):
                 self.log(f"{stem}: resuming")
             else:
                 self.log(f"{stem}: starting")

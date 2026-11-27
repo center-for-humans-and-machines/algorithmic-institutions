@@ -211,3 +211,192 @@ def test_main_cap_with_unknown_usage_does_not_start(fake, capsys):
     s = _summary(capsys)
     assert s["budget_exhausted"] and "unknown" in s["error"]
     assert not (out / "events.jsonl").exists()
+
+
+
+class _Answer:
+    def __init__(self, data):
+        self.data = data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return json.dumps({"data": self.data}).encode()
+
+
+def _endpoint(monkeypatch, *answers):
+    """OpenRouter's key endpoint: each call takes the next answer (an
+    exception is raised)."""
+    queue = list(answers)
+    calls = []
+
+    def urlopen(req, timeout=None):
+        calls.append(req.full_url)
+        answer = queue.pop(0) if len(queue) > 1 else queue[0]
+        if isinstance(answer, Exception):
+            raise answer
+        return _Answer(answer)
+    monkeypatch.setattr(oc.urllib.request, "urlopen", urlopen)
+    return calls
+
+
+URL = ["--usage-url", "https://openrouter.ai/api/v1/key"]
+
+
+def test_a_key_at_its_credit_limit_does_not_start(fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    _endpoint(monkeypatch, {"usage": 5.0, "limit": 5, "limit_remaining": 0})
+    assert run("ok", *URL) == 3
+    s = _summary(capsys)
+    assert s["budget_exhausted"] and "credit limit" in s["error"]
+
+
+def test_require_key_limit_refuses_a_non_numeric_limit(fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    _endpoint(monkeypatch, {"usage": 1.0, "limit": "abc", "limit_remaining": None})
+    assert run("ok", *URL, "--require-key-limit") == 3
+    assert "numeric credit limit" in _summary(capsys)["error"]
+
+
+def test_a_network_blip_is_retried_and_an_unknown_limit_warns(fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    calls = _endpoint(monkeypatch, OSError("blip"),
+                      {"usage": 1.0, "limit": None, "limit_remaining": None})
+    assert run("ok", *URL, "--max-usage", "5") == 0
+    assert len(calls) >= 2
+    s = _summary(capsys)
+    assert "no credit limit" in s["warnings"][0]
+    _endpoint(monkeypatch, OSError("down"))
+    assert oc.key_info(URL[1], wait=0) is None
+
+
+def test_a_read_only_file_is_made_writable_and_redacted(fake, capsys):
+    run, out, repo, data = fake
+    locked = repo / "notes/locked.md"
+    locked.write_text(f"key {KEY}\n")
+    locked.chmod(0o444)
+    assert run("ok") == 0
+    s = _summary(capsys)
+    assert "redaction_errors" not in s and KEY not in locked.read_text()
+    assert not list(data.rglob("*.db"))
+
+
+def test_a_file_that_keeps_the_key_fails_the_run(fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    locked = repo / "notes/locked.md"
+    locked.write_text(f"key {KEY}\n")
+    locked.chmod(0o444)
+
+    def no_chmod(path, mode):
+        raise PermissionError(1, "Operation not permitted")
+    monkeypatch.setattr(oc.os, "chmod", no_chmod)
+    try:
+        assert run("ok") != 0
+    finally:
+        locked.chmod(0o644)
+    s = _summary(capsys)
+    assert s["is_error"] and any("could not be redacted" in f for f in s["failures"])
+    assert KEY not in (repo / "notes/n.md").read_text()  # the walk went on
+    assert not list(data.rglob("*.db"))
+
+
+def test_a_local_server_key_is_redacted_and_openrouter_never_called(
+        fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    monkeypatch.setattr(oc.urllib.request, "urlopen",
+                        lambda *a, **k: pytest.fail("called the network"))
+    monkeypatch.setenv("PF_LLM_API_KEY", KEY)
+    monkeypatch.delenv("OPENROUTER_API_KEY")
+    (repo / ".opencode/opencode.json").write_text('{"model": "openrouter/q/c"}')
+    assert run("ok", "--key-env", "PF_LLM_API_KEY", "--max-usage", "5") == 0
+    _summary(capsys)
+    for path in [*out.rglob("*"), *repo.rglob("*.md")]:
+        if path.is_file():
+            assert KEY not in path.read_text(errors="replace")
+
+
+
+# -- the stray kill: an explicit opt-in, plus the guard --------------------------
+
+@pytest.fixture
+def proc(tmp_path):
+    root = tmp_path / "proc"
+    for pid in ("1", "7", "8"):
+        (root / pid).mkdir(parents=True)
+    (root / "1/cmdline").write_bytes(b"/sbin/docker-init\0--\0python3\0")
+    (root / "self").mkdir()
+    return root
+
+
+def test_own_pid_namespace(proc):
+    assert oc.own_pid_namespace(str(proc), ppid=1)
+    assert not oc.own_pid_namespace(str(proc), ppid=5)
+    (proc / "1/cmdline").write_bytes(b"appinit\0")  # Apptainer's init
+    assert not oc.own_pid_namespace(str(proc), ppid=1)
+
+
+def test_kill_strays_needs_the_flag(proc):
+    def kill(pid, sig):
+        pytest.fail("killed without --kill-strays")
+    assert oc.kill_strays(False, str(proc), kill=kill, ppid=1) == {
+        "enabled": False, "guard_matched": False, "killed": 0}
+
+
+def test_kill_strays_with_the_flag_and_the_guard(proc):
+    killed = []
+
+    def kill(pid, sig):
+        killed.append(pid)
+        import shutil
+        shutil.rmtree(proc / str(pid))
+    out = oc.kill_strays(True, str(proc), kill=kill, ppid=1, wait=0.5)
+    assert out == {"enabled": True, "guard_matched": True, "killed": 2}
+    assert sorted(killed) == [7, 8]
+    (proc / "1/cmdline").write_bytes(b"appinit\0")
+    assert oc.kill_strays(True, str(proc), kill=kill, ppid=1)["guard_matched"] is False
+
+
+# -- compaction (OpenCode 1.19.6, a real export: tests/fixtures) ---------------
+
+COMPACTED = Path(__file__).resolve().parent / "fixtures/opencode_compacted_session.json"
+
+
+def test_a_compacted_session_reports_its_final_text():
+    s = oc.summarize(json.loads(COMPACTED.read_text()))
+    assert (s["result"], s["compactions"], s["ended_on"]) == ("FINAL REPORT", 1, "text")
+
+
+def test_the_compaction_summary_is_never_the_report():
+    session = json.loads(COMPACTED.read_text())
+    session["messages"] = session["messages"][:-2]  # ends on the summary
+    s = oc.summarize(session)
+    assert s["result"] == "" and s["ended_on"] == "tool_call"
+
+
+def test_a_report_before_a_compaction_is_kept():
+    session = json.loads(COMPACTED.read_text())
+    first = session["messages"][1]
+    first["parts"].insert(1, {"type": "text", "text": "EARLY REPORT"})
+    session["messages"] = session["messages"][:-1]  # nothing after the continue
+    assert oc.summarize(session)["result"] == "EARLY REPORT"
+
+
+def test_a_replayed_prompt_does_not_start_a_turn():
+    session = json.loads(COMPACTED.read_text())
+    replay = json.loads(json.dumps(session["messages"][0]))  # the prompt, copied
+    session["messages"].insert(4, replay)
+    session["messages"][-1]["parts"] = [p for p in session["messages"][-1]["parts"]
+                                       if p["type"] != "text"]
+    session["messages"][1]["parts"].insert(1, {"type": "text", "text": "EARLY REPORT"})
+    assert oc.summarize(session)["result"] == "EARLY REPORT"
+
+
+def test_ended_on_marks_an_interim_text():
+    session = {"messages": [_assistant("Let me look at the data.", 10, 0, tools=1),
+                            _assistant("", 10, 0)]}
+    s = oc.summarize(session)
+    assert s["ended_on"] == "empty_after_tool_call" and s["report_chars"] == 24

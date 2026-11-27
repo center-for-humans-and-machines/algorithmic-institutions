@@ -110,6 +110,9 @@ def test_opencode_start_and_finish(spawner, tmp_path, monkeypatch):
     assert command[command.index("--max-usage") + 1] == "21.3"
     # OpenCode's own timeout, below the container's (opencode_run.py redacts after it)
     assert float(command[command.index("--timeout") + 1]) < ar.TIMEOUT
+    # the stray kill: the spawner's start path only, never in what others reuse
+    assert "--kill-strays" in command
+    assert "--kill-strays" not in ar.command("P", "opencode") + ar.runner_options()
     spawner["stdout"] = json.dumps(SUMMARY) + "\n"
     record = ar.finish("abc", log=lambda m: None, harness="opencode")
     assert record["report"] == "my report" and record["models"] == ["openrouter/q/c"]
@@ -162,3 +165,17 @@ def test_scrub_finds_the_key_by_its_hash(spawner, tmp_path):
     assert key not in copy.read_text() and "[redacted]" in copy.read_text()
     assert key not in (home / "opencode/events.jsonl").read_text()
     assert not (data / "opencode.db").exists()
+
+
+def test_the_runners_reasons_reach_the_error(spawner):
+    spawner["final"] = "failed"
+    spawner["stdout"] = json.dumps({**SUMMARY, "is_error": True,
+                                    "failures": ["no assistant text in the final turn"]})
+    record = ar.finish("abc", log=lambda m: None, harness="opencode")
+    assert "no assistant text" in record["error"]
+
+
+def test_scrub_without_a_hash_says_so(spawner):
+    lines = []
+    ar.scrub("abc", "opencode", [], log=lines.append)
+    assert "not scanned" in lines[0]

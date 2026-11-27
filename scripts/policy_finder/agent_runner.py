@@ -207,8 +207,8 @@ def _key_matcher(home):
         found = set()
         for match in token.finditer(text):
             run = match.group(0)
-            if len(run) > 4096:
-                continue
+            # every window, also of a long run (a base64 blob): about a
+            # microsecond per character
             for i in range(len(run) - length + 1):
                 piece = run[i:i + length]
                 if hashlib.sha256((salt + piece).encode()).hexdigest() == digest:
@@ -217,7 +217,7 @@ def _key_matcher(home):
     return find
 
 
-def scrub(run_id, harness, paths=(), texts=()):
+def scrub(run_id, harness, paths=(), texts=(), log=None):
     """Redact the key (found by the runner's salted hash) in `paths`, in the
     run's own opencode/ folder, and in `texts` (returned redacted); delete
     OpenCode's database and logs in the run's home. For a run whose runner
@@ -235,6 +235,9 @@ def scrub(run_id, harness, paths=(), texts=()):
             except OSError:
                 pass
     if find is None:
+        if harness == "opencode" and log:
+            log(f"no key hash in the run home of {run_id}: its transcripts were not "
+                "scanned for the key (the runner did not start?)")
         return list(texts), hits
     own = transcripts(run_id, harness)[1] if harness == "opencode" else []
     for path in [*paths, *own]:
@@ -315,8 +318,11 @@ def start(stem, write_dirs, prompt, harness="claude"):
     """
     body = {
         "profile": PROFILE,
+        # --kill-strays here only: in the spawner's container every other
+        # process is the agent's (not in command() or runner_options(), which
+        # other backends reuse)
         "command": command(prompt, harness, stem, write_dirs) + (
-            runner_options() if harness == "opencode" else []),
+            [*runner_options(), "--kill-strays"] if harness == "opencode" else []),
         "workdir": REPO,
         "mounts": mounts(stem, write_dirs),
         "cpus": CPUS,
@@ -354,11 +360,14 @@ def finish(run_id, log=print, harness="claude"):
     if (result or {}).get("budget_exhausted"):
         raise BudgetError(f"agent run {run_id}: {result.get('error')}")
     status, error = run["status"], run.get("error")
-    if harness == "opencode" and status == "succeeded" and (
-            result is None or result.get("is_error")):
+    if harness == "opencode":
         # the runner's verdict (opencode_run.failures), or no summary at all
-        status = "failed"
-        error = "; ".join((result or {}).get("failures") or ["no summary from the runner"])
+        why = (result or {}).get("failures") or (
+            [] if result else ["no summary from the runner"])
+        if status == "succeeded" and (result is None or result.get("is_error")):
+            status = "failed"
+        if why and status != "succeeded":
+            error = "; ".join([*([error] if error else []), *why])
     return {
         "run_id": run_id,
         "status": status,
