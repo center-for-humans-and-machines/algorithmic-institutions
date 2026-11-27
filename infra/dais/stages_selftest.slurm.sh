@@ -29,7 +29,7 @@ trap 'rm -rf "$T"' EXIT
 fails=0
 
 make_tree() {  # a fresh fake checkout in $T/repo
-  rm -rf "${T:?}/repo" "${T:?}/bin"
+  rm -rf "${T:?}/repo" "${T:?}/bin" "${T:?}/scratch"
   mkdir -p "$T/repo/infra/dais" "$T/repo/scripts/policy_finder" "$T/bin"
   cp "$SRC/infra/dais/campaign.slurm.sh" "$SRC/infra/dais/kill_job_children.py" \
     "$T/repo/infra/dais/"
@@ -111,7 +111,7 @@ run_job A "run scored 20 20 a.yml
 # a comment
 run finished/10 default default b.yml:2 c.yml"
 expect A 0 $? "re-evaluation exit 0" "stage .* failed"
-grep -q -- "--min-first-scored 10 --no-expired" "$T/A.log" \
+grep -q -- "'--min-first-scored', '10', '--no-expired'" "$T/A.log" \
   && echo "PASS A passes finished/10 to the check" \
   || { echo "FAIL A: no --min-first-scored"; fails=$((fails + 1)); }
 
