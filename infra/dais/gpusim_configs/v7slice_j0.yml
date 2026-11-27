@@ -1,0 +1,141 @@
+# Platform equivalence of sims (infra/dais/gpusim_equiv.py configs; docs/reports/dais_gpu_sim_equivalence.md)
+seed: 72000
+artificial_humans:
+  group_switching:
+    contribution_model: artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt
+    valid_model: artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt
+    switch_model: artifacts/artificial_humans/switch_joint_exodus/model/architecture_mlp+rnn+edge__dataset_50ep_doubled.pt
+managers:
+  ah:
+    type: linear
+    path: artifacts/baselines/punishment_multinomial_timeout_severity_copula.joblib
+  pf-20261104-12-v7_s167:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 10.836938478983939
+      peer: 0.1370829939842224
+      ceil: 13.237979426980019
+      slope: 17.032649676879224
+      decay: 0.9654433452483281
+      stop: 3
+  pf-20261104-12-v7_s219:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 9.581387992016971
+      peer: 0.4116171136498451
+      ceil: 14.119859956204891
+      slope: 49.9276286850355
+      decay: 0.7371207236656455
+      stop: 3
+  pf-20261104-12-v7_s087:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 10.497339916415513
+      peer: 0.1046727865934372
+      ceil: 13.277786570601165
+      slope: 6.342775438771845
+      decay: 0.8079123486122839
+      stop: 1
+  pf-20261104-12-v7_s002:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 7.104958914220333
+      peer: 0.6997926436364651
+      ceil: 9.370147556066513
+      slope: 5.56739448863647
+      decay: 0.7846665244750323
+      stop: 1
+  pf-20261104-12-v7_s101:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 6.360220777802169
+      peer: 0.45575982332229614
+      ceil: 9.470439782366157
+      slope: 13.02524406999795
+      decay: 0.3775091078690453
+      stop: 3
+  pf-20261104-12-v7_s120:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 10.937460301443934
+      peer: 0.8038776852190495
+      ceil: 14.488934378139675
+      slope: 19.791269702961085
+      decay: 0.460307427568258
+      stop: 3
+  pf-20261104-12-v7_s253:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 7.119151911698282
+      peer: 0.10016933307051659
+      ceil: 12.401599420234561
+      slope: 33.30986107259669
+      decay: 0.47053076831715235
+      stop: 3
+  pf-20261104-12-v7_s008:
+    type: rule_based
+    rule: configs/managers/rule_based/pf-20261104-12-v7.yml
+    params:
+      thr: 10.673051610589027
+      peer: 0.6021612554788589
+      ceil: 14.76794362720102
+      slope: 8.11983387380725
+      decay: 0.5341744628221813
+      stop: 4
+pairings:
+- name: pf-20261104-12-v7_s167_vs_ah
+  group_0: pf-20261104-12-v7_s167
+  group_1: ah
+- name: pf-20261104-12-v7_s219_vs_ah
+  group_0: pf-20261104-12-v7_s219
+  group_1: ah
+- name: pf-20261104-12-v7_s087_vs_ah
+  group_0: pf-20261104-12-v7_s087
+  group_1: ah
+- name: pf-20261104-12-v7_s002_vs_ah
+  group_0: pf-20261104-12-v7_s002
+  group_1: ah
+- name: pf-20261104-12-v7_s101_vs_ah
+  group_0: pf-20261104-12-v7_s101
+  group_1: ah
+- name: pf-20261104-12-v7_s120_vs_ah
+  group_0: pf-20261104-12-v7_s120
+  group_1: ah
+- name: pf-20261104-12-v7_s253_vs_ah
+  group_0: pf-20261104-12-v7_s253
+  group_1: ah
+- name: pf-20261104-12-v7_s008_vs_ah
+  group_0: pf-20261104-12-v7_s008
+  group_1: ah
+switch_every: 4
+n_episode_steps: 24
+n_episodes: 4500
+n_groups: 2
+n_agents: 8
+agent_groups:
+- 0
+- 0
+- 0
+- 0
+- 1
+- 1
+- 1
+- 1
+n_contributions: 21
+n_punishments: 31
+n_rounds: 24
+timeout_contribution: 0
+episode_batch_size: 1500
+output_dir: plots/simulation/gpusim/v7slice_j0
+figure_name: gpusim_v7slice_j0
+save_per_round: true
+basedir: .
+seed_cycle: 3
+sweep: true
