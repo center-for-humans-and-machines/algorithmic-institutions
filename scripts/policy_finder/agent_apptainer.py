@@ -91,6 +91,10 @@ from pathlib import Path
 SHELL_DIR = "/opt/pf-agent"
 SHELL_TARGET = f"{SHELL_DIR}/shell"
 POLL = 15
+#: The image's global OpenCode config (Dockerfile.opencode) and where it is
+GLOBAL_CONFIG = (Path(__file__).resolve().parents[2]
+                 / "infra/claude_proxy/container/CC_env/opencode/opencode.json")
+GLOBAL_CONFIG_TARGET = "/opt/opencode/config/opencode/opencode.json"
 #: Folders of the run's home bound empty and read-only (see binds)
 HOME_READONLY = (".opencode", ".config", ".claude", ".agents")
 #: Shell commands and tools that use the network (audit)
@@ -191,6 +195,10 @@ def binds(stem, write_dirs, run):
         mode = "ro" if m["read_only"] else "rw"
         out.append(f"{base / m['path']}:{m['target']}:{mode}")
     out.append(f"{run / 'tmp'}:/tmp:rw")
+    # the repo's global OpenCode config (an allowlist of tools) over the one
+    # the SIF was converted with, so a SIF of an older image gets the same
+    # tool set as the spawner's image
+    out.append(f"{GLOBAL_CONFIG}:{GLOBAL_CONFIG_TARGET}:ro")
     # folders in the home that OpenCode would read config, plugins or skills
     # from: empty and read-only, so a command cannot add to what it loads
     for d in HOME_READONLY:
@@ -233,6 +241,12 @@ def argv(stem, write_dirs, prompt, run, cpus, harness="opencode"):
         cmd += ["--env", f"{key}={value}"]
     cmd += ["--pwd", ar.REPO, sif]
     cmd += ar.command(prompt, "opencode", stem, write_dirs, endpoint=point)
+    # OpenCode's own time limit, below ours, so the runner always redacts and
+    # reports; --require-key-limit is OpenRouter's and stays off the local path
+    options = ar.runner_options()
+    if point == "local":
+        options = [o for o in options if o != "--require-key-limit"]
+    cmd += options
     pin = ["taskset", "-c", ",".join(map(str, cpus))]
     if _env("PF_AGENT_STEP") == "1":
         step = ["srun", "--overlap", "--ntasks=1", f"--cpus-per-task={n}",

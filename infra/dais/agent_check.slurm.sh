@@ -74,6 +74,7 @@ box() {  # the container as agent_apptainer.py starts it
     --bind "$PF_REPO:$REPO:ro" --bind "$PF_RUN/oc:$REPO/.opencode:ro" \
     --bind "$PF_RUN/notes:$REPO/notes/policy_finder:rw" \
     --bind "$PF_RUN/tmp:/tmp:rw" "${ro_home[@]}" \
+    --bind "$PF_REPO/infra/claude_proxy/container/CC_env/opencode/opencode.json:/opt/opencode/config/opencode/opencode.json:ro" \
     --bind "$PF_HERE/agent_shell.sh:/opt/pf-agent/shell:ro" \
     --bind "$PF_HERE/noinet.py:/opt/pf-agent/noinet.py:ro" \
     --env SHELL=/opt/pf-agent/shell --env OMP_NUM_THREADS=2 \
