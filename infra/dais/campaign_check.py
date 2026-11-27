@@ -34,7 +34,8 @@ def describe(stem, state):
     return (f"{stem}: {state.get('status')}"
             + (f" pool {score:.2f}" if isinstance(score, (int, float)) else "")
             + (f"; agent runs: {'; '.join(agent)}" if agent else "")
-            + (f"; lost runs {len(data['lost_runs'])}" if data.get("lost_runs") else ""))
+            + (f"; lost runs {len(data['lost_runs'])}" if data.get("lost_runs") else "")
+            + (f"; step seconds {state['times']}" if state.get("times") else ""))
 
 
 def main():
