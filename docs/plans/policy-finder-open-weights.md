@@ -10,6 +10,15 @@ The work is a success when an open-weight model, with OpenCode, on DAIS, has don
 
 Measured as: the best-so-far curve rises over the generations, and the final best rule reaches **at least 70% of the Opus run's improvement**, where the improvement is the gain of the final best rule over the best first-generation rule. Both sides are scored with the same simulator: the Opus reference rules are rescored on DAIS. The model is the strongest open-weight model that serves reliably on DAIS: Qwen3-Coder-Next first, to get the pipeline working, then the frontier candidates. The single-idea campaign comes after this.
 
+The bars, from re-evaluating all versions of both Opus campaigns on DAIS with fresh common seeds (30,000 episodes per version for exp2, 90,000 for exp1; paired differences; `docs/reports/policy_finder_reference_curves.md` on `policy-finder-dais-pipeline`, PR #250):
+
+| | Best first-generation rule | Final best rule | Improvement | 70% bar |
+|---|---|---|---|---|
+| Experiment 2 (`pf-20261104`) | 69.84 ± 0.29 | 73.39 ± 0.29 | 3.55 ± 0.09 | 2.49 |
+| Experiment 1 (`pf-20261105`) | 649.61 ± 0.20 | 655.37 ± 0.19 | 5.76 ± 0.09 | 4.03 |
+
+An open-model campaign is put through the same tool (`infra/dais/reevaluate.py`): its improvement is its final best rule minus its best first-generation rule, both selected by the campaign's own recorded scores and re-evaluated on the same fresh seeds. Its final best rule's absolute score is reported next to the Opus one, since "similar final performance" is part of the goal as well as the improvement.
+
 Standing authorisations for unattended work, from the same day:
 
 - **DAIS:** up to two full nodes at a time, each up to the 24-hour job limit, resubmitted as needed. Runs happen mainly on DAIS once the basic setup works there; OpenRouter is for development only.
