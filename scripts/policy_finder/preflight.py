@@ -57,6 +57,13 @@ SIM_SOURCES = (
     "configs/simulation/opponents/exp2_multi.yml",
     "configs/simulation/opponents/exp2_diff.yml",
 )
+#: Files the agent definitions promise beside the settings' agent_data globs
+#: (.claude/agents/policy-finder.md, policy-finder-exp1.md: the reference
+#: sims' per-round data, not in git)
+PROMISED_DATA = (
+    "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/per_round.parquet",
+    "plots/simulation/29_EXP1_reference/per_round.parquet",
+)
 FETCH_HINT = "python scripts/fetch_large_files.py --via command-server {}"
 
 failures = 0
@@ -188,13 +195,24 @@ def check_dais():
     else:
         report("PASS", f"driver python {sys.executable} imports torch, numpy, scipy, sklearn, pandas, yaml")
 
-    missing = [p for s in export_instance.SETTINGS.values() for p in s["agent_data"]
-               if not glob.glob(str(ROOT / p))]
+    # files, not folders: a reference folder with only its tracked plots
+    # passed once although its per_round.parquet was missing
+    missing = []
+    for pattern in sorted({p for s in export_instance.SETTINGS.values()
+                           for p in s["agent_data"]} | set(PROMISED_DATA)):
+        files = [f for f in glob.glob(str(ROOT / pattern)) if os.path.isfile(f)]
+        if not files:
+            missing.append(pattern)
+        for f in files:
+            with open(f, "rb") as handle:
+                if handle.read(40).startswith(b"version https://git-lfs"):
+                    missing.append(f"{os.path.relpath(f, ROOT)} (a git-lfs pointer)")
     if missing:
-        report("FAIL", f"agent data missing in the checkout: {sorted(set(missing))}",
-               "copy them from a checkout that has them (docs/large_files.md)")
+        report("FAIL", f"agent data missing in the checkout: {missing}",
+               "copy them from a checkout that has them (docs/large_files.md), or "
+               "recreate the reference sims (infra/dais/reference_sims.slurm.sh)")
     else:
-        report("PASS", "every setting's agent data in the checkout")
+        report("PASS", "every setting's agent data in the checkout, files present")
     artifacts = Path(os.environ.get("PF_ARTIFACTS", ROOT / "artifacts"))
     missing = [p for p in model_paths()
                if not (artifacts / os.path.relpath(p, "artifacts")).exists()]
