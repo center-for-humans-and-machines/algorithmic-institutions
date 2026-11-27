@@ -7,11 +7,11 @@
 # runs what the agent legitimately does (pandas, subprocesses and pipes,
 # multiprocessing, validate-rule). Prints PASS/FAIL lines; exits 1 on a FAIL.
 #
-#   sbatch --export=ALL infra/dais/agent_check.slurm.sh
+#   sbatch infra/dais/agent_check.slurm.sh
 #   # with the model: vLLM on the job's GPUs, then one OpenCode session in the
 #   # container that runs the network checks through its own shell tool, and
 #   # the sampling settings vLLM received (its request log)
-#   sbatch --export=ALL,WITH_MODEL=1 -p gpudev --qos=debug --gres=gpu:2 \
+#   sbatch --export=WITH_MODEL=1 -p gpudev --qos=debug --gres=gpu:2 \
 #     --cpus-per-task=24 --mem=400000 --time=00:15:00 infra/dais/agent_check.slurm.sh
 #
 #SBATCH -J pf_agentchk

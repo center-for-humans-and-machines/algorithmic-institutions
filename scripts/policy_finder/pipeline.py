@@ -37,7 +37,7 @@ Steps (STEPS):
 Paths come from PF_RUNS (the root the container spawner's `pf_exports` root
 is the `exports` folder of): worktrees and side files in PF_RUNS/worktrees
 (PF_WORKTREE_ROOT overrides), exports in PF_RUNS/exports, agent slot locks in
-PF_RUNS/locks.
+PF_RUNS/locks (PF_LOCKS overrides).
 
 Usage:
     python scripts/policy_finder/pipeline.py run <name> [--prompt TEXT]
@@ -115,7 +115,9 @@ class Version:
     def __init__(self, name):
         self.pf_runs, self.wt_root = roots()
         self.exports = self.pf_runs / "exports"
-        self.locks = self.pf_runs / "locks"
+        # PF_LOCKS: node-local slot locks when all pipelines share one node
+        # (a DAIS job: flock on GPFS does not exclude reliably)
+        self.locks = Path(os.environ.get("PF_LOCKS") or self.pf_runs / "locks")
         self.name = name
         self.wt = self.wt_root / name
         conf_path = self.wt / ".claude/policy_finder.json"

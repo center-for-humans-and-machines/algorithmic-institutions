@@ -95,8 +95,8 @@ This is weaker than the Docker sandbox on the Hetzner host, whose container has 
 S=/dais/fs/scratch/$USER/policy-finder-agents      # PF_SCRATCH of campaign.slurm.sh
 # as for the pipeline (above), plus: $S/env.sh with VLLM_SIF, the agent SIF,
 # and the human data files (experiments/*.csv, not in git) in the checkout
-sbatch --export=ALL infra/dais/agent_check.slurm.sh
-sbatch --export=ALL,PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 \
+sbatch infra/dais/agent_check.slurm.sh
+sbatch --export=PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 \
   infra/dais/campaign.slurm.sh campaign scripts/policy_finder/campaigns/dais-smoke-exp2.yml
 # the same command again resumes from the state files in $S/pf_runs
 ```

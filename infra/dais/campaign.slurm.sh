@@ -6,9 +6,9 @@
 # CPU pool (PF_CLUSTER_BACKEND=local, as in pipeline.slurm.sh).
 #
 #   cd <checkout>    # see "Agents on DAIS" in infra/dais/README.md
-#   sbatch --export=ALL,PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 \
+#   sbatch --export=PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 \
 #     infra/dais/campaign.slurm.sh campaign <campaign.yml>
-#   sbatch --export=ALL,PF_SWEEP_EPISODES=default,PF_FINAL_EPISODES=default \
+#   sbatch --export=PF_SWEEP_EPISODES=default,PF_FINAL_EPISODES=default \
 #     infra/dais/campaign.slurm.sh resume <instance>
 #
 # The campaign file names harness opencode, the served model and
@@ -49,7 +49,7 @@ for var in PF_SWEEP_EPISODES PF_FINAL_EPISODES; do
   if [ "$value" = default ]; then
     unset "$var"
   elif [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
-    echo "FATAL: set $var to a number or 'default' (sbatch --export=ALL,$var=...)," \
+    echo "FATAL: set $var to a number or 'default' (sbatch --export=$var=...)," \
       "not '$value'" >&2
     exit 2
   fi
@@ -68,10 +68,14 @@ export PF_SIM_SIF="$SIM_SIF"
 export PF_ARTIFACTS="${PF_ARTIFACTS:-$PF_SCRATCH/artifacts}"
 export PF_PYTHON="${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}"
 export PF_BASE="${PF_BASE:-$(git rev-parse --abbrev-ref HEAD)}"
-export PF_POOL_LOCKS="$PF_RUN/tmp/pool-locks"
+
 export PF_AGENT_BACKEND=apptainer
 export PF_AGENT_SIF="${PF_AGENT_SIF:-$AGENT_SIF}"
-export PF_AGENT_LOCKS="$PF_RUN/tmp/agent-locks"
+# slot locks node-local, one folder per job: all pipelines and agents of the
+# campaign run in this job (flock on GPFS does not exclude reliably)
+SHM_LOCKS="/dev/shm/pf-${SLURM_JOB_ID:-$$}"
+export PF_LOCKS="$SHM_LOCKS/locks" PF_AGENT_LOCKS="$SHM_LOCKS/agent-locks"
+export PF_POOL_LOCKS="$SHM_LOCKS/pool"
 export PF_AGENT_CPUS="${PF_AGENT_CPUS:-2}"
 export PF_AGENT_SLOTS="${PF_AGENT_SLOTS:-4}"
 export PF_AGENT_MEMORY_MB="${PF_AGENT_MEMORY_MB:-16384}"
@@ -136,6 +140,7 @@ stop_all() {
     procs=$(grep -vx -e "$$" -e "$BASHPID" "/sys/fs/cgroup$cg/cgroup.procs" || true)
     [ -n "$procs" ] && kill -KILL $procs 2>/dev/null || true
   fi
+  rm -rf "$SHM_LOCKS"
 }
 trap 'stop_all; exit 143' TERM INT
 trap stop_all EXIT
