@@ -26,6 +26,24 @@ Standing authorisations for unattended work, from the same day:
 - **Hetzner:** the server may be deleted without asking again once the pipeline has passed its smoke run end to end on DAIS and state files, transcripts and results are copied off and the secrets removed.
 - **Blocked on Levin:** a dropped SSH connection to DAIS (only he can reopen it), empty OpenRouter credit, or a decision outside this list. Notify on Slack and continue with whatever does not depend on it.
 
+## Status (2026-11-27, late evening)
+
+Everything is built, independently reviewed and merged into `policy-finder-open-weights`; the first real runs are queued on DAIS.
+
+| Piece | Pull request | State |
+|---|---|---|
+| DAIS measurements, vLLM serving scripts, the shell network filter | #248 | merged after three reviews |
+| Simulations on DAIS CPUs (local cluster backend), the re-evaluation tool, the Opus reference curves | #250 | merged after three reviews |
+| Follow-ups: sims must import their snapshot's code, lost-job handling at job end | #252 | merged after one review |
+| OpenCode harness beside Claude Code | #247 | merged after four reviews |
+| Agents, model server and simulations in one DAIS job | #251 | merged after three reviews |
+
+- **Proven on DAIS:** a smoke campaign for experiment 2 with Qwen3-Coder-Next through OpenCode ran entirely on one node and scored all 3 versions, every agent on its first attempt (job 988193). The pipeline without agents runs a version's simulations in about 1.5 minutes at real size. The model serves on H200, B200 and RTX PRO 6000.
+- **Queued:** full-node job 989450 (12 hours): smoke campaigns for both experiments with a resume test, a load stage with 24 agents at once, and, only if those pass, the two real 36-version campaigns (`pfq-exp2-20261127`, `pfq-exp1-20261127`), each re-evaluated against its bar.
+- **The Claude path** stays paused (Opus safeguards). The three small OpenRouter campaigns on the Hetzner host were stopped; the host is still up and is deleted once the DAIS runs are in.
+- **Open for Levin:** how to treat the single-idea mode's format failures with open models (2 of 8 passed the `## Change` block's exact format: clarify the wording, loosen the check, or accept the failures as data); a CHM OpenRouter key with a limit if OpenRouter is used again; whether both ways of running the pipeline (Docker and Raven with Claude; one DAIS node with open weights) go to `main`, to be agreed with Yannik.
+- **Known differences from the Opus reference runs, to state with the results:** the reference `per_round.parquet` files the agents read were recreated on DAIS CPUs (same config and seed, different draws); simulations run on CPUs (equivalence with Raven GPUs: no difference found at about 1 point; the full-power comparison waits for two Raven jobs); the agents' shell commands run under a network filter and a transcript audit, not in a Docker sandbox.
+
 ## Why
 
 - **The Claude path is blocked.** On 2026-11-27 the smoke run's agent version failed twice at its first response: "Opus 5.5's safeguards flagged this message", detail `reasoning_extraction`. Yannik saw the same on 2026-11-13 with the older agent definition. The agent definition asks for a running first-person record of the agent's thinking, which is the purpose of this mode; we do not reword it to get past a safeguard.
