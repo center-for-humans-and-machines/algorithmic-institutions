@@ -146,3 +146,16 @@ def test_single_idea_version_1_is_the_seed(tmp_path, monkeypatch):
     (wt / ".claude/policy_finder.json").write_text(json.dumps(
         {"rule_name": "pf-s-v2", "version": 2, "mode": "single_idea"}))
     assert not pl.Version("pf-s").seeded
+
+
+def test_snapshots_go_only_when_scored(version, monkeypatch):
+    removed = []
+    monkeypatch.setattr(pl.cluster_proxy, "cleanup", lambda sha: removed.append(sha) or True)
+    version.data["final_sha"] = "b" * 40
+    version.state["done"] = list(pl.STEPS)
+    assert version._run()["status"] == "scored"
+    assert removed == ["a" * 40, "b" * 40]
+    removed.clear()
+    version.state.update(status="running", done=list(pl.STEPS[:-1]))
+    monkeypatch.setattr(version, "step_final_fetch", lambda: (_ for _ in ()).throw(pl.Failed("x")))
+    assert version._run()["status"] == "failed" and removed == []

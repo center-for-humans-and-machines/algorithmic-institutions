@@ -17,6 +17,8 @@ per hyperthread (docs/reports/dais_feasibility.md):
   - `queue()`, `wait(jobs)`: the pool's jobs whose worker is still alive
   - `fetch(sha, remote_dir, local_dir)`: a copy of the snapshot's output dir
   - `sweep_parts(...)`: how many sims a sweep is split into (below)
+  - `cleanup(sha)`: a snapshot removed, unless a live job runs on it (the
+    pipeline calls it for a scored version's snapshots)
 
 The pool needs no daemon: each job is its own worker, and the slots are lock
 files (one per CPU of PF_POOL_CPUS, node-local), so pipelines running side by
@@ -388,21 +390,47 @@ def status(job):
     return json.loads(path.read_text()) if path.exists() else {}
 
 
-def queue():
-    """The pool's jobs not yet done whose worker is alive."""
+def _live():
+    """{job id: its folder} of the pool's jobs not yet done whose worker is
+    alive."""
     jobs = root() / "jobs"
-    left = set()
+    live = {}
     if not jobs.is_dir():
-        return left
+        return live
     for folder in jobs.iterdir():
         if not folder.name.startswith("local-") or not (folder / "worker.json").exists():
             continue
-        state = status(folder.name)
-        if state.get("state") == "done":
+        if status(folder.name).get("state") == "done":
             continue
         if _alive(json.loads((folder / "worker.json").read_text())):
-            left.add(folder.name)
-    return left
+            live[folder.name] = folder
+    return live
+
+
+def queue():
+    """The pool's jobs not yet done whose worker is alive."""
+    return set(_live())
+
+
+def cleanup(sha):
+    """Remove snapshot `sha` unless a live job runs on it; True if removed.
+
+    The folder is renamed first (atomically), so a later snapshot() of the
+    commit makes a fresh one rather than seeing a half-removed tree.
+    """
+    folder = root() / "snapshots" / sha
+    if not folder.is_dir():
+        return False
+    for job in _live().values():
+        try:
+            if json.loads((job / "job.json").read_text())["sha"] == sha:
+                return False
+        except (OSError, ValueError, KeyError):
+            return False  # a job being written: keep the snapshot
+    doomed = folder.with_name(f"{sha}.removing.{os.getpid()}")
+    os.replace(folder, doomed)
+    shutil.rmtree(doomed, ignore_errors=True)
+    return True
 
 
 def wait(jobs, poll=None):
