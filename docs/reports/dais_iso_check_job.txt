@@ -1,0 +1,114 @@
+host daisg301, apptainer apptainer version 1.5.2, image $VLLM_SIF
+== 1. --containall --net --network none
+ERROR  : Failed to create network namespace: maximum number of network namespaces exceeded, check /proc/sys/user/max_net_namespaces
+
+rc=1 max_net_namespaces=0
+== 1b. without a network namespace: host loopback from inside
+host 127.0.0.1:18765 -> 200
+== 2. HTTP on a Unix socket outside, client inside
+{"ok": true} -> 200
+-- a relay inside: 127.0.0.1:18766 -> /sock/model.sock
+{"ok": true} -> 200
+== 2b. Apptainer seccomp profiles, probed from inside (net_probe.py)
+-- profile deny_eq.json
+socket(AF_INET): refused: [Errno 1] Operation not permitted
+socket(AF_INET6): refused: [Errno 1] Operation not permitted
+socket(AF_NETLINK): created
+socket(AF_PACKET): refused: [Errno 1] Operation not permitted
+socket(AF_UNIX): created
+socketpair(AF_UNIX): created
+raw socket(0x100000002) (AF_INET with high bits): created
+x32 socket(AF_INET): no result, the child ended with -31
+i386 int 0x80 socket(AF_INET): no result, the child ended with -31
+io_uring_disabled (kernel setting): 2
+Unix socket /sock/model.sock: answered HTTP/1.0 200 OK
+-- profile no_inet.seccomp.json
+socket(AF_INET): refused: [Errno 1] Operation not permitted
+socket(AF_INET6): refused: [Errno 1] Operation not permitted
+socket(AF_NETLINK): refused: [Errno 1] Operation not permitted
+socket(AF_PACKET): refused: [Errno 1] Operation not permitted
+socket(AF_UNIX): created
+socketpair(AF_UNIX): created
+raw socket(0x100000002) (AF_INET with high bits): refused: Operation not permitted
+x32 socket(AF_INET): no result, the child ended with -31
+i386 int 0x80 socket(AF_INET): no result, the child ended with -31
+io_uring_disabled (kernel setting): 2
+Unix socket /sock/model.sock: answered HTTP/1.0 200 OK
+== 3. binds
+
+ro bind: read-only
+rw sub-bind: writable
+scratch: not visible
+HOME=/u/$USER entries=0
+/u: visible (1 entries)
+image root: read-only
+/tmp: writable
+y
+== 4. resource limits
+--cpus 2: refused: FATAL:   container creation failed: while applying cgroups config: cannot use cgroups - XDG_RUNTIME_DIR "/run/user/<uid>" is not writable
+--memory 2G: refused: FATAL:   container creation failed: while applying cgroups config: cannot use cgroups - XDG_RUNTIME_DIR "/run/user/<uid>" is not writable
+-- --pids-limit 64: start 200 sleepers, count the ones that started
+FATAL:   container creation failed: while applying cgroups config: cannot use cgroups - XDG_RUNTIME_DIR "/run/user/<uid>" is not writable
+-- the same without a limit
+started 200 of 200, running now: 0
+== 5. noinet.py as the shell of a stand-in harness (harness keeps its network)
+parent before: 200
+-- the same command without the filter (baseline):
+socket(AF_INET): created
+socket(AF_INET6): created
+socket(AF_NETLINK): created
+socket(AF_PACKET): refused: [Errno 1] Operation not permitted
+socket(AF_UNIX): created
+socketpair(AF_UNIX): created
+raw socket(0x100000002) (AF_INET with high bits): created
+x32 socket(AF_INET): refused: Function not implemented
+i386 int 0x80 socket(AF_INET): created
+io_uring_disabled (kernel setting): 2
+TCP 127.0.0.1:44697: answered HTTP/1.0 200 OK
+Unix socket /sock/model.sock: answered HTTP/1.0 200 OK
+abstract Unix socket of the host: answered HTTP/1.0 200 OK
+inherited TCP socket (request sent by this process): answered HTTP/1.0 200 OK
+-- the shell tool's command, through noinet.py:
+socket(AF_INET): refused: [Errno 1] Operation not permitted
+socket(AF_INET6): refused: [Errno 1] Operation not permitted
+socket(AF_NETLINK): refused: [Errno 1] Operation not permitted
+socket(AF_PACKET): refused: [Errno 1] Operation not permitted
+socket(AF_UNIX): created
+socketpair(AF_UNIX): created
+raw socket(0x100000002) (AF_INET with high bits): refused: Operation not permitted
+x32 socket(AF_INET): refused: Operation not permitted
+i386 int 0x80 socket(AF_INET): refused: Operation not permitted
+io_uring_disabled (kernel setting): 2
+TCP 127.0.0.1:44697: refused: [Errno 1] Operation not permitted
+Unix socket /sock/model.sock: answered HTTP/1.0 200 OK
+abstract Unix socket of the host: answered HTTP/1.0 200 OK
+inherited TCP socket (request sent by this process): answered HTTP/1.0 200 OK
+curl http://127.0.0.1:44697/: HTTP 000
+curl http://127.0.0.1:44697/: failed (7)
+parent after: 200
+-- noinet.py on the host's own Python (Python 3.6.15), no container
+socket(AF_INET): refused: [Errno 1] Operation not permitted
+socket(AF_INET6): refused: [Errno 1] Operation not permitted
+socket(AF_NETLINK): refused: [Errno 1] Operation not permitted
+socket(AF_PACKET): refused: [Errno 1] Operation not permitted
+socket(AF_UNIX): created
+socketpair(AF_UNIX): created
+raw socket(0x100000002) (AF_INET with high bits): refused: Operation not permitted
+x32 socket(AF_INET): refused: Operation not permitted
+i386 int 0x80 socket(AF_INET): refused: Operation not permitted
+io_uring_disabled (kernel setting): 2
+== 5b. services that could run a process for the caller (checked, not used)
+host: /run/user/<uid>/bus absent
+inside --containall: /run/user/<uid>/bus not visible
+host: systemd-run installed
+host: busctl installed
+host: tmux absent
+host: screen installed
+== 6. runtimes
+podman: absent
+docker: absent
+nerdctl: absent
+buildah: absent
+slirp4netns: absent
+pasta: absent
+subuid entries: 0
