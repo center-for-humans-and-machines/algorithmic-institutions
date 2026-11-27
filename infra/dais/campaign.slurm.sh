@@ -10,6 +10,10 @@
 #     infra/dais/campaign.slurm.sh campaign <campaign.yml>
 #   sbatch --export=PF_SWEEP_EPISODES=default,PF_FINAL_EPISODES=default \
 #     infra/dais/campaign.slurm.sh resume <instance>
+#   # a full node: several stages behind one server (see "Stages" below)
+#   sbatch -p gpu --qos=g0008 --gres=gpu:8 --exclusive --mem=0 -c 96 --time=12:00:00 \
+#     --export=PF_RUNS=<dir>,SERVER_GPUS=2,SERVER_CORES=8,DRIVER_CORES=2,AGENT_CORES=24,PF_AGENT_SLOTS=24 \
+#     infra/dais/campaign.slurm.sh stages infra/dais/stages/<file>
 #
 # The campaign file names harness opencode, the served model and
 # base_url "{env:PF_LLM_BASE_URL}" (scripts/policy_finder/campaigns/dais-*.yml),
@@ -28,6 +32,21 @@
 # failed versions). At the end, at the time limit (Slurm's TERM, --signal) and
 # on scancel it stops the server, the driver and every agent and sim of the job.
 #
+# Stages: a file of lines, run in order behind one server, each only if the
+# one before succeeded (# starts a comment):
+#   run <expect> <sweep episodes> <final episodes> <campaign.yml>[:<slices>] ...
+#       the campaigns at once; each checked with campaign_check.py --expect
+#       <expect> (scored or finished) and, with :<slices>, re-evaluated by
+#       reevaluate.py into $PF_RUNS/reevaluate/<campaign> (seed 100000)
+#   killtest <sweep episodes> <final episodes> <campaign.yml>
+#       the resume test: starts the campaign, and once an agent has run for
+#       KILL_AFTER seconds (default 90) kills every process of the job but the
+#       server, as the end of a job would (kill_job_children.py); a `run` line
+#       of the same campaign then resumes it
+# Episode sizes are a number or `default`, as PF_SWEEP_EPISODES and
+# PF_FINAL_EPISODES. SERVER_GPUS (default: all) are the server's (tensor
+# parallel over them); the job's other GPUs stay idle.
+#
 #SBATCH -J pf_campaign
 #SBATCH -o /dais/fs/scratch/%u/policy-finder-agents/logs/%x.%j.out
 #SBATCH --account=mpib_inst
@@ -42,20 +61,29 @@
 #SBATCH --signal=B:TERM@240
 
 set -euo pipefail
-MODE="${1:?campaign or resume}"
+MODE="${1:?campaign, resume or stages}"
 shift
-for var in PF_SWEEP_EPISODES PF_FINAL_EPISODES; do
-  value="${!var:-}"
-  if [ "$value" = default ]; then
-    unset "$var"
-  elif [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
-    echo "FATAL: set $var to a number or 'default' (sbatch --export=$var=...)," \
-      "not '$value'" >&2
-    exit 2
-  fi
-done
-echo "episodes: sweep ${PF_SWEEP_EPISODES:-default}, final ${PF_FINAL_EPISODES:-default}" \
-  "(a version that already started keeps its own)"
+check_episodes() {  # PF_SWEEP_EPISODES, PF_FINAL_EPISODES: a number or default
+  local var value
+  for var in PF_SWEEP_EPISODES PF_FINAL_EPISODES; do
+    value="${!var:-}"
+    if [ "$value" = default ]; then
+      unset "$var"
+    elif [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
+      echo "FATAL: set $var to a number or 'default' (sbatch --export=$var=...)," \
+        "not '$value'" >&2
+      return 2
+    fi
+  done
+  echo "episodes: sweep ${PF_SWEEP_EPISODES:-default}, final ${PF_FINAL_EPISODES:-default}" \
+    "(a version that already started keeps its own)"
+}
+if [ "$MODE" = stages ]; then
+  STAGES="${1:?stages file}"
+  [ -f "$STAGES" ] || { echo "FATAL: no stages file $STAGES" >&2; exit 2; }
+else
+  check_episodes || exit 2
+fi
 export PF_SCRATCH="${PF_SCRATCH:-/dais/fs/scratch/$USER/policy-finder-agents}"
 export PF_REPO="${PF_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 source "$PF_REPO/infra/dais/common.sh"
@@ -129,7 +157,8 @@ stop_all() {
       > "$PF_RUN/vllm_metrics.txt" || true
     sed 's/^/metrics /' "$PF_RUN/vllm_metrics.txt" || true
   fi
-  [ -n "${DRIVER_PID:-}" ] && kill -TERM "$DRIVER_PID" 2>/dev/null || true
+  # shellcheck disable=SC2086  # DRIVER_PID: one or more pids
+  [ -n "${DRIVER_PID:-}" ] && kill -TERM $DRIVER_PID 2>/dev/null || true
   cleanup
   local cg procs
   cg=$(sed -n 's/^0:://p' /proc/self/cgroup)
@@ -146,25 +175,110 @@ trap 'stop_all; exit 143' TERM INT
 trap stop_all EXIT
 
 assert_vllm_image
-NGPU=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
+SERVER_GPUS="${SERVER_GPUS:-$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)}"
+SERVER_DEVICES=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | head -n "$SERVER_GPUS" | paste -sd, -)
+NGPU=$(tr ',' '\n' <<< "$SERVER_DEVICES" | wc -l)
+echo "server on GPUs $SERVER_DEVICES (tensor parallel $NGPU)"
 export SERVER_CPUS
 # --moe-backend triton: what vLLM picks on H200 by itself; on B200 it would
 # pick FlashInfer's TRT-LLM kernels, whose cubins are not in the image and are
 # downloaded into it at start (fails: the image is read-only; job 988114)
 # shellcheck disable=SC2086  # VLLM_EXTRA: extra vllm arguments, split
-serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" --moe-backend triton ${VLLM_EXTRA:-}
+CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
+  serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" --moe-backend triton ${VLLM_EXTRA:-}
 wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
 
-case "$MODE" in
-  campaign) cmd=("$PF_PYTHON" scripts/policy_finder/campaign.py run "$@") ;;
-  resume) cmd=("$PF_PYTHON" scripts/policy_finder/pipeline.py run "$@") ;;
-  *) echo "FATAL: mode is campaign or resume, not $MODE" >&2; exit 2 ;;
-esac
+driver() {  # driver <command...>: on the driver's CPUs
+  OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 taskset -c "$DRIVER_CPUS" "$@"
+}
+
+# campaign_stage <expect> <campaign.yml>[:<slices>]: run, check, re-evaluate
+campaign_stage() {
+  local expect="$1" file="${2%%:*}" slices="" name rc=0 t0=$SECONDS
+  [[ "$2" == *:* ]] && slices="${2##*:}"
+  name=$(basename "$file" .yml)
+  echo "[$(date +%T)] campaign $name: start"
+  driver "$PF_PYTHON" scripts/policy_finder/campaign.py run "$file" \
+    >> "$PF_RUN/$name.campaign.log" 2>&1 || rc=$?
+  echo "[$(date +%T)] campaign $name: driver exit $rc after $(( SECONDS - t0 )) s"
+  "$PF_PYTHON" "$PF_HERE/campaign_check.py" campaign "$file" --expect "$expect" || rc=1
+  if [ "$rc" = 0 ] && [ -n "$slices" ]; then
+    echo "[$(date +%T)] campaign $name: re-evaluation in $slices slices"
+    driver "$PF_PYTHON" "$PF_HERE/reevaluate.py" "$PF_RUNS/campaign/$name.json" \
+      "$PF_RUNS/reevaluate/$name" --slices "$slices" --seed 100000 \
+      >> "$PF_RUN/$name.reevaluate.log" 2>&1 || rc=$?
+    echo "[$(date +%T)] campaign $name: re-evaluation exit $rc"
+    cat "$PF_RUNS/reevaluate/$name/summary.json" 2>/dev/null || true
+  fi
+  return "$rc"
+}
+
+# killtest_stage <campaign.yml>: start it, kill the job's processes (not the
+# server) once an agent has run KILL_AFTER seconds
+killtest_stage() {
+  local file="$1" t0=$SECONDS waited=0
+  echo "[$(date +%T)] killtest $(basename "$file" .yml): start"
+  driver "$PF_PYTHON" scripts/policy_finder/campaign.py run "$file" < /dev/null \
+    >> "$PF_RUN/$(basename "$file" .yml).campaign.log" 2>&1 &
+  until "$PF_PYTHON" - "$PF_RUNS/agent_runs" "${KILL_AFTER:-90}" <<'EOF'
+import json, sys, time
+from pathlib import Path
+for s in Path(sys.argv[1]).glob("apt-*/status.json"):
+    st = json.loads(s.read_text())
+    if st.get("status") == "running" and time.time() - time.mktime(
+            time.strptime(st["started_at"], "%Y-%m-%dT%H:%M:%S")) > float(sys.argv[2]):
+        sys.exit(0)
+sys.exit(1)
+EOF
+  do
+    sleep 10; waited=$(( SECONDS - t0 ))
+    if (( waited > 3600 )); then echo "FATAL: no agent ran in an hour" >&2; return 1; fi
+  done
+  echo "[$(date +%T)] killtest: killing every process but the server after $(( SECONDS - t0 )) s"
+  python3 "$PF_HERE/kill_job_children.py" "$SERVER_PID"
+  sleep 5
+  rm -rf "$PF_LOCKS" "$PF_AGENT_LOCKS" "$PF_POOL_LOCKS"  # as a new job would find them
+}
+
 rc=0
-OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 taskset -c "$DRIVER_CPUS" "${cmd[@]}" &
-DRIVER_PID=$!
-wait "$DRIVER_PID" || rc=$?
-echo "driver exit $rc after $SECONDS s"
-"$PF_PYTHON" "$PF_HERE/campaign_check.py" "$MODE" "$@" --expect "${PF_EXPECT:-scored}" || rc=1
+case "$MODE" in
+  campaign)
+    driver "$PF_PYTHON" scripts/policy_finder/campaign.py run "$@" &
+    DRIVER_PID=$!
+    wait "$DRIVER_PID" || rc=$?
+    echo "driver exit $rc after $SECONDS s"
+    "$PF_PYTHON" "$PF_HERE/campaign_check.py" campaign "$@" --expect "${PF_EXPECT:-scored}" || rc=1 ;;
+  resume)
+    driver "$PF_PYTHON" scripts/policy_finder/pipeline.py run "$@" &
+    DRIVER_PID=$!
+    wait "$DRIVER_PID" || rc=$?
+    echo "driver exit $rc after $SECONDS s"
+    "$PF_PYTHON" "$PF_HERE/campaign_check.py" resume "$@" --expect "${PF_EXPECT:-scored}" || rc=1 ;;
+  stages)
+    while read -r -u 3 kind rest; do
+      [[ -z "$kind" || "$kind" == \#* ]] && continue
+      read -r -a args <<< "$rest"
+      echo "== stage: $kind ${args[*]}"
+      case "$kind" in
+        run)
+          export PF_SWEEP_EPISODES="${args[1]}" PF_FINAL_EPISODES="${args[2]}"
+          check_episodes || { rc=2; break; }
+          pids=()
+          for c in "${args[@]:3}"; do
+            campaign_stage "${args[0]}" "$c" < /dev/null & pids+=($!)
+          done
+          DRIVER_PID="${pids[*]}"
+          for pid in "${pids[@]}"; do wait "$pid" || rc=1; done ;;
+        killtest)
+          export PF_SWEEP_EPISODES="${args[0]}" PF_FINAL_EPISODES="${args[1]}"
+          check_episodes || { rc=2; break; }
+          killtest_stage "${args[2]}" || rc=1 ;;
+        *) echo "FATAL: unknown stage $kind" >&2; rc=2 ;;
+      esac
+      [ "$rc" = 0 ] || { echo "== stage $kind failed: stopping"; break; }
+    done 3< "$STAGES" ;;
+  *) echo "FATAL: mode is campaign, resume or stages, not $MODE" >&2; rc=2 ;;
+esac
+echo "exit $rc after $SECONDS s"
 exit "$rc"

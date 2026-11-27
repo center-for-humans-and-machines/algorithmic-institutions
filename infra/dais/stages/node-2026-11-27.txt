@@ -1,0 +1,8 @@
+# The first full-node job (infra/dais/campaign.slurm.sh stages): the smoke
+# campaigns with agents (exp2, then exp1 with the resume test), then, only if
+# both are green, the two real campaigns at once, each re-evaluated when done
+# (15 slices for exp2, 45 for exp1: docs/reports/policy_finder_reference_curves.md).
+run      scored   20 20 scripts/policy_finder/campaigns/dais-smoke-exp2.yml
+killtest 20 20          scripts/policy_finder/campaigns/dais-smoke-exp1.yml
+run      scored   20 20 scripts/policy_finder/campaigns/dais-smoke-exp1.yml
+run      finished default default scripts/policy_finder/campaigns/dais-qwen-exp2.yml:15 scripts/policy_finder/campaigns/dais-qwen-exp1.yml:45
