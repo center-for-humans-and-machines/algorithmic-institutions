@@ -174,9 +174,16 @@ stop_all() {
     python3 "$PF_HERE/kill_job_children.py" ${SERVER_PID:-} \
       > "$PF_RUN/stop_kill.log" 2>&1 || true
   fi
+  # the server last, with time to shut down cleanly (TERM, up to 30 s)
   cleanup
+  local _
+  for _ in $(seq 30); do
+    kill -0 "${SERVER_PID:-0}" 2>/dev/null || break
+    sleep 1
+  done
   python3 "$PF_HERE/kill_job_children.py" >> "$PF_RUN/stop_kill.log" 2>&1 || true
-  echo "stopped $(grep -c '^kill' "$PF_RUN/stop_term.log" 2>/dev/null || true) processes"
+  echo "stopped $(grep -c '^kill' "$PF_RUN/stop_term.log" 2>/dev/null || true) processes," \
+    "then the server and watch ($(grep -c '^kill' "$PF_RUN/stop_kill.log" 2>/dev/null || true) killed hard)"
   rm -rf "$SHM_LOCKS"
 }
 trap 'stop_all; exit 143' TERM INT
@@ -253,8 +260,10 @@ driver() {  # driver <command...>: on the driver's CPUs
 # campaign_stage <expect> <campaign.yml>[:<slices>]: run, check, re-evaluate.
 # A resubmitted job can use the same stages file: campaign.py resumes an
 # unfinished campaign from its state files and returns at once for a finished
-# one, a finished re-evaluation is not rerun, and a kill test whose campaign
-# has state already is skipped.
+# one, a finished re-evaluation is not rerun, and a kill test that was done
+# (its marker beside the campaign's state) is skipped. But a stage is judged
+# again on rerun: when a check became stricter, use a stages file without the
+# stages that passed (stages/node-resume-real.txt).
 campaign_stage() {
   local expect="$1" file="${2%%:*}" slices="" name rc=0 t0=$SECONDS
   [[ "$2" == *:* ]] && slices="${2##*:}"
@@ -293,9 +302,11 @@ campaign_stage() {
 killtest_stage() {
   local file="$1" t0=$SECONDS waited=0
   echo "[$(date +%T)] killtest $(basename "$file" .yml): start"
-  if [ -e "$PF_RUNS/campaign/$(basename "$file" .yml).json" ]; then
-    # a resubmitted job: the campaign ran before; its run stage resumes it
-    echo "[$(date +%T)] killtest: the campaign has state already, not tested again"
+  local done_marker
+  done_marker="$PF_RUNS/campaign/$(basename "$file" .yml).killtest-done"
+  if [ -e "$done_marker" ]; then
+    # a resubmitted job: the kill was done before; the run stage resumes it
+    echo "[$(date +%T)] killtest: done in an earlier job ($(cat "$done_marker")), skipped"
     return 0
   fi
   driver "$PF_PYTHON" scripts/policy_finder/campaign.py run "$file" < /dev/null \
@@ -331,6 +342,7 @@ EOF
   done
   echo "[$(date +%T)] killtest: killing every process but the server after $(( SECONDS - t0 )) s"
   python3 "$PF_HERE/kill_job_children.py" "$SERVER_PID" "$WATCH_PID"
+  echo "job ${SLURM_JOB_ID:-local} $(date +%Y-%m-%dT%H:%M:%S)" > "$done_marker"
   sleep 5
   rm -rf "$PF_LOCKS" "$PF_AGENT_LOCKS" "$PF_POOL_LOCKS"  # as a new job would find them
 }
