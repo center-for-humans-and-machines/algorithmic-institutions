@@ -11,6 +11,8 @@ design is in docs/reports/dais_gpu_sim_equivalence.md.
         sweep.json averages them), from its per_round.parquet
     python infra/dais/gpusim_equiv.py slice CONFIG OUT --points A,B --output-dir D
         CONFIG reduced to some of its points (a slice, as a sweep part is)
+    python infra/dais/gpusim_equiv.py same A.csv B.csv
+        two runs of the same games compared exactly (episodes csvs)
     python infra/dais/gpusim_equiv.py sweep-parts RULE OUT_DIR [--n-parts 2]
         a real sweep of RULE (256 points x 500 episodes) as the pipeline
         splits it, its part configs and outputs in OUT_DIR
@@ -259,6 +261,27 @@ def slice_config(a):
         yaml.safe_dump(config, f, sort_keys=False, width=1000)
 
 
+def same(a):
+    """Per-episode scores of two runs of the same games, compared exactly:
+    per point, the episodes whose pool or members differ and the largest
+    difference. Exits 1 unless all are identical."""
+    import pandas as pd
+
+    x, y = (pd.read_csv(f).set_index(["point", "episode"]).sort_index() for f in a.csv)
+    if not x.index.equals(y.index):
+        sys.exit("the two files hold different (point, episode) rows")
+    d = (x - y).abs()
+    differ = (d > 0).any(axis=1).groupby(level="point").sum()
+    print(f"{a.csv[0]} vs {a.csv[1]}: {len(x)} rows")
+    for point, n in differ.items():
+        print(
+            f"  {point}: {n} of {len(x.loc[point])} episodes differ,"
+            f" max |d pool| {d.loc[point, 'pool'].max():.3g},"
+            f" means {x.loc[point, 'pool'].mean():.4f} / {y.loc[point, 'pool'].mean():.4f}"
+        )
+    sys.exit(0 if differ.sum() == 0 else 1)
+
+
 def sweep_parts(a):
     """A real sweep's part configs, as the pipeline writes them
     (generate_sim_config.py's functions), into a folder outside the repo."""
@@ -397,12 +420,15 @@ def analyze(a):
             say("|---|---|---|---|---|---|---|---|")
             rows = []
             for p in data:  # null: seed set S2 against S1 on one platform
-                s1 = {j: f for j, f in data[p].items() if j < N_JOBS // 2}
-                s2 = {j: f for j, f in data[p].items() if j >= N_JOBS // 2}
+                # the first half of the jobs against the second
+                jobs = sorted(data[p])
+                first = set(jobs[: len(jobs) // 2])
+                s1 = {j: f for j, f in data[p].items() if j in first}
+                s2 = {j: f for j, f in data[p].items() if j not in first}
                 if s1 and s2:
                     rows.append(
                         (
-                            f"null {p}: S1 vs S2",
+                            f"null {p}: jobs {sorted(s1)} vs {sorted(s2)}",
                             _units(s1, metric, names),
                             _units(s2, metric, names),
                             False,
@@ -481,6 +507,8 @@ def main():
     e.add_argument("config")
     e.add_argument("out")
     e.add_argument("--per-round")
+    m = sub.add_parser("same")
+    m.add_argument("csv", nargs=2)
     c = sub.add_parser("slice")
     c.add_argument("config")
     c.add_argument("out")
@@ -497,6 +525,7 @@ def main():
     commands = {
         "configs": write_configs,
         "episodes": episodes,
+        "same": same,
         "slice": slice_config,
         "sweep-parts": sweep_parts,
         "analyze": analyze,
