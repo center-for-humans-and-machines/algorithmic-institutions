@@ -1,0 +1,21 @@
+# One agent version at the real size, entirely on DAIS
+# (infra/dais/campaign.slurm.sh), to time a whole agent-plus-sims cycle:
+# experiment 2, free mode, Qwen3-Coder-Next served in the same job.
+# Run, with a PF_RUNS of its own:
+#   sbatch --export=PF_SWEEP_EPISODES=default,PF_FINAL_EPISODES=default,PF_RUNS=<dir> \
+#     infra/dais/campaign.slurm.sh campaign scripts/policy_finder/campaigns/dais-real-exp2.yml
+prefix: pfdr2-20261127
+setting: exp2
+mode: free
+n_fresh: 1
+generations: 0
+top_k: 1
+min_params: 1
+max_params: 5
+sobol_points: 256
+parallel: 1
+error_retries: 1
+retry_wait: 30
+harness: opencode
+model: Qwen/Qwen3-Coder-Next
+base_url: "{env:PF_LLM_BASE_URL}"

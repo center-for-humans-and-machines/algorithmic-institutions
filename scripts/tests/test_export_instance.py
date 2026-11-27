@@ -100,6 +100,14 @@ def test_build_fails_on_a_leak(layout):
         ex.build(wt, main, exports)
 
 
+def test_sibling_pattern_follows_the_prefix():
+    pattern = ex.sibling_pattern("pfq-exp2-20261127-3")
+    found = {m.group(0) for m in pattern.finditer(
+        "pfq-exp2-20261127-5 and pfq-exp2-20261127-3-v2, pf-20261104-12,"
+        " xpfq-exp2-20261127-7, pfq-exp1-20261127-2")}
+    assert found == {"pfq-exp2-20261127-5", "pfq-exp2-20261127-3", "pf-20261104-12"}
+
+
 def test_build_needs_the_data(layout):
     wt, main, exports = layout
     (main / "experiments/2group_8agent_50ep.csv").unlink()

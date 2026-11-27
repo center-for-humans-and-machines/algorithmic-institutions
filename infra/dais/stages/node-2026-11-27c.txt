@@ -1,0 +1,16 @@
+# The full-node job (third submission, after the review of PR #251). Each
+# stage only if the one before succeeded:
+# 1. the exp2 smoke campaign (3 versions);
+# 2. the exp1 smoke campaign with the resume test (killed mid-agent, resumed);
+# 3. the load test: both experiments at the real campaigns' width (12 fresh
+#    lineages each, 24 agents at once) at smoke size, then their re-evaluation
+#    in 4 slices each (into $PF_RUNS/reevaluate/, the scratch run folder);
+#    it passes only with at least 10 of the 12 first-generation versions of
+#    each scored and no agent run expired (`finished/10`);
+# 4. the two real campaigns at once, each re-evaluated when done (15 slices
+#    for exp2, 45 for exp1: docs/reports/policy_finder_reference_curves.md).
+run      scored   20 20 scripts/policy_finder/campaigns/dais-smoke-exp2-node.yml
+killtest 20 20          scripts/policy_finder/campaigns/dais-smoke-exp1-node.yml
+run      scored   20 20 scripts/policy_finder/campaigns/dais-smoke-exp1-node.yml
+run      finished/10 20 20 scripts/policy_finder/campaigns/dais-load-exp2.yml:4 scripts/policy_finder/campaigns/dais-load-exp1.yml:4
+run      finished default default scripts/policy_finder/campaigns/dais-qwen-exp2.yml:15 scripts/policy_finder/campaigns/dais-qwen-exp1.yml:45

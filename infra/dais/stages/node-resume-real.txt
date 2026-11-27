@@ -1,0 +1,4 @@
+# Resume of the full-node job after its time limit or a stop: only the two
+# real campaigns, which resume from their state files in PF_RUNS (the smoke
+# stages are done; a kill test would wait for an agent of a finished campaign).
+run      finished default default scripts/policy_finder/campaigns/dais-qwen-exp2.yml:15 scripts/policy_finder/campaigns/dais-qwen-exp1.yml:45

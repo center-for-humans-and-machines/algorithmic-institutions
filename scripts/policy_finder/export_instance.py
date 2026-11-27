@@ -173,6 +173,17 @@ MODE_AGENTS = {"single_idea": ".claude/agents/policy-finder-single-idea.md"}
 CLAUDE_KEEP = ("agents/policy-finder.md", "agents/policy-finder-host.md", "policy_finder.json")
 #: An instance's name, as new_instance.sh and the campaign make them
 INSTANCE_NAME = re.compile(r"pf-\d{8}-\d+")
+
+
+def sibling_pattern(name):
+    """Names of instances of the same campaign as `name` (its prefix and any
+    lineage number), and of the reference campaigns' (INSTANCE_NAME): a
+    campaign's prefix need not look like pf-<date> (a DAIS campaign's prefix names
+    its experiment and date)."""
+    prefix = re.sub(r"-\d+$", "", name)
+    if prefix == name:
+        return INSTANCE_NAME
+    return re.compile(rf"{INSTANCE_NAME.pattern}|(?<![\w-]){re.escape(prefix)}-\d+")
 #: Harness opencode: the folder OpenCode loads from the working directory,
 #: the agent's wording that names Claude Code's tools (OpenCode's are
 #: lower-case), and the rule files OpenCode would load into the context
@@ -282,6 +293,20 @@ def opencode_agent(text):
     return head + sep + body
 
 
+#: A server of our own (base_url): the model card's sampling settings and
+#: the server's context (infra/dais/common.sh MAX_MODEL_LEN), by served name.
+#: OpenCode sends the sampling options with every request; the context lets
+#: it compact a long session before the server refuses it.
+LOCAL_MODELS = {
+    # huggingface.co/Qwen/Qwen3-Coder-Next, "Best Practices" (also its
+    # generation_config.json at revision a7fbcb5c)
+    "Qwen/Qwen3-Coder-Next": {
+        "options": {"temperature": 1.0, "top_p": 0.95, "top_k": 40},
+        "limit": {"context": 131072, "output": 16384},
+    },
+}
+
+
 def opencode_config(conf):
     """The instance's OpenCode config: its model, nothing else.
 
@@ -303,7 +328,7 @@ def opencode_config(conf):
                 "npm": "@ai-sdk/openai-compatible",
                 "options": {"baseURL": conf["base_url"],
                             "apiKey": "{env:PF_LLM_API_KEY}"},
-                "models": {model: {"name": model}},
+                "models": {model: {"name": model, **LOCAL_MODELS.get(model, {})}},
             }},
         }
     options = {}
@@ -338,6 +363,7 @@ def leaks(export, name, terms=()):
     """Text files that name another instance, or match one of `terms`
     (regular expressions): [(path, match)]."""
     patterns = [re.compile(term) for term in terms]
+    siblings = sibling_pattern(name)
     found = []
     for root, _, files in os.walk(export):
         for f in files:
@@ -353,7 +379,7 @@ def leaks(export, name, terms=()):
                 continue
             text = data.decode("utf-8", "replace")
             rel = os.path.relpath(path, export)
-            for match in set(INSTANCE_NAME.findall(text)):
+            for match in set(m.group(0) for m in siblings.finditer(text)):
                 if match != name:
                     found.append((rel, match))
             for pattern in patterns:

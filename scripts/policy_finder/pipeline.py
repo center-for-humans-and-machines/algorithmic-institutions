@@ -37,7 +37,7 @@ Steps (STEPS):
 Paths come from PF_RUNS (the root the container spawner's `pf_exports` root
 is the `exports` folder of): worktrees and side files in PF_RUNS/worktrees
 (PF_WORKTREE_ROOT overrides), exports in PF_RUNS/exports, agent slot locks in
-PF_RUNS/locks.
+PF_RUNS/locks (PF_LOCKS overrides).
 
 Usage:
     python scripts/policy_finder/pipeline.py run <name> [--prompt TEXT]
@@ -131,7 +131,9 @@ class Version:
     def __init__(self, name):
         self.pf_runs, self.wt_root = roots()
         self.exports = self.pf_runs / "exports"
-        self.locks = self.pf_runs / "locks"
+        # PF_LOCKS: node-local slot locks when all pipelines share one node
+        # (a DAIS job: flock on GPFS does not exclude reliably)
+        self.locks = Path(os.environ.get("PF_LOCKS") or self.pf_runs / "locks")
         self.name = name
         self.wt = self.wt_root / name
         conf_path = self.wt / ".claude/policy_finder.json"
@@ -310,7 +312,12 @@ class Version:
                 if run_id:
                     self.log(f"attaching to agent run {run_id}")
                 else:
-                    if attempts or self.data.get("limited_runs"):
+                    # a fresh copy for every run after the first: an earlier
+                    # run (failed, expired, lost, or on a failing endpoint)
+                    # may have written into this one
+                    if (attempts or self.data.get("limited_runs")
+                            or self.data.get("lost_runs")
+                            or self.data.get("endpoint_runs")):
                         # a fresh copy for the retry: the failed run may have written
                         export_instance.build(self.wt, MAIN, self.exports)
                     if self.harness == "claude":
@@ -331,8 +338,28 @@ class Version:
                     self.data.pop("agent_current", None)
                     self.save()
                     raise
+                except agent_runner.EndpointError as e:
+                    # the model server failed, not the agent: not one of its
+                    # attempts; the version stops as an error, resumable
+                    e.record.pop("report", None)
+                    e.record["transcripts"] = self.keep_transcripts(run_id)
+                    self.data.setdefault("endpoint_runs", []).append(e.record)
+                    self.data.pop("agent_current", None)
+                    self.save()
+                    raise
             report = record.pop("report")
             record["transcripts"] = self.keep_transcripts(run_id)
+            if record["status"] == "lost":
+                # the run ended with the job that ran it (agent_apptainer.py):
+                # not one of the agent's attempts; a fresh run takes its place
+                lost = self.data.setdefault("lost_runs", [])
+                lost.append(record)
+                self.data.pop("agent_current", None)
+                self.save()
+                self.log(f"agent run {run_id} lost (its job ended); starting a new one")
+                if len(lost) > limit:
+                    raise Failed(f"{len(lost)} agent runs lost: {record.get('error')}")
+                continue
             rule_written = (self.exports / self.stem / self.rule).exists()
             ok = record["status"] == "succeeded" and report.strip() and rule_written
             home = agent_runner.run_home(run_id, self.harness)
@@ -364,6 +391,11 @@ class Version:
                 f"agent run {run_id}: {record['status']}, models {record['models']},"
                 f" {cost}, rule {'written' if rule_written else 'missing'}"
             )
+            if "network_audit" in record:
+                found = record["network_audit"]["findings"]
+                self.log(f"network audit of {run_id}: {len(found)} finding(s)"
+                         + "".join(f"\n  {f['kind']}: {f.get('matches') or f.get('text')}"
+                                   for f in found[:10]))
             if ok:
                 (self.wt_root / f"{self.stem}.report.md").write_text(report + "\n")
                 return

@@ -88,3 +88,34 @@ def test_the_budget_cap_stops_the_version(version, monkeypatch):
     state = version.run()
     assert state["status"] == "stopped" and "at the cap" in state["error"]
     assert "agent_current" not in version.data
+
+
+def test_every_rerun_starts_from_a_fresh_export(version, monkeypatch):
+    builds = []
+    monkeypatch.setattr(pl.export_instance, "build", lambda *a: builds.append(1))
+    outcomes = iter(["endpoint", "lost", "expired", "failed", "succeeded"])
+
+    def start(*a, **k):
+        return f"r{len(builds)}"
+
+    def finish(run_id, log=print, harness="claude"):
+        what = next(outcomes)
+        record = {"status": what, "report": "done" if what == "succeeded" else "",
+                  "result": {}, "models": []}
+        if what == "endpoint":
+            raise pl.agent_runner.EndpointError("server down", dict(record, status="failed"))
+        return record
+    monkeypatch.setattr(pl.agent_runner, "start", start)
+    monkeypatch.setattr(pl.agent_runner, "finish", finish)
+    rule = version.exports / version.stem / version.rule
+    rule.parent.mkdir(parents=True)
+    rule.write_text("params: {}\n")
+    monkeypatch.setattr(pl, "OPENCODE_ATTEMPTS", 5)
+    # the first run fails on the endpoint: the version stops (resumable)
+    with pytest.raises(pl.agent_runner.EndpointError):
+        version.step_agent()
+    assert builds == [] and len(version.data["endpoint_runs"]) == 1
+    # the resume: each of the next four runs (after an endpoint failure, a lost
+    # run, an expired one and a failed one) starts from a fresh export
+    version.step_agent()
+    assert len(builds) == 4

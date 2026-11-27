@@ -1,0 +1,10 @@
+# The full-node job, second submission (the first, 988323, stopped at once:
+# its smoke campaign's branches already existed, made by the gpu1 job 988193
+# from the same checkout, which ran dais-smoke-exp2.yml to `scored`). The
+# smoke campaigns with prefixes of their own (exp2, then exp1 with the resume
+# test), then, only if both are green, the two real campaigns at once, each
+# re-evaluated when done (15 slices for exp2, 45 for exp1).
+run      scored   20 20 scripts/policy_finder/campaigns/dais-smoke-exp2-node.yml
+killtest 20 20          scripts/policy_finder/campaigns/dais-smoke-exp1-node.yml
+run      scored   20 20 scripts/policy_finder/campaigns/dais-smoke-exp1-node.yml
+run      finished default default scripts/policy_finder/campaigns/dais-qwen-exp2.yml:15 scripts/policy_finder/campaigns/dais-qwen-exp1.yml:45

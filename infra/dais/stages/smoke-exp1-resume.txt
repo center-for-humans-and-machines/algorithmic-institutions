@@ -1,0 +1,6 @@
+# The experiment 1 smoke campaign with the resume test, in one job
+# (infra/dais/campaign.slurm.sh stages): the campaign is started, every
+# process of the job but the server is killed once an agent has run 90 s, and
+# the campaign then resumes from its state files to `scored`.
+killtest 20 20          scripts/policy_finder/campaigns/dais-smoke-exp1.yml
+run      scored   20 20 scripts/policy_finder/campaigns/dais-smoke-exp1.yml

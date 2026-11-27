@@ -27,13 +27,17 @@ agent_runner.py) also gets `harness`, `model` (an OpenRouter model id) and,
 if given, `providers` (OpenRouter's upstream providers to route to, in
 order, with no fallback), which export_instance.py turns into the agent's
 OpenCode config. A later version keeps them unless they are given again.
+With `--base-url` (an OpenAI-compatible server of our own, such as the DAIS
+job's vLLM; `{env:PF_LLM_BASE_URL}` lets OpenCode read it from the agent's
+environment, so a resumed job's new port needs no new export), `model` is
+the served model's name and `base_url` is kept as well.
 The default harness, claude, writes none of these keys.
 
 Usage:
     python scripts/policy_finder/instance_settings.py <worktree> <name>
         --version K --start-commit SHA --min-params N --max-params N|none
         --sobol-points N --python PATH [--mode free|single_idea]
-        [--harness claude|opencode --model ID [--providers A,B]]
+        [--harness claude|opencode --model ID [--providers A,B] [--base-url URL]]
 """
 
 import argparse
@@ -83,16 +87,19 @@ def base_version(wt: str, name: str, version: int) -> str:
 def harness(args, previous):
     """The harness keys of the instance file: given, else the previous version's."""
     if args.harness is None:
-        return {k: previous[k] for k in ("harness", "model", "providers") if k in previous}
+        return {k: previous[k] for k in ("harness", "model", "providers", "base_url")
+                if k in previous}
     if args.harness == "claude":
-        if args.model or args.providers:
-            raise SystemExit("--model and --providers are for --harness opencode")
+        if args.model or args.providers or args.base_url:
+            raise SystemExit("--model, --providers and --base-url are for --harness opencode")
         return {}
     if not args.model:
         raise SystemExit("--harness opencode needs --model (an OpenRouter model id)")
     out = {"harness": args.harness, "model": args.model}
     if args.providers:
         out["providers"] = [p for p in args.providers.split(",") if p]
+    if args.base_url:
+        out["base_url"] = args.base_url
     return out
 
 
@@ -152,6 +159,8 @@ def main():
                     help="default: the previous version's, else claude")
     ap.add_argument("--model", help="harness opencode: an OpenRouter model id")
     ap.add_argument("--providers", help="harness opencode: upstream providers, a,b")
+    ap.add_argument("--base-url", help="harness opencode: an OpenAI-compatible server "
+                    "of our own instead of OpenRouter (model: its served name)")
     write(ap.parse_args())
 
 

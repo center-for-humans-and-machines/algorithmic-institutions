@@ -5,7 +5,7 @@
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
 #       [--sobol-points N] [--prompt TEXT] [--setting exp2|exp1|exp2_multi|exp2_diff]
 #       [--mode free|single_idea] [--harness claude|opencode --model ID
-#       [--providers A,B]]
+#       [--providers A,B] [--base-url URL]]
 #   scripts/policy_finder/new_instance.sh --iterate-on <name> [--after-failure]
 #       [the same options]
 #
@@ -36,7 +36,9 @@
 # --harness opencode runs the agent with OpenCode on the OpenRouter model
 # --model (an OpenRouter id such as qwen/qwen3-coder-next), routed to
 # --providers in that order if given (agent_runner.py); a later version keeps
-# them unless they are given again.
+# them unless they are given again. --base-url points the agent at an
+# OpenAI-compatible server of our own instead (the DAIS job's vLLM; --model
+# is then the served name; instance_settings.py).
 #
 # --iterate-on <name> starts the next version of an existing instance on its
 # own branch and worktree instead: the worktree must be clean and its current
@@ -87,7 +89,7 @@ while [[ $# -gt 0 ]]; do
         --setting) SETTING="${2:-}"; SETTING_GIVEN=1; shift 2 ;;
         --mode) MODE="${2:-}"; shift 2 ;;
         --after-failure) AFTER_FAILURE=1; shift ;;
-        --harness|--model|--providers) HARNESS_ARGS+=("$1" "${2:-}"); shift 2 ;;
+        --harness|--model|--providers|--base-url) HARNESS_ARGS+=("$1" "${2:-}"); shift 2 ;;
         -h|--help) usage ;;
         -*) echo "unknown option: $1" >&2; usage ;;
         *) [[ -z "$NAME" ]] || usage; NAME="$1"; shift ;;
@@ -124,6 +126,10 @@ WT_ROOT="${PF_WORKTREE_ROOT:-$PF_RUNS/worktrees}"
 export PF_WORKTREE_ROOT="$WT_ROOT"
 WT="$WT_ROOT/$NAME"
 PYTHON="${PF_PYTHON:-python3}"
+# the python the AGENT is told to use (the instance file's `python`): one that
+# exists where the agent runs; PF_AGENT_PYTHON when the driver's (PF_PYTHON)
+# is a host path the agent's container does not have (DAIS: python3)
+AGENT_PYTHON="${PF_AGENT_PYTHON:-$PYTHON}"
 
 git -C "$MAIN" rev-parse --verify --quiet "$BASE" >/dev/null \
     || { echo "no branch $BASE" >&2; exit 1; }
@@ -199,7 +205,7 @@ grep -v '^#' "$MAIN/scripts/policy_finder/instance_paths" \
 "$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$NAME" \
     --version "$VERSION" --start-commit "$(git -C "$WT" rev-parse HEAD)" \
     --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
-    --sobol-points "$SOBOL_POINTS" --python "$PYTHON" --setting "$SETTING" \
+    --sobol-points "$SOBOL_POINTS" --python "$AGENT_PYTHON" --setting "$SETTING" \
     --mode "$MODE" ${HARNESS_ARGS[@]+"${HARNESS_ARGS[@]}"}
 STEM="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["rule_name"])' \
     "$WT/.claude/policy_finder.json")"

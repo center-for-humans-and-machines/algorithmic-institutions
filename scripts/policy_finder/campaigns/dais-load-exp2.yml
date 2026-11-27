@@ -1,0 +1,21 @@
+# Load test before the real campaigns, on the full node (infra/dais/
+# stages/node-2026-11-27c.txt): experiment 2 at smoke size but at the real
+# campaigns' width, 12 fresh lineages and the best 4 iterated once, run
+# beside its exp1 twin so that 24 agents share the server at once,
+# then re-evaluated in a few slices (the in-job re-evaluation's first run).
+#   sbatch ... --export=...,PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 (stage line: 20 20)
+prefix: pfdl2-20261127
+setting: exp2
+mode: free
+n_fresh: 12
+generations: 1
+top_k: 4
+min_params: 1
+max_params: 5
+sobol_points: 16
+parallel: 12
+error_retries: 1
+retry_wait: 30
+harness: opencode
+model: Qwen/Qwen3-Coder-Next
+base_url: "{env:PF_LLM_BASE_URL}"

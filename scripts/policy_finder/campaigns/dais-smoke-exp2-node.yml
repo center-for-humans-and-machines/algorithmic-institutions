@@ -1,0 +1,23 @@
+# One-chain smoke campaign entirely on DAIS, on the full node (prefix of its own:
+# the gpu1 run of dais-smoke-exp2.yml holds its branches in the same checkout) (infra/dais/campaign.slurm.sh):
+# experiment 2 in free mode, OpenCode agents on Qwen3-Coder-Next served by
+# vLLM in the same job, sims in the job's CPU pool. 2 fresh lineages, then
+# the better one iterated once: 3 agent versions.
+# Run (smoke size):
+#   sbatch --export=ALL,PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 \
+#     infra/dais/campaign.slurm.sh campaign scripts/policy_finder/campaigns/dais-smoke-exp2.yml
+prefix: pfdn2-20261127
+setting: exp2
+mode: free
+n_fresh: 2
+generations: 1
+top_k: 1
+min_params: 1
+max_params: 5
+sobol_points: 16
+parallel: 2
+error_retries: 1
+retry_wait: 30
+harness: opencode
+model: Qwen/Qwen3-Coder-Next
+base_url: "{env:PF_LLM_BASE_URL}"

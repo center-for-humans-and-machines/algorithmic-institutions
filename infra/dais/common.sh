@@ -27,6 +27,13 @@ EXPECT_VLLM_TAG="vllm/vllm-openai:v0.25.1"
 SIM_SIF="${SIM_SIF:-$PF_SCRATCH/images/algoinst.sif}"
 SIM_SIF_SHA256="fe358c025561e9fac4831abd1f03afcdf2931ed7bb683d6a86f19a39591550ff"
 
+# Agent image: the Hetzner host's algoinst_claude:opencode (Docker image
+# sha256:9ad094d1..., OpenCode 1.19.6, built from
+# infra/claude_proxy/container/CC_env/Dockerfile.opencode), converted by
+# agent_image.slurm.sh. Used by campaign.slurm.sh.
+AGENT_SIF="${AGENT_SIF:-$PF_SCRATCH/images/algoinst_claude_opencode.sif}"
+AGENT_SIF_SHA256="4d3ba8cc170616c804184177ec969227ff9d014f084bcce1ba057ab485c328d4"
+
 # Weights: Hugging Face cache layout under HF_HOME, pinned revision.
 export HF_HOME="${HF_HOME:-/dais/fs/scratch/$USER/models}"
 MODEL="${MODEL:-Qwen/Qwen3-Coder-Next}"
