@@ -11,7 +11,7 @@ The success criterion of `docs/plans/policy-finder-open-weights.md`: an open-wei
 | **Improvement** (paired; 95% interval) | **3.55 ± 0.09** (3.36 to 3.74) | **5.76 ± 0.09** (5.58 to 5.94) |
 | **70% bar** (95% interval) | **2.49 ± 0.06** (2.35 to 2.62) | **4.03 ± 0.06** (3.91 to 4.16) |
 | Had the runner-up of generation 1 been selected | 3.36 ± 0.11 (bar 2.35) | 6.07 ± 0.10 (bar 4.25) |
-| Selection-robust improvement (cross-fit) | 3.36 ± 0.12 (3.07 to 3.64) | 5.77 ± 0.09 (5.59 to 5.95) |
+| Cross-fit improvement (one even/odd split) | 3.36 ± 0.12 (3.07 to 3.64) | 5.77 ± 0.09 (5.59 to 5.95) |
 | Episodes per version | 30,000 (15 slices of 2,000) | 90,000 (45 slices of 2,000) |
 | Versions | 36: 35 with a final run, `-7-v7` failed | 36, all with a final run |
 
@@ -47,9 +47,9 @@ So the bar moves by 0.13 (exp2) and 0.22 (exp1) on selection noise alone, two to
 The tool therefore also reports, for any campaign, improvements that do not hinge on the campaign's selection (`summary.json`, `robust`):
 
 - **in sample:** from generation 1's best to the best overall, both chosen by re-evaluated score on all slices. Optimistic, because the choice and the estimate share their noise: exp2 3.36 ± 0.11 (`-12` to `-12-v7`), exp1 5.76 ± 0.09 (`-3` to `-7-v3`).
-- **cross-fit:** the same choice made on one half of the slices (even or odd) and measured on the other half, both ways, averaged. No shared noise between choice and estimate: exp2 **3.36 ± 0.12** (95% interval 3.07 to 3.64), exp1 **5.77 ± 0.09** (5.59 to 5.95).
+- **cross-fit:** the same choice made on one half of the slices (even or odd) and measured on the other half, both ways, averaged. No shared noise between choice and estimate: exp2 **3.36 ± 0.12** (95% interval 3.07 to 3.64), exp1 **5.77 ± 0.09** (5.59 to 5.95). In both campaigns the two halves chose the same rules (exp2 `-12` → `-12-v7`: 3.31 ± 0.18 chosen on the even slices, 3.41 ± 0.15 on the odd; exp1 `-3` → `-7-v3`: 5.95 ± 0.13 and 5.58 ± 0.12), so averaging them is sound. When the halves of a campaign choose different rules, the tool gives no averaged error, reports both half-estimates, and its interval spans both halves' intervals.
 
-For a comparison between campaigns, the cross-fit improvement of the open-model campaign against the cross-fit improvement here (70%: 2.35 for exp2, 4.04 for exp1) does not depend on a coin flip in either campaign. The criterion as written (from the campaign's own selection) gives the bars of the summary table; both should be reported.
+For a comparison between campaigns, the cross-fit improvement of the open-model campaign against the cross-fit improvement here (70%: 2.35 for exp2, 4.04 for exp1) depends less on which tied rules happened to be selected than the criterion's number does. It is one even/odd split of the slices, though, so a near tie can still go either way between the halves; the tool says when it does. The criterion as written (from the campaign's own selection) gives the bars of the summary table; both should be reported.
 
 ## Simulator code
 
