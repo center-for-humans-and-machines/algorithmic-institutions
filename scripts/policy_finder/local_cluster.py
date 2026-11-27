@@ -33,7 +33,7 @@ running side by side in one job (a campaign) share one pool. A job's folder
 lists that host's jobs not yet done, so a queue poll reads only those. Done jobs' folders
 are pruned after PF_LOCAL_KEEP_DAYS. A worker killed with its Slurm job
 leaves no final status: the job is `lost`, and the pipeline reruns it without
-counting an attempt.
+counting an attempt (within limits, pipeline.py LOST_ROUNDS and LOST_LIMIT).
 
 Slicing: the pipeline asks this backend how many parts a sweep of the real
 design (distinct Sobol points) has (`sweep_parts`) and splits it with
@@ -47,7 +47,11 @@ sim exactly when every part but the last fills whole batches
 chosen; when none exists (exp2_multi: 512 episodes a point in batches of
 1000), Raven's own split is used (for exp2_multi 2 parts, so 2 single-threaded
 sims, slow but correct), and the pipeline records `parts_aligned: false`.
-Either way the result does not depend on the pool's size.
+Either way the result does not depend on the pool's size. A design with an
+odd number of distinct points above 16 (a rule with int params) has no
+aligned split into 3 or more parts with generate_sim_config.py's edges
+(round(k * points / n)), so it runs as one or two sims: minutes instead of
+about 20 s, with the same result.
 
 Settings (environment):
   PF_LOCAL_ROOT          snapshots, jobs (default $PF_RUNS/local_cluster)
@@ -189,6 +193,21 @@ def snapshot(ref):
     return sha
 
 
+def _slurm_job_gone(job_id):
+    """True only if squeue says Slurm job `job_id` is not in the queue; False
+    when it runs or this cannot be told (no id, no squeue, an error)."""
+    if not job_id:
+        return False
+    try:
+        result = subprocess.run(["squeue", "-h", "-j", str(job_id), "-o", "%T"],
+                                capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    if result.returncode == 0:
+        return not result.stdout.strip()
+    return "invalid job id" in result.stderr.lower()
+
+
 def cleanup(sha):
     """Remove snapshot `sha` unless a live job runs on it or another process
     holds its lock; True if removed.
@@ -201,8 +220,17 @@ def cleanup(sha):
         if not taken or not folder.is_dir():
             return False
         # this host's live jobs, and every job another node's index lists
-        others = [jobs_dir() / e.name for e in (jobs_dir() / "active").glob("*/*")
-                  if e.parent.name != socket.gethostname()]
+        # whose Slurm job may still run (an entry of a job squeue says is gone
+        # is stale: its node will not clear it)
+        others = []
+        for entry in (jobs_dir() / "active").glob("*/*"):
+            if entry.parent.name == socket.gethostname():
+                continue
+            info = _read_json(jobs_dir() / entry.name / "worker.json")
+            if _slurm_job_gone(info.get("slurm_job")):
+                entry.unlink(missing_ok=True)
+            else:
+                others.append(jobs_dir() / entry.name)
         for job in [*_live().values(), *others]:
             try:
                 if json.loads((job / "job.json").read_text())["sha"] == sha:
@@ -390,7 +418,8 @@ def submit(config, sha, run_group="policy-finder"):
             start_new_session=True, cwd=str(folder),
         )
     _write_json(folder / "worker.json", {"host": socket.gethostname(), "pid": worker.pid,
-                                         "start": _start_time(worker.pid)})
+                                         "start": _start_time(worker.pid),
+                                         "slurm_job": _env("SLURM_JOB_ID")})
     return job
 
 
@@ -587,14 +616,42 @@ def lost(job):
     return not _alive(info)
 
 
-def prune(days=None):
-    """Remove done jobs' folders older than PF_LOCAL_KEEP_DAYS."""
+def prune(days=None, every=3600):
+    """Remove the folders of jobs older than PF_LOCAL_KEEP_DAYS that are done
+    or lost (not done, worker gone). At most once per `every` seconds, and
+    only folders that old by their modification time are read."""
     days = float(_env("PF_LOCAL_KEEP_DAYS", "7")) if days is None else days
+    stamp = jobs_dir() / "pruned_at"
+    try:
+        if time.time() - stamp.stat().st_mtime < every:
+            return
+    except OSError:
+        pass
+    stamp.touch()
     cutoff = time.time() - days * 86400
     for folder in jobs_dir().glob("local-*"):
+        try:
+            if folder.stat().st_mtime >= cutoff:
+                continue
+        except OSError:
+            continue
         state = status(folder.name)
-        if state.get("state") == "done" and state.get("finished_at", cutoff) < cutoff:
+        if state.get("state") == "done":
+            if state.get("finished_at", cutoff) < cutoff:
+                shutil.rmtree(folder, ignore_errors=True)
+        elif not _live_here(folder):
             shutil.rmtree(folder, ignore_errors=True)
+
+
+def _live_here(folder):
+    """Might the job of `folder` still run? Its worker alive on this host,
+    or a worker on another host (not decidable here)."""
+    info = _read_json(folder / "worker.json")
+    if not info:
+        return False
+    if info.get("host") != socket.gethostname():
+        return not _slurm_job_gone(info.get("slurm_job"))
+    return _alive(info)
 
 
 def wait(jobs, poll=None):

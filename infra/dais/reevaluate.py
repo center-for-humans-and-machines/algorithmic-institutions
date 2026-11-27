@@ -93,7 +93,7 @@ def with_code(commit, code_ref):
     with tempfile.TemporaryDirectory() as tmp:
         env = {"GIT_INDEX_FILE": os.path.join(tmp, "index")}
         git("read-tree", commit, env=env)
-        git("rm", "-r", "-q", "--cached", "src/aimanager", env=env)
+        git("rm", "-r", "-q", "-f", "--cached", "src/aimanager", env=env)
         git("read-tree", "--prefix=src/aimanager/", f"{code_ref}:src/aimanager", env=env)
         tree = git("write-tree", env=env)
     return git("commit-tree", tree, "-p", commit, "-m",
