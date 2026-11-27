@@ -240,3 +240,24 @@ def test_another_nodes_jobs_are_left_alone(repo):
     (folder / "worker.json").write_text(json.dumps({"host": "other-node", "pid": 1}))
     assert lc.queue() == set() and (other / "local-5").exists()
     assert lc.lost("local-5")  # this host cannot wait for it: rerun here
+
+
+def test_a_worker_that_cannot_start_is_failed_not_lost(repo, tmp_path, monkeypatch):
+    sha = lc.snapshot("HEAD")
+    (tmp_path / "not-a-dir").write_text("")
+    monkeypatch.setenv("PF_POOL_LOCKS", str(tmp_path / "not-a-dir"))
+    job = lc.submit("configs/ok1.yml", sha)
+    lc.wait([job], poll=0.2)
+    assert lc.status(job)["exit_code"] == lc.WORKER_EXIT["setup"] and not lc.lost(job)
+
+
+def test_half_written_files_are_tolerated(repo):
+    lc.active_dir().mkdir(parents=True)
+    folder = lc.jobs_dir() / "local-3"
+    folder.mkdir()
+    (folder / "worker.json").write_text("")  # a poll between creation and write
+    (lc.active_dir() / "local-3").touch()
+    assert lc.queue() == {"local-3"} and not lc.lost("local-3")
+    (lc.jobs_dir() / "next_id").write_text("")  # cut short by a kill
+    sha = lc.snapshot("HEAD")
+    assert lc.submit("configs/ok1.yml", sha) == "local-4"

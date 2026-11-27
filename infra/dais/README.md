@@ -58,6 +58,8 @@ Everything the pipeline keeps is in `PF_RUNS` (default `$S/pf_runs`): worktrees,
 
 Limits of the local backend:
 
+- **Never run one version (or one campaign) from two jobs at once.** The pipeline holds a POSIX lock per version, which GPFS honours across nodes, so a second pipeline waits for the first; but a second campaign driver on the same `PF_RUNS` would still start its own pipelines for the same versions as soon as the first stops. The agent slots (`agent_runner.slot`) still use `flock`, which may not exclude across nodes.
+- Jobs that die without a status while their pipeline runs (a worker that cannot start: a wrong `PF_POOL_CPUS`, an unusable `PF_POOL_LOCKS`) are rerun twice, 30 s apart, then fail the version with a pointer to their `worker.log`; a config may lose at most 6 jobs over all resumes.
 - A version started on Raven cannot resume here (its snapshots are Raven's; `submit` refuses a snapshot it does not have), nor the other way round.
 - A sim killed with its Slurm job (the time limit) is rerun on resume without counting as one of its two attempts; all of a step's missing parts are rerun together.
 - exp2_multi sweeps (512 episodes a point in batches of 1000) have no batch-aligned split, so they run in Raven's 2 parts: 2 single-threaded sims, correct but slow (`parts_aligned: false` in the state).

@@ -94,6 +94,14 @@ IMAGE_CHECK_SLOTS = 2
 IMAGE_CHECK_TRIES = 4
 IMAGE_CHECK_RETRY = int(os.environ.get("PF_IMAGE_CHECK_RETRY", "120"))
 JOB_ATTEMPTS = 2
+#: Jobs lost with their runner (the local backend's sims die with their Slurm
+#: job): rounds of reruns within one pipeline run, the pause before each, and
+#: the most a config may lose over all runs. Within one run a lost job is not
+#: a kill (the kill would have taken the pipeline too) but a worker that dies
+#: without a status, which would recur: the version fails instead of looping.
+LOST_ROUNDS = 2
+LOST_PAUSE = int(os.environ.get("PF_LOST_PAUSE", "30"))
+LOST_LIMIT = 6
 
 
 class Failed(Exception):
@@ -191,13 +199,16 @@ class Version:
 
     def run(self, prompt=None):
         # one pipeline per version: a second one waits, then sees its state
+        # a POSIX lock: GPFS honours it across nodes (flock it may not). It
+        # is held by this process until it exits; nothing else here opens
+        # the file (closing any descriptor of it would release the lock)
         self.lock_path = self.wt_root / f"{self.stem}.lock"
         self._lock = open(self.lock_path, "w")
         try:
-            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            fcntl.lockf(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
             self.log("another pipeline runs this version: waiting for it")
-            fcntl.flock(self._lock, fcntl.LOCK_EX)
+            fcntl.lockf(self._lock, fcntl.LOCK_EX)
             self.state = json.loads(self.state_path.read_text())
         if self.state["status"] in ("scored", "failed"):
             self.log(f"already {self.state['status']}")
@@ -467,14 +478,34 @@ class Version:
     def _drop_lost(self, key, config):
         """A job that died with its runner (the local backend's sims die with
         their Slurm job) is moved aside: it is rerun, not counted as one of
-        the config's JOB_ATTEMPTS."""
+        the config's JOB_ATTEMPTS, up to LOST_LIMIT times."""
         jobs = self.data[key]
         if jobs.get(config) and cluster_proxy.lost(jobs[config][-1]):
             job = jobs[config].pop()
-            self.data.setdefault(f"{key}_lost", {}).setdefault(config, []).append(job)
+            lost = self.data.setdefault(f"{key}_lost", {}).setdefault(config, [])
+            lost.append(job)
+            self.save()
+            if len(lost) > LOST_LIMIT:
+                raise Failed(f"{config}: {len(lost)} jobs died without a status {lost}:"
+                             " see their worker.log (the pool's PF_POOL_LOCKS,"
+                             " PF_POOL_CPUS)")
             self.log(f"job {job} of {config} died with its runner: rerun, not an attempt")
             return True
         return False
+
+    def _lost_round(self, configs):
+        """Before rerunning jobs lost within this run: fail after LOST_ROUNDS
+        such rounds, else pause."""
+        self._lost_rounds = getattr(self, "_lost_rounds", 0) + 1
+        if self._lost_rounds > LOST_ROUNDS:
+            raise Failed(
+                f"jobs keep dying without a status while the pipeline runs"
+                f" ({self._lost_rounds - 1} rounds; last {configs[:3]}...): the"
+                " workers fail before they can record it; see their worker.log"
+                " (the pool's PF_POOL_LOCKS, PF_POOL_CPUS)")
+        self.log(f"{len(configs)} jobs died while the pipeline ran: rerun in"
+                 f" {LOST_PAUSE} s (round {self._lost_rounds} of {LOST_ROUNDS})")
+        time.sleep(LOST_PAUSE)
 
     def _jobs(self, key, sha, configs):
         """Submit each config not yet submitted (ids kept in data[key]), wait;
@@ -488,8 +519,10 @@ class Version:
             pending = [jobs[c][-1] for c in configs]
             self.log(f"waiting for jobs {pending}")
             cluster_proxy.wait(pending)
-            if not any(cluster_proxy.lost(job) for job in pending):
+            lost = [c for c, job in zip(configs, pending) if cluster_proxy.lost(job)]
+            if not lost:
                 return
+            self._lost_round(lost)
 
     def _complete(self, local, config):
         """Has the fetched output a whole sweep.json: parseable, with every
@@ -510,13 +543,14 @@ class Version:
     def _fetch_all(self, key, sha, items):
         """Fetch each sim's output, (config, remote, local) in `items`; rerun
         every one without a whole sweep.json, all together, once each (a job
-        lost with its runner is rerun without counting).
+        lost with its runner is rerun without counting, within the limits of
+        _drop_lost and _lost_round).
 
         A fetch that could not run (Raven unreachable) raises ClusterError,
         resumable, and costs no job attempt.
         """
         jobs = self.data[key]
-        todo = list(items)
+        todo, first = list(items), True
         while True:
             missing = []
             for config, remote, local in todo:
@@ -530,6 +564,10 @@ class Version:
                     missing.append((config, remote, local))
             if not missing:
                 return
+            lost = [c for c, _, _ in missing if jobs[c] and cluster_proxy.lost(jobs[c][-1])]
+            if lost and not first:  # lost while this run waited for them
+                self._lost_round(lost)
+            first = False
             for config, _, local in missing:
                 if not self._drop_lost(key, config) and len(jobs[config]) >= JOB_ATTEMPTS:
                     raise Failed(f"{config} wrote no sweep.json in {JOB_ATTEMPTS} jobs"
