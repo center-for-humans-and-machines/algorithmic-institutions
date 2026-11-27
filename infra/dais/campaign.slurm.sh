@@ -177,10 +177,12 @@ stop_all() {
   # the server last, with time to shut down cleanly (TERM, up to 30 s)
   cleanup
   local _
-  for _ in $(seq 30); do
-    kill -0 "${SERVER_PID:-0}" 2>/dev/null || break
-    sleep 1
-  done
+  if [ -n "${SERVER_PID:-}" ]; then  # no server started: no wait
+    for _ in $(seq 30); do
+      kill -0 "$SERVER_PID" 2>/dev/null || break
+      sleep 1
+    done
+  fi
   python3 "$PF_HERE/kill_job_children.py" >> "$PF_RUN/stop_kill.log" 2>&1 || true
   echo "stopped $(grep -c '^kill' "$PF_RUN/stop_term.log" 2>/dev/null || true) processes," \
     "then the server and watch ($(grep -c '^kill' "$PF_RUN/stop_kill.log" 2>/dev/null || true) killed hard)"

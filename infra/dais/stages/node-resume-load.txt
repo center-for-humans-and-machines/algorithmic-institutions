@@ -1,0 +1,8 @@
+# Resume after a cut during the LOAD stage of node-2026-11-27c.txt (the smoke
+# stages and the kill test passed): the load campaigns resume from their state
+# and are judged by the load gate at their end, then the real campaigns run.
+# No kill test and no smoke stages (a kill test without its marker would run
+# again on a finished smoke campaign and fail). Before using it, check the
+# load campaigns' state files for endpoint_runs: the gate refuses any.
+run      finished/10 20 20 scripts/policy_finder/campaigns/dais-load-exp2.yml:4 scripts/policy_finder/campaigns/dais-load-exp1.yml:4
+run      finished default default scripts/policy_finder/campaigns/dais-qwen-exp2.yml:15 scripts/policy_finder/campaigns/dais-qwen-exp1.yml:45

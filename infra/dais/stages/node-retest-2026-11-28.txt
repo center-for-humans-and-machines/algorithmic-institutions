@@ -1,0 +1,10 @@
+# All stages again, after a cut BEFORE the load stage of node-2026-11-27c.txt
+# (a smoke stage or the kill test failed, or the job ended in them): the same
+# stages with test campaigns of new prefixes (pfdm*, pfdk*: the files differ
+# from dais-smoke-exp*-node.yml and dais-load-exp*.yml only in the prefix),
+# then the real campaigns, which have not started yet.
+run      scored   20 20 scripts/policy_finder/campaigns/dais-smoke-exp2-node2.yml
+killtest 20 20          scripts/policy_finder/campaigns/dais-smoke-exp1-node2.yml
+run      scored   20 20 scripts/policy_finder/campaigns/dais-smoke-exp1-node2.yml
+run      finished/10 20 20 scripts/policy_finder/campaigns/dais-load-exp2-2.yml:4 scripts/policy_finder/campaigns/dais-load-exp1-2.yml:4
+run      finished default default scripts/policy_finder/campaigns/dais-qwen-exp2.yml:15 scripts/policy_finder/campaigns/dais-qwen-exp1.yml:45
