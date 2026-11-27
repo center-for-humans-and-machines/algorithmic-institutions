@@ -1,4 +1,6 @@
-# [ACTIVE] Run the single-idea policy-finder campaign from a Hetzner host
+# [PAUSED] Run the single-idea policy-finder campaign from a Hetzner host
+
+**Paused on 2026-11-27.** The host, Raven and the pipeline work, and the seed version scored. The agent step is blocked: Opus 5.5's safeguards stop the policy-finder agent at its first response (`reasoning_extraction`), as on 2026-11-13. The follow-up is `docs/plans/policy-finder-open-weights.md`, which reuses this host for development.
 
 ## Goal
 
@@ -91,9 +93,12 @@ Done when: all 5 chains have 21 scored or failed versions.
 | Package | State (2026-11-27) |
 |---|---|
 | 1. Branch | Done and reviewed: merge commit `176ad254`, no conflicts, 201 tests passed and 3 skipped, PR #246 targets `main` and is mergeable. |
-| 2. Host | In progress: the first attempt created only the firewall (no `cx53` capacity); retry with `cpx62` in `hel1`. |
+| 2. Host | Done and reviewed: server `policy-finder` (id 177920608, `cpx62`, `hel1`, 5.222.32.225), user `pf`, images built, `host_check.sh` without FAIL. SSH aliases `pf-hetzner` and `pf-hetzner-root` on the Mac. |
 | 3. Raven | Done and reviewed: `raven_setup.sh --check` shows no FAIL. Two WARNs: no W&B key, and `module load apptainer` conflicting with the `apptainer/1.2.2` that `~/.bashrc` loads (jobs purge modules first; the image test passed by hand). |
-| 4 to 6 | Not started. |
+| Human inputs | Done: Claude token, Raven login in the command server. The S3 config was written from the object-store key the sister projects share. |
+| 4. Preflight and smoke run | Preflight all PASS. The documented `sync_to_cluster` was not used: it would have overwritten 46 files of the Raven checkout outside `artifacts/`; the 6 missing model files were copied alone. Smoke run `pfsmoke-20261127`: the seed (version 1) ran all 14 steps and scored 55.3 pool (se 9.9, 20 episodes), which covers the parameter-free rule through sweep, fit and final on Raven. Version 2 failed at the agent step, twice: "Opus 5.5's safeguards flagged this message", detail `reasoning_extraction`. Transcripts are kept on the server under `~/pf_runs/worktrees/pfsmoke-20261127-1-v2.transcripts/`. |
+| 5. Campaign | Not started: every agent version would fail the same way. |
+| 6. Teardown | Open. The server bills about 5 EUR per day. |
 
 ## Review (Fable)
 
