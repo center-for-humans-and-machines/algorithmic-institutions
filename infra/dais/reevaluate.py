@@ -38,8 +38,10 @@ import argparse
 import csv
 import json
 import math
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -59,9 +61,9 @@ def stem_of(name, version):
     return name if version == 1 else f"{name}-v{version}"
 
 
-def git(*args, check=True):
+def git(*args, check=True, env=None):
     result = subprocess.run(["git", "-C", str(MAIN), *args], capture_output=True,
-                            text=True)
+                            text=True, env={**os.environ, **(env or {})})
     if check and result.returncode != 0:
         raise RuntimeError(f"git {' '.join(args)}: {result.stderr.strip()}")
     return result.stdout.strip() if result.returncode == 0 else None
@@ -69,7 +71,10 @@ def git(*args, check=True):
 
 def version_files(ref, stem):
     """(final config commit, final config dict, recorded final sweep.json), or
-    None when the version has no final run on `ref`."""
+    None when the version has no final run on `ref`. A missing branch is an
+    error, not a version without a final."""
+    if git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", check=False) is None:
+        raise SystemExit(f"no branch {ref} here: fetch it first")
     config = f"{CONFIGS}/{stem}_sweep_final.yml"
     result = git("show", f"{ref}:{OUT}/{stem}_sweep/final/sweep.json", check=False)
     commit = git("log", "-1", "--format=%H", ref, "--", config, check=False)
@@ -79,6 +84,22 @@ def version_files(ref, stem):
     if "best_name" not in final:
         return None  # not marked by --score-final: the version did not finish
     return commit, yaml.safe_load(git("show", f"{commit}:{config}")), final
+
+
+def with_code(commit, code_ref):
+    """A commit (on no branch) with `commit`'s files but src/aimanager of
+    `code_ref`: the version's rule and configs played by other simulator
+    code."""
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {"GIT_INDEX_FILE": os.path.join(tmp, "index")}
+        git("read-tree", commit, env=env)
+        git("rm", "-r", "-q", "-f", "--cached", "src/aimanager", env=env)
+        git("read-tree", "--prefix=src/aimanager/", f"{code_ref}:src/aimanager", env=env)
+        tree = git("write-tree", env=env)
+    return git("commit-tree", tree, "-p", commit, "-m",
+               f"reevaluate: {commit[:12]} with src/aimanager of {code_ref}",
+               env={"GIT_AUTHOR_NAME": "reevaluate", "GIT_AUTHOR_EMAIL": "-",
+                    "GIT_COMMITTER_NAME": "reevaluate", "GIT_COMMITTER_EMAIL": "-"})
 
 
 def gp_config(final_config, gp, seed, out):
@@ -132,13 +153,13 @@ def curve(rows, slices=None):
             if r["generation"] == g and r["recorded"] is not None and (
                     best is None or r["recorded"] > best["recorded"]):
                 best = r
-        if first is None and best is not None:
-            first = best
+        if g == min(r["generation"] for r in rows):
+            first = best  # None when no generation-1 version has a final
         point = {"generation": g, "best_so_far": best["stem"] if best else None}
         for key in ("recorded", "recorded_se", "reevaluated", "reevaluated_se"):
             point[key] = best[key] if best else None
         point["gain_vs_first"] = point["gain_se"] = None
-        if slices and best is not None:
+        if slices and best is not None and first is not None:
             point["gain_vs_first"], point["gain_se"] = paired(
                 slices[first["stem"]], slices[best["stem"]])
         out.append(point)
@@ -150,9 +171,106 @@ def improvement(points):
     paired gain of the curve's last point, and 70% of it."""
     first, last = points[0], points[-1]
     gain, se = last["gain_vs_first"], last["gain_se"]
+    if gain is None:
+        return {"first_generation_best": None, "final_best": last["best_so_far"],
+                "improvement": None, "improvement_se": None, "bar_70": None,
+                "bar_70_se": None,
+                "note": "no improvement defined: no generation-1 version has a final run"}
     return {"first_generation_best": first["best_so_far"], "final_best": last["best_so_far"],
             "improvement": gain, "improvement_se": se, "bar_70": 0.7 * gain,
             "bar_70_se": 0.7 * se, "se_method": "paired over common-seed slices"}
+
+
+def with_ci(summary, k):
+    """95% intervals (t with k - 1 degrees of freedom) of the improvement and
+    its bar."""
+    if summary["improvement"] is None:
+        return summary
+    t = t95(k)
+    for key in ("improvement", "bar_70"):
+        m, e = summary[key], summary[f"{key}_se"]
+        summary[f"{key}_ci95"] = [m - t * e, m + t * e]
+    summary["t95"] = t
+    return summary
+
+
+def t95(k):
+    """The two-sided 95% t value for a mean over k slices."""
+    from scipy.stats import t
+
+    return float(t.ppf(0.975, k - 1))
+
+
+def gain(slices, first, last, use=None):
+    """The paired gain of `last` over `first` on the slices `use` (all)."""
+    pick = (lambda v: v) if use is None else (lambda v: [v[j] for j in use])
+    return paired(pick(slices[first]), pick(slices[last]))
+
+
+def robust(rows, slices):
+    """Companions of the improvement that do not hinge on which rules the
+    campaign's noisy recorded scores selected.
+
+    - `runner_up`: from generation 1's second best by recorded score instead
+      (how far the campaign's own choice moves the number)
+    - `in_sample`: from generation 1's best to the best overall, both chosen
+      by re-evaluated score on the same slices (optimistic: selection and
+      estimate share their noise)
+    - `cross_fit`: the same choice made on one half of the slices (even or
+      odd j) and measured on the other half, both ways. When both halves
+      choose the same two rules, their estimates are averaged (se from both);
+      when they disagree, the two estimates are reported separately and the
+      interval spans both halves' intervals (`agree`: false)
+
+    {"undefined": reason} when no generation-1 version has a final run.
+    """
+    first_gen = min(x["generation"] for x in rows)
+    scored = [r for r in rows if r["stem"] in slices]
+    gen1 = [r for r in scored if r["generation"] == first_gen]
+    if not gen1:
+        return {"undefined": "no generation-1 version has a final run"}
+    k = len(next(iter(slices.values())))
+    out = {}
+    by_rec = sorted(gen1, key=lambda r: -r["recorded"])
+    final = max(scored, key=lambda r: r["recorded"])["stem"]
+
+    def entry(first, last, use=None, dof=k):
+        m, e = gain(slices, first, last, use)
+        t = t95(dof)
+        return {"first": first, "last": last, "improvement": m, "se": e,
+                "ci95": [m - t * e, m + t * e]}
+
+    if len(by_rec) > 1:
+        out["runner_up"] = entry(by_rec[1]["stem"], final)
+
+    def best(group, use):
+        def mean(stem):
+            return sum(slices[stem][j][0] for j in use) / len(use)
+        return max((r["stem"] for r in group), key=mean)
+
+    everything = list(range(k))
+    out["in_sample"] = entry(best(gen1, everything), best(scored, everything))
+    if k >= 4:
+        halves = {"even": everything[0::2], "odd": everything[1::2]}
+        parts = []
+        for name, measure in (("even", halves["odd"]), ("odd", halves["even"])):
+            pick = halves[name]
+            part = entry(best(gen1, pick), best(scored, pick), measure, len(measure))
+            parts.append({"selected_on": name, **part})
+        agree = len({(p["first"], p["last"]) for p in parts}) == 1
+        mean = sum(p["improvement"] for p in parts) / 2
+        if agree:
+            se = math.hypot(*(p["se"] for p in parts)) / 2
+            t = t95(len(halves["odd"]))
+            ci = [mean - t * se, mean + t * se]
+        else:  # different rules: no common estimate, the halves' range
+            se = None
+            ci = [min(p["ci95"][0] for p in parts), max(p["ci95"][1] for p in parts)]
+        out["cross_fit"] = {"first": parts[0]["first"] if agree else "(differs by half)",
+                            "last": parts[0]["last"] if agree else "(differs by half)",
+                            "improvement": mean, "se": se, "ci95": ci, "agree": agree,
+                            "halves": parts}
+    return out
 
 
 def write_tsv(path, rows):
@@ -174,10 +292,13 @@ def main():
     ap.add_argument("--seed", type=int, default=100_000)
     ap.add_argument("--slices", type=int, help="instead of --target-se")
     ap.add_argument("--keep-snapshots", action="store_true")
+    ap.add_argument("--code", help="play every version with src/aimanager of this ref")
     args = ap.parse_args()
     if cluster_proxy.BACKEND != "local":
         sys.exit("set PF_CLUSTER_BACKEND=local (infra/dais/pipeline.slurm.sh)")
     out = Path(args.out)
+    if (out / "slices").exists() and any((out / "slices").iterdir()):
+        sys.exit(f"{out} holds slices of an earlier run: choose a new out dir")
     out.mkdir(parents=True, exist_ok=True)
     state = json.loads(Path(args.state).read_text())
 
@@ -208,7 +329,68 @@ def main():
     print(f"largest recorded se {largest:.2f}: {k} slices per version", flush=True)
 
     snapshots, jobs = {}, {}
+    try:
+        results = run_slices(args, versions, k, out, snapshots, jobs)
+    finally:
+        if not args.keep_snapshots:  # only those this run made, also after a failure
+            for sha in snapshots.values():
+                local_cluster.cleanup(sha)
+    for r in rows:
+        if r["stem"] in results:
+            r["reevaluated"], r["reevaluated_se"] = combine(results[r["stem"]])
+            r["episodes"] = k * versions[r["stem"]][1]["n_episodes"]
+
+    # the tables first: they hold whatever the summary below can make of them
+    with open(out / "slices.tsv", "w") as f:  # the raw per-slice scores
+        f.write("stem\tslice\tpool\tpool_se\n")
+        for stem, values in results.items():
+            for j, (pool, se) in enumerate(values):
+                f.write(f"{stem}\t{j}\t{pool:.6f}\t{se:.6f}\n")
+    write_tsv(out / "versions.tsv", rows)
+    points = curve(rows, results)
+    write_tsv(out / "curve.tsv", points)
+    summary = {"state": str(args.state), "refs": args.refs, "seed": args.seed,
+               "slices": k, "target_se": args.target_se, "code": args.code,
+               "no_final": missing, **with_ci(improvement(points), k),
+               "robust": robust(rows, results)}
+    (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    print(report(points, summary))
+
+
+def _num(x, se=None):
+    if x is None:
+        return "NA"
+    return f"{x:.2f}" + ("" if se is None else f" +- {se:.2f}")
+
+
+def report(points, summary):
+    """The run's summary lines."""
+    lines = [f"gen {p['generation']}: {p['best_so_far']} recorded {_num(p['recorded'])}"
+             f" re-evaluated {_num(p['reevaluated'], p['reevaluated_se'])}" for p in points]
+    if summary["improvement"] is None:
+        lines.append(summary["note"])
+    else:
+        lines.append(f"improvement {_num(summary['improvement'], summary['improvement_se'])},"
+                     f" 70%: {_num(summary['bar_70'])}")
+    for name, r in summary["robust"].items():
+        if name == "undefined":
+            lines.append(f"robust improvements: {r}")
+            continue
+        lines.append(f"{name}: {r['first']} -> {r['last']}: {_num(r['improvement'], r['se'])}"
+                     f" (95%: {_num(r['ci95'][0])} to {_num(r['ci95'][1])})")
+        if name == "cross_fit" and not r["agree"]:
+            lines.append("  the halves chose different rules: " + "; ".join(
+                f"chosen on {h['selected_on']}: {h['first']} -> {h['last']}"
+                f" {_num(h['improvement'], h['se'])}" for h in r["halves"]))
+    return "\n".join(lines)
+
+
+def run_slices(args, versions, k, out, snapshots, jobs):
+    """Every version's K slices into the pool; {stem: [(pool, se)] by slice}.
+    Fails if a slice's sim failed or its output is missing."""
     for stem, (commit, config, gp) in versions.items():
+        if args.code:
+            commit = with_code(commit, args.code)
         # the slices' configs go into the snapshot: the local backend's only
         existed = (local_cluster.tree(commit).parent / "complete").exists()
         sha = cluster_proxy.snapshot(commit)
@@ -230,35 +412,20 @@ def main():
 
     results, failed = {}, []
     for name, (stem, sha, job) in jobs.items():
+        code = local_cluster.status(job).get("exit_code")
+        if code != 0:
+            failed.append(f"{name} (job {job}): exit code {code}")
+            continue
         try:
             cluster_proxy.fetch(sha, f"{EVAL_OUT}/{name}", out / "slices" / name)
             sweep = json.loads((out / "slices" / name / "sweep.json").read_text())
             gp = {p["name"]: p for p in sweep["points"]}[versions[stem][2]]
             results.setdefault(stem, []).append((gp["pool"], gp["pool_se"]))
-        except (cluster_proxy.ClusterError, OSError, KeyError) as e:
+        except (cluster_proxy.ClusterError, OSError, KeyError, ValueError) as e:
             failed.append(f"{name} (job {job}): {e!r}")
     if failed:
         sys.exit("FAILED slices:\n" + "\n".join(failed))
-    for r in rows:
-        if r["stem"] in results:
-            r["reevaluated"], r["reevaluated_se"] = combine(results[r["stem"]])
-            r["episodes"] = k * versions[r["stem"]][1]["n_episodes"]
-
-    points = curve(rows, results)
-    summary = {"state": str(args.state), "refs": args.refs, "seed": args.seed,
-               "slices": k, "target_se": args.target_se, "no_final": missing,
-               **improvement(points)}
-    write_tsv(out / "versions.tsv", rows)
-    write_tsv(out / "curve.tsv", points)
-    (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    for p in points:
-        print(f"gen {p['generation']}: {p['best_so_far']} recorded {p['recorded']:.2f}"
-              f" re-evaluated {p['reevaluated']:.2f} +- {p['reevaluated_se']:.2f}")
-    print(f"improvement {summary['improvement']:.2f} +- {summary['improvement_se']:.2f},"
-          f" 70%: {summary['bar_70']:.2f}")
-    if not args.keep_snapshots:  # only those this run made
-        for sha in snapshots.values():
-            local_cluster.cleanup(sha)
+    return results
 
 
 if __name__ == "__main__":

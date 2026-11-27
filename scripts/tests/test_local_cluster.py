@@ -261,3 +261,161 @@ def test_half_written_files_are_tolerated(repo):
     (lc.jobs_dir() / "next_id").write_text("")  # cut short by a kill
     sha = lc.snapshot("HEAD")
     assert lc.submit("configs/ok1.yml", sha) == "local-4"
+
+
+def test_prune_removes_old_done_and_lost_jobs_only(repo):
+    import time
+
+    old = time.time() - 30 * 86400
+    jobs = lc.jobs_dir()
+    for name, state in (("local-1", {"state": "done", "finished_at": old}),
+                        ("local-2", {"state": "running"}),  # lost: worker gone
+                        ("local-3", {"state": "done", "finished_at": time.time()})):
+        (jobs / name).mkdir(parents=True)
+        (jobs / name / "status.json").write_text(json.dumps(state))
+        (jobs / name / "worker.json").write_text(
+            json.dumps({"host": socket.gethostname(), "pid": 999999999}))
+        if name != "local-3":
+            os.utime(jobs / name, (old, old))
+    lc.prune(days=7)
+    assert sorted(p.name for p in jobs.glob("local-*")) == ["local-3"]
+    (jobs / "local-4").mkdir()
+    os.utime(jobs / "local-4", (old, old))
+    lc.prune(days=7)  # within the hour: not run again
+    assert (jobs / "local-4").exists()
+
+
+def test_cleanup_drops_entries_of_gone_slurm_jobs(repo, monkeypatch):
+    sha = lc.snapshot("HEAD")
+    other = lc.jobs_dir() / "active" / "node-a"
+    other.mkdir(parents=True)
+    (other / "local-8").touch()
+    folder = lc.jobs_dir() / "local-8"
+    folder.mkdir()
+    (folder / "job.json").write_text(json.dumps({"sha": sha}))
+    (folder / "worker.json").write_text(
+        json.dumps({"host": "node-a", "pid": 1, "slurm_job": "42"}))
+    monkeypatch.setattr(lc, "_slurm_job_gone", lambda job, cache=None: False)
+    assert not lc.cleanup(sha)  # node-a's job may still run on it
+    monkeypatch.setattr(lc, "_slurm_job_gone", lambda job, cache=None: job == "42")
+    assert lc.cleanup(sha) and not (other / "local-8").exists()
+
+
+def test_reevaluate_robust_improvements():
+    rows = [{"generation": 1, "stem": s, "recorded": r} for s, r in
+            (("a", 70.5), ("b", 70.3))] + [{"generation": 2, "stem": "c", "recorded": 73.0}]
+    games = [0.0, 4.0, -2.0, 1.0, 3.0, -1.0]  # shared by all rules, slice by slice
+    slices = {"a": [(69.8 + g, 1) for g in games], "b": [(70.1 + g, 1) for g in games],
+              "c": [(73.4 + g + 0.1 * (-1) ** j, 1) for j, g in enumerate(games)]}
+    robust = rv.robust(rows, slices)
+    assert robust["runner_up"]["first"] == "b"
+    assert robust["runner_up"]["improvement"] == pytest.approx(3.3)
+    assert robust["in_sample"]["first"] == "b"  # chosen by re-evaluated score
+    assert robust["cross_fit"]["improvement"] == pytest.approx(3.3)
+    assert robust["cross_fit"]["agree"] and len(robust["cross_fit"]["halves"]) == 2
+    lo, hi = robust["runner_up"]["ci95"]
+    assert lo < 3.3 < hi
+
+
+def test_reevaluate_plays_other_code_and_needs_its_branches(tmp_path, monkeypatch):
+    main = tmp_path / "m"
+    (main / "src/aimanager").mkdir(parents=True)
+    git = ["git", "-C", str(main), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(git[:3] + ["init", "-q"], check=True)
+    for text in ("old", "new"):
+        (main / "src/aimanager/sim.py").write_text(text)
+        (main / "rule.yml").write_text(f"rule {text}")
+        subprocess.run(git + ["add", "."], check=True)
+        subprocess.run(git + ["commit", "-qm", text], check=True)
+    monkeypatch.setattr(rv, "MAIN", main)
+    old = rv.git("rev-parse", "HEAD~1")
+    mixed = rv.with_code(old, "HEAD")
+    assert rv.git("show", f"{mixed}:src/aimanager/sim.py") == "new"
+    assert rv.git("show", f"{mixed}:rule.yml") == "rule old"
+    with pytest.raises(SystemExit, match="no branch"):
+        rv.version_files("origin/policy-finder/missing", "missing")
+
+
+def test_a_sim_must_import_the_snapshots_aimanager(repo, tmp_path):
+    """A snapshot without its own aimanager (the venv's would be imported)
+    fails the sim instead of running other code."""
+    (repo / "src/aimanager/__init__.py").unlink()
+    (repo / "src/aimanager/__main__.py").unlink()
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t",
+                    "commit", "-qam", "no aimanager"], check=True)
+    sha = lc.snapshot("HEAD")
+    job = lc.submit("configs/ok1.yml", sha)
+    lc.wait([job], poll=0.2)
+    assert lc.status(job)["exit_code"] == lc.WORKER_EXIT["foreign_code"]
+    assert "aimanager from" in (lc.job_dir(job) / "sim.log").read_text()
+
+
+def test_squeue_is_asked_once_per_slurm_job(repo, monkeypatch):
+    sha = lc.snapshot("HEAD")
+    other = lc.jobs_dir() / "active" / "node-a"
+    other.mkdir(parents=True)
+    for n in range(20, 25):  # five jobs of one Slurm job on another node
+        (other / f"local-{n}").touch()
+        (lc.jobs_dir() / f"local-{n}").mkdir()
+        (lc.jobs_dir() / f"local-{n}" / "worker.json").write_text(
+            json.dumps({"host": "node-a", "pid": 1, "slurm_job": "77"}))
+        (lc.jobs_dir() / f"local-{n}" / "job.json").write_text(json.dumps({"sha": sha}))
+    calls = []
+    real = lc._slurm_job_gone
+
+    def counted(job, cache=None):
+        if cache is None:
+            calls.append(job)
+            return False
+        return real(job, cache)
+
+    monkeypatch.setattr(lc, "_slurm_job_gone", counted)
+    assert not lc.cleanup(sha) and calls == ["77"]
+
+
+def test_reevaluate_cross_fit_halves_that_disagree():
+    rows = [{"generation": 1, "stem": "a", "recorded": 70.0},
+            {"generation": 1, "stem": "b", "recorded": 69.0},
+            {"generation": 2, "stem": "c", "recorded": 73.0}]
+    # a leads on even slices, b on odd ones
+    slices = {"a": [(70.0, 1), (68.0, 1)] * 3, "b": [(69.0, 1), (69.5, 1)] * 3,
+              "c": [(73.0, 1), (73.1, 1)] * 3}
+    cross = rv.robust(rows, slices)["cross_fit"]
+    assert not cross["agree"] and cross["se"] is None
+    firsts = {h["selected_on"]: h["first"] for h in cross["halves"]}
+    assert firsts == {"even": "a", "odd": "b"}
+    lo, hi = cross["ci95"]
+    assert lo <= min(h["improvement"] for h in cross["halves"])
+    assert hi >= max(h["improvement"] for h in cross["halves"])
+    assert "different rules" in rv.report([], {"improvement": 1.0, "improvement_se": 0.1,
+                                               "bar_70": 0.7, "robust": {"cross_fit": cross}})
+
+
+def test_reevaluate_without_a_first_generation_final():
+    rows = [{"generation": 1, "stem": "a", "recorded": None, "recorded_se": None,
+             "reevaluated": None, "reevaluated_se": None},
+            {"generation": 2, "stem": "b", "recorded": 71.0, "recorded_se": 1,
+             "reevaluated": 70.0, "reevaluated_se": 0.3}]
+    slices = {"b": [(70.0, 1)] * 4}
+    points = rv.curve(rows, slices)
+    summary = rv.with_ci(rv.improvement(points), 4)
+    assert summary["improvement"] is None and "no improvement defined" in summary["note"]
+    summary["robust"] = rv.robust(rows, slices)
+    assert "undefined" in summary["robust"]
+    assert "no improvement defined" in rv.report(points, summary)
+
+
+def test_a_worker_ended_with_its_slurm_job_is_lost(repo):
+    import signal
+    import time
+
+    sha = lc.snapshot("HEAD")
+    job = lc.submit("configs/slow.yml", sha)
+    for _ in range(100):  # until its sim runs
+        if lc.status(job).get("state") == "running":
+            break
+        time.sleep(0.1)
+    pid = json.loads((lc.job_dir(job) / "worker.json").read_text())["pid"]
+    os.kill(pid, signal.SIGTERM)
+    lc.wait([job], poll=0.2)
+    assert lc.lost(job) and lc.status(job)["state"] == "running"

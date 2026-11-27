@@ -103,8 +103,11 @@ JOB_ATTEMPTS = 2
 #: Jobs lost with their runner (the local backend's sims die with their Slurm
 #: job): rounds of reruns within one pipeline run, the pause before each, and
 #: the most a config may lose over all runs. Within one run a lost job is not
-#: a kill (the kill would have taken the pipeline too) but a worker that dies
-#: without a status, which would recur: the version fails instead of looping.
+#: a kill of the Slurm job (that would have taken the pipeline too): its
+#: worker was killed on its own or died before it could record anything
+#: (its own setup failures, a wrong PF_POOL_CPUS or an unusable
+#: PF_POOL_LOCKS, are recorded as failed jobs, exit code 125). If that
+#: recurs, the version fails instead of looping.
 LOST_ROUNDS = 2
 LOST_PAUSE = int(os.environ.get("PF_LOST_PAUSE", "30"))
 LOST_LIMIT = 6
@@ -549,8 +552,9 @@ class Version:
             lost.append(job)
             self.save()
             if len(lost) > LOST_LIMIT:
-                raise Failed(f"{config}: {len(lost)} jobs died without a status {lost}:"
-                             " see their worker.log (the pool's PF_POOL_LOCKS,"
+                raise Failed(f"{config}: {len(lost)} jobs died without a status {lost}"
+                             " (killed, or their worker died before it could record"
+                             " anything): see their worker.log (the pool's PF_POOL_LOCKS,"
                              " PF_POOL_CPUS)")
             self.log(f"job {job} of {config} died with its runner: rerun, not an attempt")
             return True
@@ -562,7 +566,8 @@ class Version:
         self._lost_rounds = getattr(self, "_lost_rounds", 0) + 1
         if self._lost_rounds > LOST_ROUNDS:
             raise Failed(
-                f"jobs keep dying without a status while the pipeline runs"
+                f"jobs keep dying without a status while the pipeline runs (their"
+                f" workers killed, or dying before they can record anything)"
                 f" ({self._lost_rounds - 1} rounds; last {configs[:3]}...): the"
                 " workers fail before they can record it; see their worker.log"
                 " (the pool's PF_POOL_LOCKS, PF_POOL_CPUS)")
