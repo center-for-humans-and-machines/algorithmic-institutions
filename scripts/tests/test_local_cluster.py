@@ -295,9 +295,9 @@ def test_cleanup_drops_entries_of_gone_slurm_jobs(repo, monkeypatch):
     (folder / "job.json").write_text(json.dumps({"sha": sha}))
     (folder / "worker.json").write_text(
         json.dumps({"host": "node-a", "pid": 1, "slurm_job": "42"}))
-    monkeypatch.setattr(lc, "_slurm_job_gone", lambda job: False)
+    monkeypatch.setattr(lc, "_slurm_job_gone", lambda job, cache=None: False)
     assert not lc.cleanup(sha)  # node-a's job may still run on it
-    monkeypatch.setattr(lc, "_slurm_job_gone", lambda job: job == "42")
+    monkeypatch.setattr(lc, "_slurm_job_gone", lambda job, cache=None: job == "42")
     assert lc.cleanup(sha) and not (other / "local-8").exists()
 
 
@@ -312,6 +312,7 @@ def test_reevaluate_robust_improvements():
     assert robust["runner_up"]["improvement"] == pytest.approx(3.3)
     assert robust["in_sample"]["first"] == "b"  # chosen by re-evaluated score
     assert robust["cross_fit"]["improvement"] == pytest.approx(3.3)
+    assert robust["cross_fit"]["agree"] and len(robust["cross_fit"]["halves"]) == 2
     lo, hi = robust["runner_up"]["ci95"]
     assert lo < 3.3 < hi
 
@@ -333,3 +334,72 @@ def test_reevaluate_plays_other_code_and_needs_its_branches(tmp_path, monkeypatc
     assert rv.git("show", f"{mixed}:rule.yml") == "rule old"
     with pytest.raises(SystemExit, match="no branch"):
         rv.version_files("origin/policy-finder/missing", "missing")
+
+
+def test_a_sim_must_import_the_snapshots_aimanager(repo, tmp_path):
+    """A snapshot without its own aimanager (the venv's would be imported)
+    fails the sim instead of running other code."""
+    (repo / "src/aimanager/__init__.py").unlink()
+    (repo / "src/aimanager/__main__.py").unlink()
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t",
+                    "commit", "-qam", "no aimanager"], check=True)
+    sha = lc.snapshot("HEAD")
+    job = lc.submit("configs/ok1.yml", sha)
+    lc.wait([job], poll=0.2)
+    assert lc.status(job)["exit_code"] == lc.WORKER_EXIT["foreign_code"]
+    assert "aimanager from" in (lc.job_dir(job) / "sim.log").read_text()
+
+
+def test_squeue_is_asked_once_per_slurm_job(repo, monkeypatch):
+    sha = lc.snapshot("HEAD")
+    other = lc.jobs_dir() / "active" / "node-a"
+    other.mkdir(parents=True)
+    for n in range(20, 25):  # five jobs of one Slurm job on another node
+        (other / f"local-{n}").touch()
+        (lc.jobs_dir() / f"local-{n}").mkdir()
+        (lc.jobs_dir() / f"local-{n}" / "worker.json").write_text(
+            json.dumps({"host": "node-a", "pid": 1, "slurm_job": "77"}))
+        (lc.jobs_dir() / f"local-{n}" / "job.json").write_text(json.dumps({"sha": sha}))
+    calls = []
+    real = lc._slurm_job_gone
+
+    def counted(job, cache=None):
+        if cache is None:
+            calls.append(job)
+            return False
+        return real(job, cache)
+
+    monkeypatch.setattr(lc, "_slurm_job_gone", counted)
+    assert not lc.cleanup(sha) and calls == ["77"]
+
+
+def test_reevaluate_cross_fit_halves_that_disagree():
+    rows = [{"generation": 1, "stem": "a", "recorded": 70.0},
+            {"generation": 1, "stem": "b", "recorded": 69.0},
+            {"generation": 2, "stem": "c", "recorded": 73.0}]
+    # a leads on even slices, b on odd ones
+    slices = {"a": [(70.0, 1), (68.0, 1)] * 3, "b": [(69.0, 1), (69.5, 1)] * 3,
+              "c": [(73.0, 1), (73.1, 1)] * 3}
+    cross = rv.robust(rows, slices)["cross_fit"]
+    assert not cross["agree"] and cross["se"] is None
+    firsts = {h["selected_on"]: h["first"] for h in cross["halves"]}
+    assert firsts == {"even": "a", "odd": "b"}
+    lo, hi = cross["ci95"]
+    assert lo <= min(h["improvement"] for h in cross["halves"])
+    assert hi >= max(h["improvement"] for h in cross["halves"])
+    assert "different rules" in rv.report([], {"improvement": 1.0, "improvement_se": 0.1,
+                                               "bar_70": 0.7, "robust": {"cross_fit": cross}})
+
+
+def test_reevaluate_without_a_first_generation_final():
+    rows = [{"generation": 1, "stem": "a", "recorded": None, "recorded_se": None,
+             "reevaluated": None, "reevaluated_se": None},
+            {"generation": 2, "stem": "b", "recorded": 71.0, "recorded_se": 1,
+             "reevaluated": 70.0, "reevaluated_se": 0.3}]
+    slices = {"b": [(70.0, 1)] * 4}
+    points = rv.curve(rows, slices)
+    summary = rv.with_ci(rv.improvement(points), 4)
+    assert summary["improvement"] is None and "no improvement defined" in summary["note"]
+    summary["robust"] = rv.robust(rows, slices)
+    assert "undefined" in summary["robust"]
+    assert "no improvement defined" in rv.report(points, summary)
