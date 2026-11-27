@@ -179,6 +179,10 @@ INSTANCE_NAME = re.compile(r"pf-\d{8}-\d+")
 OPENCODE_DIR = ".opencode"
 OPENCODE_WORDING = ((re.compile(r"the(\s+)Edit(\s+)tool"), r"the\1edit\2tool"),)
 CONTEXT_FILES = ("AGENTS.md", "CLAUDE.md")
+#: OpenCode (1.19.6) writes this .gitignore into every config folder it loads
+#: and fails when it cannot; the export's folder is read-only, so it is
+#: written here with the same content, which OpenCode then leaves alone
+OPENCODE_GITIGNORE = "node_modules\npackage.json\npackage-lock.json\nbun.lock\n.gitignore"
 #: Text files above this size are not scanned (data files)
 SCAN_LIMIT = 20 * 2**20
 MANIFEST = ".export_manifest.json"
@@ -307,6 +311,7 @@ def write_opencode(export, conf, agent_text):
         json.dump(opencode_config(conf), f, indent=2)
         f.write("\n")
     Path(folder, "agents", "policy-finder.md").write_text(opencode_agent(agent_text))
+    Path(folder, ".gitignore").write_text(OPENCODE_GITIGNORE)
     for root, _, files in os.walk(export):
         for f in files:
             if f in CONTEXT_FILES:
