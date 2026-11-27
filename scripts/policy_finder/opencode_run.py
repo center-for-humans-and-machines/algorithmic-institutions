@@ -32,12 +32,14 @@ backend that starts it in the export with OpenCode installed can use it.
    assistant text, or the session used another model than the export's
    config names;
    a failed run exits non-zero (4 when OpenCode itself exited 0);
-7. in any case (`finally`): kills what OpenCode's tools left running (in a
-   container of its own only: under Apptainer the PID namespace is the
-   node's), copies OpenCode's logs to the out folder,
-   replaces the key wherever this run wrote it (the out folder, the
-   version's write folders) and deletes OpenCode's logs and database in the
-   home, which hold the same transcript unredacted;
+7. in any case (`finally`): with `--kill-strays` (passed by the spawner's
+   start path only, where every other process in the container is the
+   agent's), kills what OpenCode's tools left running; copies OpenCode's
+   logs to the out folder, replaces the key wherever this run wrote it (the
+   out folder, the version's write folders; a read-only file is made
+   writable first, and a file that still cannot be rewritten fails the run,
+   so that its notes are not collected) and deletes OpenCode's logs and
+   database in the home, which hold the same transcript unredacted;
 8. prints one JSON line, the summary agent_runner.py reads, with the key
    redacted: the report (the final turn's last assistant text), tokens,
    OpenCode's cost (its own price catalogue, not OpenRouter's bill), the
@@ -63,6 +65,7 @@ import json
 import os
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -94,27 +97,86 @@ def session_id(events_path):
     return None
 
 
+def _texts(message, synthetic=None):
+    """A message's text parts joined; `synthetic` True or False keeps only
+    those parts (OpenCode marks the text it inserts itself)."""
+    return "\n".join(
+        p.get("text", "") for p in message.get("parts") or []
+        if p.get("type") == "text"
+        and (synthetic is None or bool(p.get("synthetic")) == synthetic))
+
+
+def _compaction_summary(info):
+    """OpenCode's summary of a compacted session (compaction.ts: an assistant
+    message of the compaction agent, `summary: true`)."""
+    return bool(info.get("summary")) or info.get("mode") == "compaction" or (
+        info.get("agent") == "compaction")
+
+
+def _new_prompt(message, prompts):
+    """Whether a user message starts a turn: not one OpenCode inserts when it
+    compacts a session (compaction.ts, 1.19.6): the marker with a
+    `compaction` part, the "Continue if you have next steps" message (its
+    text part `synthetic`), or the replay of an earlier prompt after an
+    overflow (a copy of its parts, unmarked)."""
+    parts = message.get("parts") or []
+    if any(p.get("type") == "compaction" for p in parts):
+        return False
+    text = _texts(message, synthetic=False)
+    if not text.strip():
+        return False
+    return text not in prompts
+
+
+def _ending(turn):
+    """How the final turn ended: `text` (its last message has text),
+    `empty_after_tool_call`, `tool_call`, `error`, `empty` or `none`."""
+    if not turn:
+        return "none"
+    last = turn[-1]
+    if (last.get("info") or {}).get("error"):
+        return "error"
+    if _texts(last).strip():
+        return "text"
+    if any(p.get("type") == "tool" for p in last.get("parts") or []):
+        return "tool_call"
+    if len(turn) > 1 and any(p.get("type") == "tool" for p in turn[-2].get("parts") or []):
+        return "empty_after_tool_call"
+    return "empty"
+
+
 def summarize(session):
     """Report, tokens, cost and models of an exported session.
 
     The report is the last non-empty assistant text of the final turn (the
-    assistant messages after the last user message): a model may end on an
-    empty message after a tool call, and its report is the text before it.
-    `final_error` is the final assistant message's error, if it ended in one;
-    an interim text ("Let me look at ...") followed by an error is no report.
+    assistant messages after the last prompt): a model may end on an empty
+    message after a tool call, and its report is the text before it. The
+    messages OpenCode inserts when it compacts a long session (the marker,
+    the summary, the "Continue" prompt or a replay of the prompt) neither
+    start a turn nor are a report. `final_error` is the final assistant
+    message's error, if it ended in one (the summary's too: a compaction that
+    failed); an interim text ("Let me look at ...") followed by an error is no
+    report. `ended_on` and `report_chars` record how the turn ended, so that
+    an interim text taken for a report can be found afterwards.
     """
     tokens = {"input": 0, "output": 0, "reasoning": 0, "cache_read": 0,
               "cache_write": 0}
     cost, models, steps, tools, errors = 0.0, set(), 0, 0, []
-    final, turn = None, []
+    final, turn, prompts, compactions = None, [], set(), 0
     for message in session.get("messages", []):
         info = message.get("info") or {}
         if info.get("role") == "user":
-            turn = []
+            if _new_prompt(message, prompts):
+                prompts.add(_texts(message, synthetic=False))
+                turn = []
+            continue
         if info.get("role") != "assistant":
             continue
         final = message
-        turn.append(message)
+        if _compaction_summary(info):
+            compactions += 1
+        else:
+            turn.append(message)
         t = info.get("tokens") or {}
         cache = t.get("cache") or {}
         tokens["input"] += t.get("input") or 0
@@ -132,8 +194,7 @@ def summarize(session):
         tools += sum(1 for p in parts if p.get("type") == "tool")
     report, final_error = "", None
     for message in turn:
-        parts = message.get("parts") or []
-        text = "\n".join(p.get("text", "") for p in parts if p.get("type") == "text")
+        text = _texts(message)
         if text.strip():
             report = text
     if final is not None:
@@ -141,6 +202,8 @@ def summarize(session):
     return {"result": report, "tokens": tokens, "cost_catalog_usd": round(cost, 6),
             "models": sorted(models), "steps": steps, "tool_calls": tools,
             "errors": errors, "final_error": final_error,
+            "ended_on": _ending(turn), "report_chars": len(report.strip()),
+            "compactions": compactions,
             "agent": (session.get("info") or {}).get("agent")}
 
 
@@ -262,34 +325,50 @@ def _number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
-def own_pid_namespace():
-    """True when this runner is the direct child of the container's init
-    (docker --init): every other process of the namespace is the agent's.
-    False under Apptainer and elsewhere, where the PID namespace is shared."""
+def own_pid_namespace(proc="/proc", ppid=None):
+    """The guard of kill_strays: this runner is the direct child of PID 1 and
+    PID 1 is docker's init (docker-init or tini, the spawner's `--init`).
+    The guard alone does not decide that every other process is the agent's:
+    kill_strays also needs --kill-strays, which only the spawner passes."""
     try:
-        with open("/proc/1/cmdline", "rb") as f:
+        with open(os.path.join(proc, "1", "cmdline"), "rb") as f:
             init = f.read().split(b"\0")[0].decode(errors="replace")
     except OSError:
         return False
-    return os.getppid() == 1 and os.path.basename(init) in ("docker-init", "tini")
+    ppid = os.getppid() if ppid is None else ppid
+    return ppid == 1 and os.path.basename(init) in ("docker-init", "tini")
 
 
-def kill_strays():
-    """Kill the processes OpenCode's tools left behind (a child in its own
-    session survives the process group's kill), in a container of our own
-    only. Returns their count."""
-    if not own_pid_namespace():
-        return 0
-    me, killed = os.getpid(), 0
-    for entry in os.listdir("/proc"):
+def kill_strays(enabled, proc="/proc", kill=os.kill, wait=2.0, ppid=None):
+    """Kill what OpenCode's tools left running (a child in its own session
+    survives the kill of the process group), when `enabled` (--kill-strays:
+    the spawner's container, where every other process is the agent's) and
+    the guard matches. Waits up to `wait` seconds for them to go.
+
+    Returns {"enabled", "guard_matched", "killed"}: `killed` 0 with
+    `enabled` False means it never looked."""
+    out = {"enabled": bool(enabled), "guard_matched": False, "killed": 0}
+    if not enabled:
+        return out
+    out["guard_matched"] = own_pid_namespace(proc, ppid)
+    if not out["guard_matched"]:
+        return out
+    me, victims = os.getpid(), []
+    for entry in os.listdir(proc):
         if not entry.isdigit() or int(entry) in (1, me):
             continue
         try:
-            os.kill(int(entry), signal.SIGKILL)
-            killed += 1
+            kill(int(entry), signal.SIGKILL)
+            victims.append(entry)
         except OSError:
             pass
-    return killed
+    out["killed"] = len(victims)
+    deadline = time.time() + wait
+    while victims and time.time() < deadline:
+        victims = [v for v in victims if os.path.exists(os.path.join(proc, v))]
+        if victims:
+            time.sleep(0.1)
+    return out
 
 
 def key_hash(secret, salt=None):
@@ -320,7 +399,7 @@ def run_bounded(argv, timeout, **kwargs):
 def scrub(args, secret, summary):
     """Redact the key everywhere this run wrote it, copy and drop OpenCode's
     own logs and database. Runs whatever happened before (`finally`)."""
-    summary["stray_processes_killed"] = kill_strays()
+    summary["stray_processes"] = kill_strays(args.kill_strays)
     for log in glob.glob(os.path.join(DATA, "log", "*.log")):
         try:
             shutil.copy(log, os.path.join(args.out, "opencode-" + os.path.basename(log)))
@@ -330,9 +409,19 @@ def scrub(args, secret, summary):
     hits = redact_tree(args.out, secret, errors)
     for rel in args.write_dir:
         hits += redact_tree(os.path.join(args.repo, rel), secret, errors)
+    remaining = []
+    for error in errors:
+        path = error.rsplit(": ", 1)[0]
+        try:
+            # a file the agent made read-only: make it writable, then again
+            os.chmod(path, os.stat(path).st_mode | stat.S_IWUSR)
+            if redact_file(path, secret):
+                hits.append(path)
+        except OSError as e:
+            remaining.append(f"{path}: {e.strerror or e}")
     summary["key_redacted_in"] = hits
-    if errors:
-        summary["redaction_errors"] = errors
+    if remaining:
+        summary["redaction_errors"] = remaining
     for path in glob.glob(os.path.join(DATA, "opencode.db*")) + glob.glob(
             os.path.join(DATA, "log", "*")):
         try:
@@ -356,6 +445,9 @@ def main(argv=None):
     ap.add_argument("--timeout", type=float, default=6600,
                     help="seconds for `opencode run`, below the container's")
     ap.add_argument("--export-timeout", type=float, default=300)
+    ap.add_argument("--kill-strays", action="store_true",
+                    help="kill every other process after OpenCode (the spawner's "
+                    "container only, where all of them are the agent's)")
     args = ap.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
     secret = os.environ.get(args.key_env, "")
@@ -441,6 +533,10 @@ def main(argv=None):
         code = code or 1
     finally:
         scrub(args, secret, summary)
+    if summary.get("redaction_errors"):
+        # the key may remain in a write folder: its notes are not collected
+        why = [*why, "the key could not be redacted in: "
+               + "; ".join(summary["redaction_errors"])[:500]]
     summary["opencode_exit_code"] = code
     summary["failures"] = why
     summary["is_error"] = bool(why)

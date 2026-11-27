@@ -307,8 +307,11 @@ def start(stem, write_dirs, prompt, harness="claude"):
     """
     body = {
         "profile": PROFILE,
+        # --kill-strays here only: in the spawner's container every other
+        # process is the agent's (not in command() or runner_options(), which
+        # other backends reuse)
         "command": command(prompt, harness, stem, write_dirs) + (
-            runner_options() if harness == "opencode" else []),
+            [*runner_options(), "--kill-strays"] if harness == "opencode" else []),
         "workdir": REPO,
         "mounts": mounts(stem, write_dirs),
         "cpus": CPUS,

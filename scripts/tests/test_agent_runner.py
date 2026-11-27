@@ -110,6 +110,9 @@ def test_opencode_start_and_finish(spawner, tmp_path, monkeypatch):
     assert command[command.index("--max-usage") + 1] == "21.3"
     # OpenCode's own timeout, below the container's (opencode_run.py redacts after it)
     assert float(command[command.index("--timeout") + 1]) < ar.TIMEOUT
+    # the stray kill: the spawner's start path only, never in what others reuse
+    assert "--kill-strays" in command
+    assert "--kill-strays" not in ar.command("P", "opencode") + ar.runner_options()
     spawner["stdout"] = json.dumps(SUMMARY) + "\n"
     record = ar.finish("abc", log=lambda m: None, harness="opencode")
     assert record["report"] == "my report" and record["models"] == ["openrouter/q/c"]

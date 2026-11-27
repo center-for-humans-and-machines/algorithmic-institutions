@@ -52,10 +52,13 @@ the key can spend. What else there is, and what it does not do:
   summary and the agent's notes and scripts; the pipeline scans the
   transcripts it copies once more (for a run whose runner was killed). It is
   an exact match: a base64 copy, or one split by a space, is not found. Notes
-  are committed and published with the snapshots. A process the agent
-  detached into its own session survives the kill of OpenCode's process
-  group; the runner kills such strays only in a container of its own (the
-  spawner's), not under Apptainer, whose processes share the node's.
+  are committed and published with the snapshots. A file the runner cannot
+  rewrite fails the run. A process the agent detached into its own session
+  survives the kill of OpenCode's process group; the runner kills such
+  strays only with `--kill-strays`, which only the spawner's start path
+  passes (its container holds nothing but the agent), and only when it runs
+  directly under docker's init. Other backends (Apptainer on DAIS) do not
+  pass it.
 - Nothing stops an agent from printing its environment, key included, into
   the model's context. And `openrouter.ai`, the only egress, is a general
   gateway: an agent with the key and a shell can call any model there,
