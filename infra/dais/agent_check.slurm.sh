@@ -148,7 +148,7 @@ if [ "${WITH_MODEL:-0}" = 1 ]; then
   assert_vllm_image || exit 1
   NGPU=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
   SERVER_CPUS=$(python3 "$PF_HERE/cpu_slots.py" reserved 4) \
-    serve_model 0.90 "$NGPU" "$PF_RUN/vllm.log" --enable-log-requests
+    serve_model 0.90 "$NGPU" "$PF_RUN/vllm.log" --enable-log-requests --moe-backend triton
   if wait_ready 720; then
     LLM_URL="$SERVER_URL"; LLM_KEY=$(cat "$SERVER_KEY_FILE")
     prompt='Use your bash tool to run exactly these four commands, one tool call each, and then reply with one line per command saying whether it succeeded: (1) curl -sS -m 10 -o /dev/null http://1.1.1.1 (2) python3 -c "import socket; socket.socket(socket.AF_INET)" (3) ps -o pid,ppid,args --forest (4) grep -E "Seccomp|NoNewPrivs" /proc/self/status'

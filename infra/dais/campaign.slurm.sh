@@ -143,8 +143,11 @@ trap stop_all EXIT
 assert_vllm_image
 NGPU=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
 export SERVER_CPUS
+# --moe-backend triton: what vLLM picks on H200 by itself; on B200 it would
+# pick FlashInfer's TRT-LLM kernels, whose cubins are not in the image and are
+# downloaded into it at start (fails: the image is read-only; job 988114)
 # shellcheck disable=SC2086  # VLLM_EXTRA: extra vllm arguments, split
-serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" ${VLLM_EXTRA:-}
+serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" --moe-backend triton ${VLLM_EXTRA:-}
 wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
 
