@@ -333,14 +333,20 @@ def _new_job():
     with open(jobs / "next_id.lock", "w") as lock:
         fcntl.lockf(lock, fcntl.LOCK_EX)
         counter = jobs / "next_id"
-        n = int(counter.read_text()) if counter.exists() else 1
+        try:
+            n = int(counter.read_text())
+        except (OSError, ValueError):  # none yet, or cut short: past every id
+            n = 1 + max((int(f.name[6:]) for f in jobs.glob("local-*")
+                         if f.name[6:].isdigit()), default=0)
         while True:
             try:
                 (jobs / f"local-{n}").mkdir()
                 break
             except FileExistsError:
                 n += 1
-        counter.write_text(f"{n + 1}\n")
+        tmp = jobs / f".next_id.{os.getpid()}.tmp"
+        tmp.write_text(f"{n + 1}\n")
+        os.replace(tmp, counter)
     return n
 
 
@@ -374,7 +380,7 @@ def submit(config, sha, run_group="policy-finder"):
         "image": _env("PF_SIM_SIF"), "artifacts": _env("PF_ARTIFACTS"),
         "timeout": int(_env("PF_LOCAL_JOB_SECONDS", "3600")),
     }
-    (folder / "job.json").write_text(json.dumps(settings, indent=2) + "\n")
+    _write_json(folder / "job.json", settings)
     active_dir().mkdir(parents=True, exist_ok=True)
     (active_dir() / job).touch()
     with open(folder / "worker.log", "w") as log:
@@ -383,9 +389,8 @@ def submit(config, sha, run_group="policy-finder"):
             stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
             start_new_session=True, cwd=str(folder),
         )
-    (folder / "worker.json").write_text(json.dumps(
-        {"host": socket.gethostname(), "pid": worker.pid,
-         "start": _start_time(worker.pid)}) + "\n")
+    _write_json(folder / "worker.json", {"host": socket.gethostname(), "pid": worker.pid,
+                                         "start": _start_time(worker.pid)})
     return job
 
 
@@ -404,9 +409,7 @@ def _take_slot(cpus, locks, poll=1.0):
 
 
 def _write_status(folder, status):
-    tmp = folder / "status.tmp"
-    tmp.write_text(json.dumps(status, indent=2) + "\n")
-    os.replace(tmp, folder / "status.json")
+    _write_json(folder / "status.json", status)
 
 
 def _clear_output(repo, config):
@@ -424,60 +427,86 @@ def _clear_output(repo, config):
     shutil.rmtree(target, ignore_errors=True)
 
 
+def _write_json(path, data):
+    """Write JSON through a rename, so a reader sees the old file or the new
+    one, never half of it."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n")
+    os.replace(tmp, path)
+
+
+def _read_json(path):
+    """A JSON file's content; {} if it is missing or unreadable."""
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def worker(folder):
     """A pool job: wait for a slot, run the sim pinned to it, record the
-    result. Its exit code is the sim's."""
+    result. Its exit code is the sim's; a failure of the worker itself (its
+    slot, pinning, starting the sim, its files) is recorded as a done job
+    with exit code WORKER_EXIT["setup"] and the error, so that it reads as a
+    failed job, never as one lost with its Slurm job."""
     folder = Path(folder)
-    settings = json.loads((folder / "job.json").read_text())
-    os.environ["PF_LOCAL_ROOT"] = settings["root"]
-    os.environ["PF_LOCAL_CONTAINER"] = settings["container"]
-    if settings["image"]:
-        os.environ["PF_SIM_SIF"] = settings["image"]
-    if settings["artifacts"]:
-        os.environ["PF_ARTIFACTS"] = settings["artifacts"]
-    cpu, lock = _take_slot(settings["cpus"], Path(settings["locks"]))
-    started = time.time()
-    _write_status(folder, {"state": "running", "cpu": cpu, "started_at": started})
+    started, cpu = time.time(), None
     try:
+        settings = json.loads((folder / "job.json").read_text())
+        os.environ["PF_LOCAL_ROOT"] = settings["root"]
+        os.environ["PF_LOCAL_CONTAINER"] = settings["container"]
+        if settings["image"]:
+            os.environ["PF_SIM_SIF"] = settings["image"]
+        if settings["artifacts"]:
+            os.environ["PF_ARTIFACTS"] = settings["artifacts"]
+        cpu, lock = _take_slot(settings["cpus"], Path(settings["locks"]))
+        started = time.time()
+        _write_status(folder, {"state": "running", "cpu": cpu, "started_at": started})
         _clear_output(tree(settings["sha"]), settings["config"])
         (folder / "tmp").mkdir(exist_ok=True)
         cmd, cwd, env = argv(settings["sha"],
                              f"python -m aimanager simulate {settings['config']}",
                              folder / "tmp", settings["threads"])
+
+        def pin():
+            if hasattr(os, "sched_setaffinity"):
+                os.sched_setaffinity(0, {cpu})
+
+        with open(folder / "sim.log", "w") as log:
+            sim = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=log,
+                                   stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                   preexec_fn=pin, start_new_session=True)
+            try:
+                code = sim.wait(timeout=settings["timeout"])
+            except subprocess.TimeoutExpired:
+                os.killpg(sim.pid, signal.SIGKILL)
+                sim.wait()
+                code = WORKER_EXIT["timeout"]
+        usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+        _write_status(folder, {
+            "state": "done", "exit_code": code, "cpu": cpu,
+            "started_at": started, "finished_at": time.time(),
+            "wall_seconds": round(time.time() - started, 1),
+            "cpu_seconds": round(usage.ru_utime + usage.ru_stime, 1),
+            # kB on Linux
+            "maxrss_kb": usage.ru_maxrss,
+            "finished": time.strftime("%Y-%m-%d %H:%M:%S"),
+        })
+        shutil.rmtree(folder / "tmp", ignore_errors=True)
+        lock.close()
     except Exception as e:  # noqa: BLE001 - a failed job, not a lost one
-        _write_status(folder, {"state": "done", "exit_code": WORKER_EXIT["setup"],
-                               "cpu": cpu, "error": repr(e), "started_at": started,
-                               "finished_at": time.time()})
-        (active_dir() / folder.name).unlink(missing_ok=True)
-        return WORKER_EXIT["setup"]
-
-    def pin():
-        if hasattr(os, "sched_setaffinity"):
-            os.sched_setaffinity(0, {cpu})
-
-    with open(folder / "sim.log", "w") as log:
-        sim = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=log, stderr=subprocess.STDOUT,
-                               stdin=subprocess.DEVNULL, preexec_fn=pin,
-                               start_new_session=True)
+        code = WORKER_EXIT["setup"]
+        print(f"worker failed: {e!r}", file=sys.stderr, flush=True)
         try:
-            code = sim.wait(timeout=settings["timeout"])
-        except subprocess.TimeoutExpired:
-            os.killpg(sim.pid, signal.SIGKILL)
-            sim.wait()
-            code = WORKER_EXIT["timeout"]
-    usage = resource.getrusage(resource.RUSAGE_CHILDREN)
-    _write_status(folder, {
-        "state": "done", "exit_code": code, "cpu": cpu,
-        "started_at": started, "finished_at": time.time(),
-        "wall_seconds": round(time.time() - started, 1),
-        "cpu_seconds": round(usage.ru_utime + usage.ru_stime, 1),
-        # kB on Linux
-        "maxrss_kb": usage.ru_maxrss,
-        "finished": time.strftime("%Y-%m-%d %H:%M:%S"),
-    })
-    shutil.rmtree(folder / "tmp", ignore_errors=True)
-    lock.close()
-    (active_dir() / folder.name).unlink(missing_ok=True)
+            _write_status(folder, {"state": "done", "exit_code": code, "cpu": cpu,
+                                   "error": repr(e), "started_at": started,
+                                   "finished_at": time.time()})
+        except OSError:
+            pass  # status.json not writable: the job reads as lost
+    try:
+        (active_dir() / folder.name).unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001 - the index is pruned by queue polls too
+        pass
     return code
 
 
@@ -511,11 +540,7 @@ def _alive(info):
 
 def status(job):
     """A job's status.json, {} while it has none."""
-    path = job_dir(job) / "status.json"
-    try:
-        return json.loads(path.read_text())
-    except (OSError, ValueError):
-        return {}
+    return _read_json(job_dir(job) / "status.json")
 
 
 def _live():
@@ -528,15 +553,19 @@ def _live():
         return live
     for entry in active.iterdir():
         folder = jobs_dir() / entry.name
-        info = folder / "worker.json"
-        if not info.exists():
-            if time.time() - entry.stat().st_mtime > 60:
-                entry.unlink(missing_ok=True)  # its submit died before the worker
+        info = _read_json(folder / "worker.json")
+        if not info:
+            # being submitted (worker.json not yet written), or its submit died
+            try:
+                young = time.time() - entry.stat().st_mtime < 60
+            except OSError:
+                continue  # removed meanwhile
+            if young and folder.is_dir():
+                live[entry.name] = folder
             else:
-                live[entry.name] = folder  # being submitted
+                entry.unlink(missing_ok=True)
             continue
-        if status(entry.name).get("state") != "done" and _alive(
-                json.loads(info.read_text())):
+        if status(entry.name).get("state") != "done" and _alive(info):
             live[entry.name] = folder
         else:
             entry.unlink(missing_ok=True)
@@ -552,11 +581,10 @@ def lost(job):
     """True if the job's worker died before its sim finished (killed with its
     Slurm job): not a sim that ran and failed. A worker on another node is
     treated as lost: this host cannot wait for it."""
-    folder = job_dir(job)
-    info = folder / "worker.json"
-    if not info.exists() or status(job).get("state") == "done":
+    info = _read_json(job_dir(job) / "worker.json")
+    if not info or status(job).get("state") == "done":
         return False
-    return not _alive(json.loads(info.read_text()))
+    return not _alive(info)
 
 
 def prune(days=None):

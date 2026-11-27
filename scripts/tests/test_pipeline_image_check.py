@@ -224,3 +224,36 @@ def test_the_split_is_of_the_real_design_and_kept(version, monkeypatch):
     assert len(version.parts()) == 2 and version.data["parts_aligned"] is True
     monkeypatch.setenv("PF_LOCAL_PART_EPISODES", "1000")  # a resume keeps the split
     assert len(version.parts()) == 2
+
+
+def test_jobs_dying_while_the_pipeline_runs_fail_the_version(version, monkeypatch):
+    """Workers that die without a status every time are not rerun forever."""
+    pool = FakePool(kills=0)
+    pool.wait = lambda jobs: (pool.rounds.append(sorted(jobs)), pool.dead.update(jobs))
+    for name in ("submit", "wait", "lost", "fetch"):
+        monkeypatch.setattr(pl.cluster_proxy, name, getattr(pool, name))
+    monkeypatch.setattr(pl, "LOST_PAUSE", 0)
+    version.data.update(episodes={"sweep": 500, "final": 2000}, n_parts=2)
+    with pytest.raises(pl.Failed, match="keep dying"):
+        version.step_sweep_jobs()
+    assert len(pool.rounds) == pl.LOST_ROUNDS + 1
+
+
+def test_the_version_lock_holds_across_processes(version, tmp_path):
+    """A second pipeline waits for the POSIX lock another process holds."""
+    import subprocess
+    import time
+
+    lock = version.wt_root / f"{version.stem}.lock"
+    holder = subprocess.Popen([sys.executable, "-c", (
+        "import fcntl, sys, time; f = open(sys.argv[1], 'w');"
+        " fcntl.lockf(f, fcntl.LOCK_EX); print('locked', flush=True); time.sleep(1.5)"),
+        str(lock)], stdout=subprocess.PIPE, text=True)
+    assert holder.stdout.readline().strip() == "locked"
+    version.state["status"] = "scored"
+    version.save()
+    started = time.time()
+    assert version.run()["status"] == "scored"
+    assert time.time() - started > 0.5
+    assert "another pipeline runs this version" in version.log_path.read_text()
+    holder.wait()
