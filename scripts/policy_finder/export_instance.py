@@ -177,7 +177,7 @@ INSTANCE_NAME = re.compile(r"pf-\d{8}-\d+")
 #: the agent's wording that names Claude Code's tools (OpenCode's are
 #: lower-case), and the rule files OpenCode would load into the context
 OPENCODE_DIR = ".opencode"
-OPENCODE_WORDING = ((re.compile(r"the Edit(\s+)tool"), r"the edit\1tool"),)
+OPENCODE_WORDING = ((re.compile(r"the(\s+)Edit(\s+)tool"), r"the\1edit\2tool"),)
 CONTEXT_FILES = ("AGENTS.md", "CLAUDE.md")
 #: Text files above this size are not scanned (data files)
 SCAN_LIMIT = 20 * 2**20
