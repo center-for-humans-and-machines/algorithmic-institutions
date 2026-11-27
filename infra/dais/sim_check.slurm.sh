@@ -45,7 +45,12 @@ for flags in "--net --network none" "--cpus 2" "--memory 2G" "--pids-limit 500";
 done
 
 echo "== image checksum"
-sha256sum "$SIM_SIF" | grep -q "$SIM_SIF_SHA256" && echo "matches Raven" || echo "DIFFERS"
+if sha256sum "$SIM_SIF" | grep -q "^$SIM_SIF_SHA256 "; then
+  echo "matches Raven's image"
+else
+  echo "FATAL: $SIM_SIF is not Raven's image (SHA-256 differs)" >&2
+  exit 1
+fi
 
 echo "== torch and PyG on the GPU (expected to fail on H200/B200)"
 SIM_GPU=0 in_sim_image python /opt/dais/sim_variant.py check-gpu || echo "GPU check failed"

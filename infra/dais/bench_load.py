@@ -12,7 +12,8 @@ seconds have passed or --stop-file exists, for throughput under a steady load.
 Prints one `BENCH {json}` line per round; exits 1 if any request fails.
 
     python3 bench_load.py --base URL --key-file F --model M [--sessions 5]
-        [--context 30000] [--gen 1024] [--tag T] [--duration S --stop-file F]
+        [--context 30000] [--gen 1024] [--tag T] [--warm-rounds N]
+        [--duration S --stop-file F --ready-file F]
 """
 
 import argparse
@@ -138,6 +139,8 @@ def main():
     p.add_argument("--tag", default="t")
     p.add_argument("--duration", type=float)
     p.add_argument("--stop-file")
+    p.add_argument("--ready-file", help="created when the steady phase starts")
+    p.add_argument("--warm-rounds", type=int, default=1)
     a = p.parse_args()
     with open(a.key_file) as f:
         key = f.read().strip()
@@ -158,8 +161,16 @@ def main():
     ]
     run(a, key, f"{a.tag} cold", first)
     if a.duration is None:
-        run(a, key, f"{a.tag} warm", warm)
+        for r in range(a.warm_rounds):
+            run(
+                a,
+                key,
+                f"{a.tag} warm" + (f" {r + 1}" if a.warm_rounds > 1 else ""),
+                warm,
+            )
         return
+    if a.ready_file:
+        open(a.ready_file, "w").close()
     deadline = time.time() + a.duration
 
     def until():
