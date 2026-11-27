@@ -22,7 +22,9 @@ Steps (STEPS):
   sweep_snap    the commit published as a Raven snapshot (cluster_proxy.py)
   image_check   validate-rule in the Raven image (torch 1.11) on the snapshot
   sweep_jobs    one sim job per part, then waiting for them
-  sweep_fetch   each part's output; a part without sweep.json is rerun once
+  sweep_fetch   each part's output; parts without a whole sweep.json are
+                rerun together, once (a sim that died with its runner, the
+                local backend's Slurm job, is rerun without counting)
   fit           merge the parts, fit the Gaussian process, commit the sweep
   final_config  the final run's config: the GP peak and the 5 best measured
                 points (generate_sim_config.py --final), committed
@@ -92,6 +94,14 @@ IMAGE_CHECK_SLOTS = 2
 IMAGE_CHECK_TRIES = 4
 IMAGE_CHECK_RETRY = int(os.environ.get("PF_IMAGE_CHECK_RETRY", "120"))
 JOB_ATTEMPTS = 2
+#: Jobs lost with their runner (the local backend's sims die with their Slurm
+#: job): rounds of reruns within one pipeline run, the pause before each, and
+#: the most a config may lose over all runs. Within one run a lost job is not
+#: a kill (the kill would have taken the pipeline too) but a worker that dies
+#: without a status, which would recur: the version fails instead of looping.
+LOST_ROUNDS = 2
+LOST_PAUSE = int(os.environ.get("PF_LOST_PAUSE", "30"))
+LOST_LIMIT = 6
 
 
 class Failed(Exception):
@@ -189,13 +199,16 @@ class Version:
 
     def run(self, prompt=None):
         # one pipeline per version: a second one waits, then sees its state
+        # a POSIX lock: GPFS honours it across nodes (flock it may not). It
+        # is held by this process until it exits; nothing else here opens
+        # the file (closing any descriptor of it would release the lock)
         self.lock_path = self.wt_root / f"{self.stem}.lock"
         self._lock = open(self.lock_path, "w")
         try:
-            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            fcntl.lockf(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
             self.log("another pipeline runs this version: waiting for it")
-            fcntl.flock(self._lock, fcntl.LOCK_EX)
+            fcntl.lockf(self._lock, fcntl.LOCK_EX)
             self.state = json.loads(self.state_path.read_text())
         if self.state["status"] in ("scored", "failed"):
             self.log(f"already {self.state['status']}")
@@ -226,6 +239,7 @@ class Version:
                 self.save()
             self.state["status"] = "scored"
             self.log(f"scored: {json.dumps(self.data.get('score'))}")
+            self.release_snapshots()
         except Failed as e:
             self.state["status"] = "failed"
             self.state["error"] = str(e)[-6000:]
@@ -237,6 +251,18 @@ class Version:
             self.log(f"ERROR: {traceback.format_exc()}")
         self.save()
         return self.state
+
+    def release_snapshots(self):
+        """A scored version's snapshots: its results are fetched and
+        committed, so the backend may remove them (cluster_proxy.cleanup; a
+        failed version's stay, for debugging). Never fails the version."""
+        for key in ("sweep_sha", "final_sha"):
+            sha = self.data.get(key)
+            try:
+                if sha and cluster_proxy.cleanup(sha):
+                    self.log(f"snapshot {sha[:12]} removed")
+            except Exception as e:  # noqa: BLE001 - only disk space is at stake
+                self.log(f"snapshot {sha[:12]} not removed: {e}")
 
     def step_export(self):
         if self.seeded:
@@ -370,22 +396,47 @@ class Version:
         return self.conf.get("sobol_points", 256)
 
     def parts(self):
-        per_point = self.pairings() * self.data["episodes"]["sweep"]
-        n = -(-self.design_points() * per_point // MAX_JOB_EPISODES)
+        # the backend's split (cluster_proxy.sweep_parts) of the real design
+        # (step_sweep_config counts it), kept in the state so that a resumed
+        # version keeps its parts
+        if "n_parts" not in self.data:
+            per_point = self.pairings() * self.data["episodes"]["sweep"]
+            points = self.data.get("design_points") or self.design_points()
+            self.data["n_parts"], self.data["parts_aligned"] = cluster_proxy.sweep_parts(
+                points, per_point, self.setting, MAX_JOB_EPISODES)
+        n = self.data["n_parts"]
         if n == 1:
             return [f"{self.stem}_sweep"]
         return [f"{self.stem}_sweep_p{k}of{n}" for k in range(1, n + 1)]
 
-    def step_sweep_config(self):
+    def _generate_sweep(self, *extra):
         upper = self.conf["max_params"]
         self.py(
             "generate_sim_config.py", "--root", self.wt, "--config", self.wt / self.rule,
             "--sobol-points", self.conf.get("sobol_points", 256),
-            "--n-episodes", self.data["episodes"]["sweep"], "--n-parts", len(self.parts()),
+            "--n-episodes", self.data["episodes"]["sweep"],
             "--min-params", self.conf["min_params"],
             "--max-params", "none" if upper is None else upper,
-            "--setting", self.setting,
+            "--setting", self.setting, *extra,
         )
+
+    def count_design(self):
+        """The sweep's distinct points (the Sobol design merges equal ones, so
+        a rule with few int values has fewer than sobol_points), from the
+        sweep config generate_sim_config.py writes for it whole."""
+        whole = self.wt_root / f"{self.stem}.design.yml"
+        try:
+            self._generate_sweep("--n-parts", 1, "--out", whole)
+            managers = yaml.safe_load(whole.read_text())["managers"]
+        finally:
+            whole.unlink(missing_ok=True)
+        pattern = re.compile(rf"{re.escape(self.stem)}_s\d+$")
+        return sum(1 for name in managers if pattern.match(name))
+
+    def step_sweep_config(self):
+        if "n_parts" not in self.data:
+            self.data["design_points"] = self.count_design()
+        self._generate_sweep("--n-parts", len(self.parts()))
         configs = [f"{CONFIG_DIR}/{p}.yml" for p in self.parts()]
         self.data["sweep_commit"] = self.commit(configs, "sweep configs")
 
@@ -417,40 +468,114 @@ class Version:
             f"validate-rule did not run in the Raven image ({IMAGE_CHECK_TRIES} tries):"
             f"\n{log[-2000:]}")
 
+    def _submit(self, key, sha, config, why="submitted"):
+        jobs = self.data[key]
+        jobs.setdefault(config, []).append(
+            cluster_proxy.submit(config, sha, run_group=self.stem))
+        self.save()
+        self.log(f"{why} {config}: job {jobs[config][-1]}")
+
+    def _drop_lost(self, key, config):
+        """A job that died with its runner (the local backend's sims die with
+        their Slurm job) is moved aside: it is rerun, not counted as one of
+        the config's JOB_ATTEMPTS, up to LOST_LIMIT times."""
+        jobs = self.data[key]
+        if jobs.get(config) and cluster_proxy.lost(jobs[config][-1]):
+            job = jobs[config].pop()
+            lost = self.data.setdefault(f"{key}_lost", {}).setdefault(config, [])
+            lost.append(job)
+            self.save()
+            if len(lost) > LOST_LIMIT:
+                raise Failed(f"{config}: {len(lost)} jobs died without a status {lost}:"
+                             " see their worker.log (the pool's PF_POOL_LOCKS,"
+                             " PF_POOL_CPUS)")
+            self.log(f"job {job} of {config} died with its runner: rerun, not an attempt")
+            return True
+        return False
+
+    def _lost_round(self, configs):
+        """Before rerunning jobs lost within this run: fail after LOST_ROUNDS
+        such rounds, else pause."""
+        self._lost_rounds = getattr(self, "_lost_rounds", 0) + 1
+        if self._lost_rounds > LOST_ROUNDS:
+            raise Failed(
+                f"jobs keep dying without a status while the pipeline runs"
+                f" ({self._lost_rounds - 1} rounds; last {configs[:3]}...): the"
+                " workers fail before they can record it; see their worker.log"
+                " (the pool's PF_POOL_LOCKS, PF_POOL_CPUS)")
+        self.log(f"{len(configs)} jobs died while the pipeline ran: rerun in"
+                 f" {LOST_PAUSE} s (round {self._lost_rounds} of {LOST_ROUNDS})")
+        time.sleep(LOST_PAUSE)
+
     def _jobs(self, key, sha, configs):
-        """Submit each config not yet submitted (ids kept in data[key]), wait."""
+        """Submit each config not yet submitted (ids kept in data[key]), wait;
+        jobs lost with their runner are resubmitted together, until none is."""
         jobs = self.data.setdefault(key, {})
-        for config in configs:
-            if config not in jobs:
-                jobs[config] = [cluster_proxy.submit(config, sha, run_group=self.stem)]
-                self.save()
-                self.log(f"submitted {config}: job {jobs[config][-1]}")
-        pending = [j[-1] for j in jobs.values()]
-        self.log(f"waiting for jobs {pending}")
-        cluster_proxy.wait(pending)
+        while True:
+            for config in configs:
+                self._drop_lost(key, config)  # lost before this run (a resume)
+                if not jobs.get(config):
+                    self._submit(key, sha, config)
+            pending = [jobs[c][-1] for c in configs]
+            self.log(f"waiting for jobs {pending}")
+            cluster_proxy.wait(pending)
+            lost = [c for c, job in zip(configs, pending) if cluster_proxy.lost(job)]
+            if not lost:
+                return
+            self._lost_round(lost)
 
-    def _fetch(self, key, sha, config, remote, local):
-        """Fetch one sim's output; rerun its job once if it has no sweep.json.
+    def _complete(self, local, config):
+        """Has the fetched output a whole sweep.json: parseable, with every
+        point of its config? (A sim killed while writing leaves a truncated
+        one: treated as missing.)"""
+        try:
+            sweep = json.loads((Path(local) / "sweep.json").read_text())
+            names = {p["name"] for p in sweep["points"]}
+        except (OSError, ValueError, KeyError, TypeError):
+            return False
+        path = self.wt / config
+        if not path.exists():
+            return bool(names)
+        pattern = re.compile(rf"{re.escape(self.stem)}_(s\d+|gp)$")
+        wanted = {m for m in yaml.safe_load(path.read_text())["managers"] if pattern.match(m)}
+        return bool(names) and wanted <= names
 
-        Only a job that left no output (or no sweep.json) is rerun; a fetch
-        that could not run (Raven unreachable) raises ClusterError, resumable,
-        and costs no job attempt.
+    def _fetch_all(self, key, sha, items):
+        """Fetch each sim's output, (config, remote, local) in `items`; rerun
+        every one without a whole sweep.json, all together, once each (a job
+        lost with its runner is rerun without counting, within the limits of
+        _drop_lost and _lost_round).
+
+        A fetch that could not run (Raven unreachable) raises ClusterError,
+        resumable, and costs no job attempt.
         """
         jobs = self.data[key]
+        todo, first = list(items), True
         while True:
-            try:
-                size = cluster_proxy.fetch(sha, remote, local, key=f"{self.stem}/{Path(remote).name}")
-                self.log(f"fetched {remote}: {size / 1e6:.1f} MB")
-            except cluster_proxy.NoOutput as e:
-                self.log(f"{e}")
-            if (Path(local) / "sweep.json").exists():
+            missing = []
+            for config, remote, local in todo:
+                try:
+                    size = cluster_proxy.fetch(sha, remote, local,
+                                               key=f"{self.stem}/{Path(remote).name}")
+                    self.log(f"fetched {remote}: {size / 1e6:.1f} MB")
+                except cluster_proxy.NoOutput as e:
+                    self.log(f"{e}")
+                if not self._complete(local, config):
+                    missing.append((config, remote, local))
+            if not missing:
                 return
-            if len(jobs[config]) >= JOB_ATTEMPTS:
-                raise Failed(f"{config} wrote no sweep.json in {JOB_ATTEMPTS} jobs {jobs[config]}")
-            jobs[config].append(cluster_proxy.submit(config, sha, run_group=self.stem))
-            self.save()
-            self.log(f"resubmitted {config}: job {jobs[config][-1]}")
-            cluster_proxy.wait([jobs[config][-1]])
+            lost = [c for c, _, _ in missing if jobs[c] and cluster_proxy.lost(jobs[c][-1])]
+            if lost and not first:  # lost while this run waited for them
+                self._lost_round(lost)
+            first = False
+            for config, _, local in missing:
+                if not self._drop_lost(key, config) and len(jobs[config]) >= JOB_ATTEMPTS:
+                    raise Failed(f"{config} wrote no sweep.json in {JOB_ATTEMPTS} jobs"
+                                 f" {jobs[config]}")
+                shutil.rmtree(local, ignore_errors=True)  # a partial or truncated copy
+                self._submit(key, sha, config, why="resubmitted")
+            cluster_proxy.wait([jobs[c][-1] for c, _, _ in missing])
+            todo = missing
 
     def part_dir(self, part):
         if len(self.parts()) == 1:
@@ -462,9 +587,9 @@ class Version:
         self._jobs("sweep_jobs", self.data["sweep_sha"], configs)
 
     def step_sweep_fetch(self):
-        for part in self.parts():
-            self._fetch("sweep_jobs", self.data["sweep_sha"], f"{CONFIG_DIR}/{part}.yml",
-                        f"{OUT_DIR}/{part}", self.part_dir(part))
+        self._fetch_all("sweep_jobs", self.data["sweep_sha"], [
+            (f"{CONFIG_DIR}/{part}.yml", f"{OUT_DIR}/{part}", self.part_dir(part))
+            for part in self.parts()])
 
     def step_fit(self):
         parts = self.parts()
@@ -499,9 +624,8 @@ class Version:
                    [f"{CONFIG_DIR}/{self.stem}_sweep_final.yml"])
 
     def step_final_fetch(self):
-        self._fetch("final_jobs", self.data["final_sha"],
-                    f"{CONFIG_DIR}/{self.stem}_sweep_final.yml", self.final,
-                    self.wt / self.final)
+        self._fetch_all("final_jobs", self.data["final_sha"], [
+            (f"{CONFIG_DIR}/{self.stem}_sweep_final.yml", self.final, self.wt / self.final)])
         self.py("generate_sim_config.py", "--score-final", self.wt / self.final / "sweep.json")
         final = json.loads((self.wt / self.final / "sweep.json").read_text())
         points = {p["name"]: p for p in final["points"]}
