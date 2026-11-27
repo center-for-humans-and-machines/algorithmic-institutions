@@ -9,6 +9,8 @@ design is in docs/reports/dais_gpu_sim_equivalence.md.
         one row per (point, episode) of a finished sim: the sweep score's
         per-episode pool and members (aimanager.simulation.pool_scores, as
         sweep.json averages them), from its per_round.parquet
+    python infra/dais/gpusim_equiv.py slice CONFIG OUT --points A,B --output-dir D
+        CONFIG reduced to some of its points (a slice, as a sweep part is)
     python infra/dais/gpusim_equiv.py sweep-parts RULE OUT_DIR [--n-parts 2]
         a real sweep of RULE (256 points x 500 episodes) as the pipeline
         splits it, its part configs and outputs in OUT_DIR
@@ -238,6 +240,25 @@ def episodes(a):
     print(a.out, len(out), "rows")
 
 
+def slice_config(a):
+    """CONFIG with only the points POINTS (and the anchor), output OUT_DIR:
+    one slice of a sim. With `seed_cycle` every point's batches keep their
+    seeds, so a slice plays exactly the games the whole sim gives it."""
+    with open(a.config) as f:
+        config = yaml.safe_load(f)
+    names = a.points.split(",")
+    missing = [n for n in names if n not in config["managers"]]
+    if missing:
+        sys.exit(f"no such points: {missing}")
+    config["pairings"] = [p for p in config["pairings"] if p["group_0"] in names]
+    config["managers"] = {
+        k: v for k, v in config["managers"].items() if k == "ah" or k in names
+    }
+    config["output_dir"] = a.output_dir
+    with open(a.out, "w") as f:
+        yaml.safe_dump(config, f, sort_keys=False, width=1000)
+
+
 def sweep_parts(a):
     """A real sweep's part configs, as the pipeline writes them
     (generate_sim_config.py's functions), into a folder outside the repo."""
@@ -460,6 +481,11 @@ def main():
     e.add_argument("config")
     e.add_argument("out")
     e.add_argument("--per-round")
+    c = sub.add_parser("slice")
+    c.add_argument("config")
+    c.add_argument("out")
+    c.add_argument("--points", required=True, help="comma-separated point names")
+    c.add_argument("--output-dir", required=True)
     s = sub.add_parser("sweep-parts")
     s.add_argument("rule")
     s.add_argument("out_dir")
@@ -471,6 +497,7 @@ def main():
     commands = {
         "configs": write_configs,
         "episodes": episodes,
+        "slice": slice_config,
         "sweep-parts": sweep_parts,
         "analyze": analyze,
     }
