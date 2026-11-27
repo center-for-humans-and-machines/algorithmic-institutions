@@ -172,6 +172,39 @@ if [ "${WITH_MODEL:-0}" = 1 ]; then
       "$PF_RUN/model_session.log"
     grep -o "SamplingParams([^)]*)" "$PF_RUN/vllm.log" | sort | uniq -c | head -5 \
       | sed 's/^/     vllm | /'
+    # the same through the backend the pipeline uses (agent_apptainer.py and
+    # opencode_run.py, the runner): a stand-in export, one run, its record
+    exp="$PF_RUN/pf_runs/exports/pfchk"
+    mkdir -p "$exp"
+    (cd "$PF_REPO" && tar --exclude=.git -cf - src docs experiments configs) | tar -xf - -C "$exp"
+    cp -r "$PF_RUN/oc" "$exp/.opencode"
+    mkdir -p "$exp/notes/policy_finder"
+    check backend_run ok env PF_RUNS="$PF_RUN/pf_runs" PF_AGENT_BACKEND=apptainer \
+      PF_AGENT_SIF="$AGENT_SIF" PF_AGENT_POOL_CPUS="$(python3 "$PF_HERE/cpu_slots.py" slots 5 1 2 | paste -sd, -)" \
+      PF_AGENT_SHELL="$PF_HERE/agent_shell.sh" PF_AGENT_NOINET="$PF_HERE/noinet.py" \
+      PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE" PF_AGENT_TIMEOUT=900 \
+      "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - <<'EOF'
+import json, sys
+sys.path.insert(0, "scripts/policy_finder")
+import agent_runner as ar
+run = ar.start("pfchk", ["notes/policy_finder"], "Use your bash tool once to run "
+               "`curl -sS -m 5 http://1.1.1.1`, then write the file "
+               "notes/policy_finder/check.md with one line saying what happened, "
+               "and reply with that line.", harness="opencode")
+rec = ar.finish(run, harness="opencode")
+r = rec["result"]
+print("status", rec["status"], "error", rec["error"], "models", rec["models"])
+print("failures", r.get("failures"), "seconds", r.get("seconds"), "tokens", r.get("tokens"))
+print("audit", json.dumps(rec["network_audit"])[:400])
+print("report", rec["report"][:300])
+source, paths = ar.transcripts(run, "opencode")
+key = open(__import__("os").environ["PF_LLM_API_KEY_FILE"]).read().strip()
+leaks = [p for p in paths if key in open(p, errors="replace").read()]
+print("transcripts", len(paths), "key in", leaks)
+sys.exit(0 if rec["status"] == "succeeded" and not leaks else 1)
+EOF
+    sed 's/^/     run  | /' "$PF_RUN/backend_run.log" | tail -8
+    ls -la "$exp/notes/policy_finder" | sed 's/^/     out  | /'
   else
     tail -30 "$PF_RUN/vllm.log"; fails=$((fails + 1))
   fi
