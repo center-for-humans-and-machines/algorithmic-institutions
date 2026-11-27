@@ -246,7 +246,7 @@ def sweep_parts(a):
 
     from aimanager.manager.rule import validate_rule
 
-    design = validate_rule(a.rule, 1, 4, g.SOBOL_POINTS)
+    design = validate_rule(a.rule, 1, None, g.SOBOL_POINTS)
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
     for suffix, config in g.build_sim_configs(
