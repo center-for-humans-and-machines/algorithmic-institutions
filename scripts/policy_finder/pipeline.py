@@ -313,11 +313,13 @@ class Version:
                     self.log(f"attaching to agent run {run_id}")
                 else:
                     # a fresh copy for every run after the first: an earlier
-                    # run (failed, expired, lost, or on a failing endpoint)
-                    # may have written into this one
+                    # run (failed, expired, lost, on a failing endpoint, or one
+                    # whose start failed after its worker was launched) may
+                    # have written into this one
                     if (attempts or self.data.get("limited_runs")
                             or self.data.get("lost_runs")
-                            or self.data.get("endpoint_runs")):
+                            or self.data.get("endpoint_runs")
+                            or self.data.get("agent_starts")):
                         # a fresh copy for the retry: the failed run may have written
                         export_instance.build(self.wt, MAIN, self.exports)
                     if self.harness == "claude":
@@ -326,6 +328,8 @@ class Version:
                     elif not agent_runner.MAX_USAGE and not self.conf.get("base_url"):
                         self.log("WARNING: PF_OPENROUTER_MAX_USAGE is not set: no spend"
                                  " cap before this agent starts")
+                    self.data["agent_starts"] = self.data.get("agent_starts", 0) + 1
+                    self.save()
                     run_id = agent_runner.start(self.stem, write_dirs, self.data["prompt"],
                                                 harness=self.harness)
                     self.data["agent_current"] = run_id

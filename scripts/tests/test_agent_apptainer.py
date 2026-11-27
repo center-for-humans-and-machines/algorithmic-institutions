@@ -42,7 +42,7 @@ def env(tmp_path, monkeypatch):
 def test_argv_binds_command_and_key(env):
     run = aa.root() / "apt-1"
     cmd = aa.argv("pf-x-v2", ["notes/policy_finder"], "Design.", run, [8, 9])
-    assert cmd[:3] == ["taskset", "-c", "8,9"]
+    assert [os.path.basename(cmd[0])] + cmd[1:3] == ["taskset", "-c", "8,9"]
     binds = [cmd[i + 1] for i, a in enumerate(cmd) if a == "--bind"]
     export = env / "runs/exports/pf-x-v2"
     assert f"{export}:{ar.REPO}:ro" in binds
@@ -70,7 +70,8 @@ def test_argv_in_a_job_step(env, monkeypatch):
     cmd = aa.argv("pf-x-v2", [], "p", aa.root() / "apt-1", [8, 9])
     assert cmd[:2] == ["srun", "--overlap"]
     assert f"--mem={ar.MEMORY_MB}M" in cmd and "--cpus-per-task=2" in cmd
-    assert cmd[cmd.index("taskset"):][:3] == ["taskset", "-c", "8,9"]
+    i = next(k for k, a in enumerate(cmd) if os.path.basename(a) == "taskset")
+    assert cmd[i + 1:i + 3] == ["-c", "8,9"]
 
 
 def test_cpu_groups_and_slot_limit(env, tmp_path):
@@ -200,3 +201,19 @@ def test_local_model_config_has_sampling_and_env_url():
     model = local["models"]["Qwen/Qwen3-Coder-Next"]
     assert model["options"] == {"temperature": 1.0, "top_p": 0.95, "top_k": 40}
     assert model["limit"]["context"] == 131072
+
+
+def test_run_ids_never_collide(env):
+    first = aa._next_id()
+    (aa.root() / "next_id").write_text("1\n")  # a counter that went back
+    second = aa._next_id()
+    assert first == "apt-1" and second == "apt-2"
+    assert (aa.root() / "apt-2").is_dir()
+
+
+def test_a_reused_pid_is_not_alive(env):
+    info = {"host": aa.socket.gethostname(), "pid": os.getpid(),
+            "start": aa._start_time(os.getpid())}
+    assert aa._alive(info)
+    if info["start"] is not None:  # Linux: /proc
+        assert not aa._alive({**info, "start": info["start"] + 1})

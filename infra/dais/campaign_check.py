@@ -79,7 +79,8 @@ def main():
     ap.add_argument("--min-first-scored", type=int,
                     help="at least this many first-generation versions scored")
     ap.add_argument("--no-expired", action="store_true",
-                    help="no agent run may have expired (its time limit)")
+                    help="no agent run may have expired (its time limit), and none "
+                    "may have failed on the endpoint (the load test)")
     args = ap.parse_args()
     ok_status = ("scored",) if args.expect == "scored" else ("scored", "failed")
     pf_runs = Path(os.environ["PF_RUNS"])
@@ -100,13 +101,16 @@ def main():
         conf = json.loads((wt_root / args.target / ".claude/policy_finder.json").read_text())
         members = [(args.target, conf.get("version", 1))]
         first = set(members)
-    seconds, first_scored, expired = [], 0, []
+    seconds, first_scored, expired, endpoint, lost = [], 0, [], [], 0
     for name, version in members:
         stem = name if version == 1 else f"{name}-v{version}"
         path = wt_root / f"{stem}.state.json"
         state = json.loads(path.read_text()) if path.exists() else {}
         print(describe(stem, state))
-        for r in (state.get("data") or {}).get("agent_runs") or []:
+        data = state.get("data") or {}
+        endpoint += [f"{stem} {r.get('run_id')}" for r in data.get("endpoint_runs") or []]
+        lost += len(data.get("lost_runs") or [])
+        for r in data.get("agent_runs") or []:
             if (r.get("result") or {}).get("seconds") is not None:
                 seconds.append(r["result"]["seconds"])
             if r.get("status") == "expired":
@@ -127,12 +131,14 @@ def main():
         print(f"agent run seconds: n {len(seconds)}, min {min(seconds)}, quartiles "
               f"{[round(x) for x in q]}, max {max(seconds)}")
     print(f"first generation: {first_scored} of {len(first)} scored; expired runs: "
-          f"{len(expired)}")
+          f"{len(expired)}; endpoint runs: {len(endpoint)}; lost runs: {lost}")
     if args.min_first_scored is not None and first_scored < args.min_first_scored:
         bad.append(f"{first_scored} first-generation versions scored, fewer than "
                    f"{args.min_first_scored}")
     if args.no_expired and expired:
         bad.append(f"expired agent runs: {', '.join(expired)}")
+    if args.no_expired and endpoint:
+        bad.append(f"agent runs failed on the endpoint: {', '.join(endpoint)}")
     if bad:
         print("NOT AS EXPECTED: " + "; ".join(bad))
         return 1
