@@ -7,57 +7,72 @@ the unchanged sim image runs fastest as many single-threaded processes, one
 per hyperthread (docs/reports/dais_feasibility.md):
 
   - `snapshot(ref)`: the commit's files (`git archive`) in
-    $PF_LOCAL_ROOT/snapshots/<sha>/tree; its sims write their outputs there
+    $PF_LOCAL_ROOT/snapshots/<sha>/tree, made under a lock; its sims write
+    their outputs there
   - `run(command, sha)`: the command in the sim image (Apptainer) on that
     tree, at /opt/algorithmic-institutions as on Raven; (exit code, log)
   - `validate_rule(...)`: validate-rule through `run`
   - `submit(config, sha)`: one sim into the pool: a detached worker process
-    that takes a free CPU slot, pins itself to it and runs
+    that takes a free CPU slot, pins itself to it, clears the config's output
+    folder (so no earlier sim's result can be read as this one's) and runs
     `python -m aimanager simulate <config>` single-threaded in the image
   - `queue()`, `wait(jobs)`: the pool's jobs whose worker is still alive
+  - `lost(job)`: the job's worker died before its sim finished (killed with
+    its Slurm job), as opposed to a sim that ran and failed
   - `fetch(sha, remote_dir, local_dir)`: a copy of the snapshot's output dir
   - `sweep_parts(...)`: how many sims a sweep is split into (below)
-  - `cleanup(sha)`: a snapshot removed, unless a live job runs on it (the
-    pipeline calls it for a scored version's snapshots)
+  - `cleanup(sha)`: a snapshot removed, unless a live job runs on it or it is
+    being made (the pipeline calls it for a scored version's snapshots)
 
 The pool needs no daemon: each job is its own worker, and the slots are lock
-files (one per CPU of PF_POOL_CPUS, node-local), so pipelines running side by
-side (a campaign) share one pool. A job's folder ($PF_LOCAL_ROOT/jobs/<id>)
-holds its settings (job.json), its sim's log and its result (status.json:
-exit code, CPU, wall seconds, peak memory). A worker killed with its Slurm job
-leaves no status: it is then out of the queue, its output has no sweep.json,
-and the pipeline reruns it, as on Raven.
+files on node-local storage (one per CPU of PF_POOL_CPUS), so pipelines
+running side by side in one job (a campaign) share one pool. A job's folder
+($PF_LOCAL_ROOT/jobs/<id>) holds its settings (job.json), its worker
+(worker.json: host, pid, process start time), its sim's log and its result
+(status.json: exit code, CPU, start and end, peak memory); jobs/active/<host>/
+lists that host's jobs not yet done, so a queue poll reads only those. Done jobs' folders
+are pruned after PF_LOCAL_KEEP_DAYS. A worker killed with its Slurm job
+leaves no final status: the job is `lost`, and the pipeline reruns it without
+counting an attempt.
 
-Slicing: the pipeline asks this backend how many parts a sweep has
-(`sweep_parts`), and splits it with generate_sim_config.py's own `--n-parts`;
-merge_sweeps.py joins them as for Raven's two parts. Parts of about
-PF_LOCAL_PART_EPISODES episodes each (default 4000, a slice of the
-feasibility report) keep every CPU of the pool busy. A sim seeds its batch i
-with `seed + i` and part k starts after the batches of the parts before it, so
-a split plays the same games as one whole sim exactly when every part but the
-last fills whole batches (docs/reports/dais_gpu_sim_equivalence.md). The
-smallest such split is chosen; when none exists (exp2_multi: 1024 episodes a
-point in batches of 1000), Raven's own split is used, so the result does not
-depend on the pool's size either way. The pipeline records which in its state.
+Slicing: the pipeline asks this backend how many parts a sweep of the real
+design (distinct Sobol points) has (`sweep_parts`) and splits it with
+generate_sim_config.py's own `--n-parts`; merge_sweeps.py joins them as for
+Raven's two parts. Parts of about PF_LOCAL_PART_EPISODES episodes each
+(default 4000, a slice of the feasibility report) keep every CPU of the pool
+busy. A sim seeds its batch i with `seed + i` and part k starts after the
+batches of the parts before it, so a split plays the same games as one whole
+sim exactly when every part but the last fills whole batches
+(docs/reports/dais_gpu_sim_equivalence.md). The smallest such split is
+chosen; when none exists (exp2_multi: 512 episodes a point in batches of
+1000), Raven's own split is used (for exp2_multi 2 parts, so 2 single-threaded
+sims, slow but correct), and the pipeline records `parts_aligned: false`.
+Either way the result does not depend on the pool's size.
 
 Settings (environment):
   PF_LOCAL_ROOT          snapshots, jobs (default $PF_RUNS/local_cluster)
   PF_SIM_SIF             the sim image (algoinst.sif)
   PF_ARTIFACTS           the model files, bound over the snapshot's artifacts/
-                         (snapshots hold git-lfs pointers; default: the
-                         checkout's artifacts/)
+                         (they are not in git, docs/large_files.md; default:
+                         the checkout's artifacts/)
   PF_LOCAL_CONTAINER     apptainer (default) or none: the host's python on
                          the snapshot (tests, development)
   PF_POOL_CPUS           the pool's CPUs, one slot each, "0,96,1,97" or
                          "0-3"; default: the CPUs this process may run on
-  PF_POOL_LOCKS          the slots' lock files (default: node-local temp dir)
+  PF_POOL_LOCKS          the slots' lock files (default: /dev/shm, per Slurm
+                         job; all pipelines of one job must share it)
   PF_SIM_THREADS         threads per sim (default 1; results are exactly
                          reproducible only at a fixed thread count)
   PF_LOCAL_PART_EPISODES episodes per sweep part (default 4000)
   PF_LOCAL_JOB_SECONDS   a sim is killed after this long (default 3600)
   PF_LOCAL_POLL_SECONDS  between queue polls in wait() (default 5)
+  PF_LOCAL_KEEP_DAYS     done jobs' folders are kept this long (default 7)
+
+A version started on Raven cannot resume here: its snapshots are Raven's, and
+`submit` refuses a snapshot it does not have.
 """
 
+import contextlib
 import fcntl
 import json
 import math
@@ -80,7 +95,7 @@ REPO = "/opt/algorithmic-institutions"
 #: The batch size of each setting's sweep sims and whether its parts play
 #: common games (generate_sim_config.py SETTINGS; a test keeps them equal)
 SWEEP_BATCH = {"exp2": 1000, "exp2_multi": 1000, "exp1": 1000, "exp2_diff": None}
-WORKER_EXIT = {"killed": -9, "timeout": 124}
+WORKER_EXIT = {"timeout": 124, "setup": 125}
 
 
 def _cp():
@@ -122,37 +137,82 @@ def tree(sha):
     return root() / "snapshots" / sha / "tree"
 
 
+@contextlib.contextmanager
+def _snapshot_lock(sha, wait=True):
+    """The snapshot's lock: held while it is made or removed. Yields False
+    (not taken) when `wait` is False and another process holds it."""
+    folder = root() / "snapshots"
+    folder.mkdir(parents=True, exist_ok=True)
+    with open(folder / f"{sha}.lock", "w") as handle:
+        try:
+            # POSIX locks: GPFS honours them across nodes (flock it may not)
+            fcntl.lockf(handle, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+        except OSError:
+            yield False
+            return
+        yield True
+
+
 def snapshot(ref):
     """The files of commit `ref` in a directory of their own; its sha.
 
     The checkout's object store holds every instance branch (worktrees share
-    it). git-lfs files stay pointers: the models come from PF_ARTIFACTS.
+    it). The model files are not in git: they come from PF_ARTIFACTS.
     """
     result = _git("rev-parse", "--verify", f"{ref}^{{commit}}")
     if result.returncode != 0:
         raise _cp().ClusterError(f"no commit {ref}: {result.stderr.strip()}")
     sha = result.stdout.strip()
     target = tree(sha)
-    if (target.parent / "complete").exists():
-        return sha
-    target.parent.mkdir(parents=True, exist_ok=True)
-    partial = Path(tempfile.mkdtemp(prefix="tree.", dir=target.parent))
-    archive = subprocess.Popen(
-        ["git", "-C", str(MAIN), "-c", "filter.lfs.smudge=", "-c", "filter.lfs.process=",
-         "-c", "filter.lfs.required=false", "archive", "--format=tar", sha],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    untar = subprocess.run(["tar", "-x", "-C", str(partial)], stdin=archive.stdout,
-                           capture_output=True)
-    archive.stdout.close()
-    err = archive.stderr.read().decode(errors="replace")
-    if archive.wait() != 0 or untar.returncode != 0:
-        shutil.rmtree(partial, ignore_errors=True)
-        raise _cp().ClusterError(f"snapshot of {sha[:12]} failed: {err}"
-                                 f"{untar.stderr.decode(errors='replace')}")
-    shutil.rmtree(target, ignore_errors=True)
-    os.replace(partial, target)
-    (target.parent / "complete").write_text(time.strftime("%Y-%m-%d %H:%M:%S\n"))
+    with _snapshot_lock(sha):
+        if (target.parent / "complete").exists():
+            return sha
+        target.parent.mkdir(parents=True, exist_ok=True)
+        partial = Path(tempfile.mkdtemp(prefix="tree.", dir=target.parent))
+        archive = subprocess.Popen(
+            ["git", "-C", str(MAIN), "-c", "filter.lfs.smudge=", "-c",
+             "filter.lfs.process=", "-c", "filter.lfs.required=false",
+             "archive", "--format=tar", sha],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        untar = subprocess.run(["tar", "-x", "-C", str(partial)], stdin=archive.stdout,
+                               capture_output=True)
+        archive.stdout.close()
+        err = archive.stderr.read().decode(errors="replace")
+        if archive.wait() != 0 or untar.returncode != 0:
+            shutil.rmtree(partial, ignore_errors=True)
+            raise _cp().ClusterError(f"snapshot of {sha[:12]} failed: {err}"
+                                     f"{untar.stderr.decode(errors='replace')}")
+        (partial / "artifacts").mkdir(exist_ok=True)  # the models' bind point
+        shutil.rmtree(target, ignore_errors=True)  # a half-made one (lock held)
+        os.replace(partial, target)
+        (target.parent / "complete").write_text(time.strftime("%Y-%m-%d %H:%M:%S\n"))
     return sha
+
+
+def cleanup(sha):
+    """Remove snapshot `sha` unless a live job runs on it or another process
+    holds its lock; True if removed.
+
+    The folder is renamed first (atomically), so a later snapshot() of the
+    commit makes a fresh one rather than seeing a half-removed tree.
+    """
+    folder = root() / "snapshots" / sha
+    with _snapshot_lock(sha, wait=False) as taken:
+        if not taken or not folder.is_dir():
+            return False
+        # this host's live jobs, and every job another node's index lists
+        others = [jobs_dir() / e.name for e in (jobs_dir() / "active").glob("*/*")
+                  if e.parent.name != socket.gethostname()]
+        for job in [*_live().values(), *others]:
+            try:
+                if json.loads((job / "job.json").read_text())["sha"] == sha:
+                    return False
+            except (OSError, ValueError, KeyError):
+                return False  # a job being written: keep the snapshot
+        doomed = folder.with_name(f"{sha}.removing.{os.getpid()}")
+        os.replace(folder, doomed)
+    shutil.rmtree(doomed, ignore_errors=True)
+    return True
 
 
 # -- running in the image ----------------------------------------------------
@@ -238,25 +298,59 @@ def pool_cpus():
 
 
 def lock_dir():
-    return Path(_env("PF_POOL_LOCKS",
-                     os.path.join(tempfile.gettempdir(), f"pf-pool-{os.getuid()}")))
+    """The slots' locks: node-local, per Slurm job (/dev/shm where there is
+    one), so that waiting workers never poll the shared file system."""
+    given = _env("PF_POOL_LOCKS")
+    if given:
+        return Path(given)
+    base = "/dev/shm" if os.path.isdir("/dev/shm") else tempfile.gettempdir()
+    return Path(base) / f"pf-pool-{os.getuid()}-{_env('SLURM_JOB_ID', 'local')}"
+
+
+def jobs_dir():
+    return root() / "jobs"
 
 
 def job_dir(job):
     if not re.fullmatch(r"local-\d+", str(job)):
         raise _cp().ClusterError(f"not a local job id: {job!r}")
-    return root() / "jobs" / str(job)
+    return jobs_dir() / str(job)
 
 
-def _next_id():
-    jobs = root() / "jobs"
+def active_dir():
+    """This host's index of jobs not yet done: a queue poll reads only it, and
+    never judges another node's workers (pipelines of several Slurm jobs may
+    share one PF_LOCAL_ROOT)."""
+    return jobs_dir() / "active" / socket.gethostname()
+
+
+def _new_job():
+    """A fresh job id and its folder. The counter is read under a POSIX lock
+    and the folder made with mkdir, which fails if it exists: ids stay unique
+    across processes and nodes."""
+    jobs = jobs_dir()
     jobs.mkdir(parents=True, exist_ok=True)
     with open(jobs / "next_id.lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        fcntl.lockf(lock, fcntl.LOCK_EX)
         counter = jobs / "next_id"
         n = int(counter.read_text()) if counter.exists() else 1
+        while True:
+            try:
+                (jobs / f"local-{n}").mkdir()
+                break
+            except FileExistsError:
+                n += 1
         counter.write_text(f"{n + 1}\n")
-    return f"local-{n}"
+    return n
+
+
+def _start_time(pid):
+    """A process's start time (clock ticks since boot, Linux), None elsewhere:
+    with the pid, it names one process even after the pid is reused."""
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19]
+    except (OSError, IndexError):
+        return None
 
 
 def submit(config, sha, run_group="policy-finder"):
@@ -266,19 +360,23 @@ def submit(config, sha, run_group="policy-finder"):
         raise _cp().ClusterError(f"no snapshot {sha[:12]}: snapshot() it first")
     if not (tree(sha) / config).is_file():
         raise _cp().ClusterError(f"no {config} in snapshot {sha[:12]}")
-    job = _next_id()
+    n = _new_job()
+    if n % 50 == 0:
+        prune()
+    job = f"local-{n}"
     folder = job_dir(job)
-    folder.mkdir()
     settings = {
         "job": job, "config": config, "sha": sha, "run_group": run_group,
         "root": str(root()),
         "submitted": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "threads": threads(), "cpus": pool_cpus(),
+        "threads": threads(), "cpus": pool_cpus(), "locks": str(lock_dir()),
         "container": _env("PF_LOCAL_CONTAINER", "apptainer"),
         "image": _env("PF_SIM_SIF"), "artifacts": _env("PF_ARTIFACTS"),
         "timeout": int(_env("PF_LOCAL_JOB_SECONDS", "3600")),
     }
     (folder / "job.json").write_text(json.dumps(settings, indent=2) + "\n")
+    active_dir().mkdir(parents=True, exist_ok=True)
+    (active_dir() / job).touch()
     with open(folder / "worker.log", "w") as log:
         worker = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "worker", str(folder)],
@@ -286,17 +384,17 @@ def submit(config, sha, run_group="policy-finder"):
             start_new_session=True, cwd=str(folder),
         )
     (folder / "worker.json").write_text(json.dumps(
-        {"host": socket.gethostname(), "pid": worker.pid}) + "\n")
+        {"host": socket.gethostname(), "pid": worker.pid,
+         "start": _start_time(worker.pid)}) + "\n")
     return job
 
 
-def _take_slot(cpus, poll=1.0):
+def _take_slot(cpus, locks, poll=1.0):
     """Block until one of `cpus` is free; (cpu, its open lock file)."""
-    folder = lock_dir()
-    folder.mkdir(parents=True, exist_ok=True)
+    locks.mkdir(parents=True, exist_ok=True)
     while True:
         for cpu in cpus:
-            handle = open(folder / f"cpu{cpu}.lock", "w")
+            handle = open(locks / f"cpu{cpu}.lock", "w")
             try:
                 fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 return cpu, handle
@@ -311,6 +409,21 @@ def _write_status(folder, status):
     os.replace(tmp, folder / "status.json")
 
 
+def _clear_output(repo, config):
+    """Remove the config's output folder in the snapshot before its sim runs:
+    a reused snapshot may hold an earlier sim's result there."""
+    import yaml
+
+    with open(repo / config) as f:
+        out = (yaml.safe_load(f) or {}).get("output_dir")
+    if not out:
+        return
+    target = (repo / out).resolve()
+    if repo.resolve() not in target.parents:
+        raise _cp().ClusterError(f"{config}: output_dir {out} is outside the snapshot")
+    shutil.rmtree(target, ignore_errors=True)
+
+
 def worker(folder):
     """A pool job: wait for a slot, run the sim pinned to it, record the
     result. Its exit code is the sim's."""
@@ -322,13 +435,21 @@ def worker(folder):
         os.environ["PF_SIM_SIF"] = settings["image"]
     if settings["artifacts"]:
         os.environ["PF_ARTIFACTS"] = settings["artifacts"]
-    cpu, lock = _take_slot(settings["cpus"])
+    cpu, lock = _take_slot(settings["cpus"], Path(settings["locks"]))
     started = time.time()
-    _write_status(folder, {"state": "running", "cpu": cpu,
-                           "started": time.strftime("%Y-%m-%d %H:%M:%S")})
-    (folder / "tmp").mkdir(exist_ok=True)
-    cmd, cwd, env = argv(settings["sha"], f"python -m aimanager simulate {settings['config']}",
-                         folder / "tmp", settings["threads"])
+    _write_status(folder, {"state": "running", "cpu": cpu, "started_at": started})
+    try:
+        _clear_output(tree(settings["sha"]), settings["config"])
+        (folder / "tmp").mkdir(exist_ok=True)
+        cmd, cwd, env = argv(settings["sha"],
+                             f"python -m aimanager simulate {settings['config']}",
+                             folder / "tmp", settings["threads"])
+    except Exception as e:  # noqa: BLE001 - a failed job, not a lost one
+        _write_status(folder, {"state": "done", "exit_code": WORKER_EXIT["setup"],
+                               "cpu": cpu, "error": repr(e), "started_at": started,
+                               "finished_at": time.time()})
+        (active_dir() / folder.name).unlink(missing_ok=True)
+        return WORKER_EXIT["setup"]
 
     def pin():
         if hasattr(os, "sched_setaffinity"):
@@ -347,6 +468,7 @@ def worker(folder):
     usage = resource.getrusage(resource.RUSAGE_CHILDREN)
     _write_status(folder, {
         "state": "done", "exit_code": code, "cpu": cpu,
+        "started_at": started, "finished_at": time.time(),
         "wall_seconds": round(time.time() - started, 1),
         "cpu_seconds": round(usage.ru_utime + usage.ru_stime, 1),
         # kB on Linux
@@ -355,6 +477,7 @@ def worker(folder):
     })
     shutil.rmtree(folder / "tmp", ignore_errors=True)
     lock.close()
+    (active_dir() / folder.name).unlink(missing_ok=True)
     return code
 
 
@@ -371,39 +494,52 @@ def _alive(info):
         pass
     try:
         os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return False  # the pid was reused by another user's process
+    except (ProcessLookupError, PermissionError):
+        return False  # gone, or the pid now belongs to another user
     stat = Path(f"/proc/{pid}/stat")
     if stat.exists():
         try:
-            return stat.read_text().rsplit(")", 1)[1].split()[0] != "Z"
+            fields = stat.read_text().rsplit(")", 1)[1].split()
         except (OSError, IndexError):
             return False
+        if fields[0] == "Z":
+            return False
+        if info.get("start") and fields[19] != info["start"]:
+            return False  # the pid was reused by a later process
     return True
 
 
 def status(job):
     """A job's status.json, {} while it has none."""
     path = job_dir(job) / "status.json"
-    return json.loads(path.read_text()) if path.exists() else {}
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
 
 
 def _live():
-    """{job id: its folder} of the pool's jobs not yet done whose worker is
-    alive."""
-    jobs = root() / "jobs"
+    """{job id: its folder} of this host's jobs not yet done whose worker is
+    alive. Reads only this host's index; an entry of a done or dead job is
+    dropped."""
+    active = active_dir()
     live = {}
-    if not jobs.is_dir():
+    if not active.is_dir():
         return live
-    for folder in jobs.iterdir():
-        if not folder.name.startswith("local-") or not (folder / "worker.json").exists():
+    for entry in active.iterdir():
+        folder = jobs_dir() / entry.name
+        info = folder / "worker.json"
+        if not info.exists():
+            if time.time() - entry.stat().st_mtime > 60:
+                entry.unlink(missing_ok=True)  # its submit died before the worker
+            else:
+                live[entry.name] = folder  # being submitted
             continue
-        if status(folder.name).get("state") == "done":
-            continue
-        if _alive(json.loads((folder / "worker.json").read_text())):
-            live[folder.name] = folder
+        if status(entry.name).get("state") != "done" and _alive(
+                json.loads(info.read_text())):
+            live[entry.name] = folder
+        else:
+            entry.unlink(missing_ok=True)
     return live
 
 
@@ -412,30 +548,30 @@ def queue():
     return set(_live())
 
 
-def cleanup(sha):
-    """Remove snapshot `sha` unless a live job runs on it; True if removed.
-
-    The folder is renamed first (atomically), so a later snapshot() of the
-    commit makes a fresh one rather than seeing a half-removed tree.
-    """
-    folder = root() / "snapshots" / sha
-    if not folder.is_dir():
+def lost(job):
+    """True if the job's worker died before its sim finished (killed with its
+    Slurm job): not a sim that ran and failed. A worker on another node is
+    treated as lost: this host cannot wait for it."""
+    folder = job_dir(job)
+    info = folder / "worker.json"
+    if not info.exists() or status(job).get("state") == "done":
         return False
-    for job in _live().values():
-        try:
-            if json.loads((job / "job.json").read_text())["sha"] == sha:
-                return False
-        except (OSError, ValueError, KeyError):
-            return False  # a job being written: keep the snapshot
-    doomed = folder.with_name(f"{sha}.removing.{os.getpid()}")
-    os.replace(folder, doomed)
-    shutil.rmtree(doomed, ignore_errors=True)
-    return True
+    return not _alive(json.loads(info.read_text()))
+
+
+def prune(days=None):
+    """Remove done jobs' folders older than PF_LOCAL_KEEP_DAYS."""
+    days = float(_env("PF_LOCAL_KEEP_DAYS", "7")) if days is None else days
+    cutoff = time.time() - days * 86400
+    for folder in jobs_dir().glob("local-*"):
+        state = status(folder.name)
+        if state.get("state") == "done" and state.get("finished_at", cutoff) < cutoff:
+            shutil.rmtree(folder, ignore_errors=True)
 
 
 def wait(jobs, poll=None):
     """Until none of `jobs` is in the queue; a failed sim's log tail is printed
-    (the pipeline then finds no sweep.json and reruns it once)."""
+    (the pipeline then reruns it)."""
     jobs = set(map(str, jobs))
     poll = float(_env("PF_LOCAL_POLL_SECONDS", "5")) if poll is None else poll
     while jobs & queue():
@@ -482,16 +618,17 @@ def aligned(points, per_point, batch, n_parts):
 
 
 def sweep_parts(points, per_point, setting, max_job_episodes):
-    """(parts, aligned): the smallest split into parts of at most
-    PF_LOCAL_PART_EPISODES episodes that plays the games of one whole sim;
-    without one, Raven's split (by its job size)."""
+    """(parts, aligned) for a design of `points` distinct points: the smallest
+    split into parts of at most PF_LOCAL_PART_EPISODES episodes that plays the
+    games of one whole sim; without one, Raven's split (by its job size).
+    Never more parts than points."""
     batch = SWEEP_BATCH[setting]
     target = int(_env("PF_LOCAL_PART_EPISODES", "4000"))
     total = points * per_point
     for n in range(max(1, math.ceil(total / target)), points + 1):
         if aligned(points, per_point, batch, n):
             return n, True
-    n = max(1, math.ceil(total / max_job_episodes))
+    n = min(points, max(1, math.ceil(total / max_job_episodes)))
     return n, aligned(points, per_point, batch, n)
 
 

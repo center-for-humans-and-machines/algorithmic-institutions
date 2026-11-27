@@ -28,10 +28,10 @@ cluster backend's pool (PF_CLUSTER_BACKEND=local: infra/dais/pipeline.slurm.sh
 
 Writes to <out dir>: versions.tsv (generation, lineage, version, stem, status,
 recorded score and se, re-evaluated score and se, episodes, commit),
-curve.tsv (per generation, the best so far by recorded score and its
-re-evaluated score) and summary.json (the improvement: the re-evaluated score
-of the final best so far minus that of generation 1's best, its se, and 70% of
-it).
+curve.tsv (per generation, the best so far by recorded score, its
+re-evaluated score and its paired gain over generation 1's best) and
+summary.json (the improvement: that gain at the last generation, its se, and
+70% of it).
 """
 
 import argparse
@@ -111,30 +111,48 @@ def combine(slices):
             math.sqrt(sum(se * se for _, se in slices)) / k)
 
 
-def curve(rows):
+def paired(a, b):
+    """Mean and se of b - a over slices played on the same seeds (common
+    random numbers: slice j of every version plays seed j's games), from the
+    spread of the per-slice differences."""
+    d = [y - x for (x, _), (y, _) in zip(a, b)]
+    k = len(d)
+    mean = sum(d) / k
+    sd = math.sqrt(sum((x - mean) ** 2 for x in d) / (k - 1)) if k > 1 else math.nan
+    return mean, sd / math.sqrt(k)
+
+
+def curve(rows, slices=None):
     """Per generation: the best so far by recorded score (the campaign's
-    selection), with its re-evaluated score."""
-    out, best = [], None
+    selection), with its re-evaluated score and, with `slices` ({stem: per
+    slice (pool, se)}), its paired gain over generation 1's best."""
+    out, best, first = [], None, None
     for g in sorted({r["generation"] for r in rows}):
         for r in rows:
             if r["generation"] == g and r["recorded"] is not None and (
                     best is None or r["recorded"] > best["recorded"]):
                 best = r
-        out.append({"generation": g, "best_so_far": best["stem"] if best else None,
-                    "recorded": best["recorded"] if best else None,
-                    "recorded_se": best["recorded_se"] if best else None,
-                    "reevaluated": best["reevaluated"] if best else None,
-                    "reevaluated_se": best["reevaluated_se"] if best else None})
+        if first is None and best is not None:
+            first = best
+        point = {"generation": g, "best_so_far": best["stem"] if best else None}
+        for key in ("recorded", "recorded_se", "reevaluated", "reevaluated_se"):
+            point[key] = best[key] if best else None
+        point["gain_vs_first"] = point["gain_se"] = None
+        if slices and best is not None:
+            point["gain_vs_first"], point["gain_se"] = paired(
+                slices[first["stem"]], slices[best["stem"]])
+        out.append(point)
     return out
 
 
 def improvement(points):
+    """The final best so far minus generation 1's best, re-evaluated: the
+    paired gain of the curve's last point, and 70% of it."""
     first, last = points[0], points[-1]
-    gain = last["reevaluated"] - first["reevaluated"]
-    se = math.hypot(last["reevaluated_se"], first["reevaluated_se"])
+    gain, se = last["gain_vs_first"], last["gain_se"]
     return {"first_generation_best": first["best_so_far"], "final_best": last["best_so_far"],
             "improvement": gain, "improvement_se": se, "bar_70": 0.7 * gain,
-            "bar_70_se": 0.7 * se}
+            "bar_70_se": 0.7 * se, "se_method": "paired over common-seed slices"}
 
 
 def write_tsv(path, rows):
@@ -143,8 +161,8 @@ def write_tsv(path, rows):
                                 lineterminator="\n")
         writer.writeheader()
         for r in rows:
-            writer.writerow({k: (f"{v:.4f}" if isinstance(v, float) else v)
-                             for k, v in r.items()})
+            writer.writerow({k: ("NA" if v is None else f"{v:.4f}" if isinstance(v, float)
+                                 else v) for k, v in r.items()})
 
 
 def main():
@@ -226,7 +244,7 @@ def main():
             r["reevaluated"], r["reevaluated_se"] = combine(results[r["stem"]])
             r["episodes"] = k * versions[r["stem"]][1]["n_episodes"]
 
-    points = curve(rows)
+    points = curve(rows, results)
     summary = {"state": str(args.state), "refs": args.refs, "seed": args.seed,
                "slices": k, "target_se": args.target_se, "no_final": missing,
                **improvement(points)}

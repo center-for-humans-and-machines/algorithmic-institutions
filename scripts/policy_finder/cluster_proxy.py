@@ -278,7 +278,7 @@ def fetch(sha, remote_dir, local_dir, key):
 def sweep_parts(points, per_point, setting, max_job_episodes):
     """(parts, aligned): a sweep in as few sims as Raven's job memory allows
     (aligned: not checked here, None)."""
-    return max(1, -(-points * per_point // max_job_episodes)), None
+    return min(points, max(1, -(-points * per_point // max_job_episodes))), None
 
 
 def cleanup(sha):
@@ -286,15 +286,22 @@ def cleanup(sha):
     return False
 
 
+def lost(job):
+    """Did the job die with its runner rather than run? Raven's jobs outlive
+    the pipeline, so never: a job without output counts as an attempt."""
+    return False
+
+
 #: PF_CLUSTER_BACKEND=local: the same functions on this machine, in the sim
 #: image with a local pool of CPU processes (local_cluster.py, for DAIS)
-BACKEND = os.environ.get("PF_CLUSTER_BACKEND", "raven")
+BACKEND = os.environ.get("PF_CLUSTER_BACKEND") or "raven"
 if BACKEND == "local":
     import sys
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from local_cluster import (  # noqa: E402,F401,F811
-        cleanup, fetch, queue, run, snapshot, submit, sweep_parts, validate_rule, wait,
+        cleanup, fetch, lost, queue, run, snapshot, submit, sweep_parts, validate_rule,
+        wait,
     )
 elif BACKEND != "raven":
     raise ImportError(f"PF_CLUSTER_BACKEND is raven or local, not {BACKEND!r}")

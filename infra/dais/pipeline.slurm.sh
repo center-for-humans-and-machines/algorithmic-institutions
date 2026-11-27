@@ -4,19 +4,23 @@
 # one single-threaded sim per hyperthread, pinned, in the unchanged sim image.
 #
 #   cd <checkout>    # see "The pipeline on DAIS" in infra/dais/README.md
-#   E="--export=ALL,PF_SWEEP_EPISODES=default,PF_FINAL_EPISODES=default"
+#   E="--export=PF_SWEEP_EPISODES=default,PF_FINAL_EPISODES=default"
 #   sbatch $E infra/dais/pipeline.slurm.sh instance <name> [new_instance.sh options]
 #   sbatch $E infra/dais/pipeline.slurm.sh resume <name>
 #   sbatch $E infra/dais/pipeline.slurm.sh campaign <campaign.yml>
-#   sbatch --export=ALL infra/dais/pipeline.slurm.sh python <script> [args]
+#   sbatch infra/dais/pipeline.slurm.sh python <script> [args]
 #       (e.g. infra/dais/reevaluate.py, rescore.py)
 #
 # instance, resume and campaign need PF_SWEEP_EPISODES and PF_FINAL_EPISODES,
 # each a number or `default` (the pipeline's per-setting defaults: 500 and 2000
 # for exp2), so that a smoke run cannot silently run at the real size. DAIS
-# sets SBATCH_EXPORT so that a job inherits nothing: pass them with
-#   sbatch --export=ALL,PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 ...
+# sets SBATCH_EXPORT so that a job inherits nothing from the submitting
+# shell; name each variable it needs (not ALL, which would also pass the
+# shell's PYTHONPATH and modules to the driver):
+#   sbatch --export=PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 ...
 # A version keeps the sizes it started with (its state file), also on resume.
+# The account and the log path (-o, under the default PF_SCRATCH) are fixed
+# below; override them on the sbatch command line (--account, -o) if needed.
 #
 # State (worktrees, state files, campaign state, snapshots, the pool's jobs)
 # lives in PF_RUNS (default $PF_SCRATCH/pf_runs), so a later job resumes a
@@ -44,7 +48,7 @@ if [ "$MODE" != python ]; then
     if [ "$value" = default ]; then
       unset "$var"
     elif [[ ! "$value" =~ ^[1-9][0-9]*$ ]]; then
-      echo "FATAL: set $var to a number or 'default' (sbatch --export=ALL,$var=...)," \
+      echo "FATAL: set $var to a number or 'default' (sbatch --export=$var=...)," \
         "not '$value'" >&2
       exit 2
     fi
@@ -64,7 +68,10 @@ export PF_SIM_SIF="$SIM_SIF"
 export PF_ARTIFACTS="${PF_ARTIFACTS:-$PF_SCRATCH/artifacts}"
 export PF_PYTHON="${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}"
 export PF_BASE="${PF_BASE:-$(git rev-parse --abbrev-ref HEAD)}"
-export PF_POOL_LOCKS="$PF_RUN/tmp/pool-locks"
+# the pool's slot locks on node-local memory, shared by every pipeline of
+# this job (they only live as long as the job)
+export PF_POOL_LOCKS="/dev/shm/pfpipe-$USER-${SLURM_JOB_ID:-$$}"
+trap 'cleanup; rm -rf "$PF_POOL_LOCKS" 2>/dev/null || true' EXIT
 mkdir -p "$PF_RUNS"
 
 [ -x "$PF_PYTHON" ] || { echo "FATAL: no driver python at $PF_PYTHON" >&2; exit 1; }
