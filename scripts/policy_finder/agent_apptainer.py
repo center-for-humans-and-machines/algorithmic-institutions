@@ -273,6 +273,11 @@ def start(stem, write_dirs, prompt, harness="opencode"):
     run = run_dir(run_id)
     for d in ("home", "tmp") + tuple(f"home/{h}" for h in HOME_READONLY):
         (run / d).mkdir(parents=True)
+    # OpenCode writes this file into every config folder it loads, ~/.opencode
+    # included, and fails when it cannot (export_instance.OPENCODE_GITIGNORE)
+    import export_instance
+
+    (run / "home/.opencode/.gitignore").write_text(export_instance.OPENCODE_GITIGNORE)
     settings = {
         "id": run_id, "stem": stem, "write_dirs": list(write_dirs), "prompt": prompt,
         "harness": harness, "groups": cpu_groups(), "timeout": ar.TIMEOUT,

@@ -8,7 +8,11 @@
 # multiprocessing, validate-rule). Prints PASS/FAIL lines; exits 1 on a FAIL.
 #
 #   sbatch --export=ALL infra/dais/agent_check.slurm.sh
-#   sbatch --export=ALL -p gpudev --gres=gpu:1 --qos=debug infra/dais/agent_check.slurm.sh  # an H200/B200 node's CPUs
+#   # with the model: vLLM on the job's GPUs, then one OpenCode session in the
+#   # container that runs the network checks through its own shell tool, and
+#   # the sampling settings vLLM received (its request log)
+#   sbatch --export=ALL,WITH_MODEL=1 -p gpudev --qos=debug --gres=gpu:2 \
+#     --cpus-per-task=24 --mem=400000 --time=00:15:00 infra/dais/agent_check.slurm.sh
 #
 #SBATCH -J pf_agentchk
 #SBATCH -o /dais/fs/scratch/%u/policy-finder-agents/logs/%x.%j.out
@@ -60,11 +64,12 @@ conf = ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next",
                            "base_url": "{env:PF_LLM_BASE_URL}"})
 json.dump(conf, open(f"{out}/opencode.json", "w"), indent=2)
 open(f"{out}/.gitignore", "w").write(ex.OPENCODE_GITIGNORE)
+open(f"{out}/../home/.opencode/.gitignore", "w").write(ex.OPENCODE_GITIGNORE)
 open(f"{out}/agents/policy-finder.md", "w").write(
     "---\ndescription: check\nmode: primary\n---\nSay ok.\n")
 EOF
 box() {  # the container as agent_apptainer.py starts it
-  apptainer exec --containall --cleanenv --no-mount cwd,tmp,bind-paths \
+  APPTAINERENV_PF_LLM_API_KEY="${LLM_KEY:-dummy}" apptainer exec --containall --cleanenv --no-mount cwd,tmp,bind-paths \
     --home "$PF_RUN/home:/home/claude" \
     --bind "$PF_REPO:$REPO:ro" --bind "$PF_RUN/oc:$REPO/.opencode:ro" \
     --bind "$PF_RUN/notes:$REPO/notes/policy_finder:rw" \
@@ -72,7 +77,7 @@ box() {  # the container as agent_apptainer.py starts it
     --bind "$PF_HERE/agent_shell.sh:/opt/pf-agent/shell:ro" \
     --bind "$PF_HERE/noinet.py:/opt/pf-agent/noinet.py:ro" \
     --env SHELL=/opt/pf-agent/shell --env OMP_NUM_THREADS=2 \
-    --env PF_LLM_BASE_URL=http://127.0.0.1:9/v1 --env PF_LLM_API_KEY=dummy \
+    --env PF_LLM_BASE_URL="${LLM_URL:-http://127.0.0.1:9/v1}" \
     --env PYTHONDONTWRITEBYTECODE=1 \
     --pwd "$REPO" "$AGENT_SIF" "$@"
 }
@@ -92,7 +97,9 @@ grep -iE "fetch|http|npm|install|ECONN|EPERM|error" "$PF_RUN/opencode_logs.txt" 
   | sed 's/^/     log | /'
 
 # the agent's shell: no internet, everything else
-check shell_plain_curl_works ok box bash -c 'curl -sS -m 10 -o /dev/null https://huggingface.co'
+# unfiltered, the container reaches the internet by address (names do not
+# resolve in it: no resolv.conf under --no-mount bind-paths)
+check shell_plain_curl_ip_works ok box bash -c 'curl -sS -m 10 -o /dev/null http://1.1.1.1'
 check shell_curl fail sh_ 'curl -sS -m 10 -o /dev/null https://huggingface.co'
 check shell_curl_ip fail sh_ 'curl -sS -m 10 -o /dev/null http://1.1.1.1'
 check shell_curl_loopback fail sh_ 'curl -sS -m 5 -o /dev/null http://127.0.0.1:9/'
@@ -134,6 +141,28 @@ check busctl_user fail sh_ 'busctl --user list'
 check tmux_ls fail sh_ 'tmux ls'
 check screen_ls fail sh_ 'screen -ls | grep -q "[0-9]\."'
 check shell_process_tree ok sh_ 'ps -o pid,ppid,args --forest; grep -E "Seccomp|NoNewPrivs" /proc/self/status'
+
+if [ "${WITH_MODEL:-0}" = 1 ]; then
+  nvidia-smi --query-gpu=index,name --format=csv,noheader | sed 's/^/GPU /'
+  assert_vllm_image || exit 1
+  NGPU=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
+  SERVER_CPUS=$(python3 "$PF_HERE/cpu_slots.py" reserved 4) \
+    serve_model 0.90 "$NGPU" "$PF_RUN/vllm.log" --enable-log-requests
+  if wait_ready 720; then
+    LLM_URL="$SERVER_URL"; LLM_KEY=$(cat "$SERVER_KEY_FILE")
+    prompt='Use your bash tool to run exactly these four commands, one tool call each, and then reply with one line per command saying whether it succeeded: (1) curl -sS -m 10 -o /dev/null http://1.1.1.1 (2) python3 -c "import socket; socket.socket(socket.AF_INET)" (3) ps -o pid,ppid,args --forest (4) grep -E "Seccomp|NoNewPrivs" /proc/self/status'
+    t0=$SECONDS
+    check model_session ok box timeout 600 opencode run --agent policy-finder \
+      --format json "$prompt"
+    echo "     session took $(( SECONDS - t0 )) s"
+    "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" "$PF_HERE/agent_events.py" \
+      "$PF_RUN/model_session.log"
+    grep -o "SamplingParams([^)]*)" "$PF_RUN/vllm.log" | sort | uniq -c | head -5 \
+      | sed 's/^/     vllm | /'
+  else
+    tail -30 "$PF_RUN/vllm.log"; fails=$((fails + 1))
+  fi
+fi
 
 echo "$fails failure(s)"
 [ "$fails" = 0 ]
