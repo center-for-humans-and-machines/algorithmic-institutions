@@ -10,10 +10,12 @@ backend that starts it in the export with OpenCode installed can use it.
    pipeline can find the key in what it copies without being given it
    (agent_runner.scrub);
 2. with `--usage-url` (OpenRouter's key endpoint), reads the key's usage
-   and credit limit, warns when the key has no limit, and refuses to start
-   (exit 3) once the usage is at `--max-usage` USD or, with
-   `--require-key-limit`, when the key has no limit; without it (a local
-   server), nothing is read;
+   and credit limit (three tries), warns when the key has no limit or they
+   cannot be read, and refuses to start (exit 3) once the usage is at
+   `--max-usage` USD, when the key is at its credit limit (nothing remaining)
+   or, with `--require-key-limit`, when the key has no numeric limit;
+   without it (a local server), nothing is read and nothing but the model
+   server is called;
 3. runs `opencode run --agent policy-finder --format json` on the prompt in
    the repo (the export, whose .opencode/ holds the model and the agent),
    its JSON events to <out>/events.jsonl, its stderr to <out>/stderr.log,
@@ -30,7 +32,9 @@ backend that starts it in the export with OpenCode installed can use it.
    assistant text, or the session used another model than the export's
    config names;
    a failed run exits non-zero (4 when OpenCode itself exited 0);
-7. in any case (`finally`): copies OpenCode's logs to the out folder,
+7. in any case (`finally`): kills what OpenCode's tools left running (in a
+   container of its own only: under Apptainer the PID namespace is the
+   node's), copies OpenCode's logs to the out folder,
    replaces the key wherever this run wrote it (the out folder, the
    version's write folders) and deletes OpenCode's logs and database in the
    home, which hold the same transcript unredacted;
@@ -208,7 +212,7 @@ def redact_file(path, secret):
     needle = secret.encode()
     if not needle or needle not in data:
         return False
-    with open(path, "wb") as f:
+    with open(path, "wb") as f:  # an OSError here: the caller records it
         f.write(data.replace(needle, REDACTED.encode()))
     return True
 
@@ -217,30 +221,75 @@ def redact_text(text, secret):
     return text.replace(secret, REDACTED) if secret else text
 
 
-def redact_tree(root, secret):
-    """Redact every file under `root`; return the paths that held it."""
+def redact_tree(root, secret, errors=None):
+    """Redact every file under `root`; return the paths that held it. A file
+    that cannot be rewritten is listed in `errors` and the walk goes on."""
     hits = []
     for dirpath, _, files in os.walk(root):
         for name in files:
             path = os.path.join(dirpath, name)
-            if not os.path.islink(path) and redact_file(path, secret):
-                hits.append(path)
+            if os.path.islink(path):
+                continue
+            try:
+                if redact_file(path, secret):
+                    hits.append(path)
+            except OSError as e:
+                if errors is not None:
+                    errors.append(f"{path}: {e.strerror or e}")
     return hits
 
 
-def key_info(url, key_env=KEY_ENV):
-    """The key's `usage`, `limit` and `limit_remaining` (USD), or None."""
+def key_info(url, key_env=KEY_ENV, tries=3, wait=5):
+    """The key's `usage`, `limit` and `limit_remaining` (USD), or None after
+    `tries` failed reads (a network blip is not an unknown usage)."""
     key = os.environ.get(key_env, "")
     if not key or not url:
         return None
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+    for attempt in range(tries):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                data = json.loads(r.read().decode())["data"]
+            return {"usage": float(data["usage"]), "limit": data.get("limit"),
+                    "limit_remaining": data.get("limit_remaining")}
+        except Exception:  # noqa: BLE001 - any failure: try again, then unknown
+            if attempt + 1 < tries:
+                time.sleep(wait)
+    return None
+
+
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def own_pid_namespace():
+    """True when this runner is the direct child of the container's init
+    (docker --init): every other process of the namespace is the agent's.
+    False under Apptainer and elsewhere, where the PID namespace is shared."""
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
-            data = json.loads(r.read().decode())["data"]
-        return {"usage": float(data["usage"]), "limit": data.get("limit"),
-                "limit_remaining": data.get("limit_remaining")}
-    except Exception:  # noqa: BLE001 - any failure: unknown
-        return None
+        with open("/proc/1/cmdline", "rb") as f:
+            init = f.read().split(b"\0")[0].decode(errors="replace")
+    except OSError:
+        return False
+    return os.getppid() == 1 and os.path.basename(init) in ("docker-init", "tini")
+
+
+def kill_strays():
+    """Kill the processes OpenCode's tools left behind (a child in its own
+    session survives the process group's kill), in a container of our own
+    only. Returns their count."""
+    if not own_pid_namespace():
+        return 0
+    me, killed = os.getpid(), 0
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit() or int(entry) in (1, me):
+            continue
+        try:
+            os.kill(int(entry), signal.SIGKILL)
+            killed += 1
+        except OSError:
+            pass
+    return killed
 
 
 def key_hash(secret, salt=None):
@@ -271,15 +320,19 @@ def run_bounded(argv, timeout, **kwargs):
 def scrub(args, secret, summary):
     """Redact the key everywhere this run wrote it, copy and drop OpenCode's
     own logs and database. Runs whatever happened before (`finally`)."""
+    summary["stray_processes_killed"] = kill_strays()
     for log in glob.glob(os.path.join(DATA, "log", "*.log")):
         try:
             shutil.copy(log, os.path.join(args.out, "opencode-" + os.path.basename(log)))
         except OSError:
             pass
-    hits = redact_tree(args.out, secret)
+    errors = []
+    hits = redact_tree(args.out, secret, errors)
     for rel in args.write_dir:
-        hits += redact_tree(os.path.join(args.repo, rel), secret)
+        hits += redact_tree(os.path.join(args.repo, rel), secret, errors)
     summary["key_redacted_in"] = hits
+    if errors:
+        summary["redaction_errors"] = errors
     for path in glob.glob(os.path.join(DATA, "opencode.db*")) + glob.glob(
             os.path.join(DATA, "log", "*")):
         try:
@@ -318,17 +371,26 @@ def main(argv=None):
     if args.usage_url:
         summary["key_limit"] = info and info["limit"]
         summary["key_limit_remaining"] = info and info["limit_remaining"]
-        if info and info["limit"] is None:
+        if info is None:
+            summary["warnings"] = ["the key's usage and credit limit could not be "
+                                   "read from OpenRouter"]
+        elif info["limit"] is None:
             summary["warnings"] = ["the key has no credit limit at OpenRouter: a "
                                    "dedicated key with a limit is required for "
                                    "unattended use"]
     stop = None
+    remaining = info and info["limit_remaining"]
     if args.usage_url and args.max_usage is not None and (
             before is None or before >= args.max_usage):
         stop = (f"key usage {before} USD is unknown or at the cap of "
                 f"{args.max_usage} USD: not started")
-    elif args.usage_url and args.require_key_limit and (not info or info["limit"] is None):
-        stop = "the key has no credit limit at OpenRouter (or it is unknown): not started"
+    elif args.usage_url and _number(remaining) and remaining <= 0:
+        stop = (f"the key is at its credit limit at OpenRouter ({remaining} USD "
+                "remaining): not started")
+    elif args.usage_url and args.require_key_limit and (
+            not info or not _number(info["limit"])):
+        stop = ("the key has no numeric credit limit at OpenRouter (or it is "
+                "unknown): not started")
     if stop:
         summary.update(is_error=True, budget_exhausted=True, exit_code=3, result="",
                        error=stop)

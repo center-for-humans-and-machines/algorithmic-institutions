@@ -47,11 +47,15 @@ the key can spend. What else there is, and what it does not do:
   and the campaign then stops. It does not stop a running agent.
   `PF_OPENROUTER_REQUIRE_LIMIT=1` also refuses to start an agent whose key has
   no credit limit; without it the runner only warns (in the pipeline log).
-- The runner (`scripts/policy_finder/opencode_run.py`) and the pipeline
-  redact *accidental copies of the literal key* from transcripts, logs,
-  summaries and the agent's notes and scripts. It is an exact match: a
-  base64 copy, or one split by a space, is not found. Notes are committed
-  and published with the snapshots.
+- The runner (`scripts/policy_finder/opencode_run.py`) redacts *accidental
+  copies of the literal key* from the transcripts, OpenCode's logs, its
+  summary and the agent's notes and scripts; the pipeline scans the
+  transcripts it copies once more (for a run whose runner was killed). It is
+  an exact match: a base64 copy, or one split by a space, is not found. Notes
+  are committed and published with the snapshots. A process the agent
+  detached into its own session survives the kill of OpenCode's process
+  group; the runner kills such strays only in a container of its own (the
+  spawner's), not under Apptainer, whose processes share the node's.
 - Nothing stops an agent from printing its environment, key included, into
   the model's context. And `openrouter.ai`, the only egress, is a general
   gateway: an agent with the key and a shell can call any model there,

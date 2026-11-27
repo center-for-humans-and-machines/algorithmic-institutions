@@ -211,3 +211,94 @@ def test_main_cap_with_unknown_usage_does_not_start(fake, capsys):
     s = _summary(capsys)
     assert s["budget_exhausted"] and "unknown" in s["error"]
     assert not (out / "events.jsonl").exists()
+
+
+
+class _Answer:
+    def __init__(self, data):
+        self.data = data
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return json.dumps({"data": self.data}).encode()
+
+
+def _endpoint(monkeypatch, *answers):
+    """OpenRouter's key endpoint: each call takes the next answer (an
+    exception is raised)."""
+    queue = list(answers)
+    calls = []
+
+    def urlopen(req, timeout=None):
+        calls.append(req.full_url)
+        answer = queue.pop(0) if len(queue) > 1 else queue[0]
+        if isinstance(answer, Exception):
+            raise answer
+        return _Answer(answer)
+    monkeypatch.setattr(oc.urllib.request, "urlopen", urlopen)
+    return calls
+
+
+URL = ["--usage-url", "https://openrouter.ai/api/v1/key"]
+
+
+def test_a_key_at_its_credit_limit_does_not_start(fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    _endpoint(monkeypatch, {"usage": 5.0, "limit": 5, "limit_remaining": 0})
+    assert run("ok", *URL) == 3
+    s = _summary(capsys)
+    assert s["budget_exhausted"] and "credit limit" in s["error"]
+
+
+def test_require_key_limit_refuses_a_non_numeric_limit(fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    _endpoint(monkeypatch, {"usage": 1.0, "limit": "abc", "limit_remaining": None})
+    assert run("ok", *URL, "--require-key-limit") == 3
+    assert "numeric credit limit" in _summary(capsys)["error"]
+
+
+def test_a_network_blip_is_retried_and_an_unknown_limit_warns(fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    calls = _endpoint(monkeypatch, OSError("blip"),
+                      {"usage": 1.0, "limit": None, "limit_remaining": None})
+    assert run("ok", *URL, "--max-usage", "5") == 0
+    assert len(calls) >= 2
+    s = _summary(capsys)
+    assert "no credit limit" in s["warnings"][0]
+    _endpoint(monkeypatch, OSError("down"))
+    assert oc.key_info(URL[1], wait=0) is None
+
+
+def test_an_unwritable_file_does_not_stop_the_redaction(fake, capsys):
+    run, out, repo, data = fake
+    locked = repo / "notes/locked.md"
+    locked.write_text(f"key {KEY}\n")
+    locked.chmod(0o444)
+    try:
+        assert run("ok") == 0
+    finally:
+        locked.chmod(0o644)
+    s = _summary(capsys)
+    assert any("locked.md" in e for e in s["redaction_errors"])
+    assert KEY not in (repo / "notes/n.md").read_text()
+    assert not list(data.rglob("*.db"))
+
+
+def test_a_local_server_key_is_redacted_and_openrouter_never_called(
+        fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    monkeypatch.setattr(oc.urllib.request, "urlopen",
+                        lambda *a, **k: pytest.fail("called the network"))
+    monkeypatch.setenv("PF_LLM_API_KEY", KEY)
+    monkeypatch.delenv("OPENROUTER_API_KEY")
+    (repo / ".opencode/opencode.json").write_text('{"model": "openrouter/q/c"}')
+    assert run("ok", "--key-env", "PF_LLM_API_KEY", "--max-usage", "5") == 0
+    _summary(capsys)
+    for path in [*out.rglob("*"), *repo.rglob("*.md")]:
+        if path.is_file():
+            assert KEY not in path.read_text(errors="replace")

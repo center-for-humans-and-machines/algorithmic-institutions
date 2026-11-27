@@ -162,3 +162,17 @@ def test_scrub_finds_the_key_by_its_hash(spawner, tmp_path):
     assert key not in copy.read_text() and "[redacted]" in copy.read_text()
     assert key not in (home / "opencode/events.jsonl").read_text()
     assert not (data / "opencode.db").exists()
+
+
+def test_the_runners_reasons_reach_the_error(spawner):
+    spawner["final"] = "failed"
+    spawner["stdout"] = json.dumps({**SUMMARY, "is_error": True,
+                                    "failures": ["no assistant text in the final turn"]})
+    record = ar.finish("abc", log=lambda m: None, harness="opencode")
+    assert "no assistant text" in record["error"]
+
+
+def test_scrub_without_a_hash_says_so(spawner):
+    lines = []
+    ar.scrub("abc", "opencode", [], log=lines.append)
+    assert "not scanned" in lines[0]

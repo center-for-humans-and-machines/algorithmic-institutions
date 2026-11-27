@@ -360,7 +360,7 @@ class Version:
         except OSError as e:
             self.log(f"transcripts of {run_id} not copied: {e}")
         # the key, should the runner not have redacted it (killed, say)
-        _, hits = agent_runner.scrub(run_id, self.harness, copied)
+        _, hits = agent_runner.scrub(run_id, self.harness, copied, log=self.log)
         if hits:
             self.log(f"the key was in {len(hits)} transcript file(s) of {run_id}: redacted")
         if not count:
