@@ -6,16 +6,20 @@
 # checkout: the checkout holds committed results (sweep.json files from Raven)
 # that a failed sim must not be mistaken for.
 #
-# Before the first job: mkdir -p /dais/fs/scratch/$USER/policy-finder/logs
-# (Slurm opens the -o file before the script runs).
+# Prerequisites (see docs/reports/dais_feasibility.md, "Prerequisites"):
+# the logs folder (Slurm opens the -o file before the script runs), the sim
+# image, the weights, and $PF_SCRATCH/env.sh, not in git, which sets VLLM_SIF
+# to the vLLM image's path on this cluster.
 
 PF_SCRATCH="${PF_SCRATCH:-/dais/fs/scratch/$USER/policy-finder}"
 PF_REPO="${PF_REPO:-/u/$USER/algorithmic-institutions-pf}"
 PF_LOGS="$PF_SCRATCH/logs"
 PF_HERE="${SLURM_SUBMIT_DIR:-$PF_REPO}/infra/dais"
 
-# vLLM image: the group's image; its version is asserted, not assumed.
-VLLM_SIF="${VLLM_SIF:-/dais/fs/scratch/bsup/container/vllm.sif}"
+# Site settings kept out of git (VLLM_SIF: the vLLM image's path).
+[ -f "$PF_SCRATCH/env.sh" ] && source "$PF_SCRATCH/env.sh"
+# vLLM image: its version is asserted, not assumed.
+VLLM_SIF="${VLLM_SIF:-}"
 EXPECT_VLLM_TAG="vllm/vllm-openai:v0.25.1"
 
 # Sim image: a byte copy of Raven's shared algoinst.sif (torch 1.11.0+cu113).
@@ -51,6 +55,10 @@ cleanup() {
 
 assert_vllm_image() {
   local tag
+  if [ -z "$VLLM_SIF" ]; then
+    echo "FATAL: VLLM_SIF is not set (put it in $PF_SCRATCH/env.sh)" >&2
+    return 1
+  fi
   tag=$(apptainer inspect "$VLLM_SIF" | sed -n 's/^ai\.vllm\.image\.tag: *//p' | head -1)
   if [ "$tag" != "$EXPECT_VLLM_TAG" ]; then
     echo "FATAL: $VLLM_SIF is '$tag', expected '$EXPECT_VLLM_TAG'" >&2
@@ -74,25 +82,37 @@ free_port() {
 #
 # serve_model <gpu-memory-utilization> <tp> <log> [extra vllm args...]
 # Starts vLLM in the background on the GPUs in CUDA_VISIBLE_DEVICES, pinned to
-# SERVER_CPUS if set. Sets SERVER_PID, SERVER_PORT, SERVER_URL and
-# SERVER_KEY_FILE (mode 600; the key itself is never printed).
+# SERVER_CPUS if set. Sets SERVER_PID, SERVER_PORT, SERVER_URL,
+# SERVER_KEY_FILE and SERVER_AUTH_HEADER (both mode 600; the key is never
+# printed and never on a command line: vLLM reads it from its environment,
+# curl from the header file).
+#
+# The container: --containall, the weights read-only, a home of the job's own
+# ($PF_RUN/home) and one cache folder shared by all jobs ($PF_SCRATCH/cache:
+# torch.compile, Triton and FlashInfer caches are keyed by content).
 serve_model() {
   local util="$1" tp="$2" log="$3"
   shift 3
   SERVER_PORT=$(free_port)
   SERVER_URL="http://127.0.0.1:$SERVER_PORT/v1"
   SERVER_KEY_FILE="$PF_RUN/api_key"
-  (umask 077 && python3 -c 'import secrets; print(secrets.token_hex(24))' > "$SERVER_KEY_FILE")
-  mkdir -p "$PF_SCRATCH/home"
+  SERVER_AUTH_HEADER="$PF_RUN/auth_header"
+  (umask 077
+   python3 -c 'import secrets; print(secrets.token_hex(24))' > "$SERVER_KEY_FILE"
+   echo "Authorization: Bearer $(cat "$SERVER_KEY_FILE")" > "$SERVER_AUTH_HEADER")
+  mkdir -p "$PF_RUN/home" "$PF_SCRATCH/cache"
   local pin=()
   [ -n "${SERVER_CPUS:-}" ] && pin=(taskset -c "$SERVER_CPUS")
-  # the key reaches vLLM as VLLM_API_KEY in its environment, not on its
-  # command line, where other users on the node could read it
   APPTAINERENV_VLLM_API_KEY="$(cat "$SERVER_KEY_FILE")" \
-    "${pin[@]}" apptainer exec --nv --cleanenv \
-    --home "$PF_SCRATCH/home" \
-    --bind "$HF_HOME" \
+    "${pin[@]}" apptainer exec --nv --containall --cleanenv \
+    --home "$PF_RUN/home" \
+    --bind "$HF_HOME:$HF_HOME:ro" \
+    --bind "$PF_SCRATCH/cache" \
     --env HF_HOME="$HF_HOME" --env HF_HUB_OFFLINE=1 \
+    --env XDG_CACHE_HOME="$PF_SCRATCH/cache" \
+    --env VLLM_CACHE_ROOT="$PF_SCRATCH/cache/vllm" \
+    --env TRITON_CACHE_DIR="$PF_SCRATCH/cache/triton" \
+    --env FLASHINFER_WORKSPACE_BASE="$PF_SCRATCH/cache" \
     --env CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES" \
     "$VLLM_SIF" \
     vllm serve "$MODEL" --revision "$MODEL_REV" \
@@ -111,14 +131,13 @@ serve_model() {
 # with our key and refuses a request without it (401), so another job's
 # server on the same port cannot pass. Prints the load time.
 wait_ready() {
-  local timeout="$1" t0=$SECONDS key code
-  key=$(cat "$SERVER_KEY_FILE")
+  local timeout="$1" t0=$SECONDS code
   while (( SECONDS - t0 < timeout )); do
     if ! kill -0 "$SERVER_PID" 2>/dev/null; then
       echo "FATAL: vLLM exited during start-up" >&2
       return 1
     fi
-    if curl -sf -m 10 -H "Authorization: Bearer $key" "$SERVER_URL/models" 2>/dev/null \
+    if curl -sf -m 10 -H "@$SERVER_AUTH_HEADER" "$SERVER_URL/models" 2>/dev/null \
         | grep -qF "\"$MODEL\""; then
       code=$(curl -s -m 10 -o /dev/null -w '%{http_code}' "$SERVER_URL/models")
       if [ "$code" != 401 ]; then
@@ -145,8 +164,10 @@ in_vllm_image() {
 # in_sim_image <command...>: run a command in the sim image, set up as
 # Raven's job template does (slurm_tools run_slurm_raven_apptainer_algoinst.sh:
 # repo at /opt/algorithmic-institutions, PATH and PYTHONPATH as there), with
-# no GPU (SIM_GPU=<index> exposes one, for sim_check's GPU test only). The checkout is read-only (REPO_MODE=rw to write configs into it);
-# only the run folder is writable; this folder's scripts are at /opt/dais. SIM_THREADS sets OMP/MKL threads, which
+# no GPU (SIM_GPU=<index> exposes one, for sim_check's GPU test only). The
+# checkout is read-only (REPO_MODE=rw to write configs into it); only the run
+# folder is writable; this folder's scripts are at /opt/dais. SIM_THREADS
+# (default 1, the cheapest shape per CPU in B1) sets the OMP/MKL threads, which
 # torch 1.11 honours (the sim itself does not set them).
 in_sim_image() {
   sim_argv
@@ -169,9 +190,7 @@ sim_argv() {
   else
     SIM_ARGV+=(--env CUDA_VISIBLE_DEVICES=)
   fi
-  if [ -n "${SIM_THREADS:-}" ]; then
-    SIM_ARGV+=(--env "OMP_NUM_THREADS=$SIM_THREADS" --env "MKL_NUM_THREADS=$SIM_THREADS")
-  fi
+  SIM_ARGV+=(--env "OMP_NUM_THREADS=${SIM_THREADS:-1}" --env "MKL_NUM_THREADS=${SIM_THREADS:-1}")
   SIM_ARGV+=(--pwd /opt/algorithmic-institutions "$SIM_SIF")
 }
 
@@ -188,7 +207,7 @@ simulate() {
   /usr/bin/time -o "$timing" -f "wall=%e user=%U sys=%S maxrss_kb=%M" \
     "${pin[@]}" "${argv[@]}" python -m aimanager simulate "$cfg" \
     > "$PF_RUN/$label.log" 2>&1 || rc=$?
-  echo "SIM $label rc=$rc threads=${SIM_THREADS:-all} cpus=${SIM_CPUS:-all} $(tail -1 "$timing")"
+  echo "SIM $label rc=$rc threads=${SIM_THREADS:-1} cpus=${SIM_CPUS:-all} $(tail -1 "$timing")"
   rm -f "$timing"
   return "$rc"
 }

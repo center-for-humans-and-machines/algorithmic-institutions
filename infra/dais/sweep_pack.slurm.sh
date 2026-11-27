@@ -36,10 +36,11 @@ round() {
   local n="$1" mode="$2" t0=$SECONDS i cpus pids=() slots=()
   # one hyperthread per slice: first one per core, then the cores' second ones
   mapfile -t slots < <(python3 "$PF_HERE/cpu_slots.py" slots 0 1 | cut -d, -f1
-                       python3 "$PF_HERE/cpu_slots.py" slots 0 1 | cut -d, -f2)
+                       python3 "$PF_HERE/cpu_slots.py" slots 0 1 | cut -s -d, -f2)
   for i in $(seq 1 "$n"); do
     local part=$(( (i - 1) % 32 + 1 )) label="n${n}_${mode}_t${SIM_THREADS}_$i"
     sed "s#/out/part$part\$#/out/$label#" "$PF_RUN/cfg/part$part.yml" > "$PF_RUN/cfg/$label.yml"
+    grep -q "/out/$label\$" "$PF_RUN/cfg/$label.yml" || { echo "FATAL: output folder of $label not set" >&2; exit 1; }
     cpus=""
     [ "$mode" = pinned ] && cpus=${slots[$(( (i - 1) % ${#slots[@]} ))]}
     SIM_CPUS=$cpus simulate "$PF_RUN/cfg/$label.yml" "$label" &

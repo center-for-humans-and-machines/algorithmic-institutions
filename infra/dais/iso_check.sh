@@ -3,13 +3,15 @@
 # user. Light enough for a login node; run it inside a job too, where the
 # cgroup options behave differently. Writes nothing outside $OUT.
 #
-#   bash infra/dais/iso_check.sh [image] 2>&1 | tee iso_check.$(hostname).txt
+#   bash infra/dais/iso_check.sh <image> 2>&1 | tee iso_check.$(hostname).txt
+#   (the group's vllm.sif, $VLLM_SIF, has python3 and curl)
 #
 # Output of the run on 2026-11-27: docs/reports/dais_iso_check_login.txt.
 
 set -u
 module load apptainer/1.5.2 >/dev/null 2>&1
-S="${1:-/dais/fs/scratch/bsup/container/vllm.sif}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+S="${1:?usage: iso_check.sh <image with python3 and curl>}"
 OUT="${OUT:-/dais/fs/scratch/$USER/policy-finder/isotest}"
 mkdir -p "$OUT/sock" "$OUT/ro/rw"
 q() { grep -v gocryptfs; }
@@ -75,8 +77,9 @@ sleep 1
 curl -s -m 5 http://127.0.0.1:18766/v1/models -w " -> %{http_code}\n"
 kill $!' 2>&1 | q
 
-echo "== 2b. seccomp profile denying AF_INET/AF_INET6 sockets, AF_UNIX allowed"
-cat > "$OUT/no_inet.json" <<'JSON'
+echo "== 2b. Apptainer seccomp profiles, probed from inside (net_probe.py)"
+# the first version: a deny-list comparing the whole 64-bit family argument
+cat > "$OUT/deny_eq.json" <<'JSON'
 {"defaultAction": "SCMP_ACT_ALLOW",
  "syscalls": [
   {"names": ["socket"], "action": "SCMP_ACT_ERRNO", "args": [{"index": 0, "value": 2, "op": "SCMP_CMP_EQ"}]},
@@ -84,27 +87,13 @@ cat > "$OUT/no_inet.json" <<'JSON'
   {"names": ["io_uring_setup"], "action": "SCMP_ACT_ERRNO"}
  ]}
 JSON
-apptainer exec --containall --security "seccomp:$OUT/no_inet.json" \
-  --bind "$OUT/sock:/sock" "$S" sh -c '
-curl -s -m 5 -o /dev/null -w "inet: %{http_code}\n" https://huggingface.co || echo "curl by name: failed ($?)"
-curl -s -m 5 -o /dev/null https://1.1.1.1 || echo "curl by IP address: failed ($?)"
-python3 -c "
-import socket, ctypes
-for fam, name in ((socket.AF_INET, \"AF_INET\"), (socket.AF_INET6, \"AF_INET6\"), (socket.AF_UNIX, \"AF_UNIX\")):
-    try:
-        socket.socket(fam).close(); print(name, \"socket: allowed\")
-    except OSError as e:
-        print(name, \"socket: denied,\", e)
-libc = ctypes.CDLL(None, use_errno=True)
-r = libc.syscall(425, 8, ctypes.create_string_buffer(120))  # io_uring_setup
-print(\"io_uring_setup:\", \"denied, errno\" if r < 0 else \"allowed\", ctypes.get_errno() if r < 0 else \"\")
-"
-curl -s -m 5 --unix-socket /sock/model.sock http://x/v1/models -w " unix -> %{http_code}\n"' 2>&1 | q
-echo "-- the same image without the filter: AF_INET socket"
-apptainer exec --containall "$S" python3 -c "import socket; socket.socket(); print('AF_INET socket: allowed')" 2>&1 | q
-echo "rc=${PIPESTATUS[0]}"
+for profile in "$OUT/deny_eq.json" "$HERE/no_inet.seccomp.json"; do
+  echo "-- profile $(basename "$profile")"
+  apptainer exec --containall --security "seccomp:$profile" \
+    --bind "$OUT/sock:/sock" --bind "$HERE:/opt/dais:ro" "$S" \
+    python3 /opt/dais/net_probe.py --unix /sock/model.sock 2>&1 | q
+done
 kill $UP
-
 echo "== 3. binds"
 echo hi > "$OUT/ro/f"
 rm -f "$OUT/ro/rw/y"
@@ -132,7 +121,11 @@ apptainer exec "$S" sh -c '
 n=0; for i in $(seq 200); do sleep 5 2>/dev/null & [ $? = 0 ] && n=$((n + 1)); done
 echo "started $n of 200, running now: $(jobs -p | wc -l)"' 2>&1 | q | grep -v -E "^INFO"
 
-echo "== 5. runtimes"
+echo "== 5. noinet.py as the shell of a stand-in harness (harness keeps its network)"
+apptainer exec --containall --bind "$OUT/sock:/sock" --bind "$HERE:/opt/dais:ro" "$S" \
+  python3 /opt/dais/harness_standin.py /sock 2>&1 | q
+
+echo "== 6. runtimes"
 for c in podman docker nerdctl buildah slirp4netns pasta; do
   command -v "$c" >/dev/null && echo "$c: present" || echo "$c: absent"
 done

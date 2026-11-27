@@ -1,17 +1,24 @@
 #!/bin/bash -l
-# vLLM and sweeps on one allocation (2 H200, 24 cores), each on its own cores.
+# The recommended layout on one allocation (2 GPUs, 24 cores of an H200 or
+# B200 node), each part on its own cores:
+#   SERVER_CORES (4)  vLLM, tp 2
+#   CLIENT_CORES (2)  the benchmark client
+#   the rest          a pool of single-threaded sweep slices, one per
+#                     hyperthread, all launched at once (configs prepared
+#                     before any timing)
 #
-#   B3b  vLLM (tp 2) pinned to SERVER_CORES cores, then probe_endpoint.py
-#   B5   aggregate and per-session decode speed and time to first token for
-#        5, 10, 20, 40, 80 concurrent sessions (warm), 30k-token prompts
-#   B3d  steady generation (5 warm long-context sessions) while K sweep slices
-#        run, pinned one per core on the other cores
-#   B3c  the same steady generation alone, for as long as B3d took
-#   B3a  the same K slices alone, after the server is stopped
+#   B3 (REPEATS times, default 3): (a) the pool alone, server loaded but idle;
+#      (b) steady generation alone, SESSIONS (20) warm long-context sessions,
+#      for as long as (a) took; (c) the pool while the same steady generation
+#      runs (the pool starts once the generation is steady)
+#   B5 sessions 20, 40, 80: one cold round, then WARM_ROUNDS (3) warm rounds
 #
 #   cd /u/$USER/algorithmic-institutions-pf
-#   sbatch infra/dais/serve_bench.slurm.sh
-#   sbatch -p gpudev --time=00:15:00 infra/dais/serve_bench.slurm.sh   # if it fits
+#   sbatch infra/dais/serve_bench.slurm.sh                       # gpu1
+#   sbatch -p gpudev --time=00:15:00 infra/dais/serve_bench.slurm.sh
+#
+# Job 987430 ran an earlier version (5 sessions, 2-thread slices started one by
+# one, client on the server's cores).
 #
 #SBATCH -J pf_servebench
 #SBATCH -o /dais/fs/scratch/%u/policy-finder/logs/%x.%j.out
@@ -30,72 +37,78 @@ init_run
 hostname
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 echo "CPUs allowed: $(nproc)"
-SERVER_CORES="${SERVER_CORES:-4}"   # vLLM and the benchmark clients
-K="${K:-16}"                        # sweep slices beside the server
-export SIM_THREADS="${SIM_THREADS:-2}"
-SERVER_CPUS=$(python3 "$PF_HERE/cpu_slots.py" reserved "$SERVER_CORES")
-mapfile -t SLOTS < <(python3 "$PF_HERE/cpu_slots.py" slots "$SERVER_CORES" 1 "$K")
-echo "server CPUs: $SERVER_CPUS; ${#SLOTS[@]} slice slots of one core"
-assert_vllm_image
+SERVER_CORES="${SERVER_CORES:-4}"
+CLIENT_CORES="${CLIENT_CORES:-2}"
+SESSIONS="${SESSIONS:-20}"
+REPEATS="${REPEATS:-3}"
 FAILS=0
+SERVER_CPUS=$(python3 "$PF_HERE/cpu_slots.py" reserved "$SERVER_CORES")
+CLIENT_CPUS=$(python3 "$PF_HERE/cpu_slots.py" slots "$SERVER_CORES" "$CLIENT_CORES" 1)
+mapfile -t POOL < <(python3 "$PF_HERE/cpu_slots.py" slots $((SERVER_CORES + CLIENT_CORES)) 1 \
+  | tr , '\n')
+echo "server CPUs $SERVER_CPUS; client CPUs $CLIENT_CPUS; pool of ${#POOL[@]} CPUs"
+assert_vllm_image
 
+# every slice config of every round, before anything is timed
 make_sweep_parts 32 > "$PF_RUN/generate.log" 2>&1 || { tail "$PF_RUN/generate.log"; exit 1; }
+for k in $(seq 1 32); do part_config "$k" 32 "part$k" > /dev/null; done
+labels() {  # <tag>: one config per pool CPU, part ((i-1) % 32) + 1
+  local tag="$1" i part
+  for i in $(seq 1 "${#POOL[@]}"); do
+    part=$(( (i - 1) % 32 + 1 ))
+    sed "s#/out/part$part\$#/out/${tag}_$i#" "$PF_RUN/cfg/part$part.yml" \
+      > "$PF_RUN/cfg/${tag}_$i.yml"
+    grep -q "/out/${tag}_$i\$" "$PF_RUN/cfg/${tag}_$i.yml"
+  done
+}
+for r in $(seq 1 "$REPEATS"); do labels "alone$r"; labels "shared$r"; done
 
-slices() {  # <tag>: K slices at once, pinned; prints the round's wall time
-  local tag="$1" t0=$SECONDS i cfg pids=() fails=0
-  for i in $(seq 1 "$K"); do
-    cfg=$(part_config "$i" 32 "${tag}_$i")
-    SIM_CPUS=${SLOTS[$((i - 1))]} simulate "$cfg" "${tag}_$i" &
+pool() {  # <tag>: every pool CPU runs one slice, all launched at once
+  local tag="$1" t0=$SECONDS i pids=() fails=0
+  for i in $(seq 1 "${#POOL[@]}"); do
+    SIM_THREADS=1 SIM_CPUS=${POOL[$((i - 1))]} simulate "$PF_RUN/cfg/${tag}_$i.yml" "${tag}_$i" &
     pids+=($!)
   done
   for pid in "${pids[@]}"; do wait "$pid" || fails=$((fails + 1)); done
-  SLICES_WALL=$(( SECONDS - t0 ))
-  echo "B3 slices=$tag K=$K wall=$SLICES_WALL failures=$fails"
+  echo "POOL $tag slices=${#POOL[@]} episodes=$(( ${#POOL[@]} * 4000 )) wall=$(( SECONDS - t0 )) failures=$fails"
+  echo $(( SECONDS - t0 )) > "$PF_RUN/$tag.wall"
   [ "$fails" = 0 ]
 }
 
-bench() {  # bench_load.py on the server's cores
-  taskset -c "$SERVER_CPUS" apptainer exec --containall --cleanenv \
+bench() {
+  taskset -c "$CLIENT_CPUS" apptainer exec --containall --cleanenv \
     --bind "$PF_RUN" --bind "$PF_HERE:/opt/dais:ro" "$VLLM_SIF" \
     python3 /opt/dais/bench_load.py --base "$SERVER_URL" --key-file "$SERVER_KEY_FILE" \
     --model "$MODEL" "$@"
 }
 
-echo "== B3b: vLLM on CPUs $SERVER_CPUS, $(date +%T)"
+echo "== server, $(date +%T)"
 SERVER_CPUS="$SERVER_CPUS" serve_model 0.90 2 "$PF_RUN/vllm.log"
 wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
-nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv
-taskset -c "$SERVER_CPUS" apptainer exec --containall --cleanenv \
-  --bind "$PF_RUN" --bind "$PF_HERE:/opt/dais:ro" "$VLLM_SIF" \
-  python3 /opt/dais/probe_endpoint.py --base "$SERVER_URL" --key-file "$SERVER_KEY_FILE" \
-  --model "$MODEL" --trials "${TRIALS:-3}" || FAILS=$((FAILS + 1))
 
-echo "== B5: concurrency, $(date +%T)"
-for n in ${CONCURRENCY:-5 10 20 40 80}; do
-  bench --sessions "$n" --context 30000 --gen 512 --tag "conc$n" || FAILS=$((FAILS + 1))
+for r in $(seq 1 "$REPEATS"); do
+  echo "== B3 repeat $r (a): pool alone, $(date +%T)"
+  pool "alone$r" || FAILS=$((FAILS + 1))
+  echo "== B3 repeat $r (b): $SESSIONS sessions alone, $(date +%T)"
+  bench --sessions "$SESSIONS" --gen 1024 --tag "steady_alone$r" \
+    --duration "$(cat "$PF_RUN/alone$r.wall")" || FAILS=$((FAILS + 1))
+  echo "== B3 repeat $r (c): pool while $SESSIONS sessions generate, $(date +%T)"
+  rm -f "$PF_RUN/stop" "$PF_RUN/ready"
+  bench --sessions "$SESSIONS" --gen 1024 --tag "steady_shared$r" --duration 1800 \
+    --stop-file "$PF_RUN/stop" --ready-file "$PF_RUN/ready" &
+  BENCH_PID=$!
+  BG_PIDS+=("$BENCH_PID")
+  until [ -e "$PF_RUN/ready" ] || ! kill -0 "$BENCH_PID" 2>/dev/null; do sleep 1; done
+  pool "shared$r" || FAILS=$((FAILS + 1))
+  touch "$PF_RUN/stop"
+  wait "$BENCH_PID" || FAILS=$((FAILS + 1))
 done
 
-echo "== B3d: steady generation while $K slices run, $(date +%T)"
-rm -f "$PF_RUN/stop"
-(set +e; slices shared; rc=$?; echo "$SLICES_WALL" > "$PF_RUN/slices_wall"
- touch "$PF_RUN/stop"; exit $rc) &
-SLICES_PID=$!
-BG_PIDS+=("$SLICES_PID")
-# generation starts with the slices and stops when the last one ends
-bench --sessions 5 --context 30000 --gen 1024 --tag steady_shared \
-  --duration 3600 --stop-file "$PF_RUN/stop" || FAILS=$((FAILS + 1))
-wait "$SLICES_PID" || FAILS=$((FAILS + 1))
-SHARED_WALL=$(cat "$PF_RUN/slices_wall")
-
-echo "== B3c: steady generation alone for ${SHARED_WALL}s, $(date +%T)"
-bench --sessions 5 --context 30000 --gen 1024 --tag steady_alone --duration "$SHARED_WALL" \
-  || FAILS=$((FAILS + 1))
-
-echo "== B3a: the same $K slices alone, server stopped, $(date +%T)"
-kill "$SERVER_PID"
-wait "$SERVER_PID" 2>/dev/null || true
-slices alone || FAILS=$((FAILS + 1))
-
-grep -E "KV cache size|Maximum concurrency" "$PF_RUN/vllm.log" | tail -2
+echo "== B5, $(date +%T)"
+for n in ${CONCURRENCY:-20 40 80}; do
+  bench --sessions "$n" --gen 512 --tag "conc$n" --warm-rounds "${WARM_ROUNDS:-3}" \
+    || FAILS=$((FAILS + 1))
+done
+grep -E "KV cache size|Maximum concurrency" "$PF_RUN/vllm.log" | tail -2 || true
 echo "done $(date +%T), failures: $FAILS"
 [ "$FAILS" = 0 ]

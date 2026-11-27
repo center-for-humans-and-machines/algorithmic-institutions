@@ -77,21 +77,50 @@ done
 
 [ -n "${SKIP_B4:-}" ] && { echo "failures: $FAILS"; [ "$FAILS" = 0 ]; exit; }
 echo "== B4: srun steps as caps"
-srun --exact -n1 -c 2 python3 -c \
-  "import os; print('step -c 2 may run on CPUs', sorted(os.sched_getaffinity(0)))" \
-  || FAILS=$((FAILS + 1))
-# 8 busy processes in a 2-core step: CPU seconds per wall second shows the cap
-srun --exact -n1 -c 2 bash -c \
+check() {  # <ok?> <message>
+  if [ "$1" = 1 ]; then echo "PASS $2"; else echo "FAIL $2"; FAILS=$((FAILS + 1)); fi
+}
+n=$(srun --exact -n1 -c 2 python3 -c "import os; print(len(os.sched_getaffinity(0)))")
+check $(( n <= 4 )) "a -c 2 step may run on $n CPUs"
+# 8 busy loops for 20 s in a -c 2 step: CPU seconds show the cap
+t0=$SECONDS
+srun --exact -n1 -c 2 -J busy bash -c \
   'for i in $(seq 8); do timeout 20 sh -c "while :; do :; done" & done; wait' || true
-sleep 2
-srun --exact -n1 -c 2 --mem=2G python3 -c \
-  "b = bytearray(6 * 2**30); print('allocated 6 GiB in a 2 GiB step')" \
-  && echo "memory step was NOT killed" || echo "memory step failed with $?, as intended"
-echo "job still alive after the memory step"
+sleep 3
+cpu=$(sacct -j "$SLURM_JOB_ID" -n -P -o JobName,TotalCPU | awk -F'|' '$1=="busy" {print $2}' | tail -1)
+secs=$(python3 -c "
+t='$cpu'; d=0
+if '-' in t: d, t = t.split('-'); d = int(d)
+p=[float(x) for x in t.split(':')]
+while len(p) < 3: p.insert(0, 0)
+print(round(d*86400 + p[0]*3600 + p[1]*60 + p[2]))")
+check $(( secs <= 4 * (SECONDS - t0) + 5 )) "8 busy loops in a -c 2 step used ${secs} CPU-s in $((SECONDS - t0)) s"
+if srun --exact -n1 -c 2 --mem=2G python3 -c "b = bytearray(6 * 2**30)"; then
+  check 0 "a 2 GiB step allocated 6 GiB without being killed"
+else
+  check 1 "a 2 GiB step that allocated 6 GiB was killed, the job carries on"
+fi
 cfg=$(part_config 2 32 b4_step)
-srun --exact -n1 -c 2 --mem=16G bash -c \
+srun --exact -n1 -c 1 --mem=8G bash -c \
   "source '$PF_HERE/common.sh' >/dev/null; PF_RUN='$PF_RUN'; PF_REPO='$PF_REPO'; \
-   SIM_THREADS=2 simulate '$cfg' b4_step" || FAILS=$((FAILS + 1))
+   simulate '$cfg' b4_step" || FAILS=$((FAILS + 1))
+
+echo "== B4b: more agent steps than cores, sharing CPUs (--overlap)"
+# 2 cores of the job for 8 steps of one CPU and 1 GiB each, started at once
+AGENT_CPUS=$(python3 "$PF_HERE/cpu_slots.py" reserved 2)
+for i in $(seq 8); do
+  srun --overlap -n1 -c 1 --mem=1G --cpu-bind=none -J "agent$i" \
+    taskset -c "$AGENT_CPUS" sleep 30 &
+done
+sleep 10
+running=$(squeue -s -j "$SLURM_JOB_ID" -h -o "%j" 2>/dev/null | grep -c "^agent" || true)
+check $(( running == 8 )) "$running of 8 overlapping agent steps run at once on 2 cores"
+wait
+if srun --overlap -n1 -c 1 --mem=1G --cpu-bind=none python3 -c "b = bytearray(3 * 2**30)"; then
+  check 0 "an overlapping 1 GiB step allocated 3 GiB without being killed"
+else
+  check 1 "an overlapping 1 GiB step that allocated 3 GiB was killed"
+fi
 sleep 5
 sacct -j "$SLURM_JOB_ID" -o JobID%20,JobName%12,State,ExitCode,AllocCPUS,Elapsed,TotalCPU,MaxRSS,ReqMem
 

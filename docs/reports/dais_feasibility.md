@@ -1,76 +1,89 @@
 # DAIS feasibility for the open-weight policy finder
 
-Phase 0 (DAIS part) and the first half of phase 2 of `docs/plans/policy-finder-open-weights.md`, measured on 2026-11-27 under account `mpib_inst`. Scripts: `infra/dais/`. Revised after a review of the first version, with the measurements that decide the node layout (B1 to B5) added; section "Not yet measured" lists what is still open.
+Phase 0 (DAIS part) and the first half of phase 2 of `docs/plans/policy-finder-open-weights.md`, measured on 2026-11-27 under account `mpib_inst`. Scripts: `infra/dais/`. Revised twice after independent reviews.
 
 ## Where the numbers come from
 
-| Job | Partition, QoS | Node | What |
+| Job | Partition | Node | What |
 |---|---|---|---|
-| 986457 | gpudev, debug | daisg103 (H200) | network test |
-| 986513 | gpudev, debug | daisg103 (H200), 2 GPUs | serve and probe Qwen3-Coder-Next |
-| 986771 | gpudev, debug | daisg103 (H200), 1 GPU, 32 threads | sim image on the GPU, CPU fallback, smoke-rule timings |
-| 986879 | gpudev, debug | daisg103 (H200), 2 GPUs, 64 threads | serve, probe, 5-session benchmark, smoke-rule sims beside it |
-| 986869 | small, cpu | daisg302 (AMD EPYC 9555, an RTX node), 32 threads | `pf-20261104-1` final run on the CPUs |
-| 987428 | small, cpu | daisg301 (AMD), 48 cores | B1 threads and processes, B4 Slurm steps (`cpu_bench.slurm.sh`) |
-| 987622 | small, cpu | daisg302 (AMD), 48 cores | B2 many slices at once (`sweep_pack.slurm.sh`) |
-| 987623 | gpudev | daisg103 (H200 node's Intel CPUs), 1 GPU unused, 12 cores | B1 on the H200 nodes' CPU (`cpu_bench.slurm.sh`, short shapes) |
-| 987430 | gpudev | daisg103 (H200), 2 GPUs, 24 cores | B3 sims beside the server, B5 concurrency, revised probe (`serve_bench.slurm.sh`) |
+| 986457 | gpudev | daisg103 (H200) | network test |
+| 986513 | gpudev | daisg103 (H200), 2 GPUs | serve and probe Qwen3-Coder-Next |
+| 986771 | gpudev | daisg103 (H200), 1 GPU | sim image on the GPU, CPU fallback |
+| 986879 | gpudev | daisg103 (H200), 2 GPUs | serve, probe, 5-session benchmark, unpinned smoke-rule sims beside it |
+| 986869 | small | daisg302 (AMD EPYC 9555) | `pf-20261104-1` final run on the CPUs (32 threads) |
+| 987428 | small | daisg301 (AMD), 48 cores | B1, B4, earlier version of `cpu_bench.slurm.sh` |
+| 987622 | small | daisg302 (AMD), 48 cores | B2 (`sweep_pack.slurm.sh`) |
+| 987623 | gpudev | daisg103 (Intel CPUs of an H200 node), 12 cores | B1 on Intel, short shapes (`cpu_bench.slurm.sh`) |
+| 987430 | gpudev | daisg103 (H200), 2 GPUs, 24 cores | B3 and B5, earlier version of `serve_bench.slurm.sh` |
+| 987881 | small | daisg301 (AMD) | `iso_check.sh` inside a job |
+| 987890 | gpudev | daisg111 (H200), 2 GPUs, 24 cores | the layout at 20 sessions with repeats, B5 repeats (`serve_bench.slurm.sh`, cut at the 15-minute limit) |
+| 987891 | small | daisg302 (AMD), 24 cores | a whole "sweep, fit, final" cycle (`cycle_bench.slurm.sh`) |
+| 987892 | small | daisg301 (AMD), 48 cores | B1 and B4 with the committed `cpu_bench.slurm.sh` |
+| 987893 | small | daisg301 (AMD) | committed `sim_cpu.slurm.sh` |
+| 987950, 987951 | gpudev | see section 3 and "Scripts" | committed `serve.slurm.sh` (probe) and `sim_check.slurm.sh` |
 
-The first five jobs ran earlier versions of the scripts. All GPU jobs ran on `gpudev` (15 minutes; one job per user, shared nodes). The scripts' default `gpu1`/`g0002` path was submitted once (job 987431) and cancelled before it started, because the `gpudev` run (987430) answered B3 and B5; `serve.slurm.sh`'s `MODE=serve` has not been run. The `small` nodes are shared with other users' jobs, which adds noise. No Raven baseline could be run for this report (no Raven access); Raven numbers are the committed results of earlier runs.
+All GPU jobs ran on `gpudev` (15 minutes, one job per user, nodes shared with other jobs); a `gpu1` job of 2 GPUs and 24 cores was estimated to start a day later, so none ran there. The `small` nodes are shared with other users' jobs as well. No Raven baseline could be run (no Raven access); Raven numbers are committed results of earlier runs.
 
 ## Summary
 
-- **The sim image cannot use the H200 or B200 GPUs, but runs unchanged on the CPUs.** `algoinst.sif` (byte-identical to Raven's) has no kernels for H200 (`no kernel image is available for execution on the device`; torch 1.11+cu113 ships sm_37 to sm_86, no PTX). On the CPUs the repo's `python -m aimanager simulate` runs, and the right shape is many single-threaded processes: extra torch threads only cost CPU. On 12 cores of an H200 node, 24 single-threaded processes (one per hyperthread) played 96,000 episodes of a real rule in 38 s (about 2,500 episodes per second, 211 per core); on the AMD `small` nodes 96 processes on 48 cores reached 11,600 episodes per second. A real sweep (256 points x 500 episodes = 128,000 episodes, split by `--n-parts 32`) takes about 40 s on 16 cores.
-- **CPU and A100 results: no difference detected at this power.** A 2000-episode, 6-point final run gives no detectable mean shift (each difference has a standard error of about 1.45 pool points, so shifts below about 4 points would go unseen). The ranking of points may differ: Raven's points are heterogeneous, DAIS's are not (see section 2).
-- **Qwen3-Coder-Next serves on 2 H200 with the group's `vllm.sif` (v0.25.1), unchanged.** Ready in 276 to 386 s. Tool calls were well formed in every trial, including after a 70k-token history of earlier tool calls. Warm 30k-token sessions decode at 135 tokens/s each with 5 at once and 43 each with 80 at once; the aggregate grows from 630 to 2,770 tokens/s and is still growing at 80.
-- **Server and sims on separate cores do not slow each other** (job 987430): 16 pinned sim slices took 34.0 to 36.4 s beside steady generation and 33.4 to 35.8 s alone; generation ran at 698 tokens/s beside them and 678 alone.
-- **The agent's network can be cut with a seccomp filter, not with a namespace.** Users have no network namespaces (`max_net_namespaces` = 0) and there is no Docker-compatible runtime, so the spawner cannot run unchanged. But an unprivileged `apptainer exec --security seccomp:<profile>` that denies `AF_INET`/`AF_INET6` sockets (and `io_uring_setup`) blocks all IP traffic while a Unix-socket path to the model server still works (login node). Slurm job steps cap CPUs and memory (an over-limit step is OOM-killed, the job survives); Apptainer's own `--cpus`/`--memory` are refused.
+- **The sim image cannot use the H200 or B200 GPUs, but runs unchanged on the CPUs**, and the cheapest shape is single-threaded processes, one per hyperthread. With 36 such processes on 18 Intel cores of an H200 node, a real sweep's worth of episodes (128,000) took about 30 s, and the pool ran at about 4,300 episodes per second, unchanged while vLLM served 20 sessions on its own cores (job 987890, two repeats).
+- **A whole "sweep, fit, final" cycle took 78 s** on 24 AMD cores (job 987891), of which the final run, one process of 12,000 episodes, took 33 s; on the Intel nodes and under load it should take about 2 to 3 minutes (not measured there).
+- **CPU and A100 results: no difference detected at this power** (2000-episode final run of `pf-20261104-1`); shifts below about 4 pool points, or a different ranking of close points, are not excluded.
+- **Qwen3-Coder-Next serves on 2 H200 with the vLLM image v0.25.1, unchanged.** Tool calls were well formed in every trial, including after a 70k-token history of tool calls. Warm aggregate generation: 1,320 to 1,570 tokens/s at 20 sessions, about 2,040 at 40, 2,770 at 80 (one round).
+- **Network isolation: a seccomp allow-list works, as a barrier against ordinary network use.** It refuses every socket but `AF_UNIX`, including a 64-bit-argument bypass that defeated the first, deny-list version, and is applied either to a whole container (Apptainer profile) or only to the commands an agent harness runs (`noinet.py`, tested with a stand-in harness that keeps its own TCP connection). It does not cover sockets a process already holds or receives, or the host's abstract Unix sockets. Users get no network namespace and no Docker-compatible runtime on DAIS.
 
 ## 1. Cluster facts
 
 | Item | Finding | Evidence |
 |---|---|---|
-| Partitions | `gpu` is `OverSubscribe=EXCLUSIVE`: any job there holds a whole node. `gpu1` is the shared partition; per GPU at most 12 cores (24 threads) and 250 GB (an `sbatch --test-only` for 2 GPUs refused more than 24 cores and 500,000 MB). `gpudev`: shared, 15 min, at most 4 GPUs, one job per user. `small`: CPU only, on the two AMD RTX nodes, at most half a node (64 cores, 750,000 MB). `gpux`: 10 days, 2 H200 nodes. | `scontrol show partition`, `sbatch --test-only`, user guide |
+| Partitions | `gpu` is `OverSubscribe=EXCLUSIVE`: any job there holds a whole node. `gpu1` is the shared partition; per GPU at most 12 cores (24 threads) and 250 GB. `gpudev`: shared, 15 min, at most 4 GPUs, one job per user. `small`: CPU only, on the two AMD RTX nodes, at most 64 cores and 750,000 MB. `gpux`: 10 days, 2 H200 nodes. | `scontrol show partition`, `sbatch --test-only`, user guide |
 | GPU type | `--gres=gpu:h200:N` selects H200. | jobs above |
 | QoS | `g0001` to `g0008` carry no TRES limit in `sacctmgr`. A full node would be `-p gpu --gres=gpu:h200:8 --qos=g0008` (not tested). | `sacctmgr` |
-| Nodes | H200 nodes: 8 x H200 (143,771 MiB), 2 x Xeon Platinum 8568Y+ (96 cores, 192 threads), 2 TB RAM. The `small` partition's nodes are AMD EPYC 9555, a different CPU. | `lscpu`, `nvidia-smi` |
-| Network | The login node and compute nodes reach `huggingface.co`, `openrouter.ai`, `pypi.org`, `github.com`. | 986457, 986771 |
-| Scratch | Quota 8 TB and 8M files; no backup; from 2027-02-01 files not accessed for 12 weeks are deleted (login message). GPFS `du` shows about twice the apparent size (297 GB for 149 GB of weights); whether the quota counts the doubled figure is unclear. | login message, `mmlsquota`, `du` |
-| Weights download | 149 GB in 5 minutes on the login node, niced, 4 workers; no site rule against it was found. | download log |
+| Nodes | H200 nodes: 8 x H200 (143,771 MiB), 2 x Xeon Platinum 8568Y+ (96 cores, 192 threads), 2 TB RAM. `small`: AMD EPYC 9555. | `lscpu`, `nvidia-smi` |
+| Slurm CPUs | `-c N` in a job gives N cores (2N hyperthreads); a `srun --exact -c 2` step got 2 CPUs on two different cores but is accounted 4 (`CR_ONE_TASK_PER_CORE`), so exclusive steps use a core each at least. | jobs 987428, 987892 |
+| Network | Login and compute nodes reach `huggingface.co`, `openrouter.ai`, `pypi.org`, `github.com`. | 986457, 986771 |
+| Scratch | Quota 8 TB and 8M files; no backup; from 2027-02-01 files not accessed for 12 weeks are deleted. GPFS `du` shows about twice the apparent size. | login message, `mmlsquota` |
+| Weights download | 149 GB in 5 minutes on the login node, niced, 4 workers. | download log |
 
-### Apptainer as the agent sandbox
+## 2. Network isolation and the agent sandbox
 
-What was shown, as an unprivileged user with apptainer 1.5.2. Login-node rows: `infra/dais/iso_check.sh`, output in `docs/reports/dais_iso_check_login.txt`. In-job rows: job 986771's log and job 987428 (B4).
+Tests as an unprivileged user with apptainer 1.5.2, by `infra/dais/iso_check.sh` with `net_probe.py`, `noinet.py` and `harness_standin.py`. Outputs: `docs/reports/dais_iso_check_login.txt` (login node) and `docs/reports/dais_iso_check_job.txt` (job 987881 on daisg301, an AMD compute node; not yet repeated on an H200 node).
 
-| Test | Result | Evidence |
-|---|---|---|
-| `--containall --net --network none` | Refused: `Failed to create network namespace: maximum number of network namespaces exceeded` (`/proc/sys/user/max_net_namespaces` = 0). `unshare -rn` fails as well. | login node; job 986771 |
-| Without a network namespace | The container shares the host network; a test server on the host's `127.0.0.1` answered from inside. | login node |
-| HTTP over a Unix socket in a bound directory | Works with `--containall`. | login node |
-| A relay inside the container to a base URL | Works: a 15-line Python relay (no `socat` in the image) served the Unix-socket server at `http://127.0.0.1:18766`. | login node |
-| Binds | A `:ro` bind is read-only, a second bind of a subfolder is writable; with `--containall` neither scratch nor the real home is visible and `$HOME` is empty; the image root is read-only; `/tmp` is writable. | login node |
-| `--cpus`, `--memory` | Refused on the login node (`cpu.max: no such file or directory`) and in a job (`cannot use cgroups - XDG_RUNTIME_DIR ... is not writable`). | login node; job 986771 |
-| `--pids-limit` | Works on the login node: with `--pids-limit 64` a shell starting 200 background processes stops with `Cannot fork`; without the limit all 200 start. Refused in a job (same `XDG_RUNTIME_DIR` error). | `iso_check.sh`; job 986771 |
-| A seccomp filter denying `AF_INET`/`AF_INET6` sockets and `io_uring_setup` | Works unprivileged (`--security seccomp:<profile>`): `socket(AF_INET)` and `socket(AF_INET6)` fail with `Operation not permitted`, `curl` fails by name and by IP address, `io_uring_setup` is denied; `AF_UNIX` sockets work and the Unix-socket model server answers. Without the filter the same image opens `AF_INET` sockets. Tested on the login node only, not yet in a job, and not yet with OpenCode inside. | `iso_check.sh` |
-| Slurm job steps as caps | Work. `srun --exact -n1 -c 2` gives the step two CPUs (affinity `[12, 24]`); 8 busy loops for 20 s in such a step used 40 CPU-seconds, so the step is held to 2 CPUs. A step with `--mem=2G` that allocates 6 GiB is OOM-killed (`OUT_OF_MEMORY`, exit 0:125) and the job carries on. A sim in a `-c 2 --mem=16G` step ran normally (MaxRSS 2.3 GB by `sacct`). | job 987428 |
-| Docker image to SIF | Works without root, from `docker://alpine:3.20` and from a `docker save` tarball (`docker-archive://`). | login node |
-| Docker-compatible runtime | None: no `podman`, `docker`, `nerdctl`, `buildah`, no subuid range for the user, no `slirp4netns`/`pasta`. | login node |
+| Test | Result |
+|---|---|
+| `--net --network none` | Refused: `maximum number of network namespaces exceeded` (`max_net_namespaces` = 0), login node and job. |
+| Without a network namespace | The container shares the host network: the host's `127.0.0.1` services and its abstract Unix sockets are reachable. |
+| Unix socket in a bound folder | Works with `--containall`. |
+| First seccomp profile (deny-list: `socket` with family `== AF_INET` or `== AF_INET6`) | **Bypassable.** `syscall(SYS_socket, 0x100000002, SOCK_STREAM, 0)` created a socket (the comparison sees all 64 bits, the kernel uses the low 32), and `AF_NETLINK` sockets were allowed. |
+| Allow-list profile `infra/dais/no_inet.seccomp.json` (`socket`/`socketpair` refused unless the family is exactly `AF_UNIX`, all 64 bits compared; `io_uring_setup` refused; architectures `SCMP_ARCH_X86_64`) | `AF_INET`, `AF_INET6`, `AF_NETLINK`, `AF_PACKET` and the 64-bit bypass refused with EPERM; `AF_UNIX` sockets and `socketpair` work and the Unix-socket server answers; an x32 or i386 (`int 0x80`) socket call kills the calling process with SIGSYS. Login node and job alike. |
+| `noinet.py` (the same allow-list installed by a process on itself, with `PR_SET_NO_NEW_PRIVS`, then `exec`) | The same refusals, foreign-ABI calls return EPERM instead of killing; `curl http://127.0.0.1:<port>` fails. |
+| io_uring | Not testable here: the kernel disables it for everyone (`io_uring_disabled` = 2). Both filters refuse `io_uring_setup` anyway. |
+| What the filters do not cover | An inherited TCP socket stays usable (shown: the filtered child sent HTTP over a socket its parent opened); sockets received over a Unix socket (`SCM_RIGHTS`) would too (follows, not tested); the host's abstract Unix sockets stay reachable (shown). |
+| A relay inside the container to give a client a TCP base URL | Works without a filter; **cannot work with the filter**, which refuses the relay's own `AF_INET` socket. Seccomp cannot restrict an address to loopback. |
+| Binds | A `:ro` bind is read-only, a second bind of a subfolder is writable; with `--containall` neither scratch nor the real home is visible; the image root is read-only. |
+| `--cpus`, `--memory` | Refused (login node: controllers not delegated; job: `XDG_RUNTIME_DIR ... is not writable`). |
+| `--pids-limit` | Works on the login node (with 64, a shell stops at `Cannot fork` before starting 200 processes; without, all 200 start); refused in a job. |
+| Slurm steps as caps | Work (jobs 987428, 987892): a `-c 2` step is held to 2 CPUs (8 busy loops for 20 s used 40 CPU-s); a step over its `--mem` is OOM-killed and the job carries on. With `--overlap`, 8 steps of `-c 1 --mem=1G` ran at once on 2 cores, and an overlapping step over its memory was still killed. |
+| Docker | No Docker-compatible runtime (no podman, docker, nerdctl, subuid range, slirp4netns); `apptainer build` from `docker://` and from `docker save` tarballs works. |
 
-So the agent's network cannot be cut by a namespace, but a seccomp filter blocks IP sockets, which leaves a Unix socket (with a relay inside the container if OpenCode needs a base URL) as the agent's only way to the model. MPCDF's Apptainer sandbox for coding agents (`gitlab.mpcdf.mpg.de/mpcdf/ai-cli-agents-container`, Bits and Bytes 222) ships `opencode` and confines an agent to its working directory and a fake home; it has the same network situation.
+**The harness and its tools.** The stand-in harness (`harness_standin.py`: a parent that talks HTTP to a local server and runs its "shell tool") showed the design that fits an agent harness such as OpenCode, which needs TCP to the model server:
 
-## 2. The sim image on DAIS
+- the harness keeps the network and talks TCP to vLLM on `127.0.0.1` with the job's API key;
+- its shell runs through `noinet.py` (`noinet.py /bin/bash ...`), so every command the model runs, and everything those commands start, cannot open IP, netlink or packet sockets;
+- the parent reached its server before and after its filtered child failed to.
 
-- The image was streamed read-only from Raven's shared copy; its SHA-256 on DAIS is `fe358c02...91550ff`, the same.
-- **H200: does not work** (job 986771): `torch.cuda.is_available()` is `True`, then `RuntimeError: CUDA error: no kernel image is available for execution on the device`, after torch's warning that H200 (sm_90) is not among sm_37 ... sm_86. B200 (sm_100) was not tried; the arch list rules it out.
-- **CPU: works, unchanged**, with `CUDA_VISIBLE_DEVICES=""`.
+What this does not cover: whatever the harness does itself. Its built-in network tools (for example OpenCode's web fetch) must be switched off in its configuration, and file descriptors it passes to the shell must not include open sockets (an inherited socket works through the filter). It is a barrier against accidental and ordinary network use by the agent's commands, not a sandbox against a hostile process with other channels (the host's abstract Unix sockets, sockets passed in). Not tested: OpenCode itself, and the filter on an H200 node.
 
-**First timings (superseded by B1 and B2 below).** The smoke rule (`punishment = 0`, job 986771, 32 threads) is cheap and not representative; its 66 s "sweep" (16 points x 500 episodes) is 16 times smaller than a real one, and 62 and 69 s in the 64-thread job 986879 against 66 s in the 32-thread job show that more threads gained nothing. The real rule of `pf-20261104-1` in one 32-thread process (job 986869, daisg302, AMD) took 167 s for 12,000 episodes. B1 shows why that was slow: torch's intra-op threads cost far more than they save at this tensor size.
+## 3. The sim image on DAIS
 
-**Against Raven.** The 20-episode smoke sims are not identical to Raven's (CPU and CUDA random streams differ) and at 20 episodes say little: sweep `s000` 70.23 +- 10.97 against Raven's 65.37 +- 10.06; final `gp` 82.36 +- 11.31 against 55.31 +- 9.89, `s000` 53.91 +- 7.39 against 55.31 +- 6.78.
+- The image was streamed read-only from Raven's shared copy; its SHA-256 on DAIS is the same (`fe358c02...91550ff`, asserted by `sim_check.slurm.sh`).
+- **H200: does not work** (job 986771): `RuntimeError: CUDA error: no kernel image is available for execution on the device`; torch 1.11+cu113 ships sm_37 to sm_86 and no PTX. B200 (sm_100) is ruled out by the same list.
+- **CPU: works, unchanged**, with `CUDA_VISIBLE_DEVICES=""`. The results do not depend on the thread count: the `pf-20261104-1` final run gave the same six pools with 32 threads (986869) and with 1 thread (987893).
+- **First timings (superseded).** The smoke rule (`punishment = 0`) is cheap and not representative, its 66 s "sweep" was 16 times smaller than a real one, and the 32-thread final run (986869, 167 s) was slow because of the threads (B1).
 
-The stronger check is the 2000-episode final run of `pf-20261104-1` (that branch's code; the model files' checksums match), seed 1000:
+**Against Raven.** The 20-episode smoke sims say little (CPU and CUDA random streams differ). The 2000-episode final run of `pf-20261104-1` (that branch's code; the model files' checksums match), seed 1000:
 
-| Point | Raven (A100) | DAIS (CPU, daisg302) | Difference | z |
+| Point | Raven (A100) | DAIS (CPU) | Difference | z |
 |---|---|---|---|---|
 | gp | 66.00 +- 1.07 | 64.28 +- 1.06 | -1.72 +- 1.51 | -1.14 |
 | s183 | 67.58 +- 1.07 | 66.52 +- 1.06 | -1.06 +- 1.51 | -0.70 |
@@ -79,64 +92,64 @@ The stronger check is the 2000-episode final run of `pf-20261104-1` (that branch
 | s255 | 63.63 +- 1.03 | 65.18 +- 1.01 | +1.55 +- 1.44 | +1.07 |
 | s103 | 62.38 +- 0.98 | 64.43 +- 1.00 | +2.05 +- 1.40 | +1.46 |
 
-- No difference is detected at this power: chi-squared 7.3 on 6 degrees of freedom. But each difference has a standard error of about 1.45, so shifts below about 4 pool points would go undetected, while the policy finder ranks points that differ by 1 to 5 points.
-- A difference in the ranking of points is not excluded. On Raven the six points are heterogeneous (chi-squared 17.2 on 5 df around their weighted mean); on DAIS they are not (4.2). The lead of the top two points over the other four is +3.2 +- 0.9 on Raven and +0.2 +- 0.9 on DAIS. This comparison was chosen after seeing the data, so it is a hint, not a finding.
-- The points do not share games in this config: `run_batched` seeds batch i with `seed + i` and each point fills its own batches, so the six differences are independent.
-- A stronger test needs the same config at many more episodes on both systems, and Raven is not reachable from here.
+- **No difference detected at this power** (chi-squared 7.3 on 6 df). Shifts below about 4 pool points would go undetected, while the policy finder ranks points 1 to 5 points apart.
+- **A ranking difference is not excluded.** The six points are heterogeneous on Raven (chi-squared 17.2 on 5 df) but not on DAIS (4.2). The top two lead the other four by +3.2 +- 0.9 on Raven and +0.2 +- 0.9 on DAIS. This comparison was chosen after seeing the data, so it is a hint only.
+- **The six differences are independent:** `run_batched` seeds batch i with `seed + i` and each point fills its own batches.
 
-**The two identical Raven smoke points.** In Raven's smoke final run, `gp` and `s000` (the same rule) have the same pool mean to 14 digits but different standard errors and member counts. The rule punishes nothing, so a point's pool mean is 1.6 x (its group-0 contributions) / 480 (20 episodes x 24 rounds). The two runs' group-0 contribution totals are both 16,594, while their per-episode values, punishments of the other group and group-0 row counts (2,468 and 2,072 agent-rounds) all differ (`per_round.parquet`). No shared data was found, so as far as the code and data show, the equal integer totals are a coincidence; this is not fully explained. The DAIS run of the same config does not repeat it.
+**The two identical Raven smoke points.** In Raven's smoke final run, `gp` and `s000` (the same rule, which punishes nothing) have the same pool mean to 14 digits but different standard errors. With zero punishment the mean is 1.6 x group-0 contributions / 480. Both runs' group-0 totals are 16,594, while their per-episode values and row counts (2,468 and 2,072 agent-rounds) differ. No shared data was found: as far as code and data show, a coincidence of integer totals; not fully explained.
 
-If GPU sims are wanted on DAIS after all, the repo has a recipe: `infra/claude_proxy/container/CC_env/Dockerfile.gpu` (torch 2.5.1+cu124) covers H200 (sm_90) but not B200 (sm_100, which needs cu128 or later). It would be built with Docker elsewhere, converted with `apptainer build ... docker-archive://`, and validated against the reference sims (a newer torch changes the random streams). Not done.
+GPU sims would need a rebuilt image; the repo's `Dockerfile.gpu` (torch 2.5.1+cu124) covers H200 but not B200, and its results would need validating against the reference sims. Not done here.
 
-## 3. Serving Qwen3-Coder-Next
+## 4. Serving Qwen3-Coder-Next
 
-- Weights: `Qwen/Qwen3-Coder-Next` revision `a7fbcb5c0e12d62a448eaa0e260346bf5dcc0feb` (Apache 2.0, not gated), Hugging Face cache layout under `HF_HOME=/dais/fs/scratch/$USER/models`, served offline. 148.4 GiB of safetensors.
-- Image: the group's `vllm.sif`, label `vllm/vllm-openai:v0.25.1`, asserted at start. The model card asks for vLLM >= 0.15.
-- Serve arguments as run: `--tensor-parallel-size 2 --gpu-memory-utilization 0.88 --max-model-len 131072 --enable-prefix-caching --enable-auto-tool-choice --tool-call-parser qwen3_xml` (986879 added `--enable-prompt-tokens-details`).
-- **Parsers:** in v0.25.1 `qwen3_coder` and `qwen3_xml` are the same class (`vllm/tool_parsers/__init__.py` maps both to `Qwen3EngineToolParser`). The looping reported in the model's discussion #17 with the old `qwen3_coder` was not reproduced, but it was tested only once.
-- **Checks** (986513, 986879: one trial each at temperature 1.0; 987430: the revised `probe_endpoint.py`, 2 trials per check at temperature 0.2), all passed. A pass needs `finish_reason: tool_calls`, the expected tool, JSON arguments with every required key and no degenerate repetition. The checks were: a chat completion; a tool call; the same streamed; a tool call after one 71k-token user message; a tool call after a 70.7k-token history of three earlier `run_shell` calls with long tool results, plain and streamed (0.6 to 2.7 s each). Two trials per check is still few; the agent bake-off will exercise this far more.
-- **Usage:** `prompt_tokens`, `completion_tokens`, `total_tokens`; `prompt_tokens_details.cached_tokens` only with `--enable-prompt-tokens-details`; streamed usage with `stream_options.include_usage`.
-- **Load time:** 386 s cold (weights 145 s from GPFS, torch.compile 50 s, engine start-up with profiling and CUDA graphs 96 s), 276 to 281 s later.
-- **Memory per GPU** at utilisation 0.88: weights 74.3 GiB, KV cache 44.3 GiB, CUDA graphs 1.1 GiB; 129,371 of 143,771 MiB used. At 0.90 (987430): 132,247 MiB used, 4.02M tokens of KV cache.
-- **KV cache:** 44.3 GiB per GPU held 3.78M tokens, about 25 KB per token across both GPUs. That is unusually small, because most of the model's layers are linear attention; other models need far more per token.
+- Weights: `Qwen/Qwen3-Coder-Next` revision `a7fbcb5c0e12d62a448eaa0e260346bf5dcc0feb` (Apache 2.0, not gated), served offline from a read-only `HF_HOME`; 148.4 GiB.
+- Image: the vLLM image named by `VLLM_SIF`, label `vllm/vllm-openai:v0.25.1`, asserted at start (the model needs >= 0.15).
+- Serve arguments: `--tensor-parallel-size 2 --gpu-memory-utilization 0.90 --max-model-len 131072 --enable-prefix-caching --enable-prompt-tokens-details --enable-auto-tool-choice --tool-call-parser qwen3_xml`, in `--containall` with a per-job home, a shared compile cache, a free port and a per-job API key (refused without it, which `wait_ready` checks).
+- **Parsers:** in v0.25.1 `qwen3_coder` and `qwen3_xml` are the same class (`Qwen3EngineToolParser`).
+- **Tool calls:** 986513 and 986879, one trial each at temperature 1.0; the revised `probe_endpoint.py` at temperature 0.2, 2 trials per check in 987430 and 3 in 987950 (the committed `serve.slurm.sh`). All passed. A pass needs `finish_reason: tool_calls`, the expected tool, JSON arguments with every required key and no degenerate repetition. The checks: chat; a tool call, plain and streamed; after one 71k-token message; after a 70.7k-token history of three `run_shell` calls with long results, plain and streamed. Few trials; the bake-off will test far more.
+- **Load time:** 231 to 412 s (the longest on a node whose page cache did not hold the weights and with an empty compile cache).
+- **Memory per GPU** at 0.90: 132,247 MiB used; KV cache 4.02M tokens, about 25 KB per token, unusually small (most layers are linear attention).
 
-## 4. Sims on the CPUs, generation on the GPUs
+## 5. Sims on the CPUs, generation on the GPUs
 
-### B1: threads and processes for one real sweep
+A slice is one part of a real sweep split by `generate_sim_config.py --n-parts 32` (`pf-20261104-1`'s 5-parameter rule, 256 Sobol points x 500 episodes): 8 points x 500 episodes = 4,000 episodes. Each process runs `python -m aimanager simulate` in the unchanged image with `OMP_NUM_THREADS`/`MKL_NUM_THREADS` set (torch 1.11 honours them; the sim sets none), pinned with `taskset`. Times are GNU `time` per process, start-up included.
 
-A slice is one part of a real sweep split by the repo's own `generate_sim_config.py --n-parts 32` (`pf-20261104-1`'s 5-parameter rule, 256 Sobol points x 500 episodes): 8 points x 500 episodes = 4,000 episodes, 4 batches of 1,000. Every process ran `python -m aimanager simulate` in the unchanged sim image, `OMP_NUM_THREADS`/`MKL_NUM_THREADS` set to the thread count (torch 1.11 honours them; the sim sets none itself), pinned with `taskset`. Times are wall and user+system CPU seconds by GNU `time`, per process, including start-up.
+### B1: threads and processes
 
-One slice alone, by threads:
+One slice alone:
 
-| Threads | AMD (987428) wall, CPU s | Intel H200 node (987623) wall, CPU s |
+| Threads | AMD, committed script (987892): wall, CPU s | Intel H200 node (987623): wall, CPU s |
 |---|---|---|
-| 1 | 15.4, 15.7 | 29.6, 30.5 |
-| 2 | 23.8, 35.9 | 26.8, 39.1 |
-| 4 | 25.5, 62.3 | 33.7, 79.1 |
-| 8 | 26.8, 124.2 | |
-| 16 | 33.8, 326.8 | |
-| 32 | 76.5, 1933.8 | |
+| 1 | 15.3, 15.6 | 29.6, 30.5 |
+| 2 | 23.3, 34.8 | 26.8, 39.1 |
+| 4 | 27.1, 67.5 | 33.7, 79.1 |
+| 8 | 28.6, 136.6 | |
+| 16 | 33.9, 337.8 | |
+| 32 | 68.5, 1702.8 | |
 
-Cores filled with k processes of t threads, one slice each:
+16 AMD cores (987892) or 12 Intel cores (987623) filled with k processes of t threads, one slice each; configs prepared before the timed part (987892) and the round's wall time:
 
-| Node, cores | k x t | Episodes | Slowest process | Episodes per second | Per core |
+| Cores | k x t | Episodes | Round wall | Process wall, median (slowest) | Episodes/s |
 |---|---|---|---|---|---|
-| AMD, 16 | 1 x 32 | 4,000 | 80.5 s | 50 | 3 |
-| AMD, 16 | 4 x 8 | 16,000 | 37.9 s | 420 | 26 |
-| AMD, 16 | 8 x 4 | 32,000 | 50.7 s | 630 | 39 |
-| AMD, 16 | 16 x 2 | 64,000 | 25.5 s | 2,510 | 157 |
-| AMD, 16 | 32 x 1 | 128,000 | 27.8 s | 4,600 | 288 |
-| Intel, 12 | 6 x 4 | 24,000 | 33.9 s | 710 | 59 |
-| Intel, 12 | 12 x 1 (one per core) | 48,000 | 31.3 s | 1,530 | 128 |
-| Intel, 12 | 12 x 2 | 48,000 | 28.7 s | 1,670 | 139 |
-| Intel, 12 | 24 x 1 (one per hyperthread) | 96,000 | 38.0 s | 2,530 | 211 |
+| AMD 16 | 1 x 32 | 4,000 | 71 s | 70.5 s | 56 |
+| AMD 16 | 2 x 16 | 8,000 | 38 s | 33.7 (37.5) s | 210 |
+| AMD 16 | 4 x 8 | 16,000 | 44 s | 27.0 (43.8) s | 360 |
+| AMD 16 | 8 x 4 | 32,000 | 37 s | 24.0 (36.1) s | 860 |
+| AMD 16 | 16 x 2 | 64,000 | 25 s | 25.4 (25.7) s | 2,560 |
+| AMD 16 | 32 x 1 | 128,000 | 29 s | 28.4 (29.0) s | 4,410 |
+| Intel 12 | 6 x 4 | 24,000 | 34 s | 32.9 (33.9) s | 710 |
+| Intel 12 | 12 x 1, one per core | 48,000 | 31 s | 30.3 (31.3) s | 1,530 |
+| Intel 12 | 12 x 2 | 48,000 | 28 s | 28.2 (28.7) s | 1,670 |
+| Intel 12 | 24 x 1, one per hyperthread | 96,000 | 38 s | 34.6 (38.0) s | 2,530 |
 
-- **Best shape: one single-threaded process per hyperthread.** Every extra torch thread adds CPU time without saving wall time; system time grows with the threads (thread synchronisation).
-- **CPU cost:** about 9 CPU-seconds per 1,000 episodes per process on the Intel H200 nodes with every hyperthread busy (24 x 1: 36 s per 4,000 episodes), and about 7 on the AMD nodes (32 x 1).
-- **A whole real sweep is 128,000 episodes**, the 32 x 1 row: 28 s on 16 AMD cores, so about 40 s on 16 Intel cores.
-- **Caveats.** The k x t rows above count only the processes' own times. In job 987428 the round times (B1B lines) also include the per-slice config preparation, which the revised script takes out of the timed part. The `gpudev` and `small` nodes are shared with other jobs.
+- **Cheapest per CPU: single-threaded, one per hyperthread.** A second thread can shorten one slice's wall time when the CPUs would otherwise idle (Intel: 26.8 s against 29.6 s), but it costs about 30 percent more CPU on Intel and more than twice as much on AMD, so a full pool does more work single-threaded.
+- **The 4 x 8 and 8 x 4 AMD rows are set by one or two slow processes each.** Their medians are close to the 16 x 2 row; the `small` nodes are shared with other users' jobs.
+- **Two Intel oddities.**
+  - One single-threaded slice alone costs 30.5 CPU-s on Intel against 15.6 on AMD.
+  - Filling each core's second hyperthread gives 1.65x on Intel (24 x 1 against 12 x 1) but about 1.25x on AMD (B2: 190 episodes/s per core at one slice per core, 242 at two).
+  - Both suggest the lone Intel process ran slower than it could (clock, or a busy sibling hyperthread on the shared node), so single-process Intel numbers are less reliable than the full-pool ones.
 
-### B2: many slices at once (job 987622, AMD, 48 cores, single-threaded slices)
+### B2: many slices at once (987622, AMD, 48 cores, single-threaded)
 
 | Slices at once | Pinned: slowest, episodes/s | Not pinned: slowest, episodes/s |
 |---|---|---|
@@ -147,117 +160,165 @@ Cores filled with k processes of t threads, one slice each:
 | 40 | 21.1 s, 7,620 | 26.5 s, 5,930 |
 | 96 (every hyperthread) | 32.4 s, 11,640 | 35.4 s, 10,970 |
 
-- Episodes per second counts the round's whole wall time.
-- Pinning (one per hyperthread, one per core first) helps once the slices compete for cores (+29 percent at 40, +6 percent at 96). At small numbers the unpinned slices were faster: they can move to idle CPUs, and these nodes are shared with other users' jobs.
-- All 344 slices exited 0 and wrote their `sweep.json`; nothing was killed.
-- Peak RSS per slice was 1.2 to 1.4 GB, so 96 slices need about 130 GB. Each slice's output is about 3 MB, roughly 95 MB per sweep.
+- Pinning helps once slices compete for cores (+29 percent at 40, +6 percent at 96).
+- At small numbers the pinned rounds were slower. Two confounds: each pinned round ran first, and a few CPUs at the head of the list were slower than the rest throughout, likely from other users' load on the shared node.
+- All 344 slices exited 0; peak RSS was 1.1 to 1.4 GB per slice; output about 3 MB per slice.
 
-### B3: sims beside the server, each on its own cores (job 987430, Intel, 2 H200, 24 cores)
+### B3: the layout on one allocation (987890, Intel, 2 H200, 24 cores)
 
-- **Layout:** vLLM (TP 2, utilisation 0.90) and the benchmark clients were pinned to 4 cores. 16 slices of the real sweep (2 threads each, one core each) ran on 16 of the other cores. Generation was steady: 5 warm 27k-token sessions repeating 1,024-token requests from 17:41:00 to 17:41:51, while the slices ran from 17:40:52 to 17:41:45.
-- **Sims:** 34.0 to 36.4 s each beside generation, 33.4 to 35.8 s alone after the server was stopped; the pools are identical (the CPU sims are deterministic).
-- **Generation:** 698 tokens/s in all and 143 per session beside the sims; 678 and 139 alone; median time to first token 0.18 s and 0.16 s.
-- **Conclusion:** with separate cores, no interference was measurable. The earlier unpinned attempt (job 986879) only showed that an unpinned sim nearly stalls while the server takes the CPUs: generation overlapped about 47 s of its 108 s, and in that window it did roughly 1 to 9 s of work.
+- **Layout:** vLLM (TP 2) on 4 cores; the benchmark client on 2 other cores; a pool of 36 single-threaded slices on the remaining 18 cores (one per hyperthread). The slices were launched together, with their configs prepared beforehand.
+- **Order of each repeat:** (a) the pool alone with the server loaded and idle; (b) 20 warm 28k-token sessions alone, steady, for as long as (a) took; (c) the pool started once the same 20-session generation was steady.
 
-### B5: generation against concurrency (job 987430, Qwen3-Coder-Next on 2 H200)
+| Repeat | Pool alone: round, slice median | Pool beside generation: round, slice median | Generation alone: tok/s, per session | Generation beside the pool |
+|---|---|---|---|---|
+| 1 | 33 s, 33.0 s | 34 s, 33.0 s | 1,571, 80.9 | 1,564, 81.0 |
+| 2 | 32 s, 31.8 s | 34 s, 32.6 s | 1,574, 81.2 | 1,565, 80.1 |
 
-Sessions with 27k to 29k-token prompts, 512 generated tokens each, every session once cold and then once warm (prefix cached, 99 percent cached tokens):
+- Each pool round played 144,000 episodes (36 slices), about 4,300 episodes per second, or 240 per core.
+- With separate cores, sims and generation did not measurably slow each other (at most 3 percent on the pool, under 1 percent on generation).
+- Two repeats at 20 sessions, one node; the earlier run 987430 (5 sessions, 2-thread slices started one by one, client on the server's cores) agreed.
 
-| Sessions | Warm: decode tok/s per session (median) | Warm: aggregate tok/s | Warm: time to first token (median, max) | Cold: aggregate tok/s | Cold: time to first token (median, max) |
-|---|---|---|---|---|---|
-| 5 | 135 | 631 | 0.25 s, 0.36 s | 348 | 2.9 s, 3.7 s |
-| 10 | 102 | 934 | 0.41 s, 0.68 s | 516 | 3.0 s, 5.2 s |
-| 20 | 86 | 1,329 | 1.78 s, 1.79 s | 566 | 6.6 s, 12.2 s |
-| 40 | 62 | 2,159 | 0.82 s, 1.72 s | 714 | 10.4 s, 21.1 s |
-| 80 | 43 | 2,769 | 2.06 s, 4.13 s | 793 | 20.8 s, 42.1 s |
+### B5: generation against concurrency (Qwen3-Coder-Next on 2 H200)
 
-- The aggregate is still growing at 80 sessions (+28 percent from 40), but per-session speed falls by two thirds from 5 to 80.
-- Cold prompts are limited by prefill, which ran at about 54,000 tokens/s (vLLM's log).
-- 80 sessions of 29k tokens fill about 2.3M of the 4.0M tokens of KV cache.
-- This ran on `gpudev`, not on the `gpu1`/`g0002` default; the hardware is the same.
+Warm sessions (99 percent of the 27k to 29k-token prompt cached), 512 generated tokens each:
 
-The sim's GPU memory could not be measured on DAIS (no kernels for H200); on the CPUs a slice's resident memory is 1.2 to 1.4 GB.
+| Sessions | Run | Per session, median | Aggregate | Time to first token, median (max) |
+|---|---|---|---|---|
+| 5 | 987430 | 135 tok/s | 631 tok/s | 0.25 (0.36) s |
+| 10 | 987430 | 102 | 934 | 0.41 (0.68) s |
+| 20 | 987430 | 86 | 1,329 | 1.78 (1.79) s |
+| 20 | 987890, rounds 1 and 2 | 73, 83 | 1,325, 1,461 | 0.67, 0.61 s |
+| 40 | 987430 | 62 | 2,159 | 0.82 (1.72) s |
+| 40 | 987890, rounds 1 and 2 | 61, 62 | 2,039, 2,048 | 1.14, 1.24 s |
+| 80 | 987430 | 43 | 2,769 | 2.06 (4.13) s |
 
-## 5. The frontier candidates on a full 8 x H200 node
+- Aggregate throughput was still growing at 80 sessions in the one round measured there; per-session speed falls to about half from 5 to 40 sessions.
+- In 987430 the client shared the server's 4 cores; in 987890 it had 2 cores of its own. At 20 and 40 sessions the two agree within run-to-run variation, so the client was not the limit there. The 80-session row was not repeated (987890 hit its time limit) and may be client-limited.
+- Time to first token varies between rounds; the dip at 40 in 987430 is noise.
+- Cold prompts are limited by prefill (about 54,000 tokens/s).
 
-Expected to fit or not, unverified. Weight sizes are the summed safetensors files from the Hugging Face API on 2026-11-27, spread evenly over the tensor-parallel GPUs. With the sims on the CPUs, vLLM can take utilisation 0.92 (129.2 GiB of 140.4 GiB per GPU). About 5 GiB of that goes to activations, CUDA graphs and buffers; this figure comes from one model at TP 2 (Qwen) and may differ for others.
+### B4: Slurm steps
 
-| Model | Weights | Layout | Weights per GPU | Left for KV per GPU | Assessment |
-|---|---|---|---|---|---|
-| DeepSeek-V4.1-Flash | 510 GB (475 GiB) | TP 8 | 59 GiB | about 65 GiB | Expected to fit; TP 4 would leave about 5 GiB, too little. |
-| GLM-5.3 | 756 GB (704 GiB), FP8 | TP 8 | 88 GiB | about 36 GiB | Expected to fit; whole node. |
-| GLM-5.3-Flash | 328 GB (306 GiB), FP8 | TP 4 | 76 GiB | about 48 GiB | Expected to fit on half a node; TP 2 does not fit (153 GiB per GPU). |
-| MiniMax-M3.1-Flash | 252 GB (235 GiB) | TP 4 | 59 GiB | about 65 GiB | Expected to fit on half a node; TP 2 would leave about 7 GiB, too little to be useful. |
+See the sandbox table in section 2. Exclusive steps take at least one core each, so 20 agents cannot be 20 exclusive steps on 16 cores; `--overlap` steps on a shared CPU set can, with a memory cap each (tested with 8 steps on 2 cores).
 
-- **Unverified:** whether vLLM v0.25.1 supports each architecture and its quantisation on Hopper (DeepSeek-V4.1-Flash's int8 tensors, MiniMax's packed `U8` weights).
-- **Unknown:** each model's KV size per token, which decides how much context the remainder holds. Qwen's 25 KB per token is no guide.
-- **Storage:** about twice the file size by `du` on scratch.
-- None of these was downloaded or served.
+### The "sweep, fit, final" cycle (987891, AMD daisg302, 24 cores)
 
-## A node layout for 20 chains
+With the pipeline's own scripts in a scratch copy of the checkout, single-threaded throughout:
 
-For one full H200 node (96 cores, 192 hyperthreads, 8 GPUs, 2 TB), with the sims on the CPUs:
+| Step | Wall |
+|---|---|
+| `generate_sim_config.py --n-parts 32` | 2 s |
+| 32 parts at once (128,000 episodes) | 30 s |
+| `merge_sweeps.py` | 2 s |
+| `fit_surrogate.py` | 7 s |
+| `generate_sim_config.py --final` | 2 s |
+| final run: 6 points x 2,000 episodes, one process | 33 s |
+| `--score-final` | 1 s |
+| whole cycle, with copying the checkout | 78 s |
+
+- The final run cannot be split with the repo's mechanism: `--final` writes one config (`--out` refuses `--n-parts`). Splitting it would need code, and would change its seeds unless done the way `--n-parts` offsets them.
+- It is the longest step and runs as one process. Estimates, not measured on Intel: alone it takes about 30 s on AMD and, from Intel's single-thread speed, about 90 s on an H200 node; under a full pool, up to twice that.
+
+## 6. A node layout for 20 chains
+
+For one full H200 node (96 cores, 192 hyperthreads, 8 GPUs, 2 TB):
 
 | Use | Cores | How |
 |---|---|---|
-| vLLM and its clients | 8 | the server pinned to them (`SERVER_CPUS`); 4 cores served TP 2 without interference in B3, TP 8 has more worker processes, so twice that (not measured) |
-| 20 agents (OpenCode, their shell tools, `validate-rule`) | 16 | one Slurm job step or `taskset` set per agent; `OMP_NUM_THREADS=1` in the agents' environment, since an unbounded `validate-rule` used about 7 cores for 13 s on the login node (not measured under agent load) |
-| Sweeps | 72 (144 hyperthreads) | a pool of 144 single-threaded slice processes (`OMP_NUM_THREADS=1`), pinned one per hyperthread, fed with slices from `generate_sim_config.py --n-parts 32` (4,000 episodes each) |
+| vLLM | 8 | pinned with `taskset`; 4 cores served TP 2 at 20 sessions without interference, TP 8 has more worker processes (not measured) |
+| benchmark or monitoring clients, the campaign driver | 2 | pinned |
+| 20 agents | 16 | one shared CPU set (`taskset`) with one `srun --overlap -c 1 --mem=<cap>` step per agent for a memory cap. Not exclusive steps: those take a core each (`CR_ONE_TASK_PER_CORE`), so 20 would need 20 cores. `OMP_NUM_THREADS=1` in the agents' environment (an unbounded `validate-rule` used about 7 cores for 13 s on the login node). |
+| Sweeps | 70 (140 hyperthreads) | a pool of 140 single-threaded slice processes, one per hyperthread, fed with `--n-parts 32` slices; final runs take a pool slot each |
 
-Expected sweep times under that layout, from B1 and B2 (Intel, every hyperthread busy: about 36 s per slice, 211 episodes per second per core):
+Expected times, from B1 to B3 and the cycle, **each within about a factor of two**:
 
-- **One sweep on an idle pool:** its 32 slices run at once, about 30 to 40 s, plus merging (`merge_sweeps.py`, not timed).
-- **All 20 chains' sweeps at once (the worst case):** 640 slices in 144 slots, about 5 waves of about 36 s, so about 3 minutes for all 20. The pool's capacity is about 15,000 episodes per second, about 9 s per real sweep.
-- **Memory:** 144 slices x 1.4 GB, about 200 GB.
+- **Pool capacity:** about 240 episodes per second per core (987890), so about 17,000 episodes per second for 70 cores, or about 8 s of pool time per real sweep.
+- **One cycle on an idle pool:** about 2 to 3 minutes. Its 32 slices take about 35 s, merge and fit about 15 s, and the single-process final run about 90 s on Intel.
+- **All 20 chains' sweeps at once (the worst case):** 2.56M episodes, about 2.5 minutes of pool time, then 20 final runs in parallel of about 1.5 to 3 minutes each, so about 5 minutes for the round.
+- **Memory:** about 1.4 GB per slice, about 200 GB for the pool.
 
-So the sims are not the bottleneck: a round of 20 sweeps costs minutes, against an agent version that takes many model calls. On the model side, B5 for Qwen3-Coder-Next on 2 H200 gives 86 tokens/s per session with 20 warm sessions (1,330 in all) and still more aggregate at 40 and 80. For a frontier model on 8 GPUs the numbers are unmeasured.
+Which inputs were measured on other hardware or at another scale than the target:
+
+| Input | Measured on |
+|---|---|
+| Pool throughput | 18 Intel cores of a shared H200 node (987890); 12 Intel cores (987623); the full node is extrapolated about 4x |
+| Many slices at once, memory per slice, nothing killed | AMD `small` nodes (987622) |
+| Server cores | TP 2 with 5 and 20 sessions; not TP 8, not a frontier model |
+| Step caps, overlapping steps | AMD `small` node (987892) |
+| Agents' CPU use | one `validate-rule` on the login node; no agent measured |
+| Cycle steps | AMD (987891); the Intel final-run time is estimated from single-thread speed |
+
+So the sims are not the bottleneck: a round of 20 cycles costs minutes on the CPUs, against agent versions that take many model calls. The model side for a frontier model on 8 GPUs is unmeasured.
+
+## 7. The frontier candidates on a full 8 x H200 node
+
+Expected to fit or not, unverified. Weight sizes are the summed safetensors files from the Hugging Face API on 2026-11-27. With the sims on the CPUs, vLLM can take utilisation 0.92 (129.2 GiB of 140.4 GiB per GPU); about 5 GiB of that went to activations, CUDA graphs and buffers for Qwen at TP 2, and may differ for others.
+
+| Model | Weights | Layout | Weights per GPU | Left for KV per GPU | Assessment |
+|---|---|---|---|---|---|
+| DeepSeek-V4.1-Flash | 510 GB (475 GiB) | TP 8 | 59 GiB | about 65 GiB | expected to fit; TP 4 leaves about 5 GiB |
+| GLM-5.3 | 756 GB (704 GiB), FP8 | TP 8 | 88 GiB | about 36 GiB | expected to fit; whole node |
+| GLM-5.3-Flash | 328 GB (306 GiB), FP8 | TP 4 | 76 GiB | about 48 GiB | expected to fit on half a node; TP 2 does not fit |
+| MiniMax-M3.1-Flash | 252 GB (235 GiB) | TP 4 | 59 GiB | about 65 GiB | expected to fit on half a node; TP 2 leaves about 7 GiB |
+
+- **Unverified:** vLLM v0.25.1 support for each architecture and quantisation on Hopper.
+- **Unknown:** each model's KV size per token; Qwen's 25 KB per token is no guide.
+- None of these was downloaded or served.
+
+## Prerequisites
+
+| What | Where | How to create it |
+|---|---|---|
+| A checkout with the model files | `/u/$USER/algorithmic-institutions-pf` | `git clone` the repo; copy `artifacts/artificial_humans/**/*.pt` (not in git) from a machine that has them |
+| The logs folder | `/dais/fs/scratch/$USER/policy-finder/logs` | `mkdir -p` |
+| Site settings | `/dais/fs/scratch/$USER/policy-finder/env.sh` (not in git) | one line, `VLLM_SIF=<path of the group's vLLM image on DAIS>` |
+| The sim image | `/dais/fs/scratch/$USER/policy-finder/images/algoinst.sif` | a byte copy of Raven's shared `algoinst.sif` (SHA-256 asserted by `sim_check.slurm.sh`), or built from `infra/claude_proxy/container/CC_env/algoinst.def` |
+| The weights | `HF_HOME=/dais/fs/scratch/$USER/models` | `huggingface_hub.snapshot_download("Qwen/Qwen3-Coder-Next", revision="a7fbcb5c...")` with that `HF_HOME`, inside the vLLM image |
+| The reference rule for the benchmarks | `/dais/fs/scratch/$USER/policy-finder/ref-pf-20261104-1/configs/managers/rule_based/pf-20261104-1.yml` | `git worktree add` of the branch `policy-finder/pf-20261104-1` there, or set `SWEEP_RULE` to any rule file |
 
 ## Not yet measured
 
-- The layout above as a whole: a full node, a TP 8 server, 20 real agents and the sim pool together.
-- Throughput of the frontier models; their vLLM support on Hopper.
-- Agents' CPU use (OpenCode, tools, `validate-rule`) under load.
-- The seccomp filter inside a job and with OpenCode in the container.
-- Per-process start-up cost separately from simulation time; `merge_sweeps.py` and the final run's timing.
-- The `gpu1`/`g0002` default path and `serve.slurm.sh MODE=serve` (B5 ran on `gpudev`, the same hardware).
-- A Raven baseline for any of these: not available from here.
+- The whole layout on a full node: a TP 8 server, 20 real agents and the pool together.
+- The frontier models' throughput and their vLLM support on Hopper.
+- Agents' CPU use under load; OpenCode with `noinet.py` as its shell; the seccomp filter on an H200 node.
+- The cycle on Intel CPUs; per-process start-up separately from simulation time.
+- B5 at 80 sessions with repeats and with the client on its own cores.
+- The `gpu1`/`g0002` default path and `serve.slurm.sh MODE=serve`.
+- A Raven baseline for any of these.
 
 ## What can be reused
 
 | Part | Reuse |
 |---|---|
 | `algoinst.sif` | Unchanged, on the CPUs. Not on H200/B200 GPUs. |
-| The group's `vllm.sif` | Unchanged; version asserted at start. |
-| Sister project's serve conventions (`../understanding/scripts/slurm/lib/evo_common.sh`) | Followed: `apptainer exec --nv`, a home that is not the real one, `HF_HOME` on scratch, explicit prefix caching, readiness on `/v1/models`. Added: a port and API key per job, readiness that refuses a server answering without the key. |
-| Repo entry points | `python -m aimanager simulate` on configs from `generate_sim_config.py` (including `--n-parts`), unchanged; the Raven job template's container layout copied into `in_sim_image`. |
-| Agent spawner (Docker socket) | Cannot run: no Docker-compatible runtime. Needs an Apptainer backend, possibly MPCDF's agents container. |
-| Network rule of the Docker sandbox | Not with namespaces; a seccomp filter that denies IP sockets works (login node). File isolation is reproducible. |
-| Raven `cluster_proxy` functions | A thin adapter: a sim becomes a CPU process (or a Slurm job step) in the sim image. |
+| The vLLM image | Unchanged; version asserted at start. |
+| Sister project's serve conventions (`../understanding/scripts/slurm/lib/evo_common.sh`) | Followed (`apptainer exec --nv`, a home that is not the real one, `HF_HOME` on scratch, prefix caching, readiness on `/v1/models`); added a port and API key per job and `--containall`. |
+| Repo entry points | `python -m aimanager simulate`, `generate_sim_config.py` (`--n-parts`, `--final`, `--score-final`), `merge_sweeps.py`, `fit_surrogate.py`, unchanged. |
+| Agent spawner (Docker socket) | Cannot run: no Docker-compatible runtime. Needs an Apptainer backend, possibly MPCDF's agents container (`gitlab.mpcdf.mpg.de/mpcdf/ai-cli-agents-container`, which ships `opencode`). |
+| Network rule of the Docker sandbox | Not with namespaces. A seccomp allow-list on the agent's commands (`noinet.py`) or on a whole container without a TCP client (`no_inet.seccomp.json`). |
+| Raven `cluster_proxy` functions | A thin adapter: a sim becomes a CPU process in a pool. |
 
 ## Scripts
 
-`infra/dais/common.sh` holds the settings and helpers. Every job writes into its own run folder under scratch (`$PF_RUN`), never into the checkout; the checkout is bound read-only into the sim container, and failures make the job exit non-zero.
+`infra/dais/common.sh` holds the settings and helpers. Every job writes into its own run folder under scratch (`$PF_RUN`), never into the checkout; the checkout is bound read-only into the sim container; failures make the job exit non-zero; the API key is never on a command line.
 
-| Script | Purpose | Run? |
+| Script | Purpose | Last run of the committed form |
 |---|---|---|
-| `serve.slurm.sh` | serve and probe, or keep serving | earlier version, on gpudev |
-| `probe_endpoint.py` | tool-call checks, several trials | yes (987430) |
-| `bench_load.py` | concurrent sessions, rounds or steady load | yes (987430) |
-| `sim_check.slurm.sh` | network and Apptainer checks, GPU test, reference sims on the CPUs | earlier version (986771) |
-| `sim_cpu.slurm.sh` | one sim on the CPUs of the `small` partition | earlier version (986869) |
-| `cpu_bench.slurm.sh` | B1, B4 | yes (987428; 987623 with short shapes); the B1 round times of 987428 still included config preparation |
-| `sweep_pack.slurm.sh` | B2 | yes (987622) |
-| `serve_bench.slurm.sh` | B3, B5 | yes, on gpudev (987430) |
-| `iso_check.sh` | sandbox checks | yes, login node (`dais_iso_check_login.txt`) |
-| `cpu_slots.py` | the job's CPUs grouped by core, for pinning | yes |
-| `sim_variant.py` | GPU check; a config copy with another output folder or shape | yes |
-
-The scripts expect a checkout at `/u/$USER/algorithmic-institutions-pf` with the model files, submitted from it, and `/dais/fs/scratch/$USER/policy-finder/logs` to exist.
+| `serve.slurm.sh` | serve and probe, or keep serving | 987950 (`MODE=probe`, gpudev); `MODE=serve` not run |
+| `probe_endpoint.py`, `bench_load.py` | tool-call checks; concurrent sessions | 987890, 987950 |
+| `serve_bench.slurm.sh` | the layout (B3), B5 | 987890 (gpudev, cut at the time limit during B5) |
+| `cpu_bench.slurm.sh` | B1, B4 | 987892 |
+| `sweep_pack.slurm.sh` | B2 | 987622; since then only a check of the output folder was added and the slot list no longer repeats a CPU |
+| `cycle_bench.slurm.sh` | the "sweep, fit, final" cycle | 987891 |
+| `sim_check.slurm.sh` | network and Apptainer checks, GPU test, reference sims | 987951 (the same smoke pools as before: 70.23; 82.36 and 53.91) |
+| `sim_cpu.slurm.sh` | one sim on the CPUs | 987893 |
+| `iso_check.sh`, `net_probe.py`, `noinet.py`, `harness_standin.py`, `no_inet.seccomp.json` | the sandbox checks | 987881 and the login node |
+| `cpu_slots.py`, `sim_variant.py` | pinning slots; config copies | in the jobs above |
 
 ## Changes this suggests for the plan
 
-- **Decision 1:** run the sims on the node's CPUs in the existing image, single-threaded and one per hyperthread, and give vLLM the GPUs and a few pinned cores; the layout above.
-- **Phase 3's cluster backend:** a pool of single-threaded CPU sim processes fed with `--n-parts 32` slices; `srun --exact` steps cap CPU and memory where a hard cap is wanted (for the agents).
-- **Decision 4:** the network can be cut with a seccomp filter (no IP sockets, a Unix socket to the model server); to be confirmed in a job with OpenCode before relying on it.
-- **Full-node jobs:** they go to `gpu` (exclusive) or `gpux`; `gpu1` is for jobs of at most half a node.
+- **Decision 1:** run the sims on the node's CPUs in the existing image, single-threaded and one per hyperthread, with vLLM on the GPUs and a few pinned cores; the layout in section 6.
+- **Phase 3's cluster backend:** a pool of single-threaded sim processes fed with `--n-parts 32` slices; agents in `--overlap` steps with memory caps on a shared CPU set.
+- **Decision 4:** use `noinet.py` as the agent harness's shell, disable the harness's own network tools, and keep the harness's TCP connection to the model; to be tested with OpenCode.
+- **Full-node jobs:** they go to `gpu` (exclusive) or `gpux`.
 - **Scratch cleanup:** copy weights and results off scratch before the 12-week cleanup starts on 2027-02-01.
