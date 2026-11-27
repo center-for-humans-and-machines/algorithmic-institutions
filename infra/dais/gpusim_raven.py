@@ -27,7 +27,8 @@ CONFIGS = [
 ]
 MODELS = [
     "artifacts/artificial_humans/group_switching_contribution_50ep_vnode_stimulus"
-    "_skip_herding_copula/model/architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
+    "_skip_herding_copula/model/"
+    "architecture_node+edge+rnn__dataset_50ep__epochs_575.pt",
     "artifacts/artificial_humans/raven_script_22/model/rnn_False__dataset_full.pt",
     "artifacts/artificial_humans/switch_joint_exodus/model/"
     "architecture_mlp+rnn+edge__dataset_50ep_doubled.pt",
@@ -36,11 +37,54 @@ MODELS = [
 FORWARD = "plots/gpusim/forward"
 
 
+BEGIN, END = "__GPUSIM_BEGIN__", "__GPUSIM_END__"
+
+
+def _via_log(sha, config, out):
+    """A job's per-episode scores and sweep.json through the run log: reduced
+    on the login node into the job's own snapshot output, then printed
+    (gzip, base64). No /sync_from_cluster, so no shared transfer tree."""
+    import base64
+    import gzip
+
+    stem = Path(config).stem
+    sim = f"plots/simulation/gpusim/{stem}"
+    code, log = cp.run(
+        f"cd {cp.REPO} && OMP_NUM_THREADS=2 python -W ignore"
+        f" infra/dais/gpusim_equiv.py episodes {config} {sim}/episodes.csv"
+        f' && for f in episodes.csv sweep.json; do echo {BEGIN[:-2]}""__ $f;'
+        f' gzip -c {sim}/$f | base64 -w0; echo; echo {END[:-2]}""__; done',
+        sha,
+        timeout=1800,
+    )
+    if code != 0:
+        sys.exit(f"{stem}: reduce on the login node failed ({code}): {log[-1500:]}")
+    lines = log.splitlines()
+    target = out / "raven_gpu"
+    target.mkdir(exist_ok=True)
+    for i, line in enumerate(lines):
+        if line.startswith(BEGIN + " "):
+            name = line.split()[1]
+            data = gzip.decompress(base64.b64decode(lines[i + 1].strip()))
+            dest = target / (
+                f"{stem}.csv" if name == "episodes.csv" else f"{stem}.json"
+            )
+            dest.write_bytes(data)
+            print("got", dest, len(data), "bytes", flush=True)
+    if not (target / f"{stem}.csv").exists():
+        sys.exit(f"{stem}: no episodes in the log")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("ref")
     ap.add_argument("out_dir")
     ap.add_argument("--configs", nargs="*", default=CONFIGS)
+    ap.add_argument(
+        "--via-log",
+        action="store_true",
+        help="bring back per-episode scores through the run log, not a fetch",
+    )
     ap.add_argument(
         "--no-fetch", action="store_true", help="stop once the jobs have left the queue"
     )
@@ -92,13 +136,16 @@ def main():
         stem = Path(config).stem
         if stem in fetched:
             continue
-        n = cp.fetch(
-            sha, f"plots/simulation/gpusim/{stem}", out / stem, f"gpusim_{stem}"
-        )
-        print("fetched", stem, n, "bytes", flush=True)
+        if a.via_log:
+            _via_log(sha, config, out)
+        else:
+            n = cp.fetch(
+                sha, f"plots/simulation/gpusim/{stem}", out / stem, f"gpusim_{stem}"
+            )
+            print("fetched", stem, n, "bytes", flush=True)
         fetched.append(stem)
         save()
-    if "forward" not in fetched:
+    if "forward" not in fetched and not a.via_log:
         cp.fetch(sha, FORWARD, out / "forward", "gpusim_forward")
         fetched.append("forward")
         save()
