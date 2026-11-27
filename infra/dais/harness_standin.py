@@ -57,25 +57,32 @@ def main():
 
     url = f"http://127.0.0.1:{port}/"
     print("parent before:", urllib.request.urlopen(url, timeout=5).status)
-    held = socket.create_connection(("127.0.0.1", port), timeout=5)
-    probe = [
-        sys.executable,
-        os.path.join(HERE, "noinet.py"),
-        sys.executable,
-        os.path.join(HERE, "net_probe.py"),
-        "--http-port",
-        str(port),
-        "--unix",
-        path,
-        "--abstract",
-        abstract,
-        "--inherited-fd",
-        str(held.fileno()),
-    ]
+
+    def probe(filtered):
+        """net_probe.py with a fresh TCP socket to the server, opened here and
+        inherited by the child, which sends its own request over it."""
+        held = socket.create_connection(("127.0.0.1", port))
+        cmd = [
+            sys.executable,
+            os.path.join(HERE, "net_probe.py"),
+            "--http-port",
+            str(port),
+            "--unix",
+            path,
+            "--abstract",
+            abstract,
+            "--inherited-fd",
+            str(held.fileno()),
+        ]
+        if filtered:
+            cmd = [sys.executable, os.path.join(HERE, "noinet.py")] + cmd
+        subprocess.run(cmd, pass_fds=[held.fileno()], check=False)
+        held.close()
+
     print("-- the same command without the filter (baseline):", flush=True)
-    subprocess.run(probe[2:], pass_fds=[held.fileno()], check=False)
+    probe(filtered=False)
     print("-- the shell tool's command, through noinet.py:", flush=True)
-    subprocess.run(probe, pass_fds=[held.fileno()], check=False)
+    probe(filtered=True)
     shell = [
         sys.executable,
         os.path.join(HERE, "noinet.py"),

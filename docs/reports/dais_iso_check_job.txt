@@ -64,10 +64,10 @@ raw socket(0x100000002) (AF_INET with high bits): created
 x32 socket(AF_INET): refused: Function not implemented
 i386 int 0x80 socket(AF_INET): created
 io_uring_disabled (kernel setting): 2
-TCP 127.0.0.1:42997: answered HTTP/1.0 200 OK
+TCP 127.0.0.1:44697: answered HTTP/1.0 200 OK
 Unix socket /sock/model.sock: answered HTTP/1.0 200 OK
 abstract Unix socket of the host: answered HTTP/1.0 200 OK
-inherited TCP socket: refused: [Errno 11] Resource temporarily unavailable
+inherited TCP socket (request sent by this process): answered HTTP/1.0 200 OK
 -- the shell tool's command, through noinet.py:
 socket(AF_INET): refused: [Errno 1] Operation not permitted
 socket(AF_INET6): refused: [Errno 1] Operation not permitted
@@ -79,13 +79,31 @@ raw socket(0x100000002) (AF_INET with high bits): refused: Operation not permitt
 x32 socket(AF_INET): refused: Operation not permitted
 i386 int 0x80 socket(AF_INET): refused: Operation not permitted
 io_uring_disabled (kernel setting): 2
-TCP 127.0.0.1:42997: refused: [Errno 1] Operation not permitted
+TCP 127.0.0.1:44697: refused: [Errno 1] Operation not permitted
 Unix socket /sock/model.sock: answered HTTP/1.0 200 OK
 abstract Unix socket of the host: answered HTTP/1.0 200 OK
-inherited TCP socket: answered HTTP/1.0 200 OK
-curl http://127.0.0.1:42997/: HTTP 000
-curl http://127.0.0.1:42997/: failed (7)
+inherited TCP socket (request sent by this process): answered HTTP/1.0 200 OK
+curl http://127.0.0.1:44697/: HTTP 000
+curl http://127.0.0.1:44697/: failed (7)
 parent after: 200
+-- noinet.py on the host's own Python (Python 3.6.15), no container
+socket(AF_INET): refused: [Errno 1] Operation not permitted
+socket(AF_INET6): refused: [Errno 1] Operation not permitted
+socket(AF_NETLINK): refused: [Errno 1] Operation not permitted
+socket(AF_PACKET): refused: [Errno 1] Operation not permitted
+socket(AF_UNIX): created
+socketpair(AF_UNIX): created
+raw socket(0x100000002) (AF_INET with high bits): refused: Operation not permitted
+x32 socket(AF_INET): refused: Operation not permitted
+i386 int 0x80 socket(AF_INET): refused: Operation not permitted
+io_uring_disabled (kernel setting): 2
+== 5b. services that could run a process for the caller (checked, not used)
+host: /run/user/<uid>/bus absent
+inside --containall: /run/user/<uid>/bus not visible
+host: systemd-run installed
+host: busctl installed
+host: tmux absent
+host: screen installed
 == 6. runtimes
 podman: absent
 docker: absent

@@ -15,7 +15,7 @@ Phase 0 (DAIS part) and the first half of phase 2 of `docs/plans/policy-finder-o
 | 987622 | small | daisg302 (AMD), 48 cores | B2 (`sweep_pack.slurm.sh`) |
 | 987623 | gpudev | daisg103 (Intel CPUs of an H200 node), 12 cores | B1 on Intel, short shapes (`cpu_bench.slurm.sh`) |
 | 987430 | gpudev | daisg103 (H200), 2 GPUs, 24 cores | B3 and B5, earlier version of `serve_bench.slurm.sh` |
-| 987881 | small | daisg301 (AMD) | `iso_check.sh` inside a job |
+| 987881, 988058 | small | daisg301 (AMD) | `iso_check.sh` inside a job (988058 with the committed scripts) |
 | 987890 | gpudev | daisg111 (H200), 2 GPUs, 24 cores | the layout at 20 sessions with repeats, B5 repeats (`serve_bench.slurm.sh`, cut at the 15-minute limit) |
 | 987891 | small | daisg302 (AMD), 24 cores | a whole "sweep, fit, final" cycle (`cycle_bench.slurm.sh`) |
 | 987892 | small | daisg301 (AMD), 48 cores | B1 and B4 with the committed `cpu_bench.slurm.sh` |
@@ -26,11 +26,11 @@ All GPU jobs ran on `gpudev` (15 minutes, one job per user, nodes shared with ot
 
 ## Summary
 
-- **The sim image cannot use the H200 or B200 GPUs, but runs unchanged on the CPUs**, and the cheapest shape is single-threaded processes, one per hyperthread. With 36 such processes on 18 Intel cores of an H200 node, a real sweep's worth of episodes (128,000) took about 30 s, and the pool ran at about 4,300 episodes per second, unchanged while vLLM served 20 sessions on its own cores (job 987890, two repeats).
-- **A whole "sweep, fit, final" cycle took 78 s** on 24 AMD cores (job 987891), of which the final run, one process of 12,000 episodes, took 33 s; on the Intel nodes and under load it should take about 2 to 3 minutes (not measured there).
+- **The sim image cannot use the H200 or B200 GPUs, but runs unchanged on the CPUs**, and the cheapest shape is single-threaded processes, one per hyperthread. With 36 such processes on 18 Intel cores of an H200 node, 144,000 episodes (a little more than one real sweep, 128,000) took 32 to 34 s per round, about 4,300 episodes per second, unchanged while vLLM served 20 sessions on its own cores (job 987890, two repeats).
+- **A whole "sweep, fit, final" cycle took 78 s** on 24 AMD cores (job 987891), of which the final run, one process of 12,000 episodes, took 33 s; on the Intel nodes and under load it should take about 2 to 3 minutes (an estimate, not measured there).
 - **CPU and A100 results: no difference detected at this power** (2000-episode final run of `pf-20261104-1`); shifts below about 4 pool points, or a different ranking of close points, are not excluded.
 - **Qwen3-Coder-Next serves on 2 H200 with the vLLM image v0.25.1, unchanged.** Tool calls were well formed in every trial, including after a 70k-token history of tool calls. Warm aggregate generation: 1,320 to 1,570 tokens/s at 20 sessions, about 2,040 at 40, 2,770 at 80 (one round).
-- **Network isolation: a seccomp allow-list works, as a barrier against ordinary network use.** It refuses every socket but `AF_UNIX`, including a 64-bit-argument bypass that defeated the first, deny-list version, and is applied either to a whole container (Apptainer profile) or only to the commands an agent harness runs (`noinet.py`, tested with a stand-in harness that keeps its own TCP connection). It does not cover sockets a process already holds or receives, or the host's abstract Unix sockets. Users get no network namespace and no Docker-compatible runtime on DAIS.
+- **Network isolation: a seccomp allow-list works, as a barrier against ordinary network use.** It refuses every socket but `AF_UNIX`, including a 64-bit-argument bypass that defeated the first, deny-list version, and is applied either to a whole container (Apptainer profile) or only to the commands an agent harness runs (`noinet.py`, tested with a stand-in harness that keeps its own TCP connection). It does not cover sockets a process already holds or receives, the host's abstract Unix sockets, path Unix sockets of services that act for the caller (the user's systemd/D-Bus socket, a tmux or screen server), or files that the unfiltered harness later runs or reads; so the agent runs inside `--containall` and the wrapper and the harness configuration must be read-only to it. Users get no network namespace and no Docker-compatible runtime on DAIS.
 
 ## 1. Cluster facts
 
@@ -47,7 +47,7 @@ All GPU jobs ran on `gpudev` (15 minutes, one job per user, nodes shared with ot
 
 ## 2. Network isolation and the agent sandbox
 
-Tests as an unprivileged user with apptainer 1.5.2, by `infra/dais/iso_check.sh` with `net_probe.py`, `noinet.py` and `harness_standin.py`. Outputs: `docs/reports/dais_iso_check_login.txt` (login node) and `docs/reports/dais_iso_check_job.txt` (job 987881 on daisg301, an AMD compute node; not yet repeated on an H200 node).
+Tests as an unprivileged user with apptainer 1.5.2, by `infra/dais/iso_check.sh` with `net_probe.py`, `noinet.py` and `harness_standin.py`. Outputs: `docs/reports/dais_iso_check_login.txt` (login node) and `docs/reports/dais_iso_check_job.txt` (job 988058 on daisg301, an AMD compute node; not yet repeated on an H200 node), both from the committed scripts.
 
 | Test | Result |
 |---|---|
@@ -58,7 +58,7 @@ Tests as an unprivileged user with apptainer 1.5.2, by `infra/dais/iso_check.sh`
 | Allow-list profile `infra/dais/no_inet.seccomp.json` (`socket`/`socketpair` refused unless the family is exactly `AF_UNIX`, all 64 bits compared; `io_uring_setup` refused; architectures `SCMP_ARCH_X86_64`) | `AF_INET`, `AF_INET6`, `AF_NETLINK`, `AF_PACKET` and the 64-bit bypass refused with EPERM; `AF_UNIX` sockets and `socketpair` work and the Unix-socket server answers; an x32 or i386 (`int 0x80`) socket call kills the calling process with SIGSYS. Login node and job alike. |
 | `noinet.py` (the same allow-list installed by a process on itself, with `PR_SET_NO_NEW_PRIVS`, then `exec`) | The same refusals, foreign-ABI calls return EPERM instead of killing; `curl http://127.0.0.1:<port>` fails. |
 | io_uring | Not testable here: the kernel disables it for everyone (`io_uring_disabled` = 2). Both filters refuse `io_uring_setup` anyway. |
-| What the filters do not cover | An inherited TCP socket stays usable (shown: the filtered child sent HTTP over a socket its parent opened); sockets received over a Unix socket (`SCM_RIGHTS`) would too (follows, not tested); the host's abstract Unix sockets stay reachable (shown). |
+| What the filters do not cover | An inherited TCP socket stays usable (shown: the parent opens a fresh socket for each run, the filtered child sends its own request over it and reads the answer); sockets received over a Unix socket (`SCM_RIGHTS`) would too (follows, not tested); the host's abstract Unix sockets stay reachable (shown). By design also: path Unix sockets of services that act for the caller, and files the unfiltered harness later runs or reads (next paragraph). |
 | A relay inside the container to give a client a TCP base URL | Works without a filter; **cannot work with the filter**, which refuses the relay's own `AF_INET` socket. Seccomp cannot restrict an address to loopback. |
 | Binds | A `:ro` bind is read-only, a second bind of a subfolder is writable; with `--containall` neither scratch nor the real home is visible; the image root is read-only. |
 | `--cpus`, `--memory` | Refused (login node: controllers not delegated; job: `XDG_RUNTIME_DIR ... is not writable`). |
@@ -72,7 +72,15 @@ Tests as an unprivileged user with apptainer 1.5.2, by `infra/dais/iso_check.sh`
 - its shell runs through `noinet.py` (`noinet.py /bin/bash ...`), so every command the model runs, and everything those commands start, cannot open IP, netlink or packet sockets;
 - the parent reached its server before and after its filtered child failed to.
 
-What this does not cover: whatever the harness does itself. Its built-in network tools (for example OpenCode's web fetch) must be switched off in its configuration, and file descriptors it passes to the shell must not include open sockets (an inherited socket works through the filter). It is a barrier against accidental and ordinary network use by the agent's commands, not a sandbox against a hostile process with other channels (the host's abstract Unix sockets, sockets passed in). Not tested: OpenCode itself, and the filter on an H200 node.
+What this does not cover. The filtered commands run as the same user, on the same filesystem, as the unfiltered harness, so:
+
+- **The harness's own actions:** its built-in network tools (for example OpenCode's web fetch) must be switched off in its configuration.
+- **Sockets it passes on:** file descriptors given to the shell must not include open sockets; an inherited socket works through the filter.
+- **The host's abstract Unix sockets:** reachable, because the network namespace is shared.
+- **Services that act for the caller, over path Unix sockets.** On the login node the user's systemd/D-Bus socket `/run/user/<uid>/bus` exists, and `systemd-run`, `busctl`, `tmux` and `screen` are installed. A filtered command could ask the systemd user manager, or a tmux server started outside, to run an unfiltered process (not tried). In a job on daisg301 the socket was absent. Inside `--containall` it is not visible, on the login node and in the job (`iso_check.sh` section 5b).
+- **Files the unfiltered harness later runs or reads:** a filtered command that can write `noinet.py`, the harness configuration or shell start-up files removes the filter for later commands.
+
+Consequences for use: the agent runs inside `apptainer exec --containall`, and the wrapper and the harness configuration are read-only to it (bound `:ro`, outside the agent's writable folders). Even then the whole claim is "a barrier against ordinary network use by the agent's commands"; it is not a sandbox against a hostile process. Not tested: OpenCode itself, and the filter on an H200 node. The `noinet.py` refusals, including the x32 and i386 ones, hold in the container and on the host's own Python 3.6 (`iso_check.sh` section 5).
 
 ## 3. The sim image on DAIS
 
@@ -175,7 +183,7 @@ One slice alone:
 | 2 | 32 s, 31.8 s | 34 s, 32.6 s | 1,574, 81.2 | 1,565, 80.1 |
 
 - Each pool round played 144,000 episodes (36 slices), about 4,300 episodes per second, or 240 per core.
-- With separate cores, sims and generation did not measurably slow each other (at most 3 percent on the pool, under 1 percent on generation).
+- With separate cores, sims and generation did not measurably slow each other (slice medians at most 3 percent slower beside generation, rounds 1 to 2 s longer; generation under 1 percent slower).
 - Two repeats at 20 sessions, one node; the earlier run 987430 (5 sessions, 2-thread slices started one by one, client on the server's cores) agreed.
 
 ### B5: generation against concurrency (Qwen3-Coder-Next on 2 H200)
@@ -217,7 +225,7 @@ With the pipeline's own scripts in a scratch copy of the checkout, single-thread
 | whole cycle, with copying the checkout | 78 s |
 
 - The final run cannot be split with the repo's mechanism: `--final` writes one config (`--out` refuses `--n-parts`). Splitting it would need code, and would change its seeds unless done the way `--n-parts` offsets them.
-- It is the longest step and runs as one process. Estimates, not measured on Intel: alone it takes about 30 s on AMD and, from Intel's single-thread speed, about 90 s on an H200 node; under a full pool, up to twice that.
+- It is the longest step and runs as one process. Alone it took 33 s on AMD. Estimate for an H200 node, from the single-slice times (29.6 s on Intel against 15.3 s on AMD): about 33 x 29.6 / 15.3, about 64 s; under a full pool, up to twice that. Not measured on Intel.
 
 ## 6. A node layout for 20 chains
 
@@ -233,8 +241,8 @@ For one full H200 node (96 cores, 192 hyperthreads, 8 GPUs, 2 TB):
 Expected times, from B1 to B3 and the cycle, **each within about a factor of two**:
 
 - **Pool capacity:** about 240 episodes per second per core (987890), so about 17,000 episodes per second for 70 cores, or about 8 s of pool time per real sweep.
-- **One cycle on an idle pool:** about 2 to 3 minutes. Its 32 slices take about 35 s, merge and fit about 15 s, and the single-process final run about 90 s on Intel.
-- **All 20 chains' sweeps at once (the worst case):** 2.56M episodes, about 2.5 minutes of pool time, then 20 final runs in parallel of about 1.5 to 3 minutes each, so about 5 minutes for the round.
+- **One cycle on an idle pool:** about 2 minutes (estimate). Its 32 slices take about 35 s, merge and fit about 15 s, and the single-process final run about 64 s on Intel (estimate).
+- **All 20 chains' sweeps at once (the worst case):** 2.56M episodes, about 2.5 minutes of pool time, then 20 final runs in parallel of about 1 to 2 minutes each (estimate), so about 4 to 5 minutes for the round.
 - **Memory:** about 1.4 GB per slice, about 200 GB for the pool.
 
 Which inputs were measured on other hardware or at another scale than the target:
@@ -305,20 +313,20 @@ Expected to fit or not, unverified. Weight sizes are the summed safetensors file
 | Script | Purpose | Last run of the committed form |
 |---|---|---|
 | `serve.slurm.sh` | serve and probe, or keep serving | 987950 (`MODE=probe`, gpudev); `MODE=serve` not run |
-| `probe_endpoint.py`, `bench_load.py` | tool-call checks; concurrent sessions | 987890, 987950 |
+| `probe_endpoint.py`, `bench_load.py` | tool-call checks; concurrent sessions | 987890, 987950; `bench_load.py` was reformatted by `black` afterwards (18:45), with no other change intended. The version that ran was not kept, so the diff cannot be shown, and it has not been rerun since. |
 | `serve_bench.slurm.sh` | the layout (B3), B5 | 987890 (gpudev, cut at the time limit during B5) |
-| `cpu_bench.slurm.sh` | B1, B4 | 987892 |
+| `cpu_bench.slurm.sh` | B1, B4 | 987892; since then its memory checks read the step's `sacct` state (`OUT_OF_MEMORY`) instead of any non-zero exit (not rerun) |
 | `sweep_pack.slurm.sh` | B2 | 987622; since then only a check of the output folder was added and the slot list no longer repeats a CPU |
 | `cycle_bench.slurm.sh` | the "sweep, fit, final" cycle | 987891 |
 | `sim_check.slurm.sh` | network and Apptainer checks, GPU test, reference sims | 987951 (the same smoke pools as before: 70.23; 82.36 and 53.91) |
 | `sim_cpu.slurm.sh` | one sim on the CPUs | 987893 |
-| `iso_check.sh`, `net_probe.py`, `noinet.py`, `harness_standin.py`, `no_inet.seccomp.json` | the sandbox checks | 987881 and the login node |
+| `iso_check.sh`, `net_probe.py`, `noinet.py`, `harness_standin.py`, `no_inet.seccomp.json` | the sandbox checks | 988058 and the login node, after the last changes. Those changes: `black` formatting (18:45), the fixed inherited-socket probe, Python 3.6 support in `net_probe.py`, the section 5b checks, and the wider docstring of `noinet.py` (its filter is unchanged). |
 | `cpu_slots.py`, `sim_variant.py` | pinning slots; config copies | in the jobs above |
 
 ## Changes this suggests for the plan
 
 - **Decision 1:** run the sims on the node's CPUs in the existing image, single-threaded and one per hyperthread, with vLLM on the GPUs and a few pinned cores; the layout in section 6.
 - **Phase 3's cluster backend:** a pool of single-threaded sim processes fed with `--n-parts 32` slices; agents in `--overlap` steps with memory caps on a shared CPU set.
-- **Decision 4:** use `noinet.py` as the agent harness's shell, disable the harness's own network tools, and keep the harness's TCP connection to the model; to be tested with OpenCode.
+- **Decision 4:** run the agent harness inside `--containall`, with `noinet.py` as its shell. Disable the harness's own network tools, and keep the wrapper and its configuration read-only to the agent. The harness keeps its TCP connection to the model. The claim is a barrier against ordinary network use by the agent's commands, nothing more; to be tested with OpenCode.
 - **Full-node jobs:** they go to `gpu` (exclusive) or `gpux`.
 - **Scratch cleanup:** copy weights and results off scratch before the 12-week cleanup starts on 2027-02-01.

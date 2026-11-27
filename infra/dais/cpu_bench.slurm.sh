@@ -77,6 +77,9 @@ done
 
 [ -n "${SKIP_B4:-}" ] && { echo "failures: $FAILS"; [ "$FAILS" = 0 ]; exit; }
 echo "== B4: srun steps as caps"
+step_state() {  # <step name>: its sacct state, e.g. OUT_OF_MEMORY
+  sacct -j "$SLURM_JOB_ID" -n -P -o JobName,State | awk -F'|' -v n="$1" '$1==n {print $2}' | tail -1
+}
 check() {  # <ok?> <message>
   if [ "$1" = 1 ]; then echo "PASS $2"; else echo "FAIL $2"; FAILS=$((FAILS + 1)); fi
 }
@@ -95,11 +98,11 @@ p=[float(x) for x in t.split(':')]
 while len(p) < 3: p.insert(0, 0)
 print(round(d*86400 + p[0]*3600 + p[1]*60 + p[2]))")
 check $(( secs <= 4 * (SECONDS - t0) + 5 )) "8 busy loops in a -c 2 step used ${secs} CPU-s in $((SECONDS - t0)) s"
-if srun --exact -n1 -c 2 --mem=2G python3 -c "b = bytearray(6 * 2**30)"; then
-  check 0 "a 2 GiB step allocated 6 GiB without being killed"
-else
-  check 1 "a 2 GiB step that allocated 6 GiB was killed, the job carries on"
-fi
+srun --exact -n1 -c 2 --mem=2G -J memstep python3 -c "b = bytearray(6 * 2**30)" || true
+sleep 3
+state=$(step_state memstep)
+check $([ "$state" = OUT_OF_MEMORY ] && echo 1 || echo 0) \
+  "a 2 GiB step that allocated 6 GiB ended $state; the job carries on"
 cfg=$(part_config 2 32 b4_step)
 srun --exact -n1 -c 1 --mem=8G bash -c \
   "source '$PF_HERE/common.sh' >/dev/null; PF_RUN='$PF_RUN'; PF_REPO='$PF_REPO'; \
@@ -116,11 +119,12 @@ sleep 10
 running=$(squeue -s -j "$SLURM_JOB_ID" -h -o "%j" 2>/dev/null | grep -c "^agent" || true)
 check $(( running == 8 )) "$running of 8 overlapping agent steps run at once on 2 cores"
 wait
-if srun --overlap -n1 -c 1 --mem=1G --cpu-bind=none python3 -c "b = bytearray(3 * 2**30)"; then
-  check 0 "an overlapping 1 GiB step allocated 3 GiB without being killed"
-else
-  check 1 "an overlapping 1 GiB step that allocated 3 GiB was killed"
-fi
+srun --overlap -n1 -c 1 --mem=1G --cpu-bind=none -J memoverlap \
+  python3 -c "b = bytearray(3 * 2**30)" || true
+sleep 3
+state=$(step_state memoverlap)
+check $([ "$state" = OUT_OF_MEMORY ] && echo 1 || echo 0) \
+  "an overlapping 1 GiB step that allocated 3 GiB ended $state"
 sleep 5
 sacct -j "$SLURM_JOB_ID" -o JobID%20,JobName%12,State,ExitCode,AllocCPUS,Elapsed,TotalCPU,MaxRSS,ReqMem
 

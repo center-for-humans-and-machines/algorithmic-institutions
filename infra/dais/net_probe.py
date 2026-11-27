@@ -57,6 +57,7 @@ def attempt(name, fn):
 
 
 def http(sock):
+    sock.settimeout(5)  # blocking reads with a timeout, whatever the fd's flags
     sock.sendall(b"GET / HTTP/1.0\r\nHost: x\r\n\r\n")
     return "answered " + sock.recv(64).split(b"\r\n")[0].decode()
 
@@ -97,8 +98,9 @@ def main():
                 "-c",
                 f"import sys; sys.path.insert(0, {here!r}); import net_probe; {call}",
             ],
-            capture_output=True,
-            text=True,
+            stdout=subprocess.PIPE,  # not capture_output: the hosts' Python is 3.6
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
         )
         got = out.stdout.strip() or f"no result, the child ended with {out.returncode}"
         print(f"{name}: {got}", flush=True)
@@ -132,7 +134,7 @@ def main():
         attempt("abstract Unix socket of the host", abstract)
     if a.inherited_fd is not None:
         attempt(
-            "inherited TCP socket",
+            "inherited TCP socket (request sent by this process)",
             lambda: http(socket.socket(fileno=a.inherited_fd)),
         )
 

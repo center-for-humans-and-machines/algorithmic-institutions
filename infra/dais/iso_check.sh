@@ -125,6 +125,18 @@ echo "== 5. noinet.py as the shell of a stand-in harness (harness keeps its netw
 apptainer exec --containall --bind "$OUT/sock:/sock" --bind "$HERE:/opt/dais:ro" "$S" \
   python3 /opt/dais/harness_standin.py /sock 2>&1 | q
 
+echo "-- noinet.py on the host's own Python ($(python3 --version 2>&1)), no container"
+python3 "$HERE/noinet.py" python3 "$HERE/net_probe.py" 2>&1
+
+echo "== 5b. services that could run a process for the caller (checked, not used)"
+bus="/run/user/$(id -u)/bus"
+[ -S "$bus" ] && echo "host: $bus exists" || echo "host: $bus absent"
+apptainer exec --containall "$S" sh -c "[ -S '$bus' ] && echo 'inside --containall: $bus visible' \
+  || echo 'inside --containall: $bus not visible'" 2>&1 | q
+for c in systemd-run busctl tmux screen; do
+  command -v "$c" >/dev/null && echo "host: $c installed" || echo "host: $c absent"
+done
+
 echo "== 6. runtimes"
 for c in podman docker nerdctl buildah slirp4netns pasta; do
   command -v "$c" >/dev/null && echo "$c: present" || echo "$c: absent"
