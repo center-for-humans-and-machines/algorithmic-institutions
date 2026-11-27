@@ -4,6 +4,19 @@
 
 Run the single-idea policy-finder campaign (PR #246: 5 chains, the seed `punishment = 0` plus 20 one-idea changes each) with an open-weight model as the agent, so that the run no longer depends on Claude Code, a Claude plan, or a hosted model's safeguards. Development uses the same model through OpenRouter; the final runs serve the weights ourselves on DAIS.
 
+## Success (Levin, 2026-11-27)
+
+The work is a success when an open-weight model, with OpenCode, on DAIS, has done one run of the old (free) setting for **experiment 1** and one for **experiment 2** (12 first rules, the best 4 lineages iterated, 36 versions each, as in the Opus campaigns), and each run shows a similar cumulative improvement and a similar final performance to its Opus reference. A bit worse and a slower improvement are acceptable.
+
+Measured as: the best-so-far curve rises over the generations, and the final best rule reaches **at least 70% of the Opus run's improvement**, where the improvement is the gain of the final best rule over the best first-generation rule. Both sides are scored with the same simulator: the Opus reference rules are rescored on DAIS. The model is the strongest open-weight model that serves reliably on DAIS: Qwen3-Coder-Next first, to get the pipeline working, then the frontier candidates. The single-idea campaign comes after this.
+
+Standing authorisations for unattended work, from the same day:
+
+- **DAIS:** up to two full nodes at a time, each up to the 24-hour job limit, resubmitted as needed. Runs happen mainly on DAIS once the basic setup works there; OpenRouter is for development only.
+- **OpenRouter:** the life-hub key (Levin's private one, a stopgap), capped at 20 EUR above the baseline of 2026-11-27. A CHM key is the long-term route (the request process is not documented in Confluence; it goes through CHM IT).
+- **Hetzner:** the server may be deleted without asking again once the pipeline has passed its smoke run end to end on DAIS and state files, transcripts and results are copied off and the secrets removed.
+- **Blocked on Levin:** a dropped SSH connection to DAIS (only he can reopen it), empty OpenRouter credit, or a decision outside this list. Notify on Slack and continue with whatever does not depend on it.
+
 ## Why
 
 - **The Claude path is blocked.** On 2026-11-27 the smoke run's agent version failed twice at its first response: "Opus 5.5's safeguards flagged this message", detail `reasoning_extraction`. Yannik saw the same on 2026-11-13 with the older agent definition. The agent definition asks for a running first-person record of the agent's thinking, which is the purpose of this mode; we do not reword it to get past a safeguard.
