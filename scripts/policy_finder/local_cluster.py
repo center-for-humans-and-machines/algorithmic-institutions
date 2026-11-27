@@ -29,8 +29,8 @@ files on node-local storage (one per CPU of PF_POOL_CPUS), so pipelines
 running side by side in one job (a campaign) share one pool. A job's folder
 ($PF_LOCAL_ROOT/jobs/<id>) holds its settings (job.json), its worker
 (worker.json: host, pid, process start time), its sim's log and its result
-(status.json: exit code, CPU, start and end, peak memory); jobs/active/ lists
-the jobs not yet done, so a queue poll reads only those. Done jobs' folders
+(status.json: exit code, CPU, start and end, peak memory); jobs/active/<host>/
+lists that host's jobs not yet done, so a queue poll reads only those. Done jobs' folders
 are pruned after PF_LOCAL_KEEP_DAYS. A worker killed with its Slurm job
 leaves no final status: the job is `lost`, and the pipeline reruns it without
 counting an attempt.
@@ -145,8 +145,9 @@ def _snapshot_lock(sha, wait=True):
     folder.mkdir(parents=True, exist_ok=True)
     with open(folder / f"{sha}.lock", "w") as handle:
         try:
-            fcntl.flock(handle, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
-        except BlockingIOError:
+            # POSIX locks: GPFS honours them across nodes (flock it may not)
+            fcntl.lockf(handle, fcntl.LOCK_EX | (0 if wait else fcntl.LOCK_NB))
+        except OSError:
             yield False
             return
         yield True
@@ -199,7 +200,10 @@ def cleanup(sha):
     with _snapshot_lock(sha, wait=False) as taken:
         if not taken or not folder.is_dir():
             return False
-        for job in _live().values():
+        # this host's live jobs, and every job another node's index lists
+        others = [jobs_dir() / e.name for e in (jobs_dir() / "active").glob("*/*")
+                  if e.parent.name != socket.gethostname()]
+        for job in [*_live().values(), *others]:
             try:
                 if json.loads((job / "job.json").read_text())["sha"] == sha:
                     return False
@@ -313,13 +317,29 @@ def job_dir(job):
     return jobs_dir() / str(job)
 
 
-def _next_id():
+def active_dir():
+    """This host's index of jobs not yet done: a queue poll reads only it, and
+    never judges another node's workers (pipelines of several Slurm jobs may
+    share one PF_LOCAL_ROOT)."""
+    return jobs_dir() / "active" / socket.gethostname()
+
+
+def _new_job():
+    """A fresh job id and its folder. The counter is read under a POSIX lock
+    and the folder made with mkdir, which fails if it exists: ids stay unique
+    across processes and nodes."""
     jobs = jobs_dir()
-    (jobs / "active").mkdir(parents=True, exist_ok=True)
+    jobs.mkdir(parents=True, exist_ok=True)
     with open(jobs / "next_id.lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        fcntl.lockf(lock, fcntl.LOCK_EX)
         counter = jobs / "next_id"
         n = int(counter.read_text()) if counter.exists() else 1
+        while True:
+            try:
+                (jobs / f"local-{n}").mkdir()
+                break
+            except FileExistsError:
+                n += 1
         counter.write_text(f"{n + 1}\n")
     return n
 
@@ -340,12 +360,11 @@ def submit(config, sha, run_group="policy-finder"):
         raise _cp().ClusterError(f"no snapshot {sha[:12]}: snapshot() it first")
     if not (tree(sha) / config).is_file():
         raise _cp().ClusterError(f"no {config} in snapshot {sha[:12]}")
-    n = _next_id()
+    n = _new_job()
     if n % 50 == 0:
         prune()
     job = f"local-{n}"
     folder = job_dir(job)
-    folder.mkdir()
     settings = {
         "job": job, "config": config, "sha": sha, "run_group": run_group,
         "root": str(root()),
@@ -356,7 +375,8 @@ def submit(config, sha, run_group="policy-finder"):
         "timeout": int(_env("PF_LOCAL_JOB_SECONDS", "3600")),
     }
     (folder / "job.json").write_text(json.dumps(settings, indent=2) + "\n")
-    (jobs_dir() / "active" / job).touch()
+    active_dir().mkdir(parents=True, exist_ok=True)
+    (active_dir() / job).touch()
     with open(folder / "worker.log", "w") as log:
         worker = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "worker", str(folder)],
@@ -428,7 +448,7 @@ def worker(folder):
         _write_status(folder, {"state": "done", "exit_code": WORKER_EXIT["setup"],
                                "cpu": cpu, "error": repr(e), "started_at": started,
                                "finished_at": time.time()})
-        (jobs_dir() / "active" / folder.name).unlink(missing_ok=True)
+        (active_dir() / folder.name).unlink(missing_ok=True)
         return WORKER_EXIT["setup"]
 
     def pin():
@@ -457,7 +477,7 @@ def worker(folder):
     })
     shutil.rmtree(folder / "tmp", ignore_errors=True)
     lock.close()
-    (jobs_dir() / "active" / folder.name).unlink(missing_ok=True)
+    (active_dir() / folder.name).unlink(missing_ok=True)
     return code
 
 
@@ -499,9 +519,10 @@ def status(job):
 
 
 def _live():
-    """{job id: its folder} of the jobs not yet done whose worker is alive.
-    Reads only jobs/active/; an entry of a done or dead job is dropped."""
-    active = jobs_dir() / "active"
+    """{job id: its folder} of this host's jobs not yet done whose worker is
+    alive. Reads only this host's index; an entry of a done or dead job is
+    dropped."""
+    active = active_dir()
     live = {}
     if not active.is_dir():
         return live
@@ -529,7 +550,8 @@ def queue():
 
 def lost(job):
     """True if the job's worker died before its sim finished (killed with its
-    Slurm job): not a sim that ran and failed."""
+    Slurm job): not a sim that ran and failed. A worker on another node is
+    treated as lost: this host cannot wait for it."""
     folder = job_dir(job)
     info = folder / "worker.json"
     if not info.exists() or status(job).get("state") == "done":

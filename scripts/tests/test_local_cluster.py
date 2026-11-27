@@ -115,7 +115,7 @@ def test_snapshot_pool_and_fetch(repo, tmp_path):
     # one slot: the three sims ran one after another
     spans = sorted((lc.status(j)["started_at"], lc.status(j)["finished_at"]) for j in jobs)
     assert all(a[1] <= b[0] for a, b in zip(spans, spans[1:]))
-    assert not list((lc.jobs_dir() / "active").iterdir())  # the index is emptied
+    assert not list(lc.active_dir().iterdir())  # the index is emptied
     assert lc.fetch(sha, "plots/ok1", tmp_path / "out") > 0
     # one thread per sim, and the settings kept with the job
     assert json.loads((tmp_path / "out/sweep.json").read_text()) == {"threads": "1"}
@@ -143,8 +143,8 @@ def test_cleanup_keeps_a_snapshot_in_use(repo):
     (folder / "job.json").write_text(json.dumps({"sha": sha}))
     (folder / "worker.json").write_text(
         json.dumps({"host": socket.gethostname(), "pid": os.getpid()}))
-    (lc.jobs_dir() / "active").mkdir()
-    (lc.jobs_dir() / "active/local-7").touch()
+    lc.active_dir().mkdir(parents=True)
+    (lc.active_dir() / "local-7").touch()
     assert not lc.cleanup(sha) and lc.tree(sha).exists()  # a live job runs on it
     (folder / "status.json").write_text(json.dumps({"state": "done"}))
     assert lc.cleanup(sha) and not (lc.root() / "snapshots" / sha).exists()
@@ -228,3 +228,15 @@ def test_a_rerun_never_returns_an_old_result(repo, tmp_path):
     assert lc.status(again)["exit_code"] == 3
     with pytest.raises(lc._cp().NoOutput):
         lc.fetch(sha, "plots/ok1", tmp_path / "stale")
+
+
+def test_another_nodes_jobs_are_left_alone(repo):
+    """A queue poll never drops another node's index entries."""
+    other = lc.jobs_dir() / "active" / "other-node"
+    other.mkdir(parents=True)
+    (other / "local-5").touch()
+    folder = lc.jobs_dir() / "local-5"
+    folder.mkdir()
+    (folder / "worker.json").write_text(json.dumps({"host": "other-node", "pid": 1}))
+    assert lc.queue() == set() and (other / "local-5").exists()
+    assert lc.lost("local-5")  # this host cannot wait for it: rerun here

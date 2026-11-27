@@ -71,7 +71,7 @@ export PF_BASE="${PF_BASE:-$(git rev-parse --abbrev-ref HEAD)}"
 # the pool's slot locks on node-local memory, shared by every pipeline of
 # this job (they only live as long as the job)
 export PF_POOL_LOCKS="/dev/shm/pfpipe-$USER-${SLURM_JOB_ID:-$$}"
-trap 'cleanup; rm -rf "$PF_POOL_LOCKS"' EXIT
+trap 'cleanup; rm -rf "$PF_POOL_LOCKS" 2>/dev/null || true' EXIT
 mkdir -p "$PF_RUNS"
 
 [ -x "$PF_PYTHON" ] || { echo "FATAL: no driver python at $PF_PYTHON" >&2; exit 1; }
