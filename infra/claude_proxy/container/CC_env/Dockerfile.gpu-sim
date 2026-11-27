@@ -1,0 +1,87 @@
+# syntax=docker/dockerfile:1.6
+# Sim-only GPU image: `python -m aimanager simulate` and `validate-rule` on
+# GPUs newer than Raven's A100 (DAIS H200, sm_90), where algoinst.sif
+# (torch 1.11+cu113, kernels up to sm_86) fails with "no kernel image".
+#
+# The Python environment is Dockerfile.gpu's: the same Python 3.10, the same
+# torch 2.5.1+cu124 and PyG wheels, the same requirements.local.txt under
+# constraints.local-gpu.txt, in the same install commands. Left out are the
+# agent's tools (node, Claude Code, ripgrep, ...), the user setup and the
+# CUDA devel/cuDNN layers: torch's cu124 wheel brings its own CUDA runtime,
+# cuDNN and NCCL, and the driver comes from the host (`apptainer exec --nv`).
+# cu124 has no sm_100 kernels: not for B200.
+#
+# The checkout is not copied in; it is bound at /opt/algorithmic-institutions
+# as for algoinst.sif. Build from infra/claude_proxy (the context Dockerfile.gpu
+# uses), then convert for Apptainer:
+#
+#   docker build -f container/CC_env/Dockerfile.gpu-sim -t algoinst_gpusim:<tag> .
+#   docker save algoinst_gpusim:<tag> | gzip -1 > algoinst_gpusim.tar.gz
+#   apptainer build algoinst_gpusim.sif docker-archive://algoinst_gpusim.tar.gz
+
+FROM nvidia/cuda:12.8.1-base-ubuntu24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV PIP_NO_CACHE_DIR=1 \
+    UV_NO_CACHE=1 \
+    UV_LINK_MODE=copy \
+    UV_HTTP_TIMEOUT=900 \
+    LC_ALL=C.UTF-8 \
+    LANG=C.UTF-8 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    PYTHONPATH=/opt/algorithmic-institutions/src \
+    WANDB_ENTITY=chm-ml \
+    WANDB_PROJECT=algorithmic-institutions
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        software-properties-common ca-certificates curl gnupg \
+        libgomp1 \
+        locales \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3.10 python3.10-dev python3.10-venv \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
+    && locale-gen en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python3 -m pip install --upgrade pip setuptools wheel \
+    && python3 -m pip install "uv==0.9.5"
+
+COPY container/CC_env/requirements.local.txt /opt/requirements.local.txt
+COPY container/CC_env/constraints.local-gpu.txt /opt/constraints.local-gpu.txt
+
+RUN uv pip install --system \
+        --index-url https://download.pytorch.org/whl/cu124 \
+        "torch==2.5.1+cu124" \
+    && uv pip install --system \
+        --find-links https://data.pyg.org/whl/torch-2.5.0+cu124.html \
+        -c /opt/constraints.local-gpu.txt \
+        torch_scatter torch_sparse torch_cluster torch_spline_conv \
+    && uv pip install --system \
+        --extra-index-url https://download.pytorch.org/whl/cu124 \
+        -c /opt/constraints.local-gpu.txt \
+        "torch-geometric==2.6.1" \
+        -r /opt/requirements.local.txt \
+    && python3 -m pip freeze > /opt/pip-freeze.txt
+
+RUN python3 - <<'PY'
+import torch
+import torch_scatter
+import torch_geometric
+print("torch", torch.__version__, "cuda", torch.version.cuda)
+assert torch.version.cuda and torch.version.cuda.startswith("12.")
+# get_arch_list() is empty without a GPU; the compiled flags are not
+arch = torch._C._cuda_getArchFlags()
+print("arch", arch)
+assert "sm_90" in arch.split()
+print("torch_geometric", torch_geometric.__version__)
+PY
+
+WORKDIR /opt/algorithmic-institutions

@@ -1,0 +1,41 @@
+params:
+  slope:
+    definition: punishment points per contribution point a member falls below the mean of its valid group-mates this round (beyond the tolerance)
+    type: float
+  tol:
+    definition: shortfall below the group-mates' mean contribution that goes unpunished
+    type: float
+  cap:
+    definition: largest punishment dealt to any one member in a round
+    type: int
+  t_stop:
+    definition: last round (0-23) in which the manager punishes at all; later rounds go unpunished
+    type: int
+  pre_switch:
+    definition: factor on punishment in the round just before a switch decision (rounds 3, 7, 11, 15, 19); 0 spares those rounds, 1 treats them like any other
+    type: float
+sweep_config:
+  slope: [0.1, 3.0, log]
+  tol: [0.0, 6.0]
+  cap: [1, 15]
+  t_stop: [0, 23]
+  pre_switch: [0.0, 1.0]
+constraints:
+  - cap >= 1
+code: |
+  # only tensor-tensor comparisons and no scalar-argument calls (clamp,
+  # keepdim=...), which make a cold torch process look up __import__
+  cur = c[..., -1]
+  member = in_group[..., -1] * valid[..., -1]
+  one = th.ones_like(cur)
+  n_mates = member.sum(-1).unsqueeze(-1) - member
+  mates_total = (cur * member).sum(-1).unsqueeze(-1) - cur * member
+  mates_mean = mates_total / th.maximum(n_mates, one)
+  gap = th.relu(mates_mean - cur - tol)
+  raw = th.minimum(slope * gap, cap * one)
+  phase = t - 4.0 * th.floor(t / 4.0)
+  pre = th.eq(phase, 3.0 * th.ones_like(t)).float()
+  factor = 1.0 - pre * (1.0 - pre_switch)
+  active = (t <= t_stop).float()
+  has_mates = th.minimum(n_mates, one)
+  punishment = raw * factor * active * has_mates * member
