@@ -1,12 +1,14 @@
 """Run a policy-finder agent with OpenCode, inside its container (harness opencode).
 
 agent_runner.py passes this file's source to the container as `python3 -c`, so
-it runs with the container's environment: the OpenRouter key in
-OPENROUTER_API_KEY (the spawner's token for project algoinst_oc) and the
-egress proxy in HTTPS_PROXY. It
+it runs with the container's environment: the endpoint's key in `--key-env`
+(OPENROUTER_API_KEY: the spawner's token for project algoinst_oc) and the
+egress proxy in HTTPS_PROXY. It needs nothing of Docker or the spawner: any
+backend that starts it in the export with OpenCode installed can use it.
 
-1. reads the key's usage from OpenRouter and refuses to start once it is at
-   `--max-usage` USD (the development cap; exit 3);
+1. with `--usage-url` (OpenRouter's key endpoint), reads the key's usage and
+   refuses to start once it is at `--max-usage` USD (the development cap;
+   exit 3); without it (a local server), usage is not read;
 2. runs `opencode run --agent policy-finder --format json` on the prompt in
    the repo (the export, whose .opencode/ holds the model and the agent),
    its JSON events to <out>/events.jsonl, its stderr to <out>/stderr.log;
@@ -23,7 +25,7 @@ egress proxy in HTTPS_PROXY. It
 
 Usage (in the container):
     python3 -c "<source>" <prompt> --title T --out DIR --repo DIR
-        [--write-dir REL ...] [--max-usage USD]
+        [--write-dir REL ...] [--key-env NAME] [--usage-url URL [--max-usage USD]]
 """
 
 import argparse
@@ -37,18 +39,19 @@ import time
 import urllib.request
 
 KEY_ENV = "OPENROUTER_API_KEY"
+#: OpenRouter's endpoint for a key's usage (agent_runner.py passes it)
 KEY_URL = "https://openrouter.ai/api/v1/key"
 REDACTED = "[redacted]"
 #: OpenCode's data folder in the run's home (its database and logs)
 DATA = os.path.expanduser("~/.local/share/opencode")
 
 
-def key_usage():
+def key_usage(url, key_env=KEY_ENV):
     """The key's usage in USD so far, or None when it cannot be read."""
-    key = os.environ.get(KEY_ENV, "")
-    if not key:
+    key = os.environ.get(key_env, "")
+    if not key or not url:
         return None
-    req = urllib.request.Request(KEY_URL, headers={"Authorization": f"Bearer {key}"})
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             return float(json.loads(r.read().decode())["data"]["usage"])
@@ -137,13 +140,16 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--repo", required=True)
     ap.add_argument("--write-dir", action="append", default=[])
+    ap.add_argument("--key-env", default=KEY_ENV)
+    ap.add_argument("--usage-url")
     ap.add_argument("--max-usage", type=float)
     args = ap.parse_args(argv)
     os.makedirs(args.out, exist_ok=True)
     summary = {"harness": "opencode"}
-    before = key_usage()
+    before = key_usage(args.usage_url, args.key_env)
     summary["key_usage_before"] = before
-    if args.max_usage is not None and (before is None or before >= args.max_usage):
+    if args.usage_url and args.max_usage is not None and (
+            before is None or before >= args.max_usage):
         summary.update(is_error=True, budget_exhausted=True, exit_code=3,
                        result="", error=f"key usage {before} USD is unknown or at "
                        f"the cap of {args.max_usage} USD: not started")
@@ -172,12 +178,14 @@ def main(argv=None):
         summary.update(result="", errors=["no session export"])
     for log in glob.glob(os.path.join(DATA, "log", "*.log")):
         shutil.copy(log, os.path.join(args.out, "opencode-" + os.path.basename(log)))
-    time.sleep(10)  # OpenRouter books a request's cost shortly after it ends
-    after = key_usage()
+    after = None
+    if args.usage_url:
+        time.sleep(10)  # OpenRouter books a request's cost after it ends
+        after = key_usage(args.usage_url, args.key_env)
     summary["key_usage_after"] = after
     if before is not None and after is not None:
         summary["key_usage_delta_usd"] = round(after - before, 6)
-    secret = os.environ.get(KEY_ENV, "")
+    secret = os.environ.get(args.key_env, "")
     hits = redact_tree(args.out, secret)
     for rel in args.write_dir:
         hits += redact_tree(os.path.join(args.repo, rel), secret)

@@ -273,7 +273,7 @@ def opencode_agent(text):
     found = re.search(r"(?m)^description: (.*)$", head)
     if not found:
         raise ExportError("the agent definition has no description")
-    description = re.sub(r",? spawned by policy-finder-host", "", found.group(1))
+    description = re.sub(r"[,;]? spawned by policy-finder-host", "", found.group(1))
     for pattern, replacement in OPENCODE_WORDING:
         body, n = pattern.subn(replacement, body)
         if not n:
@@ -283,13 +283,29 @@ def opencode_agent(text):
 
 
 def opencode_config(conf):
-    """The instance's OpenCode config: its model on OpenRouter, nothing else.
+    """The instance's OpenCode config: its model, nothing else.
 
-    The image's global config (infra/claude_proxy/container/CC_env/opencode/)
+    On OpenRouter by default; with `base_url` in the instance settings, on
+    that OpenAI-compatible server instead (a vLLM endpoint, provider id
+    `local`, its key in PF_LLM_API_KEY, `model` the served name). The
+    image's global config (infra/claude_proxy/container/CC_env/opencode/)
     holds the permissions and turns off what would call out. The key comes
-    from the container's environment and is never written here.
+    from the agent's environment and is never written here.
     """
     model = conf["model"]
+    if conf.get("base_url"):
+        return {
+            "$schema": "https://opencode.ai/config.json",
+            "enabled_providers": ["local"],
+            "model": f"local/{model}",
+            "small_model": f"local/{model}",
+            "provider": {"local": {
+                "npm": "@ai-sdk/openai-compatible",
+                "options": {"baseURL": conf["base_url"],
+                            "apiKey": "{env:PF_LLM_API_KEY}"},
+                "models": {model: {"name": model}},
+            }},
+        }
     options = {}
     if conf.get("providers"):
         options["provider"] = {"order": list(conf["providers"]), "allow_fallbacks": False}

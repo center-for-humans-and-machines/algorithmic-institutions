@@ -141,7 +141,9 @@ def command(prompt, harness="claude", title="policy-finder", write_dirs=()):
         with open(OPENCODE_RUN) as f:
             source = f.read()
         out = ["python3", "-c", source, prompt, "--title", title,
-               "--out", f"{HOME}/{OPENCODE_OUT}", "--repo", REPO]
+               "--out", f"{HOME}/{OPENCODE_OUT}", "--repo", REPO,
+               "--key-env", "OPENROUTER_API_KEY",
+               "--usage-url", "https://openrouter.ai/api/v1/key"]
         for d in write_dirs:
             out += ["--write-dir", d]
         if MAX_USAGE:

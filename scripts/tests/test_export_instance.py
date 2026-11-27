@@ -289,8 +289,11 @@ def test_other_exports_hold_no_test_data(layout):
 AGENT = Path(__file__).resolve().parents[2] / ".claude/agents/policy-finder-single-idea.md"
 
 
-def test_opencode_agent_keeps_the_text():
-    text = AGENT.read_text()
+@pytest.mark.parametrize("name", [
+    "policy-finder-single-idea", "policy-finder", "policy-finder-exp1",
+    "policy-finder-exp2-multi", "policy-finder-exp2-diff"])
+def test_opencode_agent_keeps_the_text(name):
+    text = (AGENT.parent / f"{name}.md").read_text()
     port = ex.opencode_agent(text)
     head, _, body = port.partition("\n---\n")
     assert head.startswith("---\ndescription: ") and "\nmode: primary" in head
@@ -320,3 +323,12 @@ def test_an_opencode_export(layout):
     assert router["options"] == {"apiKey": "{env:OPENROUTER_API_KEY}"}
     assert router["models"]["qwen/qwen3-coder-next"]["options"]["provider"] == {
         "order": ["parasail/bf16"], "allow_fallbacks": False}
+
+
+def test_opencode_config_for_a_local_server():
+    config = ex.opencode_config({"model": "qwen3-coder-next",
+                                 "base_url": "http://node:8000/v1"})
+    assert config["model"] == "local/qwen3-coder-next"
+    local = config["provider"]["local"]
+    assert local["options"] == {"baseURL": "http://node:8000/v1",
+                                "apiKey": "{env:PF_LLM_API_KEY}"}
