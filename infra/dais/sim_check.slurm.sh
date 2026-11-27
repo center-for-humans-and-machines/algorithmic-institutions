@@ -1,15 +1,18 @@
 #!/bin/bash -l
-# The sim image on one DAIS GPU: network and Apptainer checks, torch and PyG
-# on the GPU, the two smoke reference sims of 2026-11-27 with the repo's own
-# entry point (compare with Raven), then GPU memory and time for a few
-# episode_batch_size values.
+# The sim image on a DAIS node: network and Apptainer checks, torch and PyG on
+# the GPU, then the two smoke reference sims of 2026-11-27 with the repo's own
+# entry point on the CPUs (compare with Raven's committed sweep.json files;
+# outputs go to the run folder, never into the checkout).
 #
 #   cd /u/$USER/algorithmic-institutions-pf   # the smoke commit + infra/dais
-#   sbatch infra/dais/sim_check.slurm.sh                # H200
-#   sbatch --gres=gpu:b200:1 infra/dais/sim_check.slurm.sh
+#   sbatch infra/dais/sim_check.slurm.sh
+#
+# Job 986771 (2026-11-27) ran an earlier version of this script, which also
+# timed a few episode_batch_size values with the smoke rule (punishes
+# nothing) and wrote the reference outputs into the checkout.
 #
 #SBATCH -J pf_simcheck
-#SBATCH -o /dais/fs/scratch/levinb/policy-finder/logs/sim_check.%j.out
+#SBATCH -o /dais/fs/scratch/%u/policy-finder/logs/%x.%j.out
 #SBATCH --account=mpib_inst
 #SBATCH --partition=gpudev
 #SBATCH --qos=g0001
@@ -19,12 +22,10 @@
 #SBATCH --mem=64000
 #SBATCH --time=00:15:00
 
-set -uo pipefail
+set -euo pipefail
 source "${SLURM_SUBMIT_DIR:-.}/infra/dais/common.sh"
+init_run
 cd "$PF_REPO"
-OUT="$PF_SCRATCH/sim_check/$SLURM_JOB_ID"
-mkdir -p "$OUT"
-SWEEP=configs/simulation/policy_finder/pfsmoke-20261127-1_sweep.yml
 
 echo "== node"
 hostname
@@ -46,30 +47,16 @@ done
 echo "== image checksum"
 sha256sum "$SIM_SIF" | grep -q "$SIM_SIF_SHA256" && echo "matches Raven" || echo "DIFFERS"
 
-echo "== torch and PyG on the GPU"
-if ! in_sim_image python infra/dais/sim_variant.py check-gpu; then
-  # torch 1.11+cu113 ships kernels up to sm_86 and no PTX; if this GPU is
-  # newer, check the sims on the CPU instead (aimanager uses the GPU only
-  # when torch sees one)
-  echo "GPU check failed: the reference sims run on the CPU instead"
-  export CUDA_VISIBLE_DEVICES=""
-fi
+echo "== torch and PyG on the GPU (expected to fail on H200/B200)"
+SIM_GPU=0 in_sim_image python /opt/dais/sim_variant.py check-gpu || echo "GPU check failed"
 
-echo "== reference sims, as the pipeline runs them (Raven: s000 65.373; final 55.313, 55.313)"
+echo "== reference sims on the CPUs (Raven: s000 65.373; final gp 55.313, s000 55.313)"
+FAILS=0
 for cfg in pfsmoke-20261127-1_sweep pfsmoke-20261127-1_sweep_final; do
-  simulate "configs/simulation/policy_finder/$cfg.yml" "$cfg"
+  in_sim_image python /opt/dais/sim_variant.py config \
+    "configs/simulation/policy_finder/$cfg.yml" "$PF_RUN/$cfg.yml" \
+    --output-dir "$PF_RUN/out/$cfg"
+  simulate "$PF_RUN/$cfg.yml" "$cfg" || FAILS=$((FAILS + 1))
+  cat "$PF_RUN/out/$cfg/sweep.json" || FAILS=$((FAILS + 1))
 done
-cat plots/simulation/policy_finder/pfsmoke-20261127-1_sweep/sweep.json \
-  plots/simulation/policy_finder/pfsmoke-20261127-1_sweep/final/sweep.json
-cp -r plots/simulation/policy_finder/pfsmoke-20261127-1_sweep "$OUT/"
-
-echo "== memory and time per batch size (points x episodes = one batch, then a real sweep)"
-variant() {  # <label> <points> <episodes> <batch>
-  in_sim_image python infra/dais/sim_variant.py config "$SWEEP" "$OUT/$1.yml" \
-    --points "$2" --episodes "$3" --batch "$4" --output-dir "$OUT/$1"
-  simulate "$OUT/$1.yml" "$1"
-}
-variant b100 2 50 100
-variant b1000 2 500 1000
-variant b4000 8 500 4000
-variant sweep16x500_b1000 16 500 1000
+[ "$FAILS" = 0 ]

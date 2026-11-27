@@ -1,16 +1,23 @@
 """Generation throughput with N concurrent long-context sessions.
 
 Standard library only. Each session sends a distinct prompt of about
---context tokens and streams --gen tokens back (ignore_eos, so every session
-generates the same amount), first cold, then once more with the same prefix
-plus a new turn, as an agent's next turn would (prefix cache warm). Prints
-time to first token, decode rate per session and the aggregate.
+--context tokens and streams --gen tokens back (ignore_eos, so every request
+generates the same amount).
 
-    python3 bench_load.py --model M [--sessions 5] [--context 32000] [--gen 1024]
+Rounds mode (default): every session once cold, then once more with the same
+prefix plus a new turn, as an agent's next turn would (prefix cache warm).
+Duration mode (--duration S): every session repeats its warm request until S
+seconds have passed or --stop-file exists, for throughput under a steady load.
+
+Prints one `BENCH {json}` line per round; exits 1 if any request fails.
+
+    python3 bench_load.py --base URL --key-file F --model M [--sessions 5]
+        [--context 30000] [--gen 1024] [--tag T] [--duration S --stop-file F]
 """
 
 import argparse
 import json
+import os
 import statistics
 import sys
 import threading
@@ -18,20 +25,21 @@ import time
 import urllib.request
 
 
-def session_prompt(i, n_tokens):
+def session_prompt(tag, i, n_tokens):
     lines = [
         f"session {i} round {r}: contributions {r % 21} {(r * 3) % 21} "
         f"{(r * 7 + i) % 21} {(r * 11) % 21}, punishment {(r + i) % 31}"
         for r in range(n_tokens // 28)
     ]
-    return "Game log:\n" + "\n".join(lines)
+    # the tag goes first, so that a later run with another tag starts cold
+    return f"[{tag}]\nGame log:\n" + "\n".join(lines)
 
 
-def stream(base, model, messages, gen, out):
+def stream(a, key, messages):
     body = {
-        "model": model,
+        "model": a.model,
         "messages": messages,
-        "max_tokens": gen,
+        "max_tokens": a.gen,
         "stream": True,
         "ignore_eos": True,
         "temperature": 1.0,
@@ -39,9 +47,9 @@ def stream(base, model, messages, gen, out):
         "stream_options": {"include_usage": True},
     }
     req = urllib.request.Request(
-        base + "/chat/completions",
+        a.base + "/chat/completions",
         data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json", "Authorization": "Bearer x"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
     )
     t0 = time.time()
     first, usage = None, None
@@ -58,63 +66,86 @@ def stream(base, model, messages, gen, out):
                     first = time.time()
     end = time.time()
     n = usage["completion_tokens"]
-    out.append(
-        {
-            "prompt_tokens": usage["prompt_tokens"],
-            "completion_tokens": n,
-            "cached_tokens": (usage.get("prompt_tokens_details") or {}).get(
-                "cached_tokens"
-            ),
-            "ttft_s": round(first - t0, 2),
-            "total_s": round(end - t0, 2),
-            "decode_tok_s": round((n - 1) / (end - first), 1),
-        }
-    )
+    if first is None or n < 2:
+        raise RuntimeError(f"no content streamed: usage={usage}")
+    details = usage.get("prompt_tokens_details") or {}
+    return {
+        "start": t0,
+        "end": end,
+        "prompt_tokens": usage["prompt_tokens"],
+        "completion_tokens": n,
+        "cached_tokens": details.get("cached_tokens"),
+        "ttft_s": first - t0,
+        "decode_tok_s": (n - 1) / (end - first),
+    }
 
 
-def run_round(a, label, messages_per_session):
-    out, threads = [], []
+def run(a, key, label, convs, until=None):
+    """One request per session (until=None), or repeated until `until`."""
+    out, errors, threads = [], [], []
+
+    def worker(msgs):
+        try:
+            while True:
+                out.append(stream(a, key, msgs))
+                if until is None or until():
+                    return
+        except Exception as e:  # noqa: BLE001
+            errors.append(repr(e))
+
     t0 = time.time()
-    for msgs in messages_per_session:
-        th = threading.Thread(target=stream, args=(a.base, a.model, msgs, a.gen, out))
+    for msgs in convs:
+        th = threading.Thread(target=worker, args=(msgs,))
         th.start()
         threads.append(th)
     for th in threads:
         th.join()
     wall = time.time() - t0
-    gen_total = sum(r["completion_tokens"] for r in out)
+    if errors or not out:
+        print(f"BENCH_FAILED {label}: {errors[:3]}", flush=True)
+        sys.exit(1)
     summary = {
         "round": label,
-        "sessions": len(out),
+        "sessions": len(convs),
+        "requests": len(out),
         "wall_s": round(wall, 1),
-        "ttft_s_median": statistics.median(r["ttft_s"] for r in out),
-        "decode_tok_s_per_session_median": statistics.median(
-            r["decode_tok_s"] for r in out
+        "ttft_s_median": round(statistics.median(r["ttft_s"] for r in out), 2),
+        "ttft_s_max": round(max(r["ttft_s"] for r in out), 2),
+        "decode_tok_s_per_session_median": round(
+            statistics.median(r["decode_tok_s"] for r in out), 1
         ),
-        "aggregate_gen_tok_s": round(gen_total / wall, 1),
-        "prompt_tokens": [r["prompt_tokens"] for r in out],
-        "cached_tokens": [r["cached_tokens"] for r in out],
+        "aggregate_gen_tok_s": round(
+            sum(r["completion_tokens"] for r in out) / wall, 1
+        ),
+        "prompt_tokens_median": statistics.median(r["prompt_tokens"] for r in out),
+        "cached_fraction": round(
+            sum(r["cached_tokens"] or 0 for r in out)
+            / sum(r["prompt_tokens"] for r in out),
+            3,
+        ),
     }
     print("BENCH " + json.dumps(summary), flush=True)
-    return summary
 
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--base", default="http://127.0.0.1:8000/v1")
+    p.add_argument("--base", required=True)
+    p.add_argument("--key-file", required=True)
     p.add_argument("--model", required=True)
     p.add_argument("--sessions", type=int, default=5)
-    p.add_argument("--context", type=int, default=32000)
+    p.add_argument("--context", type=int, default=30000)
     p.add_argument("--gen", type=int, default=1024)
-    p.add_argument("--tag", default="")
+    p.add_argument("--tag", default="t")
+    p.add_argument("--duration", type=float)
+    p.add_argument("--stop-file")
     a = p.parse_args()
-    convs = [
-        # the tag goes first, so that a later run with another tag starts cold
-        [{"role": "user", "content": f"[{a.tag}]\n" + session_prompt(i, a.context)}]
+    with open(a.key_file) as f:
+        key = f.read().strip()
+    first = [
+        [{"role": "user", "content": session_prompt(a.tag, i, a.context)}]
         for i in range(a.sessions)
     ]
-    run_round(a, f"{a.tag} cold", convs)
-    convs = [
+    warm = [
         c
         + [
             {"role": "assistant", "content": "Noted."},
@@ -123,10 +154,20 @@ def main():
                 "content": "Now describe a punishment rule for this group.",
             },
         ]
-        for c in convs
+        for c in first
     ]
-    run_round(a, f"{a.tag} warm", convs)
+    run(a, key, f"{a.tag} cold", first)
+    if a.duration is None:
+        run(a, key, f"{a.tag} warm", warm)
+        return
+    deadline = time.time() + a.duration
+
+    def until():
+        stop = a.stop_file and os.path.exists(a.stop_file)
+        return stop or time.time() > deadline
+
+    run(a, key, f"{a.tag} steady", warm, until)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
