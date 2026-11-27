@@ -9,6 +9,8 @@
 #   B  a failing first stage: the job stops there, exit 1
 #   C  the server dies during a stage: the watch kills the campaign, exit 3
 #   D  a re-evaluation already done is skipped; a partial one moved aside
+#   E  a kill test whose campaign ends before any agent ran fails at once
+#   F  a kill test of a campaign with state (a resubmission) is skipped
 #
 #   sbatch infra/dais/stages_selftest.slurm.sh
 #
@@ -137,6 +139,18 @@ ls -d "$T/scratch/pf_runs/reevaluate/b.partial."* >/dev/null 2>&1 \
   && [ -f "$T/scratch/pf_runs/reevaluate/b/summary.json" ] \
   && echo "PASS D partial moved aside, new result at the expected path" \
   || { echo "FAIL D"; fails=$((fails + 1)); }
+
+make_tree
+run_job E "killtest 20 20 a.yml
+run scored 20 20 a.yml" STUB_SECONDS=1 KILL_AFTER=1
+expect E 1 $? "the campaign ended before an agent had run" "campaign a: start"
+
+make_tree
+mkdir -p "$T/scratch/pf_runs/campaign"
+echo '{}' > "$T/scratch/pf_runs/campaign/a.json"
+run_job F "killtest 20 20 a.yml
+run scored 20 20 a.yml"
+expect F 0 $? "not tested again"
 
 echo "$fails failure(s)"
 [ "$fails" = 0 ]

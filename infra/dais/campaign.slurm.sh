@@ -161,15 +161,21 @@ stop_all() {
       > "$PF_RUN/vllm_metrics.txt" || true
     sed 's/^/metrics /' "$PF_RUN/vllm_metrics.txt" || true
   fi
+  # the drivers, agents and sims first, the server last: an agent that sees
+  # the server go while it still runs would read as the endpoint's failure
   # shellcheck disable=SC2086  # DRIVER_PID: one or more pids
   [ -n "${DRIVER_PID:-}" ] && kill -TERM $DRIVER_PID 2>/dev/null || true
-  cleanup
-  # every other process of the job's cgroup (not this shell's ancestors)
-  python3 "$PF_HERE/kill_job_children.py" --term > "$PF_RUN/stop_term.log" 2>&1 || true
+  # every other process of the job's cgroup (not this shell's ancestors), but
+  # the server, then the server and the rest
+  python3 "$PF_HERE/kill_job_children.py" --term ${SERVER_PID:-} \
+    > "$PF_RUN/stop_term.log" 2>&1 || true
   if [ -s "$PF_RUN/stop_term.log" ]; then
     sleep 10
-    python3 "$PF_HERE/kill_job_children.py" > "$PF_RUN/stop_kill.log" 2>&1 || true
+    python3 "$PF_HERE/kill_job_children.py" ${SERVER_PID:-} \
+      > "$PF_RUN/stop_kill.log" 2>&1 || true
   fi
+  cleanup
+  python3 "$PF_HERE/kill_job_children.py" >> "$PF_RUN/stop_kill.log" 2>&1 || true
   echo "stopped $(grep -c '^kill' "$PF_RUN/stop_term.log" 2>/dev/null || true) processes"
   rm -rf "$SHM_LOCKS"
 }
@@ -244,7 +250,11 @@ driver() {  # driver <command...>: on the driver's CPUs
   OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 taskset -c "$DRIVER_CPUS" "$@"
 }
 
-# campaign_stage <expect> <campaign.yml>[:<slices>]: run, check, re-evaluate
+# campaign_stage <expect> <campaign.yml>[:<slices>]: run, check, re-evaluate.
+# A resubmitted job can use the same stages file: campaign.py resumes an
+# unfinished campaign from its state files and returns at once for a finished
+# one, a finished re-evaluation is not rerun, and a kill test whose campaign
+# has state already is skipped.
 campaign_stage() {
   local expect="$1" file="${2%%:*}" slices="" name rc=0 t0=$SECONDS
   [[ "$2" == *:* ]] && slices="${2##*:}"
@@ -283,8 +293,14 @@ campaign_stage() {
 killtest_stage() {
   local file="$1" t0=$SECONDS waited=0
   echo "[$(date +%T)] killtest $(basename "$file" .yml): start"
+  if [ -e "$PF_RUNS/campaign/$(basename "$file" .yml).json" ]; then
+    # a resubmitted job: the campaign ran before; its run stage resumes it
+    echo "[$(date +%T)] killtest: the campaign has state already, not tested again"
+    return 0
+  fi
   driver "$PF_PYTHON" scripts/policy_finder/campaign.py run "$file" < /dev/null \
     >> "$PF_RUN/$(basename "$file" .yml).campaign.log" 2>&1 &
+  local campaign_pid=$!
   local since
   since=$(date +%s)
   # a run of this stage (started after it began) running for KILL_AFTER s; a
@@ -306,6 +322,11 @@ sys.exit(1)
 EOF
   do
     sleep 10; waited=$(( SECONDS - t0 ))
+    if [ -e "$SERVER_DOWN" ]; then echo "killtest: the model server is down" >&2; return 3; fi
+    if ! kill -0 "$campaign_pid" 2>/dev/null; then
+      echo "FATAL: killtest: the campaign ended before an agent had run ${KILL_AFTER:-90} s" >&2
+      return 1
+    fi
     if (( waited > 3600 )); then echo "FATAL: no agent ran in an hour" >&2; return 1; fi
   done
   echo "[$(date +%T)] killtest: killing every process but the server after $(( SECONDS - t0 )) s"

@@ -119,3 +119,25 @@ def test_every_rerun_starts_from_a_fresh_export(version, monkeypatch):
     # run, an expired one and a failed one) starts from a fresh export
     version.step_agent()
     assert len(builds) == 4
+
+
+def test_a_start_that_failed_is_followed_by_a_fresh_export(version, monkeypatch):
+    builds = []
+    monkeypatch.setattr(pl.export_instance, "build", lambda *a: builds.append(1))
+    starts = iter([pl.agent_runner.AgentError("worker.json not written"), "r1"])
+
+    def start(*a, **k):
+        what = next(starts)
+        if isinstance(what, Exception):
+            raise what
+        return what
+    monkeypatch.setattr(pl.agent_runner, "start", start)
+    monkeypatch.setattr(pl.agent_runner, "finish", lambda *a, **k: {
+        "status": "succeeded", "report": "done", "result": {}, "models": []})
+    rule = version.exports / version.stem / version.rule
+    rule.parent.mkdir(parents=True)
+    rule.write_text("params: {}\n")
+    with pytest.raises(pl.agent_runner.AgentError):
+        version.step_agent()
+    version.step_agent()
+    assert builds == [1]

@@ -80,6 +80,7 @@ import fcntl
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -224,7 +225,9 @@ def argv(stem, write_dirs, prompt, run, cpus, harness="opencode"):
         raise ar.AgentError(f"PF_AGENT_SIF is not an image: {sif!r}")
     point = endpoint(stem)
     n = str(len(cpus))
-    cmd = ["apptainer", "exec", "--containall", "--cleanenv",
+    # absolute paths: a Slurm step (PF_AGENT_STEP=1) does not get the job's PATH
+    # under `sbatch --export=<list>` (taskset was not found in one on DAIS)
+    cmd = [shutil.which("apptainer") or "apptainer", "exec", "--containall", "--cleanenv",
            "--no-mount", "cwd,tmp,bind-paths",
            "--home", f"{run / 'home'}:{ar.HOME}"]
     for b in binds(stem, write_dirs, run):
@@ -248,7 +251,7 @@ def argv(stem, write_dirs, prompt, run, cpus, harness="opencode"):
     if point == "local":
         options = [o for o in options if o != "--require-key-limit"]
     cmd += options
-    pin = ["taskset", "-c", ",".join(map(str, cpus))]
+    pin = [shutil.which("taskset") or "taskset", "-c", ",".join(map(str, cpus))]
     if _env("PF_AGENT_STEP") == "1":
         step = ["srun", "--overlap", "--ntasks=1", f"--cpus-per-task={n}",
                 f"--mem={ar.MEMORY_MB}M", "--cpu-bind=none", "--kill-on-bad-exit=1",
@@ -268,14 +271,39 @@ def secret_env(stem):
 
 
 def _next_id():
+    """A new run id, its folder made. A POSIX lock on the counter (flock does
+    not exclude reliably on GPFS) and an exclusive mkdir of the folder, so two
+    starts never share a run even if the lock failed."""
     base = root()
     base.mkdir(parents=True, exist_ok=True)
-    with open(base / "next_id.lock", "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        counter = base / "next_id"
-        n = int(counter.read_text()) if counter.exists() else 1
-        counter.write_text(f"{n + 1}\n")
+    with open(base / "next_id.lock", "a") as lock:
+        fcntl.lockf(lock, fcntl.LOCK_EX)
+        try:
+            counter = base / "next_id"
+            try:
+                n = int(counter.read_text())
+            except (OSError, ValueError):
+                n = 1
+            while True:
+                try:
+                    (base / f"apt-{n}").mkdir()
+                    break
+                except FileExistsError:
+                    n += 1
+            tmp = base / "next_id.tmp"
+            tmp.write_text(f"{n + 1}\n")
+            os.replace(tmp, counter)
+        finally:
+            fcntl.lockf(lock, fcntl.LOCK_UN)
     return f"apt-{n}"
+
+
+def _start_time(pid):
+    """A process's start time (clock ticks since boot, /proc), or None."""
+    try:
+        return int(Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[19])
+    except (OSError, IndexError, ValueError):
+        return None
 
 
 def start(stem, write_dirs, prompt, harness="opencode"):
@@ -287,7 +315,7 @@ def start(stem, write_dirs, prompt, harness="opencode"):
     run_id = _next_id()
     run = run_dir(run_id)
     for d in ("home", "tmp") + tuple(f"home/{h}" for h in HOME_READONLY):
-        (run / d).mkdir(parents=True)
+        (run / d).mkdir(parents=True, exist_ok=True)
     # OpenCode writes this file into every config folder it loads, ~/.opencode
     # included, and fails when it cannot (export_instance.OPENCODE_GITIGNORE)
     import export_instance
@@ -306,9 +334,20 @@ def start(stem, write_dirs, prompt, harness="opencode"):
             stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
             start_new_session=True, cwd=str(run),
         )
-    tmp = run / "worker.tmp"  # atomic: finish() may read it at any time
-    tmp.write_text(json.dumps({"host": socket.gethostname(), "pid": worker_proc.pid}) + "\n")
-    os.replace(tmp, run / "worker.json")
+    try:
+        tmp = run / "worker.tmp"  # atomic: finish() may read it at any time
+        tmp.write_text(json.dumps({"host": socket.gethostname(), "pid": worker_proc.pid,
+                                   "start": _start_time(worker_proc.pid)}) + "\n")
+        os.replace(tmp, run / "worker.json")
+    except OSError as e:
+        # no record of the worker: it must not run on unseen (the pipeline's
+        # next start builds a fresh export)
+        try:
+            os.killpg(worker_proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        worker_proc.wait()
+        raise ar.AgentError(f"agent run {run_id} not started: {e}") from None
     return run_id
 
 
@@ -386,6 +425,8 @@ def _alive(info):
         os.kill(pid, 0)
     except (ProcessLookupError, PermissionError):
         return False
+    if info.get("start") is not None and _start_time(pid) not in (None, info["start"]):
+        return False  # the pid was reused by another process (a resume on this node)
     stat = Path(f"/proc/{pid}/stat")
     if stat.exists():
         try:
