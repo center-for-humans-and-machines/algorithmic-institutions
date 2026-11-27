@@ -55,6 +55,8 @@ def test_argv_binds_command_and_key(env):
     assert inner[:2] == ["python3", "-c"]
     assert inner[inner.index("--key-env") + 1] == "PF_LLM_API_KEY"
     assert "--usage-url" not in inner and "--require-key-limit" not in inner
+    # the stray-process kill is the spawner's (Docker's PID 1) only
+    assert "--kill-strays" not in cmd
     assert inner[inner.index("--timeout") + 1] == str(ar.TIMEOUT - 600)
     assert f"{aa.GLOBAL_CONFIG}:{aa.GLOBAL_CONFIG_TARGET}:ro" in binds
     # the key never on a command line, only in the worker's environment

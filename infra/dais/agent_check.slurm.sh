@@ -196,14 +196,17 @@ r = rec["result"]
 print("status", rec["status"], "error", rec["error"], "models", rec["models"])
 print("failures", r.get("failures"), "seconds", r.get("seconds"), "tokens", r.get("tokens"))
 print("audit", json.dumps(rec["network_audit"])[:400])
+print("stray", r.get("stray_processes"), "ended_on", r.get("ended_on"),
+      "report_chars", r.get("report_chars"), "compactions", r.get("compactions"))
 print("report", rec["report"][:300])
 source, paths = ar.transcripts(run, "opencode")
 key = open(__import__("os").environ["PF_LLM_API_KEY_FILE"]).read().strip()
 leaks = [p for p in paths if key in open(p, errors="replace").read()]
 print("transcripts", len(paths), "key in", leaks)
-sys.exit(0 if rec["status"] == "succeeded" and not leaks else 1)
+sys.exit(0 if rec["status"] == "succeeded" and not leaks
+         and not (r.get("stray_processes") or {}).get("enabled") else 1)
 EOF
-    sed 's/^/     run  | /' "$PF_RUN/backend_run.log" | tail -8
+    sed 's/^/     run  | /' "$PF_RUN/backend_run.log" | tail -9
     ls -la "$exp/notes/policy_finder" | sed 's/^/     out  | /'
   else
     tail -30 "$PF_RUN/vllm.log"; fails=$((fails + 1))
