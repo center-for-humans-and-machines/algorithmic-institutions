@@ -164,15 +164,13 @@ stop_all() {
   # shellcheck disable=SC2086  # DRIVER_PID: one or more pids
   [ -n "${DRIVER_PID:-}" ] && kill -TERM $DRIVER_PID 2>/dev/null || true
   cleanup
-  local cg procs
-  cg=$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null || true)
-  if [ -n "$cg" ] && [ -r "/sys/fs/cgroup$cg/cgroup.procs" ]; then
-    procs=$(grep -vx -e "$$" -e "$BASHPID" "/sys/fs/cgroup$cg/cgroup.procs" || true)
-    [ -n "$procs" ] && kill -TERM $procs 2>/dev/null || true
+  # every other process of the job's cgroup (not this shell's ancestors)
+  python3 "$PF_HERE/kill_job_children.py" --term > "$PF_RUN/stop_term.log" 2>&1 || true
+  if [ -s "$PF_RUN/stop_term.log" ]; then
     sleep 10
-    procs=$(grep -vx -e "$$" -e "$BASHPID" "/sys/fs/cgroup$cg/cgroup.procs" || true)
-    [ -n "$procs" ] && kill -KILL $procs 2>/dev/null || true
+    python3 "$PF_HERE/kill_job_children.py" > "$PF_RUN/stop_kill.log" 2>&1 || true
   fi
+  echo "stopped $(grep -c '^kill' "$PF_RUN/stop_term.log" 2>/dev/null || true) processes"
   rm -rf "$SHM_LOCKS"
 }
 trap 'stop_all; exit 143' TERM INT
