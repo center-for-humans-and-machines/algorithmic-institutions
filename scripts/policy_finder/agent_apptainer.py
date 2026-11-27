@@ -290,7 +290,7 @@ def _next_id():
                     break
                 except FileExistsError:
                     n += 1
-            tmp = base / "next_id.tmp"
+            tmp = base / f"next_id.{socket.gethostname()}.{os.getpid()}.tmp"
             tmp.write_text(f"{n + 1}\n")
             os.replace(tmp, counter)
         finally:
@@ -347,6 +347,12 @@ def start(stem, write_dirs, prompt, harness="opencode"):
         except ProcessLookupError:
             pass
         worker_proc.wait()
+        # the container runs in a session of its own: kill it too, if the
+        # worker got as far as starting it
+        try:
+            os.killpg(int((run / "container.pid").read_text()), signal.SIGKILL)
+        except (OSError, ValueError):
+            pass
         raise ar.AgentError(f"agent run {run_id} not started: {e}") from None
     return run_id
 
@@ -391,6 +397,8 @@ def worker(folder):
         with open(run / "stdout.log", "w") as out, open(run / "stderr.log", "w") as err:
             proc = subprocess.Popen(cmd, stdout=out, stderr=err, stdin=subprocess.DEVNULL,
                                     env=env, start_new_session=True)
+            # the container's session, for a start() that has to undo the run
+            (run / "container.pid").write_text(f"{proc.pid}\n")
             try:
                 code = proc.wait(timeout=s["timeout"])
                 status = "succeeded" if code == 0 else "failed"
@@ -411,8 +419,10 @@ def worker(folder):
     return 0 if status == "succeeded" else 1
 
 
-def _alive(info):
-    """Is the worker of this worker.json alive (on this host)?"""
+def _alive(info, run=None):
+    """Is the worker of this worker.json alive (on this host)? Its start time
+    tells a reused pid apart; a record without one (older code) is checked by
+    the process's command line instead: `agent_apptainer.py worker <run>`."""
     if info.get("host") != socket.gethostname():
         return False  # a worker of an earlier job, on another node: gone
     pid = info["pid"]
@@ -427,6 +437,15 @@ def _alive(info):
         return False
     if info.get("start") is not None and _start_time(pid) not in (None, info["start"]):
         return False  # the pid was reused by another process (a resume on this node)
+    if info.get("start") is None and run is not None:
+        try:
+            argv = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")
+        except OSError:
+            argv = None
+        if argv is not None and not (
+                any(a.endswith(b"agent_apptainer.py") for a in argv)
+                and b"worker" in argv and str(run).encode() in argv):
+            return False  # another process holds the pid
     stat = Path(f"/proc/{pid}/stat")
     if stat.exists():
         try:
@@ -454,7 +473,7 @@ def finish(run_id, log=print, harness="opencode"):
         state = status(run_id)
         if state.get("status") not in (None, "running"):
             break
-        if not _alive(info):
+        if not _alive(info, run):
             state = status(run_id)
             if state.get("status") in (None, "running"):
                 state = {**state, "status": "lost",

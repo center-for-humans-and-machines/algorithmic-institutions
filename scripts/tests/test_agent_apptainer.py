@@ -217,3 +217,12 @@ def test_a_reused_pid_is_not_alive(env):
     assert aa._alive(info)
     if info["start"] is not None:  # Linux: /proc
         assert not aa._alive({**info, "start": info["start"] + 1})
+
+
+def test_a_record_without_start_time_checks_the_command_line(env):
+    run = aa.root() / "apt-9"
+    info = {"host": aa.socket.gethostname(), "pid": os.getpid()}
+    if not Path(f"/proc/{os.getpid()}/cmdline").exists():
+        return  # Linux only
+    # this test process is not `agent_apptainer.py worker <run>`
+    assert not aa._alive(info, run)
