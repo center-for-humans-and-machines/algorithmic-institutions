@@ -7,7 +7,7 @@ Status 2026-11-27: the DAIS side, the null comparison, the slicing invariance an
 ## Summary
 
 - **Slicing does not change results, exactly.** The same config run as 6 one-point slices, as 2 halves and whole gives bitwise identical per-episode results (36,000 of 36,000 episodes), and a real 256-point sweep split by `generate_sim_config.py --n-parts 32` and `--n-parts 16` gives identical `sweep.json` scores for its first 16 points. A rerun on another job reproduces them bitwise. Seeding is per batch, so a slice replays exactly the games the whole sim gives it.
-- **Thread count:** pending in this write-up (job 987567, 64 threads, same configs); see "Threads" below.
+- **Thread count barely matters:** the same config single-threaded and with 64 threads (one process) gives identical results in 35,999 of 36,000 episodes; one episode diverged (pool 0.47 apart: a different reduction order changed one sampled decision). The per-point means agree to 4 decimals. Single-threaded slices are also about 17 times faster per CPU here: 47 s per 6000-episode slice on 1 thread against 805 s for 36,000 episodes on 64 threads.
 - **The null comparison is well calibrated.** Two seed sets on DAIS CPUs (12,000 against 12,000 episodes per point) differ by +0.08 +- 0.56 (shift) and chi-squared 4.4 on 5 df (contrasts) for `final1`, -1.08 +- 0.71 and 3.7 on 7 df for `v7slice`.
 - **Against the existing Raven result** (`pf-20261104-1` final run, 2000 episodes per point, A100): the DAIS means at 24,000 episodes per point lie within 2 standard errors of all six Raven values, chi-squared 8.6 on 6 df (p 0.20), mean z +0.19. No sign of a difference, at Raven's resolution of about 1 point per point.
 - **Raven comparison at full power: pending.** Two Raven jobs (12,000 episodes per point for `final1`) are queued, starts estimated 2026-11-28 00:28 and 15:07. With them, a per-point difference of 1.4 points, a common shift of 1.4 and a ranking contrast of 0.66 points are detectable with 80 % power.
@@ -95,13 +95,13 @@ Chi-squared 8.6 on 6 df (p 0.20), mean z +0.19. Raven's points are independent o
 | `final1_j0` as 6 one-point slices vs 2 three-point halves vs whole, single-threaded | identical: 0 of 36,000 episodes differ, pool and members |
 | The same slices in two jobs (987769, 987770) | identical |
 | A real sweep of `pf-20261104-12-v7` (256 x 500), first 16 points as parts 1-2 of `--n-parts 32` vs part 1 of `--n-parts 16` | identical `sweep.json` pool and members for all 16 |
-| Single-threaded vs 64 threads (`final1_j0`, `final1_j1`) | see "Threads" |
+| Single-threaded slices vs one 64-thread process (`final1_j0`, job 987567) | 1 of 36,000 episodes differs (s255, pool by 0.47); all per-point means identical to 4 decimals |
 
 The pipeline's parts are seeded by global batch index (`seed` plus the batches of the parts before), so as long as part boundaries fall on batch boundaries (500 episodes per point, batches of 1000: an even number of points per part) a slice plays exactly the games of the unsliced sweep. An odd number of points per part would shift the batch boundaries and change the games (not the distribution).
 
 ### Threads
 
-PENDING
+Threads change the order of floating-point reductions, which can flip a sampled decision that lies on a probability boundary; from there that episode's game diverges. Once in 36,000 episodes here. This is not a platform difference that could bias results: an equally likely flip in either direction, invisible in the means (s255: 65.5382 both). The 64-thread run of `final1_j1` was cancelled after `j0` answered the question.
 
 ## Deterministic forward pass (job 987679, H200 node; capture from the Hetzner host)
 
