@@ -20,6 +20,10 @@ A campaign is a YAML file (scripts/policy_finder/campaigns/*.yml):
                             #   seeds/ in every lineage (no agent), and each
                             #   later version changes one idea of its
                             #   lineage's best version (new_instance.sh)
+    openrouter_max_usage: null  # harness opencode on OpenRouter: the key's
+                            #   total usage (USD) at which agents no longer
+                            #   start and the campaign stops (else
+                            #   PF_OPENROUTER_MAX_USAGE)
     harness: claude         # opencode: OpenCode on an OpenRouter model
     model: null             #   (harness opencode: an OpenRouter id), routed
     providers: null         #   to these upstream providers if given, in
@@ -75,6 +79,29 @@ class CampaignError(Exception):
     pass
 
 
+def check_harness(s, path):
+    """The harness settings: a known harness, a model for opencode, providers
+    as a list of names, a cap as a number."""
+    if s["harness"] not in ("claude", "opencode"):
+        raise CampaignError(f"{path}: harness is claude or opencode, not {s['harness']!r}")
+    if s["harness"] == "claude":
+        for key in ("model", "providers"):
+            if s[key] is not None:
+                raise CampaignError(f"{path}: {key} is for harness opencode")
+        return
+    if not isinstance(s["model"], str) or not s["model"].strip():
+        raise CampaignError(f"{path}: harness opencode needs model (an OpenRouter id)")
+    providers = s["providers"]
+    if providers is not None and (
+            not isinstance(providers, list)
+            or not all(isinstance(p, str) and p and "," not in p for p in providers)):
+        raise CampaignError(f"{path}: providers is a list of provider names, "
+                            f"not {providers!r}")
+    cap = s.get("openrouter_max_usage")
+    if cap is not None and (isinstance(cap, bool) or not isinstance(cap, (int, float))):
+        raise CampaignError(f"{path}: openrouter_max_usage is a number (USD)")
+
+
 def stem_of(name, version):
     return name if version == 1 else f"{name}-v{version}"
 
@@ -85,6 +112,7 @@ class Campaign:
         self.settings = {**DEFAULTS, **yaml.safe_load(self.path.read_text())}
         if not self.settings.get("prefix"):
             raise CampaignError(f"{path}: no prefix")
+        check_harness(self.settings, path)
         self.pf_runs = Path(pf_runs or os.environ.get("PF_RUNS") or "")
         if not str(self.pf_runs) or str(self.pf_runs) == ".":
             raise CampaignError("set PF_RUNS")
@@ -152,14 +180,20 @@ class Campaign:
 
     # -- running one version -------------------------------------------------
 
+    def env(self):
+        """The pipeline's environment from the campaign file."""
+        env = {"PF_RUNS": str(self.pf_runs), "PF_WORKTREE_ROOT": str(self.wt_root)}
+        if self.settings.get("openrouter_max_usage") is not None:
+            env["PF_OPENROUTER_MAX_USAGE"] = str(self.settings["openrouter_max_usage"])
+        return env
+
     def execute(self, args, out):
         """Run a command; its output appended to `out`. Returns the exit code."""
         with open(out, "a") as f:
             f.write(f"\n$ {' '.join(map(str, args))}\n")
             f.flush()
             return subprocess.run([str(a) for a in args], stdout=f, stderr=subprocess.STDOUT,
-                                  env={**os.environ, "PF_RUNS": str(self.pf_runs),
-                                       "PF_WORKTREE_ROOT": str(self.wt_root)}).returncode
+                                  env={**os.environ, **self.env()}).returncode
 
     def start_command(self, name, version):
         """The command that starts (or resumes) `version` of lineage `name`."""
@@ -202,6 +236,9 @@ class Campaign:
         while True:
             state = self.version_state(name, version) or {}
             status = state.get("status")
+            if status == "stopped":
+                # the agent's budget (agent_runner.BudgetError): not this version's
+                raise CampaignError(f"{stem}: stopped: {state.get('error', '')[-800:]}")
             if status in ("scored", "failed"):
                 self.log(f"{stem}: {status}" + (
                     f" {state['data']['score']['pool']:.2f}"
@@ -327,8 +364,14 @@ class Campaign:
                 state = self.version_state(m["name"], m["version"]) or {}
                 data = state.get("data", {})
                 score = data.get("score") or {}
-                cost = sum((r.get("result") or {}).get("total_cost_usd") or 0
-                           for r in data.get("agent_runs", []))
+                runs = data.get("agent_runs", [])
+                cost = sum((r.get("result") or {}).get("total_cost_usd") or 0 for r in runs)
+                # harness opencode: OpenCode's catalogue cost and the tokens
+                catalogue = sum((r.get("result") or {}).get("cost_catalog_usd") or 0
+                                for r in runs)
+                tokens = {k: sum(((r.get("result") or {}).get("tokens") or {}).get(k) or 0
+                                 for r in runs)
+                          for k in ("input", "cache_read", "output")}
                 rows.append({
                     "generation": generation["index"], "name": m["name"],
                     "version": m["version"], "stem": stem_of(m["name"], m["version"]),
@@ -342,6 +385,8 @@ class Campaign:
                     "n_points": score.get("n_points"),
                     "pools": score.get("pools"),
                     "agent_cost_usd": round(cost, 2),
+                    "agent_catalogue_usd": round(catalogue, 3),
+                    "agent_tokens": tokens,
                     "times": state.get("times", {}),
                 })
         return rows
@@ -360,9 +405,13 @@ class Campaign:
         extra = "".join(f" {k} |" for k in rivals)
         gains = any(r.get("gain") is not None for r in rows)
         extra = (" gain over baseline |" if gains else "") + extra
+        opencode = self.settings["harness"] == "opencode"
+        # Claude: the plan's API-equivalent cost; OpenCode: its own price
+        # catalogue (not the endpoint's bill) and the tokens
+        agent_head = (" agent: OpenCode catalogue $, tokens in / cached / out (k) |"
+                      if opencode else " agent, API-equivalent $ |")
         lines = [f"# Campaign {self.path.stem}", "",
-                 f"| gen | version | status | GP peak | best of n |{extra}"
-                 " agent, API-equivalent $ |",
+                 f"| gen | version | status | GP peak | best of n |{extra}{agent_head}",
                  "|---|---|---|---|---|" + "---|" * (len(rivals) + gains) + "---|"]
         for r in rows:
             status = r["status"] + (f" ({r['failed_step']})" if r["failed_step"] else "")
@@ -373,10 +422,17 @@ class Campaign:
             )
             if gains:
                 cells = f" {num(r.get('gain'), r.get('gain_se'))} |" + cells
+            if opencode:
+                t = r.get("agent_tokens") or {}
+                agent = (f"{r.get('agent_catalogue_usd', 0)}, "
+                         + " / ".join(f"{(t.get(k) or 0) / 1000:.0f}"
+                                      for k in ("input", "cache_read", "output")))
+            else:
+                agent = r["agent_cost_usd"]
             lines.append(f"| {r['generation']} | {r['stem']} | {status} "
                          f"| {num(r['pool'], r['pool_se'])} "
                          f"| {num(r['best_of_n'], r['best_of_n_se'])} |{cells}"
-                         f" {r['agent_cost_usd']} |")
+                         f" {agent} |")
         lines += ["", "| lineage | best GP peak |", "|---|---|"]
         for n in sorted(self.lineages(), key=lambda n: -self.lineage_best(n)):
             best = self.lineage_best(n)

@@ -69,3 +69,22 @@ def test_a_failed_session_is_not_accepted_with_a_rule(version, monkeypatch):
     version.step_agent()
     assert len(version.data["agent_runs"]) == 2
     assert (version.wt_root / "pf-x.report.md").read_text() == "the rule and its notes\n"
+
+
+def test_an_expired_run_is_a_counted_attempt(version, monkeypatch):
+    runs(monkeypatch, version, [("expired", "")] * pl.OPENCODE_ATTEMPTS)
+    with pytest.raises(pl.Failed):
+        version.step_agent()
+    assert len(version.data["agent_runs"]) == pl.OPENCODE_ATTEMPTS
+
+
+def test_the_budget_cap_stops_the_version(version, monkeypatch):
+    monkeypatch.setattr(pl.agent_runner, "start", lambda *a, **k: "r1")
+
+    def finish(run_id, log=print, harness="claude"):
+        raise pl.agent_runner.BudgetError("key usage 21.4 USD is at the cap")
+    monkeypatch.setattr(pl.agent_runner, "finish", finish)
+    monkeypatch.setattr(pl, "STEPS", ("agent",))
+    state = version.run()
+    assert state["status"] == "stopped" and "at the cap" in state["error"]
+    assert "agent_current" not in version.data

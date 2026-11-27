@@ -7,12 +7,14 @@
   "formatter": false,
   "enabled_providers": ["openrouter"],
   "permission": {
-    "*": "allow",
-    "webfetch": "deny",
-    "websearch": "deny",
-    "task": "deny",
-    "skill": "deny",
-    "question": "deny",
+    "*": "deny",
+    "read": "allow",
+    "grep": "allow",
+    "glob": "allow",
+    "edit": "allow",
+    "bash": "allow",
+    "todowrite": "allow",
+    "invalid": "allow",
     "external_directory": "deny",
     "doom_loop": "deny"
   }
