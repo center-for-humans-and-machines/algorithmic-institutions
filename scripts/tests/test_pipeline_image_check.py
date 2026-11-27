@@ -257,3 +257,18 @@ def test_the_version_lock_holds_across_processes(version, tmp_path):
     assert time.time() - started > 0.5
     assert "another pipeline runs this version" in version.log_path.read_text()
     holder.wait()
+
+
+def test_a_failed_sweep_restarts_as_the_readme_says(version, monkeypatch):
+    """README: status error, the jobs step out of done, its lists deleted."""
+    pool = FakePool(kills=0)
+    for name in ("submit", "wait", "lost", "fetch"):
+        monkeypatch.setattr(pl.cluster_proxy, name, getattr(pool, name))
+    version.data.update(episodes={"sweep": 500, "final": 2000}, n_parts=2,
+                        sweep_jobs={"c": ["local-1", "local-2"]})
+    version.state.update(status="error", done=["export", "agent", "collect", "check",
+                                               "sweep_config", "sweep_snap", "image_check"])
+    version.data.pop("sweep_jobs")
+    version.step_sweep_jobs()
+    version.step_sweep_fetch()
+    assert all(len(j) == 1 for j in version.data["sweep_jobs"].values())

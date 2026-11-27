@@ -153,13 +153,13 @@ def curve(rows, slices=None):
             if r["generation"] == g and r["recorded"] is not None and (
                     best is None or r["recorded"] > best["recorded"]):
                 best = r
-        if first is None and best is not None:
-            first = best
+        if g == min(r["generation"] for r in rows):
+            first = best  # None when no generation-1 version has a final
         point = {"generation": g, "best_so_far": best["stem"] if best else None}
         for key in ("recorded", "recorded_se", "reevaluated", "reevaluated_se"):
             point[key] = best[key] if best else None
         point["gain_vs_first"] = point["gain_se"] = None
-        if slices and best is not None:
+        if slices and best is not None and first is not None:
             point["gain_vs_first"], point["gain_se"] = paired(
                 slices[first["stem"]], slices[best["stem"]])
         out.append(point)
@@ -171,6 +171,11 @@ def improvement(points):
     paired gain of the curve's last point, and 70% of it."""
     first, last = points[0], points[-1]
     gain, se = last["gain_vs_first"], last["gain_se"]
+    if gain is None:
+        return {"first_generation_best": None, "final_best": last["best_so_far"],
+                "improvement": None, "improvement_se": None, "bar_70": None,
+                "bar_70_se": None,
+                "note": "no improvement defined: no generation-1 version has a final run"}
     return {"first_generation_best": first["best_so_far"], "final_best": last["best_so_far"],
             "improvement": gain, "improvement_se": se, "bar_70": 0.7 * gain,
             "bar_70_se": 0.7 * se, "se_method": "paired over common-seed slices"}
@@ -179,6 +184,8 @@ def improvement(points):
 def with_ci(summary, k):
     """95% intervals (t with k - 1 degrees of freedom) of the improvement and
     its bar."""
+    if summary["improvement"] is None:
+        return summary
     t = t95(k)
     for key in ("improvement", "bar_70"):
         m, e = summary[key], summary[f"{key}_se"]
@@ -210,17 +217,31 @@ def robust(rows, slices):
       by re-evaluated score on the same slices (optimistic: selection and
       estimate share their noise)
     - `cross_fit`: the same choice made on one half of the slices (even or
-      odd j) and measured on the other half, both ways, averaged: no shared
-      noise between selection and estimate
+      odd j) and measured on the other half, both ways. When both halves
+      choose the same two rules, their estimates are averaged (se from both);
+      when they disagree, the two estimates are reported separately and the
+      interval spans both halves' intervals (`agree`: false)
+
+    {"undefined": reason} when no generation-1 version has a final run.
     """
+    first_gen = min(x["generation"] for x in rows)
     scored = [r for r in rows if r["stem"] in slices]
-    gen1 = [r for r in scored if r["generation"] == min(x["generation"] for x in rows)]
+    gen1 = [r for r in scored if r["generation"] == first_gen]
+    if not gen1:
+        return {"undefined": "no generation-1 version has a final run"}
     k = len(next(iter(slices.values())))
     out = {}
     by_rec = sorted(gen1, key=lambda r: -r["recorded"])
     final = max(scored, key=lambda r: r["recorded"])["stem"]
+
+    def entry(first, last, use=None, dof=k):
+        m, e = gain(slices, first, last, use)
+        t = t95(dof)
+        return {"first": first, "last": last, "improvement": m, "se": e,
+                "ci95": [m - t * e, m + t * e]}
+
     if len(by_rec) > 1:
-        out["runner_up"] = (by_rec[1]["stem"], final, *gain(slices, by_rec[1]["stem"], final))
+        out["runner_up"] = entry(by_rec[1]["stem"], final)
 
     def best(group, use):
         def mean(stem):
@@ -228,20 +249,28 @@ def robust(rows, slices):
         return max((r["stem"] for r in group), key=mean)
 
     everything = list(range(k))
-    a, b = best(gen1, everything), best(scored, everything)
-    out["in_sample"] = (a, b, *gain(slices, a, b))
+    out["in_sample"] = entry(best(gen1, everything), best(scored, everything))
     if k >= 4:
-        halves = (everything[0::2], everything[1::2])
-        estimates = []
-        for pick, measure in (halves, halves[::-1]):
-            estimates.append(gain(slices, best(gen1, pick), best(scored, pick), measure))
-        mean = sum(e for e, _ in estimates) / 2
-        se = math.hypot(*(s for _, s in estimates)) / 2
-        out["cross_fit"] = ("(by half)", "(by half)", mean, se)
-    return {name: {"first": f, "last": la, "improvement": m, "se": e,
-                   "ci95": [m - t95(k // (2 if name == "cross_fit" else 1)) * e,
-                            m + t95(k // (2 if name == "cross_fit" else 1)) * e]}
-            for name, (f, la, m, e) in out.items()}
+        halves = {"even": everything[0::2], "odd": everything[1::2]}
+        parts = []
+        for name, measure in (("even", halves["odd"]), ("odd", halves["even"])):
+            pick = halves[name]
+            part = entry(best(gen1, pick), best(scored, pick), measure, len(measure))
+            parts.append({"selected_on": name, **part})
+        agree = len({(p["first"], p["last"]) for p in parts}) == 1
+        mean = sum(p["improvement"] for p in parts) / 2
+        if agree:
+            se = math.hypot(*(p["se"] for p in parts)) / 2
+            t = t95(len(halves["odd"]))
+            ci = [mean - t * se, mean + t * se]
+        else:  # different rules: no common estimate, the halves' range
+            se = None
+            ci = [min(p["ci95"][0] for p in parts), max(p["ci95"][1] for p in parts)]
+        out["cross_fit"] = {"first": parts[0]["first"] if agree else "(differs by half)",
+                            "last": parts[0]["last"] if agree else "(differs by half)",
+                            "improvement": mean, "se": se, "ci95": ci, "agree": agree,
+                            "halves": parts}
+    return out
 
 
 def write_tsv(path, rows):
@@ -311,26 +340,49 @@ def main():
             r["reevaluated"], r["reevaluated_se"] = combine(results[r["stem"]])
             r["episodes"] = k * versions[r["stem"]][1]["n_episodes"]
 
-    points = curve(rows, results)
-    summary = {"state": str(args.state), "refs": args.refs, "seed": args.seed,
-               "slices": k, "target_se": args.target_se, "code": args.code,
-               "no_final": missing, **with_ci(improvement(points), k),
-               "robust": robust(rows, results)}
+    # the tables first: they hold whatever the summary below can make of them
     with open(out / "slices.tsv", "w") as f:  # the raw per-slice scores
         f.write("stem\tslice\tpool\tpool_se\n")
         for stem, values in results.items():
             for j, (pool, se) in enumerate(values):
                 f.write(f"{stem}\t{j}\t{pool:.6f}\t{se:.6f}\n")
     write_tsv(out / "versions.tsv", rows)
+    points = curve(rows, results)
     write_tsv(out / "curve.tsv", points)
+    summary = {"state": str(args.state), "refs": args.refs, "seed": args.seed,
+               "slices": k, "target_se": args.target_se, "code": args.code,
+               "no_final": missing, **with_ci(improvement(points), k),
+               "robust": robust(rows, results)}
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    for p in points:
-        print(f"gen {p['generation']}: {p['best_so_far']} recorded {p['recorded']:.2f}"
-              f" re-evaluated {p['reevaluated']:.2f} +- {p['reevaluated_se']:.2f}")
-    print(f"improvement {summary['improvement']:.2f} +- {summary['improvement_se']:.2f},"
-          f" 70%: {summary['bar_70']:.2f}")
+    print(report(points, summary))
+
+
+def _num(x, se=None):
+    if x is None:
+        return "NA"
+    return f"{x:.2f}" + ("" if se is None else f" +- {se:.2f}")
+
+
+def report(points, summary):
+    """The run's summary lines."""
+    lines = [f"gen {p['generation']}: {p['best_so_far']} recorded {_num(p['recorded'])}"
+             f" re-evaluated {_num(p['reevaluated'], p['reevaluated_se'])}" for p in points]
+    if summary["improvement"] is None:
+        lines.append(summary["note"])
+    else:
+        lines.append(f"improvement {_num(summary['improvement'], summary['improvement_se'])},"
+                     f" 70%: {_num(summary['bar_70'])}")
     for name, r in summary["robust"].items():
-        print(f"{name}: {r['first']} -> {r['last']}: {r['improvement']:.2f} +- {r['se']:.2f}")
+        if name == "undefined":
+            lines.append(f"robust improvements: {r}")
+            continue
+        lines.append(f"{name}: {r['first']} -> {r['last']}: {_num(r['improvement'], r['se'])}"
+                     f" (95%: {_num(r['ci95'][0])} to {_num(r['ci95'][1])})")
+        if name == "cross_fit" and not r["agree"]:
+            lines.append("  the halves chose different rules: " + "; ".join(
+                f"chosen on {h['selected_on']}: {h['first']} -> {h['last']}"
+                f" {_num(h['improvement'], h['se'])}" for h in r["halves"]))
+    return "\n".join(lines)
 
 
 def run_slices(args, versions, k, out, snapshots, jobs):

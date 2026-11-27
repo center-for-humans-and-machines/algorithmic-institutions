@@ -11,7 +11,7 @@ The success criterion of `docs/plans/policy-finder-open-weights.md`: an open-wei
 | **Improvement** (paired; 95% interval) | **3.55 ± 0.09** (3.36 to 3.74) | **5.76 ± 0.09** (5.58 to 5.94) |
 | **70% bar** (95% interval) | **2.49 ± 0.06** (2.35 to 2.62) | **4.03 ± 0.06** (3.91 to 4.16) |
 | Had the runner-up of generation 1 been selected | 3.36 ± 0.11 (bar 2.35) | 6.07 ± 0.10 (bar 4.25) |
-| Selection-robust improvement (cross-fit) | 3.36 ± 0.12 (3.07 to 3.64) | 5.77 ± 0.09 (5.59 to 5.95) |
+| Cross-fit improvement (one even/odd split) | 3.36 ± 0.12 (3.07 to 3.64) | 5.77 ± 0.09 (5.59 to 5.95) |
 | Episodes per version | 30,000 (15 slices of 2,000) | 90,000 (45 slices of 2,000) |
 | Versions | 36: 35 with a final run, `-7-v7` failed | 36, all with a final run |
 
@@ -47,15 +47,17 @@ So the bar moves by 0.13 (exp2) and 0.22 (exp1) on selection noise alone, two to
 The tool therefore also reports, for any campaign, improvements that do not hinge on the campaign's selection (`summary.json`, `robust`):
 
 - **in sample:** from generation 1's best to the best overall, both chosen by re-evaluated score on all slices. Optimistic, because the choice and the estimate share their noise: exp2 3.36 ± 0.11 (`-12` to `-12-v7`), exp1 5.76 ± 0.09 (`-3` to `-7-v3`).
-- **cross-fit:** the same choice made on one half of the slices (even or odd) and measured on the other half, both ways, averaged. No shared noise between choice and estimate: exp2 **3.36 ± 0.12** (95% interval 3.07 to 3.64), exp1 **5.77 ± 0.09** (5.59 to 5.95).
+- **cross-fit:** the same choice made on one half of the slices (even or odd) and measured on the other half, both ways, averaged. No shared noise between choice and estimate: exp2 **3.36 ± 0.12** (95% interval 3.07 to 3.64), exp1 **5.77 ± 0.09** (5.59 to 5.95). In both campaigns the two halves chose the same rules (exp2 `-12` → `-12-v7`: 3.31 ± 0.18 chosen on the even slices, 3.41 ± 0.15 on the odd; exp1 `-3` → `-7-v3`: 5.95 ± 0.13 and 5.58 ± 0.12), so averaging them is sound. When the halves of a campaign choose different rules, the tool gives no averaged error, reports both half-estimates, and its interval spans both halves' intervals.
 
-For a comparison between campaigns, the cross-fit improvement of the open-model campaign against the cross-fit improvement here (70%: 2.35 for exp2, 4.04 for exp1) does not depend on a coin flip in either campaign. The criterion as written (from the campaign's own selection) gives the bars of the summary table; both should be reported.
+For a comparison between campaigns, the cross-fit improvement of the open-model campaign against the cross-fit improvement here (70%: 2.35 for exp2, 4.04 for exp1) depends less on which tied rules happened to be selected than the criterion's number does. It is one even/odd split of the slices, though, so a near tie can still go either way between the halves; the tool says when it does. The criterion as written (from the campaign's own selection) gives the bars of the summary table; both should be reported.
 
 ## Simulator code
 
 The tool plays each version with the code of its own commit, while an open-model campaign will run with the integration branch's code: `src/aimanager` at `origin/policy-finder-open-weights` (97c0b8af) differs from the reference campaigns' trees (`rule.py`, `sweep.py`, `simulate.py`, `pool_scores.py`). To check whether this matters, the four rules that define the bars (exp2 `-7`, `-12-v7`; exp1 `-3`, `-7-v3`) were re-evaluated with each version's rule and configs but the current `src/aimanager` (`reevaluate.py --code origin/policy-finder-open-weights`, DAIS jobs 988339 and 988340), on the same 15 and 45 slices and seeds.
 
-All 120 per-slice results (30 for exp2, 90 for exp1) are identical to 6 decimals to those under each version's own code. The code changes are behaviour-neutral for these rules and settings, so a new campaign scored with current code can be compared with these bars directly. If later changes to `src/aimanager` touch the simulation, the same check (`--code <ref>`, about 40 s per campaign pair) shows whether the references must be re-evaluated.
+All 120 per-slice results (30 for exp2, 90 for exp1) are identical to 6 decimals to those under each version's own code.
+
+That identity is real, not a sign that both runs used the same code. Run in the production container setup (`local_cluster.run`, the same Apptainer command as every sim) on a reference snapshot (`pf-20261104-12-v7`'s final commit, fa0920c6) and on the current one (02c0a475), Python imports `aimanager` from `/opt/algorithmic-institutions/src/`, the mounted snapshot, and the imported files' SHA-256 match each commit's git blobs: `simulation/simulate.py` 340d5665… (reference) against 50f8e4d2… (current), `manager/rule.py` da0e1576… against 40c8c0df…. The image has no `aimanager` of its own (`import aimanager` fails in it without the snapshot); its own environment only puts `/opt/algorithmic-institutions/src` on the path. Since then every sim on the local backend checks this itself before it runs: if the imported `aimanager` does not lie in the snapshot's `src/`, the sim fails with exit code 86. The code changes are behaviour-neutral for these rules and settings, so a new campaign scored with current code can be compared with these bars directly. If later changes to `src/aimanager` touch the simulation, the same check (`--code <ref>`, about 40 s per campaign pair) shows whether the references must be re-evaluated.
 
 ## Curves
 

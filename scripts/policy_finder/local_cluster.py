@@ -83,6 +83,7 @@ import math
 import os
 import re
 import resource
+import shlex
 import shutil
 import signal
 import socket
@@ -99,7 +100,10 @@ REPO = "/opt/algorithmic-institutions"
 #: The batch size of each setting's sweep sims and whether its parts play
 #: common games (generate_sim_config.py SETTINGS; a test keeps them equal)
 SWEEP_BATCH = {"exp2": 1000, "exp2_multi": 1000, "exp1": 1000, "exp2_diff": None}
-WORKER_EXIT = {"timeout": 124, "setup": 125}
+WORKER_EXIT = {"timeout": 124, "setup": 125, "foreign_code": 86}
+#: Signals that end a Slurm job's processes: a worker or sim ended by one of
+#: them leaves its job lost (rerun without counting), not failed
+ENDING_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 
 
 def _cp():
@@ -193,11 +197,16 @@ def snapshot(ref):
     return sha
 
 
-def _slurm_job_gone(job_id):
+def _slurm_job_gone(job_id, cache=None):
     """True only if squeue says Slurm job `job_id` is not in the queue; False
-    when it runs or this cannot be told (no id, no squeue, an error)."""
+    when it runs or this cannot be told (no id, no squeue, an error). With
+    `cache` (a dict), each id is asked once per caller."""
     if not job_id:
         return False
+    if cache is not None:
+        if job_id not in cache:
+            cache[job_id] = _slurm_job_gone(job_id)
+        return cache[job_id]
     try:
         result = subprocess.run(["squeue", "-h", "-j", str(job_id), "-o", "%T"],
                                 capture_output=True, text=True, timeout=30)
@@ -222,12 +231,12 @@ def cleanup(sha):
         # this host's live jobs, and every job another node's index lists
         # whose Slurm job may still run (an entry of a job squeue says is gone
         # is stale: its node will not clear it)
-        others = []
+        others, asked = [], {}
         for entry in (jobs_dir() / "active").glob("*/*"):
             if entry.parent.name == socket.gethostname():
                 continue
             info = _read_json(jobs_dir() / entry.name / "worker.json")
-            if _slurm_job_gone(info.get("slurm_job")):
+            if _slurm_job_gone(info.get("slurm_job"), asked):
                 entry.unlink(missing_ok=True)
             else:
                 others.append(jobs_dir() / entry.name)
@@ -275,6 +284,21 @@ def argv(sha, command, tmp, n_threads):
         cmd += ["--env", f"{key}={value}"]
     cmd += ["--pwd", REPO, sif, "bash", "-c", command]
     return cmd, None, None
+
+
+def sim_command(config, sha):
+    """`python -m aimanager simulate <config>`, after a check that the
+    `aimanager` Python imports is the snapshot's own (its src/ at the repo
+    path in the image, or the tree on the host), not a copy from elsewhere on
+    the path: else the sim fails with exit code WORKER_EXIT["foreign_code"]."""
+    src = f"{REPO}/src" if _env("PF_LOCAL_CONTAINER", "apptainer") == "apptainer" \
+        else str(tree(sha) / "src")
+    check = ("import os, sys, aimanager; f = os.path.realpath(aimanager.__file__); "
+             f"src = os.path.realpath({src!r}); "
+             "ok = f.startswith(src + os.sep); "
+             "print('aimanager from ' + f, flush=True); "
+             f"sys.exit(0 if ok else {WORKER_EXIT['foreign_code']})")
+    return f"python -c {shlex.quote(check)} && python -m aimanager simulate {config}"
 
 
 def run(command, sha=None, timeout=3600):
@@ -480,6 +504,21 @@ def worker(folder):
     failed job, never as one lost with its Slurm job."""
     folder = Path(folder)
     started, cpu = time.time(), None
+
+    running = {}
+
+    def terminated(signum, frame):
+        # the Slurm job ends (scancel, its time limit): end the sim, leave no
+        # final status, so that the job reads as lost and is rerun uncounted
+        if "sim" in running:
+            try:
+                os.killpg(running["sim"], signal.SIGKILL)
+            except OSError:
+                pass
+        os._exit(128 + signum)
+
+    for sig in ENDING_SIGNALS:
+        signal.signal(sig, terminated)
     try:
         settings = json.loads((folder / "job.json").read_text())
         os.environ["PF_LOCAL_ROOT"] = settings["root"]
@@ -493,8 +532,7 @@ def worker(folder):
         _write_status(folder, {"state": "running", "cpu": cpu, "started_at": started})
         _clear_output(tree(settings["sha"]), settings["config"])
         (folder / "tmp").mkdir(exist_ok=True)
-        cmd, cwd, env = argv(settings["sha"],
-                             f"python -m aimanager simulate {settings['config']}",
+        cmd, cwd, env = argv(settings["sha"], sim_command(settings["config"], settings["sha"]),
                              folder / "tmp", settings["threads"])
 
         def pin():
@@ -505,12 +543,17 @@ def worker(folder):
             sim = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=log,
                                    stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                    preexec_fn=pin, start_new_session=True)
+            running["sim"] = sim.pid
             try:
                 code = sim.wait(timeout=settings["timeout"])
             except subprocess.TimeoutExpired:
                 os.killpg(sim.pid, signal.SIGKILL)
                 sim.wait()
                 code = WORKER_EXIT["timeout"]
+        if code < 0 and -code in ENDING_SIGNALS:
+            # the sim was ended from outside (with its Slurm job), before the
+            # worker itself got the signal: lost, not failed
+            os._exit(128 - code)
         usage = resource.getrusage(resource.RUSAGE_CHILDREN)
         _write_status(folder, {
             "state": "done", "exit_code": code, "cpu": cpu,
@@ -629,6 +672,7 @@ def prune(days=None, every=3600):
         pass
     stamp.touch()
     cutoff = time.time() - days * 86400
+    asked = {}  # squeue's answer per Slurm job, once per call
     for folder in jobs_dir().glob("local-*"):
         try:
             if folder.stat().st_mtime >= cutoff:
@@ -639,18 +683,18 @@ def prune(days=None, every=3600):
         if state.get("state") == "done":
             if state.get("finished_at", cutoff) < cutoff:
                 shutil.rmtree(folder, ignore_errors=True)
-        elif not _live_here(folder):
+        elif not _live_here(folder, asked):
             shutil.rmtree(folder, ignore_errors=True)
 
 
-def _live_here(folder):
+def _live_here(folder, asked=None):
     """Might the job of `folder` still run? Its worker alive on this host,
-    or a worker on another host (not decidable here)."""
+    or a worker on another host whose Slurm job squeue does not say is gone."""
     info = _read_json(folder / "worker.json")
     if not info:
         return False
     if info.get("host") != socket.gethostname():
-        return not _slurm_job_gone(info.get("slurm_job"))
+        return not _slurm_job_gone(info.get("slurm_job"), asked)
     return _alive(info)
 
 
