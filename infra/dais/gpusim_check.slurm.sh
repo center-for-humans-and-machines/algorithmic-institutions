@@ -6,6 +6,7 @@
 #
 #   cd /u/$USER/algorithmic-institutions-gpusim
 #   sbatch -o $GS_SCRATCH/logs/%x.%j.out infra/dais/gpusim_check.slurm.sh
+#   EXTRA_CAPTURE=<capture.pkl from another image> sbatch ...  (optional)
 #
 #SBATCH -J gpusim_check
 #SBATCH --account=mpib_inst
@@ -36,16 +37,34 @@ git -C "$PF_REPO" rev-parse HEAD
 echo "== torch, CUDA and PyG on the GPU"
 in_sim_image python infra/dais/sim_variant.py check-gpu
 
-echo "== the models on the GPU: a small sim's model inputs, replayed"
-in_sim_image python infra/dais/gpusim_forward.py capture \
-  infra/dais/gpusim_configs/final1_j0.yml "$OUT/capture.pkl" --episodes 64
-for dev in cuda cpu; do
-  in_sim_image python infra/dais/gpusim_forward.py replay \
-    infra/dais/gpusim_configs/final1_j0.yml "$OUT/capture.pkl" \
-    "$OUT/replay_$dev.npz" --device "$dev"
+echo "== the models: a small sim's model inputs, replayed in both images"
+# inputs captured here (new image, GPU) and, if given, elsewhere (EXTRA_CAPTURE)
+CFG=infra/dais/gpusim_configs/final1_j0.yml
+in_sim_image python infra/dais/gpusim_forward.py capture "$CFG" \
+  "$OUT/capture_here.pkl" --episodes 64
+captures=("$OUT/capture_here.pkl")
+if [ -n "${EXTRA_CAPTURE:-}" ]; then
+  cp "$EXTRA_CAPTURE" "$OUT/capture_extra.pkl"
+  captures+=("$OUT/capture_extra.pkl")
+fi
+for cap in "${captures[@]}"; do
+  r="${cap%.pkl}"
+  use_image new
+  for dev in cuda cpu; do
+    in_sim_image python infra/dais/gpusim_forward.py replay "$CFG" "$cap" \
+      "${r}_new_$dev.npz" --device "$dev"
+  done
+  use_image old  # torch 1.11, on this node's CPU
+  in_sim_image python infra/dais/gpusim_forward.py replay "$CFG" "$cap" \
+    "${r}_old_cpu.npz" --device cpu
+  for pair in "old_cpu new_cpu" "new_cpu new_cuda" "old_cpu new_cuda"; do
+    set -- $pair
+    echo "-- $(basename "$r"): $1 vs $2"
+    in_sim_image python infra/dais/gpusim_forward.py compare \
+      "${r}_$1.npz" "${r}_$2.npz"
+  done
 done
-in_sim_image python infra/dais/gpusim_forward.py compare \
-  "$OUT/replay_cuda.npz" "$OUT/replay_cpu.npz"
+use_image new
 
 echo "== the smoke sweep (Raven, old image: s000 65.373 +- 10.063 at 20 episodes)"
 cp "$SMOKE_REPO/configs/managers/rule_based/$SMOKE.yml" "$OUT/"
