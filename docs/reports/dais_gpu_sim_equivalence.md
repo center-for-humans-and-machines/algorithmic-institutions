@@ -121,7 +121,7 @@ On the CPU the two torch versions agree to float32 precision, so neither the tor
 | 32997490 | `final1_j0` | `raven_gpu`, seed set 1 | 2026-11-28 00:28 |
 | 32997532 | `final1_j1` | `raven_gpu`, seed set 2 | 2026-11-28 15:07 |
 
-Snapshot `00df782def908d3b674082db4920e95802971568`; outputs on Raven in the snapshot's output tree, `plots/simulation/gpusim/final1_j{0,1}/`. To finish: on the Hetzner host, `python infra/dais/gpusim_raven.py 00df782d <out> --via-log` in a container on the command server's network (resumes from `<out>/state.json`; it reduces each job to per-episode scores on the login node and reads them back through the run log, without `sync_from_cluster`), then `gpusim_equiv.py analyze` over `raven_gpu/` and `old_cpu1/`.
+Snapshot `00df782def908d3b674082db4920e95802971568`; outputs on Raven in the snapshot's output tree, `plots/simulation/gpusim/final1_j{0,1}/`. To finish: on the Hetzner host, `python infra/dais/gpusim_raven.py 00df782d <out> --via-log --configs infra/dais/gpusim_configs/final1_j0.yml infra/dais/gpusim_configs/final1_j1.yml` (without `--configs` it would submit the other six configs) in a container on the command server's network (resumes from `<out>/state.json`; it reduces each job to per-episode scores on the login node and reads them back through the run log, without `sync_from_cluster`), then `gpusim_equiv.py analyze` over `raven_gpu/` and `old_cpu1/`.
 
 The forward pass also ran on a Raven login node (torch 1.11, `capture_old.pkl`, `replay_old_cpu_raven.npz` in the snapshot's output tree); it was not brought back, since DAIS's byte-identical image covers that comparison.
 
