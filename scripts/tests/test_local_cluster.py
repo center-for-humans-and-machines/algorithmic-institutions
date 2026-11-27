@@ -403,3 +403,19 @@ def test_reevaluate_without_a_first_generation_final():
     summary["robust"] = rv.robust(rows, slices)
     assert "undefined" in summary["robust"]
     assert "no improvement defined" in rv.report(points, summary)
+
+
+def test_a_worker_ended_with_its_slurm_job_is_lost(repo):
+    import signal
+    import time
+
+    sha = lc.snapshot("HEAD")
+    job = lc.submit("configs/slow.yml", sha)
+    for _ in range(100):  # until its sim runs
+        if lc.status(job).get("state") == "running":
+            break
+        time.sleep(0.1)
+    pid = json.loads((lc.job_dir(job) / "worker.json").read_text())["pid"]
+    os.kill(pid, signal.SIGTERM)
+    lc.wait([job], poll=0.2)
+    assert lc.lost(job) and lc.status(job)["state"] == "running"

@@ -71,7 +71,8 @@ export PF_BASE="${PF_BASE:-$(git rev-parse --abbrev-ref HEAD)}"
 # the pool's slot locks on node-local memory, shared by every pipeline of
 # this job (they only live as long as the job)
 export PF_POOL_LOCKS="/dev/shm/pfpipe-$USER-${SLURM_JOB_ID:-$$}"
-trap 'cleanup; rm -rf "$PF_POOL_LOCKS" 2>/dev/null || true' EXIT
+# (removed after the driver returns, not in a signal trap: workers starting
+# while the job is cancelled would otherwise fail on a missing directory)
 mkdir -p "$PF_RUNS"
 
 [ -x "$PF_PYTHON" ] || { echo "FATAL: no driver python at $PF_PYTHON" >&2; exit 1; }
@@ -101,5 +102,6 @@ case "$MODE" in
 esac
 rc=0
 OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 taskset -c "$DRIVER_CPUS" "${cmd[@]}" || rc=$?
+rm -rf "$PF_POOL_LOCKS" 2>/dev/null || true
 echo "exit $rc after $SECONDS s"
 exit "$rc"

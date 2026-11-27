@@ -101,6 +101,9 @@ REPO = "/opt/algorithmic-institutions"
 #: common games (generate_sim_config.py SETTINGS; a test keeps them equal)
 SWEEP_BATCH = {"exp2": 1000, "exp2_multi": 1000, "exp1": 1000, "exp2_diff": None}
 WORKER_EXIT = {"timeout": 124, "setup": 125, "foreign_code": 86}
+#: Signals that end a Slurm job's processes: a worker or sim ended by one of
+#: them leaves its job lost (rerun without counting), not failed
+ENDING_SIGNALS = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
 
 
 def _cp():
@@ -501,6 +504,21 @@ def worker(folder):
     failed job, never as one lost with its Slurm job."""
     folder = Path(folder)
     started, cpu = time.time(), None
+
+    running = {}
+
+    def terminated(signum, frame):
+        # the Slurm job ends (scancel, its time limit): end the sim, leave no
+        # final status, so that the job reads as lost and is rerun uncounted
+        if "sim" in running:
+            try:
+                os.killpg(running["sim"], signal.SIGKILL)
+            except OSError:
+                pass
+        os._exit(128 + signum)
+
+    for sig in ENDING_SIGNALS:
+        signal.signal(sig, terminated)
     try:
         settings = json.loads((folder / "job.json").read_text())
         os.environ["PF_LOCAL_ROOT"] = settings["root"]
@@ -525,12 +543,17 @@ def worker(folder):
             sim = subprocess.Popen(cmd, cwd=cwd, env=env, stdout=log,
                                    stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                                    preexec_fn=pin, start_new_session=True)
+            running["sim"] = sim.pid
             try:
                 code = sim.wait(timeout=settings["timeout"])
             except subprocess.TimeoutExpired:
                 os.killpg(sim.pid, signal.SIGKILL)
                 sim.wait()
                 code = WORKER_EXIT["timeout"]
+        if code < 0 and -code in ENDING_SIGNALS:
+            # the sim was ended from outside (with its Slurm job), before the
+            # worker itself got the signal: lost, not failed
+            os._exit(128 - code)
         usage = resource.getrusage(resource.RUSAGE_CHILDREN)
         _write_status(folder, {
             "state": "done", "exit_code": code, "cpu": cpu,
