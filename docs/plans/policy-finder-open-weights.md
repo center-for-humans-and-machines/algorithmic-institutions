@@ -1,4 +1,4 @@
-# [DRAFT] Policy finder on open-weight models: OpenCode agents, developed on OpenRouter, final runs on DAIS
+# [ACTIVE] Policy finder on open-weight models: OpenCode agents, developed on OpenRouter, final runs on DAIS
 
 ## Goal
 
@@ -38,26 +38,31 @@ Checked on 2026-11-27 unless a source is named.
 
 ## Which model
 
-No model is chosen yet. The numbers below come from model cards as reported by third parties and from blog rankings that disagree with each other; phase 1 measures the candidates on our own task.
+Three roles, decided by Levin on 2026-11-27: a cheap model to debug the harness, the Qwen coder model to develop against, and frontier open-weight models for the actual runs. Prices are OpenRouter's on 2026-11-27 in USD per million tokens (input, cached input, output); sizes are from the Hugging Face API (published weights, mostly FP8 for the large ones).
 
-| Candidate | What speaks for it | What to check |
-|---|---|---|
-| **Qwen3-Coder-Next** (first to try) | Built for agentic coding with tool calls; mixture of experts with few active parameters, so fast enough for 5 parallel agents; 256k context; the model card gives a vLLM serve command with a tool-call parser; reported 70.6% on SWE-bench Verified | Its size and whether one H200 holds it at full precision; reports of tool-call parser trouble in vLLM; that OpenRouter serves the unquantised weights |
-| **A larger frontier open model** (MiniMax M2.5 or its successor, GLM-5 family) | The highest open-weight agentic coding scores in the rankings found (roughly 73 to 80% on SWE-bench Verified) | Exact names, sizes and licences from the model cards; whether 2 to 4 H200 hold it; vLLM support |
-| **Devstral Small 2 (24B)** | Dense and small (one GPU), reported 68% on SWE-bench Verified, simple to serve | Whether it follows the long agent definition and the notes format |
-| **Qwen3-32B** (floor) | Already on both clusters and known to work with our vLLM images | A general model, not trained for agent loops; expected to be the weakest |
+| Role | Model | OpenRouter | Weights | Licence | Note |
+|---|---|---|---|---|---|
+| Debugging the harness | DeepSeek-V4.1-Flash | 0.05, 0.001, 0.20 | 763B, about 765 GB | MIT | Cached input is nearly free, and an agent loop resends its context every turn. |
+| Development | Qwen3-Coder-Next | 0.12, 0.07, 0.80 | 79.7B, 159 GB in BF16 | Apache 2.0 | Built for agent loops with tool calls, 256k context; one or two DAIS GPUs. |
+| Actual runs, candidate | DeepSeek-V4.1-Flash | as above | as above | MIT | Needs most of a full DAIS node. |
+| Actual runs, candidate | GLM-5.3 | 0.07, 0.069, 1.40 | 753B, about 755 GB | other, to read | Needs most of a full node. |
+| Actual runs, candidate | GLM-5.3-Flash | 0.15, 0.03, 0.50 | 321B, about 328 GB | MIT | About 3 GPUs. |
+| Actual runs, candidate | MiniMax-M3.1-Flash | 0.15, 0.015, 0.60 | 220B, about 224 GB | other, to read | About 2 GPUs. |
+| Too large for one node | DeepSeek-V4-Pro (1.6T), Kimi-K3.1-Pro (2.8T), Qwen3.8-2.4T | | 1.6 to 2.8 TB | | Not candidates for DAIS. |
 
-Selection criteria, in this order: (1) the same weights are on OpenRouter and downloadable under a licence that allows research use; (2) tool calls work reliably with OpenCode and vLLM; (3) it fits a DAIS allocation with at least 64k context while serving 5 agents; (4) it produces accepted versions on our task (phase 1); (5) speed.
+Which frontier models go into the actual runs is decided after phase 1, from a bake-off on our own task (version 2 on top of the scored seed, several repeats per model, judged by the acceptance check, the rule's validity in the sim image, and a read of the notes). Whether a model fits depends on the number of GPUs in a DAIS node, which phase 0 reads.
 
-What to expect: a smaller open model will fail the acceptance check more often than Opus, write weaker analyses, and cite papers from memory less reliably. The campaign already keeps failed versions in the chain, and citations are checked afterwards. The result describes how that model explores the policy space, which should be said wherever results are compared with the Opus reference run `pf-20261104`.
+An agent version costs cents on OpenRouter at these prices (an estimate: about 1.5 million cumulative input tokens, mostly cached, and 20 thousand output tokens), so the whole campaign would cost tens of dollars there. DAIS is chosen for pinned weights and independence, not to save money.
 
-## Decisions for Levin
+What to expect: an open model will fail the acceptance check more often than Opus and cite papers from memory less reliably. The campaign keeps failed versions in the chain, and citations are checked afterwards. The result describes how that model explores the policy space, which should be said wherever results are compared with the Opus reference run `pf-20261104`.
 
-1. **Where the simulations run in the final setup.** The sim image is torch 1.11 with CUDA 11.3 and was built for A100s; it may not run on H200 or B200. Option A: everything on DAIS, with a rebuilt sim image if needed, and a check that it reproduces the reference sims. Option B: agents and model on DAIS, simulations stay on Raven, which needs a way to submit Raven jobs from DAIS. Phase 0 tests the image on DAIS; the recommendation follows from that test.
-2. **Where development happens.** Recommended: on the existing Hetzner host. Everything but the agent already works there, so swapping the agent is a small change and gives real pipeline runs (with sims on Raven) within days. The alternative is to build the DAIS runner first and point it at OpenRouter, which avoids one throwaway piece (the spawner profile) but delays the first real agent run. The host costs about 5 EUR per day.
-3. **OpenRouter key and budget.** Which key to use, and a spending cap for development (a model bake-off and smoke runs are tens of agent runs).
-4. **Network rule for the agents on DAIS.** Today's guarantee is "no network but the model". On DAIS that needs Apptainer's network isolation, which may need privileges we do not have. The fallback is tool-level restriction (no web tools, an allowlist for shell commands) plus an audit of the transcripts, which is weaker and should be accepted knowingly.
-5. **Whether the Claude campaign plan (`single-idea-run-on-hetzner.md`) is dropped or kept paused** in case the safeguard is resolved.
+## Decisions (Levin, 2026-11-27)
+
+1. **Everything on DAIS, on one full node, simulations included.** vLLM is told to leave part of each GPU free (`--gpu-memory-utilization`), and the simulations run in that space, one process per GPU in parallel (`CUDA_VISIBLE_DEVICES`), with no separate Slurm jobs. The cluster backend of phase 3 is therefore a local process pool. To measure: the GPU memory a sim part needs at its batch size, and how much sims and generation slow each other when they share a GPU. The sim image (torch 1.11, CUDA 11.3) must run on DAIS GPUs or be rebuilt and validated against the reference sims.
+2. **Development on the existing Hetzner host**, with the simulations on Raven as today. The host stays up for phase 1.
+3. **OpenRouter:** the key of `../life-hub/.env`, with a cap of 20 EUR for now. The key has no limit of its own and cannot create sub-keys, so the cap is enforced by reading the key's usage before each run (baseline 0.31 USD on 2026-11-27) and stopping at 21 USD above it. The account behind it had 1.76 USD of credit left on 2026-11-27 and needs a top-up before the cap can be reached.
+4. **Network rule on DAIS:** restricting the agent's tools and auditing the transcripts is accepted if the container's network cannot be cut.
+5. **Harness: OpenCode.** It is independent of the model vendor, runs headless, defines agents in markdown files much like the current definition, and has per-tool permissions. Fallback if tool calling proves unreliable with a model: mini-swe-agent, which drives the model through shell commands only and needs no tool-call API.
 
 ## Phases
 
@@ -90,11 +95,11 @@ Done when: a one-chain smoke run (seed plus 2 agent versions) reaches `scored` w
 
 Done when: one agent version completes against the DAIS endpoint.
 
-### Phase 3: the pipeline on DAIS (about 3 to 5 days)
+### Phase 3: the pipeline on DAIS (about 3 to 4 days)
 
 - **Agent runner:** a Slurm and Apptainer backend beside the spawner one: the same read-only export and write folders as mounts, the network rule from decision 4, a time limit, and a cap on parallel agents.
-- **Cluster backend:** `cluster_proxy.py`'s seven functions (`snapshot`, `run`, `validate_rule`, `submit`, `queue`, `wait`, `fetch`) implemented with local commands for DAIS, or kept as a bridge to Raven under option B of decision 1.
-- **One campaign job:** vLLM, the campaign driver and the agents in one Slurm job; the simulations as separate jobs. The job resubmits itself before the 1-day limit, and the campaign resumes from its state files.
+- **Cluster backend:** `cluster_proxy.py`'s seven functions (`snapshot`, `run`, `validate_rule`, `submit`, `queue`, `wait`, `fetch`) implemented as a local process pool on the node: a snapshot is a directory, a sim is a process pinned to one GPU, the queue is the pool.
+- **One campaign job on a full node:** vLLM, the campaign driver, the agents and the simulations. The job resubmits itself before the 1-day limit, and the campaign resumes from its state files.
 - **Setup:** a `dais_setup.sh` with a check mode and a preflight, in the style of `infra/raven/raven_setup.sh` and `preflight.py`.
 
 Done when: the one-chain smoke run reaches `scored` entirely on the cluster side, with no service outside MPCDF.
