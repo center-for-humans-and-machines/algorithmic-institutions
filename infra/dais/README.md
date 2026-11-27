@@ -58,3 +58,39 @@ Everything the pipeline keeps is in `PF_RUNS` (default `$S/pf_runs`): worktrees,
 Snapshots are about 165 MB each by `du` plus their sims' output (a real sweep about 100 MB), two per version (sweep and final). When a version is scored, its results are fetched and committed, and the pipeline removes its two snapshots (`cluster_proxy.cleanup`), unless a live pool job still runs on one; a failed version's snapshots stay for debugging.
 
 Measured on 2026-11-27 (`small`, 48 cores, 92 pool slots): the seed of a single-idea instance (one point) through all steps in 80 s at the real size; a 5-parameter rule's real sweep (256 points x 500 episodes, 32 parts) in 20 s and its whole version from `sweep_config` to `scored` in 80 s.
+
+## Agents on DAIS
+
+`campaign.slurm.sh` runs a whole campaign with its agents in ONE GPU job on `gpu1` (2 GPUs of either type, 24 cores): vLLM serves the model on the GPUs (`serve_model` and `wait_ready` of `common.sh`, a free port and a key of the job's own), the agents run OpenCode against it as Apptainer processes on the node (`PF_AGENT_BACKEND=apptainer`, `scripts/policy_finder/agent_apptainer.py`), and the sims run in the CPU pool as in `pipeline.slurm.sh`. Nothing outside the cluster is used.
+
+### The pieces
+
+- **Agent image:** the Hetzner host's `algoinst_claude:opencode` (OpenCode 1.19.6, `infra/claude_proxy/container/CC_env/Dockerfile.opencode`), streamed as `docker save | gzip` into `$PF_SCRATCH/images/` and converted by `agent_image.slurm.sh` to `algoinst_claude_opencode.sif`; its sha256 is `AGENT_SIF_SHA256` in `common.sh`. OpenCode needs nothing from the network at run time: its plugin package is in the image, update checks, model lists, language servers and sharing are off (`agent_check.slurm.sh` starts it under `noinet.py`).
+- **Agent backend:** the spawner's `start`, `finish`, `run_home` replaced, the rest of `agent_runner.py` unchanged (slots, command, result parsing, transcripts). The container gets the export read-only at the repo path, the version's write folders writable on top, a home and `/tmp` of its own, `--containall`; CPUs from a group of `PF_AGENT_CPUS` hyperthreads (`taskset`; `PF_AGENT_STEP=1` adds a `srun --overlap` step with a memory cap), and a wall-clock limit (`PF_AGENT_TIMEOUT`, status `expired`). A run whose job ended is `lost` and is not counted as one of the agent's attempts.
+- **Model endpoint:** a campaign with `base_url: "{env:PF_LLM_BASE_URL}"` gets OpenCode provider `local` (`export_instance.opencode_config`), whose URL and key (`PF_LLM_API_KEY`) OpenCode reads from its environment; the job passes the key through `APPTAINERENV_`, never on a command line, in the export, a log or the state, and `opencode_run.py` redacts it from the transcripts. Campaigns without `base_url` stay on OpenRouter. Sampling: the model card's `temperature=1.0, top_p=0.95, top_k=40` for Qwen3-Coder-Next (`export_instance.LOCAL_MODELS`, also its `generation_config.json`), context 131072 as served.
+- **Preflight:** `preflight.py --dais`, run by the job: both images against their checksums, the weights at the pinned revision, the driver's imports, every setting's agent data in the checkout and the sweep models in `PF_ARTIFACTS`, the run folders writable.
+
+### Network rule
+
+DAIS gives users no network namespace, so the agent's container shares the node's network. What holds instead is **a barrier against ordinary network use by the agent's commands**, plus a transcript audit:
+
+- OpenCode's web tools are off and nothing asks for confirmation (the image's global `opencode.json`);
+- the agent's shell is `agent_shell.sh`, set as `$SHELL`, which OpenCode's bash tool runs every command with: each command and everything it starts runs under `noinet.py`'s seccomp filter (no socket but `AF_UNIX`), while OpenCode itself keeps its TCP connection to vLLM. `PF_AGENT_SHELL=none` turns this off;
+- the filter holds only while nothing the unfiltered side runs or loads is writable from a command: the wrapper, `noinet.py`, the export with its `.opencode`, and the image are read-only, the home's config folders (`.opencode`, `.config`, `.claude`, `.agents`) are empty read-only binds, programs are named by absolute paths, bash reads no start-up files; no host `/run`, `/tmp` or home is bound, and `--containall` hides the host's user services;
+- every finished run's transcript is scanned for network use (web tools, `curl`, `wget`, `pip install`, `git clone`, URLs in shell commands, network libraries in written scripts): `network_audit` in the run's record in the version's state, and a line in its pipeline log.
+
+This is weaker than the Docker sandbox on the Hetzner host, whose container has no route but to one host: here OpenCode's own process could reach anything, an inherited or passed socket would work through the filter, and the host's abstract Unix sockets stay reachable. `agent_check.slurm.sh` checks all of the above inside the container (`WITH_MODEL=1` on `gpudev` adds a session against vLLM).
+
+### Running
+
+```bash
+S=/dais/fs/scratch/$USER/policy-finder-agents      # PF_SCRATCH of campaign.slurm.sh
+# as for the pipeline (above), plus: $S/env.sh with VLLM_SIF, the agent SIF,
+# and the human data files (experiments/*.csv, not in git) in the checkout
+sbatch --export=ALL infra/dais/agent_check.slurm.sh
+sbatch --export=ALL,PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 \
+  infra/dais/campaign.slurm.sh campaign scripts/policy_finder/campaigns/dais-smoke-exp2.yml
+# the same command again resumes from the state files in $S/pf_runs
+```
+
+The job's cores, in order: `SERVER_CORES` (4) for vLLM, `DRIVER_CORES` (2), `AGENT_CORES` (6, groups of 2 hyperthreads, at most `PF_AGENT_SLOTS`=4 agents at once), the rest (12 cores, 24 slots) the sim pool. It stops the server, the driver and every agent and sim of the job at its end, on `scancel` and 4 minutes before the time limit (`--signal`), and exits non-zero unless `campaign_check.py` finds every version `scored` (`PF_EXPECT=finished` accepts failed ones). Agent runs are in `$S/pf_runs/agent_runs/apt-<n>/` (`run.json`, `stdout.log`, `stderr.log`, `status.json`, the home with OpenCode's `opencode/` output), their transcripts also beside the state files; the server's log and its token counters (`vllm_metrics.txt`) in the job's run folder.

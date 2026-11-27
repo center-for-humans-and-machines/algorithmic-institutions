@@ -89,8 +89,9 @@ grep -E '"(model|baseURL|enabled_providers|temperature|top_k|webfetch|websearch)
   "$PF_RUN/opencode_config.log" | head -30 | sed 's/^/     cfg | /'
 check opencode_agents ok box opencode agent list
 # OpenCode itself under the filter: whatever it fetches at start fails and is logged
-check opencode_start_offline ok box python3 /opt/pf-agent/noinet.py \
-  timeout 60 opencode debug wait
+# (`debug wait` does not end by itself: exit 124 from timeout is the pass)
+check opencode_start_offline ok box bash -c '/usr/bin/python3 /opt/pf-agent/noinet.py \
+  timeout 30 opencode debug wait; [ $? = 124 ]'
 box sh -c 'ls ~/.local/share/opencode/log/ && cat ~/.local/share/opencode/log/*.log' \
   > "$PF_RUN/opencode_logs.txt" 2>&1
 grep -iE "fetch|http|npm|install|ECONN|EPERM|error" "$PF_RUN/opencode_logs.txt" | head -20 \
