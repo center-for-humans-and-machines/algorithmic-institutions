@@ -282,6 +282,20 @@ def opencode_agent(text):
     return head + sep + body
 
 
+#: A server of our own (base_url): the model card's sampling settings and
+#: the server's context (infra/dais/common.sh MAX_MODEL_LEN), by served name.
+#: OpenCode sends the sampling options with every request; the context lets
+#: it compact a long session before the server refuses it.
+LOCAL_MODELS = {
+    # huggingface.co/Qwen/Qwen3-Coder-Next, "Best Practices" (also its
+    # generation_config.json at revision a7fbcb5c)
+    "Qwen/Qwen3-Coder-Next": {
+        "options": {"temperature": 1.0, "top_p": 0.95, "top_k": 40},
+        "limit": {"context": 131072, "output": 16384},
+    },
+}
+
+
 def opencode_config(conf):
     """The instance's OpenCode config: its model, nothing else.
 
@@ -303,7 +317,7 @@ def opencode_config(conf):
                 "npm": "@ai-sdk/openai-compatible",
                 "options": {"baseURL": conf["base_url"],
                             "apiKey": "{env:PF_LLM_API_KEY}"},
-                "models": {model: {"name": model}},
+                "models": {model: {"name": model, **LOCAL_MODELS.get(model, {})}},
             }},
         }
     options = {}

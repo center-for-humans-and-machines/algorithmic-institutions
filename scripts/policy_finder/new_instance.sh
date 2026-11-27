@@ -5,7 +5,7 @@
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
 #       [--sobol-points N] [--prompt TEXT] [--setting exp2|exp1|exp2_multi|exp2_diff]
 #       [--mode free|single_idea] [--harness claude|opencode --model ID
-#       [--providers A,B]]
+#       [--providers A,B] [--base-url URL]]
 #   scripts/policy_finder/new_instance.sh --iterate-on <name> [--after-failure]
 #       [the same options]
 #
@@ -36,7 +36,9 @@
 # --harness opencode runs the agent with OpenCode on the OpenRouter model
 # --model (an OpenRouter id such as qwen/qwen3-coder-next), routed to
 # --providers in that order if given (agent_runner.py); a later version keeps
-# them unless they are given again.
+# them unless they are given again. --base-url points the agent at an
+# OpenAI-compatible server of our own instead (the DAIS job's vLLM; --model
+# is then the served name; instance_settings.py).
 #
 # --iterate-on <name> starts the next version of an existing instance on its
 # own branch and worktree instead: the worktree must be clean and its current
@@ -87,7 +89,7 @@ while [[ $# -gt 0 ]]; do
         --setting) SETTING="${2:-}"; SETTING_GIVEN=1; shift 2 ;;
         --mode) MODE="${2:-}"; shift 2 ;;
         --after-failure) AFTER_FAILURE=1; shift ;;
-        --harness|--model|--providers) HARNESS_ARGS+=("$1" "${2:-}"); shift 2 ;;
+        --harness|--model|--providers|--base-url) HARNESS_ARGS+=("$1" "${2:-}"); shift 2 ;;
         -h|--help) usage ;;
         -*) echo "unknown option: $1" >&2; usage ;;
         *) [[ -z "$NAME" ]] || usage; NAME="$1"; shift ;;

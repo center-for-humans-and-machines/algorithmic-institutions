@@ -24,6 +24,10 @@ Claude's JSON result. Its transcripts are the files it writes to `opencode/`
 in the run's home (the spawner's state for that project, PF_SPAWNER_STATE_OC).
 PF_OPENROUTER_MAX_USAGE (USD, the key's total usage) stops an opencode agent
 before it starts once the key is at it.
+
+PF_AGENT_BACKEND=apptainer replaces the spawner by Apptainer processes on
+this node (agent_apptainer.py, for DAIS): the same `start`, `finish` and
+`run_home`, the same mounts, command and records, the same slots.
 """
 
 import contextlib
@@ -136,17 +140,24 @@ def mounts(stem, write_dirs):
     return out
 
 
-def command(prompt, harness="claude", title="policy-finder", write_dirs=()):
+def command(prompt, harness="claude", title="policy-finder", write_dirs=(),
+            endpoint="openrouter"):
+    """The agent's command. Harness opencode on endpoint `local` (a model
+    server of our own, export_instance.opencode_config with base_url): its
+    key in PF_LLM_API_KEY, and no usage to read."""
     if harness == "opencode":
         with open(OPENCODE_RUN) as f:
             source = f.read()
         out = ["python3", "-c", source, prompt, "--title", title,
-               "--out", f"{HOME}/{OPENCODE_OUT}", "--repo", REPO,
-               "--key-env", "OPENROUTER_API_KEY",
-               "--usage-url", "https://openrouter.ai/api/v1/key"]
+               "--out", f"{HOME}/{OPENCODE_OUT}", "--repo", REPO]
+        if endpoint == "local":
+            out += ["--key-env", "PF_LLM_API_KEY"]
+        else:
+            out += ["--key-env", "OPENROUTER_API_KEY",
+                    "--usage-url", "https://openrouter.ai/api/v1/key"]
         for d in write_dirs:
             out += ["--write-dir", d]
-        if MAX_USAGE:
+        if MAX_USAGE and endpoint != "local":
             out += ["--max-usage", MAX_USAGE]
         return out
     return [
@@ -264,3 +275,15 @@ def finish(run_id, log=print, harness="claude"):
         "harness": harness,
         "stderr_tail": logs.get("stderr", "")[-3000:],
     }
+
+
+#: PF_AGENT_BACKEND=apptainer: the agent as an Apptainer process on this node
+#: (agent_apptainer.py, for DAIS) instead of a container from the spawner
+BACKEND = os.environ.get("PF_AGENT_BACKEND", "spawner")
+if BACKEND == "apptainer":
+    import sys
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from agent_apptainer import finish, run_home, start  # noqa: E402,F401,F811
+elif BACKEND != "spawner":
+    raise ImportError(f"PF_AGENT_BACKEND is spawner or apptainer, not {BACKEND!r}")

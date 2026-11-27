@@ -5,6 +5,7 @@ Run inside the proxy (`docker compose ... run claude`), from the repo root:
     python scripts/policy_finder/preflight.py            # everything
     python scripts/policy_finder/preflight.py --local    # skip Raven
     python scripts/policy_finder/preflight.py --fix      # also create PF_RUNS folders
+    python scripts/policy_finder/preflight.py --dais     # a DAIS job (no proxy, no Raven)
 
 Each check prints PASS, WARN or FAIL with what to do. Exit code 1 on any FAIL.
 
@@ -18,10 +19,19 @@ the writable folders and every model the sweep sims load.
 What it cannot see from here: the host (infra/claude_proxy/host_check.sh),
 the Claude token inside the spawner (a smoke instance shows it) and the slurm
 template on Raven (infra/raven/raven_setup.sh --check).
+
+--dais checks what infra/dais/campaign.slurm.sh needs instead of the
+services and Raven: the images with their expected checksums (PF_SIM_SIF,
+PF_AGENT_SIF against SIM_SIF_SHA256, AGENT_SIF_SHA256), the weights at the
+pinned revision (HF_HOME, MODEL, MODEL_REV), the driver's imports, every
+setting's agent data in the checkout and the sweep models in PF_ARTIFACTS,
+and write access to the run folders.
 """
 
 import argparse
 import glob
+import hashlib
+import importlib
 import json
 import os
 import re
@@ -76,9 +86,11 @@ def model_paths():
     return sorted(paths)
 
 
-def check_local(fix):
+def check_local(fix, dais=False):
     user = os.environ.get("RAVEN_USER", "")
-    if user:
+    if dais:
+        pass  # no Raven
+    elif user:
         report("PASS", f"RAVEN_USER={user}")
     else:
         report("FAIL", "RAVEN_USER is not set", "set it in infra/claude_proxy/container/CC_env/.env and restart the proxy")
@@ -115,6 +127,8 @@ def check_local(fix):
                "set GIT_USER_EMAIL in infra/claude_proxy/container/CC_env/.env and rebuild the proxy "
                "(or git config --global user.email ...)")
 
+    if dais:
+        return
     for pattern in export_instance.AGENT_DATA:
         if glob.glob(str(ROOT / pattern)):
             report("PASS", f"agent data {pattern}")
@@ -127,6 +141,79 @@ def check_local(fix):
                FETCH_HINT.format(" ".join(repr(p) for p in missing)))
     else:
         report("PASS", "sweep model files present locally")
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 24), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def check_dais():
+    for var, sha_var in (("PF_SIM_SIF", "SIM_SIF_SHA256"), ("PF_AGENT_SIF", "AGENT_SIF_SHA256")):
+        path, want = os.environ.get(var, ""), os.environ.get(sha_var, "")
+        if not path or not os.path.isfile(path):
+            report("FAIL", f"{var} is not a file: {path!r}", "infra/dais/README.md, Agents on DAIS")
+        elif not want:
+            report("FAIL", f"{sha_var} is not set", "infra/dais/common.sh sets it")
+        elif sha256(path) != want:
+            report("FAIL", f"{path} is not the expected image", f"its sha256 should be {want}")
+        else:
+            report("PASS", f"{var} {path} (sha256 {want[:12]})")
+
+    hf, model, rev = (os.environ.get(v, "") for v in ("HF_HOME", "MODEL", "MODEL_REV"))
+    snap = Path(hf, "hub", "models--" + model.replace("/", "--"), "snapshots", rev)
+    index = snap / "model.safetensors.index.json"
+    if not (hf and model and rev) or not index.is_file():
+        report("FAIL", f"no weights of {model!r} at revision {rev!r} under {hf!r}",
+               "download them with HF_HOME set (docs/reports/dais_feasibility.md)")
+    else:
+        files = set(json.loads(index.read_text())["weight_map"].values())
+        missing = [f for f in files if not (snap / f).exists()]
+        if missing:
+            report("FAIL", f"{len(missing)} weight file(s) of {model} missing: {missing[:3]}")
+        else:
+            report("PASS", f"weights {model}@{rev[:8]}: {len(files)} files")
+
+    bad = []
+    for name in ("torch", "numpy", "scipy", "sklearn", "pandas", "yaml"):
+        try:
+            importlib.import_module(name)
+        except Exception as e:  # noqa: BLE001
+            bad.append(f"{name} ({e})")
+    if bad:
+        report("FAIL", f"the driver cannot import {', '.join(bad)}", "infra/dais/README.md: the driver's python")
+    else:
+        report("PASS", f"driver python {sys.executable} imports torch, numpy, scipy, sklearn, pandas, yaml")
+
+    missing = [p for s in export_instance.SETTINGS.values() for p in s["agent_data"]
+               if not glob.glob(str(ROOT / p))]
+    if missing:
+        report("FAIL", f"agent data missing in the checkout: {sorted(set(missing))}",
+               "copy them from a checkout that has them (docs/large_files.md)")
+    else:
+        report("PASS", "every setting's agent data in the checkout")
+    artifacts = Path(os.environ.get("PF_ARTIFACTS", ROOT / "artifacts"))
+    missing = [p for p in model_paths()
+               if not (artifacts / os.path.relpath(p, "artifacts")).exists()]
+    if missing:
+        report("FAIL", f"{len(missing)} sweep model file(s) missing in {artifacts}: {missing[:3]}")
+    else:
+        report("PASS", f"sweep model files in {artifacts}")
+
+    pf_runs = Path(os.environ.get("PF_RUNS", ""))
+    for sub in ("", "exports", "agent_runs", "local_cluster", "worktrees"):
+        path = pf_runs / sub
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+            probe = path / ".preflight"
+            probe.write_text("ok\n")
+            probe.unlink()
+            report("PASS", f"{path} writable")
+        except OSError as e:
+            report("FAIL", f"{path} not writable: {e}")
 
 
 def check_services():
@@ -209,10 +296,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--local", action="store_true", help="skip the services and Raven")
     ap.add_argument("--fix", action="store_true", help="create missing PF_RUNS folders")
+    ap.add_argument("--dais", action="store_true", help="a DAIS job: images, weights, "
+                    "driver, data and run folders instead of the services and Raven")
     args = ap.parse_args()
     print("== local")
-    check_local(args.fix)
-    if not args.local:
+    check_local(args.fix or args.dais, dais=args.dais)
+    if args.dais:
+        print("== DAIS")
+        check_dais()
+    elif not args.local:
         print("== services")
         if check_services():
             print("== Raven")

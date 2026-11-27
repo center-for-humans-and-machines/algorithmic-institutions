@@ -280,7 +280,8 @@ class Version:
                 if run_id:
                     self.log(f"attaching to agent run {run_id}")
                 else:
-                    if attempts or self.data.get("limited_runs"):
+                    if (attempts or self.data.get("limited_runs")
+                            or self.data.get("lost_runs")):
                         # a fresh copy for the retry: the failed run may have written
                         export_instance.build(self.wt, MAIN, self.exports)
                     if self.harness == "claude":
@@ -300,6 +301,17 @@ class Version:
                     raise
             report = record.pop("report")
             record["transcripts"] = self.keep_transcripts(run_id)
+            if record["status"] == "lost":
+                # the run ended with the job that ran it (agent_apptainer.py):
+                # not one of the agent's attempts; a fresh run takes its place
+                lost = self.data.setdefault("lost_runs", [])
+                lost.append(record)
+                self.data.pop("agent_current", None)
+                self.save()
+                self.log(f"agent run {run_id} lost (its job ended); starting a new one")
+                if len(lost) > AGENT_ATTEMPTS:
+                    raise Failed(f"{len(lost)} agent runs lost: {record.get('error')}")
+                continue
             rule_written = (self.exports / self.stem / self.rule).exists()
             ok = record["status"] == "succeeded" and report.strip() and rule_written
             home = agent_runner.run_home(run_id, self.harness)
@@ -324,6 +336,11 @@ class Version:
                 f"agent run {run_id}: {record['status']}, models {record['models']},"
                 f" {cost}, rule {'written' if rule_written else 'missing'}"
             )
+            if "network_audit" in record:
+                found = record["network_audit"]["findings"]
+                self.log(f"network audit of {run_id}: {len(found)} finding(s)"
+                         + "".join(f"\n  {f['kind']}: {f.get('matches') or f.get('text')}"
+                                   for f in found[:10]))
             if ok:
                 (self.wt_root / f"{self.stem}.report.md").write_text(report + "\n")
                 return

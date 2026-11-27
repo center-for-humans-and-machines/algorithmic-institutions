@@ -24,6 +24,10 @@ A campaign is a YAML file (scripts/policy_finder/campaigns/*.yml):
     model: null             #   (harness opencode: an OpenRouter id), routed
     providers: null         #   to these upstream providers if given, in
                             #   order, no fallback (agent_runner.py)
+    base_url: null          # harness opencode on a server of our own instead
+                            #   of OpenRouter (model: its served name); on
+                            #   DAIS "{env:PF_LLM_BASE_URL}", which the job
+                            #   sets (infra/dais/campaign.slurm.sh)
 
 The lineage best is the highest GP-peak final (`score.pool`) of any of the
 lineage's scored versions. Each later generation iterates the top_k lineages
@@ -68,6 +72,7 @@ DEFAULTS = {
     "sobol_points": 256, "parallel": 12, "error_retries": 3, "retry_wait": 600,
     "setting": "exp2", "mode": "free", "iterate_max_params": None,
     "summarize": None, "harness": "claude", "model": None, "providers": None,
+    "base_url": None,
 }
 
 
@@ -182,6 +187,8 @@ class Campaign:
                 command += ["--harness", s["harness"], "--model", s["model"]]
                 if s["providers"]:
                     command += ["--providers", ",".join(s["providers"])]
+                if s["base_url"]:
+                    command += ["--base-url", s["base_url"]]
             return command
         if current == version - 1 and current >= 1:
             command = [HERE / "new_instance.sh", "--iterate-on", name]
