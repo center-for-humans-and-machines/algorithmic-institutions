@@ -3,6 +3,7 @@
 import json
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 
@@ -226,3 +227,20 @@ def test_a_record_without_start_time_checks_the_command_line(env):
         return  # Linux only
     # this test process is not `agent_apptainer.py worker <run>`
     assert not aa._alive(info, run)
+
+
+def test_a_live_worker_without_start_time_is_alive(env, tmp_path):
+    if not Path("/proc/self/cmdline").exists():
+        return  # Linux only
+    run = aa.root() / "apt-9"
+    stand_in = tmp_path / "bin/agent_apptainer.py"  # `agent_apptainer.py worker <run>`
+    stand_in.parent.mkdir()
+    stand_in.write_text("import time\ntime.sleep(60)\n")
+    proc = subprocess.Popen([sys.executable, str(stand_in), "worker", str(run)])
+    try:
+        info = {"host": aa.socket.gethostname(), "pid": proc.pid}
+        assert aa._alive(info, run)
+        assert not aa._alive(info, aa.root() / "apt-10")  # another run's
+    finally:
+        proc.kill()
+        proc.wait()

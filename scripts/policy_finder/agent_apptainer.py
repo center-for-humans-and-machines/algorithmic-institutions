@@ -398,7 +398,11 @@ def worker(folder):
             proc = subprocess.Popen(cmd, stdout=out, stderr=err, stdin=subprocess.DEVNULL,
                                     env=env, start_new_session=True)
             # the container's session, for a start() that has to undo the run
-            (run / "container.pid").write_text(f"{proc.pid}\n")
+            # (a failed write must not leave the container running unwatched)
+            try:
+                (run / "container.pid").write_text(f"{proc.pid}\n")
+            except OSError:
+                pass
             try:
                 code = proc.wait(timeout=s["timeout"])
                 status = "succeeded" if code == 0 else "failed"
