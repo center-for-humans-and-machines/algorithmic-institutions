@@ -1,0 +1,18 @@
+# Apple Silicon (M-series) Macs: build and run the proxy, and so the agents,
+# as linux/amd64. PyG's compiled extensions (torch_scatter, torch_sparse, ...)
+# have no Linux ARM wheels, so the native ARM build of the proxy image fails.
+# Docker Desktop runs amd64 images under emulation: slower, but it works.
+# Add `-f container/CC_env/docker-compose.amd64.yml` after the main -f in
+# every compose command (start_command.md). The command server and the
+# spawner stay native.
+services:
+  claude:
+    platform: linux/amd64
+    build:
+      platforms:
+        - linux/amd64
+  claude-gpu:
+    platform: linux/amd64
+    build:
+      platforms:
+        - linux/amd64

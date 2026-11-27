@@ -47,6 +47,7 @@ import argparse
 import json
 import math
 import sys
+import zlib
 from pathlib import Path
 
 import yaml
@@ -75,12 +76,19 @@ SETTINGS = {
         "overrides": {"sweep_metric": "pool_vs_opponents"},
     },
     # experiment 2 scored by the rule's group's lead in pool over `ah`'s, in
-    # the same game, both seats (docs/plans/archive/policy-finder-pool-difference.md)
+    # the same game, both seats (docs/plans/archive/policy-finder-pool-difference.md).
+    # `common_games`: every point of a sim plays the same games, and each
+    # version's sweep and final get their own seeds (version_seed);
+    # `baseline`: a template manager every final also plays, on the same
+    # games, so each final point's gain over it is paired game by game
+    # (docs/plans/policy-finder-common-games.md)
     "exp2_diff": {
         "template": TEMPLATE,
         "anchor": None,
         "opponents": Path("configs/simulation/opponents/exp2_diff.yml"),
         "overrides": {"sweep_metric": "pool_diff_vs_opponents"},
+        "common_games": True,
+        "baseline": "zero",
     },
     "exp1": {
         "template": Path("configs/simulation/manager_testing/29_EXP1_reference.yml"),
@@ -119,6 +127,25 @@ def pairings_per_point(setting):
     return 2 * len(opponents(setting)) or 1
 
 
+def version_seed(stem, kind):
+    """A setting with `common_games`: the seed of a version's sweep or final,
+    from its name, so no two versions (or a version's sweep and final) play
+    the same games. Clear of the fixed seeds (42, 1000, 8000, the head-to-heads'
+    20000-31000 and their batches)."""
+    return 1_000_000 + zlib.crc32(f"{stem}/{kind}".encode()) % 9_000_000
+
+
+def common_batches(per_pairing, pairings, largest):
+    """`common_games`: (episode_batch_size, seed_cycle) so that every point's
+    games fill whole batches of their own, seeded alike: the point's games in
+    one batch if they fit, else one pairing's per batch (or an equal part of
+    it), the cycle being the batches per point."""
+    if per_pairing * pairings <= largest:
+        return per_pairing * pairings, 1
+    size = max(d for d in range(1, min(per_pairing, largest) + 1) if per_pairing % d == 0)
+    return size, pairings * per_pairing // size
+
+
 class _Flow(dict):
     """A mapping written on one line: a point's params, a pairing."""
 
@@ -151,6 +178,7 @@ def build_sim_config(
     names=None,
     output=None,
     setting=None,
+    baseline=False,
 ):
     """The sweep's sim config, as a dict: the setting's template with the
     design's managers (SETTINGS; default exp2, TEMPLATE against ANCHOR).
@@ -158,7 +186,8 @@ def build_sim_config(
     `design` is the points of this sim, the first of them point `start` of
     the whole design; `suffix` tells a part's output and figure name apart.
     `names` replaces the points' names `<rule>_s<index>`, `output` the
-    output dir `<rule>_sweep<suffix>` (under OUTPUT_DIR).
+    output dir `<rule>_sweep<suffix>` (under OUTPUT_DIR). `baseline` adds
+    the setting's baseline manager, played like one more point after them.
     """
     rule_path = Path(rule_path).resolve()
     name = rule_path.stem
@@ -201,6 +230,13 @@ def build_sim_config(
                 _Flow(name=f"{other}_vs_{manager}", group_0=other, group_1=manager)
             )
 
+    if baseline:
+        base = spec["baseline"]
+        managers[base] = template["managers"][base]
+        for other in rivals:
+            pairings.append(_Flow(name=f"{base}_vs_{other}", group_0=base, group_1=other))
+            pairings.append(_Flow(name=f"{other}_vs_{base}", group_0=other, group_1=base))
+
     # TEMPLATE's keys in its order, the sweep's own values where it has them
     own = {
         "seed": seed,
@@ -214,6 +250,12 @@ def build_sim_config(
         own["pairings"] = pairings
     if rivals:
         own["sweep_opponents"] = list(rivals)
+    if baseline:
+        own["sweep_baseline"] = spec["baseline"]
+    if spec.get("common_games"):
+        largest = template.get("episode_batch_size", 1)
+        own["episode_batch_size"], own["seed_cycle"] = common_batches(
+            n_episodes, max(len(rivals) * 2, 1), largest)
     config = {k: own.get(k, v) for k, v in template.items()}
     if "agent_groups" in config:
         config["agent_groups"] = _FlowList(config["agent_groups"])
@@ -246,6 +288,8 @@ def build_sim_configs(
             rule_path, part, n_episodes, part_seed, edges[k], suffix, setting=setting
         )
         configs.append((suffix, config))
+        if config.get("seed_cycle"):
+            continue  # common games: every part plays the same ones
         batch = config.get("episode_batch_size", 1)
         part_seed += math.ceil(len(part) * pairings_per_point(setting) * n_episodes / batch)
     return configs
@@ -265,15 +309,20 @@ def write_final(args):
     if top < 0:
         sys.exit("--top must be 0 or more")
     measured = sorted(sweep["points"], key=lambda p: p["pool"], reverse=True)[:top]
+    spec = SETTINGS[args.setting]
+    seed = args.seed
+    if seed is None:
+        seed = version_seed(stem, "final") if spec.get("common_games") else FINAL_SEED
     try:
         config = build_sim_config(
             ROOT / sweep["rule"],
             [peak] + [p["params"] for p in measured],
             n_episodes,
-            FINAL_SEED if args.seed is None else args.seed,
+            seed,
             names=[f"{stem}_gp"] + [p["name"] for p in measured],
             output=f"{stem}_sweep/{FINAL_DIR}",
             setting=args.setting,
+            baseline=bool(spec.get("baseline")),
         )
     except ValueError as e:
         sys.exit(f"Invalid: {e}")
@@ -388,7 +437,9 @@ def main():
         )
         return
     args.n_episodes = args.n_episodes or N_EPISODES
-    args.seed = SEED if args.seed is None else args.seed
+    if args.seed is None:
+        args.seed = (version_seed(Path(args.config).stem, "sweep")
+                     if SETTINGS[args.setting].get("common_games") else SEED)
     if args.out and args.n_parts != 1:
         sys.exit("--out writes one config; leave it out with --n-parts")
 

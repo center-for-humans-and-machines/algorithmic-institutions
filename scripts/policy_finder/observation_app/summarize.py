@@ -21,18 +21,10 @@ rule_name: `<name>` for version 1, `<name>-v<k>` for version k.
 The numbers (pool, se, members) and the inputs a rule reads are not stored:
 the app reads them from each sweep and rule on every load.
 
-summary.json and references.json (the Summary's reference pools) are kept on
-Raven, in OBSERVATORY (/u/certuer/policy-finder-observatory, a fixed folder in
-one account, so everyone means the same place; reached through the `raven`
-ssh alias): the one copy that is kept and updated. The files beside the instances are
-working copies, which the app and the export read. `status` pulls them first;
-`record` and `category` pull, write and push back. Without the SSH
-ControlMaster (`ssh raven`) they warn and work on the local copies; `push`
-sends them once Raven is reachable again. With PF_OBSERVATORY=local (the
-default when PF_RUNS is set, as in the Claude proxy) the local copies are the
-only ones and nothing is ever sent. None of this is on
-policy-finder-base: every agent starts from that branch and can read all of
-it, and these files describe earlier rules and their results.
+summary.json and references.json (the Summary's reference pools) live beside
+the instances, in the worktree root, outside every worktree: every agent
+starts from the base branch and must not read them, since they describe
+earlier rules and their results.
 
 Usage:
     python scripts/policy_finder/observation_app/summarize.py status
@@ -41,12 +33,11 @@ Usage:
         --idea "<one line>"
     python scripts/policy_finder/observation_app/summarize.py category <name> \
         --kind rule|policy-category --meaning "<one line>"
-    python scripts/policy_finder/observation_app/summarize.py pull | push
 
 `status` lists the versions to summarize: a rule not recorded yet, or changed
 since (by its hash). `record` stores one instance against its current rule;
-categories must exist first (`category`). PF_WORKTREE_ROOT as in
-new_instance.sh.
+categories must exist first (`category`). The worktree root is
+PF_WORKTREE_ROOT, else $PF_RUNS/worktrees, as in new_instance.sh.
 """
 
 import argparse
@@ -55,66 +46,29 @@ import hashlib
 import json
 import os
 import re
-import subprocess
 import sys
 from datetime import date
 from pathlib import Path
 
-MAIN = Path(__file__).resolve().parents[3]
-WT_ROOT = Path(os.environ.get("PF_WORKTREE_ROOT", MAIN.parent / "policy-finder-worktrees"))
+
+def worktree_root() -> Path:
+    """PF_WORKTREE_ROOT, else $PF_RUNS/worktrees (new_instance.sh)."""
+    root = os.environ.get("PF_WORKTREE_ROOT") or (
+        os.environ.get("PF_RUNS") and os.path.join(os.environ["PF_RUNS"], "worktrees")
+    )
+    if not root:
+        sys.exit("set PF_RUNS (or PF_WORKTREE_ROOT): the folder of the instance worktrees")
+    return Path(root)
+
+
+WT_ROOT = worktree_root()
 SUMMARY = WT_ROOT / "summary.json"
-#: Where summary.json and references.json are kept (see the module docstring).
-#: "local": only the copies beside the instances, never ssh. That is the
-#: default in the Claude proxy (PF_RUNS set), which has no Raven SSH keys.
-OBSERVATORY = os.environ.get(
-    "PF_OBSERVATORY",
-    "local" if os.environ.get("PF_RUNS") else "raven:/u/certuer/policy-finder-observatory",
-)
-LOCAL = OBSERVATORY in ("", "local")
-SYNCED = ("summary.json", "references.json")
 #: The category kinds, as the command line names them and as stored
 KINDS = {"rule": "rule", "policy-category": "policy category"}
 RULE = "configs/managers/rule_based/{name}.yml"
 SWEEP = "plots/simulation/policy_finder/{name}_sweep/sweep.json"
 #: A later version's name, <instance>-v<k> (#244)
 LATER = re.compile(r"^(?P<instance>.+)-v(?P<k>[0-9]+)$")
-
-
-def _raven_up() -> bool:
-    if LOCAL:
-        return False
-    host = OBSERVATORY.split(":", 1)[0]
-    ok = subprocess.run(["ssh", "-O", "check", host], capture_output=True).returncode == 0
-    if not ok:
-        print(
-            f"warning: no SSH ControlMaster to {host} (run `ssh {host}`):"
-            f" working on the local copies in {WT_ROOT}",
-            file=sys.stderr,
-        )
-    return ok
-
-
-def pull():
-    """Copy the kept files from OBSERVATORY over the local working copies."""
-    if not _raven_up():
-        return
-    for name in SYNCED:
-        # a file not on Raven yet keeps its local copy
-        subprocess.run(
-            ["rsync", "-a", f"{OBSERVATORY}/{name}", str(WT_ROOT / name)],
-            capture_output=True,
-        )
-
-
-def push():
-    """Copy the local working copies to OBSERVATORY."""
-    if not _raven_up():
-        return
-    host, folder = OBSERVATORY.split(":", 1)
-    subprocess.run(["ssh", host, f"mkdir -p {folder}"], check=True)
-    files = [str(WT_ROOT / n) for n in SYNCED if (WT_ROOT / n).exists()]
-    subprocess.run(["rsync", "-a", *files, f"{OBSERVATORY}/"], check=True)
-    print(f"pushed {', '.join(Path(f).name for f in files)} to {OBSERVATORY}")
 
 
 def load() -> dict:
@@ -208,8 +162,6 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="command", required=True)
     sub.add_parser("status")
-    sub.add_parser("pull")
-    sub.add_parser("push")
     rec = sub.add_parser("record")
     rec.add_argument("name")
     rec.add_argument("--rule", action="append", required=True)
@@ -222,11 +174,7 @@ def main():
     args = ap.parse_args()
 
     if args.command == "status":
-        pull()
         status(load())
-        return
-    if args.command in ("pull", "push"):
-        (pull if args.command == "pull" else push)()
         return
     # instances finishing together each record: one writer at a time
     with open(SUMMARY.with_suffix(".lock"), "w") as lock:
@@ -235,15 +183,13 @@ def main():
 
 
 def write(args):
-    """`category` or `record` on the kept copy, under the caller's lock."""
-    pull()
+    """`category` or `record`, under the caller's lock."""
     data = load()
     if args.command == "category":
         kind = KINDS[args.kind]
         data["categories"][args.name] = {"kind": kind, "meaning": args.meaning}
         save(data)
         print(f"category {args.name} ({kind})")
-        push()
     else:
         sha = rule_sha(args.name)
         if sha is None:
@@ -266,7 +212,6 @@ def write(args):
         }
         save(data)
         print(f"recorded {args.name}")
-        push()
 
 
 if __name__ == "__main__":

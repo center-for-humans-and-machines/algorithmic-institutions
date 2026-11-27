@@ -31,9 +31,6 @@ Steps (STEPS):
   final_fetch   its output (rerun once without sweep.json), marked with
                 --score-final, committed: the version's result
 
-Only the cluster path through the command server (the Claude proxy) is
-implemented here; the SSH path stays run_sweep.sh and run_final.sh.
-
 Paths come from PF_RUNS (the root the container spawner's `pf_exports` root
 is the `exports` folder of): worktrees and side files in PF_RUNS/worktrees
 (PF_WORKTREE_ROOT overrides), exports in PF_RUNS/exports, agent slot locks in
@@ -516,7 +513,7 @@ class Version:
             "best_of_n_name": top["name"], "best_of_n_params": top["params"],
             "n_points": final["n_points"],
         }
-        for key in ("own", "other"):  # the two groups' pools (pool_diff_vs_opponents)
+        for key in ("own", "other", "gain", "gain_se"):  # pool_diff_vs_opponents; a baseline
             if key in gp:
                 self.data["score"][key] = gp[key]
         if "pools" in gp:  # against each opponent (pool_vs_opponents)

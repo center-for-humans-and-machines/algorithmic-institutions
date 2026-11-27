@@ -11,9 +11,9 @@ Run from the repo root (streamlit is not a project dependency):
     uv run --no-sync --with streamlit python \
         scripts/policy_finder/observation_app/export_html.py [--out <file>] [--fragment]
 
-Writes ../policy-finder-worktrees/dashboard.html by default, beside the
-instances and outside this checkout: it holds their results, which must not
-reach policy-finder-base. --fragment leaves out the <!doctype>/<html> wrapper,
+Writes dashboard.html in the worktree root ($PF_WORKTREE_ROOT, else
+$PF_RUNS/worktrees) by default, beside the instances and outside this
+checkout: it holds their results, which must not reach the base branch. --fragment leaves out the <!doctype>/<html> wrapper,
 for a host that adds its own (a claude.ai artifact).
 """
 

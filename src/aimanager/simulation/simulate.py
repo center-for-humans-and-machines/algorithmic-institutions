@@ -213,7 +213,10 @@ def run_batched(config: dict, runs: dict, mm, device, episode_batch_size: int):
     pairings mixed within a batch. Every manager in a batch punishes the
     whole batch; each agent takes the punishment of the manager its episode's
     pairing assigns to its current agent_group. Batch i is seeded with
-    `seed + i` when the config sets a seed.
+    `seed + i` when the config sets a seed, or with `seed + i mod seed_cycle`
+    when it also sets `seed_cycle`: batches that hold the same slots of
+    different managers' games (one sweep point per `seed_cycle` batches) then
+    play the same games, so their scores differ only by what the managers do.
 
     Returns one (episodes, record) per batch: `episodes` lists the batch's
     (run name, episode index) pairs in batch order, `record` maps each of
@@ -221,6 +224,9 @@ def run_batched(config: dict, runs: dict, mm, device, episode_batch_size: int):
     """
     n_episodes = config["n_episodes"]
     seed = config.get("seed")
+    cycle = config.get("seed_cycle")
+    if cycle is not None and (not isinstance(cycle, int) or cycle < 1):
+        raise ValueError(f"seed_cycle must be a positive integer, got {cycle!r}")
     # one side per agent group: (group_0 manager, group_1 manager) per run
     sides = {
         name: (
@@ -256,7 +262,7 @@ def run_batched(config: dict, runs: dict, mm, device, episode_batch_size: int):
         ]
         for start in range(0, len(episodes), episode_batch_size):
             if seed is not None:
-                batch_seed = seed + len(batches)
+                batch_seed = seed + (len(batches) % cycle if cycle else len(batches))
                 random.seed(batch_seed)
                 np.random.seed(batch_seed)
                 th.manual_seed(batch_seed)

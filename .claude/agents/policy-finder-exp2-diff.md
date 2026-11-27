@@ -85,13 +85,17 @@ extend or rework.
     score `pool` (its group's lead over `ah`'s group, both seats together),
     `pool_se` its standard error, `own` and `other` the two groups' pools,
     `members` and `other_members` the two groups' mean sizes, `n_episodes`
-    its games (both seats), and the same under `pools.ah`.
+    its games (both seats), and the same under `pools.ah`. Every design
+    point plays the same games (the same seeds, game by game), so two points'
+    scores differ only by what their rules do; each version's sweep has
+    games of its own.
   - `per_round_p<k>of<N>.parquet` (`per_round.parquet` for a sweep of one
     part): every design point's games per round and player, in the format
     of the reference sims; `run` names the point and its seat, group 0's
     manager first: `... managed by <version>_s<index>_vs_ah` (your rule runs
     group 0) or `... managed by ah_vs_<version>_s<index>` (it runs group 1),
-    and `episode` counts from 0 per pairing in each file.
+    and `episode` counts from 0 per pairing in each file; the same episode
+    and seat is the same game for every point.
   - `landscapes.json`: a smooth surface fitted to the design points' scores.
     Per parameter (`params`): its `range`, `effect` (how far the fitted score
     moves along it, in pool points) and `length_scale`; `peak`: where the
@@ -101,9 +105,13 @@ extend or rework.
     each design point.
   - `final/`: the surface's peak simulated on fresh seeds with more
     episodes, in both seats (`sweep.json`, `per_round.parquet`, two plots of
-    it). It is
-    that version's final result: your version is compared with the highest
-    of the earlier versions' final results.
+    it), beside `zero` (never punishes), which plays the same games against
+    `ah`. Each final point's `gain` is its lead minus `zero`'s lead in the
+    same games (`gain_se` its standard error); `baseline` holds `zero`'s own
+    lead. Each version's final has games of its own, so leads of different
+    versions are not on the same games; their gains are comparable. The
+    peak's gain is that version's final result: your version is compared
+    with the highest of the earlier versions' final gains.
 
 ## The rule config
 

@@ -5,6 +5,7 @@ the layout new_instance.sh makes, and runs the check from the repo's copy.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -58,12 +59,12 @@ def repo(tmp_path):
     (main / "src.py").write_text("x = 1\n")
     (main / ".gitignore").write_text(".claude/policy_finder.json\n")
     shutil.copy(CHECK, main / "scripts/policy_finder/check_instance.sh")
-    git(tmp_path, "init", "-q", "-b", "yannik/handover", str(main))
+    git(tmp_path, "init", "-q", "-b", "main", str(main))
     git(main, "config", "user.email", "t@t")
     git(main, "config", "user.name", "t")
     git(main, "add", "-A")
     git(main, "commit", "-q", "-m", "base")
-    wt = tmp_path / "policy-finder-worktrees" / NAME
+    wt = tmp_path / "worktrees" / NAME
     git(main, "worktree", "add", "-q", "-b", f"policy-finder/{NAME}", str(wt))
     (wt / ".claude").mkdir()
     # gitignored; the interpreter runs validate-rule
@@ -73,10 +74,13 @@ def repo(tmp_path):
 
 
 def check(main, *args):
+    # the worktree root beside main, as PF_WORKTREE_ROOT names it (repo())
+    env = {**os.environ, "PF_WORKTREE_ROOT": str(main.parent / "worktrees")}
     return subprocess.run(
         ["bash", str(main / "scripts/policy_finder/check_instance.sh"), NAME, *args],
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -211,7 +215,7 @@ def test_commit_commits_only_write_paths(repo):
     result = check(main, "--commit")
     assert result.returncode == 0, result.stderr
     files = git(
-        main, "diff", "--name-only", f"yannik/handover...policy-finder/{NAME}"
+        main, "diff", "--name-only", f"main...policy-finder/{NAME}"
     )
     assert files.split() == [RULE, NOTES, f"scripts/policy_finder/{NAME}/a.py"]
     assert git(wt, "status", "--porcelain") == ""
@@ -230,7 +234,7 @@ def test_commit_rule_only(repo):
 
 
 def test_committed_sweep_passes(repo):
-    """run_sweep.sh (#241) commits the sweep configs and the merged sweep, its
+    """pipeline.py commits the sweep configs and the merged sweep, its
     landscapes.json and its final run."""
     main, wt = repo
     write_rule(wt)

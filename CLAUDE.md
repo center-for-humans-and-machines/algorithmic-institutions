@@ -79,7 +79,11 @@ docs/tasks/                       # Task writeups; finished tasks move to archiv
 docs/plans/                       # Implementation plans (status in the title)
   archive/                        # Completed plans (DONE, ABANDONED)
 docs/reports/                     # Research documentation and reports
+docs/handover/                    # Setting up the Claude proxy and policy finder on a new machine
 notes/                            # Normative definitions (evaluation metrics, scoring schema)
+infra/claude_proxy/               # The Claude proxy: compose, Dockerfiles, algoinst.def, skills,
+                                  #   spawner allowlist, host_check.sh, secrets layout
+infra/raven/raven_setup.sh        # One-time Raven setup for a new user (run on a login node)
 run/                              # Legacy DJX run definitions (djx no longer used)
 ```
 
@@ -211,14 +215,14 @@ evaluation suite likewise keeps one copy per game.
   lives in `simulation/pool_scores.py`, shared with `plot_winrates.py`.
 - A sweep's best measured point reads high by luck (one 500-episode estimate
   each, #238). `scripts/policy_finder/fit_surrogate.py <sweep sim dir>` (local,
-  seconds; `run_sweep.sh` runs it) fits a Gaussian process to the points and
+  seconds; `pipeline.py` runs it in its `fit` step) fits a Gaussian process to the points and
   writes `landscapes.json` beside `sweep.json`: the surface's peak, each
   param's effect and length scale, the smoothed pool at every point and
   profiles through the peak. The final run simulates the peak:
   `generate_sim_config.py --final <sweep dir>/sweep.json` writes it
-  (`run_final.sh <name>`, run by `run_sweep.sh`), the peak alone at 2000
-  episodes on fresh seeds. Its `final/sweep.json` in the sweep dir holds the
-  rule's final result.
+  (`pipeline.py`'s `final_config` step): the peak and the sweep's 5 best
+  measured points, at 2000 episodes on fresh seeds. Its `final/sweep.json` in
+  the sweep dir holds the rule's final result.
 - `scripts/plotting/plot_winrates.py <sim_dir> [<sim_dir> ...]` tables the five
   win definitions of #226. Definitions 1-3 and 5 are head to head. Definition 4
   (Levin's) ranks managers by their group's common pool against `ah`, so it
@@ -299,9 +303,9 @@ scripts/remote_test.sh -- -k test_encoder -v
 
 ### Claude proxy (command server)
 
-The proxy in `claude_proxies/algoinst` submits Raven jobs through `CC_command_server` (`CC_PROJECT=algoinst`). That container has no Raven SSH keys. The checkout it syncs is `/u/ykeller/algorithmic-institutions`. A job is `python -m aimanager <train-ah|train-manager|simulate> <config>` inside `/raven/ptmp/ykeller/cc/containers/apptainer/algoinst.sif`. `WANDB_ENTITY=chm-ml` and `WANDB_PROJECT=algorithmic-institutions` are set on the container; the API key comes from the cluster secrets file. The `run_on_cluster` skill in the proxy is the agent path. The SSH scripts below stay the manual path.
+The proxy in `infra/claude_proxy` submits Raven jobs through `CC_command_server` (`CC_PROJECT=algoinst`). That container has no Raven SSH keys. The checkout it syncs is `/u/$RAVEN_USER/algorithmic-institutions`. A job is `python -m aimanager <train-ah|train-manager|simulate> <config>` inside `/raven/ptmp/ykeller/cc/containers/apptainer/algoinst.sif`. `WANDB_ENTITY=chm-ml` and `WANDB_PROJECT=algorithmic-institutions` are set on the container; the API key comes from the cluster secrets file. The `run_on_cluster` skill in the proxy is the agent path. The SSH scripts below stay the manual path.
 
-- `/sync_to_cluster` with `{"ref": "<sha or branch>"}` publishes that commit to `/u/ykeller/cc-snapshots/<sha>/` and returns the sha. Pass it as `checkout` on `/submit_slurm_job` and `/run_in_container`. The snapshot is not written again. Artifacts stay in the live tree, read-only; `plots/` and `.log/` for that job are `/u/ykeller/cc-snapshot-outputs/<sha>/`.
+- `/sync_to_cluster` with `{"ref": "<sha or branch>"}` publishes that commit to `/u/$RAVEN_USER/cc-snapshots/<sha>/` and returns the sha. Pass it as `checkout` on `/submit_slurm_job` and `/run_in_container`. The snapshot is not written again. Artifacts stay in the live tree, read-only; `plots/` and `.log/` for that job are `/u/$RAVEN_USER/cc-snapshot-outputs/<sha>/`.
 - Without `ref`, `/sync_to_cluster` still rsyncs the working tree. It excludes `artifacts/` and `plots/`; send what a job reads with `"includes": ["artifacts"]`. That sync never deletes remote files, so the Raven checkout must be kept a mirror of the local tree by hand (a stray top-level `aimanager/` there shadows `src/`). It can also change files under a running job.
 - `train-ah` on an orchestrator YAML takes its `job_id` from the labels, as `run.py` does (`cli.py:default_job_id`), so a repo config writes the shipped artifact's path.
 - The image runs torch 1.11: validate a new rule there (`validate-rule` via `/run_in_container`), since torch 2.5 accepts code 1.11 rejects.

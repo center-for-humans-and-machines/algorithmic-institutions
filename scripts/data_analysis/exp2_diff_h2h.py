@@ -7,13 +7,14 @@ pooled, with the two pools, the two group sizes, the row's fines, and the same p
 """
 import json
 import math
+import sys
 from pathlib import Path
 
 import pandas as pd
 
 from aimanager.simulation.pool_scores import POOL, add_pool, pairing_of
 
-ROOT = Path("plots/simulation/34_DIFF_h2h")
+ROOT = Path(sys.argv[1] if len(sys.argv) > 1 else "plots/simulation/34_DIFF_h2h")
 COLUMNS = ["episode", "round_number", "agent_group", "contribution", "punishment", "run"]
 
 
@@ -76,6 +77,18 @@ def main():
                  [["own_pool", "other_pool", "own_n", "other_n", "own_fines", "other_fines",
                    "own_contrib", "other_contrib"]].mean().reset_index())
     out = {"rows": rows, "per_round": per_round.to_dict(orient="records")}
+    if "--paired" in sys.argv:
+        # every row played the same games (seed_cycle): differences game by game
+        lead = games.set_index(["seed", "seat", "episode", "row"])["lead"].unstack("row")
+        out["paired"] = {
+            a: {b: mean_se(lead[a] - lead[b]) for b in lead.columns if b != a}
+            for a in lead.columns
+        }
+        print("paired against zero and the multi leader:")
+        for a in sorted(lead.columns, key=lambda r: -rows[r]["lead"]["mean"]):
+            z, m = out["paired"][a].get("zero"), out["paired"][a].get("multi_9_w0")
+            print(f"  {a:14s}" + (f" vs zero {z['mean']:+.2f} ± {z['se']:.2f}" if z else "")
+                  + (f"  vs multi {m['mean']:+.2f} ± {m['se']:.2f}" if m else ""))
     (ROOT / "h2h_summary.json").write_text(json.dumps(out, indent=1) + "\n")
     print(f"{'row':10s} {'lead':>13s} {'own':>6s} {'ah':>6s} {'n own':>6s} {'n ah':>6s}"
           f" {'fine/m':>7s} {'ah f/m':>7s}")

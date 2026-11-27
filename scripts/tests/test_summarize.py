@@ -14,10 +14,8 @@ SCRIPT = (
 
 @pytest.fixture
 def summ(tmp_path, monkeypatch):
-    """summarize.py over a worktree root with one instance at version 3, and
-    an observatory that is never reachable (local copies only)."""
+    """summarize.py over a worktree root with one instance at version 3."""
     monkeypatch.setenv("PF_WORKTREE_ROOT", str(tmp_path))
-    monkeypatch.setenv("PF_OBSERVATORY", "nohost.invalid:/x")
     spec = importlib.util.spec_from_file_location("summarize", SCRIPT)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

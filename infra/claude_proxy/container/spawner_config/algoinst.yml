@@ -1,0 +1,41 @@
+# Allowlist for CC_PROJECT=algoinst. Host paths and resource ceilings live
+# here; a request can only pick a profile and subpaths of mount_roots.
+#
+# docker-compose.yml mounts this folder at /config in the spawner, so the
+# project's allowlist lives in this repo. A root names the env var that holds
+# its host path (the Docker daemon's path):
+#
+#   pf_exports -> SPAWNER_ROOT_PF_EXPORTS ($PF_RUNS/exports, set by compose)
+#
+# writable false would mean a caller can mount a subpath read-only only.
+
+proxy_image: container-spawner-proxy:latest
+token_env: CLAUDE_CODE_OAUTH_TOKEN
+egress_hosts:
+  - api.anthropic.com
+
+max_cpus: 4
+default_cpus: 2
+max_memory_mb: 16384
+default_memory_mb: 8192
+max_pids: 512
+default_pids: 256
+max_timeout_seconds: 86400
+default_timeout_seconds: 21600
+max_concurrent: 8
+
+profiles:
+  cpu:
+    # Rebuild retags this name only. seed_image is copied onto it at startup
+    # when the tag is missing, and is never the rebuild target.
+    image: algoinst_claude:cpu
+    seed_image: algoinst_claude:latest
+    user: "1000:1000"
+    home: /home/claude
+    dockerfile: container/CC_env/Dockerfile
+    context_env: ALGOINST_BUILD_CONTEXT
+
+mount_roots:
+  pf_exports:
+    host_path_env: SPAWNER_ROOT_PF_EXPORTS
+    writable: true

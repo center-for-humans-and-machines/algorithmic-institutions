@@ -1,10 +1,9 @@
 """Live dashboard of policy-finder instances (#236, #227).
 
-Reads the instance worktrees (`../policy-finder-worktrees`, or
-$PF_WORKTREE_ROOT) and refreshes every few seconds: per instance its status,
-rule, notes, scripts, final report and, once swept, its sweep result, which
-run_sweep.sh (#241) commits in the worktree. Read-only: it never writes to a
-worktree.
+Reads the instance worktrees ($PF_WORKTREE_ROOT, else $PF_RUNS/worktrees) and
+refreshes every few seconds: per instance its status, rule, notes, scripts,
+final report and, once swept, its sweep result, which pipeline.py commits in
+the worktree. Read-only: it never writes to a worktree.
 
 Run from the repo root (streamlit is not a project dependency):
     uv run --no-sync --with streamlit streamlit run scripts/policy_finder/observation_app/dashboard.py
@@ -22,17 +21,14 @@ import subprocess
 from pathlib import Path
 
 import altair as alt
-from summarize import OBSERVATORY, versions
+from summarize import versions, worktree_root
 import pandas as pd
 import streamlit as st
 import yaml
 
 MAIN = Path(__file__).resolve().parents[3]
-WT_ROOT = Path(
-    os.environ.get("PF_WORKTREE_ROOT", MAIN.parent / "policy-finder-worktrees")
-)
-BASE = os.environ.get("PF_BASE", "policy-finder-base")
-#: An instance's merged sweep, relative to its worktree (run_sweep.sh), with
+WT_ROOT = worktree_root()
+#: An instance's merged sweep, relative to its worktree (pipeline.py), with
 #: its Gaussian process fit (landscapes.json) and, in final/, the final run
 #: of the fit's peak, the rule's final result
 SWEEP_DIR = "plots/simulation/policy_finder/{name}_sweep"
@@ -104,20 +100,10 @@ STYLE = (
 )
 #: Under the page title: where the data outside the repo lives, and why
 DATA_NOTE = (
-    (
-        "Part of this page's data is kept outside the repo. The Summary's categories"
-        " and the reference pools (summary.json, references.json) are kept on Raven in"
-        f" {OBSERVATORY.split(':', 1)[1]}/, with working copies beside the instances in"
-        " ../policy-finder-worktrees/; the overview text, the agent reports and their"
-        " session logs stay on the machine that ran them."
-    )
-    if ":" in OBSERVATORY
-    else (
-        "Part of this page's data is kept outside the repo, beside the instances in"
-        f" {WT_ROOT}/: the Summary's categories and the reference pools"
-        " (summary.json, references.json), the pipeline states, the agent reports,"
-        " and, in the container spawner's run homes, the agents' session logs."
-    )
+    "Part of this page's data is kept outside the repo, beside the instances in"
+    f" {WT_ROOT}/: the Summary's categories and the reference pools"
+    " (summary.json, references.json), the pipeline states, the agent reports,"
+    " and, in the container spawner's run homes, the agents' session logs."
 ) + (
     " None of it is in an agent's view: every policy-finder agent starts from the"
     " base branch and sees only its own lineage, and this data describes earlier"
@@ -853,6 +839,10 @@ def sweep_blocks(wt: Path, name: str, zero) -> list:
                 f"{final['own']:.1f} · {final['other']:.1f}"
                 f"<small>{final['members']:.2f} · {final['other_members']:.2f} members</small>",
             )
+        if final.get("gain") is not None:  # a final paired with a baseline
+            tiles.insert(1, (
+                "Gain over zero, same games",
+                f"{final['gain']:+.2f}<small>± {final['gain_se']:.2f}</small>"))
         tiles += [
             ("Fit predicted", predicted),
             (
@@ -1207,6 +1197,8 @@ def version_row(wt: Path, version: str, key: str, summary: dict) -> dict:
             row[f"vs {OPPONENTS.get(k, k)}"] = v["pool"]
         if "own" in best:  # exp2_diff
             row.update({"own pool": best["own"], "ah pool": best["other"]})
+        if best.get("gain") is not None:  # paired with a baseline in its final
+            row["gain"] = best["gain"]
     notes = read(wt / "notes/policy_finder" / f"{version}.md")
     if notes:
         sections = parse_notes(notes)
