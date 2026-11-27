@@ -21,11 +21,13 @@ SPEC = importlib.util.spec_from_file_location(
 rv = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(rv)
 
-FAKE_SIM = """import json, os, sys
+FAKE_SIM = """import json, os, sys, time
 config = sys.argv[2]
 out = open(config).read().split()[1]
-if "fail" in config:
+if "fail" in config or os.path.exists("FAIL_ALL"):
     sys.exit(3)
+if "slow" in config:
+    time.sleep(30)
 os.makedirs(out, exist_ok=True)
 with open(os.path.join(out, "sweep.json"), "w") as f:
     json.dump({"threads": os.environ["OMP_NUM_THREADS"]}, f)
@@ -55,8 +57,10 @@ def test_the_switch(monkeypatch):
     (16, 20, "exp2", (1, True)),        # the smoke size
     (1, 500, "exp2", (1, True)),        # the seed: one point
     (256, 500, "exp2_diff", (32, True)),
-    (256, 1024, "exp2_multi", (3, False)),  # no aligned split: Raven's
+    (256, 512, "exp2_multi", (2, False)),  # no aligned split: Raven's
     (100, 500, "exp1", (25, True)),     # 13 to 24 parts give odd ones
+    (11, 500, "exp2", (2, True)),       # a design of few distinct points
+    (3, 100, "exp2", (1, True)),        # never more parts than points
 ])
 def test_sweep_parts(monkeypatch, points, per_point, setting, expected):
     monkeypatch.delenv("PF_LOCAL_PART_EPISODES", raising=False)
@@ -81,7 +85,7 @@ def repo(tmp_path, monkeypatch):
     (main / "src/aimanager").mkdir(parents=True)
     (main / "src/aimanager/__init__.py").write_text("")
     (main / "src/aimanager/__main__.py").write_text(FAKE_SIM)
-    for name in ("ok1", "ok2", "fail"):
+    for name in ("ok1", "ok2", "fail", "slow"):
         (main / f"configs/{name}.yml").parent.mkdir(exist_ok=True)
         (main / f"configs/{name}.yml").write_text(f"output_dir: plots/{name}\n")
     git = ["git", "-C", str(main)]
@@ -108,6 +112,10 @@ def test_snapshot_pool_and_fetch(repo, tmp_path):
     assert not lc.queue()
     codes = [lc.status(j)["exit_code"] for j in jobs]
     assert codes == [0, 0, 3]
+    # one slot: the three sims ran one after another
+    spans = sorted((lc.status(j)["started_at"], lc.status(j)["finished_at"]) for j in jobs)
+    assert all(a[1] <= b[0] for a, b in zip(spans, spans[1:]))
+    assert not list((lc.jobs_dir() / "active").iterdir())  # the index is emptied
     assert lc.fetch(sha, "plots/ok1", tmp_path / "out") > 0
     # one thread per sim, and the settings kept with the job
     assert json.loads((tmp_path / "out/sweep.json").read_text()) == {"threads": "1"}
@@ -135,6 +143,8 @@ def test_cleanup_keeps_a_snapshot_in_use(repo):
     (folder / "job.json").write_text(json.dumps({"sha": sha}))
     (folder / "worker.json").write_text(
         json.dumps({"host": socket.gethostname(), "pid": os.getpid()}))
+    (lc.jobs_dir() / "active").mkdir()
+    (lc.jobs_dir() / "active/local-7").touch()
     assert not lc.cleanup(sha) and lc.tree(sha).exists()  # a live job runs on it
     (folder / "status.json").write_text(json.dumps({"state": "done"}))
     assert lc.cleanup(sha) and not (lc.root() / "snapshots" / sha).exists()
@@ -163,8 +173,58 @@ def test_reevaluate_curve_selects_on_recorded_scores():
         {"generation": 3, "stem": "a-v3", "recorded": 71.0, "recorded_se": 1,
          "reevaluated": 70.0, "reevaluated_se": 0.4},
     ]
-    points = rv.curve(rows)
+    # common seeds: slice j of each version shares a large game effect
+    slices = {"a": [(60.0, 1), (70.0, 1), (74.0, 1)],
+              "a-v3": [(62.5, 1), (71.5, 1), (76.0, 1)]}
+    points = rv.curve(rows, slices)
     assert [p["best_so_far"] for p in points] == ["a", "a", "a-v3"]
     gain = rv.improvement(points)
     assert gain["improvement"] == pytest.approx(2.0) and gain["bar_70"] == pytest.approx(1.4)
-    assert gain["improvement_se"] == pytest.approx(0.5)
+    # paired: the se of the differences (2.5, 1.5, 2.0), not of the scores
+    assert gain["improvement_se"] == pytest.approx(0.5 / 3 ** 0.5)
+
+
+@pytest.mark.parametrize("points", [11, 151, 230, 255])
+def test_aligned_parts_play_the_whole_sims_batches(points):
+    """A split marked aligned starts every part at the whole sim's batch (the
+    seeds build_sim_configs gives the parts); one not marked aligned does not."""
+    gsc = pytest.importorskip("generate_sim_config")
+    rule = gsc.ROOT / "configs/managers/rule_based/levin_sigmoid.yml"
+    design = [{"x": float(i)} for i in range(points)]
+    n, ok = lc.sweep_parts(points, 500, "exp2", 125000)
+    assert 1 <= n <= points
+    configs = gsc.build_sim_configs(rule, design, 500, 42, n, "exp2")
+    starts = lc.edges(points, n)
+    batch = configs[0][1]["episode_batch_size"]
+    matches = [cfg["seed"] - 42 == starts[k] * 500 / batch
+               for k, (_, cfg) in enumerate(configs)]
+    assert all(matches) == ok
+
+
+def test_lost_worker_and_timeout(repo, monkeypatch):
+    sha = lc.snapshot("HEAD")
+    folder = lc.root() / "jobs" / "local-98"
+    folder.mkdir(parents=True)
+    done = subprocess.Popen(["true"])
+    done.wait()
+    (folder / "worker.json").write_text(
+        json.dumps({"host": socket.gethostname(), "pid": done.pid}))
+    (folder / "status.json").write_text(json.dumps({"state": "running"}))
+    assert lc.lost("local-98") and "local-98" not in lc.queue()
+    monkeypatch.setenv("PF_LOCAL_JOB_SECONDS", "1")
+    job = lc.submit("configs/slow.yml", sha)
+    lc.wait([job], poll=0.2)
+    assert lc.status(job)["exit_code"] == 124 and not lc.lost(job)
+
+
+def test_a_rerun_never_returns_an_old_result(repo, tmp_path):
+    sha = lc.snapshot("HEAD")
+    first = lc.submit("configs/ok1.yml", sha)
+    lc.wait([first], poll=0.2)
+    assert (lc.tree(sha) / "plots/ok1/sweep.json").exists()
+    (lc.tree(sha) / "FAIL_ALL").touch()  # the same config, now failing
+    again = lc.submit("configs/ok1.yml", sha)
+    lc.wait([again], poll=0.2)
+    assert lc.status(again)["exit_code"] == 3
+    with pytest.raises(lc._cp().NoOutput):
+        lc.fetch(sha, "plots/ok1", tmp_path / "stale")
