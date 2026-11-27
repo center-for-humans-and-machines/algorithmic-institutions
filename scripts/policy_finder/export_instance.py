@@ -20,6 +20,15 @@ a text file. Last, the version's write folders are made (they are mounted
 read-write) and every file in them is hashed into `.export_manifest.json`,
 outside the export.
 
+An instance with harness opencode (instance_settings.py) gets its agent as
+OpenCode reads it instead: `.opencode/opencode.json` (the OpenRouter model,
+the key from the environment, the upstream providers) and
+`.opencode/agents/policy-finder.md`, the same definition with OpenCode's
+frontmatter and tool names (`opencode_agent`). OpenCode loads AGENTS.md and
+CLAUDE.md into the context from the working directory up; the export holds
+neither (the sparse checkout leaves CLAUDE.md out), and the build removes any
+that turns up.
+
 A single-idea instance's export also holds `test_data/`: scrambled copies of
 its data files (scramble_data.py), read-only, which the agent debugs its one
 analysis script on.
@@ -164,6 +173,12 @@ MODE_AGENTS = {"single_idea": ".claude/agents/policy-finder-single-idea.md"}
 CLAUDE_KEEP = ("agents/policy-finder.md", "agents/policy-finder-host.md", "policy_finder.json")
 #: An instance's name, as new_instance.sh and the campaign make them
 INSTANCE_NAME = re.compile(r"pf-\d{8}-\d+")
+#: Harness opencode: the folder OpenCode loads from the working directory,
+#: the agent's wording that names Claude Code's tools (OpenCode's are
+#: lower-case), and the rule files OpenCode would load into the context
+OPENCODE_DIR = ".opencode"
+OPENCODE_WORDING = ((re.compile(r"the Edit(\s+)tool"), r"the edit\1tool"),)
+CONTEXT_FILES = ("AGENTS.md", "CLAUDE.md")
 #: Text files above this size are not scanned (data files)
 SCAN_LIMIT = 20 * 2**20
 MANIFEST = ".export_manifest.json"
@@ -241,6 +256,63 @@ def _prune(export, name, deny=()):
                     os.rmdir(p)
 
 
+def opencode_agent(text):
+    """A Claude Code agent definition as an OpenCode primary agent.
+
+    The body stays as it is but for the tool names of OPENCODE_WORDING; the
+    frontmatter keeps the description (without the relay that starts the
+    Claude agent). Model and permissions are in opencode_config.
+    """
+    head, sep, body = text.partition("\n---\n")
+    if not head.startswith("---\n") or not sep:
+        raise ExportError("the agent definition has no frontmatter")
+    found = re.search(r"(?m)^description: (.*)$", head)
+    if not found:
+        raise ExportError("the agent definition has no description")
+    description = re.sub(r",? spawned by policy-finder-host", "", found.group(1))
+    for pattern, replacement in OPENCODE_WORDING:
+        body, n = pattern.subn(replacement, body)
+        if not n:
+            raise ExportError(f"the agent definition no longer says {pattern.pattern!r}")
+    head = f"---\ndescription: {json.dumps(description)}\nmode: primary\n"
+    return head + sep + body
+
+
+def opencode_config(conf):
+    """The instance's OpenCode config: its model on OpenRouter, nothing else.
+
+    The image's global config (infra/claude_proxy/container/CC_env/opencode/)
+    holds the permissions and turns off what would call out. The key comes
+    from the container's environment and is never written here.
+    """
+    model = conf["model"]
+    options = {}
+    if conf.get("providers"):
+        options["provider"] = {"order": list(conf["providers"]), "allow_fallbacks": False}
+    return {
+        "$schema": "https://opencode.ai/config.json",
+        "model": f"openrouter/{model}",
+        "small_model": f"openrouter/{model}",
+        "provider": {"openrouter": {
+            "options": {"apiKey": "{env:OPENROUTER_API_KEY}"},
+            "models": {model: {"options": options}},
+        }},
+    }
+
+
+def write_opencode(export, conf, agent_text):
+    folder = os.path.join(export, OPENCODE_DIR)
+    os.makedirs(os.path.join(folder, "agents"), exist_ok=True)
+    with open(os.path.join(folder, "opencode.json"), "w") as f:
+        json.dump(opencode_config(conf), f, indent=2)
+        f.write("\n")
+    Path(folder, "agents", "policy-finder.md").write_text(opencode_agent(agent_text))
+    for root, _, files in os.walk(export):
+        for f in files:
+            if f in CONTEXT_FILES:
+                os.remove(os.path.join(root, f))
+
+
 def leaks(export, name, terms=()):
     """Text files that name another instance, or match one of `terms`
     (regular expressions): [(path, match)]."""
@@ -315,6 +387,8 @@ def build(wt, main, exports):
         head, sep, body = text.partition("\n---\n")
         head = re.sub(r"(?m)^name: .*$", "name: policy-finder", head, count=1)
         Path(target).write_text(head + sep + body)
+    if conf.get("harness") == "opencode":
+        write_opencode(export, conf, Path(agent).read_text())
     for pattern in setting["agent_data"]:
         base = os.path.dirname(pattern)
         source_dir = os.path.join(main, base)

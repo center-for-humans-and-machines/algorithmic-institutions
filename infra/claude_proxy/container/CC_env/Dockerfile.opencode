@@ -4,8 +4,7 @@
 # algoinst_oc (spawner_config/algoinst_oc.yml), whose only egress is
 # openrouter.ai, so nothing OpenCode would fetch at run time may be left to
 # the network: no update check, no model catalogue, no language servers, no
-# sharing, and the plugin package it installs into its config folders is
-# installed here (below).
+# sharing, no plugin packages (the environment below).
 #
 # Build from infra/claude_proxy, after the claude service's image:
 #   docker build -t algoinst_claude:opencode -f container/CC_env/Dockerfile.opencode .
@@ -23,22 +22,13 @@ RUN npm install -g "opencode-ai@${OPENCODE_VERSION}" \
     && test "$(opencode --version)" = "${OPENCODE_VERSION}"
 
 # OpenCode's global config folder lives in the image, not in the run's home
-# (a fresh folder per run): its defaults (opencode.json) and the plugin
-# package OpenCode installs into every config folder it loads, installed now
-# while the build has network. The instance's own config and agent come from
-# OPENCODE_CONFIG_DIR in the export (agent_runner.py). OpenCode installs the
-# package once a provider resolves, so the warm-up run gets a dummy key: its
-# one request is refused, and nothing is sent but the word "warm".
+# (a fresh folder per run): its defaults (opencode/opencode.json: one
+# provider, no sharing, snapshots, language servers or formatters, web tools
+# off). The instance's model and agent come from OPENCODE_CONFIG_DIR, a
+# folder of the export (agent_runner.py). Without default plugins OpenCode
+# installs no package into its config folders at start.
 COPY container/CC_env/opencode/opencode.json /opt/opencode/config/opencode/opencode.json
-RUN mkdir -p /tmp/oc-warm \
-    && cd /tmp/oc-warm \
-    && HOME=/tmp/oc-warm XDG_CONFIG_HOME=/opt/opencode/config \
-        OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1 \
-        OPENROUTER_API_KEY=not-a-key \
-        timeout 120 opencode run --pure "warm" >/dev/null 2>&1 || true; \
-    test -d /opt/opencode/config/opencode/node_modules/@opencode-ai/plugin \
-    && rm -rf /tmp/oc-warm \
-    && chown -R "${USER_ID}:${GROUP_ID}" /opt/opencode
+RUN chown -R "${USER_ID}:${GROUP_ID}" /opt/opencode
 
 ENV XDG_CONFIG_HOME=/opt/opencode/config \
     OPENCODE_DISABLE_AUTOUPDATE=1 \
