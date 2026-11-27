@@ -34,6 +34,7 @@
 #SBATCH --partition=gpu1
 #SBATCH --qos=g0002
 #SBATCH --gres=gpu:2
+#SBATCH --constraint=hopper|blackwell
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=24
 #SBATCH --mem=480000
