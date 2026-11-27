@@ -64,6 +64,25 @@ What to expect: an open model will fail the acceptance check more often than Opu
 4. **Network rule on DAIS:** restricting the agent's tools and auditing the transcripts is accepted if the container's network cannot be cut.
 5. **Harness: OpenCode.** It is independent of the model vendor, runs headless, defines agents in markdown files much like the current definition, and has per-tool permissions. Fallback if tool calling proves unreliable with a model: mini-swe-agent, which drives the model through shell commands only and needs no tool-call API.
 
+## Principle: reuse the existing setup (Levin, 2026-11-27)
+
+Everything new is the smallest adapter beside what exists, selected by a setting; nothing that works is rewritten.
+
+| Existing piece | On DAIS |
+|---|---|
+| `pipeline.py`, `campaign.py`, state files, instance branches, `check_instance.sh`, the rule checks, sweep design, fit and scoring | Unchanged |
+| `export_instance.py`: the agent's read-only copy and its write folders | Unchanged; the same folders become Apptainer binds |
+| The agent image with OpenCode (phase 1) | Converted to Apptainer's format, not rebuilt |
+| The OpenCode configuration and agent definitions of phase 1 | Unchanged; only the provider's base URL points at the local server |
+| `agent_runner.py`: `start`, `finish`, the slot limit, the result and usage records | Same functions; a second backend that launches Apptainer instead of asking the spawner. If DAIS offers a rootless runtime with a Docker-compatible socket, the spawner itself is tried first. |
+| `cluster_proxy.py`: `snapshot`, `run`, `validate_rule`, `submit`, `queue`, `wait`, `fetch` | Same functions; a second backend that runs on the node |
+| The sim image `algoinst.sif` and `python -m aimanager simulate` | Unchanged if the image runs on H200; a rebuild only if it does not |
+| vLLM | The group's existing image on DAIS and the sister project's launch conventions (`../understanding/scripts/slurm/`) |
+| `preflight.py`, `raven_setup.sh` | The same checks, extended for DAIS |
+| The command server, `slurm_tools` | Not used on DAIS: they exist to reach Raven from outside |
+
+The branch for all of this is `policy-finder-open-weights`; the agents work on `policy-finder-opencode` and `policy-finder-dais` and are merged into it after review. Yannik's external repositories are not changed.
+
 ## Phases
 
 ### Phase 0: feasibility checks (about 1 day)
