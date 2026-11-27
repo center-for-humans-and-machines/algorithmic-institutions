@@ -10,8 +10,7 @@
 #   sbatch infra/dais/serve.slurm.sh
 #   sbatch --export=ALL,MODE=serve --time=08:00:00 infra/dais/serve.slurm.sh
 #
-# Runs so far (2026-11-27) used `-p gpudev` (QoS debug, node daisg103) and
-# MODE=probe, with an earlier version of this script; this version, the
+# This version ran as job 987950 (2026-11-27, `-p gpudev`, MODE=probe). The
 # default gpu1/g0002 path and MODE=serve have not been run.
 #
 #SBATCH -J pf_serve

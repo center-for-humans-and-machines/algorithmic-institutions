@@ -17,9 +17,21 @@ The filter, an allow-list for socket creation:
 - io_uring_setup() fails with EPERM (io_uring can create sockets itself)
 - everything else is allowed
 
-What it does not do: sockets the process already holds, or receives over a
-Unix socket, stay usable; abstract Unix sockets of the host are reachable when
-the network namespace is shared (on DAIS it always is).
+What it does not do (it is a barrier against ordinary network use by the
+commands, nothing more):
+- sockets the process already holds, or receives over a Unix socket, stay
+  usable
+- the host's abstract Unix sockets are reachable when the network namespace
+  is shared (on DAIS it always is)
+- path Unix sockets of services that act for the caller stay reachable where
+  they are visible: the user's systemd/D-Bus socket (/run/user/<uid>/bus) or
+  a tmux/screen server started outside could run an unfiltered process
+- files that the unfiltered harness later runs or reads: a filtered command
+  that can write this file, the harness configuration or shell start-up
+  files removes the filter for later commands
+So run the agent inside `apptainer exec --containall` (which hides
+/run/user and the host's files) and keep this file and the harness
+configuration read-only to the agent.
 """
 
 import ctypes
