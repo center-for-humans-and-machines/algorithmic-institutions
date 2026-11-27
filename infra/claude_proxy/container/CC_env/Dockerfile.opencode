@@ -26,14 +26,17 @@ RUN npm install -g "opencode-ai@${OPENCODE_VERSION}" \
 # (a fresh folder per run): its defaults (opencode.json) and the plugin
 # package OpenCode installs into every config folder it loads, installed now
 # while the build has network. The instance's own config and agent come from
-# OPENCODE_CONFIG_DIR in the export (agent_runner.py).
+# OPENCODE_CONFIG_DIR in the export (agent_runner.py). OpenCode installs the
+# package once a provider resolves, so the warm-up run gets a dummy key: its
+# one request is refused, and nothing is sent but the word "warm".
 COPY container/CC_env/opencode/opencode.json /opt/opencode/config/opencode/opencode.json
 RUN mkdir -p /tmp/oc-warm \
     && cd /tmp/oc-warm \
     && HOME=/tmp/oc-warm XDG_CONFIG_HOME=/opt/opencode/config \
         OPENCODE_DISABLE_AUTOUPDATE=1 OPENCODE_DISABLE_MODELS_FETCH=1 \
+        OPENROUTER_API_KEY=not-a-key \
         timeout 120 opencode run --pure "warm" >/dev/null 2>&1 || true; \
-    ls /opt/opencode/config/opencode \
+    test -d /opt/opencode/config/opencode/node_modules/@opencode-ai/plugin \
     && rm -rf /tmp/oc-warm \
     && chown -R "${USER_ID}:${GROUP_ID}" /opt/opencode
 
