@@ -139,6 +139,7 @@ def test_single_idea_version_1_is_the_seed(tmp_path, monkeypatch):
     (wt / "configs/managers/rule_based/pf-s.yml").write_text(
         "params: {a: {definition: d, type: float}}\nsweep_config: {a: [0, 1]}\n"
         "code: |\n  punishment = a\n")
+    v.state = {"data": {"episodes": {"sweep": 500}}}  # the split is kept in the state
     assert v.design_points() == 256 and len(v.parts()) == 128
     notes = (wt / "notes/policy_finder/pf-s.md").read_text()
     assert notes.startswith("# pf-s\n") and "### Justification" in notes

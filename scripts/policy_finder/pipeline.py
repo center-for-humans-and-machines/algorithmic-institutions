@@ -370,8 +370,13 @@ class Version:
         return self.conf.get("sobol_points", 256)
 
     def parts(self):
-        per_point = self.pairings() * self.data["episodes"]["sweep"]
-        n = -(-self.design_points() * per_point // MAX_JOB_EPISODES)
+        # the backend's split (cluster_proxy.sweep_parts), kept in the state
+        # so that a resumed version keeps its parts
+        if "n_parts" not in self.data:
+            per_point = self.pairings() * self.data["episodes"]["sweep"]
+            self.data["n_parts"], self.data["parts_aligned"] = cluster_proxy.sweep_parts(
+                self.design_points(), per_point, self.setting, MAX_JOB_EPISODES)
+        n = self.data["n_parts"]
         if n == 1:
             return [f"{self.stem}_sweep"]
         return [f"{self.stem}_sweep_p{k}of{n}" for k in range(1, n + 1)]
