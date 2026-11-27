@@ -278,7 +278,13 @@ class Version:
                     self.data["agent_current"] = run_id
                     self.save()
                     self.log(f"agent run {run_id} started")
-                record = agent_runner.finish(run_id, log=self.log, harness=self.harness)
+                try:
+                    record = agent_runner.finish(run_id, log=self.log, harness=self.harness)
+                except agent_runner.BudgetError:
+                    # not started: a resume starts a new run once there is budget
+                    self.data.pop("agent_current", None)
+                    self.save()
+                    raise
             report = record.pop("report")
             record["transcripts"] = self.keep_transcripts(run_id)
             rule_written = (self.exports / self.stem / self.rule).exists()

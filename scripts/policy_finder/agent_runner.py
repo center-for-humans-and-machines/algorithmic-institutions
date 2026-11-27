@@ -62,6 +62,10 @@ class AgentError(Exception):
     pass
 
 
+class BudgetError(AgentError):
+    """An opencode run that did not start: the key is at PF_OPENROUTER_MAX_USAGE."""
+
+
 def _url(harness):
     if harness not in HARNESSES:
         raise AgentError(f"unknown harness {harness!r}; harnesses: {HARNESSES}")
@@ -227,7 +231,7 @@ def start(stem, write_dirs, prompt, harness="claude"):
 def finish(run_id, log=print, harness="claude"):
     """Wait for the run; return its record (status, report, cost, models).
 
-    Raises AgentError when an opencode run did not start because the key is
+    Raises BudgetError when an opencode run did not start because the key is
     at PF_OPENROUTER_MAX_USAGE: not the agent's failure, and not to retry.
     """
     started = time.time()
@@ -241,7 +245,7 @@ def finish(run_id, log=print, harness="claude"):
     logs = _request("GET", f"/runs/{run_id}/logs?tail=5000", harness=harness)
     result = parse_result(logs.get("stdout", ""))
     if (result or {}).get("budget_exhausted"):
-        raise AgentError(f"agent run {run_id}: {result.get('error')}")
+        raise BudgetError(f"agent run {run_id}: {result.get('error')}")
     return {
         "run_id": run_id,
         "status": run["status"],

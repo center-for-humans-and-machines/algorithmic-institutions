@@ -121,5 +121,5 @@ def test_opencode_start_and_finish(spawner, tmp_path, monkeypatch):
 
 def test_opencode_at_the_cap_is_not_an_agent_failure(spawner):
     spawner["stdout"] = json.dumps({"budget_exhausted": True, "error": "at the cap"})
-    with pytest.raises(ar.AgentError, match="at the cap"):
+    with pytest.raises(ar.BudgetError, match="at the cap"):
         ar.finish("abc", log=lambda m: None, harness="opencode")
