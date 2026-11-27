@@ -11,7 +11,8 @@ Steps (STEPS):
   agent         the agent in its container (agent_runner.py); its report in
                 <stem>.report.md, its run (cost, tokens, models) in the state,
                 its transcripts copied to <stem>.transcripts/<run id>/ (the
-                spawner's run homes are not kept for good)
+                spawner's run homes are not kept for good); the instance's
+                `harness` (claude, the default, or opencode) picks the agent
   collect       the rule, notes and scripts back into the worktree; a file
                 written anywhere else in the write folders fails the version
                 (version 1 of a single-idea instance has no agent: these
@@ -125,6 +126,8 @@ class Version:
         self.version = self.conf.get("version", 1)
         # version 1 of a single-idea instance is the given seed rule
         self.seeded = self.conf.get("mode") == "single_idea" and self.version == 1
+        # the agent's harness (agent_runner.py): claude, or opencode with `model`
+        self.harness = self.conf.get("harness", "claude")
         self.rule = f"configs/managers/rule_based/{self.stem}.yml"
         self.sweep = f"{OUT_DIR}/{self.stem}_sweep"
         self.final = f"{self.sweep}/final"
@@ -267,18 +270,26 @@ class Version:
                     if attempts or self.data.get("limited_runs"):
                         # a fresh copy for the retry: the failed run may have written
                         export_instance.build(self.wt, MAIN, self.exports)
-                    # the plan's usage: wait while a window is over its ceiling
-                    self.log(f"usage: {usage.describe(usage.gate(log=self.log))}")
-                    run_id = agent_runner.start(self.stem, write_dirs, self.data["prompt"])
+                    if self.harness == "claude":
+                        # the plan's usage: wait while a window is over its ceiling
+                        self.log(f"usage: {usage.describe(usage.gate(log=self.log))}")
+                    run_id = agent_runner.start(self.stem, write_dirs, self.data["prompt"],
+                                                harness=self.harness)
                     self.data["agent_current"] = run_id
                     self.save()
                     self.log(f"agent run {run_id} started")
-                record = agent_runner.finish(run_id, log=self.log)
+                try:
+                    record = agent_runner.finish(run_id, log=self.log, harness=self.harness)
+                except agent_runner.BudgetError:
+                    # not started: a resume starts a new run once there is budget
+                    self.data.pop("agent_current", None)
+                    self.save()
+                    raise
             report = record.pop("report")
             record["transcripts"] = self.keep_transcripts(run_id)
             rule_written = (self.exports / self.stem / self.rule).exists()
             ok = record["status"] == "succeeded" and report.strip() and rule_written
-            home = os.path.join(agent_runner.SPAWNER_STATE, "runs", run_id, "home")
+            home = agent_runner.run_home(run_id, self.harness)
             hits = [] if ok else usage.limited({**record, "report": report}, home)
             if hits:
                 # the account's limit, not the agent: not one of its attempts
@@ -290,10 +301,15 @@ class Version:
             attempts.append(record)
             self.data.pop("agent_current", None)
             self.save()
+            if self.harness == "opencode":
+                cost = (f"tokens {record['result'].get('tokens')}, OpenRouter key usage"
+                        f" +$ {record['result'].get('key_usage_delta_usd')}")
+            else:
+                cost = (f"API-equivalent cost $ {record['result'].get('total_cost_usd')}"
+                        " (plan, not billed)")
             self.log(
                 f"agent run {run_id}: {record['status']}, models {record['models']},"
-                f" API-equivalent cost $ {record['result'].get('total_cost_usd')} (plan, not billed),"
-                f" rule {'written' if rule_written else 'missing'}"
+                f" {cost}, rule {'written' if rule_written else 'missing'}"
             )
             if ok:
                 (self.wt_root / f"{self.stem}.report.md").write_text(report + "\n")
@@ -307,13 +323,12 @@ class Version:
         the agent ran. Returns the number of files copied (0, with a log line,
         when the run home is not mounted here).
         """
-        home = Path(agent_runner.SPAWNER_STATE) / "runs" / run_id / "home"
-        source = home / ".claude" / "projects"
+        source, paths = agent_runner.transcripts(run_id, self.harness)
         target = self.wt_root / f"{self.stem}.transcripts" / run_id
         count = 0
         try:
-            for path in sorted(source.rglob("*.jsonl")):
-                dest = target / path.relative_to(source)
+            for path in paths:
+                dest = target / os.path.relpath(path, source)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, dest)
                 count += 1

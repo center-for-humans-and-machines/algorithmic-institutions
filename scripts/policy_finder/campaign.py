@@ -20,6 +20,10 @@ A campaign is a YAML file (scripts/policy_finder/campaigns/*.yml):
                             #   seeds/ in every lineage (no agent), and each
                             #   later version changes one idea of its
                             #   lineage's best version (new_instance.sh)
+    harness: claude         # opencode: OpenCode on an OpenRouter model
+    model: null             #   (harness opencode: an OpenRouter id), routed
+    providers: null         #   to these upstream providers if given, in
+                            #   order, no fallback (agent_runner.py)
 
 The lineage best is the highest GP-peak final (`score.pool`) of any of the
 lineage's scored versions. Each later generation iterates the top_k lineages
@@ -63,7 +67,7 @@ DEFAULTS = {
     "n_fresh": 12, "generations": 6, "top_k": 4, "min_params": 1, "max_params": 5,
     "sobol_points": 256, "parallel": 12, "error_retries": 3, "retry_wait": 600,
     "setting": "exp2", "mode": "free", "iterate_max_params": None,
-    "summarize": None,
+    "summarize": None, "harness": "claude", "model": None, "providers": None,
 }
 
 
@@ -173,6 +177,11 @@ class Campaign:
                 command += ["--setting", s["setting"]]
             if s["mode"] != "free":
                 command += ["--mode", s["mode"]]
+            if s["harness"] != "claude":
+                # the agent's harness and model (agent_runner.py); later versions keep them
+                command += ["--harness", s["harness"], "--model", s["model"]]
+                if s["providers"]:
+                    command += ["--providers", ",".join(s["providers"])]
             return command
         if current == version - 1 and current >= 1:
             command = [HERE / "new_instance.sh", "--iterate-on", name]

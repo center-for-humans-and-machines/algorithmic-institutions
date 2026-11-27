@@ -13,6 +13,17 @@ report in `result`, cost and token usage) and the models the session used,
 read from its transcripts in the run's home (kept by the spawner, mounted at
 SPAWNER_STATE). At most PF_AGENT_SLOTS agents run at once across all
 pipelines (lock files under `<exports>/../locks`), below the spawner's own cap.
+
+That is harness `claude`, the default. An instance whose settings name
+harness `opencode` runs OpenCode instead (`opencode run --agent policy-finder`,
+no relay), through a second spawner (PF_SPAWNER_OC, project algoinst_oc)
+whose token is the OpenRouter key and whose only egress is openrouter.ai.
+The command is opencode_run.py, passed as `python3 -c`: it runs OpenCode,
+exports the session and prints a summary line, which takes the place of
+Claude's JSON result. Its transcripts are the files it writes to `opencode/`
+in the run's home (the spawner's state for that project, PF_SPAWNER_STATE_OC).
+PF_OPENROUTER_MAX_USAGE (USD, the key's total usage) stops an opencode agent
+before it starts once the key is at it.
 """
 
 import contextlib
@@ -29,22 +40,51 @@ URL = os.environ.get("PF_SPAWNER", "http://container_spawner:8877")
 SPAWNER_STATE = os.environ.get("PF_SPAWNER_STATE", "/var/spawner")
 PROFILE = "cpu"
 REPO = "/opt/algorithmic-institutions"
+#: The run's home in the container (the profile's `home`)
+HOME = "/home/claude"
 SLOTS = int(os.environ.get("PF_AGENT_SLOTS", "4"))
 CPUS = float(os.environ.get("PF_AGENT_CPUS", "2"))
 MEMORY_MB = int(os.environ.get("PF_AGENT_MEMORY_MB", "4096"))
 TIMEOUT = int(os.environ.get("PF_AGENT_TIMEOUT", "7200"))
 POLL = 30
 TERMINAL = ("succeeded", "failed", "cancelled", "expired", "error")
+HARNESSES = ("claude", "opencode")
+#: The opencode harness's spawner and its state as mounted here
+URL_OC = os.environ.get("PF_SPAWNER_OC", "http://container_spawner_oc:8877")
+SPAWNER_STATE_OC = os.environ.get("PF_SPAWNER_STATE_OC", f"{SPAWNER_STATE}/oc")
+#: The in-container runner of harness opencode, and where it writes in the home
+OPENCODE_RUN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "opencode_run.py")
+OPENCODE_OUT = "opencode"
+MAX_USAGE = os.environ.get("PF_OPENROUTER_MAX_USAGE")
 
 
 class AgentError(Exception):
     pass
 
 
-def _request(method, path, body=None, timeout=120):
+class BudgetError(AgentError):
+    """An opencode run that did not start: the key is at PF_OPENROUTER_MAX_USAGE."""
+
+
+def _url(harness):
+    if harness not in HARNESSES:
+        raise AgentError(f"unknown harness {harness!r}; harnesses: {HARNESSES}")
+    return URL_OC if harness == "opencode" else URL
+
+
+def _state(harness):
+    return SPAWNER_STATE_OC if harness == "opencode" else SPAWNER_STATE
+
+
+def run_home(run_id, harness="claude"):
+    """The run's home as mounted here."""
+    return os.path.join(_state(harness), "runs", run_id, "home")
+
+
+def _request(method, path, body=None, timeout=120, harness="claude"):
     data = None if body is None else json.dumps(body).encode()
     req = urllib.request.Request(
-        URL + path, data=data, method=method,
+        _url(harness) + path, data=data, method=method,
         headers={"Content-Type": "application/json"} if data else {},
     )
     try:
@@ -96,7 +136,19 @@ def mounts(stem, write_dirs):
     return out
 
 
-def command(prompt):
+def command(prompt, harness="claude", title="policy-finder", write_dirs=()):
+    if harness == "opencode":
+        with open(OPENCODE_RUN) as f:
+            source = f.read()
+        out = ["python3", "-c", source, prompt, "--title", title,
+               "--out", f"{HOME}/{OPENCODE_OUT}", "--repo", REPO,
+               "--key-env", "OPENROUTER_API_KEY",
+               "--usage-url", "https://openrouter.ai/api/v1/key"]
+        for d in write_dirs:
+            out += ["--write-dir", d]
+        if MAX_USAGE:
+            out += ["--max-usage", MAX_USAGE]
+        return out
     return [
         "claude", "-p", prompt,
         "--agent", "policy-finder-host",
@@ -105,10 +157,23 @@ def command(prompt):
     ]
 
 
+def transcripts(run_id, harness="claude"):
+    """The run's transcript files: (folder, [paths under it])."""
+    home = run_home(run_id, harness)
+    if harness == "opencode":
+        source = os.path.join(home, OPENCODE_OUT)
+        pattern = os.path.join(source, "*")
+    else:
+        source = os.path.join(home, ".claude", "projects")
+        pattern = os.path.join(source, "**", "*.jsonl")
+    return source, sorted(p for p in glob.glob(pattern, recursive=True)
+                          if os.path.isfile(p))
+
+
 def models(run_id):
     """The models the run's Claude sessions called, from their transcripts."""
     found = set()
-    home = os.path.join(SPAWNER_STATE, "runs", run_id, "home")
+    home = run_home(run_id)
     for path in glob.glob(os.path.join(home, ".claude", "projects", "**", "*.jsonl"),
                           recursive=True):
         try:
@@ -142,14 +207,14 @@ def parse_result(stdout):
         return None
 
 
-def start(stem, write_dirs, prompt):
+def start(stem, write_dirs, prompt, harness="claude"):
     """Start the agent on the export `<stem>`; return the spawner's run id.
 
     Waits while the spawner is at its cap (HTTP 409).
     """
     body = {
         "profile": PROFILE,
-        "command": command(prompt),
+        "command": command(prompt, harness, stem, write_dirs),
         "workdir": REPO,
         "mounts": mounts(stem, write_dirs),
         "cpus": CPUS,
@@ -158,25 +223,31 @@ def start(stem, write_dirs, prompt):
     }
     while True:
         try:
-            return _request("POST", "/runs", body)["id"]
+            return _request("POST", "/runs", body, harness=harness)["id"]
         except AgentError as e:
             if "HTTP 409" not in str(e):
                 raise
             time.sleep(60)
 
 
-def finish(run_id, log=print):
-    """Wait for the run; return its record (status, report, cost, models)."""
+def finish(run_id, log=print, harness="claude"):
+    """Wait for the run; return its record (status, report, cost, models).
+
+    Raises BudgetError when an opencode run did not start because the key is
+    at PF_OPENROUTER_MAX_USAGE: not the agent's failure, and not to retry.
+    """
     started = time.time()
-    run = _request("GET", f"/runs/{run_id}")
+    run = _request("GET", f"/runs/{run_id}", harness=harness)
     while run["status"] not in TERMINAL:
         time.sleep(POLL)
         try:
-            run = _request("GET", f"/runs/{run_id}")
+            run = _request("GET", f"/runs/{run_id}", harness=harness)
         except AgentError as e:
             log(f"poll of run {run_id} failed: {e}")
-    logs = _request("GET", f"/runs/{run_id}/logs?tail=5000")
+    logs = _request("GET", f"/runs/{run_id}/logs?tail=5000", harness=harness)
     result = parse_result(logs.get("stdout", ""))
+    if (result or {}).get("budget_exhausted"):
+        raise BudgetError(f"agent run {run_id}: {result.get('error')}")
     return {
         "run_id": run_id,
         "status": run["status"],
@@ -188,6 +259,8 @@ def finish(run_id, log=print):
         "home_host_path": run.get("home_host_path"),
         "result": {k: v for k, v in (result or {}).items() if k != "result"},
         "report": (result or {}).get("result") or "",
-        "models": models(run_id),
+        "models": ((result or {}).get("models") or [] if harness == "opencode"
+                   else models(run_id)),
+        "harness": harness,
         "stderr_tail": logs.get("stderr", "")[-3000:],
     }
