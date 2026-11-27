@@ -23,6 +23,11 @@ mkdir -p "$tmp"
 export APPTAINER_TMPDIR="$tmp" APPTAINER_CACHEDIR="$tmp/cache"
 sha256sum "$TARBALL"
 t0=$SECONDS
+# docker-archive: reads a plain tar, not a gzipped one
+if [[ "$TARBALL" == *.gz ]]; then
+  gunzip -c "$TARBALL" > "$tmp/image.tar"
+  TARBALL="$tmp/image.tar"
+fi
 apptainer build --force "$NEW_SIF.partial" "docker-archive://$TARBALL"
 mv "$NEW_SIF.partial" "$NEW_SIF"
 echo "built in $(( SECONDS - t0 )) s"
