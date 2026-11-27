@@ -291,8 +291,9 @@ def start(stem, write_dirs, prompt, harness="opencode"):
             stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
             start_new_session=True, cwd=str(run),
         )
-    (run / "worker.json").write_text(json.dumps(
-        {"host": socket.gethostname(), "pid": worker_proc.pid}) + "\n")
+    tmp = run / "worker.tmp"  # atomic: finish() may read it at any time
+    tmp.write_text(json.dumps({"host": socket.gethostname(), "pid": worker_proc.pid}) + "\n")
+    os.replace(tmp, run / "worker.json")
     return run_id
 
 
@@ -389,7 +390,10 @@ def finish(run_id, log=print, harness="opencode"):
     ar = _ar()
     run = run_dir(run_id)
     started = time.time()
-    info = json.loads((run / "worker.json").read_text())
+    try:
+        info = json.loads((run / "worker.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        info = {}  # start() died before writing it: the run is lost
     while True:
         state = status(run_id)
         if state.get("status") not in (None, "running"):
