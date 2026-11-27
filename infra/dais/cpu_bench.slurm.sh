@@ -10,9 +10,10 @@
 #        exceeds its memory, and a sim in a step
 #
 #   cd /u/$USER/algorithmic-institutions-pf
-#   sbatch infra/dais/cpu_bench.slurm.sh
-#
-# Not run yet: the SSH connection to DAIS dropped before it was submitted.
+#   sbatch infra/dais/cpu_bench.slurm.sh                  # AMD nodes (small)
+#   sbatch -p gpudev --qos=g0001 --gres=gpu:h200:1 -c 12 --mem=200000 \
+#     --time=00:15:00 --export=ALL,SKIP_B4=1,B1A_THREADS="1 2 4",B1B_CORES=12,\
+#   B1B_SHAPES="12:1 24:1 12:2 6:4" infra/dais/cpu_bench.slurm.sh   # H200 node CPUs
 #
 #SBATCH -J pf_cpubench
 #SBATCH -o /dais/fs/scratch/%u/policy-finder/logs/%x.%j.out
@@ -39,33 +40,42 @@ SIM_THREADS=3 in_sim_image python -c \
   "import torch; print('torch threads with OMP_NUM_THREADS=3:', torch.get_num_threads())"
 
 echo "== B1a: one slice, threads x"
-for t in 1 2 4 8 16 32; do
+for t in ${B1A_THREADS:-1 2 4 8 16 32}; do
   cores=$(( (t + 1) / 2 ))
   cfg=$(part_config 1 32 "b1a_t$t")
   SIM_THREADS=$t SIM_CPUS=$(python3 "$PF_HERE/cpu_slots.py" slots 0 "$cores" 1) \
     simulate "$cfg" "b1a_t$t" || FAILS=$((FAILS + 1))
 done
 
-echo "== B1b: 16 cores, k processes x 32/k threads, one slice each"
-for k in 1 2 4 8 16 32; do
-  t=$(( 32 / k ))
+# shapes k:t on B1B_CORES cores: k processes of t threads, one slice each; a
+# process gets t/2 cores, or with t=1 a whole core while k <= cores and a
+# single hyperthread beyond that
+B1B_CORES="${B1B_CORES:-16}"
+echo "== B1b: $B1B_CORES cores, k processes x t threads, one slice each"
+for shape in ${B1B_SHAPES:-1:32 2:16 4:8 8:4 16:2 32:1}; do
+  k=${shape%%:*}
+  t=${shape##*:}
   echo "-- k=$k t=$t, $(date +%T)"
   if [ "$t" -ge 2 ]; then
     mapfile -t slots < <(python3 "$PF_HERE/cpu_slots.py" slots 0 $(( t / 2 )) "$k")
-  else  # one thread per process: one hyperthread each
-    mapfile -t slots < <(python3 "$PF_HERE/cpu_slots.py" slots 0 1 16 | tr , '\n')
+  elif [ "$k" -le "$B1B_CORES" ]; then
+    mapfile -t slots < <(python3 "$PF_HERE/cpu_slots.py" slots 0 1 "$k")
+  else
+    mapfile -t slots < <(python3 "$PF_HERE/cpu_slots.py" slots 0 1 "$B1B_CORES" | tr , '\n')
   fi
+  for i in $(seq 1 "$k"); do part_config "$i" 32 "b1b_k${k}t${t}_$i" > /dev/null; done
   t0=$SECONDS
   pids=()
   for i in $(seq 1 "$k"); do
-    cfg=$(part_config "$i" 32 "b1b_k${k}_$i")
-    SIM_THREADS=$t SIM_CPUS=${slots[$((i - 1))]} simulate "$cfg" "b1b_k${k}_$i" &
+    SIM_THREADS=$t SIM_CPUS=${slots[$((i - 1))]} \
+      simulate "$PF_RUN/cfg/b1b_k${k}t${t}_$i.yml" "b1b_k${k}t${t}_$i" &
     pids+=($!)
   done
   for pid in "${pids[@]}"; do wait "$pid" || FAILS=$((FAILS + 1)); done
   echo "B1B k=$k threads=$t episodes=$((k * 4000)) wall=$((SECONDS - t0))"
 done
 
+[ -n "${SKIP_B4:-}" ] && { echo "failures: $FAILS"; [ "$FAILS" = 0 ]; exit; }
 echo "== B4: srun steps as caps"
 srun --exact -n1 -c 2 python3 -c \
   "import os; print('step -c 2 may run on CPUs', sorted(os.sched_getaffinity(0)))" \

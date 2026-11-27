@@ -5,9 +5,7 @@
 #
 #   bash infra/dais/iso_check.sh [image] 2>&1 | tee iso_check.$(hostname).txt
 #
-# The version run on 2026-11-27 (login node, output not saved) differed: it had
-# no fork count for --pids-limit and no seccomp test. This version has not been
-# run yet.
+# Output of the run on 2026-11-27: docs/reports/dais_iso_check_login.txt.
 
 set -u
 module load apptainer/1.5.2 >/dev/null 2>&1
@@ -82,13 +80,28 @@ cat > "$OUT/no_inet.json" <<'JSON'
 {"defaultAction": "SCMP_ACT_ALLOW",
  "syscalls": [
   {"names": ["socket"], "action": "SCMP_ACT_ERRNO", "args": [{"index": 0, "value": 2, "op": "SCMP_CMP_EQ"}]},
-  {"names": ["socket"], "action": "SCMP_ACT_ERRNO", "args": [{"index": 0, "value": 10, "op": "SCMP_CMP_EQ"}]}
+  {"names": ["socket"], "action": "SCMP_ACT_ERRNO", "args": [{"index": 0, "value": 10, "op": "SCMP_CMP_EQ"}]},
+  {"names": ["io_uring_setup"], "action": "SCMP_ACT_ERRNO"}
  ]}
 JSON
 apptainer exec --containall --security "seccomp:$OUT/no_inet.json" \
   --bind "$OUT/sock:/sock" "$S" sh -c '
-curl -s -m 5 -o /dev/null -w "inet: %{http_code}\n" https://huggingface.co || echo "inet: refused ($?)"
+curl -s -m 5 -o /dev/null -w "inet: %{http_code}\n" https://huggingface.co || echo "curl by name: failed ($?)"
+curl -s -m 5 -o /dev/null https://1.1.1.1 || echo "curl by IP address: failed ($?)"
+python3 -c "
+import socket, ctypes
+for fam, name in ((socket.AF_INET, \"AF_INET\"), (socket.AF_INET6, \"AF_INET6\"), (socket.AF_UNIX, \"AF_UNIX\")):
+    try:
+        socket.socket(fam).close(); print(name, \"socket: allowed\")
+    except OSError as e:
+        print(name, \"socket: denied,\", e)
+libc = ctypes.CDLL(None, use_errno=True)
+r = libc.syscall(425, 8, ctypes.create_string_buffer(120))  # io_uring_setup
+print(\"io_uring_setup:\", \"denied, errno\" if r < 0 else \"allowed\", ctypes.get_errno() if r < 0 else \"\")
+"
 curl -s -m 5 --unix-socket /sock/model.sock http://x/v1/models -w " unix -> %{http_code}\n"' 2>&1 | q
+echo "-- the same image without the filter: AF_INET socket"
+apptainer exec --containall "$S" python3 -c "import socket; socket.socket(); print('AF_INET socket: allowed')" 2>&1 | q
 echo "rc=${PIPESTATUS[0]}"
 kill $UP
 
@@ -113,11 +126,11 @@ done
 echo "-- --pids-limit 64: start 200 sleepers, count the ones that started"
 apptainer exec --pids-limit 64 "$S" sh -c '
 n=0; for i in $(seq 200); do sleep 5 2>/dev/null & [ $? = 0 ] && n=$((n + 1)); done
-echo "started $n of 200, running now: $(jobs -p | wc -l)"' 2>&1 | q | tail -2
+echo "started $n of 200, running now: $(jobs -p | wc -l)"' 2>&1 | q | grep -v -E "^INFO"
 echo "-- the same without a limit"
 apptainer exec "$S" sh -c '
 n=0; for i in $(seq 200); do sleep 5 2>/dev/null & [ $? = 0 ] && n=$((n + 1)); done
-echo "started $n of 200, running now: $(jobs -p | wc -l)"' 2>&1 | q | tail -2
+echo "started $n of 200, running now: $(jobs -p | wc -l)"' 2>&1 | q | grep -v -E "^INFO"
 
 echo "== 5. runtimes"
 for c in podman docker nerdctl buildah slirp4netns pasta; do

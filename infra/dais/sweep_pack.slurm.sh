@@ -1,14 +1,13 @@
 #!/bin/bash -l
 # Many sweep slices at once on one allocation's cores (B2): N = 1, 5, 10, 20,
-# 40 concurrent slices of a real sweep (part k of 32: 8 points x 500 episodes),
-# SIM_THREADS threads each (default 2), pinned one per core versus not pinned.
+# 40, 96 concurrent slices of a real sweep (part k of 32: 8 points x 500
+# episodes), SIM_THREADS threads each (default 1, the best shape in B1),
+# pinned one per hyperthread (one per core first) versus not pinned.
 # Prints node throughput (episodes per second) per round and every slice's
 # wall time, CPU time and peak memory.
 #
 #   cd /u/$USER/algorithmic-institutions-pf
 #   sbatch infra/dais/sweep_pack.slurm.sh
-#
-# Not run yet: the SSH connection to DAIS dropped before it was submitted.
 #
 #SBATCH -J pf_sweeppack
 #SBATCH -o /dais/fs/scratch/%u/policy-finder/logs/%x.%j.out
@@ -26,7 +25,7 @@ init_run
 hostname
 lscpu | grep -E "Model name"
 echo "CPUs allowed: $(nproc)"
-export SIM_THREADS="${SIM_THREADS:-2}"
+export SIM_THREADS="${SIM_THREADS:-1}"
 FAILS=0
 
 make_sweep_parts 32 > "$PF_RUN/generate.log" 2>&1 || { tail "$PF_RUN/generate.log"; exit 1; }
@@ -35,7 +34,9 @@ for k in $(seq 1 32); do part_config "$k" 32 "part$k" > /dev/null; done
 # round <N> <pinned|free>: N slices at once; slice i plays part ((i-1) % 32)+1
 round() {
   local n="$1" mode="$2" t0=$SECONDS i cpus pids=() slots=()
-  mapfile -t slots < <(python3 "$PF_HERE/cpu_slots.py" slots 0 1 "$n")
+  # one hyperthread per slice: first one per core, then the cores' second ones
+  mapfile -t slots < <(python3 "$PF_HERE/cpu_slots.py" slots 0 1 | cut -d, -f1
+                       python3 "$PF_HERE/cpu_slots.py" slots 0 1 | cut -d, -f2)
   for i in $(seq 1 "$n"); do
     local part=$(( (i - 1) % 32 + 1 )) label="n${n}_${mode}_t${SIM_THREADS}_$i"
     sed "s#/out/part$part\$#/out/$label#" "$PF_RUN/cfg/part$part.yml" > "$PF_RUN/cfg/$label.yml"
@@ -51,12 +52,10 @@ round() {
   dmesg 2>/dev/null | grep -i -E "killed process|out of memory" | tail -2 || true
 }
 
-for n in 1 5 10 20 40; do
+for n in 1 5 10 20 40 96; do
   round "$n" pinned
   round "$n" free
 done
-echo "== one thread per slice, 40 slices pinned one per core"
-SIM_THREADS=1 round 40 pinned
 
 echo "failures: $FAILS"
 [ "$FAILS" = 0 ]
