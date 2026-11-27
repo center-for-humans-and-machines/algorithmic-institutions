@@ -173,6 +173,17 @@ MODE_AGENTS = {"single_idea": ".claude/agents/policy-finder-single-idea.md"}
 CLAUDE_KEEP = ("agents/policy-finder.md", "agents/policy-finder-host.md", "policy_finder.json")
 #: An instance's name, as new_instance.sh and the campaign make them
 INSTANCE_NAME = re.compile(r"pf-\d{8}-\d+")
+
+
+def sibling_pattern(name):
+    """Names of instances of the same campaign as `name` (its prefix and any
+    lineage number), and of the reference campaigns' (INSTANCE_NAME): a
+    campaign's prefix need not look like pf-<date> (a DAIS campaign's prefix names
+    its experiment and date)."""
+    prefix = re.sub(r"-\d+$", "", name)
+    if prefix == name:
+        return INSTANCE_NAME
+    return re.compile(rf"{INSTANCE_NAME.pattern}|(?<![\w-]){re.escape(prefix)}-\d+")
 #: Harness opencode: the folder OpenCode loads from the working directory,
 #: the agent's wording that names Claude Code's tools (OpenCode's are
 #: lower-case), and the rule files OpenCode would load into the context
@@ -352,6 +363,7 @@ def leaks(export, name, terms=()):
     """Text files that name another instance, or match one of `terms`
     (regular expressions): [(path, match)]."""
     patterns = [re.compile(term) for term in terms]
+    siblings = sibling_pattern(name)
     found = []
     for root, _, files in os.walk(export):
         for f in files:
@@ -367,7 +379,7 @@ def leaks(export, name, terms=()):
                 continue
             text = data.decode("utf-8", "replace")
             rel = os.path.relpath(path, export)
-            for match in set(INSTANCE_NAME.findall(text)):
+            for match in set(m.group(0) for m in siblings.finditer(text)):
                 if match != name:
                     found.append((rel, match))
             for pattern in patterns:

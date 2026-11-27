@@ -78,6 +78,16 @@ class AgentError(Exception):
     pass
 
 
+class EndpointError(AgentError):
+    """A run that failed because the model server did (unreachable, server
+    errors, time-outs): the job's fault, not the agent's; `record` is the
+    run's record. The version stops as resumable (pipeline.py)."""
+
+    def __init__(self, message, record=None):
+        super().__init__(message)
+        self.record = record or {}
+
+
 class BudgetError(AgentError):
     """An opencode run that did not start: the key is at PF_OPENROUTER_MAX_USAGE."""
 

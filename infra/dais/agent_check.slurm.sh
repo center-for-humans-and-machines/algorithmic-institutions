@@ -135,6 +135,9 @@ check shell_overwrite_global_config fail sh_ 'echo {} > /opt/opencode/config/ope
 check shell_home_opencode fail sh_ 'mkdir -p ~/.opencode/plugin && touch ~/.opencode/plugin/x.ts'
 check shell_home_config fail sh_ 'mkdir -p ~/.config/opencode && touch ~/.config/opencode/opencode.json'
 check shell_path_readonly ok sh_ 'echo "PATH=$PATH"; for d in ${PATH//:/ }; do [ -d "$d" ] || continue; if touch "$d/.w" 2>/dev/null; then rm -f "$d/.w"; echo "writable: $d"; exit 1; fi; done'
+# a .pth file in the writable home runs at a Python's start-up: the filter's
+# own python must not read it (-I), or a command could disarm the next one
+check shell_pth_ignored ok sh_ 'd=$(python3 -c "import site; print(site.getusersitepackages())"); mkdir -p "$d" && echo "import os; open(\"/tmp/pth_ran\", \"w\")" > "$d/x.pth"; /opt/pf-agent/shell -c true; rm -f "$d/x.pth"; [ ! -e /tmp/pth_ran ]'
 check shell_bashrc_ignored ok sh_ 'echo "touch /tmp/bashrc_ran" > ~/.bashrc; /opt/pf-agent/shell -c true; rm -f ~/.bashrc; [ ! -e /tmp/bashrc_ran ]'
 # the host's user services are out of sight under --containall
 check run_user_absent ok sh_ '[ ! -e /run/user ] || [ -z "$(ls -A /run/user)" ]'
@@ -163,6 +166,12 @@ if [ "${WITH_MODEL:-0}" = 1 ]; then
     serve_model 0.90 "$NGPU" "$PF_RUN/vllm.log" --enable-log-requests --moe-backend triton
   if wait_ready 720; then
     LLM_URL="$SERVER_URL"; LLM_KEY=$(cat "$SERVER_KEY_FILE")
+    # the resume test's kill (campaign.slurm.sh killtest) must spare the server:
+    # every vLLM process descends from SERVER_PID
+    python3 "$PF_HERE/kill_job_children.py" --dry-run "$SERVER_PID" > "$PF_RUN/kill_dry.log"
+    check kill_spares_server ok bash -c "! grep -E '^kill .*(vllm|VLLM|EngineCore|apptainer)' '$PF_RUN/kill_dry.log'"
+    grep -c '^keep' "$PF_RUN/kill_dry.log" | sed 's/^/     kept processes: /'
+    grep '^kill' "$PF_RUN/kill_dry.log" | cut -c1-150 | sed 's/^/     would kill | /'
     prompt='Use your bash tool to run exactly these four commands, one tool call each, and then reply with one line per command saying whether it succeeded: (1) curl -sS -m 10 -o /dev/null http://1.1.1.1 (2) python3 -c "import socket; socket.socket(socket.AF_INET)" (3) ps -o pid,ppid,args --forest (4) grep -E "Seccomp|NoNewPrivs" /proc/self/status'
     t0=$SECONDS
     check model_session ok box timeout 600 opencode run --agent policy-finder \

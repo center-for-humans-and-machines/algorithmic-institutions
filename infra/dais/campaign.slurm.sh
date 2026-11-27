@@ -95,6 +95,9 @@ export PF_CLUSTER_BACKEND=local
 export PF_SIM_SIF="$SIM_SIF"
 export PF_ARTIFACTS="${PF_ARTIFACTS:-$PF_SCRATCH/artifacts}"
 export PF_PYTHON="${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}"
+# the python the agents are told to use (their instance file's `python`):
+# the agent image's, as for the reference agents, not the driver's host path
+export PF_AGENT_PYTHON="${PF_AGENT_PYTHON:-python3}"
 export PF_BASE="${PF_BASE:-$(git rev-parse --abbrev-ref HEAD)}"
 
 export PF_AGENT_BACKEND=apptainer
@@ -189,6 +192,45 @@ CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
 wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
 
+# server_report: vLLM's request counters (errors included) and its log's tail
+server_report() {
+  echo "-- model server at $(date +%T): $(kill -0 "$SERVER_PID" 2>/dev/null && echo alive || echo DEAD)"
+  curl -s -m 20 -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/metrics" 2>/dev/null \
+    | grep -E '^vllm:(request_success_total|num_requests_running|num_requests_waiting|generation_tokens_total|prompt_tokens_total)' \
+    | sed 's/model_name="[^"]*"//; s/^/   metrics /' || echo "   metrics: no answer"
+  grep -ciE "error|exception|traceback" "$PF_RUN/vllm.log" | sed 's/^/   vllm.log lines with error\/exception: /'
+  tail -3 "$PF_RUN/vllm.log" | cut -c1-300 | sed 's/^/   vllm.log | /'
+}
+
+# the server watch: every 30 s the process must be alive and /health answer
+# 200; after 4 failures in a row (2 minutes) it marks the server down and
+# kills every process of the job (kill_job_children.py), so that the running
+# versions stop as lost, resumable, rather than burning their agents' attempts
+# on a dead endpoint; the stage then fails and the job exits non-zero.
+SERVER_DOWN="$PF_RUN/server_down"
+watch_server() {
+  local bad=0
+  while sleep 30; do
+    if kill -0 "$SERVER_PID" 2>/dev/null && [ "$(curl -s -m 20 -o /dev/null \
+        -w '%{http_code}' -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/health")" = 200 ]; then
+      bad=0
+    else
+      bad=$(( bad + 1 ))
+      echo "[$(date +%T)] model server check failed ($bad/4)"
+      if (( bad >= 4 )); then
+        echo "[$(date +%T)] FATAL: the model server is down: stopping every process" \
+          | tee "$SERVER_DOWN"
+        server_report
+        python3 "$PF_HERE/kill_job_children.py"
+        return
+      fi
+    fi
+  done
+}
+watch_server &
+WATCH_PID=$!
+BG_PIDS+=("$WATCH_PID")
+
 driver() {  # driver <command...>: on the driver's CPUs
   OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 taskset -c "$DRIVER_CPUS" "$@"
 }
@@ -202,14 +244,20 @@ campaign_stage() {
   driver "$PF_PYTHON" scripts/policy_finder/campaign.py run "$file" \
     >> "$PF_RUN/$name.campaign.log" 2>&1 || rc=$?
   echo "[$(date +%T)] campaign $name: driver exit $rc after $(( SECONDS - t0 )) s"
+  [ -e "$SERVER_DOWN" ] && { echo "campaign $name: stopped, the model server is down"; return 3; }
   "$PF_PYTHON" "$PF_HERE/campaign_check.py" campaign "$file" --expect "$expect" || rc=1
-  if [ "$rc" = 0 ] && [ -n "$slices" ]; then
-    echo "[$(date +%T)] campaign $name: re-evaluation in $slices slices"
+  local out="$PF_RUNS/reevaluate/$name"
+  if [ "$rc" = 0 ] && [ -n "$slices" ] && [ -f "$out/summary.json" ]; then
+    echo "[$(date +%T)] campaign $name: re-evaluation already done ($out)"
+  elif [ "$rc" = 0 ] && [ -n "$slices" ]; then
+    # an earlier, partial re-evaluation keeps its folder; this one starts anew
+    [ -e "$out" ] && out="$out.$(date +%Y%m%d-%H%M%S)"
+    echo "[$(date +%T)] campaign $name: re-evaluation in $slices slices into $out"
     driver "$PF_PYTHON" "$PF_HERE/reevaluate.py" "$PF_RUNS/campaign/$name.json" \
-      "$PF_RUNS/reevaluate/$name" --slices "$slices" --seed 100000 \
+      "$out" --slices "$slices" --seed 100000 \
       >> "$PF_RUN/$name.reevaluate.log" 2>&1 || rc=$?
     echo "[$(date +%T)] campaign $name: re-evaluation exit $rc"
-    cat "$PF_RUNS/reevaluate/$name/summary.json" 2>/dev/null || true
+    cat "$out/summary.json" 2>/dev/null || true
   fi
   return "$rc"
 }
@@ -221,13 +269,22 @@ killtest_stage() {
   echo "[$(date +%T)] killtest $(basename "$file" .yml): start"
   driver "$PF_PYTHON" scripts/policy_finder/campaign.py run "$file" < /dev/null \
     >> "$PF_RUN/$(basename "$file" .yml).campaign.log" 2>&1 &
-  until "$PF_PYTHON" - "$PF_RUNS/agent_runs" "${KILL_AFTER:-90}" <<'EOF'
+  local since
+  since=$(date +%s)
+  # a run of this stage (started after it began) running for KILL_AFTER s; a
+  # lost run of an earlier job keeps `running` in its status for ever
+  until "$PF_PYTHON" - "$PF_RUNS/agent_runs" "${KILL_AFTER:-90}" "$since" <<'EOF'
 import json, sys, time
 from pathlib import Path
 for s in Path(sys.argv[1]).glob("apt-*/status.json"):
-    st = json.loads(s.read_text())
-    if st.get("status") == "running" and time.time() - time.mktime(
-            time.strptime(st["started_at"], "%Y-%m-%dT%H:%M:%S")) > float(sys.argv[2]):
+    try:
+        st = json.loads(s.read_text())
+        started = time.mktime(time.strptime(st["started_at"], "%Y-%m-%dT%H:%M:%S"))
+    except (OSError, ValueError, KeyError):
+        continue
+    if (st.get("status") == "running" and started >= float(sys.argv[3])
+            and time.time() - started > float(sys.argv[2])):
+        print(f"killing while {s.parent.name} runs", flush=True)
         sys.exit(0)
 sys.exit(1)
 EOF
@@ -236,7 +293,7 @@ EOF
     if (( waited > 3600 )); then echo "FATAL: no agent ran in an hour" >&2; return 1; fi
   done
   echo "[$(date +%T)] killtest: killing every process but the server after $(( SECONDS - t0 )) s"
-  python3 "$PF_HERE/kill_job_children.py" "$SERVER_PID"
+  python3 "$PF_HERE/kill_job_children.py" "$SERVER_PID" "$WATCH_PID"
   sleep 5
   rm -rf "$PF_LOCKS" "$PF_AGENT_LOCKS" "$PF_POOL_LOCKS"  # as a new job would find them
 }
@@ -276,6 +333,10 @@ case "$MODE" in
           killtest_stage "${args[2]}" || rc=1 ;;
         *) echo "FATAL: unknown stage $kind" >&2; rc=2 ;;
       esac
+      server_report
+      if [ -e "$SERVER_DOWN" ]; then
+        echo "== stage $kind stopped: the model server went down"; rc=3; break
+      fi
       [ "$rc" = 0 ] || { echo "== stage $kind failed: stopping"; break; }
     done 3< "$STAGES" ;;
   *) echo "FATAL: mode is campaign, resume or stages, not $MODE" >&2; rc=2 ;;

@@ -20,6 +20,33 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "policy_finder"))
 
 
+#: Steps whose failure is the agent's work (its runs, what it wrote, its
+#: rule): a failed version there counts; a failure at any other step (sims,
+#: fetches, the fit) is the infrastructure's, and --expect finished refuses it
+AGENT_STEPS = ("agent", "collect", "check", "image_check")
+
+
+def failure(state):
+    """(failed step, reason, the agent's?) of a failed version."""
+    import campaign
+
+    step = campaign.Campaign._failed_step(state)
+    reason = (state.get("error") or "").strip().splitlines()
+    reason = reason[0][:300] if reason else ""
+    data = state.get("data") or {}
+    own = step in AGENT_STEPS
+    if step == "agent":
+        # an agent run that failed on the endpoint is not the agent's
+        import agent_apptainer
+
+        for r in data.get("agent_runs") or []:
+            errors = json.dumps([(r.get("result") or {}).get("errors"),
+                                 (r.get("result") or {}).get("final_error")])
+            if agent_apptainer.ENDPOINT_ERRORS.search(errors):
+                own = False
+    return step, reason, own
+
+
 def describe(stem, state):
     data = state.get("data") or {}
     score = (data.get("score") or {}).get("pool")
@@ -66,6 +93,13 @@ def main():
         path = wt_root / f"{stem}.state.json"
         state = json.loads(path.read_text()) if path.exists() else {}
         print(describe(stem, state))
+        if state.get("status") == "failed":
+            step, reason, own = failure(state)
+            print(f"  failed at {step} ({'the agent' if own else 'INFRASTRUCTURE'}):"
+                  f" {reason}")
+            if not own:
+                bad.append(f"{stem} failed at {step} for an infrastructure reason")
+                continue
         if state.get("status") not in ok_status:
             bad.append(f"{stem} is {state.get('status')}")
     if bad:

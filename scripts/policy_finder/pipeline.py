@@ -334,6 +334,15 @@ class Version:
                     self.data.pop("agent_current", None)
                     self.save()
                     raise
+                except agent_runner.EndpointError as e:
+                    # the model server failed, not the agent: not one of its
+                    # attempts; the version stops as an error, resumable
+                    e.record.pop("report", None)
+                    e.record["transcripts"] = self.keep_transcripts(run_id)
+                    self.data.setdefault("endpoint_runs", []).append(e.record)
+                    self.data.pop("agent_current", None)
+                    self.save()
+                    raise
             report = record.pop("report")
             record["transcripts"] = self.keep_transcripts(run_id)
             if record["status"] == "lost":

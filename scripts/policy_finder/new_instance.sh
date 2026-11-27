@@ -126,6 +126,10 @@ WT_ROOT="${PF_WORKTREE_ROOT:-$PF_RUNS/worktrees}"
 export PF_WORKTREE_ROOT="$WT_ROOT"
 WT="$WT_ROOT/$NAME"
 PYTHON="${PF_PYTHON:-python3}"
+# the python the AGENT is told to use (the instance file's `python`): one that
+# exists where the agent runs; PF_AGENT_PYTHON when the driver's (PF_PYTHON)
+# is a host path the agent's container does not have (DAIS: python3)
+AGENT_PYTHON="${PF_AGENT_PYTHON:-$PYTHON}"
 
 git -C "$MAIN" rev-parse --verify --quiet "$BASE" >/dev/null \
     || { echo "no branch $BASE" >&2; exit 1; }
@@ -201,7 +205,7 @@ grep -v '^#' "$MAIN/scripts/policy_finder/instance_paths" \
 "$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$NAME" \
     --version "$VERSION" --start-commit "$(git -C "$WT" rev-parse HEAD)" \
     --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
-    --sobol-points "$SOBOL_POINTS" --python "$PYTHON" --setting "$SETTING" \
+    --sobol-points "$SOBOL_POINTS" --python "$AGENT_PYTHON" --setting "$SETTING" \
     --mode "$MODE" ${HARNESS_ARGS[@]+"${HARNESS_ARGS[@]}"}
 STEM="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["rule_name"])' \
     "$WT/.claude/policy_finder.json")"

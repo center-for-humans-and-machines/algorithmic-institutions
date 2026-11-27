@@ -85,6 +85,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 #: Where the shell wrapper and noinet.py appear in the container
@@ -430,8 +431,10 @@ def finish(run_id, log=print, harness="opencode"):
         # the runner's verdict (opencode_run.failures), as agent_runner.finish
         verdict = "failed"
         error = "; ".join(result.get("failures") or ["no summary from the runner"])
+    elif verdict != "succeeded" and not error and result.get("failures"):
+        error = "; ".join(result["failures"])
     source, paths = ar.transcripts(run_id, harness)
-    return {
+    record = {
         "run_id": run_id,
         "backend": "apptainer",
         "status": verdict,
@@ -449,6 +452,72 @@ def finish(run_id, log=print, harness="opencode"):
         "network_audit": audit(paths),
         "stderr_tail": stderr[-3000:],
     }
+    if verdict in ("failed", "expired", "error") and endpoint_of_run(run) == "local":
+        why = endpoint_trouble(result)
+        if why:
+            # the job's model server, not the model: not one of the attempts
+            record["endpoint_error"] = why
+            raise ar.EndpointError(f"agent run {run_id}: {why}", record)
+    return record
+
+
+#: A session's errors that are the endpoint's, not the model's: no connection,
+#: a time-out, or a server error (HTTP 5xx)
+ENDPOINT_ERRORS = re.compile(
+    r"ECONNREFUSED|ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|fetch failed"
+    r"|Unable to connect|Cannot connect|Connection (refused|reset|error)"
+    r"|timed? ?out|Service Unavailable|Internal Server Error|Bad Gateway"
+    r"|Gateway Timeout|status(Code)?\W{0,6}5\d\d\b", re.I)
+
+
+def server_health(tries=3, wait=10):
+    """(healthy, detail) of the job's model server: /health answers 200 and
+    /models lists a model with the job's key; `tries` tries `wait` s apart."""
+    base = _env("PF_LLM_BASE_URL", "")
+    key_file = _env("PF_LLM_API_KEY_FILE")
+    if not base:
+        return False, "PF_LLM_BASE_URL is not set"
+    key = Path(key_file).read_text().strip() if key_file else ""
+    detail = ""
+    for i in range(tries):
+        try:
+            with urllib.request.urlopen(base.rstrip("/").rsplit("/v1", 1)[0] + "/health",
+                                        timeout=20) as r:
+                ok = r.status == 200
+            req = urllib.request.Request(base.rstrip("/") + "/models",
+                                         headers={"Authorization": f"Bearer {key}"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                ok = ok and bool(json.loads(r.read().decode()).get("data"))
+            if ok:
+                return True, "healthy"
+            detail = "answered without a model"
+        except Exception as e:  # noqa: BLE001 - any failure is the server's
+            detail = f"{type(e).__name__}: {e}"
+        if i + 1 < tries:
+            time.sleep(wait)
+    return False, detail
+
+
+def endpoint_trouble(result):
+    """Why a failed run is the endpoint's fault, or "" (the model's)."""
+    # the provider's own errors only: the runner's failures name its own
+    # time limit ("timeout"), which is the model's run taking too long
+    errors = json.dumps([result.get("errors"), result.get("final_error")])
+    found = ENDPOINT_ERRORS.search(errors)
+    healthy, detail = server_health()
+    if not healthy:
+        return f"the model server is down after the run ({detail})"
+    if found:
+        return f"the session hit an endpoint error ({found.group(0)}): {errors[:500]}"
+    return ""
+
+
+def endpoint_of_run(run):
+    """The endpoint of a run, from its settings (its export may be gone)."""
+    try:
+        return endpoint(json.loads((run / "run.json").read_text())["stem"])
+    except Exception:  # noqa: BLE001 - no export: not ours to judge
+        return "unknown"
 
 
 # -- the network audit ---------------------------------------------------------
@@ -499,6 +568,9 @@ def audit(paths):
             command = str(args.get("command") or "")
             hits = [m.group(0).strip() for m in NET_COMMANDS.finditer(command)]
             hits += NET_URL.findall(command)
+            # python run inline (-c, heredocs, `cat > a.py <<E`) and bash's /dev/tcp
+            hits += [m.group(0) for m in NET_LIBRARIES.finditer(command)]
+            hits += re.findall(r"/dev/(?:tcp|udp)/\S+", command)
             if hits:
                 findings.append({"tool": tool, "kind": "shell", "failed": failed,
                                  "matches": sorted(set(hits))[:10],

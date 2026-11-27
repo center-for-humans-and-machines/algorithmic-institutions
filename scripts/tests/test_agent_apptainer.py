@@ -35,6 +35,7 @@ def env(tmp_path, monkeypatch):
         monkeypatch.setenv(k, v)
     monkeypatch.delenv("PF_AGENT_STEP", raising=False)
     monkeypatch.delenv("PF_AGENT_ROOT", raising=False)
+    monkeypatch.setattr(aa, "server_health", lambda: (True, "healthy"))
     return tmp_path
 
 
@@ -125,6 +126,30 @@ def test_start_finish_and_timeout(env, monkeypatch):
     assert record["status"] == "expired" and "limit" in record["error"]
 
 
+def test_a_failed_run_on_a_failing_server_is_not_an_attempt(env, monkeypatch):
+    bindir = fake_apptainer(env, "echo '{\"result\": \"\", \"is_error\": true}'; exit 4")
+    monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
+    monkeypatch.setattr(aa, "POLL", 0.2)
+    # the server is down: the job's fault
+    monkeypatch.setattr(aa, "server_health", lambda: (False, "ConnectionRefusedError"))
+    with pytest.raises(ar.EndpointError, match="server is down") as e:
+        aa.finish(aa.start("pf-x-v2", [], "p"), log=lambda m: None)
+    assert e.value.record["status"] == "failed"
+    # the server is fine but the session saw a server error: still the job's
+    monkeypatch.setattr(aa, "server_health", lambda: (True, "healthy"))
+    bad = json.dumps({"result": "", "is_error": True,
+                      "errors": ['{"name": "APIError", "statusCode": 503}']})
+    fake_apptainer(env, f"echo '{bad}'; exit 4")
+    with pytest.raises(ar.EndpointError, match="endpoint error"):
+        aa.finish(aa.start("pf-x-v2", [], "p"), log=lambda m: None)
+    # the model's own failure (its time limit, no report): one of its attempts
+    own = json.dumps({"result": "", "is_error": True,
+                      "failures": ["OpenCode stopped at its timeout of 60 s"]})
+    fake_apptainer(env, f"echo '{own}'; exit 4")
+    record = aa.finish(aa.start("pf-x-v2", [], "p"), log=lambda m: None)
+    assert record["status"] == "failed" and "timeout" in record["error"]
+
+
 def test_a_dead_worker_is_lost(env):
     run = aa.root() / "apt-7"
     (run / "home").mkdir(parents=True)
@@ -142,6 +167,8 @@ def test_audit_finds_network_use(tmp_path):
         tool("bash", {"command": "ls notes; python -m aimanager validate-rule r.yml"}),
         tool("bash", {"command": "curl -s https://example.org/x | head"}, "error"),
         tool("bash", {"command": "pip install seaborn && git clone https://github.com/a/b"}),
+        tool("bash", {"command": "python3 - <<EOF\nimport socket\nEOF\n"
+                      "echo > /dev/tcp/1.1.1.1/80"}),
         tool("webfetch", {"url": "https://arxiv.org"}),
         tool("write", {"filePath": "scripts/a.py", "content": "import requests\n"}),
         tool("write", {"filePath": "notes/n.md", "content": "see https://doi.org/10.1"}),
@@ -149,10 +176,11 @@ def test_audit_finds_network_use(tmp_path):
     path = tmp_path / "session.json"
     path.write_text(json.dumps(session))
     found = aa.audit([str(path)])
-    assert found["tool_calls"] == 6
+    assert found["tool_calls"] == 7
     kinds = [(f["tool"], f["kind"]) for f in found["findings"]]
-    assert kinds == [("bash", "shell"), ("bash", "shell"), ("webfetch", "web tool"),
-                     ("write", "network library")]
+    assert kinds == [("bash", "shell"), ("bash", "shell"), ("bash", "shell"),
+                     ("webfetch", "web tool"), ("write", "network library")]
+    assert {"import socket", "/dev/tcp/1.1.1.1/80"} <= set(found["findings"][2]["matches"])
     assert found["findings"][0]["failed"] is True
     assert "https://example.org/x" in found["findings"][0]["matches"]
     assert {"pip install", "git clone"} <= set(found["findings"][1]["matches"])

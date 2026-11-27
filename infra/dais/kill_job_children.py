@@ -3,9 +3,10 @@ descendants, as the end of a job would (SIGKILL): the resume test of
 campaign.slurm.sh, which keeps the model server running and then restarts the
 campaign from its state files.
 
-    python3 kill_job_children.py <keep pid> [<keep pid> ...]
+    python3 kill_job_children.py [--dry-run] <keep pid> [<keep pid> ...]
 
-This process and its ancestors are kept too. Lists what it killed.
+This process and its ancestors are kept too. Lists what it killed (with
+--dry-run: what it would kill, and what it keeps).
 """
 
 import os
@@ -34,7 +35,9 @@ def cmdline(pid):
 
 
 def main():
-    keep = {int(p) for p in sys.argv[1:]}
+    args = sys.argv[1:]
+    dry = "--dry-run" in args
+    keep = {int(p) for p in args if p != "--dry-run"}
     with open("/proc/self/cgroup") as f:
         cgroup = next(line.split("::", 1)[1].strip() for line in f if line.startswith("0::"))
     with open(f"/sys/fs/cgroup{cgroup}/cgroup.procs") as f:
@@ -55,6 +58,10 @@ def main():
         return p in keep
 
     for p in sorted(procs):
+        if dry:
+            what = "keep" if p in mine or kept(p) else "kill"
+            print(f"{what} {p} {cmdline(p)}", flush=True)
+            continue
         if p not in mine and not kept(p):
             print(f"kill {p} {cmdline(p)}", flush=True)
             try:
