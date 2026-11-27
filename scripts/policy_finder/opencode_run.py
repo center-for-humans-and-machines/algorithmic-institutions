@@ -26,15 +26,16 @@ backend that starts it in the export with OpenCode installed can use it.
    included;
 6. decides whether the run succeeded (`failures`): not when OpenCode exited
    non-zero or timed out, the agent did not load (OpenCode's fallback to its
-   default agent), the session ended in an error, the final message has no
-   text, or the session used another model than the export's config names;
+   default agent), the session ended in an error, the final turn has no
+   assistant text, or the session used another model than the export's
+   config names;
    a failed run exits non-zero (4 when OpenCode itself exited 0);
 7. in any case (`finally`): copies OpenCode's logs to the out folder,
    replaces the key wherever this run wrote it (the out folder, the
    version's write folders) and deletes OpenCode's logs and database in the
    home, which hold the same transcript unredacted;
 8. prints one JSON line, the summary agent_runner.py reads, with the key
-   redacted: the report (the final assistant message's text), tokens,
+   redacted: the report (the final turn's last assistant text), tokens,
    OpenCode's cost (its own price catalogue, not OpenRouter's bill), the
    models, the usage difference and the failures.
 
@@ -92,19 +93,24 @@ def session_id(events_path):
 def summarize(session):
     """Report, tokens, cost and models of an exported session.
 
-    The report is the final assistant message's text: an earlier message's
-    text ("Let me look at ...") is not a report. `final_error` is the final
-    assistant message's error, if it ended in one.
+    The report is the last non-empty assistant text of the final turn (the
+    assistant messages after the last user message): a model may end on an
+    empty message after a tool call, and its report is the text before it.
+    `final_error` is the final assistant message's error, if it ended in one;
+    an interim text ("Let me look at ...") followed by an error is no report.
     """
     tokens = {"input": 0, "output": 0, "reasoning": 0, "cache_read": 0,
               "cache_write": 0}
     cost, models, steps, tools, errors = 0.0, set(), 0, 0, []
-    final = None
+    final, turn = None, []
     for message in session.get("messages", []):
         info = message.get("info") or {}
+        if info.get("role") == "user":
+            turn = []
         if info.get("role") != "assistant":
             continue
         final = message
+        turn.append(message)
         t = info.get("tokens") or {}
         cache = t.get("cache") or {}
         tokens["input"] += t.get("input") or 0
@@ -121,9 +127,12 @@ def summarize(session):
         steps += sum(1 for p in parts if p.get("type") == "step-finish")
         tools += sum(1 for p in parts if p.get("type") == "tool")
     report, final_error = "", None
+    for message in turn:
+        parts = message.get("parts") or []
+        text = "\n".join(p.get("text", "") for p in parts if p.get("type") == "text")
+        if text.strip():
+            report = text
     if final is not None:
-        parts = final.get("parts") or []
-        report = "\n".join(p.get("text", "") for p in parts if p.get("type") == "text")
         final_error = (final.get("info") or {}).get("error")
     return {"result": report, "tokens": tokens, "cost_catalog_usd": round(cost, 6),
             "models": sorted(models), "steps": steps, "tool_calls": tools,
@@ -181,7 +190,7 @@ def failures(summary, code, stderr, expected_model, event_error, agent="policy-f
     if event_error:
         out.append(f"OpenCode reported an error at the end: {event_error[:500]}")
     if not (summary.get("result") or "").strip():
-        out.append("the final message has no text (no report)")
+        out.append("no assistant text in the final turn (no report)")
     if not expected_model:
         out.append("the export's OpenCode config names no model")
     elif summary.get("models") != [expected_model]:
