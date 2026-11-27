@@ -143,6 +143,17 @@ check tmux_ls fail sh_ 'tmux ls'
 check screen_ls fail sh_ 'screen -ls | grep -q "[0-9]\."'
 check shell_process_tree ok sh_ 'ps -o pid,ppid,args --forest; grep -E "Seccomp|NoNewPrivs" /proc/self/status'
 
+# agent_apptainer.py's PF_AGENT_STEP=1: a `srun --overlap` step caps memory,
+# and taskset inside it pins to CPUs of our choosing (the agent's group)
+if [ -n "${SLURM_JOB_ID:-}" ]; then
+  C=$(python3 "$PF_HERE/cpu_slots.py" slots 1 1 1)  # the second core's CPUs
+  step() { srun --overlap --ntasks=1 --cpus-per-task=2 --mem=1024M --cpu-bind=none \
+    --kill-on-bad-exit=1 --job-name=agent-check taskset -c "$C" "$@"; }
+  check step_taskset ok step python3 -c "import os; a = sorted(os.sched_getaffinity(0)); print(a); assert a == sorted(map(int, '$C'.split(',')))"
+  check step_oom fail step python3 -c "b = b'x' * (3 * 2**30); print(len(b))"
+  check step_agent ok step apptainer exec --containall --cleanenv "$AGENT_SIF" opencode --version
+fi
+
 if [ "${WITH_MODEL:-0}" = 1 ]; then
   nvidia-smi --query-gpu=index,name --format=csv,noheader | sed 's/^/GPU /'
   assert_vllm_image || exit 1
