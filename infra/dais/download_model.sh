@@ -20,8 +20,10 @@ nice -n 10 apptainer exec --containall --cleanenv --bind "$HF_HOME" \
   "$SIF" python3 -c "
 import sys
 from huggingface_hub import snapshot_download
-p = snapshot_download(sys.argv[1], revision=sys.argv[2], max_workers=8,
-                      ignore_patterns=['*.pdf', '*.png', '*.jpg'])
+# every file of the revision: a newer huggingface_hub refuses an incomplete
+# snapshot offline (IncompleteSnapshotError), and the skipped images and
+# PDFs are a few MB
+p = snapshot_download(sys.argv[1], revision=sys.argv[2], max_workers=8)
 print('DONE', p, flush=True)
 " "$REPO" "$REV"
 echo "$(date +%T) finished"
