@@ -203,7 +203,8 @@ def test_local_model_config_has_sampling_and_env_url(monkeypatch):
     assert local["options"]["baseURL"] == "{env:PF_LLM_BASE_URL}"
     model = local["models"]["Qwen/Qwen3-Coder-Next"]
     assert model["options"] == {"temperature": 1.0, "top_p": 0.95, "top_k": 40}
-    assert model["limit"] == {"context": 262144, "output": 16384}
+    # limit.input: without it OpenCode ignores compaction.reserved
+    assert model["limit"] == {"context": 262144, "input": 262144, "output": 16384}
     # it compacts with room for the output and a large tool result
     assert conf["compaction"] == {"auto": True,
                                   "reserved": 16384 + ex.COMPACTION_MARGIN}
@@ -213,9 +214,14 @@ def test_local_model_context_is_the_servers(monkeypatch):
     monkeypatch.setenv("PF_LLM_CONTEXT", "131072")
     conf = ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next", "base_url": "u"})
     assert conf["provider"]["local"]["models"]["Qwen/Qwen3-Coder-Next"]["limit"] == {
-        "context": 131072, "output": 16384}
+        "context": 131072, "input": 131072, "output": 16384}
+    # OpenCode then compacts at 131072 - 16384 - 65536 = 49152 tokens
+    assert 131072 - conf["compaction"]["reserved"] == 49152
     monkeypatch.setenv("PF_LLM_CONTEXT", "65536")
     with pytest.raises(ex.ExportError, match="too small"):
+        ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next", "base_url": "u"})
+    monkeypatch.setenv("PF_LLM_CONTEXT", "128k")
+    with pytest.raises(ex.ExportError, match="not a number"):
         ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next", "base_url": "u"})
 
 

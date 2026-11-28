@@ -55,7 +55,10 @@ ro_home=()
 for d in .opencode .config .claude .agents; do  # agent_apptainer.HOME_READONLY
   mkdir -p "$PF_RUN/home/$d"; ro_home+=(--bind "$PF_RUN/home/$d:/home/claude/$d:ro")
 done
-"${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$PF_RUN/oc" <<'EOF'
+# the served context (MAX_MODEL_LEN, common.sh) reaches the config as in a
+# campaign; WITH_MODEL=1 MAX_MODEL_LEN=131072 makes the compaction check
+# below compact early (at 131072 - 16384 - 65536 = 49152 tokens)
+PF_LLM_CONTEXT="$MAX_MODEL_LEN" "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$PF_RUN/oc" <<'EOF'
 import json, sys
 sys.path.insert(0, "scripts/policy_finder")
 import export_instance as ex
@@ -227,6 +230,33 @@ sys.exit(0 if rec["status"] == "succeeded" and not leaks
          and not (r.get("stray_processes") or {}).get("enabled") else 1)
 EOF
     sed 's/^/     run  | /' "$PF_RUN/backend_run.log" | tail -9
+    # compaction by behaviour: a session that reads more than the context
+    # holds must compact before the server refuses, and finish
+    rm -rf "$exp/notes/policy_finder"/*
+    check backend_compaction ok env PF_RUNS="$PF_RUN/pf_runs" PF_AGENT_BACKEND=apptainer \
+      PF_AGENT_SIF="$AGENT_SIF" PF_AGENT_POOL_CPUS="$(python3 "$PF_HERE/cpu_slots.py" slots 5 1 2 | paste -sd, -)" \
+      PF_AGENT_SHELL="$PF_HERE/agent_shell.sh" PF_AGENT_NOINET="$PF_HERE/noinet.py" \
+      PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE" PF_AGENT_TIMEOUT=1200 \
+      "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$MAX_MODEL_LEN" <<'EOF'
+import sys
+sys.path.insert(0, "scripts/policy_finder")
+import agent_runner as ar
+reads = " ".join(f"({k + 1}) experiments/2group_8agent_50ep.csv from line {2000 * k + 1}"
+                 for k in range(10))
+run = ar.start("pfchk", ["notes/policy_finder"], "Read these parts of a file with your "
+               "read tool, one call each, 2000 lines each, in this order, and keep "
+               f"what you read in mind: {reads}. Then write the file "
+               "notes/policy_finder/check.md with one line: the number of parts you "
+               "read, and reply with that line.", harness="opencode")
+rec = ar.finish(run, harness="opencode")
+r = rec["result"]
+print("served context", sys.argv[1], "status", rec["status"], "error", rec["error"])
+print("compactions", r.get("compactions"), "ended_on", r.get("ended_on"),
+      "seconds", r.get("seconds"), "tokens", r.get("tokens"))
+print("report", rec["report"][:200])
+sys.exit(0 if rec["status"] == "succeeded" and (r.get("compactions") or 0) >= 1 else 1)
+EOF
+    sed 's/^/     cmp  | /' "$PF_RUN/backend_compaction.log" | tail -4
     ls -la "$exp/notes/policy_finder" | sed 's/^/     out  | /'
   else
     tail -30 "$PF_RUN/vllm.log"; fails=$((fails + 1))

@@ -309,12 +309,13 @@ LOCAL_MODELS = {
     },
 }
 #: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
-#: beyond the output limit: room for the largest tool result a step adds
-#: (a parent's sweep file read whole was about 15k tokens) and for the
-#: compaction request itself. Without it OpenCode sent a request past the
-#: server's context, the server refused it, and the compaction that followed
-#: failed the same way (9 runs of the first Qwen campaigns ended so).
-COMPACTION_MARGIN = 32768
+#: beyond the output limit: room for the tool results one step adds (one
+#: tool output is capped at 50 KB or 2000 lines, 20-25k tokens of numeric
+#: text; a step may make two) and for the compaction request itself. Without
+#: it OpenCode sent a request past the server's context, the server refused
+#: it, and the compaction that followed failed the same way (9 runs of the
+#: first Qwen campaigns ended so).
+COMPACTION_MARGIN = 65536
 
 
 def local_model(model):
@@ -323,10 +324,17 @@ def local_model(model):
     limit = dict(entry.get("limit") or {"context": 131072, "output": 16384})
     context = os.environ.get("PF_LLM_CONTEXT")
     if context:
-        limit["context"] = int(context)
+        try:
+            limit["context"] = int(context)
+        except ValueError:
+            raise ExportError(f"PF_LLM_CONTEXT is not a number of tokens: {context!r}") from None
+    # OpenCode 1.19.6 (session/overflow.ts) applies `compaction.reserved` only
+    # to a model with `limit.input`; without one it compacts at context minus
+    # the output limit, with no margin at all
+    limit["input"] = limit["context"]
     entry["limit"] = limit
     reserved = limit["output"] + COMPACTION_MARGIN
-    if reserved >= limit["context"] // 2:
+    if limit["context"] - reserved < 32768:  # too little left to work in
         raise ExportError(f"context {limit['context']} is too small for output "
                           f"{limit['output']} and a compaction margin of {COMPACTION_MARGIN}")
     return entry, {"auto": True, "reserved": reserved}

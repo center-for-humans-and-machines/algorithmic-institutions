@@ -191,6 +191,12 @@ stop_all() {
 trap 'stop_all; exit 143' TERM INT
 trap stop_all EXIT
 
+# the served context is MAX_MODEL_LEN, which the agents' OpenCode config
+# takes too (PF_LLM_CONTEXT): a --max-model-len of its own in VLLM_EXTRA
+# would make the two disagree
+if [[ " ${VLLM_EXTRA:-} " == *" --max-model-len"* ]]; then
+  echo "FATAL: set MAX_MODEL_LEN, not --max-model-len in VLLM_EXTRA" >&2; exit 2
+fi
 assert_vllm_image
 SERVER_GPUS="${SERVER_GPUS:-$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)}"
 SERVER_DEVICES=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | head -n "$SERVER_GPUS" | paste -sd, -)
