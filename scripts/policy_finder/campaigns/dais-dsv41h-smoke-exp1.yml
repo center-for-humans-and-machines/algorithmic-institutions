@@ -1,0 +1,21 @@
+# DeepSeek-V4.1-Flash-1017 at reasoning effort high (Levin, 2026-11-28: the
+# model's own default; REASONING_EFFORT=high in the job, which this file
+# requires: reasoning_effort), stage 1 of
+# infra/dais/stages/node-dsv41h-2026-11-28.txt. Experiment 1 at smoke size: 2 fresh
+# lineages, then the better one iterated once (3 agent versions).
+prefix: pfdshs1-20261128
+reasoning_effort: high
+setting: exp1
+mode: free
+n_fresh: 2
+generations: 1
+top_k: 1
+min_params: 1
+max_params: 5
+sobol_points: 16
+parallel: 2
+error_retries: 1
+retry_wait: 30
+harness: opencode
+model: deepseek-ai/DeepSeek-V4.1-Flash-1017
+base_url: "{env:PF_LLM_BASE_URL}"

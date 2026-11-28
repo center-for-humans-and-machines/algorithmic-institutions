@@ -1,0 +1,17 @@
+# DeepSeek-V4.1-Flash-1017 at reasoning effort high on a full B200 node
+# (MODEL_PROFILE=deepseek-v4.1-flash-1017, REASONING_EFFORT=high, which every
+# campaign file below requires; PF_RUNS of its own). Each stage only if the
+# one before succeeded:
+# 1. the smoke campaigns of both experiments at once (3 versions each): the
+#    model serves at this effort and its agents run;
+# 2. the load test at the real campaigns' width (12 lineages per experiment,
+#    24 agents at once) at smoke size, re-evaluated in 4 slices each; it
+#    passes with at least 10 of 12 first-generation versions scored, no
+#    expired, no endpoint run and no run stopped at a limit;
+# 3. the two real campaigns at once (12 lineages, 7 generations, every
+#    lineage iterated), each re-evaluated when done (15 slices for exp2, 45
+#    for exp1) with the setting's reference managers, the Opus-comparable
+#    result (the 4 best after generation 1) and the one over all 12.
+run      scored      20 20 scripts/policy_finder/campaigns/dais-dsv41h-smoke-exp2.yml scripts/policy_finder/campaigns/dais-dsv41h-smoke-exp1.yml
+run      finished/10+nolimits 20 20 scripts/policy_finder/campaigns/dais-dsv41h-load-exp2.yml:4 scripts/policy_finder/campaigns/dais-dsv41h-load-exp1.yml:4
+run      finished default default scripts/policy_finder/campaigns/dais-dsv41h-exp2.yml:15 scripts/policy_finder/campaigns/dais-dsv41h-exp1.yml:45

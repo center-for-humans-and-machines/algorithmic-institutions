@@ -198,9 +198,12 @@ def opencode_time_limit(timeout=None):
 
 
 def time_limits(timeout=None):
-    """The limits a run ran under, for its record."""
+    """The limits a run ran under, for its record, and the model server's
+    reasoning effort (PF_REASONING_EFFORT, set by the DAIS campaign job; None
+    without one)."""
     timeout = TIMEOUT if timeout is None else timeout
-    return {"time_limit_s": timeout, "opencode_time_limit_s": opencode_time_limit(timeout)}
+    return {"time_limit_s": timeout, "opencode_time_limit_s": opencode_time_limit(timeout),
+            "reasoning_effort": os.environ.get("PF_REASONING_EFFORT") or None}
 
 
 def runner_options():

@@ -231,6 +231,9 @@ export SERVER_CPUS
 CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
   serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" ${VLLM_EXTRA:-}
 echo "model $MODEL@$MODEL_REV${MODEL_PROFILE:+ (profile $MODEL_PROFILE)}, image $VLLM_SIF"
+# the reasoning effort in force (common.sh), in every agent run's record
+export PF_REASONING_EFFORT="${REASONING_EFFORT:-}"
+echo "reasoning effort ${REASONING_EFFORT:-none (the model has none)}${REASONING_EFFORT:+ (prompt: $PROMPT_MUST_CONTAIN)}"
 wait_ready "${READY_TIMEOUT:-1800}" || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
 # the agents' OpenCode config takes the served context from here

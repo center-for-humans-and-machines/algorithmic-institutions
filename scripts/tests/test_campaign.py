@@ -256,3 +256,15 @@ def test_every_campaign_file_loads(tmp_path, monkeypatch):
     assert files
     for path in files:
         cm.Campaign(path, pf_runs=tmp_path)
+
+
+def test_a_campaign_runs_at_one_reasoning_effort(tmp_path, monkeypatch):
+    monkeypatch.setenv("PF_REASONING_EFFORT", "high")
+    campaign, _ = make(tmp_path, monkeypatch, reasoning_effort="high")
+    campaign.run()
+    assert campaign.state["reasoning_effort"] == "high"  # recorded in its state
+    monkeypatch.setenv("PF_REASONING_EFFORT", "max")
+    with pytest.raises(cm.CampaignError, match="reasoning_effort high"):
+        make(tmp_path, monkeypatch, reasoning_effort="high")[0].run()  # the file's
+    with pytest.raises(cm.CampaignError, match="its state ran at reasoning effort high"):
+        make(tmp_path, monkeypatch)[0].run()  # a resume at another effort
