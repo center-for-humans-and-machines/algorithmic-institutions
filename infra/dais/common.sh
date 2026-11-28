@@ -60,6 +60,17 @@ MOE_BACKEND="${MOE_BACKEND:-triton}"
 # split on spaces; every server start gets them (serve_model), before the
 # caller's (VLLM_EXTRA, a per-submission override, comes after)
 MODEL_VLLM_ARGS="${MODEL_VLLM_ARGS:-}"
+# a profile's environment for vLLM in the container, VAR=value words split on
+# spaces (such as a longer VLLM_ENGINE_READY_TIMEOUT_S for a slow load)
+MODEL_VLLM_ENV="${MODEL_VLLM_ENV:-}"
+# the nodes the model server spans (a profile's SERVER_NODES; serve_model):
+# 1, the server on this node alone, or more: pipeline parallel over the job's
+# first SERVER_NODES nodes, tensor parallel over each one's SERVER_GPUS, the
+# head with the API (and the agents and sims) on the first node. Across
+# nodes vLLM's own traffic runs over SERVER_NET_IF (IP over InfiniBand on
+# DAIS) and NCCL's data over InfiniBand.
+SERVER_NODES="${SERVER_NODES:-1}"
+SERVER_NET_IF="${SERVER_NET_IF:-ib0}"
 # the endpoint probe's tokens per request (probe_endpoint.py): a reasoning
 # model needs room to reason before it answers
 if [ -n "$REASONING_PARSER" ]; then
@@ -125,17 +136,41 @@ free_port() {
 #
 # serve_model <gpu-memory-utilization> <tp> <log> [extra vllm args...]
 # Starts vLLM in the background on the GPUs in CUDA_VISIBLE_DEVICES, pinned to
-# SERVER_CPUS if set. Sets SERVER_PID, SERVER_PORT, SERVER_URL,
-# SERVER_KEY_FILE and SERVER_AUTH_HEADER (both mode 600; the key is never
-# printed and never on a command line: vLLM reads it from its environment,
-# curl from the header file).
+# SERVER_CPUS if set. Sets SERVER_PID, SERVER_PIDS (the server's processes on
+# this node: SERVER_PID and, across nodes, each worker's srun), SERVER_PORT,
+# SERVER_URL, SERVER_KEY_FILE and SERVER_AUTH_HEADER (both mode 600; the key
+# is never printed and never on a command line: vLLM reads it from its
+# environment, curl from the header file).
 #
 # The container: --containall, the weights read-only, a home of the job's own
 # ($PF_RUN/home) and one cache folder shared by all jobs ($PF_SCRATCH/cache:
 # torch.compile, Triton and FlashInfer caches are keyed by content).
+#
+# Across nodes (SERVER_NODES > 1, a profile): tensor parallel over <tp> GPUs
+# on each node, pipeline parallel over the nodes, vLLM's own multi-node mode
+# (--nnodes, --node-rank, --master-addr, --master-port; the other nodes
+# --headless; no Ray). The head is this node, the job's first, and serves the
+# API; each further node of the job runs a worker in the same container
+# through `srun --overlap` (server_worker), its log beside the head's
+# (<log without .log>.node<k>.log). vLLM's own traffic and NCCL's and Gloo's
+# bootstrap use SERVER_NET_IF (each node's IPv4 address there is its
+# VLLM_HOST_IP); NCCL's data goes over InfiniBand, /dev/infiniband bound in.
+# With SERVE_DRY_RUN=1 it prints what it would start on which node, and
+# starts nothing.
 serve_model() {
   local util="$1" tp="$2" log="$3"
   shift 3
+  local multi=() net=() nodes=() k
+  if (( SERVER_NODES > 1 )); then
+    server_nodes || return 1
+    nodes=("${SERVER_NODE_LIST[@]}")
+    net_args || return 1
+    net=("${NET_ARGV[@]}" --env VLLM_HOST_IP="$SERVER_HEAD_IP")
+    SERVER_MASTER_PORT=$(free_port)
+    multi=(--pipeline-parallel-size "$SERVER_NODES" --nnodes "$SERVER_NODES"
+           --master-addr "$SERVER_HEAD_IP" --master-port "$SERVER_MASTER_PORT"
+           --distributed-executor-backend mp)
+  fi
   SERVER_PORT=$(free_port)
   SERVER_URL="http://127.0.0.1:$SERVER_PORT/v1"
   SERVER_KEY_FILE="$PF_RUN/api_key"
@@ -146,40 +181,171 @@ serve_model() {
   mkdir -p "$PF_RUN/home" "$PF_SCRATCH/cache"
   local pin=()
   [ -n "${SERVER_CPUS:-}" ] && pin=(taskset -c "$SERVER_CPUS")
-  APPTAINERENV_VLLM_API_KEY="$(cat "$SERVER_KEY_FILE")" \
-    "${pin[@]}" apptainer exec --nv --containall --cleanenv \
-    --home "$PF_RUN/home" \
-    --bind "$HF_HOME:$HF_HOME:ro" \
-    --bind "$PF_SCRATCH/cache" \
-    --env HF_HOME="$HF_HOME" --env HF_HUB_OFFLINE=1 \
-    --env XDG_CACHE_HOME="$PF_SCRATCH/cache" \
-    --env VLLM_CACHE_ROOT="$PF_SCRATCH/cache/vllm" \
-    --env TRITON_CACHE_DIR="$PF_SCRATCH/cache/triton" \
-    --env FLASHINFER_WORKSPACE_BASE="$PF_SCRATCH/cache" \
-    --env CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES" \
-    "$VLLM_SIF" \
-    vllm serve "$MODEL" --revision "$MODEL_REV" \
-    --host 127.0.0.1 --port "$SERVER_PORT" \
-    --tensor-parallel-size "$tp" \
-    --gpu-memory-utilization "$util" \
-    --max-model-len "$MAX_MODEL_LEN" \
-    --enable-prefix-caching --enable-prompt-tokens-details \
-    --enable-auto-tool-choice --tool-call-parser "$TOOL_PARSER" \
-    ${REASONING_PARSER:+--reasoning-parser "$REASONING_PARSER"} \
-    $([ "$MOE_BACKEND" = auto ] || echo --moe-backend "$MOE_BACKEND") \
-    ${MODEL_VLLM_ARGS:-} \
-    "$@" > "$log" 2>&1 &
-  SERVER_PID=$!
-  BG_PIDS+=("$SERVER_PID")
+  vllm_container "$PF_RUN/home"
+  local head=("${pin[@]}" "${CONTAINER_ARGV[@]}"
+    --env CUDA_VISIBLE_DEVICES="$CUDA_VISIBLE_DEVICES" "${net[@]}" "$VLLM_SIF")
+  vllm_argv "$util" "$tp" head
+  head+=("${VLLM_ARGV[@]}" "${multi[@]}" ${multi[0]:+--node-rank 0} "$@")
+  if [ "${SERVE_DRY_RUN:-0}" = 1 ]; then
+    echo "head on ${nodes[0]:-$(hostname -s)}, log $log:"
+    echo "  APPTAINERENV_VLLM_API_KEY=<key> $(printf '%q ' "${head[@]}")"
+  else
+    APPTAINERENV_VLLM_API_KEY="$(cat "$SERVER_KEY_FILE")" \
+      "${head[@]}" > "$log" 2>&1 &
+    SERVER_PID=$!
+    BG_PIDS+=("$SERVER_PID")
+  fi
+  SERVER_PIDS=(${SERVER_PID:-})
+  for (( k = 1; k < ${#nodes[@]} && k < SERVER_NODES; k++ )); do
+    server_worker "$k" "${nodes[$k]}" "${log%.log}.node$k.log" "$util" "$tp" \
+      "${multi[@]}" "$@" || return 1
+  done
+}
+
+# vllm_container <home>: CONTAINER_ARGV, the apptainer command up to the
+# GPUs, the network and the image; with the profile's MODEL_VLLM_ENV.
+vllm_container() {
+  local var
+  CONTAINER_ARGV=(apptainer exec --nv --containall --cleanenv
+    --home "$1"
+    --bind "$HF_HOME:$HF_HOME:ro"
+    --bind "$PF_SCRATCH/cache"
+    --env HF_HOME="$HF_HOME" --env HF_HUB_OFFLINE=1
+    --env XDG_CACHE_HOME="$PF_SCRATCH/cache"
+    --env VLLM_CACHE_ROOT="$PF_SCRATCH/cache/vllm"
+    --env TRITON_CACHE_DIR="$PF_SCRATCH/cache/triton"
+    --env FLASHINFER_WORKSPACE_BASE="$PF_SCRATCH/cache")
+  for var in ${MODEL_VLLM_ENV:-}; do
+    CONTAINER_ARGV+=(--env "$var")
+  done
+}
+
+# vllm_argv <util> <tp> head|worker: VLLM_ARGV, the `vllm serve` command
+# without the caller's arguments; the head's has the API's address and port.
+vllm_argv() {
+  VLLM_ARGV=(vllm serve "$MODEL" --revision "$MODEL_REV")
+  [ "$3" = head ] && VLLM_ARGV+=(--host 127.0.0.1 --port "$SERVER_PORT")
+  # shellcheck disable=SC2206  # MODEL_VLLM_ARGS: split on spaces
+  VLLM_ARGV+=(--tensor-parallel-size "$2"
+    --gpu-memory-utilization "$1"
+    --max-model-len "$MAX_MODEL_LEN"
+    --enable-prefix-caching --enable-prompt-tokens-details
+    --enable-auto-tool-choice --tool-call-parser "$TOOL_PARSER"
+    ${REASONING_PARSER:+--reasoning-parser "$REASONING_PARSER"}
+    $([ "$MOE_BACKEND" = auto ] || echo --moe-backend "$MOE_BACKEND")
+    ${MODEL_VLLM_ARGS:-})
+}
+
+# server_nodes: SERVER_NODE_LIST, the nodes of a server across SERVER_NODES
+# nodes, this one (the head) first: the job's nodes, or SERVER_NODES_OVERRIDE
+# (space-separated; the connectivity probe puts head and worker on one node).
+# Fails when the job has fewer nodes than the profile asks for.
+server_nodes() {
+  if [ -n "${SERVER_NODES_OVERRIDE:-}" ]; then
+    read -r -a SERVER_NODE_LIST <<< "$SERVER_NODES_OVERRIDE"
+  else
+    mapfile -t SERVER_NODE_LIST < <(scontrol show hostnames "${SLURM_JOB_NODELIST:-}" 2>/dev/null)
+  fi
+  if (( ${#SERVER_NODE_LIST[@]} < SERVER_NODES )); then
+    echo "FATAL: the model server spans $SERVER_NODES nodes (SERVER_NODES, profile" \
+      "${MODEL_PROFILE:-none}), but this job has ${#SERVER_NODE_LIST[@]}" \
+      "(${SERVER_NODE_LIST[*]:-none}): submit with -N $SERVER_NODES" \
+      "--ntasks=$SERVER_NODES --ntasks-per-node=1 (the scripts' --ntasks=1 alone" \
+      "makes Slurm shrink -N to one node)" >&2
+    return 1
+  fi
+  if [ "${SERVE_DRY_RUN:-0}" != 1 ] && [ "${SERVER_NODE_LIST[0]}" != "$(hostname -s)" ]; then
+    echo "FATAL: the head must run on the job's first node ${SERVER_NODE_LIST[0]}," \
+      "not on $(hostname -s)" >&2
+    return 1
+  fi
+}
+
+# net_args: NET_ARGV, the container's network settings across nodes, and
+# SERVER_HEAD_IP, this node's IPv4 address on SERVER_NET_IF.
+net_args() {
+  SERVER_HEAD_IP="${SERVER_HEAD_IP:-$(iface_ip "$SERVER_NET_IF")}"
+  if [ -z "$SERVER_HEAD_IP" ]; then
+    echo "FATAL: no IPv4 address on $SERVER_NET_IF on $(hostname -s) (SERVER_NET_IF)" >&2
+    return 1
+  fi
+  if [ "${SERVE_DRY_RUN:-0}" != 1 ] && [ ! -d /dev/infiniband ]; then
+    echo "FATAL: no /dev/infiniband on $(hostname -s)" >&2
+    return 1
+  fi
+  NET_ARGV=(--bind /dev/infiniband
+    --env GLOO_SOCKET_IFNAME="$SERVER_NET_IF" --env NCCL_SOCKET_IFNAME="$SERVER_NET_IF"
+    ${NCCL_DEBUG:+--env NCCL_DEBUG="$NCCL_DEBUG"})
+}
+
+# iface_ip <interface>: its first IPv4 address on this node (empty: none)
+iface_ip() {
+  ip -4 -o addr show dev "$1" 2>/dev/null | awk '{split($4, a, "/"); print a[1]; exit}'
+}
+
+# server_worker <k> <node> <log> <util> <tp> [vllm args...]: worker k of the
+# server, on <node>, in the background through srun (one task, the node's
+# GPUs: SERVER_WORKER_GPUS, default <tp>; SERVER_WORKER_CPUS cores' worth of
+# CPUs, default 32). On the node, WORKER_PRELUDE finds its address on
+# SERVER_NET_IF and its GPUs (SERVER_WORKER_DEVICES, or the step's) and passes
+# them in through APPTAINERENV_ (--cleanenv drops the rest). Adds the srun's
+# pid to SERVER_PIDS and BG_PIDS: stopping it ends the worker (srun forwards
+# the signal), and its end shows in server_alive.
+server_worker() {
+  local k="$1" node="$2" log="$3" util="$4" tp="$5"
+  shift 5
+  mkdir -p "$PF_RUN/home.node$k"
+  vllm_container "$PF_RUN/home.node$k"
+  # by absolute path: a step on the GPU nodes may not have the batch's PATH
+  # (infra/dais/README.md, the agents' taskset)
+  CONTAINER_ARGV[0]=$(command -v apptainer || echo apptainer)
+  vllm_argv "$util" "$tp" worker
+  local argv=(srun --nodes=1 --ntasks=1 --nodelist="$node" --overlap
+    --kill-on-bad-exit=1 --gres="gpu:${SERVER_WORKER_GPUS:-$tp}"
+    --cpus-per-task="${SERVER_WORKER_CPUS:-32}" --mem=0
+    /bin/bash -c "$WORKER_PRELUDE" worker "$SERVER_NET_IF" "${SERVER_WORKER_DEVICES:-}"
+    "${CONTAINER_ARGV[@]}" "${NET_ARGV[@]}" "$VLLM_SIF"
+    "${VLLM_ARGV[@]}" "$@" --node-rank "$k" --headless)
+  if [ "${SERVE_DRY_RUN:-0}" = 1 ]; then
+    echo "worker $k on $node, log $log:"
+    echo "  $(printf '%q ' "${argv[@]}")"
+    return 0
+  fi
+  "${argv[@]}" > "$log" 2>&1 &
+  SERVER_PIDS+=($!)
+  BG_PIDS+=($!)
+  echo "worker $k on $node: srun pid $!, log $log"
+}
+
+# what a worker runs on its node before the container: bash -c "$WORKER_PRELUDE"
+# worker <interface> <devices or empty> <command...>
+WORKER_PRELUDE='if_=$1 devices=$2; shift 2
+export PATH=/usr/sbin:/usr/bin:/bin:$PATH
+ip=$(ip -4 -o addr show dev "$if_" 2>/dev/null | awk '"'"'{split($4, a, "/"); print a[1]; exit}'"'"')
+[ -n "$ip" ] || { echo "FATAL: no IPv4 address on $if_ on $(hostname -s)" >&2; exit 1; }
+[ -d /dev/infiniband ] || { echo "FATAL: no /dev/infiniband on $(hostname -s)" >&2; exit 1; }
+export APPTAINERENV_VLLM_HOST_IP=$ip
+export APPTAINERENV_CUDA_VISIBLE_DEVICES=${devices:-${CUDA_VISIBLE_DEVICES:-}}
+echo "worker on $(hostname -s): $if_ $ip, GPUs $APPTAINERENV_CUDA_VISIBLE_DEVICES"
+exec "$@"'
+
+# server_alive: every process of the server on this node runs (SERVER_PIDS:
+# the head, and each worker's srun, which ends with its worker)
+server_alive() {
+  local pid
+  for pid in "${SERVER_PIDS[@]}"; do
+    kill -0 "$pid" 2>/dev/null || return 1
+  done
 }
 
 # wait_ready <timeout s>: until OUR server answers: /v1/models lists $MODEL
 # with our key and refuses a request without it (401), so another job's
-# server on the same port cannot pass. Prints the load time.
+# server on the same port cannot pass. Prints the load time. Across nodes the
+# head answers only once every worker has loaded its part.
 wait_ready() {
   local timeout="$1" t0=$SECONDS code
   while (( SECONDS - t0 < timeout )); do
-    if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    if ! server_alive; then
       echo "FATAL: vLLM exited during start-up" >&2
       return 1
     fi

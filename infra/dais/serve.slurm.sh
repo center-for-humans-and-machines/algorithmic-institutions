@@ -13,6 +13,14 @@
 #   sbatch --export=MODEL_PROFILE=deepseek-v4.1-flash-1017,PF_SCRATCH=... \
 #     -o <log> --qos=g0004 --gres=gpu:b200:4 --cpus-per-task=48 --mem=1000000 \
 #     infra/dais/serve.slurm.sh
+#   # a profile whose server spans two nodes (SERVER_NODES=2): a job of two
+#   # nodes; the head on the first, a worker on the second (common.sh serve_model)
+#   sbatch --export=MODEL_PROFILE=kimi-k3.1-pro,PF_SCRATCH=... -o <log> \
+#     -p gpu --qos=g0008 -N 2 --ntasks=2 --ntasks-per-node=1 --gres=gpu:b200:8 --exclusive --mem=0 -c 96 \
+#     --time=02:00:00 infra/dais/serve.slurm.sh
+#   # what would start on which node, without starting it (login node)
+#   SERVE_DRY_RUN=1 SERVER_NODES_OVERRIDE="daisg201 daisg202" SERVER_HEAD_IP=<ip> \
+#     MODEL_PROFILE=kimi-k3.1-pro bash infra/dais/serve.slurm.sh
 #
 # This version ran as job 987950 (2026-11-27, `-p gpudev`, MODE=probe). The
 # default gpu1/g0002 path and MODE=serve have not been run.
@@ -34,15 +42,28 @@ init_run
 MODE="${MODE:-probe}"
 GPU_UTIL="${GPU_UTIL:-0.90}"
 
+if [ "${SERVE_DRY_RUN:-0}" = 1 ]; then
+  # shellcheck disable=SC2086  # VLLM_EXTRA: extra vllm arguments, split
+  serve_model "$GPU_UTIL" "${SERVER_GPUS:-2}" "$PF_RUN/vllm.log" ${VLLM_EXTRA:-}
+  exit $?
+fi
 assert_vllm_image
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 # SERVER_GPUS (default 2; a model profile may set more): tensor parallel
 serve_model "$GPU_UTIL" "${SERVER_GPUS:-2}" "$PF_RUN/vllm.log" ${VLLM_EXTRA:-}
-wait_ready "${READY_TIMEOUT:-1800}" || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
-grep -E "Model loading took|KV cache|Maximum concurrency" "$PF_RUN/vllm.log" | tail -4
+wait_ready "${READY_TIMEOUT:-1800}" || {
+  tail -50 "$PF_RUN/vllm.log"
+  for log in "$PF_RUN"/vllm.node*.log; do [ -f "$log" ] && tail -30 "$log"; done
+  exit 1
+}
+grep -E "Model loading took|KV cache|Maximum concurrency" "$PF_RUN"/vllm*.log | tail -8
 nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv
 
 if [ "$MODE" = probe ]; then
+  health=$(curl -s -m 20 -o /dev/null -w '%{http_code}' -H "@$SERVER_AUTH_HEADER" \
+    "${SERVER_URL%/v1}/health")
+  echo "/health: $health"
+  [ "$health" = 200 ] || exit 1
   in_vllm_image python3 /opt/dais/probe_endpoint.py \
     ${PROBE_MAX_TOKENS:+--max-tokens "$PROBE_MAX_TOKENS"} \
     --base "$SERVER_URL" --key-file "$SERVER_KEY_FILE" --model "$MODEL"

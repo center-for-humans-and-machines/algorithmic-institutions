@@ -1,0 +1,10 @@
+# Kimi K3.1 Pro on two full B200 nodes (MODEL_PROFILE=kimi-k3.1-pro: vLLM
+# v0.34.0, tensor parallel over each node's 8 GPUs, pipeline parallel over the
+# two; the head, the agents and the sims on the first node). Each stage only
+# if the one before succeeded:
+# 1. the exp2 smoke campaign (3 versions): the model serves across the nodes
+#    and its agents run;
+# 2. the two real campaigns at once, each re-evaluated when done (15 slices
+#    for exp2, 45 for exp1), with the Qwen, DeepSeek and Opus campaigns' sizes.
+run      scored      20 20 scripts/policy_finder/campaigns/dais-kimi-smoke-exp2.yml
+run      finished default default scripts/policy_finder/campaigns/dais-kimi-exp2.yml:15 scripts/policy_finder/campaigns/dais-kimi-exp1.yml:45

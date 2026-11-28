@@ -1,0 +1,20 @@
+# The open-weight run of experiment 2 with Kimi K3.1 Pro on DAIS, served
+# across two B200 nodes (infra/dais/model_profiles/kimi-k3.1-pro.sh): the
+# same campaign as dais-qwen-exp2.yml, dais-dsv41-exp2.yml and the Opus
+# reference but for the model and the prefix.
+prefix: pfkm-exp2-20261128
+setting: exp2
+mode: free
+n_fresh: 12
+generations: 6
+top_k: 4
+min_params: 1
+max_params: 5
+sobol_points: 256
+parallel: 12
+error_retries: 3
+retry_wait: 600
+summarize: null
+harness: opencode
+model: moonshotai/Kimi-K3.1-Pro
+base_url: "{env:PF_LLM_BASE_URL}"
