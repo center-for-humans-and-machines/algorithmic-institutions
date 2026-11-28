@@ -318,6 +318,17 @@ LOCAL_MODELS = {
         "options": {"temperature": 1.0, "top_p": 1.0},
         "limit": {"context": 1048576, "output": 262144},
     },
+    # huggingface.co/tencent/Hy4-FP8 (revision 78037597), "Recommended
+    # parameters": temperature 0.9, top_p 1.0 (also generation_config.json);
+    # reasoning_effort "high" (the template's default, set explicitly) or
+    # "no_think", through chat_template_kwargs. The card gives no output
+    # limit; 65536 is ours. The context is the server's
+    # (infra/dais/model_profiles/hy4-fp8.sh).
+    "tencent/Hy4-FP8": {
+        "options": {"temperature": 0.9, "top_p": 1.0,
+                    "chat_template_kwargs": {"reasoning_effort": "high"}},
+        "limit": {"context": 262144, "output": 65536},
+    },
 }
 #: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
 #: beyond the output limit: room for the tool results one step adds (one
