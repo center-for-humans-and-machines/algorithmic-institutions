@@ -43,8 +43,13 @@ grep -E "Model loading took|KV cache|Maximum concurrency" "$PF_RUN/vllm.log" | t
 nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv
 
 if [ "$MODE" = probe ]; then
+  health=$(curl -s -m 20 -o /dev/null -w '%{http_code}' -H "@$SERVER_AUTH_HEADER" \
+    "${SERVER_URL%/v1}/health")
+  echo "/health: $health"
+  [ "$health" = 200 ] || exit 1
   in_vllm_image python3 /opt/dais/probe_endpoint.py \
-    --base "$SERVER_URL" --key-file "$SERVER_KEY_FILE" --model "$MODEL"
+    --base "$SERVER_URL" --key-file "$SERVER_KEY_FILE" --model "$MODEL" \
+    "${PROBE_ARGS[@]}"
   exit $?
 fi
 echo "$SERVER_URL" > "$PF_RUN/url"

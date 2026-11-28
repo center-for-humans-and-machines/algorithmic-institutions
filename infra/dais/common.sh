@@ -27,6 +27,14 @@ if [ -n "${MODEL_PROFILE:-}" ]; then
   # shellcheck source=/dev/null
   source "$_profile"
 fi
+# A profile may also set MODEL_ARGS, an array of further `vllm serve`
+# arguments the model needs, and VLLM_PATCH, a script in
+# infra/dais/vllm_patches/ (without .py) whose patched vLLM files are bound
+# read-only over the image's (vllm_patch_binds), and PROBE_ARGS, an array of
+# probe_endpoint.py arguments (serve.slurm.sh). All are empty by default.
+[ -n "${MODEL_ARGS+set}" ] || MODEL_ARGS=()
+[ -n "${PROBE_ARGS+set}" ] || PROBE_ARGS=()
+VLLM_PATCH="${VLLM_PATCH:-}"
 # vLLM image: its version is asserted, not assumed.
 VLLM_SIF="${VLLM_SIF:-}"
 EXPECT_VLLM_TAG="${EXPECT_VLLM_TAG:-vllm/vllm-openai:v0.25.1}"
@@ -134,9 +142,12 @@ serve_model() {
   mkdir -p "$PF_RUN/home" "$PF_SCRATCH/cache"
   local pin=()
   [ -n "${SERVER_CPUS:-}" ] && pin=(taskset -c "$SERVER_CPUS")
+  PATCH_BINDS=()
+  [ -z "$VLLM_PATCH" ] || vllm_patch_binds || return 1
   APPTAINERENV_VLLM_API_KEY="$(cat "$SERVER_KEY_FILE")" \
     "${pin[@]}" apptainer exec --nv --containall --cleanenv \
     --home "$PF_RUN/home" \
+    "${PATCH_BINDS[@]}" \
     --bind "$HF_HOME:$HF_HOME:ro" \
     --bind "$PF_SCRATCH/cache" \
     --env HF_HOME="$HF_HOME" --env HF_HUB_OFFLINE=1 \
@@ -155,9 +166,27 @@ serve_model() {
     --enable-auto-tool-choice --tool-call-parser "$TOOL_PARSER" \
     ${REASONING_PARSER:+--reasoning-parser "$REASONING_PARSER"} \
     $([ "$MOE_BACKEND" = auto ] || echo --moe-backend "$MOE_BACKEND") \
+    "${MODEL_ARGS[@]}" \
     "$@" > "$log" 2>&1 &
   SERVER_PID=$!
   BG_PIDS+=("$SERVER_PID")
+}
+
+# vllm_patch_binds: the patched vLLM files of the profile's VLLM_PATCH,
+# written into $PF_RUN/vllm_patch by the patch script run in the vLLM image
+# (it checks its anchors against the image's files), as apptainer binds in
+# PATCH_BINDS.
+vllm_patch_binds() {
+  local out="$PF_RUN/vllm_patch" bind
+  in_vllm_image python3 "/opt/dais/vllm_patches/$VLLM_PATCH.py" "$out" \
+    > "$PF_RUN/vllm_patch.binds" || {
+    echo "FATAL: vLLM patch $VLLM_PATCH does not apply to $VLLM_SIF" >&2
+    return 1
+  }
+  while read -r bind; do
+    [ -n "$bind" ] && PATCH_BINDS+=(--bind "$bind")
+  done < "$PF_RUN/vllm_patch.binds"
+  echo "vLLM patch $VLLM_PATCH: $(( ${#PATCH_BINDS[@]} / 2 )) files bound"
 }
 
 # wait_ready <timeout s>: until OUR server answers: /v1/models lists $MODEL

@@ -15,6 +15,10 @@ A tool call passes if finish_reason is `tool_calls`, the tool is the expected
 one, its arguments parse as JSON with every required key, and the output has
 no degenerate repetition. Prints usage for each; exits 1 if a check fails.
 
+A reasoning model thinks before it answers: --max-tokens gives room for that
+(default 200 for the chat check, 600 for the tool checks) and --extra-body
+adds request fields, such as '{"reasoning_effort": "low"}'.
+
     python3 probe_endpoint.py --base URL --key-file F --model M [--trials 3]
 """
 
@@ -108,7 +112,9 @@ def history(n_tokens):
 def post(a, key, body):
     req = urllib.request.Request(
         a.base + "/chat/completions",
-        data=json.dumps({"model": a.model, **SAMPLING, **body}).encode(),
+        data=json.dumps(
+            {"model": a.model, **SAMPLING, **a.extra_body, **body}
+        ).encode(),
         headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
     )
     resp = urllib.request.urlopen(req, timeout=900)
@@ -174,6 +180,8 @@ def main():
     p.add_argument("--model", required=True)
     p.add_argument("--trials", type=int, default=3)
     p.add_argument("--long-tokens", type=int, default=60000)
+    p.add_argument("--max-tokens", type=int)
+    p.add_argument("--extra-body", type=json.loads, default={})
     a = p.parse_args()
     with open(a.key_file) as f:
         key = f.read().strip()
@@ -201,7 +209,7 @@ def main():
         a,
         key,
         {
-            "max_tokens": 200,
+            "max_tokens": a.max_tokens or 200,
             "messages": [
                 {
                     "role": "user",
@@ -210,14 +218,20 @@ def main():
             ],
         },
     )
-    text = r["choices"][0]["message"]["content"] or ""
+    msg = r["choices"][0]["message"]
+    text = msg["content"] or ""
+    reasoning = msg.get("reasoning") or msg.get("reasoning_content") or ""
     ok = bool(text.strip()) and not degenerate(text)
-    print(f"[{'PASS' if ok else 'FAIL'}] chat: usage={r['usage']} text={text[:120]!r}")
+    print(
+        f"[{'PASS' if ok else 'FAIL'}] chat: usage={r['usage']} text={text[:120]!r}"
+        f" reasoning={len(reasoning)} chars"
+    )
     if not ok:
         failed.append("chat")
 
     for name, (body, parse) in checks.items():
-        body = {**body, "max_tokens": 600, "tools": TOOLS, "tool_choice": "auto"}
+        body = {**body, "max_tokens": a.max_tokens or 600, "tools": TOOLS,
+                "tool_choice": "auto"}
         stream = parse is streamed
         if stream:
             body.update(stream=True, stream_options={"include_usage": True})

@@ -320,6 +320,17 @@ LOCAL_MODELS = {
                     "chat_template_kwargs": {"reasoning_effort": "max"}},
         "limit": {"context": 524288, "output": 131072},
     },
+    # Kimi K3.1 Pro as nota-ai's 37.5%-expert-pruned build (one node of 8
+    # B200; infra/dais/model_profiles/kimi-k3.1-pro.sh). huggingface.co/
+    # moonshotai/Kimi-K3.1-Pro, "Evaluation Results": reasoning effort max,
+    # temperature 1.0, top_p 0.95 (its generation_config sets none); vLLM's
+    # kimi_k3 renderer takes the effort from chat_template_kwargs. The output
+    # limit keeps the compaction reserve below half the served context.
+    "nota-ai/Kimi-K3.1-Pro-Global-Pruned-37": {
+        "options": {"temperature": 1.0, "top_p": 0.95,
+                    "chat_template_kwargs": {"reasoning_effort": "max"}},
+        "limit": {"context": 262144, "output": 49152},
+    },
 }
 #: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
 #: beyond the output limit: room for the tool results one step adds (one

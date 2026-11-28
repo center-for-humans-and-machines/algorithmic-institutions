@@ -8,9 +8,12 @@
 #     > $PF_SCRATCH/logs/download.<name>.log 2>&1 &
 #
 # No token: the candidates are ungated. Prints DONE <path> at the end; rerun
-# to resume an interrupted download.
+# to resume an interrupted download. DOWNLOAD_ALLOW=<glob>,<glob>,... fetches
+# only the matching files (a tokenizer without the weights:
+# DOWNLOAD_ALLOW='*.json,*.py,*.model').
 set -euo pipefail
 REPO="${1:?repo}" REV="${2:?revision}"
+ALLOW="${DOWNLOAD_ALLOW:-}"
 export HF_HOME="${HF_HOME:-/dais/fs/scratch/$USER/models}"
 SIF="${DOWNLOAD_SIF:-/dais/fs/scratch/bsup/container/vllm.sif}"
 module load apptainer/1.5.2 >/dev/null 2>&1 || true
@@ -21,7 +24,8 @@ nice -n 10 apptainer exec --containall --cleanenv --bind "$HF_HOME" \
 import sys
 from huggingface_hub import snapshot_download
 p = snapshot_download(sys.argv[1], revision=sys.argv[2], max_workers=8,
+                      allow_patterns=sys.argv[3].split(',') if sys.argv[3] else None,
                       ignore_patterns=['*.pdf', '*.png', '*.jpg'])
 print('DONE', p, flush=True)
-" "$REPO" "$REV"
+" "$REPO" "$REV" "$ALLOW"
 echo "$(date +%T) finished"
