@@ -46,8 +46,10 @@ Usage:
 
 import argparse
 import fnmatch
+import glob
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -184,6 +186,8 @@ def sibling_pattern(name):
     if prefix == name:
         return INSTANCE_NAME
     return re.compile(rf"{INSTANCE_NAME.pattern}|(?<![\w-]){re.escape(prefix)}-\d+")
+
+
 #: Harness opencode: the folder OpenCode loads from the working directory,
 #: the agent's wording that names Claude Code's tools (OpenCode's are
 #: lower-case), and the rule files OpenCode would load into the context
@@ -294,17 +298,48 @@ def opencode_agent(text):
 
 
 #: A server of our own (base_url): the model card's sampling settings and
-#: the server's context (infra/dais/common.sh MAX_MODEL_LEN), by served name.
-#: OpenCode sends the sampling options with every request; the context lets
-#: it compact a long session before the server refuses it.
+#: its output limit, by served name. OpenCode sends the sampling options with
+#: every request. The context is the server's (PF_LLM_CONTEXT, which
+#: infra/dais/campaign.slurm.sh sets from MAX_MODEL_LEN; the value here when
+#: unset), so that OpenCode compacts a long session before the server refuses.
 LOCAL_MODELS = {
     # huggingface.co/Qwen/Qwen3-Coder-Next, "Best Practices" (also its
-    # generation_config.json at revision a7fbcb5c)
+    # generation_config.json at revision a7fbcb5c); 262,144 tokens natively
     "Qwen/Qwen3-Coder-Next": {
         "options": {"temperature": 1.0, "top_p": 0.95, "top_k": 40},
-        "limit": {"context": 131072, "output": 16384},
+        "limit": {"context": 262144, "output": 16384},
     },
 }
+#: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
+#: beyond the output limit: room for the tool results one step adds (one
+#: tool output is capped at 50 KB or 2000 lines, 20-25k tokens of numeric
+#: text; a step may make two) and for the compaction request itself. Without
+#: it OpenCode sent a request past the server's context, the server refused
+#: it, and the compaction that followed failed the same way (9 runs of the
+#: first Qwen campaigns ended so).
+COMPACTION_MARGIN = 65536
+
+
+def local_model(model):
+    """A local model's OpenCode entry and the compaction setting for it."""
+    entry = {"name": model, **LOCAL_MODELS.get(model, {})}
+    limit = dict(entry.get("limit") or {"context": 131072, "output": 16384})
+    context = os.environ.get("PF_LLM_CONTEXT")
+    if context:
+        try:
+            limit["context"] = int(context)
+        except ValueError:
+            raise ExportError(f"PF_LLM_CONTEXT is not a number of tokens: {context!r}") from None
+    # OpenCode 1.19.6 (session/overflow.ts) applies `compaction.reserved` only
+    # to a model with `limit.input`; without one it compacts at context minus
+    # the output limit, with no margin at all
+    limit["input"] = limit["context"]
+    entry["limit"] = limit
+    reserved = limit["output"] + COMPACTION_MARGIN
+    if limit["context"] - reserved < 32768:  # too little left to work in
+        raise ExportError(f"context {limit['context']} is too small for output "
+                          f"{limit['output']} and a compaction margin of {COMPACTION_MARGIN}")
+    return entry, {"auto": True, "reserved": reserved}
 
 
 def opencode_config(conf):
@@ -319,16 +354,18 @@ def opencode_config(conf):
     """
     model = conf["model"]
     if conf.get("base_url"):
+        entry, compaction = local_model(model)
         return {
             "$schema": "https://opencode.ai/config.json",
             "enabled_providers": ["local"],
             "model": f"local/{model}",
             "small_model": f"local/{model}",
+            "compaction": compaction,
             "provider": {"local": {
                 "npm": "@ai-sdk/openai-compatible",
                 "options": {"baseURL": conf["base_url"],
                             "apiKey": "{env:PF_LLM_API_KEY}"},
-                "models": {model: {"name": model, **LOCAL_MODELS.get(model, {})}},
+                "models": {model: entry},
             }},
         }
     options = {}
@@ -343,6 +380,113 @@ def opencode_config(conf):
             "models": {model: {"options": options}},
         }},
     }
+
+
+#: The sweep results an agent reads, under each earlier version's sweep
+#: folder: written for the agent in a compact form (slim_sweep_files)
+SWEEP_FILES = ("sweep.json", "landscapes.json", "final/sweep.json")
+
+
+def _round(x, digits=4):
+    """`x` with every float rounded to `digits` significant digits."""
+    if isinstance(x, float):
+        return float(f"{x:.{digits}g}") if math.isfinite(x) else x
+    if isinstance(x, dict):
+        return {k: _round(v, digits) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_round(v, digits) for v in x]
+    return x
+
+
+#: OpenCode's read tool returns at most 2000 lines or 50 KB of a file
+READ_LIMIT_BYTES = 50 * 1000
+READ_LIMIT_LINES = 2000
+
+
+#: OpenCode's read tool also cuts every line at 2000 characters
+READ_LIMIT_LINE_CHARS = 2000
+#: Lines this file writes stay under it, with room to spare
+LINE_CHARS = 1500
+
+
+def _dump(x):
+    """Compact JSON of `x` in lines of at most LINE_CHARS where it can: a
+    dict or list too long for one line puts its items on lines of their
+    own, short items grouped (only an atom longer than that, a long
+    string, keeps a long line)."""
+    one = json.dumps(x, separators=(",", ":"))
+    if len(one) <= LINE_CHARS or not isinstance(x, (dict, list)) or not x:
+        return one
+    if isinstance(x, dict):
+        items = [json.dumps(k) + ":" + _dump(v) for k, v in x.items()]
+        opening, closing = "{", "}"
+    else:
+        items = [_dump(v) for v in x]
+        opening, closing = "[", "]"
+    lines, line = [], ""
+    for item in items:
+        if line and ("\n" in item or len(line) + 1 + len(item) > LINE_CHARS):
+            lines.append(line)
+            line = item
+        else:
+            line = f"{line},{item}" if line else item
+    lines.append(line)
+    return opening + ",\n".join(lines) + closing
+
+
+def slim_json(data, rows="points", sort_by=None):
+    """A sweep file as the agent gets it: the same keys and entries, floats to
+    4 significant digits (fewer would merge the points' scores: exp1's pools
+    of 630 to 660 at 2 digits take 4 distinct values), compact, one entry of
+    `rows` per line (sorted by `sort_by`, highest first, when given), and no
+    line over LINE_CHARS where it can be broken (the read tool cuts lines at
+    2000 characters)."""
+    head = {k: v for k, v in data.items() if k != rows}
+    entries = list(data.get(rows) or [])
+    if sort_by and all(isinstance(e.get(sort_by), (int, float)) for e in entries):
+        entries.sort(key=lambda e: -e[sort_by])
+    compact = _dump(_round(head))
+    if rows not in data:
+        return compact + "\n"
+    lines = ",\n".join(_dump(_round(e)) for e in entries)
+    sep = ",\n" if head else ""
+    return f'{compact[:-1]}{sep}"{rows}":[\n{lines}\n]}}\n'
+
+
+def slim_sweep_files(export):
+    """Rewrite the earlier versions' sweep results in the export compactly:
+    the agent reads them whole (a pretty-printed sweep.json of 256 points was
+    over 3,000 lines and 90k characters, cut by the read tool at 50 KB). The
+    worktree keeps the full files for the pipeline (fit_surrogate.py,
+    generate_sim_config.py --final, merge_sweeps.py, reevaluate.py), and
+    collect() never copies these back: they are outside the write folders.
+    Returns {path: (characters before, after)}."""
+    sizes = {}
+    root = os.path.join(export, "plots/simulation/policy_finder")
+    for sweep in sorted(glob.glob(os.path.join(root, "*_sweep"))):
+        for rel in SWEEP_FILES:
+            path = os.path.join(sweep, rel)
+            if not os.path.isfile(path):
+                continue
+            try:
+                with open(path) as f:
+                    text = f.read()
+                data = json.loads(text)
+            except (OSError, ValueError):
+                continue  # not ours to judge: left as it is
+            sort_by = "pool" if rel.endswith("sweep.json") else "mean"
+            slim = slim_json(data, "points", sort_by)
+            if (len(slim.encode()) > READ_LIMIT_BYTES
+                    or slim.count("\n") >= READ_LIMIT_LINES):
+                # the read tool cuts the tail, the lowest-scoring points
+                # (best first); fewer digits would merge the scores instead
+                print(f"WARNING: {os.path.relpath(path, export)} is {len(slim.encode())} "
+                      f"bytes, over the agent's read limit of {READ_LIMIT_BYTES}: its "
+                      f"lowest points are cut when read", file=sys.stderr, flush=True)
+            with open(path, "w") as f:
+                f.write(slim)
+            sizes[os.path.relpath(path, export)] = (len(text), len(slim))
+    return sizes
 
 
 def write_opencode(export, conf, agent_text):
@@ -452,6 +596,7 @@ def build(wt, main, exports):
         for f in matched:
             shutil.copy2(os.path.join(source_dir, f), os.path.join(export, base, f))
     _prune(export, name, setting["deny"])
+    slim_sweep_files(export)
     if conf.get("mode") == "single_idea":
         # scrambled copies the agent debugs its one analysis script on
         import scramble_data

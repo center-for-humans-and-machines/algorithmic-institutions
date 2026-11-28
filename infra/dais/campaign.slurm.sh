@@ -191,6 +191,12 @@ stop_all() {
 trap 'stop_all; exit 143' TERM INT
 trap stop_all EXIT
 
+# the served context is MAX_MODEL_LEN, which the agents' OpenCode config
+# takes too (PF_LLM_CONTEXT): a --max-model-len of its own in VLLM_EXTRA
+# would make the two disagree
+if [[ " ${VLLM_EXTRA:-} " == *" --max-model-len"* ]]; then
+  echo "FATAL: set MAX_MODEL_LEN, not --max-model-len in VLLM_EXTRA" >&2; exit 2
+fi
 assert_vllm_image
 SERVER_GPUS="${SERVER_GPUS:-$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)}"
 SERVER_DEVICES=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | head -n "$SERVER_GPUS" | paste -sd, -)
@@ -205,6 +211,10 @@ CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
   serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" --moe-backend triton ${VLLM_EXTRA:-}
 wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
+# the agents' OpenCode config takes the served context from here
+# (export_instance.local_model), so it compacts before the server refuses
+export PF_LLM_CONTEXT="$MAX_MODEL_LEN"
+echo "served context $MAX_MODEL_LEN tokens"
 
 # server_report: vLLM's request counters (errors included), /health's
 # latency and its log's tail. A report: it never fails (a subshell without

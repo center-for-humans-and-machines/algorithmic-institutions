@@ -63,6 +63,8 @@ def describe(stem, state):
         audit = r.get("network_audit") or {}
         agent.append(f"{r.get('run_id')} {r.get('status')} {res.get('seconds')} s"
                      f" tokens {res.get('tokens')}"
+                     f" compactions {res.get('compactions')}"
+                     f" overflow {res.get('overflow') or 'no'}"
                      f" audit {len(audit.get('findings', []))}")
     return (f"{stem}: {state.get('status')}"
             + (f" pool {score:.2f}" if isinstance(score, (int, float)) else "")
@@ -102,6 +104,7 @@ def main():
         members = [(args.target, conf.get("version", 1))]
         first = set(members)
     seconds, first_scored, expired, endpoint, lost = [], 0, [], [], 0
+    overflows, overflows_recovered, limit_hit = 0, 0, 0
     for name, version in members:
         stem = name if version == 1 else f"{name}-v{version}"
         path = wt_root / f"{stem}.state.json"
@@ -115,6 +118,14 @@ def main():
                 seconds.append(r["result"]["seconds"])
             if r.get("status") == "expired":
                 expired.append(f"{stem} {r.get('run_id')}")
+            res = r.get("result") or {}
+            # attempts the server refused past its context (failed attempts,
+            # also when OpenCode recovered by compacting)
+            if res.get("overflow"):
+                overflows += 1
+                overflows_recovered += bool(res["overflow"].get("recovered"))
+            # OpenCode stopped at the runner's time limit (--timeout)
+            limit_hit += bool(res.get("timed_out"))
         if (name, version) in first and state.get("status") == "scored":
             first_scored += 1
         if state.get("status") == "failed":
@@ -131,7 +142,9 @@ def main():
         print(f"agent run seconds: n {len(seconds)}, min {min(seconds)}, quartiles "
               f"{[round(x) for x in q]}, max {max(seconds)}")
     print(f"first generation: {first_scored} of {len(first)} scored; expired runs: "
-          f"{len(expired)}; endpoint runs: {len(endpoint)}; lost runs: {lost}")
+          f"{len(expired)}; endpoint runs: {len(endpoint)}; lost runs: {lost}; "
+          f"overflow attempts (failed): {overflows}, of which OpenCode recovered: "
+          f"{overflows_recovered}; runs stopped at the runner's time limit: {limit_hit}")
     if args.min_first_scored is not None and first_scored < args.min_first_scored:
         bad.append(f"{first_scored} first-generation versions scored, fewer than "
                    f"{args.min_first_scored}")

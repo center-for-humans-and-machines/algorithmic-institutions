@@ -116,6 +116,13 @@ FAKE = r'''#!/usr/bin/env python3
 import json, os, sys, time
 mode = os.environ["FAKE_MODE"]
 key = os.environ.get("OPENROUTER_API_KEY", "")
+if sys.argv[1] == "run" and mode == "replay":  # a real run's events, exit 1
+    for line in open(os.environ["FAKE_EVENTS"]):
+        print(json.dumps({**json.loads(line), "sessionID": "ses_1"}), flush=True)
+    sys.exit(1)
+if sys.argv[1] == "export" and mode == "replay":
+    print(open(os.environ["FAKE_SESSION"]).read())
+    sys.exit(0)
 if sys.argv[1] == "run":
     print(json.dumps({"type": "step_start", "sessionID": "ses_1", "text": key}), flush=True)
     if mode == "hang":
@@ -400,3 +407,50 @@ def test_ended_on_marks_an_interim_text():
                             _assistant("", 10, 0)]}
     s = oc.summarize(session)
     assert s["ended_on"] == "empty_after_tool_call" and s["report_chars"] == 24
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+def overflow_run(name, tmp_path, drop_compactions=False):
+    """A real run's events and session (trimmed), and the runner's verdict
+    inputs from them."""
+    data = json.loads((FIXTURES / f"opencode_overflow_recovered_{name}.json").read_text())
+    events, session = data["events"], data["session"]
+    if drop_compactions:
+        session["messages"] = [m for m in session["messages"]
+                               if not oc._compaction_summary(m["info"])]
+    path = tmp_path / "events.jsonl"
+    path.write_text("".join(json.dumps(e) + "\n" for e in events))
+    return oc.overflow_attempt(oc.error_events(path), session)
+
+
+@pytest.mark.parametrize("name", ["check", "qwen"])
+def test_an_overflow_is_recorded_with_whether_opencode_recovered(name, tmp_path):
+    # 993218's compaction check and pfq-exp1-20261127-9-v6's first run: the
+    # server refused a request, OpenCode compacted and went on
+    assert overflow_run(name, tmp_path) == {"overflows": 1, "recovered": True}
+    assert overflow_run(name, tmp_path, drop_compactions=True) == {
+        "overflows": 1, "recovered": False}
+
+
+@pytest.mark.parametrize("name", ["check", "qwen"])
+def test_an_overflow_is_a_failed_attempt_with_its_reason(name, fake, capsys, monkeypatch):
+    # the whole runner (main), a fake OpenCode replaying the real run
+    run, out, repo, data = fake
+    fixture = json.loads((FIXTURES / f"opencode_overflow_recovered_{name}.json").read_text())
+    events = out.parent / "replay_events.jsonl"
+    events.write_text("".join(json.dumps(e) + "\n" for e in fixture["events"]))
+    session = out.parent / "replay_session.json"
+    model = fixture["session"]["messages"][1]["info"]
+    (repo / ".opencode/opencode.json").write_text(json.dumps(
+        {"model": f"{model['providerID']}/{model['modelID']}"}))
+    session.write_text(json.dumps(fixture["session"]))
+    monkeypatch.setenv("FAKE_EVENTS", str(events))
+    monkeypatch.setenv("FAKE_SESSION", str(session))
+    code = run("replay")
+    summary = _summary(capsys)
+    assert code == 1 and summary["is_error"]
+    assert summary["overflow"] == {"overflows": 1, "recovered": True}
+    assert any("refused a request past its context" in f and "recovered" in f
+               for f in summary["failures"])
