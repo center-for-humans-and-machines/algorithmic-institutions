@@ -71,6 +71,7 @@ import csv
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -679,11 +680,14 @@ def submit_references(args, refs, versions, k, snapshots, out=None):
         snapshots["references"] = sha
     tree = local_cluster.tree(sha)
     size = template.get("episode_batch_size", 1)
+    # the out dir's name in the slices' names: re-evaluations that share a
+    # snapshot (the same code) must not share a reference's slice dirs
+    run = re.sub(r"[^A-Za-z0-9.-]", "-", Path(args.out).resolve().name)
     ref_jobs, ref_done = {}, {}
     for ref, spec in refs.items():
         seed = args.seed
         for j in range(k):
-            name = f"ref-{ref}_r{j:02d}"
+            name = f"ref-{run}-{ref}_r{j:02d}"
             cfg = reference_config(template, ref, spec, seed, f"{EVAL_OUT}/{name}")
             # the versions' seeds when batched alike; else disjoint ones of its own
             seed += max(batches(cfg), batches({**cfg, "episode_batch_size": size}))
