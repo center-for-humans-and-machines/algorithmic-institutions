@@ -36,7 +36,8 @@ def serve(tmp_path, env, body):
     stdout, stderr and exit code, with the port and the folder normalised."""
     script = (STUBS + 'source "$REPO/infra/dais/common.sh"\ninit_run > /dev/null\n'
               + body)
-    base = {"PATH": "/usr/bin:/bin", "USER": "u", "REPO": str(ROOT), "SLURM_SUBMIT_DIR": str(ROOT),
+    base = {"PATH": "/usr/bin:/bin", "USER": "u", "REPO": str(ROOT),
+            "SLURM_SUBMIT_DIR": str(ROOT),
             "PF_SCRATCH": f"{tmp_path}/scratch", "HF_HOME": "/models",
             "SLURM_JOB_NAME": "t", "SLURM_JOB_ID": "1", "CUDA_VISIBLE_DEVICES": "0,1"}
     r = subprocess.run(["bash", "-c", "set -euo pipefail\n" + script],
@@ -68,7 +69,8 @@ TWO = {"MODEL_PROFILE": "kimi-k3.1-pro", "SERVE_DRY_RUN": "1",
 def test_two_nodes_start_a_head_and_a_headless_worker(tmp_path):
     out, err, rc = serve(tmp_path, TWO, 'serve_model 0.90 8 "$PF_RUN/vllm.log" --x')
     assert rc == 0, err
-    head, worker = out.split("worker 1 on nodeB, log OUT/scratch/runs/t.1/vllm.node1.log:")
+    log = "OUT/scratch/runs/t.1/vllm.node1.log"
+    head, worker = out.split(f"worker 1 on nodeB, log {log}:")
     assert head.startswith("head on nodeA")
     common = ("--tensor-parallel-size 8", "--pipeline-parallel-size 2", "--nnodes 2",
               "--master-addr 10.0.0.1", "--master-port PORT",
@@ -79,7 +81,8 @@ def test_two_nodes_start_a_head_and_a_headless_worker(tmp_path):
         assert part in head and part in worker, part
     assert "--node-rank 0" in head and "--headless" not in head
     assert "--port PORT" in head and "VLLM_HOST_IP=10.0.0.1" in head
-    assert worker.strip().startswith("srun --nodes=1 --ntasks=1 --nodelist=nodeB --overlap")
+    assert worker.strip().startswith(
+        "srun --nodes=1 --ntasks=1 --nodelist=nodeB --overlap")
     assert "/bin/bash -c" in worker
     assert worker.rstrip().endswith("--node-rank 1 --headless")
     assert "--gres=gpu:8" in worker and "home.node1" in worker
@@ -98,4 +101,3 @@ def test_one_node_needs_no_node_list(tmp_path):
     out, err, rc = serve(tmp_path, env, 'serve_model 0.90 8 "$PF_RUN/vllm.log"')
     assert rc == 0, err
     assert "worker" not in out and "--nnodes" not in out and "infiniband" not in out
-
