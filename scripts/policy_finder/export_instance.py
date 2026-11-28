@@ -323,12 +323,12 @@ LOCAL_MODELS = {
     # temperature 1.0, top_p 0.95 (also the card's HLE and SWE-Marathon runs).
     # The effort is the server's default, chosen per job (REASONING_EFFORT; the
     # profile's default is max, the model's own; the campaigns run at high),
-    # as is the context (147,456:
-    # infra/dais/model_profiles/glm-5.3.sh). Output 32,768 per step: what the
-    # served context leaves above OpenCode's compaction point for 24 sessions.
+    # as is the context (262,144: infra/dais/model_profiles/glm-5.3.sh).
+    # Output 65,536 per step (the card's agentic runs allowed 64K to 128K):
+    # OpenCode compacts at 262,144 - 65,536 - 65,536 = 131,072 tokens.
     "zai-org/GLM-5.3": {
         "options": {"temperature": 1.0, "top_p": 0.95},
-        "limit": {"context": 147456, "output": 32768},
+        "limit": {"context": 262144, "output": 65536},
     },
 }
 #: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
