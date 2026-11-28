@@ -26,6 +26,14 @@ GP-peak standard error of the campaign, divided by sqrt(K), is at most
 cluster backend's pool (PF_CLUSTER_BACKEND=local: infra/dais/pipeline.slurm.sh
 `python` mode). Fails if any slice fails.
 
+A campaign that iterated more lineages after generation 1 than
+--compare-top-k (4, the reference campaigns' top_k) gets two results: the
+comparable one, over the k lineages best after generation 1 by recorded score
+(what a top_k k campaign iterates throughout; the headline of summary.json),
+and the one over all lineages (summary.json "subsets"; curve_comparable.tsv
+beside curve.tsv). lineages.tsv holds each lineage's best so far per
+generation.
+
 Writes to <out dir>: versions.tsv (generation, lineage, version, stem, status,
 recorded score and se, re-evaluated score and se, episodes, commit),
 curve.tsv (per generation, the best so far by recorded score, its
@@ -273,6 +281,53 @@ def robust(rows, slices):
     return out
 
 
+def top_lineages(rows, k):
+    """The k lineages with the highest recorded generation-1 score (ties: the
+    lower lineage number): those a top_k = k campaign iterates throughout,
+    since a lineage best only rises and the others' stay fixed (campaign.py
+    select). Ranked by the recorded GP-peak pool, as campaign.py ranks exp1
+    and exp2 (a setting with a baseline ranks by its paired gain there)."""
+    first_gen = min(r["generation"] for r in rows)
+    gen1 = {r["lineage"]: r["recorded"] for r in rows if r["generation"] == first_gen}
+
+    def number(name):
+        tail = name.rsplit("-", 1)[-1]
+        return int(tail) if tail.isdigit() else 0
+
+    ranked = sorted(gen1, key=lambda n: (-(gen1[n] if gen1[n] is not None else -math.inf),
+                                         number(n)))
+    return ranked[:k]
+
+
+def analysis(rows, slices, k):
+    """Curve, improvement and its robust companions over `rows`."""
+    points = curve(rows, slices)
+    return points, {**with_ci(improvement(points), k), "robust": robust(rows, slices)}
+
+
+def lineage_curves(rows):
+    """Per lineage and generation: its best version so far by recorded score,
+    with that version's re-evaluated score."""
+    out = []
+    for name in sorted({r["lineage"] for r in rows},
+                       key=lambda n: int(n.rsplit("-", 1)[-1]) if n.rsplit("-", 1)[-1].isdigit()
+                       else 0):
+        best = None
+        for g in sorted({r["generation"] for r in rows}):
+            for r in rows:
+                if r["lineage"] == name and r["generation"] == g and r["recorded"] is not None \
+                        and (best is None or r["recorded"] > best["recorded"]):
+                    best = r
+            mine = [r for r in rows if r["lineage"] == name and r["generation"] == g]
+            out.append({"lineage": name, "generation": g,
+                        "version_this_generation": mine[0]["stem"] if mine else None,
+                        "best_so_far": best["stem"] if best else None,
+                        "recorded": best["recorded"] if best else None,
+                        "reevaluated": best["reevaluated"] if best else None,
+                        "reevaluated_se": best["reevaluated_se"] if best else None})
+    return out
+
+
 def write_tsv(path, rows):
     with open(path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0]), delimiter="\t",
@@ -293,6 +348,9 @@ def main():
     ap.add_argument("--slices", type=int, help="instead of --target-se")
     ap.add_argument("--keep-snapshots", action="store_true")
     ap.add_argument("--code", help="play every version with src/aimanager of this ref")
+    ap.add_argument("--compare-top-k", type=int, default=4,
+                    help="a campaign that iterated more lineages also gets the result "
+                    "over the k best after generation 1 (the reference's top_k)")
     args = ap.parse_args()
     if cluster_proxy.BACKEND != "local":
         sys.exit("set PF_CLUSTER_BACKEND=local (infra/dais/pipeline.slurm.sh)")
@@ -347,14 +405,36 @@ def main():
             for j, (pool, se) in enumerate(values):
                 f.write(f"{stem}\t{j}\t{pool:.6f}\t{se:.6f}\n")
     write_tsv(out / "versions.tsv", rows)
-    points = curve(rows, results)
-    write_tsv(out / "curve.tsv", points)
+    write_tsv(out / "lineages.tsv", lineage_curves(rows))
+    # a campaign that iterated more lineages than the reference (top_k 4):
+    # two results, the reference-comparable one over the lineages a top_k 4
+    # campaign would have iterated, and the one over all
+    first_gen = min(r["generation"] for r in rows)
+    iterated = {r["lineage"] for r in rows if r["generation"] > first_gen}
+    subsets = {"all": sorted({r["lineage"] for r in rows})}
+    if len(iterated) > args.compare_top_k:
+        subsets["comparable"] = top_lineages(rows, args.compare_top_k)
+    results_by = {}
+    for name, lineages in subsets.items():
+        part = [r for r in rows if r["lineage"] in lineages]
+        points, result = analysis(part, results, k)
+        write_tsv(out / ("curve.tsv" if name == "all" else f"curve_{name}.tsv"), points)
+        results_by[name] = {"lineages": lineages, **result, "points": points}
+    head = results_by.get("comparable", results_by["all"])
     summary = {"state": str(args.state), "refs": args.refs, "seed": args.seed,
                "slices": k, "target_se": args.target_se, "code": args.code,
-               "no_final": missing, **with_ci(improvement(points), k),
-               "robust": robust(rows, results)}
+               "no_final": missing,
+               "headline": ("comparable: the %d lineages best after generation 1 by "
+                            "recorded score, as a top_k %d campaign iterates"
+                            % (args.compare_top_k, args.compare_top_k))
+               if "comparable" in results_by else "all lineages",
+               **{k_: v for k_, v in head.items() if k_ not in ("points", "lineages")},
+               "subsets": {n: {k_: v for k_, v in r.items() if k_ != "points"}
+                           for n, r in results_by.items()}}
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    print(report(points, summary))
+    for name, r in results_by.items():
+        print(f"== {name}: {len(r['lineages'])} lineages")
+        print(report(r["points"], r))
 
 
 def _num(x, se=None):
