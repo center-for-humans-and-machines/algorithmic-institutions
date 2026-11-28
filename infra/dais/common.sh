@@ -48,6 +48,9 @@ export HF_HOME="${HF_HOME:-/dais/fs/scratch/$USER/models}"
 MODEL="${MODEL:-Qwen/Qwen3-Coder-Next}"
 MODEL_REV="${MODEL_REV:-a7fbcb5c0e12d62a448eaa0e260346bf5dcc0feb}"
 TOOL_PARSER="${TOOL_PARSER:-qwen3_xml}"
+# a text the server's rendered chat prompt must contain (check_prompt; empty:
+# no check), such as a reasoning effort a profile sets as the server's default
+PROMPT_MUST_CONTAIN="${PROMPT_MUST_CONTAIN:-}"
 # a reasoning model's parser (empty: none, as for Qwen3-Coder-Next)
 REASONING_PARSER="${REASONING_PARSER:-}"
 # the MoE kernels: triton (Qwen on H200 and B200, see campaign.slurm.sh), or
@@ -188,12 +191,43 @@ wait_ready() {
         return 1
       fi
       echo "ready after $(( SECONDS - t0 )) s on port $SERVER_PORT"
+      check_prompt || return 1
       return 0
     fi
     sleep 5
   done
   echo "FATAL: not ready after $timeout s" >&2
   return 1
+}
+
+# check_prompt: with PROMPT_MUST_CONTAIN set (a profile), the prompt the
+# server renders for a plain chat request, defaults included (such as a
+# reasoning effort set by --default-chat-template-kwargs), must contain it:
+# /tokenize with the chat, then /detokenize. Prints the rendered prompt's
+# start either way.
+check_prompt() {
+  [ -n "${PROMPT_MUST_CONTAIN:-}" ] || return 0
+  python3 - "$SERVER_URL" "$SERVER_KEY_FILE" "$MODEL" "$PROMPT_MUST_CONTAIN" <<'EOF'
+import json, sys, urllib.request
+base, key_file, model, want = sys.argv[1:5]
+key = open(key_file).read().strip()
+
+def post(path, body):
+    req = urllib.request.Request(base.rsplit("/v1", 1)[0] + path, json.dumps(body).encode(),
+                                 {"Authorization": f"Bearer {key}",
+                                  "Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode())
+
+tokens = post("/tokenize", {"model": model, "add_generation_prompt": True,
+                            "messages": [{"role": "user", "content": "Say ok."}]})["tokens"]
+prompt = post("/detokenize", {"model": model, "tokens": tokens})["prompt"]
+print("rendered prompt:", repr(prompt[:300]), flush=True)
+if want not in prompt:
+    print(f"FATAL: the server's prompt lacks {want!r}", file=sys.stderr)
+    sys.exit(1)
+print(f"the server's prompt has {want!r}")
+EOF
 }
 
 # in_vllm_image <command...>: a client (probe, benchmark) in the vLLM image,

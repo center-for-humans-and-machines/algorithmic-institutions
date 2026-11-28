@@ -309,16 +309,14 @@ LOCAL_MODELS = {
         "options": {"temperature": 1.0, "top_p": 0.95, "top_k": 40},
         "limit": {"context": 262144, "output": 16384},
     },
-    # huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash(-1017), "Recommended
-    # sampling parameters": temperature 1.0, top_p 0.95, max_tokens >= 256K;
-    # its agentic results were run at the maximum reasoning effort, which the
-    # server's prompt encoder takes from chat_template_kwargs (vLLM 0.34
-    # tokenizers/deepseek_v41.py; thinking is on by default). The context is
-    # the server's (infra/dais/model_profiles/deepseek-v4.1-flash-1017.sh).
+    # huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017 (the dated card, at
+    # revision 08c8657f), "Recommended sampling parameters": temperature 1.0,
+    # top_p 1.0, max_tokens >= 256K. The maximum reasoning effort is the
+    # server's default (infra/dais/model_profiles/deepseek-v4.1-flash-1017.sh),
+    # as is the context (1M tokens).
     "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
-        "options": {"temperature": 1.0, "top_p": 0.95,
-                    "chat_template_kwargs": {"reasoning_effort": "max"}},
-        "limit": {"context": 524288, "output": 131072},
+        "options": {"temperature": 1.0, "top_p": 1.0},
+        "limit": {"context": 1048576, "output": 262144},
     },
 }
 #: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
@@ -414,20 +412,54 @@ READ_LIMIT_BYTES = 50 * 1000
 READ_LIMIT_LINES = 2000
 
 
-def slim_json(data, rows="points", sort_by=None, digits=4):
+#: OpenCode's read tool also cuts every line at 2000 characters
+READ_LIMIT_LINE_CHARS = 2000
+#: Lines this file writes stay under it, with room to spare
+LINE_CHARS = 1500
+
+
+def _dump(x):
+    """Compact JSON of `x` in lines of at most LINE_CHARS where it can: a
+    dict or list too long for one line puts its items on lines of their
+    own, short items grouped (only an atom longer than that, a long
+    string, keeps a long line)."""
+    one = json.dumps(x, separators=(",", ":"))
+    if len(one) <= LINE_CHARS or not isinstance(x, (dict, list)) or not x:
+        return one
+    if isinstance(x, dict):
+        items = [json.dumps(k) + ":" + _dump(v) for k, v in x.items()]
+        opening, closing = "{", "}"
+    else:
+        items = [_dump(v) for v in x]
+        opening, closing = "[", "]"
+    lines, line = [], ""
+    for item in items:
+        if line and ("\n" in item or len(line) + 1 + len(item) > LINE_CHARS):
+            lines.append(line)
+            line = item
+        else:
+            line = f"{line},{item}" if line else item
+    lines.append(line)
+    return opening + ",\n".join(lines) + closing
+
+
+def slim_json(data, rows="points", sort_by=None):
     """A sweep file as the agent gets it: the same keys and entries, floats to
-    `digits` significant digits, no indentation, one entry of `rows` per line
-    (sorted by `sort_by`, highest first, when given)."""
+    4 significant digits (fewer would merge the points' scores: exp1's pools
+    of 630 to 660 at 2 digits take 4 distinct values), compact, one entry of
+    `rows` per line (sorted by `sort_by`, highest first, when given), and no
+    line over LINE_CHARS where it can be broken (the read tool cuts lines at
+    2000 characters)."""
     head = {k: v for k, v in data.items() if k != rows}
     entries = list(data.get(rows) or [])
     if sort_by and all(isinstance(e.get(sort_by), (int, float)) for e in entries):
         entries.sort(key=lambda e: -e[sort_by])
-    compact = json.dumps(_round(head, digits), separators=(",", ":"))
+    compact = _dump(_round(head))
     if rows not in data:
         return compact + "\n"
-    lines = ",\n".join(json.dumps(_round(e, digits), separators=(",", ":"))
-                       for e in entries)
-    return f'{compact[:-1]}{"," if head else ""}"{rows}":[\n{lines}\n]}}\n'
+    lines = ",\n".join(_dump(_round(e)) for e in entries)
+    sep = ",\n" if head else ""
+    return f'{compact[:-1]}{sep}"{rows}":[\n{lines}\n]}}\n'
 
 
 def slim_sweep_files(export):
@@ -452,19 +484,14 @@ def slim_sweep_files(export):
             except (OSError, ValueError):
                 continue  # not ours to judge: left as it is
             sort_by = "pool" if rel.endswith("sweep.json") else "mean"
-            # within the read tool's limit, else with fewer digits; a file
-            # still over it keeps 2 digits and is said so loudly: the read
-            # tool then cuts its tail, the lowest-scoring points (best first)
-            for digits in (4, 3, 2):
-                slim = slim_json(data, "points", sort_by, digits)
-                if (len(slim.encode()) <= READ_LIMIT_BYTES
-                        and slim.count("\n") < READ_LIMIT_LINES):
-                    break
-            else:
+            slim = slim_json(data, "points", sort_by)
+            if (len(slim.encode()) > READ_LIMIT_BYTES
+                    or slim.count("\n") >= READ_LIMIT_LINES):
+                # the read tool cuts the tail, the lowest-scoring points
+                # (best first); fewer digits would merge the scores instead
                 print(f"WARNING: {os.path.relpath(path, export)} is {len(slim.encode())} "
-                      f"bytes even at 2 significant digits, over the agent's read limit of "
-                      f"{READ_LIMIT_BYTES}: its lowest points are cut when read",
-                      file=sys.stderr, flush=True)
+                      f"bytes, over the agent's read limit of {READ_LIMIT_BYTES}: its "
+                      f"lowest points are cut when read", file=sys.stderr, flush=True)
             with open(path, "w") as f:
                 f.write(slim)
             sizes[os.path.relpath(path, export)] = (len(text), len(slim))

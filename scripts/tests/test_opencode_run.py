@@ -454,3 +454,26 @@ def test_an_overflow_is_a_failed_attempt_with_its_reason(name, fake, capsys, mon
     assert summary["overflow"] == {"overflows": 1, "recovered": True}
     assert any("refused a request past its context" in f and "recovered" in f
                for f in summary["failures"])
+
+
+def test_a_step_at_the_output_limit_is_a_failed_attempt():
+    session = {"info": {"agent": "policy-finder"}, "messages": [
+        {"info": {"role": "user"}, "parts": [{"type": "text", "text": "Design."}]},
+        {"info": {"role": "assistant", "providerID": "local", "modelID": "m",
+                  "finish": "length", "tokens": {"input": 5, "output": 32000}},
+         "parts": [{"type": "text", "text": "Let me think about the rule ..."}]}]}
+    summary = oc.summarize(session)
+    assert summary["length_stops"] == 1
+    why = oc.failures(summary, 0, "", "local/m", None)
+    assert any("output limit" in f for f in why)
+
+
+def test_the_output_cap_is_the_models_output_limit(fake, capsys):
+    run, out, repo, data = fake
+    (repo / ".opencode/opencode.json").write_text(json.dumps({
+        "model": "openrouter/q/c",
+        "provider": {"openrouter": {"models": {"q/c": {"limit": {"output": 262144}}}}}}))
+    run("ok")
+    assert _summary(capsys)["output_limit"] == 262144
+    assert oc.configured_output_limit(repo) == 262144
+

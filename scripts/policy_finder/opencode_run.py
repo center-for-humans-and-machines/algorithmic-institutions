@@ -162,7 +162,7 @@ def summarize(session):
     tokens = {"input": 0, "output": 0, "reasoning": 0, "cache_read": 0,
               "cache_write": 0}
     cost, models, steps, tools, errors = 0.0, set(), 0, 0, []
-    final, turn, prompts, compactions = None, [], set(), 0
+    final, turn, prompts, compactions, length_stops = None, [], set(), 0, 0
     for message in session.get("messages", []):
         info = message.get("info") or {}
         if info.get("role") == "user":
@@ -173,6 +173,8 @@ def summarize(session):
         if info.get("role") != "assistant":
             continue
         final = message
+        if info.get("finish") == "length":
+            length_stops += 1  # the step ran out of output tokens mid-way
         if _compaction_summary(info):
             compactions += 1
         else:
@@ -203,13 +205,30 @@ def summarize(session):
             "models": sorted(models), "steps": steps, "tool_calls": tools,
             "errors": errors, "final_error": final_error,
             "ended_on": _ending(turn), "report_chars": len(report.strip()),
-            "compactions": compactions,
+            "compactions": compactions, "length_stops": length_stops,
             "agent": (session.get("info") or {}).get("agent")}
 
 
 #: OpenCode's warning when the agent named with --agent does not load: it
 #: then runs its default agent, without our definition
 AGENT_FALLBACK = "Falling back to default agent"
+
+
+#: OpenCode 1.19.6 caps a request's output (reasoning included) at 32,000
+#: tokens (provider/transform.ts OUTPUT_TOKEN_MAX), whatever the model's
+#: `limit.output`; this variable raises the cap (its flag.ts outputTokenMax)
+OUTPUT_CAP_ENV = "OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"
+
+
+def configured_output_limit(repo):
+    """The output limit the export's OpenCode config gives its model, or None."""
+    try:
+        with open(os.path.join(repo, ".opencode", "opencode.json")) as f:
+            conf = json.load(f)
+        provider, _, model = conf["model"].partition("/")
+        return int(conf["provider"][provider]["models"][model]["limit"]["output"])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
 
 
 def configured_model(repo):
@@ -299,6 +318,10 @@ def failures(summary, code, stderr, expected_model, event_error, agent="policy-f
     out = []
     if code != 0:
         out.append(f"OpenCode exited with {code}")
+    if summary.get("length_stops"):
+        out.append(f"{summary['length_stops']} step(s) stopped at the output limit "
+                   f"(finish `length`, output limit {summary.get('output_limit')}): "
+                   "the model's reasoning or answer was cut, the session ended there")
     if overflow:
         out.append(f"the server refused a request past its context "
                    f"({overflow['overflows']} time(s)); OpenCode "
@@ -551,10 +574,16 @@ def main(argv=None):
         started = time.time()
         with open(events, "w") as out, open(os.path.join(args.out, "stderr.log"),
                                             "w") as err:
+            # the model's own output limit, not OpenCode's 32,000-token cap
+            opencode_env = dict(os.environ)
+            output_limit = configured_output_limit(args.repo)
+            if output_limit:
+                opencode_env[OUTPUT_CAP_ENV] = str(output_limit)
+            summary["output_limit"] = output_limit
             code = run_bounded(
                 ["opencode", "run", "--agent", "policy-finder", "--format", "json",
                  "--title", args.title, args.prompt],
-                args.timeout, cwd=args.repo, stdout=out, stderr=err)
+                args.timeout, cwd=args.repo, stdout=out, stderr=err, env=opencode_env)
         summary["seconds"] = round(time.time() - started)
         if code is None:
             summary["timed_out"] = True
