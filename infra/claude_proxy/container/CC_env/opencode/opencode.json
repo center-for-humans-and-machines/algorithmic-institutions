@@ -15,7 +15,7 @@
     "bash": "allow",
     "todowrite": "allow",
     "invalid": "allow",
-    "external_directory": "deny",
+    "external_directory": {"*": "deny", "/tmp/*": "allow"},
     "doom_loop": "deny"
   }
 }

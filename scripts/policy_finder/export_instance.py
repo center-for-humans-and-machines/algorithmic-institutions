@@ -184,6 +184,8 @@ def sibling_pattern(name):
     if prefix == name:
         return INSTANCE_NAME
     return re.compile(rf"{INSTANCE_NAME.pattern}|(?<![\w-]){re.escape(prefix)}-\d+")
+
+
 #: Harness opencode: the folder OpenCode loads from the working directory,
 #: the agent's wording that names Claude Code's tools (OpenCode's are
 #: lower-case), and the rule files OpenCode would load into the context
@@ -294,17 +296,48 @@ def opencode_agent(text):
 
 
 #: A server of our own (base_url): the model card's sampling settings and
-#: the server's context (infra/dais/common.sh MAX_MODEL_LEN), by served name.
-#: OpenCode sends the sampling options with every request; the context lets
-#: it compact a long session before the server refuses it.
+#: its output limit, by served name. OpenCode sends the sampling options with
+#: every request. The context is the server's (PF_LLM_CONTEXT, which
+#: infra/dais/campaign.slurm.sh sets from MAX_MODEL_LEN; the value here when
+#: unset), so that OpenCode compacts a long session before the server refuses.
 LOCAL_MODELS = {
     # huggingface.co/Qwen/Qwen3-Coder-Next, "Best Practices" (also its
-    # generation_config.json at revision a7fbcb5c)
+    # generation_config.json at revision a7fbcb5c); 262,144 tokens natively
     "Qwen/Qwen3-Coder-Next": {
         "options": {"temperature": 1.0, "top_p": 0.95, "top_k": 40},
-        "limit": {"context": 131072, "output": 16384},
+        "limit": {"context": 262144, "output": 16384},
     },
 }
+#: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
+#: beyond the output limit: room for the tool results one step adds (one
+#: tool output is capped at 50 KB or 2000 lines, 20-25k tokens of numeric
+#: text; a step may make two) and for the compaction request itself. Without
+#: it OpenCode sent a request past the server's context, the server refused
+#: it, and the compaction that followed failed the same way (9 runs of the
+#: first Qwen campaigns ended so).
+COMPACTION_MARGIN = 65536
+
+
+def local_model(model):
+    """A local model's OpenCode entry and the compaction setting for it."""
+    entry = {"name": model, **LOCAL_MODELS.get(model, {})}
+    limit = dict(entry.get("limit") or {"context": 131072, "output": 16384})
+    context = os.environ.get("PF_LLM_CONTEXT")
+    if context:
+        try:
+            limit["context"] = int(context)
+        except ValueError:
+            raise ExportError(f"PF_LLM_CONTEXT is not a number of tokens: {context!r}") from None
+    # OpenCode 1.19.6 (session/overflow.ts) applies `compaction.reserved` only
+    # to a model with `limit.input`; without one it compacts at context minus
+    # the output limit, with no margin at all
+    limit["input"] = limit["context"]
+    entry["limit"] = limit
+    reserved = limit["output"] + COMPACTION_MARGIN
+    if limit["context"] - reserved < 32768:  # too little left to work in
+        raise ExportError(f"context {limit['context']} is too small for output "
+                          f"{limit['output']} and a compaction margin of {COMPACTION_MARGIN}")
+    return entry, {"auto": True, "reserved": reserved}
 
 
 def opencode_config(conf):
@@ -319,16 +352,18 @@ def opencode_config(conf):
     """
     model = conf["model"]
     if conf.get("base_url"):
+        entry, compaction = local_model(model)
         return {
             "$schema": "https://opencode.ai/config.json",
             "enabled_providers": ["local"],
             "model": f"local/{model}",
             "small_model": f"local/{model}",
+            "compaction": compaction,
             "provider": {"local": {
                 "npm": "@ai-sdk/openai-compatible",
                 "options": {"baseURL": conf["base_url"],
                             "apiKey": "{env:PF_LLM_API_KEY}"},
-                "models": {model: {"name": model, **LOCAL_MODELS.get(model, {})}},
+                "models": {model: entry},
             }},
         }
     options = {}

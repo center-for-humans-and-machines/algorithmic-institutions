@@ -1,0 +1,32 @@
+# The rerun of dais-qwen-exp2.yml on the fixed setup (served context 262144
+# reaching OpenCode, early compaction, the agent's own /tmp allowed): only the
+# prefix differs, to measure how much of the gap to Opus was the setup.
+# The open-weight run of experiment 2 on DAIS, in the old (free) setting,
+# exactly as the Opus reference campaign proxy-2026-11.yml (pf-20261104)
+# ran it, but for the harness, the model and the prefix: OpenCode agents on
+# Qwen3-Coder-Next served by vLLM in the same job (infra/dais/campaign.slurm.sh),
+# sims in the job's CPU pool, episode sizes the pipeline's defaults for the
+# setting (PF_SWEEP_EPISODES=default, PF_FINAL_EPISODES=default).
+# Judged by infra/dais/reevaluate.py against the reference curve
+# (docs/reports/policy_finder_reference_curves.md).
+# Unlike the Opus reference (top_k 4), every lineage is iterated in every
+# generation (top_k 12, Levin, 2026-11-28): 12 x 7 = 84 versions. The
+# Opus-comparable result is that of the 4 lineages best after generation 1,
+# which a top_k 4 campaign would have iterated throughout (campaign.py:
+# lineage bests only rise, the others' stay fixed).
+prefix: pfq2-exp2-20261128
+setting: exp2
+mode: free
+n_fresh: 12
+generations: 6
+top_k: 12
+min_params: 1
+max_params: 5
+sobol_points: 256
+parallel: 12
+error_retries: 3
+retry_wait: 600
+summarize: null
+harness: opencode
+model: Qwen/Qwen3-Coder-Next
+base_url: "{env:PF_LLM_BASE_URL}"
