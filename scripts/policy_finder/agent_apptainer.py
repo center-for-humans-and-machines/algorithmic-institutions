@@ -501,7 +501,12 @@ def finish(run_id, log=print, harness="opencode"):
         error = (f"exit code {state.get('exit_code')}, no reason from the runner"
                  + ("" if parsed else " (no summary)"))
     source, paths = ar.transcripts(run_id, harness)
+    try:
+        timeout = json.loads((run / "run.json").read_text())["timeout"]
+    except (OSError, ValueError, KeyError):
+        timeout = None
     record = {
+        **ar.time_limits(timeout),
         "run_id": run_id,
         "backend": "apptainer",
         "status": verdict,

@@ -83,6 +83,10 @@ def main():
     ap.add_argument("--no-expired", action="store_true",
                     help="no agent run may have expired (its time limit), and none "
                     "may have failed on the endpoint (the load test)")
+    ap.add_argument("--no-limit-stops", action="store_true",
+                    help="no agent run may have been stopped at the time limit or "
+                    "had a step cut at the output limit (stage option +nolimits)")
+    ap.add_argument("--json-out", help="write the limit report here as JSON")
     args = ap.parse_args()
     ok_status = ("scored",) if args.expect == "scored" else ("scored", "failed")
     pf_runs = Path(os.environ["PF_RUNS"])
@@ -104,6 +108,7 @@ def main():
         members = [(args.target, conf.get("version", 1))]
         first = set(members)
     seconds, first_scored, expired, endpoint, lost = [], 0, [], [], 0
+    time_stops, output_stops, lost_to_limits, limits_seen = [], [], [], set()
     overflows, overflows_recovered, limit_hit, length_cut = 0, 0, 0, 0
     for name, version in members:
         stem = name if version == 1 else f"{name}-v{version}"
@@ -113,9 +118,24 @@ def main():
         data = state.get("data") or {}
         endpoint += [f"{stem} {r.get('run_id')}" for r in data.get("endpoint_runs") or []]
         lost += len(data.get("lost_runs") or [])
+        stopped_here = []
         for r in data.get("agent_runs") or []:
             if (r.get("result") or {}).get("seconds") is not None:
                 seconds.append(r["result"]["seconds"])
+            if r.get("time_limit_s"):
+                limits_seen.add((r["time_limit_s"], r.get("opencode_time_limit_s")))
+            ran = f"{stem} {r.get('run_id')}"
+            if r.get("status") == "expired" or (r.get("result") or {}).get("timed_out"):
+                time_stops.append(ran)
+                stopped_here.append("time limit")
+            if (r.get("result") or {}).get("length_stops"):
+                output_stops.append(ran)
+                stopped_here.append("output limit")
+        if (state.get("status") == "failed" and failure(state)[0] == "agent"
+                and stopped_here):
+            # all its attempts failed, one of them at a limit: rerun it with a
+            # higher cap rather than count it as the model's failure
+            lost_to_limits.append(f"{stem} ({', '.join(sorted(set(stopped_here)))})")
             if r.get("status") == "expired":
                 expired.append(f"{stem} {r.get('run_id')}")
             res = r.get("result") or {}
@@ -139,10 +159,31 @@ def main():
                 continue
         if state.get("status") not in ok_status:
             bad.append(f"{stem} is {state.get('status')}")
+    durations = {}
     if seconds:
         q = statistics.quantiles(seconds, n=4) if len(seconds) > 1 else seconds * 3
+        durations = {"n": len(seconds), "min": min(seconds),
+                     "quartiles": [round(x) for x in q], "max": max(seconds)}
         print(f"agent run seconds: n {len(seconds)}, min {min(seconds)}, quartiles "
-              f"{[round(x) for x in q]}, max {max(seconds)}")
+              f"{durations['quartiles']}, max {max(seconds)}")
+        for limit, oc_limit in sorted(limits_seen):
+            # OpenCode runs to oc_limit; the container is killed at limit
+            share = max(seconds) / oc_limit if oc_limit else None
+            used = f"; the longest run used {share:.0%} of OpenCode's" if share else ""
+            print(f"  agent time limit {limit} s (OpenCode stopped at {oc_limit} s, "
+                  f"600 s before it){used}")
+            durations.setdefault("limits", []).append(
+                {"time_limit_s": limit, "opencode_time_limit_s": oc_limit,
+                 "longest_share_of_opencode_limit": share and round(share, 3)})
+    print(f"runs stopped at the time limit: {len(time_stops)} {time_stops}")
+    print(f"runs with a step cut at the output limit: {len(output_stops)} {output_stops}")
+    print(f"versions lost with a limit stop among their attempts (rerun them with a "
+          f"higher cap): {len(lost_to_limits)} {lost_to_limits}")
+    if args.json_out:
+        Path(args.json_out).write_text(json.dumps(
+            {"time_limit_stops": time_stops, "output_limit_stops": output_stops,
+             "versions_lost_with_limit_stops": lost_to_limits,
+             "agent_run_seconds": durations}, indent=1) + "\n")
     print(f"first generation: {first_scored} of {len(first)} scored; expired runs: "
           f"{len(expired)}; endpoint runs: {len(endpoint)}; lost runs: {lost}; "
           f"overflow attempts (failed): {overflows}, of which OpenCode recovered: "
@@ -155,6 +196,9 @@ def main():
         bad.append(f"expired agent runs: {', '.join(expired)}")
     if args.no_expired and endpoint:
         bad.append(f"agent runs failed on the endpoint: {', '.join(endpoint)}")
+    if args.no_limit_stops and (time_stops or output_stops):
+        bad.append(f"agent runs stopped at a limit: time {time_stops}, "
+                   f"output {output_stops}")
     if bad:
         print("NOT AS EXPECTED: " + "; ".join(bad))
         return 1

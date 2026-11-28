@@ -5,9 +5,10 @@
 # 2. the load test at the real campaigns' width (12 lineages per experiment,
 #    24 agents at once) at smoke size, re-evaluated in 4 slices each; it
 #    passes with at least 10 of 12 first-generation versions scored, no
-#    expired and no endpoint run (`finished/10`);
+#    expired, no endpoint run and no run stopped at a limit
+#    (`finished/10+nolimits`);
 # 3. the two real campaigns at once, each re-evaluated when done (15 slices
 #    for exp2, 45 for exp1), with the Qwen and Opus campaigns' sizes.
 run      scored      20 20 scripts/policy_finder/campaigns/dais-dsv41-smoke-exp2.yml
-run      finished/10 20 20 scripts/policy_finder/campaigns/dais-dsv41-load-exp2.yml:4 scripts/policy_finder/campaigns/dais-dsv41-load-exp1.yml:4
+run      finished/10+nolimits 20 20 scripts/policy_finder/campaigns/dais-dsv41-load-exp2.yml:4 scripts/policy_finder/campaigns/dais-dsv41-load-exp1.yml:4
 run      finished default default scripts/policy_finder/campaigns/dais-dsv41-exp2.yml:15 scripts/policy_finder/campaigns/dais-dsv41-exp1.yml:45

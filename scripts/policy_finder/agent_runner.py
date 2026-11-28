@@ -190,11 +190,24 @@ def command(prompt, harness="claude", title="policy-finder", write_dirs=(),
     ]
 
 
+def opencode_time_limit(timeout=None):
+    """OpenCode's own time limit (opencode_run.py --timeout): 600 s before
+    the agent's time limit (PF_AGENT_TIMEOUT, the container's), so that the
+    runner always gets to save, redact and report."""
+    return max((TIMEOUT if timeout is None else timeout) - 600, 60)
+
+
+def time_limits(timeout=None):
+    """The limits a run ran under, for its record."""
+    timeout = TIMEOUT if timeout is None else timeout
+    return {"time_limit_s": timeout, "opencode_time_limit_s": opencode_time_limit(timeout)}
+
+
 def runner_options():
     """opencode_run.py's own limits, appended to `command` by a backend:
     OpenCode stops before the container's timeout (so the runner redacts),
     and the key-limit requirement."""
-    out = ["--timeout", str(max(TIMEOUT - 600, 60))]
+    out = ["--timeout", str(opencode_time_limit())]
     if REQUIRE_KEY_LIMIT:
         out.append("--require-key-limit")
     return out
@@ -379,6 +392,7 @@ def finish(run_id, log=print, harness="claude"):
         if why and status != "succeeded":
             error = "; ".join([*([error] if error else []), *why])
     return {
+        **time_limits(),
         "run_id": run_id,
         "status": status,
         "exit_code": run.get("exit_code"),

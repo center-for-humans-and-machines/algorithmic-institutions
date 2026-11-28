@@ -39,7 +39,7 @@ make_tree() {  # a fresh fake checkout in $T/repo
   git -C "$T/repo" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
   cat > "$T/repo/infra/dais/common.sh" <<'EOF'
 PF_HERE="$PF_REPO/infra/dais"
-SIM_SIF=/dev/null SIM_SIF_SHA256=x AGENT_SIF=/dev/null AGENT_SIF_SHA256=x MODEL=m MODEL_REV=r
+SIM_SIF=/dev/null SIM_SIF_SHA256=x AGENT_SIF=/dev/null AGENT_SIF_SHA256=x MODEL=m MODEL_REV=r VLLM_SIF=/dev/null MAX_MODEL_LEN=131072
 init_run() { PF_RUN="$PF_SCRATCH/run"; mkdir -p "$PF_RUN/tmp"; BG_PIDS=(); }
 cleanup() { local p; for p in "${BG_PIDS[@]}"; do kill "$p" 2>/dev/null || true; done; }
 assert_vllm_image() { :; }
@@ -111,9 +111,9 @@ expect() {  # expect <name> <exit code> <got> <grep pattern> [<absent pattern>]
 make_tree
 run_job A "run scored 20 20 a.yml
 # a comment
-run finished/10 default default b.yml:2 c.yml"
+run finished/10+nolimits default default b.yml:2 c.yml"
 expect A 0 $? "re-evaluation exit 0" "stage .* failed"
-grep -q -- "'--min-first-scored', '10', '--no-expired'" "$T/A.log" \
+grep -q -- "'--min-first-scored', '10', '--no-expired', '--no-limit-stops'" "$T/A.log" \
   && echo "PASS A passes finished/10 to the check" \
   || { echo "FAIL A: no --min-first-scored"; fails=$((fails + 1)); }
 

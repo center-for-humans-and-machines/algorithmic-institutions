@@ -4,5 +4,5 @@
 # No kill test and no smoke stages (a kill test without its marker would run
 # again on a finished smoke campaign and fail). Before using it, check the
 # load campaigns' state files for endpoint_runs: the gate refuses any.
-run      finished/10 20 20 scripts/policy_finder/campaigns/dais-load-exp2.yml:4 scripts/policy_finder/campaigns/dais-load-exp1.yml:4
+run      finished/10+nolimits 20 20 scripts/policy_finder/campaigns/dais-load-exp2.yml:4 scripts/policy_finder/campaigns/dais-load-exp1.yml:4
 run      finished default default scripts/policy_finder/campaigns/dais-qwen-exp2.yml:15 scripts/policy_finder/campaigns/dais-qwen-exp1.yml:45
