@@ -284,25 +284,29 @@ Expected to fit or not, unverified. Weight sizes are the summed safetensors file
 | Architecture | `GlmMoeDsaForCausalLM`: 78 layers, 256 experts (8 active), MLA (`kv_lora_rank` 512) with DeepSeek-V3.2-style sparse attention (top 2048), one MTP layer | `config.json` |
 | vLLM | from v0.29 per the recipe; v0.34.0 maps the architecture to `models/deepseek_v32.py`, transformers 5.22.2 (5.15 needed) | recipes.vllm.ai/zai-org/GLM-5.3; the image's registry |
 | Parsers | `--tool-call-parser glm47 --reasoning-parser glm47` | recipe; both registered in v0.34.0 |
-| Context | 1,048,576 natively; served 262,144 | `max_position_embeddings`; profile |
+| Context | 1,048,576 natively; served 147,456 (below) | `max_position_embeddings`; profile |
 | Sampling | temperature 1.0, top_p 0.95 | `generation_config.json`; the card's HLE and SWE-Marathon runs |
-| Reasoning | always on; `reasoning_effort` low, high or max (default max, any other value is max), a chat template variable passed as `chat_template_kwargs` | model card "Note"; `chat_template.jinja` |
+| Reasoning | always on; `reasoning_effort` low, high or max, rendered as `Reasoning Effort: Low`, `High` or `Max`; the model's default is max (a request without one, or with any other value, renders `Max`). The profile declares the three with default max; the campaigns run at high (Levin, 2026-11-28) | model card "Note"; `chat_template.jinja`; job 993473 rendered `Max` without an effort |
 
 Chat template quirks (rendered by vLLM's HF renderer on the Python frontend; `--tokenizer-mode glm5_next` is the same there, the recipe's Rust frontend is not used): the reasoning effort becomes a first `<|system|>Reasoning Effort: Max` line, ahead of the tools block and the client's own system prompt; tool calls are XML (`<tool_call>name<arg_key>k</arg_key><arg_value>v</arg_value></tool_call>`), and the template needs the arguments as a mapping, which vLLM's `_postprocess_messages` makes from the OpenAI JSON string; the generation prompt ends in `<think>`, so the model's output starts inside its reasoning; `clear_thinking` defaults to false, so earlier turns keep their reasoning, if the client sends it back as `reasoning_content` (otherwise they get an empty `<think></think>`).
 
-Memory at TP 8 (estimates, not measured): 88 GiB of weights per GPU. On 8 B200 (179 GiB each) at utilisation 0.90 about 68 GiB per GPU remain for the KV cache after about 5 GiB of overhead; on 8 H200 about 33 GiB. The MLA latent cache is replicated on every GPU, about 100 KB per token in BF16 (576 values per layer plus the indexer's keys, 78 layers), so about 0.7M tokens in all on B200 and 0.35M on H200; an FP8 cache (`--kv-cache-dtype fp8_e4m3`, the recipe's) would hold about 1.6 times as many. It does not fit on fewer GPUs: 4 B200 (716 GiB) hold less than the weights, and TP must divide the 64 heads.
+Memory at TP 8 on 8 B200, measured (job 993477, utilisation 0.90, served 262,144 then): 89.5 GiB of weights per GPU, 5.5 GiB for CUDA graphs; vLLM chose an FP8 KV cache by itself (`Using standard fp8 KV cache format`), 55.8 GiB per GPU (19,626 blocks), 1,256,064 tokens in all: 47.7 KB per token, the MLA cache being replicated on every GPU. The recipe's `--kv-cache-dtype fp8_e4m3` is therefore not needed. (The estimate before this run assumed a BF16 cache, about twice as large per token.) It does not fit on fewer GPUs: 4 B200 (716 GiB) hold less than the weights, and TP must divide the 64 heads. On 8 H200 about 33 GiB per GPU would remain, roughly 0.7M tokens: not measured.
+
+Served context: a session holds up to OpenCode's compaction point, the context less the output limit and the compaction margin (65,536). With an output limit of 32,768 and 147,456 served, it compacts at 49,152 tokens; 1,256,064 / 49,152 = 25.6 sessions at their compaction point fit at once, so the free mode's 24 agents never wait for KV space. The single-idea mode's 40 agents fit at an average of 31,400 tokens each; above that vLLM preempts (recomputes) rather than fails. A context that left room for 40 sessions at the compaction point (about 31k each) is below the smallest OpenCode accepts (compaction point 32,768).
+
+Loading: the weights loaded in 1,166 s from GPFS (all 8 ranks 1,184 s), profiling, KV cache and warm-up took 475 s more, the server was ready 1,771 s after start; `READY_TIMEOUT` is 3,600.
 
 What ran (job IDs on DAIS):
 
-- 993473 (`small`, CPU): in the v0.34.0 image, the snapshot's tokenizer loads (`glm5_next`, vocabulary 154,856), the template renders tools, a tool-call history and both effort levels; the `glm47` tool parser turns a GLM tool call into `tool_calls` (`bash`, `{"command": "ls -la /tmp", "timeout": 30}`) with the text before it as content, and the `glm47` reasoning parser splits `reasoning</think>answer`. PASS.
+- 993473 (`small`, CPU): in the v0.34.0 image, the snapshot's tokenizer loads (`glm5_next`, vocabulary 154,856), the template renders tools, a tool-call history and the efforts; the `glm47` tool parser turns a GLM tool call into `tool_calls` (`bash`, `{"command": "ls -la /tmp", "timeout": 30}`) with the text before it as content, and the `glm47` reasoning parser splits `reasoning</think>answer`. PASS.
 - `gpudev` cannot prove serving: its QOS allows 4 GPUs per user, fewer than the weights need.
-- The full-node proof (load time, memory, `/health`, chat, tool call unstreamed and streamed, one OpenCode session) is prepared and checked with `sbatch --test-only`, not yet run.
+- 993477 (`gpu`, 8 B200, daisg202, 30 minutes, at the default effort max and 262,144 served): loading and memory as above; `probe_endpoint.py` (one trial each): tool call, streamed tool call, a tool call after a 64k-token message and after a 64k-token history of tool calls (unstreamed and streamed) all PASS, each a proper `tool_calls` field, 0.7 to 2.3 s, 20 to 72 reasoning tokens; the plain chat FAILED only because the probe's 200 tokens all went to reasoning (`PROBE_MAX_TOKENS`, 8192 for a reasoning model, has since fixed the probe). One OpenCode session through the pipeline's backend (`agent_runner`, the agent image) succeeded with the key in no transcript, but answered about a missing data file: the checkout lacked `experiments/` (fixed since).
 
 Known problems and open points:
 
-- `probe_endpoint.py` gives a chat 200 tokens and a tool call 600; a model that reasons at maximum effort spends those on reasoning, so `serve.slurm.sh MODE=probe` can fail for it although the server is fine.
-- `agent_check.slurm.sh WITH_MODEL=1` writes OpenCode's config for `Qwen/Qwen3-Coder-Next` and waits 720 s for the server, whatever the profile.
-- The KV cache at BF16 is the profile's only option; FP8 needs `VLLM_EXTRA=--kv-cache-dtype fp8_e4m3` on each submission. MTP speculative decoding (the recipe's `--speculative-config.method mtp`) is off for the same reason.
+- The two runs above used no `REASONING_EFFORT` (the default, max); the campaigns run at high, whose prompt check (`Reasoning Effort: High`) has not run on a server yet.
+- An output limit of 32,768 tokens per step: a step that reasons longer ends at the limit and is a failed attempt (`length_stops`); the load test's `+nolimits` gate shows whether it happens.
+- MTP speculative decoding (the recipe's `--speculative-config.method mtp`) is off.
 - Whether OpenCode 1.19.6 sends `reasoning_content` back in its history is unverified.
 
 ## Prerequisites
