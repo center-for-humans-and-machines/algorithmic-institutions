@@ -387,7 +387,8 @@ class Version:
                 # attempt, retried on a fresh export, not a failed version
                 notes = self.exports / self.stem / f"notes/policy_finder/{self.stem}.md"
                 try:
-                    text = notes.read_text()
+                    # not valid UTF-8: an ordinary rejected note, not a crash
+                    text = notes.read_text(errors="replace")
                 except OSError:
                     text = ""
                 reasons = change_note.check_notes(text, self.conf.get("base_version", ""))

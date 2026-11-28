@@ -197,3 +197,17 @@ def test_free_mode_takes_the_notes_as_they_are(version, monkeypatch):
     runs(monkeypatch, version, [("succeeded", "the report")])
     version.step_agent()
     assert len(version.data["agent_runs"]) == 1
+
+
+def test_notes_that_are_not_utf8_are_a_rejected_note(version, monkeypatch):
+    version.conf.update(mode="single_idea", base_version="pf-x")
+    notes = version.exports / version.stem / f"notes/policy_finder/{version.stem}.md"
+    notes.parent.mkdir(parents=True)
+    rule = version.exports / version.stem / version.rule
+    rule.parent.mkdir(parents=True)
+    rule.write_text("params: {}\n")
+    notes.write_bytes(b"# pf-x\n\n## Explorations\n\xff\xfe broken\n")
+    runs(monkeypatch, version, [("succeeded", "a report")] * pl.OPENCODE_ATTEMPTS)
+    with pytest.raises(pl.Failed):
+        version.step_agent()
+    assert all(r.get("note_rejected") for r in version.data["agent_runs"])

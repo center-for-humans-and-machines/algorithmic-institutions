@@ -134,3 +134,20 @@ def test_check_notes_needs_the_headings_in_order():
     assert cn.check_notes(notes, BASE) == []
     swapped = notes.replace("## Key findings", "## Findings")
     assert "## Key findings" in cn.check_notes(swapped, BASE)[0]
+
+
+@pytest.mark.parametrize("fields", [
+    {"paper": "No free riding: punishment in public goods games (Fehr 2000)",
+     "analysis": "none"},
+    {"analysis": "None of the full contributors is punished: share 0.93", "paper": "none"},
+    {"idea": "Nothing above the cap is charged: punishment capped at 10"},
+    {"paper": "Not by money alone, Fehr", "analysis": "none"},
+])
+def test_values_that_start_like_empty_ones(fields):
+    assert cn.check(_with(**fields), BASE) == []
+
+
+def test_two_operations_in_one_phrase_fail():
+    text = _with(operation="add a cap and remove the floor")
+    assert any(r.startswith("several changes") for r in cn.check(text, BASE))
+    assert cn.check(_with(operation="remove the cap added in v3"), BASE) == []

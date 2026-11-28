@@ -409,6 +409,30 @@ def write_tsv(path, rows):
                                  else v) for k, v in r.items()})
 
 
+#: What the slices in an out dir were run with (--resume reuses them only
+#: under the same seed and code)
+RESUME_RECORD = "resume.json"
+
+
+def check_resume(args, out, k):
+    """Record the seed, slice count and code beside the slices; with --resume,
+    refuse slices an earlier run made with another seed or code (the slice
+    count may differ: slice j's seeds do not depend on it)."""
+    record = {"seed": args.seed, "slices": k, "code": args.code,
+              "commit": git("rev-parse", "HEAD")}
+    path = out / RESUME_RECORD
+    if path.exists():
+        earlier = json.loads(path.read_text())
+        changed = [key for key in ("seed", "code", "commit")
+                   if earlier.get(key) != record[key]]
+        if changed and any((out / "slices").glob("*")):
+            sys.exit(f"{out}: its slices were run with another "
+                     + ", ".join(f"{key} ({earlier.get(key)} here {record[key]})"
+                                 for key in changed)
+                     + ": choose a new out dir")
+    path.write_text(json.dumps(record, indent=2) + "\n")
+
+
 #: The headline of a single-idea campaign's summary (--single-idea)
 SINGLE_IDEA_HEADLINE = (
     "all lineages; single-idea mode: the improvement is the gain of the best rule"
@@ -474,6 +498,7 @@ def main():
     k = args.slices or math.ceil((largest / args.target_se) ** 2)
     print(f"largest recorded se {largest:.2f}: {k} slices per version", flush=True)
 
+    check_resume(args, out, k)
     refs = yaml.safe_load(Path(args.references).read_text()) if args.references else {}
     if args.references_only and not refs:
         sys.exit("--references-only needs --references")
@@ -655,8 +680,8 @@ def run_slices(args, versions, k, out, snapshots, jobs, refs=None):
     ref_rows = {}
     for ref, values in ref_slices.items():
         score, se = combine(values)
-        cfg = next([c for r, _, c, _ in ref_jobs.values() if r == ref]
-                   + [c for r, c in ref_done.values() if r == ref])
+        cfg = ([c for r, _, c, _ in ref_jobs.values() if r == ref]
+               + [c for r, c in ref_done.values() if r == ref])[0]
         ref_rows[ref] = {"score": score, "se": se, "slices": len(values),
                          "episodes": len(values) * cfg["n_episodes"],
                          "common_seeds": cfg.get("episode_batch_size", 1)

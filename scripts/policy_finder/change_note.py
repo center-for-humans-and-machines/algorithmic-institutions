@@ -53,16 +53,24 @@ OPERATIONS = {
 }
 #: Words that may join operations at the start of the value ("add and modify")
 JOINERS = {"and", "then", "plus", "also", "or", "&", "+", "/", ","}
-#: A reference or analysis that is not there: none, no paper, not run, n/a,
-#: (none), ?, a dash, unknown, null, the template line left as it was
+#: A reference or analysis that is not there, as the whole value (a remark in
+#: brackets may follow): none, no paper, not run, n/a, (none), ?, a dash,
+#: unknown, null, the template line left as it was. "No free riding: ..." or
+#: "None of the full contributors ..." are values, not empty.
+_EMPTY_WORDS = (r"none|no|no paper|no paper comes to mind|no analysis|no reference"
+                r"|not applicable|not run|not used|none used|n/?a|n\.\s?a\.?|unknown"
+                r"|null|nil|tbd|\?+|[-\u2013\u2014]+")
 EMPTY = re.compile(
-    r"^[\s(\[]*(none|no|not|n/?a|n\.a|unknown|null|nil|tbd|\?+|[-\u2013\u2014]+)"
-    r"(\b|[\s.,;:)\]]|$).*$|^\s*<.*$|^\s*$",
+    rf"^\s*[(\[]?\s*(?:{_EMPTY_WORDS})\s*[)\]]?\s*[.!]?\s*(?:[(\[].*[)\]])?\s*$"
+    r"|^\s*<.*$|^\s*$",
     re.I,
 )
-#: An idea that says there is none
-NO_IDEA = re.compile(r"^[\s(\[]*(none|n/?a|n\.a|nothing|no change|-+|\?+)\b|^\s*<|^\s*$",
-                     re.I)
+#: An idea that says there is none, as the whole value
+NO_IDEA = re.compile(
+    r"^\s*[(\[]?\s*(?:none|n/?a|n\.\s?a\.?|nothing|no change|-+|\?+)\s*[)\]]?\s*[.!]?"
+    r"\s*(?:[(\[].*[)\]])?\s*$|^\s*<.*$|^\s*$",
+    re.I,
+)
 #: The notes' required headings, in order (check_instance.sh), the Change
 #: section last
 HEADINGS = ("## Explorations", "## Key findings", "## Hypothesis", "### Justification",
@@ -97,17 +105,29 @@ def filled(value):
     return value is not None and not EMPTY.match(value)
 
 
+def _op(word):
+    return next((name for name, p in OPERATIONS.items() if p.match(word)), None)
+
+
 def operations(value):
-    """The operations the value starts with ("add", "remove the cap added in
-    v3": remove; "add and modify": both; "nothing was added": none)."""
+    """The operations the value states: the one it starts with, and every
+    one joined to it by "and", a comma or a slash ("add", "remove the cap
+    added in v3": remove; "add and modify", "add a cap and remove the floor":
+    both; "nothing was added": none)."""
+    words = re.findall(r"[A-Za-z]+|[&+/,]", value)
     found = []
-    for word in re.findall(r"[A-Za-z]+|[&+/,]", value):
-        op = next((name for name, pattern in OPERATIONS.items()
-                   if pattern.match(word)), None)
-        if op:
-            found.append(op)
+    for word in words:  # the operations the value starts with
+        if _op(word):
+            found.append(_op(word))
         elif word.lower() not in JOINERS:
             break
+    if not found:
+        return found
+    for i, word in enumerate(words):  # a further one after a joiner
+        if word.lower() in {"and", ",", "/", "&", "+", "plus"}:
+            rest = [w for w in words[i + 1:i + 4] if w.lower() not in {"then", "also"}]
+            if rest and _op(rest[0]):
+                found.append(_op(rest[0]))
     return found
 
 
