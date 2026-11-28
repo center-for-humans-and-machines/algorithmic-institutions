@@ -1,0 +1,36 @@
+INFO:    gocryptfs not found, will not be able to use gocryptfs
+aimanager from /opt/algorithmic-institutions/src/aimanager/__init__.py
+Config: configs/simulation/policy_finder/pfq2-exp1-20261128-3-v3_sweep_p1of32.yml
+Output directory: plots/simulation/policy_finder/pfq2-exp1-20261128-3-v3_sweep_p1of32
+Seeding with seed 42
+Using device: cpu
+Managers: {'pfq2-exp1-20261128-3-v3_s000': {'type': 'rule_based', 'rule': './configs/managers/rule_based/pfq2-exp1-20261128-3-v3.yml', 'params': {'alpha': 0.4327634602319449, 'k': 4.656830024905503, 'm': 2.088152770884335, 'min_punish': 0.7291003204882145, 'adjust_factor': 0.06997273350134492, 'trend_window': 2}, 'setting': 'exp1'}, 'pfq2-exp1-20261128-3-v3_s001': {'type': 'rule_based', 'rule': './configs/managers/rule_based/pfq2-exp1-20261128-3-v3.yml', 'params': {'alpha': 0.2677238421048969, 'k': 0.6890955381095409, 'm': 2.9335422599688172, 'min_punish': 1.2064975909888744, 'adjust_factor': 0.29581513861194253, 'trend_window': 1}, 'setting': 'exp1'}, 'pfq2-exp1-20261128-3-v3_s002': {'type': 'rule_based', 'rule': './configs/managers/rule_based/pfq2-exp1-20261128-3-v3.yml', 'params': {'alpha': 0.14944630227982997, 'k': 3.7487040227279067, 'm': 1.587206095457077, 'min_punish': 0.09336398169398308, 'adjust_factor': 0.4125378895550966, 'trend_window': 1}, 'setting': 'exp1'}, 'pfq2-exp1-20261128-3-v3_s003': {'type': 'rule_based', 'rule': './configs/managers/rule_based/pfq2-exp1-20261128-3-v3.yml', 'params': {'alpha': 0.3223598668351769, 'k': 2.241906886920333, 'm': 3.3700416944921017, 'min_punish': 1.600065503269434, 'adjust_factor': 0.20237950049340725, 'trend_window': 3}, 'setting': 'exp1'}, 'pfq2-exp1-20261128-3-v3_s004': {'type': 'rule_based', 'rule': './configs/managers/rule_based/pfq2-exp1-20261128-3-v3.yml', 'params': {'alpha': 0.38084662463515995, 'k': 2.6824816269800067, 'm': 2.6530684074386954, 'min_punish': 1.870319988578558, 'adjust_factor': 0.1534848134033382, 'trend_window': 2}, 'setting': 'exp1'}, 'pfq2-exp1-20261128-3-v3_s005': {'type': 'rule_based', 'rule': './configs/managers/rule_based/pfq2-exp1-20261128-3-v3.yml', 'params': {'alpha': 0.10331558287143708, 'k': 1.3368078786879778, 'm': 2.3730270443484187, 'min_punish': 0.315278846770525, 'adjust_factor': 0.48867738572880626, 'trend_window': 2}, 'setting': 'exp1'}, 'pfq2-exp1-20261128-3-v3_s006': {'type': 'rule_based', 'rule': './configs/managers/rule_based/pfq2-exp1-20261128-3-v3.yml', 'params': {'alpha': 0.21365580908022824, 'k': 4.235139326192439, 'm': 3.669651499018073, 'min_punish': 1.4513802714645863, 'adjust_factor': 0.37206132616847754, 'trend_window': 1}, 'setting': 'exp1'}, 'pfq2-exp1-20261128-3-v3_s007': {'type': 'rule_based', 'rule': './configs/managers/rule_based/pfq2-exp1-20261128-3-v3.yml', 'params': {'alpha': 0.49907796340994537, 'k': 0.42852792888879776, 'm': 1.3271411824971437, 'min_punish': 0.9920501373708248, 'adjust_factor': 0.021184499375522137, 'trend_window': 3}, 'setting': 'exp1'}}
+Batched: 8 runs x 500 episodes in 4 batches of up to 1000
+Start batch 0: 1000 episodes
+Start batch 1: 1000 episodes
+Traceback (most recent call last):
+  File "/usr/lib/python3.9/runpy.py", line 197, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/usr/lib/python3.9/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/opt/algorithmic-institutions/src/aimanager/__main__.py", line 4, in <module>
+    main()
+  File "/opt/algorithmic-institutions/src/aimanager/cli.py", line 242, in main
+    DISPATCH[args.command](config, args.config)
+  File "/opt/algorithmic-institutions/src/aimanager/cli.py", line 166, in dispatch_simulate
+    run_cli(config, config_path)
+  File "/opt/algorithmic-institutions/src/aimanager/simulation/simulate.py", line 842, in run_cli
+    dfs = run_simulation(config, output_dir)
+  File "/opt/algorithmic-institutions/src/aimanager/simulation/simulate.py", line 417, in run_simulation
+    batches = run_batched(config, runs, mm, device, episode_batch_size)
+  File "/opt/algorithmic-institutions/src/aimanager/simulation/simulate.py", line 292, in run_batched
+    mm.managers[m].batched_punish(state),
+  File "/opt/algorithmic-institutions/src/aimanager/manager/api_manager.py", line 250, in batched_punish
+    return self._punish(**self.history)
+  File "/opt/algorithmic-institutions/src/aimanager/manager/api_manager.py", line 218, in _punish
+    raw = run_rule(self.code, self.params, inputs).unsqueeze(-1)
+  File "/opt/algorithmic-institutions/src/aimanager/manager/rule.py", line 456, in run_rule
+    exec(code, scope)
+  File "./configs/managers/rule_based/pfq2-exp1-20261128-3-v3.yml", line 51, in <module>
+    
+RuntimeError: The size of tensor a (3) must match the size of tensor b (2) at non-singleton dimension 2
