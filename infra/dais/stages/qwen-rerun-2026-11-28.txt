@@ -1,0 +1,6 @@
+# Qwen3-Coder-Next again, both real campaigns at once on the fixed setup
+# (PR: the served context reaches OpenCode, early compaction, the agent's own
+# /tmp allowed), with new prefixes (pfq2-*), each re-evaluated when done as
+# the first run (15 slices for exp2, 45 for exp1). No test stages: the fix
+# was checked in agent_check.slurm.sh, and the stages are unchanged.
+run      finished default default scripts/policy_finder/campaigns/dais-qwen2-exp2.yml:15 scripts/policy_finder/campaigns/dais-qwen2-exp1.yml:45
