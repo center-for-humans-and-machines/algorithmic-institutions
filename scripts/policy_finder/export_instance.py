@@ -46,8 +46,10 @@ Usage:
 
 import argparse
 import fnmatch
+import glob
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -380,6 +382,84 @@ def opencode_config(conf):
     }
 
 
+#: The sweep results an agent reads, under each earlier version's sweep
+#: folder: written for the agent in a compact form (slim_sweep_files)
+SWEEP_FILES = ("sweep.json", "landscapes.json", "final/sweep.json")
+
+
+def _round(x, digits=4):
+    """`x` with every float rounded to `digits` significant digits."""
+    if isinstance(x, float):
+        return float(f"{x:.{digits}g}") if math.isfinite(x) else x
+    if isinstance(x, dict):
+        return {k: _round(v, digits) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_round(v, digits) for v in x]
+    return x
+
+
+#: OpenCode's read tool returns at most 2000 lines or 50 KB of a file
+READ_LIMIT_BYTES = 50 * 1000
+READ_LIMIT_LINES = 2000
+
+
+def slim_json(data, rows="points", sort_by=None, digits=4):
+    """A sweep file as the agent gets it: the same keys and entries, floats to
+    `digits` significant digits, no indentation, one entry of `rows` per line
+    (sorted by `sort_by`, highest first, when given)."""
+    head = {k: v for k, v in data.items() if k != rows}
+    entries = list(data.get(rows) or [])
+    if sort_by and all(isinstance(e.get(sort_by), (int, float)) for e in entries):
+        entries.sort(key=lambda e: -e[sort_by])
+    compact = json.dumps(_round(head, digits), separators=(",", ":"))
+    if rows not in data:
+        return compact + "\n"
+    lines = ",\n".join(json.dumps(_round(e, digits), separators=(",", ":"))
+                       for e in entries)
+    return f'{compact[:-1]}{"," if head else ""}"{rows}":[\n{lines}\n]}}\n'
+
+
+def slim_sweep_files(export):
+    """Rewrite the earlier versions' sweep results in the export compactly:
+    the agent reads them whole (a pretty-printed sweep.json of 256 points was
+    over 3,000 lines and 90k characters, cut by the read tool at 50 KB). The
+    worktree keeps the full files for the pipeline (fit_surrogate.py,
+    generate_sim_config.py --final, merge_sweeps.py, reevaluate.py), and
+    collect() never copies these back: they are outside the write folders.
+    Returns {path: (characters before, after)}."""
+    sizes = {}
+    root = os.path.join(export, "plots/simulation/policy_finder")
+    for sweep in sorted(glob.glob(os.path.join(root, "*_sweep"))):
+        for rel in SWEEP_FILES:
+            path = os.path.join(sweep, rel)
+            if not os.path.isfile(path):
+                continue
+            try:
+                with open(path) as f:
+                    text = f.read()
+                data = json.loads(text)
+            except (OSError, ValueError):
+                continue  # not ours to judge: left as it is
+            sort_by = "pool" if rel.endswith("sweep.json") else "mean"
+            # within the read tool's limit, else with fewer digits; a file
+            # still over it keeps 2 digits and is said so loudly: the read
+            # tool then cuts its tail, the lowest-scoring points (best first)
+            for digits in (4, 3, 2):
+                slim = slim_json(data, "points", sort_by, digits)
+                if (len(slim.encode()) <= READ_LIMIT_BYTES
+                        and slim.count("\n") < READ_LIMIT_LINES):
+                    break
+            else:
+                print(f"WARNING: {os.path.relpath(path, export)} is {len(slim.encode())} "
+                      f"bytes even at 2 significant digits, over the agent's read limit of "
+                      f"{READ_LIMIT_BYTES}: its lowest points are cut when read",
+                      file=sys.stderr, flush=True)
+            with open(path, "w") as f:
+                f.write(slim)
+            sizes[os.path.relpath(path, export)] = (len(text), len(slim))
+    return sizes
+
+
 def write_opencode(export, conf, agent_text):
     folder = os.path.join(export, OPENCODE_DIR)
     os.makedirs(os.path.join(folder, "agents"), exist_ok=True)
@@ -487,6 +567,7 @@ def build(wt, main, exports):
         for f in matched:
             shutil.copy2(os.path.join(source_dir, f), os.path.join(export, base, f))
     _prune(export, name, setting["deny"])
+    slim_sweep_files(export)
     if conf.get("mode") == "single_idea":
         # scrambled copies the agent debugs its one analysis script on
         import scramble_data
