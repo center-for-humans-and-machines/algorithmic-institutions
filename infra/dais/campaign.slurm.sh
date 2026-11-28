@@ -203,12 +203,14 @@ SERVER_DEVICES=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | head -n "$SERVER_GPUS
 NGPU=$(tr ',' '\n' <<< "$SERVER_DEVICES" | wc -l)
 echo "server on GPUs $SERVER_DEVICES (tensor parallel $NGPU)"
 export SERVER_CPUS
-# --moe-backend triton: what vLLM picks on H200 by itself; on B200 it would
-# pick FlashInfer's TRT-LLM kernels, whose cubins are not in the image and are
-# downloaded into it at start (fails: the image is read-only; job 988114)
+# MOE_BACKEND (common.sh, default triton): what vLLM picks for Qwen on H200 by
+# itself; on B200 it would pick FlashInfer's TRT-LLM kernels, whose cubins are
+# not in the image and are downloaded into it at start (fails: the image is
+# read-only; job 988114). A model profile may set it to auto.
 # shellcheck disable=SC2086  # VLLM_EXTRA: extra vllm arguments, split
 CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
-  serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" --moe-backend triton ${VLLM_EXTRA:-}
+  serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" ${VLLM_EXTRA:-}
+echo "model $MODEL@$MODEL_REV${MODEL_PROFILE:+ (profile $MODEL_PROFILE)}, image $VLLM_SIF"
 wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
 # the agents' OpenCode config takes the served context from here

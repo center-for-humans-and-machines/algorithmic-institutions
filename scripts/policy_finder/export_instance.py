@@ -309,6 +309,17 @@ LOCAL_MODELS = {
         "options": {"temperature": 1.0, "top_p": 0.95, "top_k": 40},
         "limit": {"context": 262144, "output": 16384},
     },
+    # huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash(-1017), "Recommended
+    # sampling parameters": temperature 1.0, top_p 0.95, max_tokens >= 256K;
+    # its agentic results were run at the maximum reasoning effort, which the
+    # server's prompt encoder takes from chat_template_kwargs (vLLM 0.34
+    # tokenizers/deepseek_v41.py; thinking is on by default). The context is
+    # the server's (infra/dais/models/deepseek-v4.1-flash-1017.sh).
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+        "options": {"temperature": 1.0, "top_p": 0.95,
+                    "chat_template_kwargs": {"reasoning_effort": "max"}},
+        "limit": {"context": 524288, "output": 131072},
+    },
 }
 #: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
 #: beyond the output limit: room for the tool results one step adds (one

@@ -166,7 +166,7 @@ if [ "${WITH_MODEL:-0}" = 1 ]; then
   assert_vllm_image || exit 1
   NGPU=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
   SERVER_CPUS=$(python3 "$PF_HERE/cpu_slots.py" reserved 4) \
-    serve_model 0.90 "$NGPU" "$PF_RUN/vllm.log" --enable-log-requests --moe-backend triton
+    serve_model 0.90 "$NGPU" "$PF_RUN/vllm.log" --enable-log-requests
   if wait_ready 720; then
     LLM_URL="$SERVER_URL"; LLM_KEY=$(cat "$SERVER_KEY_FILE")
     # the resume test's kill (campaign.slurm.sh killtest) must spare the server:
