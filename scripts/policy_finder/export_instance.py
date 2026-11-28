@@ -318,6 +318,15 @@ LOCAL_MODELS = {
         "options": {"temperature": 1.0, "top_p": 1.0},
         "limit": {"context": 1048576, "output": 262144},
     },
+    # huggingface.co/moonshotai/Kimi-K3.1-Pro (revision 80aff651), "Evaluation
+    # Results": temperature 1.0, top_p 0.95, reasoning effort max; its
+    # generation_config.json sets no sampling. The effort is the server's
+    # default (infra/dais/model_profiles/kimi-k3.1-pro.sh), as is the context
+    # (1M tokens). The card states no output limit: 131072 here.
+    "moonshotai/Kimi-K3.1-Pro": {
+        "options": {"temperature": 1.0, "top_p": 0.95},
+        "limit": {"context": 1048576, "output": 131072},
+    },
 }
 #: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
 #: beyond the output limit: room for the tool results one step adds (one

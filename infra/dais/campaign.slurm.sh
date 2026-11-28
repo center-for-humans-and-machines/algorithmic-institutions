@@ -49,6 +49,17 @@
 # PF_FINAL_EPISODES. SERVER_GPUS (default: all) are the server's (tensor
 # parallel over them); the job's other GPUs stay idle.
 #
+# A model server across nodes (a profile's SERVER_NODES, common.sh
+# serve_model): the job has that many nodes, its first runs the head (the
+# API) with the driver, the agents and the sims as above, every other one a
+# worker of the server only (srun), with SERVER_GPUS GPUs on each:
+#   sbatch -p gpu --qos=g0008 -N 2 --ntasks=2 --ntasks-per-node=1 --gres=gpu:8 --exclusive --mem=0 -c 96 \
+#     --time=24:00:00 --export=MODEL_PROFILE=kimi-k3.1-pro,PF_RUNS=<dir>,... \
+#     infra/dais/campaign.slurm.sh stages infra/dais/stages/<file>
+# The server's processes on this node (SERVER_PIDS: the head and each
+# worker's srun) are spared by the kill test and stopped last; a worker that
+# ends counts as the server down.
+#
 #SBATCH -J pf_campaign
 #SBATCH -o /dais/fs/scratch/%u/policy-finder-agents/logs/%x.%j.out
 #SBATCH --account=mpib_inst
@@ -91,6 +102,12 @@ export PF_REPO="${PF_REPO:-${SLURM_SUBMIT_DIR:-$PWD}}"
 source "$PF_REPO/infra/dais/common.sh"
 init_run
 cd "$PF_REPO"
+
+# a server across more nodes than the job has fails here, not after the preflight
+if (( SERVER_NODES > 1 )); then
+  server_nodes || exit 2
+  echo "model server across ${SERVER_NODE_LIST[*]:0:$SERVER_NODES} (head on the first)"
+fi
 
 export PF_RUNS="${PF_RUNS:-$PF_SCRATCH/pf_runs}"
 export PF_CLUSTER_BACKEND=local
@@ -173,22 +190,23 @@ stop_all() {
   [ -n "${DRIVER_PID:-}" ] && kill -TERM $DRIVER_PID 2>/dev/null || true
   # every other process of the job's cgroup (not this shell's ancestors), but
   # the server, then the server and the rest
-  python3 "$PF_HERE/kill_job_children.py" --term ${SERVER_PID:-} \
+  python3 "$PF_HERE/kill_job_children.py" --term ${SERVER_PIDS[*]:-} \
     > "$PF_RUN/stop_term.log" 2>&1 || true
   if [ -s "$PF_RUN/stop_term.log" ]; then
     sleep 10
-    python3 "$PF_HERE/kill_job_children.py" ${SERVER_PID:-} \
+    python3 "$PF_HERE/kill_job_children.py" ${SERVER_PIDS[*]:-} \
       > "$PF_RUN/stop_kill.log" 2>&1 || true
   fi
-  # the server last, with time to shut down cleanly (TERM, up to 30 s)
+  # the server last, with time to shut down cleanly (TERM, up to 30 s; a
+  # worker's srun passes the TERM on to its node)
   cleanup
-  local _
-  if [ -n "${SERVER_PID:-}" ]; then  # no server started: no wait
+  local _ pid
+  for pid in ${SERVER_PIDS[*]:-}; do  # no server started: no wait
     for _ in $(seq 30); do
-      kill -0 "$SERVER_PID" 2>/dev/null || break
+      kill -0 "$pid" 2>/dev/null || break
       sleep 1
     done
-  fi
+  done
   python3 "$PF_HERE/kill_job_children.py" >> "$PF_RUN/stop_kill.log" 2>&1 || true
   echo "stopped $(grep -c '^kill' "$PF_RUN/stop_term.log" 2>/dev/null || true) processes," \
     "then the server and watch ($(grep -c '^kill' "$PF_RUN/stop_kill.log" 2>/dev/null || true) killed hard)"
@@ -230,7 +248,7 @@ echo "served context $MAX_MODEL_LEN tokens"
 server_report() {
   (
     set +e +o pipefail
-    echo "-- model server at $(date +%T): $(kill -0 "$SERVER_PID" 2>/dev/null && echo alive || echo DEAD)"
+    echo "-- model server at $(date +%T): $(server_alive && echo alive || echo DEAD)"
     curl -s -m 20 -o /dev/null -w '   /health %{http_code} in %{time_total} s\n' \
       -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/health"
     curl -s -m 20 -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/metrics" 2>/dev/null \
@@ -238,12 +256,17 @@ server_report() {
       | sed 's/model_name="[^"]*"//; s/^/   metrics /'
     echo "   vllm.log lines with error/exception: $(grep -ciE 'error|exception|traceback' "$PF_RUN/vllm.log")"
     tail -3 "$PF_RUN/vllm.log" | cut -c1-300 | sed 's/^/   vllm.log | /'
+    for log in "$PF_RUN"/vllm.node*.log; do  # the workers' (across nodes)
+      [ -f "$log" ] || continue
+      echo "   $(basename "$log") lines with error/exception: $(grep -ciE 'error|exception|traceback' "$log")"
+      tail -2 "$log" | cut -c1-300 | sed "s/^/   $(basename "$log") | /"
+    done
   ) || true
 }
 
-# the server watch: every 30 s the process must be alive and /health answer
-# 200; after 4 failures in a row (2 minutes) it marks the server down and
-# kills every process of the job (kill_job_children.py), so that the running
+# the server watch: every 30 s the server's processes must be alive (the head
+# and, across nodes, each worker's srun) and /health answer 200; after 4
+# failures in a row (2 minutes) it marks the server down and kills every process of the job (kill_job_children.py), so that the running
 # versions stop as lost, resumable, rather than burning their agents' attempts
 # on a dead endpoint; the stage then fails and the job exits non-zero.
 SERVER_DOWN="$PF_RUN/server_down"
@@ -252,7 +275,7 @@ WATCH_FAILS="${WATCH_FAILS:-4}"
 watch_server() {
   local bad=0
   while sleep "$WATCH_INTERVAL"; do
-    if kill -0 "$SERVER_PID" 2>/dev/null && [ "$(curl -s -m 20 -o /dev/null \
+    if server_alive && [ "$(curl -s -m 20 -o /dev/null \
         -w '%{http_code}' -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/health")" = 200 ]; then
       bad=0
     else
@@ -368,7 +391,7 @@ EOF
     if (( waited > 3600 )); then echo "FATAL: no agent ran in an hour" >&2; return 1; fi
   done
   echo "[$(date +%T)] killtest: killing every process but the server after $(( SECONDS - t0 )) s"
-  python3 "$PF_HERE/kill_job_children.py" "$SERVER_PID" "$WATCH_PID"
+  python3 "$PF_HERE/kill_job_children.py" "${SERVER_PIDS[@]}" "$WATCH_PID"
   echo "job ${SLURM_JOB_ID:-local} $(date +%Y-%m-%dT%H:%M:%S)" > "$done_marker"
   sleep 5
   rm -rf "$PF_LOCKS" "$PF_AGENT_LOCKS" "$PF_POOL_LOCKS"  # as a new job would find them
