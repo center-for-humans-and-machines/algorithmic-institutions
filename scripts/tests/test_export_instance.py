@@ -340,3 +340,53 @@ def test_opencode_config_for_a_local_server():
     local = config["provider"]["local"]
     assert local["options"] == {"baseURL": "http://node:8000/v1",
                                 "apiKey": "{env:PF_LLM_API_KEY}"}
+
+
+def test_sweep_files_are_slim_in_the_export(layout):
+    wt, main, exports = layout
+    points = [{"name": f"{NAME}_s{i:03d}", "params": {"k": 1 / (i + 3), "m": i},
+               "pool": 50 + i / 7, "pool_se": 2.123456, "members": 3.98765,
+               "n_episodes": 500} for i in range(256)]
+    sweep = {"best": {"k": 0.123456789}, "best_name": f"{NAME}_s255", "points": points}
+    _write(wt, f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json",
+           json.dumps(sweep, indent=2))
+    export = Path(ex.build(wt, main, exports))
+    text = (export / f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json").read_text()
+    slim = json.loads(text)
+    # the same keys and points, rounded, best first, one point per line
+    assert set(slim) == set(sweep) and len(slim["points"]) == 256
+    assert slim["points"][0]["name"] == f"{NAME}_s255"
+    assert slim["points"][0]["pool_se"] == 2.123 and slim["best"] == {"k": 0.1235}
+    assert text.count("\n") == 258 and len(text) < 50_000
+    # the worktree keeps full precision for the pipeline
+    full = json.loads((wt / f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json")
+                      .read_text())
+    assert full["points"][0]["pool_se"] == 2.123456
+
+
+def test_a_slim_file_stays_within_the_read_limit():
+    points = [{"name": f"pf-x-v7_s{i:03d}",
+               "params": {f"a_long_parameter_name_{j}": 1 / (i + j + 3) for j in range(5)},
+               "pool": 50 + i / 7, "pool_se": 2.123456, "members": 3.98765,
+               "n_episodes": 500} for i in range(256)]
+    four = ex.slim_json({"points": points}, "points", "pool", 4)
+    assert len(four.encode()) > ex.READ_LIMIT_BYTES  # too long at 4 digits
+
+
+def test_slim_sweep_files_fall_back_to_fewer_digits(tmp_path, capsys):
+    # 51 kB at 4 digits, 49 kB at 3
+    points = [{"name": f"pf-x-v7_s{i:03d}",
+               "params": {f"a_param_{j}": 1 / (i + j + 3) for j in range(5)},
+               "pool": 50 + i / 7, "pool_se": 2.123456, "members": 3.98765,
+               "n_episodes": 500} for i in range(256)]
+    sweep = tmp_path / "plots/simulation/policy_finder/pf-x-v7_sweep/sweep.json"
+    sweep.parent.mkdir(parents=True)
+    sweep.write_text(json.dumps({"points": points}, indent=2))
+    sizes = ex.slim_sweep_files(tmp_path)
+    assert list(sizes.values())[0][1] <= ex.READ_LIMIT_BYTES
+    assert json.loads(sweep.read_text())["points"][0]["pool_se"] == 2.12
+    # far too many points even at 2 digits: said loudly, best points first
+    sweep.write_text(json.dumps({"points": points * 4}, indent=2))
+    ex.slim_sweep_files(tmp_path)
+    assert "read limit" in capsys.readouterr().err
+    assert json.loads(sweep.read_text())["points"][0]["name"] == "pf-x-v7_s255"

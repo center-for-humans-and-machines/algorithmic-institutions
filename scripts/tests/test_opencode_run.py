@@ -400,3 +400,42 @@ def test_ended_on_marks_an_interim_text():
                             _assistant("", 10, 0)]}
     s = oc.summarize(session)
     assert s["ended_on"] == "empty_after_tool_call" and s["report_chars"] == 24
+
+
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+
+
+def overflow_run(name, tmp_path, drop_compactions=False, extra_error=None):
+    """A real run's events and session (trimmed): its verdict inputs."""
+    data = json.loads((FIXTURES / f"opencode_overflow_recovered_{name}.json").read_text())
+    events, session = data["events"], data["session"]
+    if drop_compactions:
+        session["messages"] = [m for m in session["messages"]
+                               if not oc._compaction_summary(m["info"])]
+    if extra_error:
+        events.append({"type": "error", "timestamp": 1, "error": {"name": extra_error}})
+    path = tmp_path / "events.jsonl"
+    path.write_text("".join(json.dumps(e) + "\n" for e in events))
+    summary = oc.summarize(session)
+    event_error = oc.last_event_error(path)
+    recovered = oc.recovered_overflows(oc.error_events(path), session, summary, event_error)
+    why = oc.failures(summary, 1, "", "local/Qwen/Qwen3-Coder-Next", event_error,
+                      recovered=recovered)
+    return recovered, why
+
+
+@pytest.mark.parametrize("name", ["check", "qwen"])
+def test_a_recovered_context_overflow_is_a_success(name, tmp_path):
+    # 993218's compaction check and pfq-exp1-20261127-9-v6's first run: the
+    # server refused a request, OpenCode compacted, finished with a report,
+    # and exited 1
+    recovered, why = overflow_run(name, tmp_path)
+    assert recovered == 1 and why == []
+
+
+@pytest.mark.parametrize("name", ["check", "qwen"])
+def test_an_overflow_without_a_compaction_or_with_another_error_fails(name, tmp_path):
+    recovered, why = overflow_run(name, tmp_path, drop_compactions=True)
+    assert recovered == 0 and "OpenCode exited with 1" in why
+    recovered, why = overflow_run(name, tmp_path, extra_error="APIError")
+    assert recovered == 0 and "OpenCode exited with 1" in why

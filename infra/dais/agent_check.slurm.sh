@@ -55,7 +55,10 @@ ro_home=()
 for d in .opencode .config .claude .agents; do  # agent_apptainer.HOME_READONLY
   mkdir -p "$PF_RUN/home/$d"; ro_home+=(--bind "$PF_RUN/home/$d:/home/claude/$d:ro")
 done
-"${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$PF_RUN/oc" <<'EOF'
+# the served context (MAX_MODEL_LEN, common.sh) reaches the config as in a
+# campaign; WITH_MODEL=1 MAX_MODEL_LEN=131072 makes the compaction check
+# below compact early (at 131072 - 16384 - 65536 = 49152 tokens)
+PF_LLM_CONTEXT="$MAX_MODEL_LEN" "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$PF_RUN/oc" <<'EOF'
 import json, sys
 sys.path.insert(0, "scripts/policy_finder")
 import export_instance as ex
@@ -227,6 +230,81 @@ sys.exit(0 if rec["status"] == "succeeded" and not leaks
          and not (r.get("stray_processes") or {}).get("enabled") else 1)
 EOF
     sed 's/^/     run  | /' "$PF_RUN/backend_run.log" | tail -9
+    # compaction by behaviour: a session that reads more than the context
+    # holds must compact before the server refuses, and finish
+    rm -rf "$exp/notes/policy_finder"/*
+    check backend_compaction ok env PF_RUNS="$PF_RUN/pf_runs" PF_AGENT_BACKEND=apptainer \
+      PF_AGENT_SIF="$AGENT_SIF" PF_AGENT_POOL_CPUS="$(python3 "$PF_HERE/cpu_slots.py" slots 5 1 2 | paste -sd, -)" \
+      PF_AGENT_SHELL="$PF_HERE/agent_shell.sh" PF_AGENT_NOINET="$PF_HERE/noinet.py" \
+      PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE" PF_AGENT_TIMEOUT=1200 \
+      "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$MAX_MODEL_LEN" <<'EOF'
+import sys
+sys.path.insert(0, "scripts/policy_finder")
+import agent_runner as ar
+# sequential reads of about 10k tokens each, as an agent reads data: the
+# context passes OpenCode's compaction point (served context - output -
+# margin) a few reads in, well before the server's limit. (Ten reads made in
+# ONE step add more than any margin; that case is not what this checks.)
+reads = " ".join(f"({k + 1}) experiments/2group_8agent_50ep.csv from line {1000 * k + 1}"
+                 for k in range(12))
+run = ar.start("pfchk", ["notes/policy_finder"], "Read these parts of a file with your "
+               "read tool, 1000 lines each, strictly one at a time: make exactly one "
+               "tool call per message and wait for its result before the next. Parts: "
+               f"{reads}. After each part, say in one sentence what the column "
+               "`contribution` looked like in it. Then write the file "
+               "notes/policy_finder/check.md with one line: the number of parts you "
+               "read, and reply with that line.", harness="opencode")
+rec = ar.finish(run, harness="opencode")
+r = rec["result"]
+print("served context", sys.argv[1], "status", rec["status"], "error", rec["error"])
+print("compactions", r.get("compactions"), "ended_on", r.get("ended_on"),
+      "seconds", r.get("seconds"), "tokens", r.get("tokens"))
+print("report", rec["report"][:200])
+import json
+steps = []
+for path in ar.transcripts(run, "opencode")[1]:
+    if path.endswith("session.json"):
+        for m in json.load(open(path))["messages"]:
+            i = m["info"]
+            if i.get("role") == "assistant":
+                t = i.get("tokens") or {}
+                steps.append((i.get("agent"), (t.get("input") or 0)
+                              + ((t.get("cache") or {}).get("read") or 0)))
+print("prompt tokens per step (agent, tokens):", steps)
+peak = max((n for a, n in steps if a != "compaction"), default=0)
+print("peak prompt", peak, "of", sys.argv[1])
+# compacted on its own (before the server refused: no overflow error) and done
+sys.exit(0 if rec["status"] == "succeeded" and (r.get("compactions") or 0) >= 1 else 1)
+EOF
+    sed 's/^/     cmp  | /' "$PF_RUN/backend_compaction.log" | tail -7
+    # an overflow OpenCode recovers from: ten large reads in ONE step pass the
+    # server's context; OpenCode compacts, finishes, exits 1, and the
+    # runner's verdict counts it as succeeded (recovered_overflow)
+    rm -rf "$exp/notes/policy_finder"/*
+    check backend_overflow_recovered ok env PF_RUNS="$PF_RUN/pf_runs" PF_AGENT_BACKEND=apptainer \
+      PF_AGENT_SIF="$AGENT_SIF" PF_AGENT_POOL_CPUS="$(python3 "$PF_HERE/cpu_slots.py" slots 5 1 2 | paste -sd, -)" \
+      PF_AGENT_SHELL="$PF_HERE/agent_shell.sh" PF_AGENT_NOINET="$PF_HERE/noinet.py" \
+      PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE" PF_AGENT_TIMEOUT=1200 \
+      "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$MAX_MODEL_LEN" <<'EOF'
+import sys
+sys.path.insert(0, "scripts/policy_finder")
+import agent_runner as ar
+reads = " ".join(f"({k + 1}) experiments/2group_8agent_50ep.csv from line {2000 * k + 1}"
+                 for k in range(10))
+run = ar.start("pfchk", ["notes/policy_finder"], "Read these parts of a file with your "
+               "read tool, all ten at once in one message (parallel tool calls), 2000 "
+               f"lines each: {reads}. Then write the file notes/policy_finder/check.md "
+               "with one line: the number of parts you read, and reply with that "
+               "line.", harness="opencode")
+rec = ar.finish(run, harness="opencode")
+r = rec["result"]
+print("served context", sys.argv[1], "status", rec["status"], "error", rec["error"])
+print("recovered_overflow", r.get("recovered_overflow"), "compactions", r.get("compactions"),
+      "opencode exit", r.get("opencode_exit_code"), "failures", r.get("failures"))
+# meaningful only when the server refused: then it must count as recovered
+sys.exit(0 if rec["status"] == "succeeded" else 1)
+EOF
+    sed 's/^/     ovf  | /' "$PF_RUN/backend_overflow_recovered.log" | tail -3
     ls -la "$exp/notes/policy_finder" | sed 's/^/     out  | /'
   else
     tail -30 "$PF_RUN/vllm.log"; fails=$((fails + 1))

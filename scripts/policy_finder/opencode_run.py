@@ -242,10 +242,65 @@ def last_event_error(events_path):
     return error
 
 
-def failures(summary, code, stderr, expected_model, event_error, agent="policy-finder"):
-    """Why a run is not a success: [] when it is one."""
+#: The error OpenCode reports when a request passes the server's context
+OVERFLOW = "ContextOverflowError"
+
+
+def error_events(events_path):
+    """[(timestamp, error name)] of the `error` events of a run."""
     out = []
-    if code != 0:
+    try:
+        with open(events_path, errors="replace") as f:
+            for line in f:
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(event, dict) and event.get("type") == "error":
+                    out.append((event.get("timestamp") or 0,
+                                (event.get("error") or {}).get("name")))
+    except OSError:
+        pass
+    return out
+
+
+def recovered_overflows(errors, session, summary, event_error):
+    """How many context overflows OpenCode recovered from, or 0.
+
+    OpenCode answers a request that passes the server's context with a
+    compaction and carries on, but exits 1 at the end. Such a run is a
+    success only when every error of the run was an overflow, each overflow
+    was followed by a completed compaction (OpenCode's summary message,
+    finished `stop` without an error), no error came after the last finished
+    step, and the turn ended with a report. Anything else: 0.
+    """
+    if not errors or any(name != OVERFLOW for _, name in errors) or event_error:
+        return 0
+    if not (summary.get("result") or "").strip() or summary.get("final_error"):
+        return 0
+    # a compaction's completion (OpenCode starts it before it emits the error)
+    done = sorted(
+        ((m.get("info") or {}).get("time") or {}).get("completed") or 0
+        for m in session.get("messages", [])
+        if (m.get("info") or {}).get("role") == "assistant"
+        and _compaction_summary(m.get("info") or {})
+        and (m.get("info") or {}).get("finish") == "stop"
+        and not (m.get("info") or {}).get("error"))
+    for stamp, _ in errors:
+        later = [t for t in done if t >= stamp]
+        if not later:
+            return 0
+        done.remove(later[0])  # each overflow needs a compaction of its own
+    return len(errors)
+
+
+def failures(summary, code, stderr, expected_model, event_error, agent="policy-finder",
+             recovered=0):
+    """Why a run is not a success: [] when it is one. `recovered`: overflows
+    OpenCode recovered from (recovered_overflows), whose exit code 1 is then
+    no failure."""
+    out = []
+    if code != 0 and not (code == 1 and recovered):
         out.append(f"OpenCode exited with {code}")
     if AGENT_FALLBACK in stderr:
         out.append(f"the agent {agent} did not load: OpenCode fell back to its default")
@@ -526,8 +581,17 @@ def main(argv=None):
                 stderr = f.read()
         except OSError:
             stderr = ""
+        event_error = last_event_error(events)
+        try:
+            with open(session_path) as f:
+                session = json.load(f)
+        except (OSError, ValueError):
+            session = {}
+        recovered = recovered_overflows(error_events(events), session, summary,
+                                        event_error)
+        summary["recovered_overflow"] = recovered
         why = failures(summary, code, stderr, configured_model(args.repo),
-                       last_event_error(events))
+                       event_error, recovered=recovered)
     except Exception as e:  # noqa: BLE001 - the runner's own failure fails the run
         why = [f"the runner failed: {type(e).__name__}: {e}"]
         code = code or 1
