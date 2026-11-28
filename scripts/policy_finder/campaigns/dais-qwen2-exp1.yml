@@ -9,12 +9,17 @@
 # setting (PF_SWEEP_EPISODES=default, PF_FINAL_EPISODES=default).
 # Judged by infra/dais/reevaluate.py against the reference curve
 # (docs/reports/policy_finder_reference_curves.md).
+# Unlike the Opus reference (top_k 4), every lineage is iterated in every
+# generation (top_k 12, Levin, 2026-11-28): 12 x 7 = 84 versions. The
+# Opus-comparable result is that of the 4 lineages best after generation 1,
+# which a top_k 4 campaign would have iterated throughout (campaign.py:
+# lineage bests only rise, the others' stay fixed).
 prefix: pfq2-exp1-20261128
 setting: exp1
 mode: free
 n_fresh: 12
 generations: 6
-top_k: 4
+top_k: 12
 min_params: 1
 max_params: 5
 sobol_points: 256
