@@ -273,6 +273,42 @@ Expected to fit or not, unverified. Weight sizes are the summed safetensors file
 - **Unknown:** each model's KV size per token; Qwen's 25 KB per token is no guide.
 - None of these was downloaded or served.
 
+### GLM-5.3 (profile `glm-5.3`, 2026-11-28)
+
+`MODEL_PROFILE=glm-5.3` (`infra/dais/model_profiles/glm-5.3.sh`) serves `zai-org/GLM-5.3` at revision `ba32f8c1` (the Hub's `main` on 2026-11-28), from the official vLLM v0.34.0 image, with tensor parallel 8; `export_instance.LOCAL_MODELS` holds its OpenCode settings.
+
+| Fact | Value | Source |
+|---|---|---|
+| Licence | "GLM-5.3 License": MIT-style; a Z.AI safety review only for Model-as-a-Service businesses above USD 10 billion revenue. Ungated, no token needed | `LICENSE` in the snapshot; Hub API `gated: false` |
+| Weights | 753.3B parameters, native FP8 (e4m3, 128x128 blocks; 2.1B in BF16): 755 GB (704 GiB) in 141 shards, 156 files in all | `config.json`, Hub API `safetensors` |
+| Architecture | `GlmMoeDsaForCausalLM`: 78 layers, 256 experts (8 active), MLA (`kv_lora_rank` 512) with DeepSeek-V3.2-style sparse attention (top 2048), one MTP layer | `config.json` |
+| vLLM | from v0.29 per the recipe; v0.34.0 maps the architecture to `models/deepseek_v32.py`, transformers 5.22.2 (5.15 needed) | recipes.vllm.ai/zai-org/GLM-5.3; the image's registry |
+| Parsers | `--tool-call-parser glm47 --reasoning-parser glm47` | recipe; both registered in v0.34.0 |
+| Context | 1,048,576 natively; served 262,144 (below) | `max_position_embeddings`; profile |
+| Sampling | temperature 1.0, top_p 0.95 | `generation_config.json`; the card's HLE and SWE-Marathon runs |
+| Reasoning | always on; `reasoning_effort` low, high or max, rendered as `Reasoning Effort: Low`, `High` or `Max`; the model's default is max (a request without one, or with any other value, renders `Max`). The profile declares the three with default max; the campaigns run at high (Levin, 2026-11-28) | model card "Note"; `chat_template.jinja`; job 993473 rendered `Max` without an effort |
+
+Chat template quirks (rendered by vLLM's HF renderer on the Python frontend; `--tokenizer-mode glm5_next` is the same there, the recipe's Rust frontend is not used): the reasoning effort becomes a first `<|system|>Reasoning Effort: Max` line, ahead of the tools block and the client's own system prompt; tool calls are XML (`<tool_call>name<arg_key>k</arg_key><arg_value>v</arg_value></tool_call>`), and the template needs the arguments as a mapping, which vLLM's `_postprocess_messages` makes from the OpenAI JSON string; the generation prompt ends in `<think>`, so the model's output starts inside its reasoning; `clear_thinking` defaults to false, so earlier turns keep their reasoning, if the client sends it back as `reasoning_content` (otherwise they get an empty `<think></think>`).
+
+Memory at TP 8 on 8 B200, measured (job 993477, utilisation 0.90, served 262,144 then): 89.5 GiB of weights per GPU, 5.5 GiB for CUDA graphs; vLLM chose an FP8 KV cache by itself (`Using standard fp8 KV cache format`), 55.8 GiB per GPU (19,626 blocks), 1,256,064 tokens in all: 47.7 KB per token, the MLA cache being replicated on every GPU. The recipe's `--kv-cache-dtype fp8_e4m3` is therefore not needed. (The estimate before this run assumed a BF16 cache, about twice as large per token.) It does not fit on fewer GPUs: 4 B200 (716 GiB) hold less than the weights, and TP must divide the 64 heads. On 8 H200 about 33 GiB per GPU would remain, roughly 0.7M tokens: not measured.
+
+Served context: 262,144 with an output limit of 65,536, so OpenCode compacts at 262,144 - 65,536 - 65,536 = 131,072 tokens, above the 55k to 115k tokens (median about 80k in later generations) Qwen's sessions peaked at on this task: most sessions should finish a version without compacting. The cache does not hold every session at its compaction point: its 1,256,064 tokens are 24 sessions of about 52k live tokens each, so under load vLLM preempts (drops a request's cache and recomputes it later) rather than fails, and sessions are at their peak only briefly. Preemption is expected; the campaign job prints vLLM's count (`vllm:num_preemptions_total`) after each stage and at its end. Both steps run 24 agents at once (`PF_AGENT_SLOTS=24`; the single-idea mode's generations of 40 versions take two rounds of agents). Utilisation stays at 0.90 (12.9 GiB per GPU kept out of the cache): no profile variable sets it.
+
+Loading: the weights loaded in 1,166 s from GPFS (all 8 ranks 1,184 s), profiling, KV cache and warm-up took 475 s more, the server was ready 1,771 s after start; `READY_TIMEOUT` is 3,600.
+
+What ran (job IDs on DAIS):
+
+- 993473 (`small`, CPU): in the v0.34.0 image, the snapshot's tokenizer loads (`glm5_next`, vocabulary 154,856), the template renders tools, a tool-call history and the efforts; the `glm47` tool parser turns a GLM tool call into `tool_calls` (`bash`, `{"command": "ls -la /tmp", "timeout": 30}`) with the text before it as content, and the `glm47` reasoning parser splits `reasoning</think>answer`. PASS.
+- `gpudev` cannot prove serving: its QOS allows 4 GPUs per user, fewer than the weights need.
+- 993477 (`gpu`, 8 B200, daisg202, 30 minutes, at the default effort max and 262,144 served): loading and memory as above; `probe_endpoint.py` (one trial each): tool call, streamed tool call, a tool call after a 64k-token message and after a 64k-token history of tool calls (unstreamed and streamed) all PASS, each a proper `tool_calls` field, 0.7 to 2.3 s, 20 to 72 reasoning tokens; the plain chat FAILED only because the probe's 200 tokens all went to reasoning (`PROBE_MAX_TOKENS`, 8192 for a reasoning model, has since fixed the probe). One OpenCode session through the pipeline's backend (`agent_runner`, the agent image) succeeded with the key in no transcript, but answered about a missing data file: the checkout lacked `experiments/` (fixed since).
+
+Known problems and open points:
+
+- The two runs above used no `REASONING_EFFORT` (the default, max); the campaigns run at high, whose prompt check (`Reasoning Effort: High`) has not run on a server yet.
+- Preemptions under load slow the sessions down; how much is not measured. The count is in the job log.
+- MTP speculative decoding (the recipe's `--speculative-config.method mtp`) is off.
+- Whether OpenCode 1.19.6 sends `reasoning_content` back in its history is unverified.
+
 ## Prerequisites
 
 | What | Where | How to create it |

@@ -1,0 +1,21 @@
+# GLM-5.3 at reasoning effort high (Levin, 2026-11-28: high for every model;
+# the model's own default is max; REASONING_EFFORT=high in the job, which this
+# file requires: reasoning_effort), stage 1 of
+# infra/dais/stages/node-glm53h-2026-11-28.txt. Experiment 2 at smoke size: 2 fresh
+# lineages, then the better one iterated once (3 agent versions).
+prefix: pfglmhs2-20261128
+reasoning_effort: high
+setting: exp2
+mode: free
+n_fresh: 2
+generations: 1
+top_k: 1
+min_params: 1
+max_params: 5
+sobol_points: 16
+parallel: 2
+error_retries: 1
+retry_wait: 30
+harness: opencode
+model: zai-org/GLM-5.3
+base_url: "{env:PF_LLM_BASE_URL}"
