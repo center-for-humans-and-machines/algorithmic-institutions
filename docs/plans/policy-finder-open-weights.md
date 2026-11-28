@@ -26,9 +26,22 @@ Standing authorisations for unattended work, from the same day:
 - **Hetzner:** the server may be deleted without asking again once the pipeline has passed its smoke run end to end on DAIS and state files, transcripts and results are copied off and the secrets removed.
 - **Blocked on Levin:** a dropped SSH connection to DAIS (only he can reopen it), empty OpenRouter credit, or a decision outside this list. Notify on Slack and continue with whatever does not depend on it.
 
-## Status (2026-11-27, late evening)
+## Status (2026-11-28, midday)
 
-Everything is built, independently reviewed and merged into `policy-finder-open-weights`; the first real runs are queued on DAIS.
+The pipeline runs end to end on one DAIS node, and the first real campaigns with Qwen3-Coder-Next are in. Experiment 1 passes its bar on improvement but ends below Opus; experiment 2 does not pass.
+
+Full-node job 989450 (8 B200, `daisg206`, code `7273bb7d`) took 1 h 27 min for everything: both smoke campaigns, the kill-and-resume test, the load stage with 24 agents at once (2 campaigns of 16 versions, all scored), and the two real 36-version campaigns (37 and 50 minutes) with their re-evaluations. The model server answered 4,679 requests with no error.
+
+| | Best first-generation rule | Final best rule | Improvement | 70% bar | Opus improvement | Opus final best |
+|---|---|---|---|---|---|---|
+| Experiment 1 (`pfq-exp1-20261127`) | 637.05 ± 0.24 | 644.78 ± 0.21 | 7.73 ± 0.09 (cross-fit 7.73 ± 0.09) | 4.03 | 5.76 | 655.37 |
+| Experiment 2 (`pfq-exp2-20261127`) | 66.49 ± 0.28 | 67.69 ± 0.29 | 1.21 ± 0.13 (cross-fit 1.21 ± 0.14) | 2.49 | 3.55 | 73.39 |
+
+- **Experiment 1:** the best-so-far curve rises in 5 of the 6 iteration generations (gain 0.96, 2.49, 4.66, 5.90, 5.90, 7.73). The improvement is above the bar, but the run starts 12.6 points below Opus's first generation and ends 10.6 below Opus's final rule, so "similar final performance" is not met.
+- **Experiment 2:** the best rule comes in generation 2 and nothing later beats it. The final rule is 5.7 points below Opus's.
+- **Agents:** 35 of 36 versions scored in experiment 2, 34 of 36 in experiment 1. Failures: one rule rejected by `validate-rule` in the Raven image, one by `check_instance.sh`, one version whose agent failed three times. A typical agent run takes 70 to 90 seconds.
+- **Next:** the frontier open-weight models on the same pipeline, since a campaign pair costs under an hour of one node.
+- **Results on DAIS:** `/dais/fs/scratch/levinb/policy-finder-agents/pf_runs_node/` (`campaign/`, `reevaluate/dais-qwen-exp{1,2}/`), log `logs/pf_campaign.989450.out`.
 
 | Piece | Pull request | State |
 |---|---|---|
@@ -37,10 +50,9 @@ Everything is built, independently reviewed and merged into `policy-finder-open-
 | Follow-ups: sims must import their snapshot's code, lost-job handling at job end | #252 | merged after one review |
 | OpenCode harness beside Claude Code | #247 | merged after four reviews |
 | Agents, model server and simulations in one DAIS job | #251 | merged after three reviews |
+| Resume robustness and the stages files for a restart | #253, #254, #255 | merged |
 
-- **Proven on DAIS:** a smoke campaign for experiment 2 with Qwen3-Coder-Next through OpenCode ran entirely on one node and scored all 3 versions, every agent on its first attempt (job 988193). The pipeline without agents runs a version's simulations in about 1.5 minutes at real size. The model serves on H200, B200 and RTX PRO 6000.
-- **Queued:** full-node job 989450 (12 hours): smoke campaigns for both experiments with a resume test, a load stage with 24 agents at once, and, only if those pass, the two real 36-version campaigns (`pfq-exp2-20261127`, `pfq-exp1-20261127`), each re-evaluated against its bar.
-- **The Claude path** stays paused (Opus safeguards). The three small OpenRouter campaigns on the Hetzner host were stopped; the host is still up and is deleted once the DAIS runs are in.
+- **The Claude path** stays paused (Opus safeguards). The three small OpenRouter campaigns on the Hetzner host were stopped; the host is still up for the two Raven equivalence jobs and is deleted after them.
 - **Open for Levin:** how to treat the single-idea mode's format failures with open models (2 of 8 passed the `## Change` block's exact format: clarify the wording, loosen the check, or accept the failures as data); a CHM OpenRouter key with a limit if OpenRouter is used again; whether both ways of running the pipeline (Docker and Raven with Claude; one DAIS node with open weights) go to `main`, to be agreed with Yannik.
 - **Known differences from the Opus reference runs, to state with the results:** the reference `per_round.parquet` files the agents read were recreated on DAIS CPUs (same config and seed, different draws); simulations run on CPUs (equivalence with Raven GPUs: no difference found at about 1 point; the full-power comparison waits for two Raven jobs); the agents' shell commands run under a network filter and a transcript audit, not in a Docker sandbox.
 
