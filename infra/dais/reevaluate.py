@@ -324,14 +324,15 @@ def reference_config(template, name, spec, seed, out):
     return config
 
 
-def reference_score(per_round, config, name):
-    """(score, se) of reference `name` in one slice, as sweep.py scores a point."""
+def reference_score(per_round, metric, name):
+    """(score, se) of reference `name` in one slice, as sweep.py scores a point
+    by `metric` (the template's sweep_metric)."""
     sys.path.insert(0, str(MAIN / "src"))
     import pandas as pd
     from aimanager.simulation import pool_scores
 
     df = pool_scores.add_pool(pd.read_parquet(per_round))
-    anchor = REFERENCE_METRICS[config.get("sweep_metric", "pool_vs_anchor")]
+    anchor = REFERENCE_METRICS[metric]
     scores = (pool_scores.group_payoff_scores(df) if anchor is None
               else pool_scores.against_anchor(df, anchor))
     pool = scores[name]["pool"]
@@ -582,7 +583,8 @@ def run_slices(args, versions, k, out, snapshots, jobs, refs=None):
                 raise RuntimeError(f"exit code {code}")
             cluster_proxy.fetch(sha, f"{EVAL_OUT}/{name}", out / "slices" / name)
             per_round = out / "slices" / name / "per_round.parquet"
-            ref_slices.setdefault(ref, []).append(reference_score(per_round, cfg, ref))
+            metric = next(iter(versions.values()))[1].get("sweep_metric", "pool_vs_anchor")
+            ref_slices.setdefault(ref, []).append(reference_score(per_round, metric, ref))
             per_round.unlink()  # large; the score is in references.tsv
         except (cluster_proxy.ClusterError, OSError, KeyError, ValueError,
                 RuntimeError) as e:
