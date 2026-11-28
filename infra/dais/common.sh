@@ -18,6 +18,15 @@ PF_HERE="${SLURM_SUBMIT_DIR:-$PF_REPO}/infra/dais"
 
 # Site settings kept out of git (VLLM_SIF: the vLLM image's path).
 [ -f "$PF_SCRATCH/env.sh" ] && source "$PF_SCRATCH/env.sh"
+# MODEL_PROFILE=<name>: a model other than the default Qwen3-Coder-Next, its
+# settings (weights, revision, vLLM image, parsers, context, MoE backend,
+# server GPUs) in infra/dais/models/<name>.sh; the defaults below fill the rest.
+if [ -n "${MODEL_PROFILE:-}" ]; then
+  _profile="${PF_HERE:-$(dirname "${BASH_SOURCE[0]}")}/models/$MODEL_PROFILE.sh"
+  [ -f "$_profile" ] || { echo "FATAL: no model profile $_profile" >&2; exit 2; }
+  # shellcheck source=/dev/null
+  source "$_profile"
+fi
 # vLLM image: its version is asserted, not assumed.
 VLLM_SIF="${VLLM_SIF:-}"
 EXPECT_VLLM_TAG="${EXPECT_VLLM_TAG:-vllm/vllm-openai:v0.25.1}"
@@ -39,6 +48,11 @@ export HF_HOME="${HF_HOME:-/dais/fs/scratch/$USER/models}"
 MODEL="${MODEL:-Qwen/Qwen3-Coder-Next}"
 MODEL_REV="${MODEL_REV:-a7fbcb5c0e12d62a448eaa0e260346bf5dcc0feb}"
 TOOL_PARSER="${TOOL_PARSER:-qwen3_xml}"
+# a reasoning model's parser (empty: none, as for Qwen3-Coder-Next)
+REASONING_PARSER="${REASONING_PARSER:-}"
+# the MoE kernels: triton (Qwen on H200 and B200, see campaign.slurm.sh), or
+# auto for vLLM's own choice
+MOE_BACKEND="${MOE_BACKEND:-triton}"
 # the served context; campaign.slurm.sh passes it to the agents' OpenCode
 # config (PF_LLM_CONTEXT). Qwen3-Coder-Next: 262,144 natively. Its KV cache
 # costs about 25 KB per token over both GPUs at TP 2 (B5), so a full-length
@@ -73,6 +87,10 @@ assert_vllm_image() {
     return 1
   fi
   tag=$(apptainer inspect "$VLLM_SIF" | sed -n 's/^ai\.vllm\.image\.tag: *//p' | head -1)
+  if [ -z "$tag" ]; then  # an official image converted here: no such label
+    tag="vllm/vllm-openai:v$(apptainer exec --containall --cleanenv "$VLLM_SIF" \
+      python3 -c 'import vllm; print(vllm.__version__)' 2>/dev/null | tail -1)"
+  fi
   if [ "$tag" != "$EXPECT_VLLM_TAG" ]; then
     echo "FATAL: $VLLM_SIF is '$tag', expected '$EXPECT_VLLM_TAG'" >&2
     return 1
@@ -135,6 +153,8 @@ serve_model() {
     --max-model-len "$MAX_MODEL_LEN" \
     --enable-prefix-caching --enable-prompt-tokens-details \
     --enable-auto-tool-choice --tool-call-parser "$TOOL_PARSER" \
+    ${REASONING_PARSER:+--reasoning-parser "$REASONING_PARSER"} \
+    $([ "$MOE_BACKEND" = auto ] || echo --moe-backend "$MOE_BACKEND") \
     "$@" > "$log" 2>&1 &
   SERVER_PID=$!
   BG_PIDS+=("$SERVER_PID")

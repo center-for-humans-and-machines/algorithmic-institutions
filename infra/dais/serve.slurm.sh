@@ -9,6 +9,10 @@
 #   cd /u/$USER/algorithmic-institutions-pf
 #   sbatch infra/dais/serve.slurm.sh
 #   sbatch --export=ALL,MODE=serve --time=08:00:00 infra/dais/serve.slurm.sh
+#   # another model: its profile (infra/dais/models/<name>.sh), the GPUs it needs
+#   sbatch --export=MODEL_PROFILE=deepseek-v4.1-flash-1017,PF_SCRATCH=... \
+#     -o <log> --qos=g0004 --gres=gpu:b200:4 --cpus-per-task=48 --mem=1000000 \
+#     infra/dais/serve.slurm.sh
 #
 # This version ran as job 987950 (2026-11-27, `-p gpudev`, MODE=probe). The
 # default gpu1/g0002 path and MODE=serve have not been run.
@@ -32,7 +36,8 @@ GPU_UTIL="${GPU_UTIL:-0.90}"
 
 assert_vllm_image
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
-serve_model "$GPU_UTIL" 2 "$PF_RUN/vllm.log"
+# SERVER_GPUS (default 2; a model profile may set more): tensor parallel
+serve_model "$GPU_UTIL" "${SERVER_GPUS:-2}" "$PF_RUN/vllm.log" ${VLLM_EXTRA:-}
 wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 grep -E "Model loading took|KV cache|Maximum concurrency" "$PF_RUN/vllm.log" | tail -4
 nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv
