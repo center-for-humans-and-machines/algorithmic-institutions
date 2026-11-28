@@ -117,6 +117,15 @@ grep -q -- "'--min-first-scored', '10', '--no-expired', '--no-limit-stops'" "$T/
   && echo "PASS A passes finished/10 to the check" \
   || { echo "FAIL A: no --min-first-scored"; fails=$((fails + 1)); }
 
+make_tree  # a setting with a reference list re-evaluates with it
+mkdir -p "$T/repo/infra/dais/references"
+echo "zero: null" > "$T/repo/infra/dais/references/exp2.yml"
+printf 'prefix: r\nsetting: exp2\n' > "$T/repo/r.yml"
+run_job R "run scored 20 20 r.yml:2"
+grep -q "re-evaluation in 2 slices .*--references .*references/exp2.yml" "$T/R.log" \
+  && echo "PASS R the setting's references are passed" \
+  || { echo "FAIL R: no --references"; fails=$((fails + 1)); sed 's/^/     | /' "$T/R.log" | tail -15; }
+
 make_tree
 run_job B "run scored 20 20 a.yml
 run scored 20 20 b.yml" STUB_FAIL=a
