@@ -1,0 +1,23 @@
+# GLM-5.3 at reasoning effort high (Levin, 2026-11-28: high for every model;
+# the model's own default is max; REASONING_EFFORT=high in the job, which this
+# file requires: reasoning_effort), stage 3 of
+# infra/dais/stages/node-glm53h-2026-11-28.txt. The real campaign of experiment 1, as
+# dais-dsv41h-exp1.yml (the Opus reference's setting, every lineage iterated
+# in every generation: top_k 12) but for the model and the prefix.
+prefix: pfglmh-exp1-20261128
+reasoning_effort: high
+setting: exp1
+mode: free
+n_fresh: 12
+generations: 6
+top_k: 12
+min_params: 1
+max_params: 5
+sobol_points: 256
+parallel: 12
+error_retries: 3
+retry_wait: 600
+summarize: null
+harness: opencode
+model: zai-org/GLM-5.3
+base_url: "{env:PF_LLM_BASE_URL}"

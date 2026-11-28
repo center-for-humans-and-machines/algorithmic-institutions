@@ -44,3 +44,23 @@ def test_a_model_without_an_effort_refuses_one():
     assert resolve(profile=None)[:2] == (0, ["", "", ""])
     code, _, err = resolve("high", profile=None)
     assert code == 2 and "has no reasoning effort" in err
+
+
+GLM = DAIS / "model_profiles/glm-5.3.sh"
+
+
+@pytest.mark.parametrize("effort, shown, prompt", [
+    (None, "max", "Reasoning Effort: Max"),  # the model's own default
+    ("high", "high", "Reasoning Effort: High"),
+    ("low", "low", "Reasoning Effort: Low"),
+])
+def test_glm_efforts_are_its_chat_templates(effort, shown, prompt):
+    code, (resolved, args, check), _ = resolve(effort, profile=GLM)
+    assert code == 0 and resolved == shown and check == prompt
+    assert args == '--default-chat-template-kwargs {"reasoning_effort":"%s"}' % shown
+
+
+@pytest.mark.parametrize("effort", ["50", "xhigh", "none"])
+def test_glm_takes_no_other_effort(effort):
+    code, _, err = resolve(effort, profile=GLM)
+    assert code == 2 and "FATAL: reasoning effort" in err
