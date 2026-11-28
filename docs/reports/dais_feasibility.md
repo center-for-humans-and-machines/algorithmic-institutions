@@ -284,7 +284,7 @@ Expected to fit or not, unverified. Weight sizes are the summed safetensors file
 | Architecture | `GlmMoeDsaForCausalLM`: 78 layers, 256 experts (8 active), MLA (`kv_lora_rank` 512) with DeepSeek-V3.2-style sparse attention (top 2048), one MTP layer | `config.json` |
 | vLLM | from v0.29 per the recipe; v0.34.0 maps the architecture to `models/deepseek_v32.py`, transformers 5.22.2 (5.15 needed) | recipes.vllm.ai/zai-org/GLM-5.3; the image's registry |
 | Parsers | `--tool-call-parser glm47 --reasoning-parser glm47` | recipe; both registered in v0.34.0 |
-| Context | 1,048,576 natively; served 147,456 (below) | `max_position_embeddings`; profile |
+| Context | 1,048,576 natively; served 262,144 (below) | `max_position_embeddings`; profile |
 | Sampling | temperature 1.0, top_p 0.95 | `generation_config.json`; the card's HLE and SWE-Marathon runs |
 | Reasoning | always on; `reasoning_effort` low, high or max, rendered as `Reasoning Effort: Low`, `High` or `Max`; the model's default is max (a request without one, or with any other value, renders `Max`). The profile declares the three with default max; the campaigns run at high (Levin, 2026-11-28) | model card "Note"; `chat_template.jinja`; job 993473 rendered `Max` without an effort |
 
@@ -292,7 +292,7 @@ Chat template quirks (rendered by vLLM's HF renderer on the Python frontend; `--
 
 Memory at TP 8 on 8 B200, measured (job 993477, utilisation 0.90, served 262,144 then): 89.5 GiB of weights per GPU, 5.5 GiB for CUDA graphs; vLLM chose an FP8 KV cache by itself (`Using standard fp8 KV cache format`), 55.8 GiB per GPU (19,626 blocks), 1,256,064 tokens in all: 47.7 KB per token, the MLA cache being replicated on every GPU. The recipe's `--kv-cache-dtype fp8_e4m3` is therefore not needed. (The estimate before this run assumed a BF16 cache, about twice as large per token.) It does not fit on fewer GPUs: 4 B200 (716 GiB) hold less than the weights, and TP must divide the 64 heads. On 8 H200 about 33 GiB per GPU would remain, roughly 0.7M tokens: not measured.
 
-Served context: a session holds up to OpenCode's compaction point, the context less the output limit and the compaction margin (65,536). With an output limit of 32,768 and 147,456 served, it compacts at 49,152 tokens; 1,256,064 / 49,152 = 25.6 sessions at their compaction point fit at once, so the free mode's 24 agents never wait for KV space. The single-idea mode's 40 agents fit at an average of 31,400 tokens each; above that vLLM preempts (recomputes) rather than fails. A context that left room for 40 sessions at the compaction point (about 31k each) is below the smallest OpenCode accepts (compaction point 32,768).
+Served context: 262,144 with an output limit of 65,536, so OpenCode compacts at 262,144 - 65,536 - 65,536 = 131,072 tokens, above the 55k to 115k tokens (median about 80k in later generations) Qwen's sessions peaked at on this task: most sessions should finish a version without compacting. The cache does not hold every session at its compaction point: its 1,256,064 tokens are 24 sessions of about 52k live tokens each, so under load vLLM preempts (drops a request's cache and recomputes it later) rather than fails, and sessions are at their peak only briefly. Preemption is expected; the campaign job prints vLLM's count (`vllm:num_preemptions_total`) after each stage and at its end. Both steps run 24 agents at once (`PF_AGENT_SLOTS=24`; the single-idea mode's generations of 40 versions take two rounds of agents). Utilisation stays at 0.90 (12.9 GiB per GPU kept out of the cache): no profile variable sets it.
 
 Loading: the weights loaded in 1,166 s from GPFS (all 8 ranks 1,184 s), profiling, KV cache and warm-up took 475 s more, the server was ready 1,771 s after start; `READY_TIMEOUT` is 3,600.
 
@@ -305,7 +305,7 @@ What ran (job IDs on DAIS):
 Known problems and open points:
 
 - The two runs above used no `REASONING_EFFORT` (the default, max); the campaigns run at high, whose prompt check (`Reasoning Effort: High`) has not run on a server yet.
-- An output limit of 32,768 tokens per step: a step that reasons longer ends at the limit and is a failed attempt (`length_stops`); the load test's `+nolimits` gate shows whether it happens.
+- Preemptions under load slow the sessions down; how much is not measured. The count is in the job log.
 - MTP speculative decoding (the recipe's `--speculative-config.method mtp`) is off.
 - Whether OpenCode 1.19.6 sends `reasoning_content` back in its history is unverified.
 

@@ -177,7 +177,7 @@ stop_all() {
   echo "stopping at $(date +%T) after $SECONDS s"
   if [ -n "${SERVER_URL:-}" ]; then
     curl -s -m 10 -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/metrics" 2>/dev/null \
-      | grep -E '^vllm:(prompt_tokens_total|generation_tokens_total|prefix_cache_(hits|queries)_total|request_success_total)' \
+      | grep -E '^vllm:(prompt_tokens_total|generation_tokens_total|prefix_cache_(hits|queries)_total|request_success_total|num_preemptions_total)' \
       > "$PF_RUN/vllm_metrics.txt" || true
     sed 's/^/metrics /' "$PF_RUN/vllm_metrics.txt" || true
   fi
@@ -241,7 +241,8 @@ export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
 export PF_LLM_CONTEXT="$MAX_MODEL_LEN"
 echo "served context $MAX_MODEL_LEN tokens"
 
-# server_report: vLLM's request counters (errors included), /health's
+# server_report: vLLM's request counters (errors included) and its
+# preemptions (requests whose KV cache was dropped and recomputed), /health's
 # latency and its log's tail. A report: it never fails (a subshell without
 # errexit or pipefail, whatever grep finds).
 server_report() {
@@ -251,7 +252,7 @@ server_report() {
     curl -s -m 20 -o /dev/null -w '   /health %{http_code} in %{time_total} s\n' \
       -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/health"
     curl -s -m 20 -H "@$SERVER_AUTH_HEADER" "${SERVER_URL%/v1}/metrics" 2>/dev/null \
-      | grep -E '^vllm:(request_success_total|num_requests_running|num_requests_waiting|generation_tokens_total|prompt_tokens_total)' \
+      | grep -E '^vllm:(request_success_total|num_requests_running|num_requests_waiting|generation_tokens_total|prompt_tokens_total|num_preemptions_total)' \
       | sed 's/model_name="[^"]*"//; s/^/   metrics /'
     echo "   vllm.log lines with error/exception: $(grep -ciE 'error|exception|traceback' "$PF_RUN/vllm.log")"
     tail -3 "$PF_RUN/vllm.log" | cut -c1-300 | sed 's/^/   vllm.log | /'

@@ -21,12 +21,17 @@ REASONING_PARSER=glm47
 # The KV cache: measured on 8 B200 at 0.90 (job 993477), vLLM chose an FP8
 # cache by itself ("standard fp8 KV cache format"): 1,256,064 tokens in
 # 55.8 GiB per GPU (the MLA cache is replicated, 47.7 KB per token), so the
-# recipe's --kv-cache-dtype fp8_e4m3 is not needed. A session holds up to
-# OpenCode's compaction point, the context less the output limit (32,768,
-# LOCAL_MODELS) and the margin (65,536): at 147,456 that is 49,152 tokens,
-# room for 25 sessions at their compaction point at once (24 agents run).
+# recipe's --kv-cache-dtype fp8_e4m3 is not needed. Served 262,144 with an
+# output limit of 65,536 (LOCAL_MODELS), OpenCode compacts at 131,072, above
+# the 55k-115k tokens Qwen's sessions peaked at on this task, so most
+# sessions finish a version without compacting. The cache does NOT hold
+# every session at its compaction point: 1.26M tokens are 24 sessions of
+# about 52k live tokens each. Under load vLLM preempts (drops a request's
+# cache and recomputes it later) rather than fails; that is expected, and
+# the campaign job prints the count (vllm:num_preemptions_total). Both steps
+# run 24 agents at once (PF_AGENT_SLOTS=24).
 MODEL_VLLM_ARGS=""
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-147456}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
 MOE_BACKEND=auto
 # the reasoning effort (reasoning_effort.sh): a submission's REASONING_EFFORT,
 # by default max, the model's own (its card: "It defaults to max if not
