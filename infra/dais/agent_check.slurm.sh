@@ -241,11 +241,17 @@ EOF
 import sys
 sys.path.insert(0, "scripts/policy_finder")
 import agent_runner as ar
-reads = " ".join(f"({k + 1}) experiments/2group_8agent_50ep.csv from line {2000 * k + 1}"
-                 for k in range(10))
+# sequential reads of about 10k tokens each, as an agent reads data: the
+# context passes OpenCode's compaction point (served context - output -
+# margin) a few reads in, well before the server's limit. (Ten reads made in
+# ONE step add more than any margin; that case is not what this checks.)
+reads = " ".join(f"({k + 1}) experiments/2group_8agent_50ep.csv from line {1000 * k + 1}"
+                 for k in range(12))
 run = ar.start("pfchk", ["notes/policy_finder"], "Read these parts of a file with your "
-               "read tool, one call each, 2000 lines each, in this order, and keep "
-               f"what you read in mind: {reads}. Then write the file "
+               "read tool, 1000 lines each, strictly one at a time: make exactly one "
+               "tool call per message and wait for its result before the next. Parts: "
+               f"{reads}. After each part, say in one sentence what the column "
+               "`contribution` looked like in it. Then write the file "
                "notes/policy_finder/check.md with one line: the number of parts you "
                "read, and reply with that line.", harness="opencode")
 rec = ar.finish(run, harness="opencode")
@@ -254,9 +260,23 @@ print("served context", sys.argv[1], "status", rec["status"], "error", rec["erro
 print("compactions", r.get("compactions"), "ended_on", r.get("ended_on"),
       "seconds", r.get("seconds"), "tokens", r.get("tokens"))
 print("report", rec["report"][:200])
+import json
+steps = []
+for path in ar.transcripts(run, "opencode")[1]:
+    if path.endswith("session.json"):
+        for m in json.load(open(path))["messages"]:
+            i = m["info"]
+            if i.get("role") == "assistant":
+                t = i.get("tokens") or {}
+                steps.append((i.get("agent"), (t.get("input") or 0)
+                              + ((t.get("cache") or {}).get("read") or 0)))
+print("prompt tokens per step (agent, tokens):", steps)
+peak = max((n for a, n in steps if a != "compaction"), default=0)
+print("peak prompt", peak, "of", sys.argv[1])
+# compacted on its own (before the server refused: no overflow error) and done
 sys.exit(0 if rec["status"] == "succeeded" and (r.get("compactions") or 0) >= 1 else 1)
 EOF
-    sed 's/^/     cmp  | /' "$PF_RUN/backend_compaction.log" | tail -4
+    sed 's/^/     cmp  | /' "$PF_RUN/backend_compaction.log" | tail -7
     ls -la "$exp/notes/policy_finder" | sed 's/^/     out  | /'
   else
     tail -30 "$PF_RUN/vllm.log"; fails=$((fails + 1))
