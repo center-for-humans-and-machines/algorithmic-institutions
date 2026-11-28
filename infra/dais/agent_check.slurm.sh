@@ -277,11 +277,11 @@ print("peak prompt", peak, "of", sys.argv[1])
 sys.exit(0 if rec["status"] == "succeeded" and (r.get("compactions") or 0) >= 1 else 1)
 EOF
     sed 's/^/     cmp  | /' "$PF_RUN/backend_compaction.log" | tail -7
-    # an overflow OpenCode recovers from: ten large reads in ONE step pass the
-    # server's context; OpenCode compacts, finishes, exits 1, and the
-    # runner's verdict counts it as succeeded (recovered_overflow)
+    # an overflow: ten large reads in ONE step pass the server's context;
+    # OpenCode compacts and goes on but exits 1. The run must be a failed
+    # attempt whose record names the overflow (and whether OpenCode recovered)
     rm -rf "$exp/notes/policy_finder"/*
-    check backend_overflow_recovered ok env PF_RUNS="$PF_RUN/pf_runs" PF_AGENT_BACKEND=apptainer \
+    check backend_overflow_attempt ok env PF_RUNS="$PF_RUN/pf_runs" PF_AGENT_BACKEND=apptainer \
       PF_AGENT_SIF="$AGENT_SIF" PF_AGENT_POOL_CPUS="$(python3 "$PF_HERE/cpu_slots.py" slots 5 1 2 | paste -sd, -)" \
       PF_AGENT_SHELL="$PF_HERE/agent_shell.sh" PF_AGENT_NOINET="$PF_HERE/noinet.py" \
       PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE" PF_AGENT_TIMEOUT=1200 \
@@ -298,13 +298,15 @@ run = ar.start("pfchk", ["notes/policy_finder"], "Read these parts of a file wit
                "line.", harness="opencode")
 rec = ar.finish(run, harness="opencode")
 r = rec["result"]
-print("served context", sys.argv[1], "status", rec["status"], "error", rec["error"])
-print("recovered_overflow", r.get("recovered_overflow"), "compactions", r.get("compactions"),
-      "opencode exit", r.get("opencode_exit_code"), "failures", r.get("failures"))
-# meaningful only when the server refused: then it must count as recovered
-sys.exit(0 if rec["status"] == "succeeded" else 1)
+print("served context", sys.argv[1], "status", rec["status"], "overflow", r.get("overflow"))
+print("error", rec["error"])
+if not r.get("overflow"):
+    print("INCONCLUSIVE: the session did not overflow")
+    sys.exit(2)
+sys.exit(0 if rec["status"] == "failed"
+         and "refused a request past its context" in (rec["error"] or "") else 1)
 EOF
-    sed 's/^/     ovf  | /' "$PF_RUN/backend_overflow_recovered.log" | tail -3
+    sed 's/^/     ovf  | /' "$PF_RUN/backend_overflow_attempt.log" | tail -3
     ls -la "$exp/notes/policy_finder" | sed 's/^/     out  | /'
   else
     tail -30 "$PF_RUN/vllm.log"; fails=$((fails + 1))
