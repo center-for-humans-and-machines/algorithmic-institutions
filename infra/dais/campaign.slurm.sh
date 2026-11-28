@@ -311,9 +311,17 @@ campaign_stage() {
     if [ -e "$out" ]; then
       mv "$out" "$out.partial.$(date +%Y%m%d-%H%M%S)"
     fi
-    echo "[$(date +%T)] campaign $name: re-evaluation in $slices slices into $out"
+    # the setting's fixed reference managers beside the versions, when it has
+    # a list (infra/dais/references/<setting>.yml)
+    local setting refs=()
+    setting=$(sed -n 's/^setting: *\([A-Za-z0-9_]*\).*/\1/p' "$file" 2>/dev/null \
+              | head -n 1) || setting=""
+    [ -n "$setting" ] && [ -f "$PF_HERE/references/$setting.yml" ] \
+      && refs=(--references "$PF_HERE/references/$setting.yml")
+    echo "[$(date +%T)] campaign $name: re-evaluation in $slices slices into $out" \
+      "${refs[*]}"
     driver "$PF_PYTHON" "$PF_HERE/reevaluate.py" "$PF_RUNS/campaign/$name.json" \
-      "$out" --slices "$slices" --seed 100000 \
+      "$out" --slices "$slices" --seed 100000 "${refs[@]}" \
       >> "$PF_RUN/$name.reevaluate.log" 2>&1 || rc=$?
     echo "[$(date +%T)] campaign $name: re-evaluation exit $rc"
     cat "$out/summary.json" 2>/dev/null || true
