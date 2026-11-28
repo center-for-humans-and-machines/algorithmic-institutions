@@ -1,9 +1,12 @@
 """Tests for scripts/policy_finder/opencode_run.py: the summary and the redaction."""
 
+import gzip
 import importlib.util
 import json
 import os
+import signal
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -119,6 +122,8 @@ key = os.environ.get("OPENROUTER_API_KEY", "")
 if sys.argv[1] == "run" and mode == "replay":  # a real run's events, exit 1
     for line in open(os.environ["FAKE_EVENTS"]):
         print(json.dumps({**json.loads(line), "sessionID": "ses_1"}), flush=True)
+    if os.environ.get("FAKE_HANG"):  # a looping agent goes on until stopped
+        time.sleep(60)
     sys.exit(1)
 if sys.argv[1] == "export" and mode == "replay":
     print(open(os.environ["FAKE_SESSION"]).read())
@@ -477,3 +482,71 @@ def test_the_output_cap_is_the_models_output_limit(fake, capsys):
     assert _summary(capsys)["output_limit"] == 262144
     assert oc.configured_output_limit(repo) == 262144
 
+
+# -- loops of failing tool calls (LoopWatch) -------------------------------------
+
+def loop_events(run):
+    """A real run's events (tool inputs and outputs dropped, but for the error
+    of a call of tool `invalid`): apt-164 (370 `write` calls without
+    `filePath`, status `error`, stopped by hand), apt-42 (431 denied calls),
+    apt-225 (684 calls of an unavailable tool `run`, recorded as tool
+    `invalid`, status `completed`) and apt-141 (5 failing `write` calls, then
+    the agent fixed them)."""
+    with gzip.open(FIXTURES / f"opencode_events_{run}.jsonl.gz", "rt") as f:
+        return [json.loads(line) for line in f]
+
+
+def first_trip(events, limit=oc.LOOP_LIMIT):
+    watch = oc.LoopWatch(limit)
+    for i, event in enumerate(events):
+        if watch.feed(event):
+            return i, watch.tripped
+    return None, None
+
+
+@pytest.mark.parametrize("run, tool, error", [
+    ("apt164", "write", "SchemaError(Missing key"),
+    ("apt42", "bash", "prevents you from using this specific tool call"),
+    ("apt225", "invalid", "Model tried to call unavailable tool 'run'"),
+])
+def test_a_loop_of_failing_calls_trips_at_the_limit(run, tool, error):
+    events = loop_events(run)
+    i, tripped = first_trip(events)
+    assert tripped["tool"] == tool and error in tripped["error"]
+    assert tripped["repeats"] == oc.LOOP_LIMIT
+    calls = [e for e in events[: i + 1] if e["type"] == "tool_use"]
+    assert len(calls) < len([e for e in events if e["type"] == "tool_use"]) - 300
+
+
+def test_retries_that_recover_and_repeated_successes_do_not_trip():
+    assert first_trip(loop_events("apt141")) == (None, None)  # 5 failures, then fixed
+    assert first_trip(loop_events("apt164"), limit=371) == (None, None)
+    ok = {"type": "tool_use", "part": {"tool": "read", "state": {"status": "completed"}}}
+    bad = {"type": "tool_use", "part": {"tool": "write",
+                                        "state": {"status": "error", "error": "e"}}}
+    other = {"type": "tool_use", "part": {"tool": "write",
+                                          "state": {"status": "error", "error": "f"}}}
+    text = {"type": "text"}
+    assert first_trip([ok] * 100) == (None, None)
+    assert first_trip(([bad, text] * 19 + [ok]) * 5) == (None, None)
+    assert first_trip(([bad] * 19 + [other]) * 5) == (None, None)
+    assert first_trip([bad, text] * 20)[1]["repeats"] == 20  # text does not reset
+    assert first_trip([bad] * 100, limit=0) == (None, None)
+
+
+def test_a_looping_run_is_stopped_and_fails_with_its_reason(fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    events = out.parent / "replay_events.jsonl"
+    events.parent.mkdir(parents=True, exist_ok=True)
+    events.write_text("".join(json.dumps(e) + "\n" for e in loop_events("apt164")))
+    monkeypatch.setenv("FAKE_EVENTS", str(events))
+    monkeypatch.setenv("FAKE_HANG", "1")
+    started = time.monotonic()
+    code = run("replay", "--timeout", "50")
+    s = _summary(capsys)
+    assert time.monotonic() - started < 30  # stopped, not at the time limit
+    assert code == 128 + signal.SIGTERM and not s.get("timed_out")
+    assert s["tool_loop"]["tool"] == "write" and s["tool_loop"]["repeats"] == 20
+    assert any(f.startswith("stopped in a loop: 20 consecutive `write` calls")
+               for f in s["failures"])
+    _clean(out, repo, data)
