@@ -277,6 +277,34 @@ print("peak prompt", peak, "of", sys.argv[1])
 sys.exit(0 if rec["status"] == "succeeded" and (r.get("compactions") or 0) >= 1 else 1)
 EOF
     sed 's/^/     cmp  | /' "$PF_RUN/backend_compaction.log" | tail -7
+    # an overflow OpenCode recovers from: ten large reads in ONE step pass the
+    # server's context; OpenCode compacts, finishes, exits 1, and the
+    # runner's verdict counts it as succeeded (recovered_overflow)
+    rm -rf "$exp/notes/policy_finder"/*
+    check backend_overflow_recovered ok env PF_RUNS="$PF_RUN/pf_runs" PF_AGENT_BACKEND=apptainer \
+      PF_AGENT_SIF="$AGENT_SIF" PF_AGENT_POOL_CPUS="$(python3 "$PF_HERE/cpu_slots.py" slots 5 1 2 | paste -sd, -)" \
+      PF_AGENT_SHELL="$PF_HERE/agent_shell.sh" PF_AGENT_NOINET="$PF_HERE/noinet.py" \
+      PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE" PF_AGENT_TIMEOUT=1200 \
+      "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$MAX_MODEL_LEN" <<'EOF'
+import sys
+sys.path.insert(0, "scripts/policy_finder")
+import agent_runner as ar
+reads = " ".join(f"({k + 1}) experiments/2group_8agent_50ep.csv from line {2000 * k + 1}"
+                 for k in range(10))
+run = ar.start("pfchk", ["notes/policy_finder"], "Read these parts of a file with your "
+               "read tool, all ten at once in one message (parallel tool calls), 2000 "
+               f"lines each: {reads}. Then write the file notes/policy_finder/check.md "
+               "with one line: the number of parts you read, and reply with that "
+               "line.", harness="opencode")
+rec = ar.finish(run, harness="opencode")
+r = rec["result"]
+print("served context", sys.argv[1], "status", rec["status"], "error", rec["error"])
+print("recovered_overflow", r.get("recovered_overflow"), "compactions", r.get("compactions"),
+      "opencode exit", r.get("opencode_exit_code"), "failures", r.get("failures"))
+# meaningful only when the server refused: then it must count as recovered
+sys.exit(0 if rec["status"] == "succeeded" else 1)
+EOF
+    sed 's/^/     ovf  | /' "$PF_RUN/backend_overflow_recovered.log" | tail -3
     ls -la "$exp/notes/policy_finder" | sed 's/^/     out  | /'
   else
     tail -30 "$PF_RUN/vllm.log"; fails=$((fails + 1))
