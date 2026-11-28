@@ -130,6 +130,22 @@ class Campaign:
                       else {"generations": []})
         self._lock = threading.Lock()
 
+    def check_effort(self):
+        """The model server's reasoning effort (PF_REASONING_EFFORT, the DAIS
+        job's) is the campaign file's `reasoning_effort` when it names one,
+        and the one its state recorded at its start: a campaign never mixes
+        efforts, and its state carries the one it ran at."""
+        effort = os.environ.get("PF_REASONING_EFFORT") or None
+        wanted = self.settings.get("reasoning_effort")
+        if wanted is not None and str(wanted) != str(effort):
+            raise CampaignError(f"{self.path}: reasoning_effort {wanted}, but the server's "
+                                f"is {effort} (REASONING_EFFORT of the job)")
+        if "reasoning_effort" not in self.state:
+            self.state["reasoning_effort"] = effort
+        elif self.state["reasoning_effort"] != effort:
+            raise CampaignError(f"{self.path}: its state ran at reasoning effort "
+                                f"{self.state['reasoning_effort']}, the server's is {effort}")
+
     # -- bookkeeping ---------------------------------------------------------
 
     def save(self):
@@ -333,6 +349,8 @@ class Campaign:
         return members
 
     def run(self):
+        self.check_effort()
+        self.save()
         total = 1 + self.settings["generations"]
         for index in range(total):
             members = self.members(index)

@@ -231,3 +231,15 @@ def test_an_opencode_summary_shows_tokens_and_catalogue_cost(tmp_path, monkeypat
     state_path.write_text(json.dumps(state))
     text = campaign.write_summary()
     assert "OpenCode catalogue $" in text and "0.15, 290 / 1500 / 13" in text
+
+
+def test_a_campaign_runs_at_one_reasoning_effort(tmp_path, monkeypatch):
+    monkeypatch.setenv("PF_REASONING_EFFORT", "high")
+    campaign, _ = make(tmp_path, monkeypatch, reasoning_effort="high")
+    campaign.run()
+    assert campaign.state["reasoning_effort"] == "high"  # recorded in its state
+    monkeypatch.setenv("PF_REASONING_EFFORT", "max")
+    with pytest.raises(cm.CampaignError, match="reasoning_effort high"):
+        make(tmp_path, monkeypatch, reasoning_effort="high")[0].run()  # the file's
+    with pytest.raises(cm.CampaignError, match="its state ran at reasoning effort high"):
+        make(tmp_path, monkeypatch)[0].run()  # a resume at another effort

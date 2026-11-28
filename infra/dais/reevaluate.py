@@ -493,7 +493,9 @@ def main():
         write_tsv(out / ("curve.tsv" if name == "all" else f"curve_{name}.tsv"), points)
         results_by[name] = {"lineages": lineages, **result, "points": points}
     head = results_by.get("comparable", results_by["all"])
-    summary = {"state": str(args.state), "refs": args.refs, "seed": args.seed,
+    summary = {"state": str(args.state),
+               "reasoning_effort": state.get("reasoning_effort", "not recorded"),
+               "refs": args.refs, "seed": args.seed,
                "slices": k, "target_se": args.target_se, "code": args.code,
                "no_final": missing, "references": ref_rows,
                "headline": ("comparable: the %d lineages best after generation 1 by "
@@ -504,6 +506,7 @@ def main():
                "subsets": {n: {k_: v for k_, v in r.items() if k_ != "points"}
                            for n, r in results_by.items()}}
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    print(f"reasoning effort: {summary['reasoning_effort']}")
     for name, r in results_by.items():
         print(f"== {name}: {len(r['lineages'])} lineages")
         print(report(r["points"], r))
