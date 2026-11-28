@@ -264,20 +264,16 @@ def error_events(events_path):
     return out
 
 
-def recovered_overflows(errors, session, summary, event_error):
-    """How many context overflows OpenCode recovered from, or 0.
-
-    OpenCode answers a request that passes the server's context with a
-    compaction and carries on, but exits 1 at the end. Such a run is a
-    success only when every error of the run was an overflow, each overflow
-    was followed by a completed compaction (OpenCode's summary message,
-    finished `stop` without an error), no error came after the last finished
-    step, and the turn ended with a report. Anything else: 0.
-    """
-    if not errors or any(name != OVERFLOW for _, name in errors) or event_error:
-        return 0
-    if not (summary.get("result") or "").strip() or summary.get("final_error"):
-        return 0
+def overflow_attempt(errors, session):
+    """{overflows, recovered} when the server refused a request past its
+    context (an OVERFLOW error), else None. `recovered`: OpenCode completed a
+    compaction after each overflow (its summary message, finished `stop`
+    without an error) and went on. Either way the run is a failed attempt
+    (failures): a session that recovered may stop on an interim text or on
+    OpenCode's continuation prompt, with its work unfinished."""
+    stamps = sorted(stamp for stamp, name in errors if name == OVERFLOW)
+    if not stamps:
+        return None
     # a compaction's completion (OpenCode starts it before it emits the error)
     done = sorted(
         ((m.get("info") or {}).get("time") or {}).get("completed") or 0
@@ -286,22 +282,28 @@ def recovered_overflows(errors, session, summary, event_error):
         and _compaction_summary(m.get("info") or {})
         and (m.get("info") or {}).get("finish") == "stop"
         and not (m.get("info") or {}).get("error"))
-    for stamp, _ in errors:
+    recovered = True
+    for stamp in stamps:
         later = [t for t in done if t >= stamp]
         if not later:
-            return 0
+            recovered = False
+            break
         done.remove(later[0])  # each overflow needs a compaction of its own
-    return len(errors)
+    return {"overflows": len(stamps), "recovered": recovered}
 
 
 def failures(summary, code, stderr, expected_model, event_error, agent="policy-finder",
-             recovered=0):
-    """Why a run is not a success: [] when it is one. `recovered`: overflows
-    OpenCode recovered from (recovered_overflows), whose exit code 1 is then
-    no failure."""
+             overflow=None):
+    """Why a run is not a success: [] when it is one. `overflow`: the run's
+    overflow_attempt, which always fails it, with its own reason."""
     out = []
-    if code != 0 and not (code == 1 and recovered):
+    if code != 0:
         out.append(f"OpenCode exited with {code}")
+    if overflow:
+        out.append(f"the server refused a request past its context "
+                   f"({overflow['overflows']} time(s)); OpenCode "
+                   + ("recovered by compacting" if overflow["recovered"]
+                      else "did not recover"))
     if AGENT_FALLBACK in stderr:
         out.append(f"the agent {agent} did not load: OpenCode fell back to its default")
     if summary.get("agent") and summary["agent"] != agent:
@@ -587,11 +589,10 @@ def main(argv=None):
                 session = json.load(f)
         except (OSError, ValueError):
             session = {}
-        recovered = recovered_overflows(error_events(events), session, summary,
-                                        event_error)
-        summary["recovered_overflow"] = recovered
+        overflow = overflow_attempt(error_events(events), session)
+        summary["overflow"] = overflow
         why = failures(summary, code, stderr, configured_model(args.repo),
-                       event_error, recovered=recovered)
+                       event_error, overflow=overflow)
     except Exception as e:  # noqa: BLE001 - the runner's own failure fails the run
         why = [f"the runner failed: {type(e).__name__}: {e}"]
         code = code or 1
