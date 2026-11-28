@@ -84,7 +84,7 @@ KEY_HASH = ".key_hash.json"
 #: OpenCode's data folder in the run's home (its database and logs)
 DATA = os.path.expanduser("~/.local/share/opencode")
 #: Consecutive tool calls failing alike (the same tool, the same error text)
-#: that stop a run (--loop-limit). Real loops ran 60 to 431 calls; no other
+#: that stop a run (--loop-limit). Real loops ran 64 to 684 calls; no other
 #: run of the DAIS campaigns repeated a failing call more than 5 times before
 #: it changed course. OpenCode's own `doom_loop` check does not catch them:
 #: it compares the last 3 tool calls of one assistant message, with identical
@@ -95,8 +95,11 @@ LOOP_LIMIT = 20
 class LoopWatch:
     """Counts consecutive tool calls that failed alike, from OpenCode's
     `--format json` events: `tool_use` events with status `error`, the same
-    tool and the same error text. Any other tool result (a success, another
-    error) starts the count anew; text and steps between calls do not count.
+    tool and the same error text, or calls of OpenCode's tool `invalid` (a
+    call of a tool the agent does not have, recorded as `completed`), the
+    same error text. A call with invalid arguments arrives as status `error`.
+    Any other tool result (a success, another error) starts the count anew;
+    text and steps between calls do not count.
     `tripped`: {tool, error, repeats} once the count reaches `limit` (0: never).
     """
 
@@ -111,10 +114,16 @@ class LoopWatch:
         state = part.get("state") or {}
         if state.get("status") == "error":
             key = (part.get("tool"), str(state.get("error")))
+        elif part.get("tool") == "invalid":
+            key = ("invalid", str((state.get("input") or {}).get("error")
+                                  or state.get("output")))
+        else:
+            key = None
+        if key is None:
+            self.key, self.count = None, 0
+        else:
             self.count = self.count + 1 if key == self.key else 1
             self.key = key
-        else:
-            self.key, self.count = None, 0
         if self.limit and self.count >= self.limit and not self.tripped:
             self.tripped = {"tool": self.key[0], "error": self.key[1][:500],
                             "repeats": self.count}

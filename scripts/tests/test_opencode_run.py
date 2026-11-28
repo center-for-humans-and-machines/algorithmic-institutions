@@ -486,9 +486,12 @@ def test_the_output_cap_is_the_models_output_limit(fake, capsys):
 # -- loops of failing tool calls (LoopWatch) -------------------------------------
 
 def loop_events(run):
-    """A real run's events (tool inputs and outputs dropped): apt-164 (370
-    `write` calls without `filePath`, stopped by hand), apt-42 (431 denied
-    calls) and apt-141 (5 failing `write` calls, then the agent fixed them)."""
+    """A real run's events (tool inputs and outputs dropped, but for the error
+    of a call of tool `invalid`): apt-164 (370 `write` calls without
+    `filePath`, status `error`, stopped by hand), apt-42 (431 denied calls),
+    apt-225 (684 calls of an unavailable tool `run`, recorded as tool
+    `invalid`, status `completed`) and apt-141 (5 failing `write` calls, then
+    the agent fixed them)."""
     with gzip.open(FIXTURES / f"opencode_events_{run}.jsonl.gz", "rt") as f:
         return [json.loads(line) for line in f]
 
@@ -504,6 +507,7 @@ def first_trip(events, limit=oc.LOOP_LIMIT):
 @pytest.mark.parametrize("run, tool, error", [
     ("apt164", "write", "SchemaError(Missing key"),
     ("apt42", "bash", "prevents you from using this specific tool call"),
+    ("apt225", "invalid", "Model tried to call unavailable tool 'run'"),
 ])
 def test_a_loop_of_failing_calls_trips_at_the_limit(run, tool, error):
     events = loop_events(run)
