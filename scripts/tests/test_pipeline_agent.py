@@ -141,3 +141,20 @@ def test_a_start_that_failed_is_followed_by_a_fresh_export(version, monkeypatch)
         version.step_agent()
     version.step_agent()
     assert builds == [1]
+
+
+@pytest.mark.parametrize("setting, mentions_switching", [("exp2", True), ("exp1", False)])
+def test_the_seed_notes_name_the_settings_game(tmp_path, monkeypatch, setting,
+                                               mentions_switching):
+    monkeypatch.setenv("PF_RUNS", str(tmp_path))
+    monkeypatch.delenv("PF_WORKTREE_ROOT", raising=False)
+    conf = tmp_path / "worktrees/pf-s/.claude/policy_finder.json"
+    conf.parent.mkdir(parents=True)
+    conf.write_text(json.dumps({"name": "pf-s", "rule_name": "pf-s", "version": 1,
+                                "mode": "single_idea", "setting": setting}))
+    v = pl.Version("pf-s")
+    v.step_export()
+    notes = (v.wt / "notes/policy_finder/pf-s.md").read_text()
+    assert notes.startswith("# pf-s\n")
+    assert ("switch decisions" in notes) == mentions_switching
+    assert (v.wt / v.rule).read_text() == (pl.SEEDS / "single_idea.yml").read_text()

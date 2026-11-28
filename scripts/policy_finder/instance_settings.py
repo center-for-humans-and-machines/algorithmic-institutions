@@ -45,6 +45,10 @@ import json
 import os
 
 
+#: The settings with a single-idea agent (export_instance.MODE_AGENTS)
+SINGLE_IDEA_SETTINGS = ("exp2", "exp1")
+
+
 def rule_name(name: str, version: int) -> str:
     """The stem of a version's rule, notes and sweep."""
     return name if version == 1 else f"{name}-v{version}"
@@ -127,8 +131,9 @@ def write(args):
     if args.setting != "exp2":
         instance["setting"] = args.setting
     if args.mode == "single_idea":
-        if args.setting != "exp2":
-            raise SystemExit("--mode single_idea has an agent for --setting exp2 only")
+        if args.setting not in SINGLE_IDEA_SETTINGS:
+            raise SystemExit("--mode single_idea has an agent for --setting "
+                             + " and ".join(SINGLE_IDEA_SETTINGS) + " only")
         instance["mode"] = args.mode
         if args.version > 1:
             instance["base_version"] = base_version(wt, args.name, args.version)

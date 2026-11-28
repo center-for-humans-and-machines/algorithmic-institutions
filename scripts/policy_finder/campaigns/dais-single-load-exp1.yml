@@ -2,9 +2,6 @@
 # and one change each: 20 agents at once per experiment) at smoke size
 # (stage line: 20 20), then re-evaluated in a few slices. The gate counts
 # the change, not the seed (campaign_check.py: the first agent generation).
-# NOT RUNNABLE YET: single-idea mode has an agent for exp2 only
-# (instance_settings.py refuses --setting exp1 with --mode single_idea); it
-# needs an exp1 single-idea agent definition first (PR description).
 prefix: "pfsil-exp1-{env:PF_MODEL_TAG}"
 setting: exp1
 mode: single_idea

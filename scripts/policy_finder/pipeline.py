@@ -288,8 +288,11 @@ class Version:
             for path in (self.wt / self.rule, notes):
                 path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(SEEDS / "single_idea.yml", self.wt / self.rule)
-            notes.write_text((SEEDS / "single_idea.md").read_text().replace(
-                "{stem}", self.stem))
+            # its notes name the game's dimensions: exp1's has no switching
+            # and no other manager
+            seed_notes = SEEDS / ("single_idea.md" if self.setting == "exp2"
+                                  else f"single_idea_{self.setting}.md")
+            notes.write_text(seed_notes.read_text().replace("{stem}", self.stem))
             self.log("seed rule written, no agent")
             return
         try:

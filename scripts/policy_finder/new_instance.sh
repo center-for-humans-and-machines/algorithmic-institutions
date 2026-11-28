@@ -28,11 +28,12 @@
 # (a power of two, default 256) sets the size of the sweep's design, which
 # validate-rule, check_instance.sh and the pipeline read from the instance.
 # --prompt replaces the agent's prompt (default: design your rule).
-# --mode single_idea (setting exp2 only) makes version 1 the seed rule of
+# --mode single_idea (settings exp2 and exp1) makes version 1 the seed rule of
 # scripts/policy_finder/seeds/, written without an agent, and every later
 # version one changed idea of the instance's best earlier version, with the
-# agent of .claude/agents/policy-finder-single-idea.md; an instance keeps its
-# mode across versions.
+# agent of .claude/agents/policy-finder-single-idea.md (exp2) or
+# policy-finder-exp1-single-idea.md (exp1); an instance keeps its mode across
+# versions.
 # --harness opencode runs the agent with OpenCode on the OpenRouter model
 # --model (an OpenRouter id such as qwen/qwen3-coder-next), routed to
 # --providers in that order if given (agent_runner.py); a later version keeps

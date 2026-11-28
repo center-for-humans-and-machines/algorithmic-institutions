@@ -1,5 +1,5 @@
 # Step 2 of the open-weight runs (Levin, 2026-11-28): single-idea mode
-# (.claude/agents/policy-finder-single-idea.md, PR #246) on DAIS for any
+# (.claude/agents/policy-finder-exp1-single-idea.md for experiment 1) on DAIS for any
 # served model. 20 chains of the seed (punishment = 0, no parameters) and 20
 # one-idea changes each: top_k equals n_fresh, so no chain is dropped, and a
 # version that fails or lowers the result keeps its place. Later versions
@@ -9,9 +9,6 @@
 # own prefix; give each model's job its own PF_RUNS (the state files are
 # named after this file). Real sizes: PF_SWEEP_EPISODES=default,
 # PF_FINAL_EPISODES=default (stage line: default default).
-# NOT RUNNABLE YET: single-idea mode has an agent for exp2 only
-# (instance_settings.py refuses --setting exp1 with --mode single_idea); it
-# needs an exp1 single-idea agent definition first (PR description).
 prefix: "pfsi1-exp1-{env:PF_MODEL_TAG}"
 setting: exp1
 mode: single_idea

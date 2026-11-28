@@ -1,13 +1,16 @@
-# Step 2, single-idea mode, both experiments at once (NOT RUNNABLE until
-# experiment 1 has a single-idea agent: dais-single-exp1.yml), for the model
-# of the job's MODEL_PROFILE. 40 agents at once: PF_AGENT_SLOTS=40,
-# AGENT_CORES=40. Give each model's job its own PF_RUNS.
-# 1. smoke: exp2, 2 chains x 2 changes, smoke size;
-# 2. load: both experiments at the real width (40 agents at once) at smoke
-#    size, each passing with 15 of its 20 changes scored and no expired,
-#    endpoint or limit-stopped run;
+# Step 2, single-idea mode, both experiments at once, for the model of the
+# job's MODEL_PROFILE (the campaign files take it from the job). 40 agents at
+# once: AGENT_CORES=40, PF_AGENT_SLOTS=40. Give each model's job its own
+# PF_RUNS. Each stage only if the one before succeeded:
+# 1. smoke, both experiments at once: 2 chains of the seed and 2 changes
+#    each, smoke size;
+# 2. load: both experiments at the real width (20 chains each, 40 agents at
+#    once) at smoke size, each passing with 15 of its 20 changes scored and
+#    no expired, endpoint or limit-stopped run (finished/15+nolimits),
+#    re-evaluated in 4 slices;
 # 3. the real campaigns, 20 chains x 20 changes each, re-evaluated when done
-#    (15 slices for exp2, 45 for exp1).
-run      scored               20 20 scripts/policy_finder/campaigns/dais-single-smoke-exp2.yml
+#    (15 slices for exp2, 45 for exp1), with the setting's reference managers
+#    (infra/dais/references/<setting>.yml).
+run      scored               20 20 scripts/policy_finder/campaigns/dais-single-smoke-exp2.yml scripts/policy_finder/campaigns/dais-single-smoke-exp1.yml
 run      finished/15+nolimits 20 20 scripts/policy_finder/campaigns/dais-single-load-exp2.yml:4 scripts/policy_finder/campaigns/dais-single-load-exp1.yml:4
 run      finished default default scripts/policy_finder/campaigns/dais-single-exp2.yml:15 scripts/policy_finder/campaigns/dais-single-exp1.yml:45

@@ -100,3 +100,28 @@ def test_build_copies_data_files_at_the_same_paths(tmp_path):
 ])
 def test_identifier_columns(column, key):
     assert scramble_data.is_key(column) is key
+
+
+def test_exp1_pilots_keep_whole_games():
+    """Experiment 1's pilots (experiments/pilot_random1_player_round_slim.csv):
+    games of 4 over 16 rounds, named by `episode_id` beside a 1-or-2 `episode`."""
+    rows = [
+        {"session": f"s{g % 3}", "global_group_id": f"s{g % 3} #{g}", "episode": 1 + g % 2,
+         "episode_id": 100 + g, "experiment_name": "trail_rounds_2", "round_number": t,
+         "participant_code": f"p{g}_{p}", "player_no_input": int((g + t + p) % 9 == 0),
+         "manager_no_input": 0.0, "player_id": p, "contribution": float((g + t + p) % 21),
+         "punishment": float((g * t + p) % 31), "payoff": float(g * 100 + t + p / 10),
+         "common_good": float(g + t), "group_id": 0}
+        for g in range(30) for t in range(16) for p in range(4)
+    ]
+    df = pd.DataFrame(rows)
+    out = scramble_data.scramble_table(df, random.Random(3))
+    assert list(out.columns) == list(df.columns)
+    # whole games by episode_id: 16 rounds x 4 players each, a few of them
+    sizes = out.groupby("episode_id").size()
+    assert set(sizes) == {16 * 4} and len(sizes) <= scramble_data.MAX_EPISODES
+    # the identifiers stay with their rows, the values do not
+    merged = out.merge(df, on=["episode_id", "round_number", "participant_code"],
+                       suffixes=("", "_real"))
+    assert (merged["global_group_id"] == merged["global_group_id_real"]).all()
+    assert (merged["payoff"] != merged["payoff_real"]).mean() > 0.9
