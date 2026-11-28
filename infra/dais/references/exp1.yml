@@ -1,0 +1,23 @@
+# Experiment 1's fixed reference managers for infra/dais/reevaluate.py
+# --references: each plays alone with the clones as a campaign's version does,
+# scored by the average payoff. A manager entry as in a sim config.
+# `rl` and `human` punish only unbatched: they play their own seeds.
+#
+# Earlier values (other seeds; docs/reports/policy_finder_exp1_vs_rl.md):
+# never punishing 588.9 +- 1.1, the deployed RL manager 656.8 +- 0.4, the
+# human-like clone 548.7.
+
+zero:
+  type: dummy
+  constant_punishment: 0
+# The deployed RL manager (configs/simulation/manager_testing/31_EXP1_confirm)
+# needs its model in the sims' artifacts ($PF_ARTIFACTS on DAIS), which does
+# not hold it yet (scripts/fetch_large_files.py from S3):
+# rl_deployed:
+#   type: rl
+#   path: artifacts/manager/17_exp2_group_payoff_heavy_optimize/model/_manager.pt
+# the human-like manager clone (configs/simulation/manager_testing/29_EXP1_reference.yml)
+humanlike:
+  type: human
+  path: artifacts/behavioral_cloning/23_punishment_autoregressive_v4/model/architecture_node+edge.pt
+  autoregressive: true

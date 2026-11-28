@@ -20,7 +20,11 @@ backend that starts it in the export with OpenCode installed can use it.
    the repo (the export, whose .opencode/ holds the model and the agent),
    its JSON events to <out>/events.jsonl, its stderr to <out>/stderr.log,
    killed with its process group after `--timeout` seconds (below the
-   container's, so that this runner always gets to the redaction);
+   container's, so that this runner always gets to the redaction), or
+   stopped early (TERM to the group) once `--loop-limit` consecutive tool
+   calls failed alike, the same tool with the same error text (LoopWatch: an
+   agent that loops on a failing call would otherwise hold its generation to
+   the time limit);
 4. exports the session (`opencode export`, the transcript with every
    message's tokens and cost, `--export-timeout`) to <out>/session.json;
 5. reads the key's usage again: the difference is what OpenRouter billed
@@ -30,7 +34,7 @@ backend that starts it in the export with OpenCode installed can use it.
    non-zero or timed out, the agent did not load (OpenCode's fallback to its
    default agent), the session ended in an error, the final turn has no
    assistant text, or the session used another model than the export's
-   config names;
+   config names, or the run was stopped in a loop of failing tool calls;
    a failed run exits non-zero (4 when OpenCode itself exited 0);
 7. in any case (`finally`): with `--kill-strays` (passed by the spawner's
    start path only, where every other process in the container is the
@@ -79,6 +83,62 @@ REDACTED = "[redacted]"
 KEY_HASH = ".key_hash.json"
 #: OpenCode's data folder in the run's home (its database and logs)
 DATA = os.path.expanduser("~/.local/share/opencode")
+#: Consecutive tool calls failing alike (the same tool, the same error text)
+#: that stop a run (--loop-limit). Real loops ran 64 to 684 calls; no other
+#: run of the DAIS campaigns repeated a failing call more than 5 times before
+#: it changed course. OpenCode's own `doom_loop` check does not catch them:
+#: it compares the last 3 tool calls of one assistant message, with identical
+#: input, and these agents make one call per message, its input varying.
+LOOP_LIMIT = 20
+#: ... spread over at least this many steps: one step's parallel calls that
+#: fail alike (25 reads denied with the same text) are not a loop
+LOOP_MIN_STEPS = 3
+
+
+class LoopWatch:
+    """Counts consecutive tool calls that failed alike, from OpenCode's
+    `--format json` events: `tool_use` events with status `error`, the same
+    tool and the same error text, or calls of OpenCode's tool `invalid` (a
+    call of a tool the agent does not have, recorded as `completed`), the
+    same error text. A call with invalid arguments arrives as status `error`.
+    Any other tool result (a success, another error) starts the count anew;
+    text and steps between calls do not count.
+    `tripped`: {tool, error, repeats, steps} once the count reaches `limit`
+    (0: never) over at least LOOP_MIN_STEPS steps.
+    """
+
+    def __init__(self, limit):
+        self.limit, self.key, self.count, self.tripped = limit, None, 0, None
+        self.step, self.steps = 0, set()
+
+    def feed(self, event):
+        """Count one event; the trip record once the limit is reached."""
+        if isinstance(event, dict) and event.get("type") == "step_start":
+            self.step += 1
+        if not isinstance(event, dict) or event.get("type") != "tool_use":
+            return self.tripped
+        part = event.get("part") or {}
+        state = part.get("state") or {}
+        if state.get("status") == "error":
+            key = (part.get("tool"), str(state.get("error")))
+        elif part.get("tool") == "invalid":
+            key = ("invalid", str((state.get("input") or {}).get("error")
+                                  or state.get("output")))
+        else:
+            key = None
+        if key is None:
+            self.key, self.count, self.steps = None, 0, set()
+        else:
+            if key != self.key:
+                self.count, self.steps = 0, set()
+            self.count += 1
+            self.steps.add(self.step)
+            self.key = key
+        if (self.limit and self.count >= self.limit
+                and len(self.steps) >= LOOP_MIN_STEPS and not self.tripped):
+            self.tripped = {"tool": self.key[0], "error": self.key[1][:500],
+                            "repeats": self.count, "steps": len(self.steps)}
+        return self.tripped
 
 
 def session_id(events_path):
@@ -162,7 +222,7 @@ def summarize(session):
     tokens = {"input": 0, "output": 0, "reasoning": 0, "cache_read": 0,
               "cache_write": 0}
     cost, models, steps, tools, errors = 0.0, set(), 0, 0, []
-    final, turn, prompts, compactions = None, [], set(), 0
+    final, turn, prompts, compactions, length_stops = None, [], set(), 0, 0
     for message in session.get("messages", []):
         info = message.get("info") or {}
         if info.get("role") == "user":
@@ -173,6 +233,8 @@ def summarize(session):
         if info.get("role") != "assistant":
             continue
         final = message
+        if info.get("finish") == "length":
+            length_stops += 1  # the step ran out of output tokens mid-way
         if _compaction_summary(info):
             compactions += 1
         else:
@@ -203,13 +265,30 @@ def summarize(session):
             "models": sorted(models), "steps": steps, "tool_calls": tools,
             "errors": errors, "final_error": final_error,
             "ended_on": _ending(turn), "report_chars": len(report.strip()),
-            "compactions": compactions,
+            "compactions": compactions, "length_stops": length_stops,
             "agent": (session.get("info") or {}).get("agent")}
 
 
 #: OpenCode's warning when the agent named with --agent does not load: it
 #: then runs its default agent, without our definition
 AGENT_FALLBACK = "Falling back to default agent"
+
+
+#: OpenCode 1.19.6 caps a request's output (reasoning included) at 32,000
+#: tokens (provider/transform.ts OUTPUT_TOKEN_MAX), whatever the model's
+#: `limit.output`; this variable raises the cap (its flag.ts outputTokenMax)
+OUTPUT_CAP_ENV = "OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"
+
+
+def configured_output_limit(repo):
+    """The output limit the export's OpenCode config gives its model, or None."""
+    try:
+        with open(os.path.join(repo, ".opencode", "opencode.json")) as f:
+            conf = json.load(f)
+        provider, _, model = conf["model"].partition("/")
+        return int(conf["provider"][provider]["models"][model]["limit"]["output"])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
 
 
 def configured_model(repo):
@@ -264,20 +343,16 @@ def error_events(events_path):
     return out
 
 
-def recovered_overflows(errors, session, summary, event_error):
-    """How many context overflows OpenCode recovered from, or 0.
-
-    OpenCode answers a request that passes the server's context with a
-    compaction and carries on, but exits 1 at the end. Such a run is a
-    success only when every error of the run was an overflow, each overflow
-    was followed by a completed compaction (OpenCode's summary message,
-    finished `stop` without an error), no error came after the last finished
-    step, and the turn ended with a report. Anything else: 0.
-    """
-    if not errors or any(name != OVERFLOW for _, name in errors) or event_error:
-        return 0
-    if not (summary.get("result") or "").strip() or summary.get("final_error"):
-        return 0
+def overflow_attempt(errors, session):
+    """{overflows, recovered} when the server refused a request past its
+    context (an OVERFLOW error), else None. `recovered`: OpenCode completed a
+    compaction after each overflow (its summary message, finished `stop`
+    without an error) and went on. Either way the run is a failed attempt
+    (failures): a session that recovered may stop on an interim text or on
+    OpenCode's continuation prompt, with its work unfinished."""
+    stamps = sorted(stamp for stamp, name in errors if name == OVERFLOW)
+    if not stamps:
+        return None
     # a compaction's completion (OpenCode starts it before it emits the error)
     done = sorted(
         ((m.get("info") or {}).get("time") or {}).get("completed") or 0
@@ -286,22 +361,36 @@ def recovered_overflows(errors, session, summary, event_error):
         and _compaction_summary(m.get("info") or {})
         and (m.get("info") or {}).get("finish") == "stop"
         and not (m.get("info") or {}).get("error"))
-    for stamp, _ in errors:
+    recovered = True
+    for stamp in stamps:
         later = [t for t in done if t >= stamp]
         if not later:
-            return 0
+            recovered = False
+            break
         done.remove(later[0])  # each overflow needs a compaction of its own
-    return len(errors)
+    return {"overflows": len(stamps), "recovered": recovered}
 
 
 def failures(summary, code, stderr, expected_model, event_error, agent="policy-finder",
-             recovered=0):
-    """Why a run is not a success: [] when it is one. `recovered`: overflows
-    OpenCode recovered from (recovered_overflows), whose exit code 1 is then
-    no failure."""
+             overflow=None, loop=None):
+    """Why a run is not a success: [] when it is one. `overflow`: the run's
+    overflow_attempt, which always fails it, with its own reason; `loop`:
+    LoopWatch's record of a run stopped in a loop of failing tool calls."""
     out = []
-    if code != 0 and not (code == 1 and recovered):
+    if loop:
+        out.append(f"stopped in a loop: {loop['repeats']} consecutive `{loop['tool']}` "
+                   f"calls failed with the same error: {loop['error'][:200]}")
+    if code != 0:
         out.append(f"OpenCode exited with {code}")
+    if summary.get("length_stops"):
+        out.append(f"{summary['length_stops']} step(s) stopped at the output limit "
+                   f"(finish `length`, output limit {summary.get('output_limit')}): "
+                   "the model's reasoning or answer was cut, the session ended there")
+    if overflow:
+        out.append(f"the server refused a request past its context "
+                   f"({overflow['overflows']} time(s)); OpenCode "
+                   + ("recovered by compacting" if overflow["recovered"]
+                      else "did not recover"))
     if AGENT_FALLBACK in stderr:
         out.append(f"the agent {agent} did not load: OpenCode fell back to its default")
     if summary.get("agent") and summary["agent"] != agent:
@@ -451,6 +540,55 @@ def run_bounded(argv, timeout, **kwargs):
         return None
 
 
+def run_watched(argv, timeout, events_path, watch, poll=2.0, grace=15.0, **kwargs):
+    """run_bounded, watching the events `argv` writes to `events_path`: once
+    `watch` (LoopWatch) trips, TERM to the process group (KILL after `grace`
+    seconds). Returns the exit code (128 + the signal when one ended it), or
+    None when the time limit killed it."""
+    proc = subprocess.Popen(argv, start_new_session=True, **kwargs)
+    deadline = time.monotonic() + timeout
+    pos, buf = 0, b""
+    while True:
+        try:
+            code = proc.wait(timeout=max(0.0, min(poll, deadline - time.monotonic())))
+            return 128 - code if code < 0 else code
+        except subprocess.TimeoutExpired:
+            pass
+        if time.monotonic() >= deadline:
+            _killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+            return None
+        try:
+            with open(events_path, "rb") as f:
+                f.seek(pos)
+                buf += f.read()
+                pos = f.tell()
+        except OSError:
+            continue
+        *lines, buf = buf.split(b"\n")
+        for line in lines:
+            try:
+                watch.feed(json.loads(line))
+            except Exception:  # noqa: BLE001 - a malformed event is ignored
+                continue
+        if watch.tripped:
+            _killpg(proc.pid, signal.SIGTERM)
+            try:
+                proc.wait(timeout=grace)
+            except subprocess.TimeoutExpired:
+                _killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
+            code = proc.returncode
+            return 128 - code if code < 0 else code
+
+
+def _killpg(pid, sig):
+    try:
+        os.killpg(pid, sig)
+    except ProcessLookupError:
+        pass
+
+
 def scrub(args, secret, summary):
     """Redact the key everywhere this run wrote it, copy and drop OpenCode's
     own logs and database. Runs whatever happened before (`finally`)."""
@@ -500,6 +638,9 @@ def main(argv=None):
     ap.add_argument("--timeout", type=float, default=6600,
                     help="seconds for `opencode run`, below the container's")
     ap.add_argument("--export-timeout", type=float, default=300)
+    ap.add_argument("--loop-limit", type=int, default=LOOP_LIMIT,
+                    help="stop the run after this many consecutive tool calls "
+                    "failing alike (0: never)")
     ap.add_argument("--kill-strays", action="store_true",
                     help="kill every other process after OpenCode (the spawner's "
                     "container only, where all of them are the agent's)")
@@ -549,11 +690,20 @@ def main(argv=None):
         started = time.time()
         with open(events, "w") as out, open(os.path.join(args.out, "stderr.log"),
                                             "w") as err:
-            code = run_bounded(
+            # the model's own output limit, not OpenCode's 32,000-token cap
+            opencode_env = dict(os.environ)
+            output_limit = configured_output_limit(args.repo)
+            if output_limit:
+                opencode_env[OUTPUT_CAP_ENV] = str(output_limit)
+            summary["output_limit"] = output_limit
+            watch = LoopWatch(args.loop_limit)
+            code = run_watched(
                 ["opencode", "run", "--agent", "policy-finder", "--format", "json",
                  "--title", args.title, args.prompt],
-                args.timeout, cwd=args.repo, stdout=out, stderr=err)
+                args.timeout, events, watch, cwd=args.repo, stdout=out, stderr=err,
+                env=opencode_env)
         summary["seconds"] = round(time.time() - started)
+        summary["tool_loop"] = watch.tripped
         if code is None:
             summary["timed_out"] = True
             code = 124
@@ -587,11 +737,10 @@ def main(argv=None):
                 session = json.load(f)
         except (OSError, ValueError):
             session = {}
-        recovered = recovered_overflows(error_events(events), session, summary,
-                                        event_error)
-        summary["recovered_overflow"] = recovered
+        overflow = overflow_attempt(error_events(events), session)
+        summary["overflow"] = overflow
         why = failures(summary, code, stderr, configured_model(args.repo),
-                       event_error, recovered=recovered)
+                       event_error, overflow=overflow, loop=watch.tripped)
     except Exception as e:  # noqa: BLE001 - the runner's own failure fails the run
         why = [f"the runner failed: {type(e).__name__}: {e}"]
         code = code or 1

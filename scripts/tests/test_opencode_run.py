@@ -1,9 +1,12 @@
 """Tests for scripts/policy_finder/opencode_run.py: the summary and the redaction."""
 
+import gzip
 import importlib.util
 import json
 import os
+import signal
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -116,6 +119,15 @@ FAKE = r'''#!/usr/bin/env python3
 import json, os, sys, time
 mode = os.environ["FAKE_MODE"]
 key = os.environ.get("OPENROUTER_API_KEY", "")
+if sys.argv[1] == "run" and mode == "replay":  # a real run's events, exit 1
+    for line in open(os.environ["FAKE_EVENTS"]):
+        print(json.dumps({**json.loads(line), "sessionID": "ses_1"}), flush=True)
+    if os.environ.get("FAKE_HANG"):  # a looping agent goes on until stopped
+        time.sleep(60)
+    sys.exit(1)
+if sys.argv[1] == "export" and mode == "replay":
+    print(open(os.environ["FAKE_SESSION"]).read())
+    sys.exit(0)
 if sys.argv[1] == "run":
     print(json.dumps({"type": "step_start", "sessionID": "ses_1", "text": key}), flush=True)
     if mode == "hang":
@@ -405,37 +417,158 @@ def test_ended_on_marks_an_interim_text():
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-def overflow_run(name, tmp_path, drop_compactions=False, extra_error=None):
-    """A real run's events and session (trimmed): its verdict inputs."""
+def overflow_run(name, tmp_path, drop_compactions=False):
+    """A real run's events and session (trimmed), and the runner's verdict
+    inputs from them."""
     data = json.loads((FIXTURES / f"opencode_overflow_recovered_{name}.json").read_text())
     events, session = data["events"], data["session"]
     if drop_compactions:
         session["messages"] = [m for m in session["messages"]
                                if not oc._compaction_summary(m["info"])]
-    if extra_error:
-        events.append({"type": "error", "timestamp": 1, "error": {"name": extra_error}})
     path = tmp_path / "events.jsonl"
     path.write_text("".join(json.dumps(e) + "\n" for e in events))
-    summary = oc.summarize(session)
-    event_error = oc.last_event_error(path)
-    recovered = oc.recovered_overflows(oc.error_events(path), session, summary, event_error)
-    why = oc.failures(summary, 1, "", "local/Qwen/Qwen3-Coder-Next", event_error,
-                      recovered=recovered)
-    return recovered, why
+    return oc.overflow_attempt(oc.error_events(path), session)
 
 
 @pytest.mark.parametrize("name", ["check", "qwen"])
-def test_a_recovered_context_overflow_is_a_success(name, tmp_path):
+def test_an_overflow_is_recorded_with_whether_opencode_recovered(name, tmp_path):
     # 993218's compaction check and pfq-exp1-20261127-9-v6's first run: the
-    # server refused a request, OpenCode compacted, finished with a report,
-    # and exited 1
-    recovered, why = overflow_run(name, tmp_path)
-    assert recovered == 1 and why == []
+    # server refused a request, OpenCode compacted and went on
+    assert overflow_run(name, tmp_path) == {"overflows": 1, "recovered": True}
+    assert overflow_run(name, tmp_path, drop_compactions=True) == {
+        "overflows": 1, "recovered": False}
 
 
 @pytest.mark.parametrize("name", ["check", "qwen"])
-def test_an_overflow_without_a_compaction_or_with_another_error_fails(name, tmp_path):
-    recovered, why = overflow_run(name, tmp_path, drop_compactions=True)
-    assert recovered == 0 and "OpenCode exited with 1" in why
-    recovered, why = overflow_run(name, tmp_path, extra_error="APIError")
-    assert recovered == 0 and "OpenCode exited with 1" in why
+def test_an_overflow_is_a_failed_attempt_with_its_reason(name, fake, capsys, monkeypatch):
+    # the whole runner (main), a fake OpenCode replaying the real run
+    run, out, repo, data = fake
+    fixture = json.loads((FIXTURES / f"opencode_overflow_recovered_{name}.json").read_text())
+    events = out.parent / "replay_events.jsonl"
+    events.write_text("".join(json.dumps(e) + "\n" for e in fixture["events"]))
+    session = out.parent / "replay_session.json"
+    model = fixture["session"]["messages"][1]["info"]
+    (repo / ".opencode/opencode.json").write_text(json.dumps(
+        {"model": f"{model['providerID']}/{model['modelID']}"}))
+    session.write_text(json.dumps(fixture["session"]))
+    monkeypatch.setenv("FAKE_EVENTS", str(events))
+    monkeypatch.setenv("FAKE_SESSION", str(session))
+    code = run("replay")
+    summary = _summary(capsys)
+    assert code == 1 and summary["is_error"]
+    assert summary["overflow"] == {"overflows": 1, "recovered": True}
+    assert any("refused a request past its context" in f and "recovered" in f
+               for f in summary["failures"])
+
+
+def test_a_step_at_the_output_limit_is_a_failed_attempt():
+    session = {"info": {"agent": "policy-finder"}, "messages": [
+        {"info": {"role": "user"}, "parts": [{"type": "text", "text": "Design."}]},
+        {"info": {"role": "assistant", "providerID": "local", "modelID": "m",
+                  "finish": "length", "tokens": {"input": 5, "output": 32000}},
+         "parts": [{"type": "text", "text": "Let me think about the rule ..."}]}]}
+    summary = oc.summarize(session)
+    assert summary["length_stops"] == 1
+    why = oc.failures(summary, 0, "", "local/m", None)
+    assert any("output limit" in f for f in why)
+
+
+def test_the_output_cap_is_the_models_output_limit(fake, capsys):
+    run, out, repo, data = fake
+    (repo / ".opencode/opencode.json").write_text(json.dumps({
+        "model": "openrouter/q/c",
+        "provider": {"openrouter": {"models": {"q/c": {"limit": {"output": 262144}}}}}}))
+    run("ok")
+    assert _summary(capsys)["output_limit"] == 262144
+    assert oc.configured_output_limit(repo) == 262144
+
+
+# -- loops of failing tool calls (LoopWatch) -------------------------------------
+
+def loop_events(run):
+    """A real run's events (tool inputs and outputs dropped, but for the error
+    of a call of tool `invalid`): apt-164 (370 `write` calls without
+    `filePath`, status `error`, stopped by hand), apt-42 (431 denied calls),
+    apt-225 (684 calls of an unavailable tool `run`, recorded as tool
+    `invalid`, status `completed`) and apt-141 (5 failing `write` calls, then
+    the agent fixed them)."""
+    with gzip.open(FIXTURES / f"opencode_events_{run}.jsonl.gz", "rt") as f:
+        return [json.loads(line) for line in f]
+
+
+def first_trip(events, limit=oc.LOOP_LIMIT):
+    watch = oc.LoopWatch(limit)
+    for i, event in enumerate(events):
+        if watch.feed(event):
+            return i, watch.tripped
+    return None, None
+
+
+@pytest.mark.parametrize("run, tool, error", [
+    ("apt164", "write", "SchemaError(Missing key"),
+    ("apt42", "bash", "prevents you from using this specific tool call"),
+    ("apt225", "invalid", "Model tried to call unavailable tool 'run'"),
+])
+def test_a_loop_of_failing_calls_trips_at_the_limit(run, tool, error):
+    events = loop_events(run)
+    i, tripped = first_trip(events)
+    assert tripped["tool"] == tool and error in tripped["error"]
+    assert tripped["repeats"] == oc.LOOP_LIMIT and tripped["steps"] == oc.LOOP_LIMIT
+    calls = [e for e in events[: i + 1] if e["type"] == "tool_use"]
+    assert len(calls) < len([e for e in events if e["type"] == "tool_use"]) - 300
+
+
+def test_retries_that_recover_and_repeated_successes_do_not_trip():
+    assert first_trip(loop_events("apt141")) == (None, None)  # 5 failures, then fixed
+    assert first_trip(loop_events("apt164"), limit=371) == (None, None)
+    ok = {"type": "tool_use", "part": {"tool": "read", "state": {"status": "completed"}}}
+    bad = {"type": "tool_use", "part": {"tool": "write",
+                                        "state": {"status": "error", "error": "e"}}}
+    other = {"type": "tool_use", "part": {"tool": "write",
+                                          "state": {"status": "error", "error": "f"}}}
+    text, step = {"type": "text"}, {"type": "step_start"}
+    assert first_trip([ok] * 100) == (None, None)
+    assert first_trip(([step, bad, text] * 19 + [ok]) * 5) == (None, None)
+    assert first_trip(([step, bad] * 19 + [other]) * 5) == (None, None)
+    assert first_trip([step, bad, text] * 20)[1]["repeats"] == 20  # text: no reset
+    assert first_trip([step, bad] * 100, limit=0) == (None, None)
+    # one step's 25 parallel calls failing alike, then a success: no loop
+    assert first_trip([step] + [bad] * 25 + [step, ok]) == (None, None)
+    assert first_trip([step] + [bad] * 25 + [step, bad, step, bad])[1]["steps"] == 3
+
+
+def test_a_looping_run_is_stopped_and_fails_with_its_reason(fake, capsys, monkeypatch):
+    run, out, repo, data = fake
+    events = out.parent / "replay_events.jsonl"
+    events.parent.mkdir(parents=True, exist_ok=True)
+    events.write_text("".join(json.dumps(e) + "\n" for e in loop_events("apt164")))
+    monkeypatch.setenv("FAKE_EVENTS", str(events))
+    monkeypatch.setenv("FAKE_HANG", "1")
+    started = time.monotonic()
+    code = run("replay", "--timeout", "50")
+    s = _summary(capsys)
+    assert time.monotonic() - started < 30  # stopped, not at the time limit
+    assert code == 128 + signal.SIGTERM and not s.get("timed_out")
+    assert s["tool_loop"]["tool"] == "write" and s["tool_loop"]["repeats"] == 20
+    assert s["tool_loop"]["steps"] == 20
+    assert any(f.startswith("stopped in a loop: 20 consecutive `write` calls")
+               for f in s["failures"])
+    _clean(out, repo, data)
+
+
+def test_a_malformed_event_is_skipped_and_the_watch_goes_on(tmp_path):
+    bad = {"type": "tool_use", "part": {"tool": "write",
+                                        "state": {"status": "error", "error": "e"}}}
+    lines = [{"type": "tool_use", "part": "x"},
+             {"type": "tool_use", "part": {"tool": "invalid", "state": {"input": "s"}}},
+             *[e for _ in range(20) for e in ({"type": "step_start"}, bad)]]
+    events = tmp_path / "events.jsonl"
+    script = ("import json, sys, time\n"
+              f"lines = {json.dumps([json.dumps(e) for e in lines])}\n"
+              "for line in lines:\n    print(line, flush=True)\n"
+              "time.sleep(60)\n")
+    watch = oc.LoopWatch(20)
+    with open(events, "w") as out:
+        code = oc.run_watched([sys.executable, "-c", script], 30, str(events), watch,
+                              poll=0.2, stdout=out)
+    assert code == 128 + signal.SIGTERM and watch.tripped["repeats"] == 20

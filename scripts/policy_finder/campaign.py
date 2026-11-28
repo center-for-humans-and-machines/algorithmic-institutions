@@ -130,6 +130,35 @@ class Campaign:
                       else {"generations": []})
         self._lock = threading.Lock()
 
+    def check_effort(self):
+        """The model server's reasoning effort (PF_REASONING_EFFORT, the DAIS
+        job's) is the campaign file's `reasoning_effort` when it names one,
+        and the one its state recorded at its start: a campaign never mixes
+        efforts, and its state carries the one it ran at. A state that has
+        generations but no recorded effort (it started before efforts were
+        recorded) resumes only on a model without one. Its members must carry
+        the campaign's prefix (a prefix with the model's tag: another model's
+        or effort's state under the same file name is refused)."""
+        effort = os.environ.get("PF_REASONING_EFFORT") or None
+        wanted = self.settings.get("reasoning_effort")
+        if wanted is not None and str(wanted) != str(effort):
+            raise CampaignError(f"{self.path}: reasoning_effort {wanted}, but the server's "
+                                f"is {effort} (REASONING_EFFORT of the job)")
+        prefix = f"{self.settings['prefix']}-"
+        others = sorted({m["name"] for g in self.state["generations"] for m in g["members"]
+                         if not m["name"].startswith(prefix)})
+        if others:
+            raise CampaignError(f"{self.path}: its state holds lineages of another prefix "
+                                f"than {self.settings['prefix']}: {', '.join(others[:3])}")
+        if "reasoning_effort" not in self.state:
+            if self.state["generations"] and effort is not None:
+                raise CampaignError(f"{self.path}: its state started without a recorded "
+                                    f"reasoning effort; the server's is {effort}")
+            self.state["reasoning_effort"] = effort
+        elif self.state["reasoning_effort"] != effort:
+            raise CampaignError(f"{self.path}: its state ran at reasoning effort "
+                                f"{self.state['reasoning_effort']}, the server's is {effort}")
+
     # -- bookkeeping ---------------------------------------------------------
 
     def save(self):
@@ -333,6 +362,8 @@ class Campaign:
         return members
 
     def run(self):
+        self.check_effort()
+        self.save()
         total = 1 + self.settings["generations"]
         for index in range(total):
             members = self.members(index)

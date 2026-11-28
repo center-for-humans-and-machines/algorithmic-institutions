@@ -36,8 +36,10 @@
 # one before succeeded (# starts a comment):
 #   run <expect> <sweep episodes> <final episodes> <campaign.yml>[:<slices>] ...
 #       the campaigns at once; each checked with campaign_check.py --expect
-#       <expect> (scored or finished) and, with :<slices>, re-evaluated by
-#       reevaluate.py into $PF_RUNS/reevaluate/<campaign> (seed 100000)
+#       <expect> (scored or finished; /<n> and +nolimits: campaign_stage) and,
+#       with :<slices>, re-evaluated by reevaluate.py into
+#       $PF_RUNS/reevaluate/<campaign> (seed 100000), with the limit report
+#       (limits.json) beside it
 #   killtest <sweep episodes> <final episodes> <campaign.yml>
 #       the resume test: starts the campaign, and once an agent has run for
 #       KILL_AFTER seconds (default 90) kills every process of the job but the
@@ -110,7 +112,11 @@ export PF_POOL_LOCKS="$SHM_LOCKS/pool"
 export PF_AGENT_CPUS="${PF_AGENT_CPUS:-2}"
 export PF_AGENT_SLOTS="${PF_AGENT_SLOTS:-4}"
 export PF_AGENT_MEMORY_MB="${PF_AGENT_MEMORY_MB:-16384}"
+# one agent time limit: the container is killed at PF_AGENT_TIMEOUT, and
+# OpenCode itself is stopped 600 s earlier so that the runner can save
 export PF_AGENT_TIMEOUT="${PF_AGENT_TIMEOUT:-5400}"
+echo "agent time limit ${PF_AGENT_TIMEOUT} s (OpenCode stopped at" \
+  "$(( PF_AGENT_TIMEOUT > 660 ? PF_AGENT_TIMEOUT - 600 : 60 )) s, 600 s before it)"
 # the network rule: the agent's shell commands under noinet.py (no internet
 # sockets); PF_AGENT_SHELL=none runs them in plain bash (the audit stays)
 if [ "${PF_AGENT_SHELL:-}" = none ]; then
@@ -211,6 +217,9 @@ export SERVER_CPUS
 CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
   serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" ${VLLM_EXTRA:-}
 echo "model $MODEL@$MODEL_REV${MODEL_PROFILE:+ (profile $MODEL_PROFILE)}, image $VLLM_SIF"
+# the reasoning effort in force (common.sh), in every agent run's record
+export PF_REASONING_EFFORT="${REASONING_EFFORT:-}"
+echo "reasoning effort ${REASONING_EFFORT:-none (the model has none)}${REASONING_EFFORT:+ (prompt: $PROMPT_MUST_CONTAIN)}"
 wait_ready "${READY_TIMEOUT:-1800}" || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
 # the agents' OpenCode config takes the served context from here
@@ -287,10 +296,14 @@ campaign_stage() {
     >> "$PF_RUN/$name.campaign.log" 2>&1 || rc=$?
   echo "[$(date +%T)] campaign $name: driver exit $rc after $(( SECONDS - t0 )) s"
   [ -e "$SERVER_DOWN" ] && { echo "campaign $name: stopped, the model server is down"; return 3; }
-  # <expect>[/<n>]: with /n, at least n first-generation versions scored and
-  # no expired agent run (the load test)
-  local check=(--expect "${expect%%/*}")
-  [[ "$expect" == */* ]] && check+=(--min-first-scored "${expect##*/}" --no-expired)
+  # <expect>[/<n>][+nolimits]: with /n, at least n first-generation versions
+  # scored, no expired and no endpoint run (the load test); with +nolimits,
+  # no agent run stopped at the time limit or cut at the output limit
+  local check=(--expect "${expect%%[/+]*}") mods="${expect#"${expect%%[/+]*}"}"
+  local n="${mods#/}"; n="${n%%+*}"
+  [[ "$mods" == /* ]] && check+=(--min-first-scored "$n" --no-expired)
+  [[ "$mods" == *+nolimits* ]] && check+=(--no-limit-stops)
+  check+=(--json-out "$PF_RUN/$name.limits.json")
   "$PF_PYTHON" "$PF_HERE/campaign_check.py" campaign "$file" "${check[@]}" || rc=1
   local out="$PF_RUNS/reevaluate/$name"
   if [ "$rc" = 0 ] && [ -n "$slices" ] && [ -f "$out/summary.json" ]; then
@@ -301,12 +314,23 @@ campaign_stage() {
     if [ -e "$out" ]; then
       mv "$out" "$out.partial.$(date +%Y%m%d-%H%M%S)"
     fi
-    echo "[$(date +%T)] campaign $name: re-evaluation in $slices slices into $out"
+    # the setting's fixed reference managers beside the versions, when it has
+    # a list (infra/dais/references/<setting>.yml)
+    local setting refs=()
+    setting=$(sed -n 's/^setting: *\([A-Za-z0-9_]*\).*/\1/p' "$file" 2>/dev/null \
+              | head -n 1) || setting=""
+    [ -n "$setting" ] && [ -f "$PF_HERE/references/$setting.yml" ] \
+      && refs=(--references "$PF_HERE/references/$setting.yml")
+    echo "[$(date +%T)] campaign $name: re-evaluation in $slices slices into $out" \
+      "${refs[*]}"
     driver "$PF_PYTHON" "$PF_HERE/reevaluate.py" "$PF_RUNS/campaign/$name.json" \
-      "$out" --slices "$slices" --seed 100000 \
+      "$out" --slices "$slices" --seed 100000 "${refs[@]}" \
       >> "$PF_RUN/$name.reevaluate.log" 2>&1 || rc=$?
     echo "[$(date +%T)] campaign $name: re-evaluation exit $rc"
     cat "$out/summary.json" 2>/dev/null || true
+    # the limit report beside the re-evaluation: runs stopped at a limit,
+    # versions lost with such a run among their attempts
+    cp "$PF_RUN/$name.limits.json" "$out/limits.json" 2>/dev/null || true
   fi
   return "$rc"
 }

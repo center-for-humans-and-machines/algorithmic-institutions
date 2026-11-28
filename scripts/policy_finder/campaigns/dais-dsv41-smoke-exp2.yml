@@ -1,11 +1,8 @@
-# One-chain smoke campaign entirely on DAIS, on the full node (prefix of its own:
-# the gpu1 run of dais-smoke-exp2.yml holds its branches in the same checkout) (infra/dais/campaign.slurm.sh):
-# experiment 2 in free mode, OpenCode agents on Qwen3-Coder-Next served by
-# vLLM in the same job, sims in the job's CPU pool. 2 fresh lineages, then
-# the better one iterated once: 3 agent versions.
-# Run (smoke size):
-#   sbatch --export=ALL,PF_SWEEP_EPISODES=20,PF_FINAL_EPISODES=20 \
-#     infra/dais/campaign.slurm.sh campaign scripts/policy_finder/campaigns/dais-smoke-exp2.yml
+# DeepSeek-V4.1-Flash-1017's smoke campaign, the first stage of
+# infra/dais/stages/node-dsv41-2026-11-28.txt: experiment 2 in free mode,
+# OpenCode agents on the model served by vLLM in the same job (model profile
+# deepseek-v4.1-flash-1017), sims in the job's CPU pool. 2 fresh lineages,
+# then the better one iterated once: 3 agent versions, smoke size.
 prefix: pfdss2-20261128
 setting: exp2
 mode: free

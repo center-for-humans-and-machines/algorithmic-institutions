@@ -11,6 +11,8 @@
 #   # with the model: vLLM on the job's GPUs, then one OpenCode session in the
 #   # container that runs the network checks through its own shell tool, and
 #   # the sampling settings vLLM received (its request log)
+#   # another model: its profile (MODEL_PROFILE=<name>, infra/dais/model_profiles/),
+#   # with the GPUs it needs (--gres) and READY_TIMEOUT from the profile
 #   sbatch --export=WITH_MODEL=1 -p gpudev --qos=debug --gres=gpu:2 \
 #     --cpus-per-task=24 --mem=400000 --time=00:15:00 infra/dais/agent_check.slurm.sh
 #
@@ -58,12 +60,12 @@ done
 # the served context (MAX_MODEL_LEN, common.sh) reaches the config as in a
 # campaign; WITH_MODEL=1 MAX_MODEL_LEN=131072 makes the compaction check
 # below compact early (at 131072 - 16384 - 65536 = 49152 tokens)
-PF_LLM_CONTEXT="$MAX_MODEL_LEN" "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$PF_RUN/oc" <<'EOF'
-import json, sys
+MODEL="$MODEL" PF_LLM_CONTEXT="$MAX_MODEL_LEN" "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$PF_RUN/oc" <<'EOF'
+import json, os, sys
 sys.path.insert(0, "scripts/policy_finder")
 import export_instance as ex
 out = sys.argv[1]
-conf = ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next",
+conf = ex.opencode_config({"model": os.environ["MODEL"],
                            "base_url": "{env:PF_LLM_BASE_URL}"})
 json.dump(conf, open(f"{out}/opencode.json", "w"), indent=2)
 open(f"{out}/.gitignore", "w").write(ex.OPENCODE_GITIGNORE)
@@ -167,7 +169,7 @@ if [ "${WITH_MODEL:-0}" = 1 ]; then
   NGPU=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
   SERVER_CPUS=$(python3 "$PF_HERE/cpu_slots.py" reserved 4) \
     serve_model 0.90 "$NGPU" "$PF_RUN/vllm.log" --enable-log-requests
-  if wait_ready 720; then
+  if wait_ready "${READY_TIMEOUT:-720}"; then
     LLM_URL="$SERVER_URL"; LLM_KEY=$(cat "$SERVER_KEY_FILE")
     # the resume test's kill (campaign.slurm.sh killtest) must spare the server:
     # every vLLM process descends from SERVER_PID
@@ -277,11 +279,11 @@ print("peak prompt", peak, "of", sys.argv[1])
 sys.exit(0 if rec["status"] == "succeeded" and (r.get("compactions") or 0) >= 1 else 1)
 EOF
     sed 's/^/     cmp  | /' "$PF_RUN/backend_compaction.log" | tail -7
-    # an overflow OpenCode recovers from: ten large reads in ONE step pass the
-    # server's context; OpenCode compacts, finishes, exits 1, and the
-    # runner's verdict counts it as succeeded (recovered_overflow)
+    # an overflow: ten large reads in ONE step pass the server's context;
+    # OpenCode compacts and goes on but exits 1. The run must be a failed
+    # attempt whose record names the overflow (and whether OpenCode recovered)
     rm -rf "$exp/notes/policy_finder"/*
-    check backend_overflow_recovered ok env PF_RUNS="$PF_RUN/pf_runs" PF_AGENT_BACKEND=apptainer \
+    check backend_overflow_attempt ok env PF_RUNS="$PF_RUN/pf_runs" PF_AGENT_BACKEND=apptainer \
       PF_AGENT_SIF="$AGENT_SIF" PF_AGENT_POOL_CPUS="$(python3 "$PF_HERE/cpu_slots.py" slots 5 1 2 | paste -sd, -)" \
       PF_AGENT_SHELL="$PF_HERE/agent_shell.sh" PF_AGENT_NOINET="$PF_HERE/noinet.py" \
       PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE" PF_AGENT_TIMEOUT=1200 \
@@ -298,13 +300,15 @@ run = ar.start("pfchk", ["notes/policy_finder"], "Read these parts of a file wit
                "line.", harness="opencode")
 rec = ar.finish(run, harness="opencode")
 r = rec["result"]
-print("served context", sys.argv[1], "status", rec["status"], "error", rec["error"])
-print("recovered_overflow", r.get("recovered_overflow"), "compactions", r.get("compactions"),
-      "opencode exit", r.get("opencode_exit_code"), "failures", r.get("failures"))
-# meaningful only when the server refused: then it must count as recovered
-sys.exit(0 if rec["status"] == "succeeded" else 1)
+print("served context", sys.argv[1], "status", rec["status"], "overflow", r.get("overflow"))
+print("error", rec["error"])
+if not r.get("overflow"):
+    print("INCONCLUSIVE: the session did not overflow")
+    sys.exit(2)
+sys.exit(0 if rec["status"] == "failed"
+         and "refused a request past its context" in (rec["error"] or "") else 1)
 EOF
-    sed 's/^/     ovf  | /' "$PF_RUN/backend_overflow_recovered.log" | tail -3
+    sed 's/^/     ovf  | /' "$PF_RUN/backend_overflow_attempt.log" | tail -3
     ls -la "$exp/notes/policy_finder" | sed 's/^/     out  | /'
   else
     tail -30 "$PF_RUN/vllm.log"; fails=$((fails + 1))

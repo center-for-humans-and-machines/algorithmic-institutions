@@ -40,6 +40,9 @@ def failure(state):
     error = state.get("error") or ""
     if step == "agent" and not data.get("agent_runs"):
         own = False  # no attempt of the agent's: its runs were lost
+    if step in ("sweep_fetch", "final_fetch") and error.startswith(
+            "the rule's code failed in the"):
+        own = True  # every sim failed in the version's own rule (pipeline.py)
     if step == "check" and re.search(r"FAIL: cannot (read|diff|list)", error):
         own = False  # check_instance.sh could not read the worktree
     if step == "agent":
@@ -64,7 +67,7 @@ def describe(stem, state):
         agent.append(f"{r.get('run_id')} {r.get('status')} {res.get('seconds')} s"
                      f" tokens {res.get('tokens')}"
                      f" compactions {res.get('compactions')}"
-                     f" recovered overflows {res.get('recovered_overflow') or 0}"
+                     f" overflow {res.get('overflow') or 'no'}"
                      f" audit {len(audit.get('findings', []))}")
     return (f"{stem}: {state.get('status')}"
             + (f" pool {score:.2f}" if isinstance(score, (int, float)) else "")
@@ -83,6 +86,10 @@ def main():
     ap.add_argument("--no-expired", action="store_true",
                     help="no agent run may have expired (its time limit), and none "
                     "may have failed on the endpoint (the load test)")
+    ap.add_argument("--no-limit-stops", action="store_true",
+                    help="no agent run may have been stopped at the time limit or "
+                    "had a step cut at the output limit (stage option +nolimits)")
+    ap.add_argument("--json-out", help="write the limit report here as JSON")
     args = ap.parse_args()
     ok_status = ("scored",) if args.expect == "scored" else ("scored", "failed")
     pf_runs = Path(os.environ["PF_RUNS"])
@@ -104,7 +111,9 @@ def main():
         members = [(args.target, conf.get("version", 1))]
         first = set(members)
     seconds, first_scored, expired, endpoint, lost = [], 0, [], [], 0
-    recovered, limit_hit = 0, 0
+    time_stops, output_stops, lost_to_limits, limits_seen = [], [], [], set()
+    loop_stops, efforts, rule_code = [], set(), []
+    overflows, overflows_recovered, limit_hit, length_cut = 0, 0, 0, 0
     for name, version in members:
         stem = name if version == 1 else f"{name}-v{version}"
         path = wt_root / f"{stem}.state.json"
@@ -113,20 +122,49 @@ def main():
         data = state.get("data") or {}
         endpoint += [f"{stem} {r.get('run_id')}" for r in data.get("endpoint_runs") or []]
         lost += len(data.get("lost_runs") or [])
+        stopped_here = []
         for r in data.get("agent_runs") or []:
             if (r.get("result") or {}).get("seconds") is not None:
                 seconds.append(r["result"]["seconds"])
+            if "reasoning_effort" in r:
+                efforts.add(r["reasoning_effort"])
+            if r.get("time_limit_s"):
+                limits_seen.add((r["time_limit_s"], r.get("opencode_time_limit_s")))
+            ran = f"{stem} {r.get('run_id')}"
+            if r.get("status") == "expired" or (r.get("result") or {}).get("timed_out"):
+                time_stops.append(ran)
+                stopped_here.append("time limit")
+            if (r.get("result") or {}).get("length_stops"):
+                output_stops.append(ran)
+                stopped_here.append("output limit")
+            # stopped in a loop of failing tool calls (opencode_run LoopWatch):
+            # a failed attempt of the model's, not a limit
+            if (r.get("result") or {}).get("tool_loop"):
+                loop = r["result"]["tool_loop"]
+                loop_stops.append(f"{ran} ({loop.get('repeats')}x {loop.get('tool')})")
             if r.get("status") == "expired":
                 expired.append(f"{stem} {r.get('run_id')}")
             res = r.get("result") or {}
-            recovered += 1 if res.get("recovered_overflow") else 0
+            # attempts the server refused past its context (failed attempts,
+            # also when OpenCode recovered by compacting)
+            if res.get("overflow"):
+                overflows += 1
+                overflows_recovered += bool(res["overflow"].get("recovered"))
             # OpenCode stopped at the runner's time limit (--timeout)
-            limit_hit += any("timeout" in str(f).lower() or "time limit" in str(f).lower()
-                             for f in res.get("failures") or [])
+            limit_hit += bool(res.get("timed_out"))
+            # a step that ran out of output tokens (failed attempts)
+            length_cut += bool(res.get("length_stops"))
+        if (state.get("status") == "failed" and failure(state)[0] == "agent"
+                and stopped_here):
+            # all its attempts failed, one of them at a limit: rerun it with a
+            # higher cap rather than count it as the model's failure
+            lost_to_limits.append(f"{stem} ({', '.join(sorted(set(stopped_here)))})")
         if (name, version) in first and state.get("status") == "scored":
             first_scored += 1
         if state.get("status") == "failed":
             step, reason, own = failure(state)
+            if own and step in ("sweep_fetch", "final_fetch"):
+                rule_code.append(stem)
             print(f"  failed at {step} ({'the agent' if own else 'INFRASTRUCTURE'}):"
                   f" {reason}")
             if not own:
@@ -134,14 +172,44 @@ def main():
                 continue
         if state.get("status") not in ok_status:
             bad.append(f"{stem} is {state.get('status')}")
+    durations = {}
     if seconds:
         q = statistics.quantiles(seconds, n=4) if len(seconds) > 1 else seconds * 3
+        durations = {"n": len(seconds), "min": min(seconds),
+                     "quartiles": [round(x) for x in q], "max": max(seconds)}
         print(f"agent run seconds: n {len(seconds)}, min {min(seconds)}, quartiles "
-              f"{[round(x) for x in q]}, max {max(seconds)}")
+              f"{durations['quartiles']}, max {max(seconds)}")
+        for limit, oc_limit in sorted(limits_seen):
+            # OpenCode runs to oc_limit; the container is killed at limit
+            share = max(seconds) / oc_limit if oc_limit else None
+            used = f"; the longest run used {share:.0%} of OpenCode's" if share else ""
+            print(f"  agent time limit {limit} s (OpenCode stopped at {oc_limit} s, "
+                  f"600 s before it){used}")
+            durations.setdefault("limits", []).append(
+                {"time_limit_s": limit, "opencode_time_limit_s": oc_limit,
+                 "longest_share_of_opencode_limit": share and round(share, 3)})
+    print(f"runs stopped at the time limit: {len(time_stops)} {time_stops}")
+    print(f"runs with a step cut at the output limit: {len(output_stops)} {output_stops}")
+    print("reasoning effort of the agent runs: "
+          + (", ".join(sorted(str(e) for e in efforts)) or "not recorded"))
+    print(f"versions whose rule's code failed in the sims (the agent's): "
+          f"{len(rule_code)} {rule_code}")
+    print(f"runs stopped in a loop of failing tool calls: {len(loop_stops)} {loop_stops}")
+    print(f"versions lost with a limit stop among their attempts (rerun them with a "
+          f"higher cap): {len(lost_to_limits)} {lost_to_limits}")
+    if args.json_out:
+        Path(args.json_out).write_text(json.dumps(
+            {"time_limit_stops": time_stops, "output_limit_stops": output_stops,
+             "versions_lost_with_limit_stops": lost_to_limits,
+             "tool_loop_stops": loop_stops,
+             "rule_code_failures": rule_code,
+             "reasoning_efforts": sorted(efforts, key=str),
+             "agent_run_seconds": durations}, indent=1) + "\n")
     print(f"first generation: {first_scored} of {len(first)} scored; expired runs: "
-          f"{len(expired)}; endpoint runs: {len(endpoint)}; lost runs: {lost}; runs "
-          f"that recovered from a context overflow: {recovered}; runs stopped at the "
-          f"runner's time limit: {limit_hit}")
+          f"{len(expired)}; endpoint runs: {len(endpoint)}; lost runs: {lost}; "
+          f"overflow attempts (failed): {overflows}, of which OpenCode recovered: "
+          f"{overflows_recovered}; runs stopped at the runner's time limit: {limit_hit}; "
+          f"runs with a step cut at the output limit (failed): {length_cut}")
     if args.min_first_scored is not None and first_scored < args.min_first_scored:
         bad.append(f"{first_scored} first-generation versions scored, fewer than "
                    f"{args.min_first_scored}")
@@ -149,6 +217,9 @@ def main():
         bad.append(f"expired agent runs: {', '.join(expired)}")
     if args.no_expired and endpoint:
         bad.append(f"agent runs failed on the endpoint: {', '.join(endpoint)}")
+    if args.no_limit_stops and (time_stops or output_stops):
+        bad.append(f"agent runs stopped at a limit: time {time_stops}, "
+                   f"output {output_stops}")
     if bad:
         print("NOT AS EXPECTED: " + "; ".join(bad))
         return 1

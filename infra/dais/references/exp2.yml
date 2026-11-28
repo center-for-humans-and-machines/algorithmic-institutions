@@ -1,0 +1,28 @@
+# Experiment 2's fixed reference managers for infra/dais/reevaluate.py
+# --references: each plays `ah` as a campaign's version does, on the same
+# seeds, and is scored by its group's pool against `ah`. A manager entry as in
+# a sim config; null is the setting's own manager of that name.
+#
+# Earlier values (other seeds, Raven): levin_sigmoid 69.8 (rerun 69.1 +- 1.0),
+# ah against ah 56.2 to 56.9, zero 59.5 to 60.2.
+
+# Levin's rule at #219's common-pool optimum (sigmoid_opt_pool, its header)
+levin_sigmoid:
+  type: rule_based
+  rule: configs/managers/rule_based/levin_sigmoid.yml
+  params: {p_max: 30.0, c0: 7.13780183612438, tau: 0.4249189420822854,
+           gamma_ep: 3.0, gamma_sw: 1.418622533255372}
+# #207's simplest robust winner
+thr9_p10:
+  type: rule_based
+  rule: configs/managers/rule_based/thr9_p10.yml
+  params: {threshold: 9, amount: 10}
+# the earlier policy finder's final best
+pf-20261008-3-v6:
+  type: rule_based
+  rule: configs/managers/rule_based/pf-20261008-3-v6.yml
+  params: configs/managers/rule_based/params/pf-20261008-3-v6_best.json
+zero:
+  type: dummy
+  constant_punishment: 0
+ah: null

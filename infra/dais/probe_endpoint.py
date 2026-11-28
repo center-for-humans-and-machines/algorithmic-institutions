@@ -174,6 +174,10 @@ def main():
     p.add_argument("--model", required=True)
     p.add_argument("--trials", type=int, default=3)
     p.add_argument("--long-tokens", type=int, default=60000)
+    # a reasoning model spends tokens on reasoning before it answers: give it
+    # more (serve.slurm.sh: PROBE_MAX_TOKENS, larger with a reasoning parser)
+    p.add_argument("--max-tokens", type=int, default=None,
+                   help="tokens per request (default: 200 for the chat, 600 for a tool call)")
     a = p.parse_args()
     with open(a.key_file) as f:
         key = f.read().strip()
@@ -201,7 +205,7 @@ def main():
         a,
         key,
         {
-            "max_tokens": 200,
+            "max_tokens": a.max_tokens or 200,
             "messages": [
                 {
                     "role": "user",
@@ -217,7 +221,8 @@ def main():
         failed.append("chat")
 
     for name, (body, parse) in checks.items():
-        body = {**body, "max_tokens": 600, "tools": TOOLS, "tool_choice": "auto"}
+        body = {**body, "max_tokens": a.max_tokens or 600, "tools": TOOLS,
+                "tool_choice": "auto"}
         stream = parse is streamed
         if stream:
             body.update(stream=True, stream_options={"include_usage": True})
