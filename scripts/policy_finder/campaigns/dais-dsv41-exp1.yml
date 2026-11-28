@@ -1,0 +1,20 @@
+# The open-weight run of experiment 1 with DeepSeek-V4.1-Flash-1017 on DAIS
+# (infra/dais/model_profiles/deepseek-v4.1-flash-1017.sh): the same campaign
+# as dais-qwen-exp1.yml and the Opus reference but for the model and the
+# prefix.
+prefix: pfds-exp1-20261128
+setting: exp1
+mode: free
+n_fresh: 12
+generations: 6
+top_k: 4
+min_params: 1
+max_params: 5
+sobol_points: 256
+parallel: 12
+error_retries: 3
+retry_wait: 600
+summarize: null
+harness: opencode
+model: deepseek-ai/DeepSeek-V4.1-Flash-1017
+base_url: "{env:PF_LLM_BASE_URL}"

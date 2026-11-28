@@ -38,7 +38,7 @@ assert_vllm_image
 nvidia-smi --query-gpu=index,name,memory.total --format=csv
 # SERVER_GPUS (default 2; a model profile may set more): tensor parallel
 serve_model "$GPU_UTIL" "${SERVER_GPUS:-2}" "$PF_RUN/vllm.log" ${VLLM_EXTRA:-}
-wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
+wait_ready "${READY_TIMEOUT:-1800}" || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 grep -E "Model loading took|KV cache|Maximum concurrency" "$PF_RUN/vllm.log" | tail -4
 nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv
 

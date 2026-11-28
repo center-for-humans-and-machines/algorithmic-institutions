@@ -15,3 +15,6 @@ MAX_MODEL_LEN="${MAX_MODEL_LEN:-524288}"
 MOE_BACKEND=auto
 # 510 GB: 4 B200 hold it (about 128 GB per GPU); the campaign takes 8
 SERVER_GPUS="${SERVER_GPUS:-8}"
+# loading took 526 s at TP 4 from GPFS (job 993167), then warm-up and CUDA
+# graphs: give the server up to an hour to answer
+READY_TIMEOUT="${READY_TIMEOUT:-3600}"
