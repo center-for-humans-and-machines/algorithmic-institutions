@@ -44,8 +44,8 @@ the version's `rule_name` (`<name>` for version 1, `<name>-v<k>` for version
 k), `min_params` and `max_params` (the fewest and most parameters your rule
 may declare; equal values mean exactly that many, a `max_params` of null no
 upper bound), `sobol_points` (the size of the sweep's design), `python`
-(the interpreter to use), `setting`, `exp1`, and `base_version` (the earlier
-version your rule starts from, see One change).
+(the interpreter to use), `setting` (here `exp1`) and `base_version` (the
+earlier version your rule starts from, see One change).
 Run Python as `PYTHONPATH=src <python> ...`.
 
 You may write only:

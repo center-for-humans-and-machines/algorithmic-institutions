@@ -158,3 +158,42 @@ def test_the_seed_notes_name_the_settings_game(tmp_path, monkeypatch, setting,
     assert notes.startswith("# pf-s\n")
     assert ("switch decisions" in notes) == mentions_switching
     assert (v.wt / v.rule).read_text() == (pl.SEEDS / "single_idea.yml").read_text()
+
+
+def test_single_idea_notes_the_check_rejects_cost_an_attempt(version, monkeypatch):
+    version.conf.update(mode="single_idea", base_version="pf-x")
+    notes = version.exports / version.stem / f"notes/policy_finder/{version.stem}.md"
+    notes.parent.mkdir(parents=True)
+    rule = version.exports / version.stem / version.rule
+    rule.parent.mkdir(parents=True)
+    rule.write_text("params: {}\n")
+    good = (Path(__file__).resolve().parent / "fixtures/single_idea_notes/si-ds-2.md"
+            ).read_text().replace("pfsmoke-20261127-1", "pf-x")
+    writes = [good.replace("- Operation: add", "- Operation: none"), good]
+
+    def build(*a):  # the fresh export for the retry: the agent writes its notes
+        pass
+    monkeypatch.setattr(pl.export_instance, "build", build)
+    queue = [("succeeded", "first report"), ("succeeded", "second report")]
+    monkeypatch.setattr(pl.agent_runner, "start", lambda *a, **k: f"r{len(queue)}")
+
+    def finish(run_id, log=print, harness="claude"):
+        notes.write_text(writes.pop(0))
+        status, report = queue.pop(0)
+        return {"status": status, "report": report, "result": {}, "models": []}
+    monkeypatch.setattr(pl.agent_runner, "finish", finish)
+    version.step_agent()
+    runs = version.data["agent_runs"]
+    assert len(runs) == 2 and "no change stated" in runs[0]["note_rejected"][0]
+    assert "note_rejected" not in runs[1]
+    assert version.sleeps == []  # no rate-limit back-off after a rejected note
+    assert (version.wt_root / "pf-x.report.md").read_text() == "second report\n"
+
+
+def test_free_mode_takes_the_notes_as_they_are(version, monkeypatch):
+    rule = version.exports / version.stem / version.rule
+    rule.parent.mkdir(parents=True)
+    rule.write_text("params: {}\n")
+    runs(monkeypatch, version, [("succeeded", "the report")])
+    version.step_agent()
+    assert len(version.data["agent_runs"]) == 1

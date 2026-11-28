@@ -14,6 +14,14 @@ single_idea_notes/, the 8 runs of 2026-11-27):
 - `- Justification:` as `paper and analysis` or `paper + analysis` for
   `both`, or a sentence ("Analysis of human data showing ...");
 - `- Claim:` left out or `none` (the reference alone is enough).
+- a value on the line after its label, a base version given as the path to
+  its rule or followed by a remark that names another version, an operation
+  followed by its object (`remove the cap added in v3`: one removal).
+
+Empty, for a reference or an analysis: `none`, `no paper`, `not run`,
+`n/a`, `N.A.`, `(none)`, `?`, a dash, `unknown`, `null`, the template line
+left as it was (`<title, ...>, or none`). No change: an idea such as
+`N/A (no change)`, an operation such as `nothing was added`.
 
 It rejects a section without a change (no operation, or no idea), with
 several changes (two operations, in one line or in two), with a base
@@ -33,14 +41,32 @@ FIELD = re.compile(
     r"^\s*[-*+]\s+(?:\*\*|__)?(?P<label>[A-Za-z][A-Za-z ]*?)(?:\*\*|__)?\s*:"
     r"\s*(?:\*\*|__)?\s*(?P<value>.*?)\s*$"
 )
+#: The labels of the section (a line with another label continues the value
+#: before it)
+LABELS = ("base version", "operation", "idea", "justification", "paper", "claim",
+          "analysis", "expected")
 #: The operations, with their usual inflections
 OPERATIONS = {
-    "add": re.compile(r"\badd(s|ed|ing|ition)?\b", re.I),
-    "remove": re.compile(r"\bremov(e|es|ed|ing|al)\b", re.I),
-    "modify": re.compile(r"\bmodif(y|ies|ied|ying|ication)\b", re.I),
+    "add": re.compile(r"^add(s|ed|ing|ition)?$", re.I),
+    "remove": re.compile(r"^remov(e|es|ed|ing|al)$", re.I),
+    "modify": re.compile(r"^modif(y|ies|ied|ying|ication)$", re.I),
 }
-#: An empty value: nothing, `none`, `n/a`, `-`, or the template's `<...>`
-EMPTY = re.compile(r"^(none\b.*|n/?a|-+|<.*>)?$", re.I)
+#: Words that may join operations at the start of the value ("add and modify")
+JOINERS = {"and", "then", "plus", "also", "or", "&", "+", "/", ","}
+#: A reference or analysis that is not there: none, no paper, not run, n/a,
+#: (none), ?, a dash, unknown, null, the template line left as it was
+EMPTY = re.compile(
+    r"^[\s(\[]*(none|no|not|n/?a|n\.a|unknown|null|nil|tbd|\?+|[-\u2013\u2014]+)"
+    r"(\b|[\s.,;:)\]]|$).*$|^\s*<.*$|^\s*$",
+    re.I,
+)
+#: An idea that says there is none
+NO_IDEA = re.compile(r"^[\s(\[]*(none|n/?a|n\.a|nothing|no change|-+|\?+)\b|^\s*<|^\s*$",
+                     re.I)
+#: The notes' required headings, in order (check_instance.sh), the Change
+#: section last
+HEADINGS = ("## Explorations", "## Key findings", "## Hypothesis", "### Justification",
+            "## Change")
 
 
 def clean(value):
@@ -51,26 +77,47 @@ def clean(value):
 
 def fields(text):
     """{label: [values]} of the section's `- Label: value` lines, labels in
-    lower case."""
-    out = {}
+    lower case. A label whose value is on the line after it gets that line."""
+    out, last = {}, None
     for line in text.splitlines():
         m = FIELD.match(line)
-        if m:
-            label = " ".join(m.group("label").lower().split())
+        label = " ".join(m.group("label").lower().split()) if m else None
+        if m and label in LABELS:
             out.setdefault(label, []).append(clean(m.group("value")))
+            last = label
+        elif last is not None and not out[last][-1] and line.strip():
+            # the value on the next line: `- Paper:` then `  Fehr, ...`
+            out[last][-1] = clean(re.sub(r"^\s*[-*+]\s+", "", line))
+        elif not line.strip() or line.lstrip().startswith("#"):
+            last = None
     return out
 
 
 def filled(value):
-    return value is not None and not EMPTY.match(value.strip())
+    return value is not None and not EMPTY.match(value)
+
+
+def operations(value):
+    """The operations the value starts with ("add", "remove the cap added in
+    v3": remove; "add and modify": both; "nothing was added": none)."""
+    found = []
+    for word in re.findall(r"[A-Za-z]+|[&+/,]", value):
+        op = next((name for name, pattern in OPERATIONS.items()
+                   if pattern.match(word)), None)
+        if op:
+            found.append(op)
+        elif word.lower() not in JOINERS:
+            break
+    return found
 
 
 def base_ok(value, base):
-    """The value names the base version and no other version of its lineage."""
+    """The value names the base version first (a path to its rule, or a
+    remark naming another version after it, is fine)."""
     name = re.sub(r"-v\d+$", "", base)
-    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9]|[A-Za-z0-9]", value)
-    lineage = {t for t in tokens if t == name or t.startswith(name + "-v")}
-    return base in tokens and lineage <= {base}
+    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]*", value)
+    lineage = [t for t in tokens if t == name or re.fullmatch(re.escape(name) + r"-v\d+", t)]
+    return bool(lineage) and lineage[0] == base
 
 
 def check(text, base):
@@ -82,13 +129,13 @@ def check(text, base):
         reasons.append(f"'- Base version:' must name {base}"
                        + (f" (it says {bases[0]!r})" if len(bases) == 1 else ""))
     ops = f.get("operation", [])
-    named = {op for v in ops for op, pattern in OPERATIONS.items() if pattern.search(v)}
+    named = {op for v in ops for op in operations(v)}
     if len(ops) > 1 or len(named) > 1:
         reasons.append("several changes: one '- Operation:' (add, remove or modify)"
                        f" per version, not {ops}")
     elif not named:
         reasons.append("no change stated: '- Operation:' must be add, remove or modify")
-    ideas = [v for v in f.get("idea", []) if filled(v)]
+    ideas = [v for v in f.get("idea", []) if not NO_IDEA.match(v)]
     if len(ideas) > 1:
         reasons.append("several changes: one '- Idea:' per version")
     elif not ideas:
@@ -99,6 +146,19 @@ def check(text, base):
         reasons.append("no justification: neither '- Paper:' (a reference: title"
                        " and an author are enough) nor '- Analysis:' is given")
     return reasons
+
+
+def check_notes(text, base):
+    """A single-idea version's whole notes, as check_instance.sh reads them:
+    the headings in order, then the Change section (check)."""
+    lines = text.splitlines()
+    last = -1
+    for heading in HEADINGS:
+        at = next((i for i, line in enumerate(lines) if line == heading), None)
+        if at is None or at <= last:
+            return [f"the notes need the section '{heading}', in order"]
+        last = at
+    return check("\n".join(lines[last + 1:]), base)
 
 
 def main():

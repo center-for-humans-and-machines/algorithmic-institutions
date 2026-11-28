@@ -76,3 +76,61 @@ def test_bold_labels_and_a_remark_pass():
             "  - Paper: Fehr, E., & Gächter, S. (2002). *Altruistic punishment in humans.*\n"
             "  - Analysis: `scripts/x_analysis.py` printed **1.337195**\n")
     assert cn.check(text, BASE) == []
+
+
+def _with(**fields):
+    """si-ds-2's Change section with some lines replaced (a value None drops
+    the line)."""
+    text = section("si-ds-2")
+    for label, value in fields.items():
+        label = label.replace("_", " ").capitalize()
+        line = "" if value is None else f"- {label}: {value}"
+        text = re.sub(rf"(?m)^- {label}:.*$", line, text)
+    return text
+
+
+@pytest.mark.parametrize("empty", [
+    "none", "no paper", "No paper comes to mind", "not applicable", "N/A (no paper used)",
+    "N.A.", "(none)", "?", "—", "-", "unknown", "null",
+    "<title, lead or senior author (year and journal if you know them)>, or none",
+])
+def test_empty_references_and_analyses(empty):
+    text = _with(paper=empty, analysis="not run")
+    assert any(r.startswith("no justification") for r in cn.check(text, BASE))
+
+
+@pytest.mark.parametrize("fields, reason", [
+    ({"idea": "N/A (no change)"}, "no change stated"),
+    ({"operation": "nothing was added"}, "no change stated"),
+])
+def test_no_change(fields, reason):
+    assert any(r.startswith(reason) for r in cn.check(_with(**fields), BASE))
+
+
+@pytest.mark.parametrize("fields", [
+    {"operation": "remove the cap added in v3"},
+    {"base_version": f"{BASE} (the seed; {BASE}-v3 lowered the result)"},
+    {"base_version": f"configs/managers/rule_based/{BASE}.yml"},
+    {"paper": "Nowak, M. A. and Sigmund, K., Evolution of indirect reciprocity"},
+])
+def test_no_false_failures(fields):
+    assert cn.check(_with(**fields), BASE) == []
+
+
+def test_a_value_on_the_next_line():
+    text = _with(paper="", analysis="none")
+    text = text.replace("- Paper: ", "- Paper:\n  Fehr and Gaechter, Altruistic punishment"
+                        " in humans")
+    assert cn.check(text, BASE) == []
+
+
+def test_another_base_version_first_still_fails():
+    text = _with(base_version=f"{BASE}-v3 (built on {BASE})")
+    assert cn.check(text, BASE)[0].startswith("'- Base version:' must name")
+
+
+def test_check_notes_needs_the_headings_in_order():
+    notes = (NOTES / "si-ds-2.md").read_text()
+    assert cn.check_notes(notes, BASE) == []
+    swapped = notes.replace("## Key findings", "## Findings")
+    assert "## Key findings" in cn.check_notes(swapped, BASE)[0]

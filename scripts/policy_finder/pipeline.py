@@ -62,6 +62,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import agent_runner  # noqa: E402
+import change_note  # noqa: E402
 import cluster_proxy  # noqa: E402
 import export_instance  # noqa: E402
 import usage  # noqa: E402
@@ -307,7 +308,8 @@ class Version:
         attempts = self.data.setdefault("agent_runs", [])
         limit = AGENT_ATTEMPTS if self.harness == "claude" else OPENCODE_ATTEMPTS
         while len(attempts) < limit:
-            if self.harness != "claude" and attempts and not self.data.get("agent_current"):
+            if (self.harness != "claude" and attempts and not self.data.get("agent_current")
+                    and not attempts[-1].get("note_rejected")):
                 # bounded back-off after a failed attempt (a rate limit, say)
                 time.sleep(OPENCODE_RETRY_WAIT * len(attempts))
             with agent_runner.slot(self.locks):
@@ -379,6 +381,21 @@ class Version:
                 self.save()
                 usage.wait_after_limit(hits, log=self.log)
                 continue
+            if ok and self.conf.get("mode") == "single_idea":
+                # single-idea mode: notes the acceptance check would reject
+                # (change_note.check_notes, as check_instance.sh) make a failed
+                # attempt, retried on a fresh export, not a failed version
+                notes = self.exports / self.stem / f"notes/policy_finder/{self.stem}.md"
+                try:
+                    text = notes.read_text()
+                except OSError:
+                    text = ""
+                reasons = change_note.check_notes(text, self.conf.get("base_version", ""))
+                if reasons:
+                    ok = False
+                    record["note_rejected"] = reasons
+                    self.log(f"agent run {run_id}: its notes would fail the check: "
+                             + "; ".join(reasons))
             attempts.append(record)
             self.data.pop("agent_current", None)
             self.save()

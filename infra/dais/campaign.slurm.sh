@@ -131,7 +131,21 @@ echo "job ${SLURM_JOB_ID:-local} on $(hostname), commit $(git rev-parse HEAD)"
 nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader \
   | sed 's/^/GPU /'
 export SIM_SIF_SHA256 AGENT_SIF_SHA256 MODEL MODEL_REV
-"$PF_PYTHON" scripts/policy_finder/preflight.py --dais || exit 1
+# the served model and its tag, for campaign files that name them
+# (model: "{env:PF_LLM_MODEL}", prefix "...{env:PF_MODEL_TAG}..."); the
+# preflight expands the prefixes of the job's campaigns
+export PF_LLM_MODEL="$MODEL" PF_MODEL_TAG="$MODEL_TAG"
+echo "campaign files' {env:PF_LLM_MODEL} = $MODEL, {env:PF_MODEL_TAG} = $MODEL_TAG"
+if [ "$MODE" = stages ]; then
+  mapfile -t JOB_CAMPAIGNS < <(grep -v '^[[:space:]]*#' "$STAGES" \
+    | grep -o '[^[:space:]]*\.yml' | sort -u)
+elif [ "$MODE" = campaign ]; then
+  JOB_CAMPAIGNS=("$1")
+else
+  JOB_CAMPAIGNS=()
+fi
+"$PF_PYTHON" scripts/policy_finder/preflight.py --dais \
+  ${JOB_CAMPAIGNS[@]+--campaigns "${JOB_CAMPAIGNS[@]}"} || exit 1
 
 # the cores: server, driver, agents, then the pool
 SERVER_CORES="${SERVER_CORES:-4}"
@@ -219,10 +233,6 @@ CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
 echo "model $MODEL@$MODEL_REV${MODEL_PROFILE:+ (profile $MODEL_PROFILE)}, image $VLLM_SIF"
 wait_ready "${READY_TIMEOUT:-1800}" || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
-# the served model and its tag, for campaign files that name them
-# (model: "{env:PF_LLM_MODEL}", prefix "...{env:PF_MODEL_TAG}...")
-export PF_LLM_MODEL="$MODEL" PF_MODEL_TAG="$MODEL_TAG"
-echo "campaign files' {env:PF_LLM_MODEL} = $MODEL, {env:PF_MODEL_TAG} = $MODEL_TAG"
 # the agents' OpenCode config takes the served context from here
 # (export_instance.local_model), so it compacts before the server refuses
 export PF_LLM_CONTEXT="$MAX_MODEL_LEN"
@@ -322,6 +332,8 @@ campaign_stage() {
               | head -n 1) || setting=""
     [ -n "$setting" ] && [ -f "$PF_HERE/references/$setting.yml" ] \
       && refs=(--references "$PF_HERE/references/$setting.yml")
+    # a single-idea campaign: all lineages, the gain over the seed
+    grep -q '^mode: *single_idea' "$file" && refs+=(--single-idea)
     echo "[$(date +%T)] campaign $name: re-evaluation in $slices slices into $out" \
       "${refs[*]}"
     driver "$PF_PYTHON" "$PF_HERE/reevaluate.py" "$PF_RUNS/campaign/$name.json" \

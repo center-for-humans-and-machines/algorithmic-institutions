@@ -10,7 +10,7 @@
 
 ## Hypothesis
 
-A manager that never punishes: every member gets 0 punishment points in every round, whatever the member contributed. No parameters, so the sweep is a single point.
+A manager that never punishes: every player gets 0 punishment points in every round, whatever the player contributed. No parameters, so the sweep is a single point.
 
 ### Justification
 

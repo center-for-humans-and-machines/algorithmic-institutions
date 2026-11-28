@@ -131,7 +131,22 @@ A job on code older than #254 leaves no `killtest-done` marker, so `node-2026-11
 
 ### Single-idea campaigns (step 2)
 
-`stages/single-idea-exp2.txt` runs single-idea mode (`.claude/agents/policy-finder-single-idea.md`) for the job's model: a smoke campaign (2 chains, 2 changes each), a load test at the real width (20 chains, the seed and one change, smoke size; `finished/15+nolimits` counts the change, not the seed) and the real campaign (20 chains x 20 changes, versions after the seed with 0 to 4 parameters), re-evaluated in 15 slices. Its campaign files name the model and the prefix as `{env:PF_LLM_MODEL}` and `{env:PF_MODEL_TAG}` (`campaign.py` expands them; the job sets them from the model profile: `MODEL` and `MODEL_TAG`, the latter by default the profile's name in lower case), so one file serves every model and each model's lineages get branches of their own. The state files are named after the campaign file: give each model's job its own `PF_RUNS`. `stages/single-idea.txt` runs both experiments at once (40 agents: `AGENT_CORES=40`, `PF_AGENT_SLOTS=40`), experiment 1 with its own single-idea agent (`.claude/agents/policy-finder-exp1-single-idea.md`, built from `policy-finder-exp1.md` and `policy-finder-single-idea.md`) and its own seed notes; the re-evaluations play the setting's reference managers (`references/<setting>.yml`).
+`stages/single-idea.txt` runs single-idea mode for the job's model, both experiments at once (40 agents: `AGENT_CORES=40`, `PF_AGENT_SLOTS=40`): experiment 2 with `.claude/agents/policy-finder-single-idea.md`, experiment 1 with `.claude/agents/policy-finder-exp1-single-idea.md` (built from `policy-finder-exp1.md` and `policy-finder-single-idea.md`), each with its own seed notes.
+
+- Stages: a smoke campaign per experiment (2 chains, 2 changes each, smoke size; `finished/1`: each finishes and at least one change scores, a test of the mechanics), a load test at the real width (20 chains, the seed and one change, smoke size; `finished/10+nolimits`: 10 of the 20 changes scored, no expired, endpoint or limit-stopped run; the gate counts the change, not the seed) and the real campaigns (20 chains x 20 changes, versions after the seed with 0 to 4 parameters). `stages/single-idea-exp2.txt` is experiment 2 alone; after a cut in the real stage, resubmit with `stages/single-idea-real.txt`.
+- A note the acceptance check would reject (`change_note.py`: headings, one change, a justification) is a failed agent attempt in single-idea mode, retried on a fresh export within the version's attempts (`note_rejected` in the run's record, counted by `campaign_check.py`); free mode is unchanged.
+- The campaign files name the model and the prefix as `{env:PF_LLM_MODEL}` and `{env:PF_MODEL_TAG}` (`campaign.py` expands them; the job sets them from the model profile: `MODEL` and `MODEL_TAG`, the latter by default the profile's name in lower case), so one file serves every model and each model's lineages get branches of their own. The state files are named after the campaign file: give each model's job its own `PF_RUNS`. The preflight fails when a campaign's branches exist without their worktrees in this `PF_RUNS` (a run under another one), and when a reference manager's model file is missing.
+- No stage re-evaluates in the GPU job. The real campaigns' re-evaluation (420 versions per experiment, about an hour of pool time each) runs afterwards as a CPU job per experiment, resumable from its finished slices (`--resume`), the improvement labelled as the gain of the best rule over the seed (`--single-idea`), not comparable with the free-mode bars:
+
+```bash
+S=/dais/fs/scratch/$USER/policy-finder-agents; R=$S/pf_runs_single_<tag>   # the campaign job's PF_RUNS
+for e in exp2:15 exp1:45; do x=${e%%:*}; k=${e##*:}
+  sbatch -p small --time=06:00:00 --dependency=afterany:<campaign job> -o $S/logs/%x.%j.out \
+    --export=PF_SCRATCH=$S,PF_RUNS=$R infra/dais/pipeline.slurm.sh python infra/dais/reevaluate.py \
+    $R/campaign/dais-single-$x.json $R/reevaluate/dais-single-$x --slices $k --seed 100000 \
+    --references infra/dais/references/$x.yml --single-idea --resume
+done
+```
 
 ### Model profiles
 

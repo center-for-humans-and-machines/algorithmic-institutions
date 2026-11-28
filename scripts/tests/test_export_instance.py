@@ -456,6 +456,11 @@ def test_the_exp1_single_idea_definition_is_built_from_the_two():
     exp1 = _sections((AGENT.parent / "policy-finder-exp1.md").read_text())
     single = _sections(AGENT.read_text())
     assert mine["## The game"] == exp1["## The game"]
+    assert mine["## Your instance"] == single["## Your instance"].replace(
+        "`python`\n(the interpreter to use) and `base_version` (the earlier version your rule"
+        "\nstarts from, see One change).",
+        "`python`\n(the interpreter to use), `setting` (here `exp1`) and `base_version` (the"
+        "\nearlier version your rule starts from, see One change).")
     assert mine["## Your notes"] == single["## Your notes"]
     assert mine["## How to work"] == single["## How to work"].replace(
         "--sobol-points <sobol_points>` (a null\n   `max_params` is passed as `none`)",

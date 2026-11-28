@@ -112,7 +112,7 @@ def main():
         conf = json.loads((wt_root / args.target / ".claude/policy_finder.json").read_text())
         members = [(args.target, conf.get("version", 1))]
         first = set(members)
-    seconds, first_scored, expired, endpoint, lost = [], 0, [], [], 0
+    seconds, first_scored, expired, endpoint, lost, rejected = [], 0, [], [], 0, []
     time_stops, output_stops, lost_to_limits, limits_seen = [], [], [], set()
     overflows, overflows_recovered, limit_hit, length_cut = 0, 0, 0, 0
     for name, version in members:
@@ -123,6 +123,10 @@ def main():
         data = state.get("data") or {}
         endpoint += [f"{stem} {r.get('run_id')}" for r in data.get("endpoint_runs") or []]
         lost += len(data.get("lost_runs") or [])
+        # single-idea mode: agent runs whose notes the check rejected (each a
+        # failed attempt, retried; pipeline.step_agent)
+        rejected += [f"{stem} {r.get('run_id')}: {'; '.join(r['note_rejected'])[:200]}"
+                     for r in data.get("agent_runs") or [] if r.get("note_rejected")]
         stopped_here = []
         for r in data.get("agent_runs") or []:
             if (r.get("result") or {}).get("seconds") is not None:
@@ -194,6 +198,9 @@ def main():
           f"overflow attempts (failed): {overflows}, of which OpenCode recovered: "
           f"{overflows_recovered}; runs stopped at the runner's time limit: {limit_hit}; "
           f"runs with a step cut at the output limit (failed): {length_cut}")
+    print(f"notes rejected by the check (failed attempts, retried): {len(rejected)}")
+    for line in rejected[:20]:
+        print(f"  {line}")
     if args.min_first_scored is not None and first_scored < args.min_first_scored:
         bad.append(f"{first_scored} first-generation versions scored, fewer than "
                    f"{args.min_first_scored}")
