@@ -40,6 +40,9 @@ def failure(state):
     error = state.get("error") or ""
     if step == "agent" and not data.get("agent_runs"):
         own = False  # no attempt of the agent's: its runs were lost
+    if step in ("sweep_fetch", "final_fetch") and error.startswith(
+            "the rule's code failed in the"):
+        own = True  # every sim failed in the version's own rule (pipeline.py)
     if step == "check" and re.search(r"FAIL: cannot (read|diff|list)", error):
         own = False  # check_instance.sh could not read the worktree
     if step == "agent":
@@ -114,7 +117,7 @@ def main():
         first = set(members)
     seconds, first_scored, expired, endpoint, lost, rejected = [], 0, [], [], 0, []
     time_stops, output_stops, lost_to_limits, limits_seen = [], [], [], set()
-    loop_stops, efforts = [], set()
+    loop_stops, efforts, rule_code = [], set(), []
     overflows, overflows_recovered, limit_hit, length_cut = 0, 0, 0, 0
     for name, version in members:
         stem = name if version == 1 else f"{name}-v{version}"
@@ -169,6 +172,8 @@ def main():
             first_scored += 1
         if state.get("status") == "failed":
             step, reason, own = failure(state)
+            if own and step in ("sweep_fetch", "final_fetch"):
+                rule_code.append(stem)
             print(f"  failed at {step} ({'the agent' if own else 'INFRASTRUCTURE'}):"
                   f" {reason}")
             if not own:
@@ -196,6 +201,8 @@ def main():
     print(f"runs with a step cut at the output limit: {len(output_stops)} {output_stops}")
     print("reasoning effort of the agent runs: "
           + (", ".join(sorted(str(e) for e in efforts)) or "not recorded"))
+    print(f"versions whose rule's code failed in the sims (the agent's): "
+          f"{len(rule_code)} {rule_code}")
     print(f"runs stopped in a loop of failing tool calls: {len(loop_stops)} {loop_stops}")
     print(f"versions lost with a limit stop among their attempts (rerun them with a "
           f"higher cap): {len(lost_to_limits)} {lost_to_limits}")
@@ -204,6 +211,7 @@ def main():
             {"time_limit_stops": time_stops, "output_limit_stops": output_stops,
              "versions_lost_with_limit_stops": lost_to_limits,
              "tool_loop_stops": loop_stops,
+             "rule_code_failures": rule_code,
              "reasoning_efforts": sorted(efforts, key=str),
              "agent_run_seconds": durations}, indent=1) + "\n")
     print(f"first generation: {first_scored} of {len(first)} scored; expired runs: "

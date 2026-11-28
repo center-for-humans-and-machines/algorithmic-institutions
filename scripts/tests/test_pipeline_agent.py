@@ -211,3 +211,19 @@ def test_notes_that_are_not_utf8_are_a_rejected_note(version, monkeypatch):
     with pytest.raises(pl.Failed):
         version.step_agent()
     assert all(r.get("note_rejected") for r in version.data["agent_runs"])
+
+
+def test_sims_failing_in_the_rules_own_code():
+    # pfq2-exp1-20261128-3-v3's sweep (job local-7095): every part and retry
+    # failed in the rule's code (a shape the batched sweep has and
+    # validate-rule does not)
+    log = (Path(__file__).parent / "fixtures/sim_rule_code_error.txt").read_text()
+    stem = "pfq2-exp1-20261128-3-v3"
+    error = pl.rule_code_error([log, log], stem)
+    assert error.startswith("RuntimeError: The size of tensor a (3) must match")
+    assert pl.rule_code_error([log], "pfq2-exp1-20261128-3-v2") is None  # another rule
+    assert pl.rule_code_error([log, "Start batch 0\n"], stem) is None  # killed, no traceback
+    elsewhere = log.replace(f"./configs/managers/rule_based/{stem}.yml",
+                            "/opt/algorithmic-institutions/src/aimanager/manager/rule.py")
+    assert pl.rule_code_error([elsewhere], stem) is None  # the backend's code
+    assert pl.rule_code_error([], stem) is None

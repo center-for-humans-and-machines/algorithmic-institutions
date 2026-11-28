@@ -32,6 +32,10 @@ def test_failures_of_the_agent_and_of_the_infrastructure():
     driver = {"status": "failed", "done": DONE[:3],
               "error": "check_instance.sh failed:\nFAIL: cannot diff a..b"}
     assert not cc.failure(driver)[2]
+    # every sim failed in the version's own rule (pipeline.rule_code_error)
+    rule = {"status": "failed", "done": DONE + ["sweep_jobs"],
+            "error": "the rule's code failed in the sweep sims: RuntimeError: x"}
+    assert cc.failure(rule) == ("sweep_fetch", rule["error"], True)
 
 
 def test_limit_stops_are_reported_and_can_gate(tmp_path, monkeypatch, capsys):

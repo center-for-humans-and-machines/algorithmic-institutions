@@ -268,3 +268,17 @@ def test_a_campaign_runs_at_one_reasoning_effort(tmp_path, monkeypatch):
         make(tmp_path, monkeypatch, reasoning_effort="high")[0].run()  # the file's
     with pytest.raises(cm.CampaignError, match="its state ran at reasoning effort high"):
         make(tmp_path, monkeypatch)[0].run()  # a resume at another effort
+
+
+def test_a_state_of_another_prefix_or_without_an_effort_is_refused(tmp_path, monkeypatch):
+    campaign, _ = make(tmp_path, monkeypatch)
+    campaign.state = {"generations": [{"index": 1, "members": [
+        {"name": "pf-20990101-1", "version": 1}]}]}  # started before efforts
+    monkeypatch.setenv("PF_REASONING_EFFORT", "high")
+    with pytest.raises(cm.CampaignError, match="without a recorded reasoning effort"):
+        campaign.check_effort()
+    monkeypatch.delenv("PF_REASONING_EFFORT")
+    campaign.check_effort()  # a model without an effort resumes it
+    campaign.state["generations"][0]["members"][0]["name"] = "pf-other-1"
+    with pytest.raises(cm.CampaignError, match="another prefix"):
+        campaign.check_effort()

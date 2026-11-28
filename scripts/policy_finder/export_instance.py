@@ -315,9 +315,10 @@ LOCAL_MODELS = {
     },
     # huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017 (the dated card, at
     # revision 08c8657f), "Recommended sampling parameters": temperature 1.0,
-    # top_p 1.0, max_tokens >= 256K. The maximum reasoning effort is the
-    # server's default (infra/dais/model_profiles/deepseek-v4.1-flash-1017.sh),
-    # as is the context (1M tokens).
+    # top_p 1.0, max_tokens >= 256K, the same at every reasoning effort. The
+    # effort is the server's default, chosen per job (REASONING_EFFORT; the
+    # profile's default is max: infra/dais/model_profiles/
+    # deepseek-v4.1-flash-1017.sh), as is the context (1M tokens).
     "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
         "options": {"temperature": 1.0, "top_p": 1.0},
         "limit": {"context": 1048576, "output": 262144},

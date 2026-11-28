@@ -452,6 +452,9 @@ def main():
     ap.add_argument("--code", help="play every version with src/aimanager of this ref")
     ap.add_argument("--references", help="a YAML of fixed managers to play beside "
                     "the versions (infra/dais/references/)")
+    ap.add_argument("--slices-from", help="the slices.tsv of an earlier run of this "
+                    "state, seed and slice count (its summary.json beside it): the "
+                    "versions' scores from it, nothing replayed")
     ap.add_argument("--references-only", action="store_true",
                     help="play only the references, on the campaign's setting")
     ap.add_argument("--single-idea", action="store_true",
@@ -502,9 +505,12 @@ def main():
     refs = yaml.safe_load(Path(args.references).read_text()) if args.references else {}
     if args.references_only and not refs:
         sys.exit("--references-only needs --references")
+    earlier = load_slices(args, versions, k) if args.slices_from else None
     snapshots, jobs = {}, {}
     try:
         results, ref_results = run_slices(args, versions, k, out, snapshots, jobs, refs)
+        if earlier is not None:
+            results = earlier
     finally:
         if not args.keep_snapshots:  # only those this run made, also after a failure
             for sha in snapshots.values():
@@ -605,10 +611,10 @@ def run_slices(args, versions, k, out, snapshots, jobs, refs=None):
     """Every version's and reference's K slices into the pool; ({stem: [(pool,
     se)] by slice}, {reference: its row}). Fails if a slice's sim failed or its
     output is missing. With --resume, slices an earlier run finished in `out`
-    are read, not run."""
+    are read, not run; with --slices-from, the versions' are not run."""
     done = {}
-    for stem, (commit, config, gp) in ({} if args.references_only
-                                       else versions).items():
+    skip = args.references_only or getattr(args, "slices_from", None)
+    for stem, (commit, config, gp) in ({} if skip else versions).items():
         if args.code:
             commit = with_code(commit, args.code)
         seed, todo = args.seed, []
@@ -690,6 +696,27 @@ def run_slices(args, versions, k, out, snapshots, jobs, refs=None):
                          "common_seeds": cfg.get("episode_batch_size", 1)
                          == next(iter(versions.values()))[1].get("episode_batch_size", 1)}
     return results, ref_rows
+
+
+def load_slices(args, versions, k):
+    """{stem: [(pool, se)] by slice} from --slices-from, which must hold k
+    slices of every version with a final, played at --seed (its summary.json)."""
+    path = Path(args.slices_from)
+    earlier = json.loads((path.parent / "summary.json").read_text())
+    if (earlier.get("seed"), earlier.get("slices"), earlier.get("code")) != (
+            args.seed, k, args.code):
+        sys.exit(f"{path}: seed {earlier.get('seed')}, {earlier.get('slices')} slices, "
+                 f"code {earlier.get('code')}; this run: {args.seed}, {k}, {args.code}")
+    results = {}
+    with open(path) as f:
+        for row in csv.DictReader(f, delimiter="\t"):
+            results.setdefault(row["stem"], {})[int(row["slice"])] = (
+                float(row["pool"]), float(row["pool_se"]))
+    bad = [stem for stem in versions if sorted(results.get(stem, {})) != list(range(k))]
+    if bad:
+        sys.exit(f"{path}: not {k} slices of {', '.join(bad)}")
+    print(f"the versions' slices from {path}, nothing replayed", flush=True)
+    return {stem: [results[stem][j] for j in range(k)] for stem in versions}
 
 
 def submit_references(args, refs, versions, k, snapshots, out=None):

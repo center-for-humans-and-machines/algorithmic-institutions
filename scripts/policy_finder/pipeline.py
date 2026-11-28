@@ -114,6 +114,30 @@ LOST_PAUSE = int(os.environ.get("PF_LOST_PAUSE", "30"))
 LOST_LIMIT = 6
 
 
+#: A version whose sims all failed in its own rule's code: the agent's failure
+#: (campaign_check), not the backend's
+RULE_CODE_FAILED = "the rule's code failed in the {what}: "
+
+
+def rule_code_error(logs, stem):
+    """The exception line when every sim log in `logs` ends in a traceback
+    whose last frame is the version's own rule file
+    (configs/managers/rule_based/<stem>.yml), else None. A rule can pass
+    validate-rule and still fail in the batched sims (other input shapes)."""
+    rule = f"configs/managers/rule_based/{stem}.yml"
+    last = None
+    for log in logs:
+        lines = [line for line in (log or "").splitlines() if line.strip()]
+        if "Traceback (most recent call last):" not in lines:
+            return None
+        tail = lines[len(lines) - lines[::-1].index("Traceback (most recent call last):"):]
+        frames = [line for line in tail if line.lstrip().startswith('File "')]
+        if not frames or rule not in frames[-1] or tail[-1].startswith(" "):
+            return None
+        last = tail[-1].strip()
+    return last
+
+
 class Failed(Exception):
     pass
 
@@ -676,12 +700,37 @@ class Version:
             first = False
             for config, _, local in missing:
                 if not self._drop_lost(key, config) and len(jobs[config]) >= JOB_ATTEMPTS:
+                    error = self._rule_code_error([c for c, _, _ in missing])
+                    if error:
+                        what = "final run's sims" if key == "final_jobs" else "sweep sims"
+                        raise Failed(RULE_CODE_FAILED.format(what=what) + error)
                     raise Failed(f"{config} wrote no sweep.json in {JOB_ATTEMPTS} jobs"
                                  f" {jobs[config]}")
                 shutil.rmtree(local, ignore_errors=True)  # a partial or truncated copy
                 self._submit(key, sha, config, why="resubmitted")
             cluster_proxy.wait([jobs[c][-1] for c, _, _ in missing])
             todo = missing
+
+    def _rule_code_error(self, configs):
+        """rule_code_error over every job of the failed `configs` (the local
+        backend's sim logs; None on another backend)."""
+        if cluster_proxy.BACKEND != "local":
+            return None
+        import local_cluster
+
+        logs = []
+        for config in configs:
+            for job in self.data_jobs(config):
+                try:
+                    logs.append((local_cluster.job_dir(job) / "sim.log").read_text(
+                        errors="replace"))
+                except OSError:
+                    return None
+        return rule_code_error(logs, self.stem) if logs else None
+
+    def data_jobs(self, config):
+        return [job for key in ("sweep_jobs", "final_jobs")
+                for job in (self.data.get(key) or {}).get(config, [])]
 
     def part_dir(self, part):
         if len(self.parts()) == 1:
