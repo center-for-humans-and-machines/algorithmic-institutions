@@ -7,7 +7,8 @@ A campaign is a YAML file (scripts/policy_finder/campaigns/*.yml):
     generations: 6          # then this many generations of --iterate-on
     top_k: 4                # ... on the lineages with the highest lineage best
     min_params: 1           # generation 1's param bounds; later versions
-    max_params: 5           #   may declare any number (new_instance.sh)
+    max_params: 5           #   may declare any number (new_instance.sh),
+    iterate_max_params: null  # or 0 to this many, when set
     sobol_points: 256
     parallel: 12            # versions running at once (agents are capped
                             #   separately by agent_runner's slots)
@@ -15,6 +16,10 @@ A campaign is a YAML file (scripts/policy_finder/campaigns/*.yml):
     retry_wait: 600         # seconds before such a resume
     summarize: null         # a shell command run after each generation
                             #   (non-fatal; its output goes to the log)
+    mode: free              # single_idea: generation 1 is the seed rule of
+                            #   seeds/ in every lineage (no agent), and each
+                            #   later version changes one idea of its
+                            #   lineage's best version (new_instance.sh)
 
 The lineage best is the highest GP-peak final (`score.pool`) of any of the
 lineage's scored versions. Each later generation iterates the top_k lineages
@@ -57,7 +62,7 @@ HERE = Path(__file__).resolve().parent
 DEFAULTS = {
     "n_fresh": 12, "generations": 6, "top_k": 4, "min_params": 1, "max_params": 5,
     "sobol_points": 256, "parallel": 12, "error_retries": 3, "retry_wait": 600,
-    "setting": "exp2",
+    "setting": "exp2", "mode": "free", "iterate_max_params": None,
     "summarize": None,
 }
 
@@ -166,12 +171,16 @@ class Campaign:
                        "--max-params", s["max_params"], "--sobol-points", s["sobol_points"]]
             if s["setting"] != "exp2":
                 command += ["--setting", s["setting"]]
+            if s["mode"] != "free":
+                command += ["--mode", s["mode"]]
             return command
         if current == version - 1 and current >= 1:
             command = [HERE / "new_instance.sh", "--iterate-on", name]
             previous = self.version_state(name, current) or {}
             if previous.get("status") == "failed":
                 command.append("--after-failure")
+            if s["iterate_max_params"] is not None:
+                command += ["--min-params", 0, "--max-params", s["iterate_max_params"]]
             return command
         raise CampaignError(f"{name} is at version {current}, cannot run version {version}")
 

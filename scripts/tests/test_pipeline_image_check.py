@@ -97,3 +97,51 @@ def test_a_fetch_during_an_outage_costs_no_job(version, monkeypatch):
     with pytest.raises(pl.Failed):
         version._fetch("sweep_jobs", "a" * 40, "c.yml", "plots/x", version.wt_root / "x")
     assert len(submitted) == pl.JOB_ATTEMPTS - 1
+
+
+def test_transcripts_are_kept(version, tmp_path, monkeypatch):
+    """Every agent run's session transcripts are copied next to the state file."""
+    state = tmp_path / "spawner"
+    projects = state / "runs/run-1/home/.claude/projects/-opt-repo"
+    (projects / "sub").mkdir(parents=True)
+    (projects / "a.jsonl").write_text("{}\n")
+    (projects / "sub/b.jsonl").write_text("{}\n")
+    (projects / "notes.txt").write_text("not a transcript\n")
+    monkeypatch.setattr(pl.agent_runner, "SPAWNER_STATE", str(state))
+    assert version.keep_transcripts("run-1") == 2
+    kept = tmp_path / "worktrees/pf-x.transcripts/run-1/-opt-repo"
+    assert (kept / "a.jsonl").exists() and (kept / "sub/b.jsonl").exists()
+    assert not (kept / "notes.txt").exists()
+    assert version.keep_transcripts("run-missing") == 0  # logged, not an error
+
+
+def test_single_idea_version_1_is_the_seed(tmp_path, monkeypatch):
+    """Version 1 of a single-idea instance: the seed rule and notes, no agent."""
+    monkeypatch.setenv("PF_RUNS", str(tmp_path))
+    monkeypatch.delenv("PF_WORKTREE_ROOT", raising=False)
+    wt = tmp_path / "worktrees/pf-s"
+    (wt / ".claude").mkdir(parents=True)
+    (wt / ".claude/policy_finder.json").write_text(json.dumps(
+        {"rule_name": "pf-s", "version": 1, "mode": "single_idea"}))
+    v = pl.Version("pf-s")
+    assert v.seeded
+    monkeypatch.setattr(pl.agent_runner, "start", lambda *a: pytest.fail("agent started"))
+    v.step_export()
+    v.step_agent()
+    v.step_collect()
+    rule = (wt / "configs/managers/rule_based/pf-s.yml").read_text()
+    assert "punishment = th.zeros_like(c[..., -1])" in rule
+    # no parameters: the design is one point, so the sweep is one part
+    monkeypatch.setattr(pl, "MAX_JOB_EPISODES", 1000)
+    v.state = {"data": {"episodes": {"sweep": 500}}}
+    v.conf["sobol_points"] = 256
+    assert v.design_points() == 1 and v.parts() == ["pf-s_sweep"]
+    (wt / "configs/managers/rule_based/pf-s.yml").write_text(
+        "params: {a: {definition: d, type: float}}\nsweep_config: {a: [0, 1]}\n"
+        "code: |\n  punishment = a\n")
+    assert v.design_points() == 256 and len(v.parts()) == 128
+    notes = (wt / "notes/policy_finder/pf-s.md").read_text()
+    assert notes.startswith("# pf-s\n") and "### Justification" in notes
+    (wt / ".claude/policy_finder.json").write_text(json.dumps(
+        {"rule_name": "pf-s-v2", "version": 2, "mode": "single_idea"}))
+    assert not pl.Version("pf-s").seeded

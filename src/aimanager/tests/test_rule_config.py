@@ -240,7 +240,8 @@ def test_rule_and_params_required(tmp_path):
     "rule, params, match",
     [
         ({**BASE, "parms": {}}, {"a": 1}, r"unknown keys \['parms'\]"),
-        ({**BASE, "params": {}}, {}, "non-empty `params`"),
+        ({**BASE, "params": None}, {}, "needs a `params` mapping"),
+        ({**BASE, "params": {}}, {}, r"undeclared \['a'\]"),
         (
             {**BASE, "params": {"a": A, "t": A}, "code": "punishment = a * t"},
             {"a": 1, "t": 2},

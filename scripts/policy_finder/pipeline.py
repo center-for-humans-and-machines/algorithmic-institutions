@@ -9,9 +9,13 @@ without redoing finished steps or resubmitting jobs it already submitted.
 Steps (STEPS):
   export        the agent's copy of the instance (export_instance.py)
   agent         the agent in its container (agent_runner.py); its report in
-                <stem>.report.md, its run (cost, tokens, models) in the state
+                <stem>.report.md, its run (cost, tokens, models) in the state,
+                its transcripts copied to <stem>.transcripts/<run id>/ (the
+                spawner's run homes are not kept for good)
   collect       the rule, notes and scripts back into the worktree; a file
                 written anywhere else in the write folders fails the version
+                (version 1 of a single-idea instance has no agent: these
+                three steps write the seed rule of seeds/ and its notes)
   check         check_instance.sh --commit: the acceptance check, and the
                 commit of the agent's work on policy-finder/<name>
   sweep_config  the sweep's sim configs (generate_sim_config.py), committed
@@ -60,6 +64,7 @@ import export_instance  # noqa: E402
 import usage  # noqa: E402
 
 MAIN = HERE.parents[1]
+SEEDS = HERE / "seeds"
 STEPS = (
     "export", "agent", "collect", "check",
     "sweep_config", "sweep_snap", "image_check", "sweep_jobs", "sweep_fetch", "fit",
@@ -118,6 +123,8 @@ class Version:
         # the game (manager/rule.py SETTINGS); absent: exp2
         self.setting = self.conf.get("setting", "exp2")
         self.version = self.conf.get("version", 1)
+        # version 1 of a single-idea instance is the given seed rule
+        self.seeded = self.conf.get("mode") == "single_idea" and self.version == 1
         self.rule = f"configs/managers/rule_based/{self.stem}.yml"
         self.sweep = f"{OUT_DIR}/{self.stem}_sweep"
         self.final = f"{self.sweep}/final"
@@ -232,12 +239,23 @@ class Version:
         return self.state
 
     def step_export(self):
+        if self.seeded:
+            notes = self.wt / f"notes/policy_finder/{self.stem}.md"
+            for path in (self.wt / self.rule, notes):
+                path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(SEEDS / "single_idea.yml", self.wt / self.rule)
+            notes.write_text((SEEDS / "single_idea.md").read_text().replace(
+                "{stem}", self.stem))
+            self.log("seed rule written, no agent")
+            return
         try:
             export_instance.build(self.wt, MAIN, self.exports)
         except export_instance.ExportError as e:
             raise Failed(str(e)) from None
 
     def step_agent(self):
+        if self.seeded:
+            return
         write_dirs = export_instance.write_dirs(self.name, self.stem)
         attempts = self.data.setdefault("agent_runs", [])
         while len(attempts) < AGENT_ATTEMPTS:
@@ -257,6 +275,7 @@ class Version:
                     self.log(f"agent run {run_id} started")
                 record = agent_runner.finish(run_id, log=self.log)
             report = record.pop("report")
+            record["transcripts"] = self.keep_transcripts(run_id)
             rule_written = (self.exports / self.stem / self.rule).exists()
             ok = record["status"] == "succeeded" and report.strip() and rule_written
             home = os.path.join(agent_runner.SPAWNER_STATE, "runs", run_id, "home")
@@ -281,7 +300,32 @@ class Version:
                 return
         raise Failed(f"the agent failed {AGENT_ATTEMPTS} times: {attempts[-1]}")
 
+    def keep_transcripts(self, run_id):
+        """Copy an agent run's session transcripts next to the state file.
+
+        Every attempt is kept, also a failed one: they are the record of what
+        the agent ran. Returns the number of files copied (0, with a log line,
+        when the run home is not mounted here).
+        """
+        home = Path(agent_runner.SPAWNER_STATE) / "runs" / run_id / "home"
+        source = home / ".claude" / "projects"
+        target = self.wt_root / f"{self.stem}.transcripts" / run_id
+        count = 0
+        try:
+            for path in sorted(source.rglob("*.jsonl")):
+                dest = target / path.relative_to(source)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, dest)
+                count += 1
+        except OSError as e:
+            self.log(f"transcripts of {run_id} not copied: {e}")
+        if not count:
+            self.log(f"no transcripts of {run_id} under {source}")
+        return count
+
     def step_collect(self):
+        if self.seeded:
+            return
         strays = export_instance.collect(self.wt, self.exports)
         if strays:
             raise Failed("the agent wrote outside its paths: " + ", ".join(strays))
@@ -314,10 +358,20 @@ class Version:
             return 1
         return 2 * len(yaml.safe_load(path.read_text()))
 
+    def design_points(self):
+        """The most points the sweep's design holds: the instance's
+        `sobol_points`, or one for a rule without a ranged param (the seed of
+        a single-idea instance), whose design is a single point."""
+        rule = self.wt / self.rule
+        if rule.exists():
+            sweep = (yaml.safe_load(rule.read_text()) or {}).get("sweep_config") or {}
+            if not any(isinstance(spec, list) for spec in sweep.values()):
+                return 1
+        return self.conf.get("sobol_points", 256)
+
     def parts(self):
-        sobol = self.conf.get("sobol_points", 256)
         per_point = self.pairings() * self.data["episodes"]["sweep"]
-        n = -(-sobol * per_point // MAX_JOB_EPISODES)
+        n = -(-self.design_points() * per_point // MAX_JOB_EPISODES)
         if n == 1:
             return [f"{self.stem}_sweep"]
         return [f"{self.stem}_sweep_p{k}of{n}" for k in range(1, n + 1)]

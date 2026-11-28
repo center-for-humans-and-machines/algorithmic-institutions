@@ -247,3 +247,39 @@ def test_other_exports_hold_no_diff_game_doc(layout):
     wt, main, exports = layout
     _write(wt, "docs/reports/basics_exp2_diff.md", "the lead over ah\n")
     assert "docs/reports/basics_exp2_diff.md" not in _files(Path(ex.build(wt, main, exports)))
+
+
+def test_a_single_idea_export_has_its_agent_and_test_data(layout):
+    """Mode single_idea: its own agent definition, and scrambled copies of the
+    data files under test_data/, the earlier versions' sweeps included."""
+    import pandas as pd
+
+    wt, main, exports = layout
+    _write(wt, ".claude/policy_finder.json", json.dumps(
+        {"name": NAME, "version": 2, "rule_name": f"{NAME}-v2", "mode": "single_idea",
+         "base_version": NAME}))
+    _write(wt, ".claude/agents/policy-finder-single-idea.md",
+           "---\nname: policy-finder-single-idea\nmodel: claude-opus-5-5\n---\none idea\n")
+    _write(wt, f"plots/simulation/policy_finder/{NAME}_sweep/sweep.json",
+           json.dumps({"points": [{"pool": 1.5}, {"pool": 2.5}, {"pool": 3.5}]}))
+    table = pd.DataFrame({"episode": [0] * 4 + [1] * 4, "round_number": [0, 0, 1, 1] * 2,
+                          "contribution": range(8)})
+    table.to_csv(main / "experiments/2group_8agent_50ep.csv", index=False)
+    table.to_parquet(
+        main / "plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/per_round.parquet")
+    export = Path(ex.build(wt, main, exports))
+    agent = (export / ".claude/agents/policy-finder.md").read_text()
+    assert "name: policy-finder\n" in agent and "one idea" in agent
+    assert not (export / ".claude/agents/policy-finder-single-idea.md").exists()
+    copies = [f for f in _files(export) if f.startswith("test_data/")]
+    assert copies == [
+        "test_data/experiments/2group_8agent_50ep.csv",
+        "test_data/plots/simulation/25_LEVIN_run1_ah_zero_pairings_batched/per_round.parquet",
+        f"test_data/plots/simulation/policy_finder/{NAME}_sweep/sweep.json",
+    ]
+
+
+def test_other_exports_hold_no_test_data(layout):
+    wt, main, exports = layout
+    export = Path(ex.build(wt, main, exports))
+    assert not (export / "test_data").exists()

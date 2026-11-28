@@ -230,11 +230,45 @@ def profiles(gp, ax, peak):
     return out
 
 
+def unfitted(sweep, rule, rule_path):
+    """landscapes.json for a rule without a ranged param: nothing to fit.
+
+    Its design is one point (no params, or every param fixed), so the "peak"
+    is that point as measured: its params, its pool and the pool's standard
+    error. The keys are those of a fit; `params` and `profiles` are empty and
+    the fit's own numbers are null.
+    """
+    pts = sweep["points"]
+    best = max(pts, key=lambda p: p["pool"])
+    ses = [p["pool_se"] for p in pts if p["pool_se"] is not None]
+    return {
+        "rule": str(rule_path),
+        "fit": {
+            "kernel": None,
+            "n_points": len(pts),
+            "median_se": float(np.median(ses)) if ses else None,
+            "extra_noise_sd": None,
+            "fit_rmse": None,
+        },
+        "params": {},
+        "peak": {
+            "params": dict(rule["sweep_config"]),
+            "mean": best["pool"],
+            "sd": best["pool_se"],
+            "at_edge": [],
+        },
+        "points": [
+            {"name": p["name"], "mean": p["pool"], "sd": p["pool_se"]} for p in pts
+        ],
+        "profiles": {},
+    }
+
+
 def landscapes(sweep, rule, rule_path, seed=0):
     """Fit the sweep's points; return the landscapes.json content."""
     ax = axes(rule)
     if not ax:
-        raise ValueError(f"{rule_path}: no ranged params to fit")
+        return unfitted(sweep, rule, rule_path)
     names = [a["name"] for a in ax]
     pts = sweep["points"]
     values = np.array([[p["params"][n] for n in names] for p in pts], dtype=float)
@@ -333,6 +367,10 @@ def main():
     out.write_text(json.dumps(result, indent=2) + "\n")
 
     peak, fit = result["peak"], result["fit"]
+    if not result["params"]:
+        print(f"wrote {out}")
+        print(f"  no ranged param, nothing to fit: {peak['params']} at {peak['mean']:.1f}")
+        return
     best = max(sweep["points"], key=lambda p: p["pool"])
     at_best = next(p for p in result["points"] if p["name"] == best["name"])
     print(f"wrote {out}")

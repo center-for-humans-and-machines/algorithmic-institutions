@@ -373,3 +373,108 @@ def test_no_upper_param_bound(repo):
     (wt / f"configs/managers/rule_based/{NAME}-v2.yml").write_text(rule)
     result = check(main)
     assert result.returncode == 0, result.stderr
+
+
+# -- single-idea instances: the Change section ---------------------------------
+
+CHANGE = """
+## Change
+
+- Base version: probe1
+- Operation: add
+- Idea: stop punishing after a set round
+- Justification: paper
+- Paper: Fehr, E. and Gaechter, S. (2000). Cooperation and Punishment in Public Goods Experiments. American Economic Review.
+- Claim: punishment raises contributions in later rounds
+- Analysis: none
+- Expected: a higher pool, since late punishment cannot repay itself
+"""
+
+
+def _single_idea_v2(main, wt, change):
+    _version_1_done(main, wt)
+    _version_2(wt, mode="single_idea", base_version=NAME)
+    write_v2(wt)
+    notes = wt / f"notes/policy_finder/{NAME}-v2.md"
+    notes.write_text(NOTES_TEXT + change)
+
+
+def test_single_idea_change_passes(repo):
+    main, wt = repo
+    _single_idea_v2(main, wt, CHANGE)
+    result = check(main)
+    assert result.returncode == 0, result.stderr
+
+
+def test_single_idea_analysis_passes(repo):
+    main, wt = repo
+    change = (
+        CHANGE.replace("Justification: paper", "Justification: analysis")
+        .replace("- Paper: Fehr", "- Paper: none\n- Was: Fehr")
+        .replace("Analysis: none", "Analysis: slope.py, return per point, 0.26")
+    )
+    _single_idea_v2(main, wt, change)
+    result = check(main)
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "old, new, reason",
+    [
+        ("## Change\n", "", "needs the section '## Change'"),
+        ("Base version: probe1", "Base version: probe1-v3", "must be probe1"),
+        ("Operation: add", "Operation: rewrite", "add, remove or modify"),
+        ("Idea: stop punishing after a set round", "Idea:", "'- Idea:' is empty"),
+        ("Justification: paper", "Justification: intuition", "paper, analysis or both"),
+        ("Justification: paper", "Justification: both", "needs '- Analysis:'"),
+        ("Claim: punishment raises contributions in later rounds", "Claim: none",
+         "needs '- Paper:' and '- Claim:'"),
+        ("Justification: paper", "Justification: analysis", "needs '- Analysis:'"),
+    ],
+)
+def test_single_idea_change_rejected(repo, old, new, reason):
+    main, wt = repo
+    assert old in CHANGE
+    _single_idea_v2(main, wt, CHANGE.replace(old, new))
+    result = check(main)
+    assert result.returncode == 1
+    assert reason in result.stderr
+
+
+def test_single_idea_both_passes(repo):
+    main, wt = repo
+    change = CHANGE.replace("Justification: paper", "Justification: both").replace(
+        "Analysis: none", "Analysis: slope.py, return per point, 0.26"
+    )
+    _single_idea_v2(main, wt, change)
+    result = check(main)
+    assert result.returncode == 0, result.stderr
+
+
+def test_free_instance_needs_no_change_section(repo):
+    main, wt = repo
+    _version_1_done(main, wt)
+    _version_2(wt)
+    write_v2(wt)
+    assert check(main).returncode == 0
+
+
+def test_base_version_is_the_best_final(tmp_path):
+    """instance_settings: the earlier version with the highest final pool."""
+    sys.path.insert(0, str(CHECK.parent))
+    import instance_settings
+
+    def final(stem, pool):
+        path = tmp_path / f"plots/simulation/policy_finder/{stem}_sweep/final"
+        path.mkdir(parents=True)
+        points = [{"name": "gp", "pool": pool}, {"name": "other", "pool": 99.0}]
+        (path / "sweep.json").write_text(
+            json.dumps({"best_name": "gp", "points": points})
+        )
+
+    assert instance_settings.base_version(str(tmp_path), "x", 2) == "x"
+    final("x", 60.0)
+    final("x-v2", 64.0)
+    final("x-v4", 64.0)  # x-v3 has no final; a tie goes to the earlier
+    assert instance_settings.base_version(str(tmp_path), "x", 5) == "x-v2"
+    assert instance_settings.base_version(str(tmp_path), "x", 2) == "x"

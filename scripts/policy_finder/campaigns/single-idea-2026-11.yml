@@ -1,0 +1,27 @@
+# The policy finder, one idea per version (.claude/agents/policy-finder-single-idea.md):
+# experiment 2's game against ah. Every lineage starts from the seed rule
+# p = 0, never punishing (scripts/policy_finder/seeds/single_idea.yml), scored
+# without an agent: it has no parameters, so its sweep is a single point. Each later version changes one idea of its lineage's
+# best version so far and justifies it by a paper cited from memory (no network;
+# references are checked afterwards), by one metric from the data, or by both.
+# Five independent chains of fixed length: top_k equals n_fresh, so no chain is
+# dropped, and each runs the seed plus 20 changes. A version that fails its
+# check or lowers the result still takes its place in the chain.
+# No version declares more than 4 parameters (the seed has none): the earlier
+# campaigns' best rules were carried by 2 to 4 of theirs.
+# Run: PF_RUNS=... PF_BASE=<a branch with this mode> \
+#      python scripts/policy_finder/campaign.py run <this file>
+prefix: pf-20261126
+setting: exp2
+mode: single_idea
+n_fresh: 5
+generations: 20
+top_k: 5
+min_params: 0
+max_params: 0
+iterate_max_params: 4
+sobol_points: 256
+parallel: 5
+error_retries: 3
+retry_wait: 600
+summarize: null

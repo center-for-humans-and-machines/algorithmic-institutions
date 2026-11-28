@@ -4,6 +4,7 @@
 # Usage:
 #   scripts/policy_finder/new_instance.sh <name> [--max-params N] [--min-params N]
 #       [--sobol-points N] [--prompt TEXT] [--setting exp2|exp1|exp2_multi|exp2_diff]
+#       [--mode free|single_idea]
 #   scripts/policy_finder/new_instance.sh --iterate-on <name> [--after-failure]
 #       [the same options]
 #
@@ -26,6 +27,11 @@
 # (a power of two, default 256) sets the size of the sweep's design, which
 # validate-rule, check_instance.sh and the pipeline read from the instance.
 # --prompt replaces the agent's prompt (default: design your rule).
+# --mode single_idea (setting exp2 only) makes version 1 the seed rule of
+# scripts/policy_finder/seeds/, written without an agent, and every later
+# version one changed idea of the instance's best earlier version, with the
+# agent of .claude/agents/policy-finder-single-idea.md; an instance keeps its
+# mode across versions.
 #
 # --iterate-on <name> starts the next version of an existing instance on its
 # own branch and worktree instead: the worktree must be clean and its current
@@ -48,7 +54,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '4,7p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '4,8p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
 }
 
@@ -58,6 +64,7 @@ MIN_PARAMS=1
 SOBOL_POINTS=256
 SETTING=exp2
 SETTING_GIVEN=0
+MODE=free
 PROMPT=""
 ITERATE=0
 PARAMS_GIVEN=0
@@ -71,6 +78,7 @@ while [[ $# -gt 0 ]]; do
         --sobol-points) SOBOL_POINTS="${2:-}"; SOBOL_GIVEN=1; shift 2 ;;
         --prompt) PROMPT="${2:-}"; shift 2 ;;
         --setting) SETTING="${2:-}"; SETTING_GIVEN=1; shift 2 ;;
+        --mode) MODE="${2:-}"; shift 2 ;;
         --after-failure) AFTER_FAILURE=1; shift ;;
         -h|--help) usage ;;
         -*) echo "unknown option: $1" >&2; usage ;;
@@ -84,8 +92,8 @@ if [[ ! "$NAME" =~ ^[a-z0-9][a-z0-9_-]*$ ]]; then
     exit 2
 fi
 for n in "$MAX_PARAMS" "$MIN_PARAMS"; do
-    if [[ ! "$n" =~ ^[1-9][0-9]*$ ]]; then
-        echo "--max-params and --min-params must be positive integers: $n" >&2
+    if [[ ! "$n" =~ ^[0-9]+$ ]]; then
+        echo "--max-params and --min-params must be integers from 0: $n" >&2
         exit 2
     fi
 done
@@ -120,13 +128,15 @@ if [[ "$ITERATE" == 1 ]]; then
         || { echo "no instance $NAME: no worktree at $WT" >&2; exit 1; }
     WT="$(cd "$WT" && pwd -P)"
     git -C "$MAIN" worktree lock --reason "policy finder: outside the command server's view" "$WT" 2>/dev/null || true
-    { read -r PREV_VERSION; read -r PREV_STEM; read -r PREV_SOBOL; read -r PREV_SETTING; } < <(
+    { read -r PREV_VERSION; read -r PREV_STEM; read -r PREV_SOBOL; read -r PREV_SETTING
+      read -r MODE; } < <(
         python3 -c 'import json, sys
 c = json.load(open(sys.argv[1]))
 print(c.get("version", 1), c.get("rule_name") or sys.argv[2],
-      c.get("sobol_points", 256), c.get("setting", "exp2"), sep="\n")' "$WT/.claude/policy_finder.json" "$NAME"
+      c.get("sobol_points", 256), c.get("setting", "exp2"), c.get("mode", "free"),
+      sep="\n")' "$WT/.claude/policy_finder.json" "$NAME"
     )
-    # an instance keeps its game across versions
+    # an instance keeps its game and its mode across versions
     if [[ "$SETTING_GIVEN" == 1 && "$SETTING" != "$PREV_SETTING" ]]; then
         echo "$NAME is a $PREV_SETTING instance: --setting $SETTING does not apply" >&2
         exit 2
@@ -181,11 +191,13 @@ grep -v '^#' "$MAIN/scripts/policy_finder/instance_paths" \
 "$PYTHON" "$MAIN/scripts/policy_finder/instance_settings.py" "$WT" "$NAME" \
     --version "$VERSION" --start-commit "$(git -C "$WT" rev-parse HEAD)" \
     --min-params "$MIN_PARAMS" --max-params "$MAX_PARAMS" \
-    --sobol-points "$SOBOL_POINTS" --python "$PYTHON" --setting "$SETTING"
+    --sobol-points "$SOBOL_POINTS" --python "$PYTHON" --setting "$SETTING" \
+    --mode "$MODE"
 STEM="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["rule_name"])' \
     "$WT/.claude/policy_finder.json")"
 
 echo "instance $NAME, version $VERSION ($STEM): branch $BRANCH, worktree $WT," \
-    "params $MIN_PARAMS-$MAX_PARAMS, $SOBOL_POINTS Sobol points, setting $SETTING"
+    "params $MIN_PARAMS-$MAX_PARAMS, $SOBOL_POINTS Sobol points, setting $SETTING," \
+    "mode $MODE"
 exec "$PYTHON" "$MAIN/scripts/policy_finder/pipeline.py" run "$NAME" \
     ${PROMPT:+--prompt "$PROMPT"}
