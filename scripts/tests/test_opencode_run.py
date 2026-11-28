@@ -116,6 +116,13 @@ FAKE = r'''#!/usr/bin/env python3
 import json, os, sys, time
 mode = os.environ["FAKE_MODE"]
 key = os.environ.get("OPENROUTER_API_KEY", "")
+if sys.argv[1] == "run" and mode == "replay":  # a real run's events, exit 1
+    for line in open(os.environ["FAKE_EVENTS"]):
+        print(json.dumps({**json.loads(line), "sessionID": "ses_1"}), flush=True)
+    sys.exit(1)
+if sys.argv[1] == "export" and mode == "replay":
+    print(open(os.environ["FAKE_SESSION"]).read())
+    sys.exit(0)
 if sys.argv[1] == "run":
     print(json.dumps({"type": "step_start", "sessionID": "ses_1", "text": key}), flush=True)
     if mode == "hang":
@@ -405,37 +412,45 @@ def test_ended_on_marks_an_interim_text():
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
-def overflow_run(name, tmp_path, drop_compactions=False, extra_error=None):
-    """A real run's events and session (trimmed): its verdict inputs."""
+def overflow_run(name, tmp_path, drop_compactions=False):
+    """A real run's events and session (trimmed), and the runner's verdict
+    inputs from them."""
     data = json.loads((FIXTURES / f"opencode_overflow_recovered_{name}.json").read_text())
     events, session = data["events"], data["session"]
     if drop_compactions:
         session["messages"] = [m for m in session["messages"]
                                if not oc._compaction_summary(m["info"])]
-    if extra_error:
-        events.append({"type": "error", "timestamp": 1, "error": {"name": extra_error}})
     path = tmp_path / "events.jsonl"
     path.write_text("".join(json.dumps(e) + "\n" for e in events))
-    summary = oc.summarize(session)
-    event_error = oc.last_event_error(path)
-    recovered = oc.recovered_overflows(oc.error_events(path), session, summary, event_error)
-    why = oc.failures(summary, 1, "", "local/Qwen/Qwen3-Coder-Next", event_error,
-                      recovered=recovered)
-    return recovered, why
+    return oc.overflow_attempt(oc.error_events(path), session)
 
 
 @pytest.mark.parametrize("name", ["check", "qwen"])
-def test_a_recovered_context_overflow_is_a_success(name, tmp_path):
+def test_an_overflow_is_recorded_with_whether_opencode_recovered(name, tmp_path):
     # 993218's compaction check and pfq-exp1-20261127-9-v6's first run: the
-    # server refused a request, OpenCode compacted, finished with a report,
-    # and exited 1
-    recovered, why = overflow_run(name, tmp_path)
-    assert recovered == 1 and why == []
+    # server refused a request, OpenCode compacted and went on
+    assert overflow_run(name, tmp_path) == {"overflows": 1, "recovered": True}
+    assert overflow_run(name, tmp_path, drop_compactions=True) == {
+        "overflows": 1, "recovered": False}
 
 
 @pytest.mark.parametrize("name", ["check", "qwen"])
-def test_an_overflow_without_a_compaction_or_with_another_error_fails(name, tmp_path):
-    recovered, why = overflow_run(name, tmp_path, drop_compactions=True)
-    assert recovered == 0 and "OpenCode exited with 1" in why
-    recovered, why = overflow_run(name, tmp_path, extra_error="APIError")
-    assert recovered == 0 and "OpenCode exited with 1" in why
+def test_an_overflow_is_a_failed_attempt_with_its_reason(name, fake, capsys, monkeypatch):
+    # the whole runner (main), a fake OpenCode replaying the real run
+    run, out, repo, data = fake
+    fixture = json.loads((FIXTURES / f"opencode_overflow_recovered_{name}.json").read_text())
+    events = out.parent / "replay_events.jsonl"
+    events.write_text("".join(json.dumps(e) + "\n" for e in fixture["events"]))
+    session = out.parent / "replay_session.json"
+    model = fixture["session"]["messages"][1]["info"]
+    (repo / ".opencode/opencode.json").write_text(json.dumps(
+        {"model": f"{model['providerID']}/{model['modelID']}"}))
+    session.write_text(json.dumps(fixture["session"]))
+    monkeypatch.setenv("FAKE_EVENTS", str(events))
+    monkeypatch.setenv("FAKE_SESSION", str(session))
+    code = run("replay")
+    summary = _summary(capsys)
+    assert code == 1 and summary["is_error"]
+    assert summary["overflow"] == {"overflows": 1, "recovered": True}
+    assert any("refused a request past its context" in f and "recovered" in f
+               for f in summary["failures"])
