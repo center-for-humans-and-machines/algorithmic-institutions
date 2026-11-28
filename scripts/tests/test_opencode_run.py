@@ -513,7 +513,7 @@ def test_a_loop_of_failing_calls_trips_at_the_limit(run, tool, error):
     events = loop_events(run)
     i, tripped = first_trip(events)
     assert tripped["tool"] == tool and error in tripped["error"]
-    assert tripped["repeats"] == oc.LOOP_LIMIT
+    assert tripped["repeats"] == oc.LOOP_LIMIT and tripped["steps"] == oc.LOOP_LIMIT
     calls = [e for e in events[: i + 1] if e["type"] == "tool_use"]
     assert len(calls) < len([e for e in events if e["type"] == "tool_use"]) - 300
 
@@ -526,12 +526,15 @@ def test_retries_that_recover_and_repeated_successes_do_not_trip():
                                         "state": {"status": "error", "error": "e"}}}
     other = {"type": "tool_use", "part": {"tool": "write",
                                           "state": {"status": "error", "error": "f"}}}
-    text = {"type": "text"}
+    text, step = {"type": "text"}, {"type": "step_start"}
     assert first_trip([ok] * 100) == (None, None)
-    assert first_trip(([bad, text] * 19 + [ok]) * 5) == (None, None)
-    assert first_trip(([bad] * 19 + [other]) * 5) == (None, None)
-    assert first_trip([bad, text] * 20)[1]["repeats"] == 20  # text does not reset
-    assert first_trip([bad] * 100, limit=0) == (None, None)
+    assert first_trip(([step, bad, text] * 19 + [ok]) * 5) == (None, None)
+    assert first_trip(([step, bad] * 19 + [other]) * 5) == (None, None)
+    assert first_trip([step, bad, text] * 20)[1]["repeats"] == 20  # text: no reset
+    assert first_trip([step, bad] * 100, limit=0) == (None, None)
+    # one step's 25 parallel calls failing alike, then a success: no loop
+    assert first_trip([step] + [bad] * 25 + [step, ok]) == (None, None)
+    assert first_trip([step] + [bad] * 25 + [step, bad, step, bad])[1]["steps"] == 3
 
 
 def test_a_looping_run_is_stopped_and_fails_with_its_reason(fake, capsys, monkeypatch):
@@ -547,6 +550,25 @@ def test_a_looping_run_is_stopped_and_fails_with_its_reason(fake, capsys, monkey
     assert time.monotonic() - started < 30  # stopped, not at the time limit
     assert code == 128 + signal.SIGTERM and not s.get("timed_out")
     assert s["tool_loop"]["tool"] == "write" and s["tool_loop"]["repeats"] == 20
+    assert s["tool_loop"]["steps"] == 20
     assert any(f.startswith("stopped in a loop: 20 consecutive `write` calls")
                for f in s["failures"])
     _clean(out, repo, data)
+
+
+def test_a_malformed_event_is_skipped_and_the_watch_goes_on(tmp_path):
+    bad = {"type": "tool_use", "part": {"tool": "write",
+                                        "state": {"status": "error", "error": "e"}}}
+    lines = [{"type": "tool_use", "part": "x"},
+             {"type": "tool_use", "part": {"tool": "invalid", "state": {"input": "s"}}},
+             *[e for _ in range(20) for e in ({"type": "step_start"}, bad)]]
+    events = tmp_path / "events.jsonl"
+    script = ("import json, sys, time\n"
+              f"lines = {json.dumps([json.dumps(e) for e in lines])}\n"
+              "for line in lines:\n    print(line, flush=True)\n"
+              "time.sleep(60)\n")
+    watch = oc.LoopWatch(20)
+    with open(events, "w") as out:
+        code = oc.run_watched([sys.executable, "-c", script], 30, str(events), watch,
+                              poll=0.2, stdout=out)
+    assert code == 128 + signal.SIGTERM and watch.tripped["repeats"] == 20

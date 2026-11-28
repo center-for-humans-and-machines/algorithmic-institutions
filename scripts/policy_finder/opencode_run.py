@@ -90,6 +90,9 @@ DATA = os.path.expanduser("~/.local/share/opencode")
 #: it compares the last 3 tool calls of one assistant message, with identical
 #: input, and these agents make one call per message, its input varying.
 LOOP_LIMIT = 20
+#: ... spread over at least this many steps: one step's parallel calls that
+#: fail alike (25 reads denied with the same text) are not a loop
+LOOP_MIN_STEPS = 3
 
 
 class LoopWatch:
@@ -100,14 +103,18 @@ class LoopWatch:
     same error text. A call with invalid arguments arrives as status `error`.
     Any other tool result (a success, another error) starts the count anew;
     text and steps between calls do not count.
-    `tripped`: {tool, error, repeats} once the count reaches `limit` (0: never).
+    `tripped`: {tool, error, repeats, steps} once the count reaches `limit`
+    (0: never) over at least LOOP_MIN_STEPS steps.
     """
 
     def __init__(self, limit):
         self.limit, self.key, self.count, self.tripped = limit, None, 0, None
+        self.step, self.steps = 0, set()
 
     def feed(self, event):
         """Count one event; the trip record once the limit is reached."""
+        if isinstance(event, dict) and event.get("type") == "step_start":
+            self.step += 1
         if not isinstance(event, dict) or event.get("type") != "tool_use":
             return self.tripped
         part = event.get("part") or {}
@@ -120,13 +127,17 @@ class LoopWatch:
         else:
             key = None
         if key is None:
-            self.key, self.count = None, 0
+            self.key, self.count, self.steps = None, 0, set()
         else:
-            self.count = self.count + 1 if key == self.key else 1
+            if key != self.key:
+                self.count, self.steps = 0, set()
+            self.count += 1
+            self.steps.add(self.step)
             self.key = key
-        if self.limit and self.count >= self.limit and not self.tripped:
+        if (self.limit and self.count >= self.limit
+                and len(self.steps) >= LOOP_MIN_STEPS and not self.tripped):
             self.tripped = {"tool": self.key[0], "error": self.key[1][:500],
-                            "repeats": self.count}
+                            "repeats": self.count, "steps": len(self.steps)}
         return self.tripped
 
 
@@ -558,7 +569,7 @@ def run_watched(argv, timeout, events_path, watch, poll=2.0, grace=15.0, **kwarg
         for line in lines:
             try:
                 watch.feed(json.loads(line))
-            except ValueError:
+            except Exception:  # noqa: BLE001 - a malformed event is ignored
                 continue
         if watch.tripped:
             _killpg(proc.pid, signal.SIGTERM)
