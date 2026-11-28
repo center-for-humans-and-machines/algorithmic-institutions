@@ -219,6 +219,10 @@ CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
 echo "model $MODEL@$MODEL_REV${MODEL_PROFILE:+ (profile $MODEL_PROFILE)}, image $VLLM_SIF"
 wait_ready "${READY_TIMEOUT:-1800}" || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
+# the served model and its tag, for campaign files that name them
+# (model: "{env:PF_LLM_MODEL}", prefix "...{env:PF_MODEL_TAG}...")
+export PF_LLM_MODEL="$MODEL" PF_MODEL_TAG="$MODEL_TAG"
+echo "campaign files' {env:PF_LLM_MODEL} = $MODEL, {env:PF_MODEL_TAG} = $MODEL_TAG"
 # the agents' OpenCode config takes the served context from here
 # (export_instance.local_model), so it compacts before the server refuses
 export PF_LLM_CONTEXT="$MAX_MODEL_LEN"

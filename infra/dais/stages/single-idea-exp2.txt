@@ -1,0 +1,13 @@
+# Step 2, single-idea mode, experiment 2 only (runnable now; exp1 needs its
+# single-idea agent first, see single-idea.txt), for the model of the job's
+# MODEL_PROFILE (the campaign files take it from the job). Give each model's
+# job its own PF_RUNS. Each stage only if the one before succeeded:
+# 1. smoke: 2 chains of the seed and 2 changes, smoke size;
+# 2. load: the real width (20 chains, 20 agents at once) at smoke size; it
+#    passes with at least 15 of the 20 changes scored, no expired, no
+#    endpoint run and no run stopped at a limit (finished/15+nolimits);
+# 3. the real campaign, 20 chains x 20 changes, re-evaluated when done
+#    (15 slices, as the exp2 free-mode campaigns).
+run      scored               20 20 scripts/policy_finder/campaigns/dais-single-smoke-exp2.yml
+run      finished/15+nolimits 20 20 scripts/policy_finder/campaigns/dais-single-load-exp2.yml:4
+run      finished default default scripts/policy_finder/campaigns/dais-single-exp2.yml:15

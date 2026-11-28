@@ -1,0 +1,23 @@
+# Load test before dais-single-exp1.yml, at its width (20 chains, the seed
+# and one change each: 20 agents at once per experiment) at smoke size
+# (stage line: 20 20), then re-evaluated in a few slices. The gate counts
+# the change, not the seed (campaign_check.py: the first agent generation).
+# NOT RUNNABLE YET: single-idea mode has an agent for exp2 only
+# (instance_settings.py refuses --setting exp1 with --mode single_idea); it
+# needs an exp1 single-idea agent definition first (PR description).
+prefix: "pfsil-exp1-{env:PF_MODEL_TAG}"
+setting: exp1
+mode: single_idea
+n_fresh: 20
+generations: 1
+top_k: 20
+min_params: 0
+max_params: 0
+iterate_max_params: 4
+sobol_points: 16
+parallel: 20
+error_retries: 1
+retry_wait: 30
+harness: opencode
+model: "{env:PF_LLM_MODEL}"
+base_url: "{env:PF_LLM_BASE_URL}"

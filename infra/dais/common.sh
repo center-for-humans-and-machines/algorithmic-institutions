@@ -46,6 +46,14 @@ AGENT_SIF_SHA256="4d3ba8cc170616c804184177ec969227ff9d014f084bcce1ba057ab485c328
 # Weights: Hugging Face cache layout under HF_HOME, pinned revision.
 export HF_HOME="${HF_HOME:-/dais/fs/scratch/$USER/models}"
 MODEL="${MODEL:-Qwen/Qwen3-Coder-Next}"
+# a short name of the model for campaign prefixes (campaign.py: a file with
+# prefix "...{env:PF_MODEL_TAG}..." serves every model): a profile's own, or
+# the profile's name, lower case, with every character but a-z, 0-9 and -
+# made a dash
+if [ -z "${MODEL_TAG:-}" ]; then
+  MODEL_TAG=$(printf '%s' "${MODEL_PROFILE:-qwen3-coder-next}" | tr 'A-Z' 'a-z' \
+    | tr -c 'a-z0-9-' '-')
+fi
 MODEL_REV="${MODEL_REV:-a7fbcb5c0e12d62a448eaa0e260346bf5dcc0feb}"
 TOOL_PARSER="${TOOL_PARSER:-qwen3_xml}"
 # a text the server's rendered chat prompt must contain (check_prompt; empty:

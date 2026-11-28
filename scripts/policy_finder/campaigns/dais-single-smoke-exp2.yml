@@ -1,0 +1,20 @@
+# Smoke campaign of single-idea mode on DAIS (first stage of
+# infra/dais/stages/single-idea*.txt): 2 chains of the seed and 2 changes
+# each, at smoke size (stage line: 20 20). Any served model (see
+# dais-single-exp2.yml).
+prefix: "pfsis-exp2-{env:PF_MODEL_TAG}"
+setting: exp2
+mode: single_idea
+n_fresh: 2
+generations: 2
+top_k: 2
+min_params: 0
+max_params: 0
+iterate_max_params: 4
+sobol_points: 16
+parallel: 2
+error_retries: 1
+retry_wait: 30
+harness: opencode
+model: "{env:PF_LLM_MODEL}"
+base_url: "{env:PF_LLM_BASE_URL}"

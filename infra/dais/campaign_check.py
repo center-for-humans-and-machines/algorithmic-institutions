@@ -79,7 +79,8 @@ def main():
     ap.add_argument("target")
     ap.add_argument("--expect", choices=("scored", "finished"), default="scored")
     ap.add_argument("--min-first-scored", type=int,
-                    help="at least this many first-generation versions scored")
+                    help="at least this many versions of the first agent generation"
+                    " scored (single-idea mode: the second, after the seed)")
     ap.add_argument("--no-expired", action="store_true",
                     help="no agent run may have expired (its time limit), and none "
                     "may have failed on the endpoint (the load test)")
@@ -102,7 +103,11 @@ def main():
             bad.append(f"{sum(bool(g.get('finished')) for g in gens)} of {want}"
                        " generations finished")
         members = [(m["name"], m["version"]) for g in gens for m in g["members"]]
-        first = {(m["name"], m["version"]) for m in (gens[0]["members"] if gens else [])}
+        # the first generation of agent versions: in single-idea mode the
+        # first one is the seed, written without an agent
+        lead = 1 if c.settings.get("mode") == "single_idea" else 0
+        first = {(m["name"], m["version"])
+                 for m in (gens[lead]["members"] if len(gens) > lead else [])}
     else:
         conf = json.loads((wt_root / args.target / ".claude/policy_finder.json").read_text())
         members = [(args.target, conf.get("version", 1))]

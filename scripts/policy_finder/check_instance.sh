@@ -19,12 +19,13 @@
 # max_params (null: no upper bound) on its sobol_points design, run with the
 # instance's python. Prints what is wrong otherwise.
 # A single-idea instance (the instance file's `mode`, new_instance.sh --mode)
-# also needs, from version 2 on, the notes' last section `## Change` with the
-# lines `- Base version:` (the instance's `base_version`), `- Operation:`
-# (add, remove or modify), `- Idea:`, `- Justification:` (paper, analysis or
-# both) and, filled, `- Paper:` and `- Claim:` under paper, `- Analysis:`
-# under analysis, all three under both. Whether one idea changed, and whether the paper exists, is not
-# checked here.
+# also needs, from version 2 on, a section `## Change` after the
+# Justification that states one change and its justification
+# (change_note.py): the instance's `base_version`, one operation (add,
+# remove or modify) and one idea, and a reference (`- Paper:`, a title and an
+# author are enough) or an analysis (`- Analysis:`), in any of the layouts
+# the agents write. Whether one idea changed, and whether the paper exists,
+# is not checked here.
 # --commit then commits the write paths on the instance's branch, since the
 # agent has no git. PF_BASE, PF_RUNS and PF_WORKTREE_ROOT as in
 # new_instance.sh; PF_PYTHON overrides the instance's python.
@@ -129,40 +130,14 @@ if [[ "$MODE" == single_idea && "$VERSION" -gt 1 ]]; then
         echo "FAIL: $NOTES needs the section '## Change', after the Justification" >&2
         exit 1
     fi
-    change="$(tail -n "+$((line + 1))" "$WT/$NOTES")"
-    # the value of a `- <label>: <value>` line of the section, trimmed
-    field() {
-        printf '%s\n' "$change" | sed -n "s/^- $1:[[:space:]]*//p" | head -1 \
-            | sed 's/[[:space:]]*$//'
-    }
-    filled() { [[ -n "$1" && "$1" != none && "$1" != "<"* ]]; }
-    if [[ "$(field "Base version")" != "$BASE_VERSION" ]]; then
-        echo "FAIL: $NOTES: '- Base version:' must be $BASE_VERSION" >&2
+    # one change and its justification, in any of the layouts the agents
+    # write (change_note.py: what it accepts and what it rejects)
+    if ! reasons="$(tail -n "+$((line + 1))" "$WT/$NOTES" \
+        | "$PY" "$(dirname "$0")/change_note.py" --base "$BASE_VERSION")"; then
+        while IFS= read -r reason; do
+            [[ -n "$reason" ]] && echo "FAIL: $NOTES: $reason" >&2
+        done <<< "$reasons"
         exit 1
-    fi
-    case "$(field Operation)" in
-        add|remove|modify) ;;
-        *) echo "FAIL: $NOTES: '- Operation:' must be add, remove or modify" >&2; exit 1 ;;
-    esac
-    filled "$(field Idea)" \
-        || { echo "FAIL: $NOTES: '- Idea:' is empty" >&2; exit 1; }
-    kind="$(field Justification)"
-    case "$kind" in
-        paper|analysis|both) ;;
-        *) echo "FAIL: $NOTES: '- Justification:' must be paper, analysis or both" >&2
-           exit 1 ;;
-    esac
-    if [[ "$kind" != analysis ]]; then
-        filled "$(field Paper)" && filled "$(field Claim)" || {
-            echo "FAIL: $NOTES: a paper justification needs '- Paper:' and '- Claim:'" >&2
-            exit 1
-        }
-    fi
-    if [[ "$kind" != paper ]]; then
-        filled "$(field Analysis)" || {
-            echo "FAIL: $NOTES: an analysis justification needs '- Analysis:'" >&2
-            exit 1
-        }
     fi
 fi
 
