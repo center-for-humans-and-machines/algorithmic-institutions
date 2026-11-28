@@ -225,6 +225,36 @@ def test_local_model_context_is_the_servers(monkeypatch):
         ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next", "base_url": "u"})
 
 
+PROFILES = sorted((Path(__file__).resolve().parents[2]
+                   / "infra/dais/model_profiles").glob("*.sh"))
+PROFILE_VARS = ("MODEL", "MODEL_REV", "VLLM_SIF", "EXPECT_VLLM_TAG", "TOOL_PARSER",
+                "REASONING_PARSER", "MAX_MODEL_LEN", "MOE_BACKEND", "SERVER_GPUS",
+                "READY_TIMEOUT")
+
+
+@pytest.mark.parametrize("profile", PROFILES, ids=lambda p: p.stem)
+def test_a_model_profile_serves_a_model_opencode_knows(profile, monkeypatch):
+    # sourced as common.sh does, with nothing set in the environment
+    out = subprocess.run(
+        ["bash", "-euc", 'PF_SCRATCH=/scratch; source "$1"; for v in "${@:2}"; do '
+         'printf "%s=%s\\n" "$v" "${!v}"; done', "-", str(profile), *PROFILE_VARS],
+        capture_output=True, text=True, check=True, env={"PATH": "/usr/bin:/bin"})
+    vals = dict(line.split("=", 1) for line in out.stdout.splitlines())
+    assert re.fullmatch(r"[0-9a-f]{40}", vals["MODEL_REV"])
+    assert vals["VLLM_SIF"].startswith("/scratch/images/")
+    assert vals["EXPECT_VLLM_TAG"].startswith("vllm/vllm-openai:v")
+    assert vals["TOOL_PARSER"] and int(vals["SERVER_GPUS"]) >= 1
+    assert int(vals["READY_TIMEOUT"]) >= 1800
+    # the served name has the model card's settings, and the served context
+    # leaves OpenCode room to work below its compaction point
+    assert vals["MODEL"] in ex.LOCAL_MODELS
+    monkeypatch.setenv("PF_LLM_CONTEXT", vals["MAX_MODEL_LEN"])
+    model = ex.opencode_config({"model": vals["MODEL"], "base_url": "u"})[
+        "provider"]["local"]["models"][vals["MODEL"]]
+    assert model["limit"]["context"] == int(vals["MAX_MODEL_LEN"])
+    assert model["options"]["temperature"] == 1.0
+
+
 def opencode_permission(rules, path):
     """OpenCode's verdict for an external path: the last rule that matches
     wins, `*` matching any characters (its wildcard matcher)."""

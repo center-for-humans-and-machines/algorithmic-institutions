@@ -320,6 +320,17 @@ LOCAL_MODELS = {
                     "chat_template_kwargs": {"reasoning_effort": "max"}},
         "limit": {"context": 524288, "output": 131072},
     },
+    # huggingface.co/zai-org/GLM-5.3 at revision ba32f8c1: generation_config
+    # temperature 1.0, top_p 0.95 (also the card's HLE and SWE-Marathon runs);
+    # thinking always on, reasoning_effort low/high/max in the chat template,
+    # max when unset; its agentic results ran at max with up to 64K-128K of
+    # output. 64K here: a larger output limit leaves too little of the served
+    # 262,144 (infra/dais/model_profiles/glm-5.3.sh) above the compaction margin.
+    "zai-org/GLM-5.3": {
+        "options": {"temperature": 1.0, "top_p": 0.95,
+                    "chat_template_kwargs": {"reasoning_effort": "max"}},
+        "limit": {"context": 262144, "output": 65536},
+    },
 }
 #: Tokens OpenCode keeps free before it compacts (its `compaction.reserved`),
 #: beyond the output limit: room for the tool results one step adds (one
