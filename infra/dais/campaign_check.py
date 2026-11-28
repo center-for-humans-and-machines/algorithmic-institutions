@@ -109,6 +109,7 @@ def main():
         first = set(members)
     seconds, first_scored, expired, endpoint, lost = [], 0, [], [], 0
     time_stops, output_stops, lost_to_limits, limits_seen = [], [], [], set()
+    loop_stops = []
     overflows, overflows_recovered, limit_hit, length_cut = 0, 0, 0, 0
     for name, version in members:
         stem = name if version == 1 else f"{name}-v{version}"
@@ -131,11 +132,11 @@ def main():
             if (r.get("result") or {}).get("length_stops"):
                 output_stops.append(ran)
                 stopped_here.append("output limit")
-        if (state.get("status") == "failed" and failure(state)[0] == "agent"
-                and stopped_here):
-            # all its attempts failed, one of them at a limit: rerun it with a
-            # higher cap rather than count it as the model's failure
-            lost_to_limits.append(f"{stem} ({', '.join(sorted(set(stopped_here)))})")
+            # stopped in a loop of failing tool calls (opencode_run LoopWatch):
+            # a failed attempt of the model's, not a limit
+            if (r.get("result") or {}).get("tool_loop"):
+                loop = r["result"]["tool_loop"]
+                loop_stops.append(f"{ran} ({loop.get('repeats')}x {loop.get('tool')})")
             if r.get("status") == "expired":
                 expired.append(f"{stem} {r.get('run_id')}")
             res = r.get("result") or {}
@@ -148,6 +149,11 @@ def main():
             limit_hit += bool(res.get("timed_out"))
             # a step that ran out of output tokens (failed attempts)
             length_cut += bool(res.get("length_stops"))
+        if (state.get("status") == "failed" and failure(state)[0] == "agent"
+                and stopped_here):
+            # all its attempts failed, one of them at a limit: rerun it with a
+            # higher cap rather than count it as the model's failure
+            lost_to_limits.append(f"{stem} ({', '.join(sorted(set(stopped_here)))})")
         if (name, version) in first and state.get("status") == "scored":
             first_scored += 1
         if state.get("status") == "failed":
@@ -177,12 +183,14 @@ def main():
                  "longest_share_of_opencode_limit": share and round(share, 3)})
     print(f"runs stopped at the time limit: {len(time_stops)} {time_stops}")
     print(f"runs with a step cut at the output limit: {len(output_stops)} {output_stops}")
+    print(f"runs stopped in a loop of failing tool calls: {len(loop_stops)} {loop_stops}")
     print(f"versions lost with a limit stop among their attempts (rerun them with a "
           f"higher cap): {len(lost_to_limits)} {lost_to_limits}")
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(
             {"time_limit_stops": time_stops, "output_limit_stops": output_stops,
              "versions_lost_with_limit_stops": lost_to_limits,
+             "tool_loop_stops": loop_stops,
              "agent_run_seconds": durations}, indent=1) + "\n")
     print(f"first generation: {first_scored} of {len(first)} scored; expired runs: "
           f"{len(expired)}; endpoint runs: {len(endpoint)}; lost runs: {lost}; "

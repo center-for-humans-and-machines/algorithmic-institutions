@@ -58,3 +58,23 @@ def test_limit_stops_are_reported_and_can_gate(tmp_path, monkeypatch, capsys):
     assert report["agent_run_seconds"]["limits"][0]["longest_share_of_opencode_limit"] == 1.0
     assert "OpenCode stopped at 4800 s" in capsys.readouterr().out
 
+
+def test_loop_stops_and_expired_runs_are_counted_in_a_scored_version(
+        tmp_path, monkeypatch, capsys):
+    import sys
+    wt = tmp_path / "worktrees"
+    (wt / "pfx-1/.claude").mkdir(parents=True)
+    (wt / "pfx-1/.claude/policy_finder.json").write_text(json.dumps({"version": 1}))
+    loop = {"tool": "write", "error": "SchemaError", "repeats": 20}
+    runs = [{"run_id": "apt-1", "status": "failed", "result": {"tool_loop": loop}},
+            {"run_id": "apt-2", "status": "expired", "result": {}},
+            {"run_id": "apt-3", "status": "done", "result": {"seconds": 60}}]
+    (wt / "pfx-1.state.json").write_text(json.dumps({
+        "status": "scored", "done": DONE, "data": {"agent_runs": runs}}))
+    monkeypatch.setenv("PF_RUNS", str(tmp_path))
+    out = tmp_path / "limits.json"
+    monkeypatch.setattr(sys, "argv", ["campaign_check.py", "resume", "pfx-1", "--expect",
+                                      "scored", "--no-expired", "--json-out", str(out)])
+    assert cc.main() == 1  # the expired run of a version that scored still counts
+    assert json.loads(out.read_text())["tool_loop_stops"] == ["pfx-1 apt-1 (20x write)"]
+    assert "runs stopped in a loop of failing tool calls: 1" in capsys.readouterr().out
