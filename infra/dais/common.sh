@@ -53,6 +53,15 @@ REASONING_PARSER="${REASONING_PARSER:-}"
 # the MoE kernels: triton (Qwen on H200 and B200, see campaign.slurm.sh), or
 # auto for vLLM's own choice
 MOE_BACKEND="${MOE_BACKEND:-triton}"
+# a profile's own vLLM arguments (a KV cache format, an attention backend),
+# split on spaces; every server start gets them (serve_model), before the
+# caller's (VLLM_EXTRA, a per-submission override, comes after)
+MODEL_VLLM_ARGS="${MODEL_VLLM_ARGS:-}"
+# the endpoint probe's tokens per request (probe_endpoint.py): a reasoning
+# model needs room to reason before it answers
+if [ -n "$REASONING_PARSER" ]; then
+  PROBE_MAX_TOKENS="${PROBE_MAX_TOKENS:-8192}"
+fi
 # the served context; campaign.slurm.sh passes it to the agents' OpenCode
 # config (PF_LLM_CONTEXT). Qwen3-Coder-Next: 262,144 natively. Its KV cache
 # costs about 25 KB per token over both GPUs at TP 2 (B5), so a full-length
@@ -155,6 +164,7 @@ serve_model() {
     --enable-auto-tool-choice --tool-call-parser "$TOOL_PARSER" \
     ${REASONING_PARSER:+--reasoning-parser "$REASONING_PARSER"} \
     $([ "$MOE_BACKEND" = auto ] || echo --moe-backend "$MOE_BACKEND") \
+    ${MODEL_VLLM_ARGS:-} \
     "$@" > "$log" 2>&1 &
   SERVER_PID=$!
   BG_PIDS+=("$SERVER_PID")

@@ -44,6 +44,7 @@ nvidia-smi --query-gpu=index,memory.used,memory.total --format=csv
 
 if [ "$MODE" = probe ]; then
   in_vllm_image python3 /opt/dais/probe_endpoint.py \
+    ${PROBE_MAX_TOKENS:+--max-tokens "$PROBE_MAX_TOKENS"} \
     --base "$SERVER_URL" --key-file "$SERVER_KEY_FILE" --model "$MODEL"
   exit $?
 fi

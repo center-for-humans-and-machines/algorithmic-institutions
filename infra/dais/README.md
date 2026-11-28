@@ -128,3 +128,7 @@ Which stages file a resubmission of a cut `node-2026-11-27c.txt` job needs depen
 | a smoke stage or the kill test | the last `== stage:` line is a smoke `run` or the `killtest` | `stages/node-retest-2026-11-28.txt`: the same stages with test campaigns of new prefixes (`dais-*-node2.yml`, `dais-load-exp*-2.yml`, which differ only in the prefix), then the real campaigns |
 
 A job on code older than #254 leaves no `killtest-done` marker, so `node-2026-11-27c.txt` itself cannot be resubmitted on newer code: its kill test would run again on a finished smoke campaign and fail.
+
+### Model profiles
+
+A model other than the default Qwen3-Coder-Next is one file, `infra/dais/model_profiles/<name>.sh` (selected with `MODEL_PROFILE=<name>`, sourced by `common.sh`), plus its entry in `export_instance.LOCAL_MODELS` (sampling, output limit). A profile sets: `MODEL`, `MODEL_REV` (weights, downloaded with `download_model.sh`), `VLLM_SIF` and `EXPECT_VLLM_TAG` (another vLLM image, built with `vllm_image.slurm.sh`), `TOOL_PARSER`, `REASONING_PARSER`, `MAX_MODEL_LEN`, `MOE_BACKEND` (`auto`, or a backend), `MODEL_VLLM_ARGS` (further vLLM arguments, such as a KV cache format; every server start gets them, before a submission's `VLLM_EXTRA`), `SERVER_GPUS` (tensor parallel), `READY_TIMEOUT` (seconds until the server must answer) and `PROBE_MAX_TOKENS` (the endpoint probe's tokens per request; 8192 by default when the profile names a reasoning parser). The campaign job, the serve job and the agent check take all of them; nothing else in the scripts is model-specific.

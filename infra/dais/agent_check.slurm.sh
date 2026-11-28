@@ -11,6 +11,8 @@
 #   # with the model: vLLM on the job's GPUs, then one OpenCode session in the
 #   # container that runs the network checks through its own shell tool, and
 #   # the sampling settings vLLM received (its request log)
+#   # another model: its profile (MODEL_PROFILE=<name>, infra/dais/model_profiles/),
+#   # with the GPUs it needs (--gres) and READY_TIMEOUT from the profile
 #   sbatch --export=WITH_MODEL=1 -p gpudev --qos=debug --gres=gpu:2 \
 #     --cpus-per-task=24 --mem=400000 --time=00:15:00 infra/dais/agent_check.slurm.sh
 #
@@ -58,12 +60,12 @@ done
 # the served context (MAX_MODEL_LEN, common.sh) reaches the config as in a
 # campaign; WITH_MODEL=1 MAX_MODEL_LEN=131072 makes the compaction check
 # below compact early (at 131072 - 16384 - 65536 = 49152 tokens)
-PF_LLM_CONTEXT="$MAX_MODEL_LEN" "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$PF_RUN/oc" <<'EOF'
-import json, sys
+MODEL="$MODEL" PF_LLM_CONTEXT="$MAX_MODEL_LEN" "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" - "$PF_RUN/oc" <<'EOF'
+import json, os, sys
 sys.path.insert(0, "scripts/policy_finder")
 import export_instance as ex
 out = sys.argv[1]
-conf = ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next",
+conf = ex.opencode_config({"model": os.environ["MODEL"],
                            "base_url": "{env:PF_LLM_BASE_URL}"})
 json.dump(conf, open(f"{out}/opencode.json", "w"), indent=2)
 open(f"{out}/.gitignore", "w").write(ex.OPENCODE_GITIGNORE)
@@ -167,7 +169,7 @@ if [ "${WITH_MODEL:-0}" = 1 ]; then
   NGPU=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
   SERVER_CPUS=$(python3 "$PF_HERE/cpu_slots.py" reserved 4) \
     serve_model 0.90 "$NGPU" "$PF_RUN/vllm.log" --enable-log-requests
-  if wait_ready 720; then
+  if wait_ready "${READY_TIMEOUT:-720}"; then
     LLM_URL="$SERVER_URL"; LLM_KEY=$(cat "$SERVER_KEY_FILE")
     # the resume test's kill (campaign.slurm.sh killtest) must spare the server:
     # every vLLM process descends from SERVER_PID
