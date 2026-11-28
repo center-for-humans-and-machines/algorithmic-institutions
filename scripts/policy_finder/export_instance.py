@@ -312,7 +312,7 @@ LOCAL_MODELS = {
     # its agentic results were run at the maximum reasoning effort, which the
     # server's prompt encoder takes from chat_template_kwargs (vLLM 0.34
     # tokenizers/deepseek_v41.py; thinking is on by default). The context is
-    # the server's (infra/dais/models/deepseek-v4.1-flash-1017.sh).
+    # the server's (infra/dais/model_profiles/deepseek-v4.1-flash-1017.sh).
     "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
         "options": {"temperature": 1.0, "top_p": 0.95,
                     "chat_template_kwargs": {"reasoning_effort": "max"}},

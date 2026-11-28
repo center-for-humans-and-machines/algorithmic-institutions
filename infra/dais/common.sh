@@ -20,9 +20,9 @@ PF_HERE="${SLURM_SUBMIT_DIR:-$PF_REPO}/infra/dais"
 [ -f "$PF_SCRATCH/env.sh" ] && source "$PF_SCRATCH/env.sh"
 # MODEL_PROFILE=<name>: a model other than the default Qwen3-Coder-Next, its
 # settings (weights, revision, vLLM image, parsers, context, MoE backend,
-# server GPUs) in infra/dais/models/<name>.sh; the defaults below fill the rest.
+# server GPUs) in infra/dais/model_profiles/<name>.sh; the defaults below fill the rest.
 if [ -n "${MODEL_PROFILE:-}" ]; then
-  _profile="${PF_HERE:-$(dirname "${BASH_SOURCE[0]}")}/models/$MODEL_PROFILE.sh"
+  _profile="${PF_HERE:-$(dirname "${BASH_SOURCE[0]}")}/model_profiles/$MODEL_PROFILE.sh"
   [ -f "$_profile" ] || { echo "FATAL: no model profile $_profile" >&2; exit 2; }
   # shellcheck source=/dev/null
   source "$_profile"

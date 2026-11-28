@@ -9,7 +9,7 @@
 #   cd /u/$USER/algorithmic-institutions-pf
 #   sbatch infra/dais/serve.slurm.sh
 #   sbatch --export=ALL,MODE=serve --time=08:00:00 infra/dais/serve.slurm.sh
-#   # another model: its profile (infra/dais/models/<name>.sh), the GPUs it needs
+#   # another model: its profile (infra/dais/model_profiles/<name>.sh), the GPUs it needs
 #   sbatch --export=MODEL_PROFILE=deepseek-v4.1-flash-1017,PF_SCRATCH=... \
 #     -o <log> --qos=g0004 --gres=gpu:b200:4 --cpus-per-task=48 --mem=1000000 \
 #     infra/dais/serve.slurm.sh
