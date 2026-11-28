@@ -1,0 +1,28 @@
+# Step 2 of the open-weight runs (Levin, 2026-11-28): single-idea mode
+# (.claude/agents/policy-finder-exp1-single-idea.md for experiment 1) on DAIS for any
+# served model. 20 chains of the seed (punishment = 0, no parameters) and 20
+# one-idea changes each: top_k equals n_fresh, so no chain is dropped, and a
+# version that fails or lowers the result keeps its place. Later versions
+# declare 0 to 4 parameters. One file for every model: the job names the
+# served model and its tag (infra/dais/campaign.slurm.sh: PF_LLM_MODEL,
+# PF_MODEL_TAG from the model profile), so each model's lineages have their
+# own prefix; give each model's job its own PF_RUNS (the state files are
+# named after this file). Real sizes: PF_SWEEP_EPISODES=default,
+# PF_FINAL_EPISODES=default (stage line: default default).
+prefix: "pfsi1-exp1-{env:PF_MODEL_TAG}"
+setting: exp1
+mode: single_idea
+n_fresh: 20
+generations: 20
+top_k: 20
+min_params: 0
+max_params: 0
+iterate_max_params: 4
+sobol_points: 256
+parallel: 20
+error_retries: 3
+retry_wait: 600
+summarize: null
+harness: opencode
+model: "{env:PF_LLM_MODEL}"
+base_url: "{env:PF_LLM_BASE_URL}"

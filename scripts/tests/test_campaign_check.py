@@ -63,6 +63,37 @@ def test_limit_stops_are_reported_and_can_gate(tmp_path, monkeypatch, capsys):
     assert "OpenCode stopped at 4800 s" in capsys.readouterr().out
 
 
+def test_the_single_idea_load_gate_counts_the_agents_generation(tmp_path, monkeypatch,
+                                                                 capsys):
+    import sys
+    camp = tmp_path / "si.yml"
+    camp.write_text("prefix: pfx\nmode: single_idea\nn_fresh: 2\ngenerations: 1\n"
+                    "top_k: 2\nmin_params: 0\nmax_params: 0\n")
+    (tmp_path / "campaign").mkdir()
+    (tmp_path / "campaign/si.json").write_text(json.dumps({"generations": [
+        {"index": 1, "finished": True,
+         "members": [{"name": "pfx-1", "version": 1}, {"name": "pfx-2", "version": 1}]},
+        {"index": 2, "finished": True,
+         "members": [{"name": "pfx-1", "version": 2}, {"name": "pfx-2", "version": 2}]},
+    ]}))
+    wt = tmp_path / "worktrees"
+    wt.mkdir()
+    for stem in ("pfx-1", "pfx-2", "pfx-1-v2"):  # the seeds, and one agent version
+        (wt / f"{stem}.state.json").write_text(json.dumps(
+            {"status": "scored", "done": DONE, "data": {"score": {"pool": 60.0}}}))
+    (wt / "pfx-2-v2.state.json").write_text(json.dumps(
+        {"status": "failed", "done": DONE[:3], "error": "check_instance.sh failed:\nx",
+         "data": {"agent_runs": [{"status": "succeeded", "result": {}}]}}))
+    monkeypatch.setenv("PF_RUNS", str(tmp_path))
+    for n, code in ((2, 1), (1, 0)):
+        monkeypatch.setattr(sys, "argv", ["campaign_check.py", "campaign", str(camp),
+                                          "--expect", "finished", "--min-first-scored",
+                                          str(n)])
+        assert cc.main() == code
+        # the seeds (both scored) are not the generation the gate counts
+        assert "first generation: 1 of 2 scored" in capsys.readouterr().out
+
+
 def test_loop_stops_and_expired_runs_are_counted_in_a_scored_version(
         tmp_path, monkeypatch, capsys):
     import sys

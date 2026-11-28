@@ -189,12 +189,13 @@ fixed form), or your change is a removal or a modification.
 
 You justify the change by one paper, by one analysis, or by one of each:
 
-- **a paper**: a published study or theory you know that speaks for the
-  change. You have no network: cite from what you know, with authors, year,
-  title and the finding you rely on. Cite only a paper you are confident
-  exists and says this. The references are checked afterwards; a paper you
-  are unsure of is worth less than none. If no paper comes to mind, use an
-  analysis alone.
+- **a paper**: a study or line of research you know that speaks for the
+  change. You have no network: cite from what you know. Its title and its
+  lead or senior author are enough; add the year and where it appeared if
+  you know them, and the finding you rely on. The reference points the
+  reader to a strand of research and need not be exact in every detail, but
+  cite only work you are confident exists and speaks for the change. If no
+  paper comes to mind, use an analysis alone.
 - **an analysis**: one script on the data here (the human data, the
   reference sims or your earlier versions' results) that prints one number
   and nothing else: the metric that speaks for the change. Write it as
@@ -310,15 +311,15 @@ what would contradict it; what you chose not to model, and why.
 - Operation: <add, remove or modify>
 - Idea: <the changed idea, in one sentence>
 - Justification: <paper, analysis or both>
-- Paper: <authors (year). title. journal or publisher>, or none
-- Claim: <the finding of that paper you rely on, in one sentence>, or none
+- Paper: <title, lead or senior author (year and journal if you know them)>, or none
+- Claim: <the finding you rely on, in one sentence>, or none
 - Analysis: <the script's path, the metric's name and the number it printed>, or none
 - Expected: <what the change should do to the result, and why>
 ```
 
-The Change section keeps these eight lines, each starting with its label.
-Under Justification `paper`, Paper and Claim are filled and Analysis is
-`none`; under `analysis`, the reverse; under `both`, all three are filled.
+Keep these labels, one line each. The section must state one change
+(Operation and Idea) and at least one justification: a Paper, an Analysis,
+or both.
 
 Number explorations and findings in the order you made them, and add to them
 rather than rewriting history: a dead end is worth recording. Key findings,

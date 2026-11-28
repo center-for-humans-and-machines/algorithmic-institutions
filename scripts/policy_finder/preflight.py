@@ -330,18 +330,75 @@ def check_raven():
         report("PASS", f"{len(models)} sweep model files in the Raven live checkout")
 
 
+def check_campaigns(files, pf_runs=None, artifacts=None):
+    """The job's campaigns (--campaigns, campaign.slurm.sh): no lineage of
+    theirs has a branch in this checkout that this PF_RUNS does not hold (a
+    run under another PF_RUNS: its state is there, and new_instance.sh would
+    stop at the first instance), and the managers of the setting's reference
+    list (infra/dais/references/<setting>.yml, played by the re-evaluation)
+    have their model files."""
+    import campaign as campaign_mod
+
+    pf_runs = Path(pf_runs or os.environ.get("PF_RUNS", ""))
+    artifacts = Path(artifacts or os.environ.get("PF_ARTIFACTS", ROOT / "artifacts"))
+    settings = set()
+    for f in files:
+        try:
+            c = campaign_mod.Campaign(f, pf_runs)
+        except campaign_mod.CampaignError as e:
+            report("FAIL", f"campaign {f}: {e}")
+            continue
+        settings.add(c.settings.get("setting", "exp2"))
+        foreign = []
+        for name in c.lineages():
+            code, _ = git("rev-parse", "--verify", "--quiet", f"policy-finder/{name}")
+            if code == 0 and not (c.wt_root / name).exists():
+                foreign.append(name)
+        if foreign:
+            report("FAIL", f"campaign {f}: branches policy-finder/{foreign[0]} and"
+                   f" {len(foreign) - 1} more exist, but {c.wt_root} has no worktree of"
+                   " them (a run under another PF_RUNS)",
+                   "resume with that PF_RUNS, or give the campaign a new prefix")
+        else:
+            report("PASS", f"campaign {f}: prefix {c.settings['prefix']}, no branches"
+                   " of another run")
+    for setting in sorted(settings):
+        path = ROOT / "infra/dais/references" / f"{setting}.yml"
+        if not path.exists():
+            continue
+        import yaml
+
+        refs = yaml.safe_load(path.read_text()) or {}
+        missing = [str(spec["path"]) for spec in refs.values()
+                   if isinstance(spec, dict) and str(spec.get("path", "")).startswith(
+                       "artifacts/")
+                   and not (artifacts / Path(spec["path"]).relative_to("artifacts")).exists()]
+        if missing:
+            report("FAIL", f"references/{setting}.yml: model file(s) missing in"
+                   f" {artifacts}: {', '.join(missing)}",
+                   "copy them into PF_ARTIFACTS (docs/large_files.md)")
+        else:
+            report("PASS", f"references/{setting}.yml: its managers' model files in"
+                   f" {artifacts}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--local", action="store_true", help="skip the services and Raven")
     ap.add_argument("--fix", action="store_true", help="create missing PF_RUNS folders")
     ap.add_argument("--dais", action="store_true", help="a DAIS job: images, weights, "
                     "driver, data and run folders instead of the services and Raven")
+    ap.add_argument("--campaigns", nargs="*", default=[],
+                    help="the job's campaign files: their prefixes and references")
     args = ap.parse_args()
     print("== local")
     check_local(args.fix or args.dais, dais=args.dais)
     if args.dais:
         print("== DAIS")
         check_dais()
+        if args.campaigns:
+            print("== campaigns")
+            check_campaigns(args.campaigns)
     elif not args.local:
         print("== services")
         if check_services():

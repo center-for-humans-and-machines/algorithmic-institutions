@@ -8,6 +8,7 @@
 # reasoning effort low/high/max or 1-100 (reasoning_effort.sh below).
 MODEL=deepseek-ai/DeepSeek-V4.1-Flash-1017
 MODEL_REV=08c8657f02291e11b6f6b63e0e16014f8e748518
+MODEL_TAG=dsv41
 VLLM_SIF="$PF_SCRATCH/images/vllm-v0.34.0.sif"
 EXPECT_VLLM_TAG=vllm/vllm-openai:v0.34.0
 TOOL_PARSER=deepseek_v41

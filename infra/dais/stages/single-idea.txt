@@ -1,0 +1,17 @@
+# Step 2, single-idea mode, both experiments at once, for the model of the
+# job's MODEL_PROFILE (the campaign files take it from the job). 40 agents at
+# once: AGENT_CORES=40, PF_AGENT_SLOTS=40. Give each model's job its own
+# PF_RUNS. Each stage only if the one before succeeded:
+# 1. smoke, both experiments at once: 2 chains of the seed and 2 changes
+#    each, smoke size; the gate tests the mechanics, not the model: each
+#    campaign finishes and at least one change scores (finished/1);
+# 2. load: both experiments at the real width (20 chains each, 40 agents at
+#    once) at smoke size, each passing with 10 of its 20 changes scored and
+#    no expired, endpoint or limit-stopped run (finished/10+nolimits);
+# 3. the real campaigns, 20 chains x 20 changes each.
+# No stage re-evaluates in this job: the real campaigns' re-evaluation is a
+# CPU job of its own afterwards (pipeline.slurm.sh python infra/dais/reevaluate.py ... --single-idea --resume; infra/dais/README.md).
+# After a cut in stage 3, resubmit with single-idea-real.txt.
+run      finished/1           20 20 scripts/policy_finder/campaigns/dais-single-smoke-exp2.yml scripts/policy_finder/campaigns/dais-single-smoke-exp1.yml
+run      finished/10+nolimits 20 20 scripts/policy_finder/campaigns/dais-single-load-exp2.yml scripts/policy_finder/campaigns/dais-single-load-exp1.yml
+run      finished default default scripts/policy_finder/campaigns/dais-single-exp2.yml scripts/policy_finder/campaigns/dais-single-exp1.yml

@@ -298,7 +298,8 @@ AGENT = Path(__file__).resolve().parents[2] / ".claude/agents/policy-finder-sing
 
 
 @pytest.mark.parametrize("name", [
-    "policy-finder-single-idea", "policy-finder", "policy-finder-exp1",
+    "policy-finder-single-idea", "policy-finder-exp1-single-idea", "policy-finder",
+    "policy-finder-exp1",
     "policy-finder-exp2-multi", "policy-finder-exp2-diff"])
 def test_opencode_agent_keeps_the_text(name):
     text = (AGENT.parent / f"{name}.md").read_text()
@@ -395,3 +396,86 @@ def test_slim_files_have_no_line_the_read_tool_cuts():
     text = ex.slim_json(data, "points", "mean")
     assert json.loads(text)["profiles"]["param_3"]["mean"][100] == round(60 + 100 / 7, 2)
     assert max(len(line) for line in text.splitlines()) <= ex.LINE_CHARS
+
+
+
+def test_an_exp1_single_idea_export(layout):
+    """setting exp1, mode single_idea: the exp1 single-idea definition under
+    the name policy-finder-host starts, exp1's view of the repo, test data."""
+    wt, main, exports = layout
+    _write(wt, ".claude/policy_finder.json", json.dumps(
+        {"name": NAME, "version": 2, "rule_name": f"{NAME}-v2", "setting": "exp1",
+         "mode": "single_idea", "base_version": NAME}))
+    _write(wt, ".claude/agents/policy-finder-exp1-single-idea.md",
+           "---\nname: policy-finder-exp1-single-idea\nmodel: opus\n---\none idea, 4 players\n")
+    _write(wt, ".claude/agents/policy-finder-single-idea.md",
+           "---\nname: policy-finder-single-idea\nmodel: opus\n---\nexp2 game\n")
+    _write(wt, "docs/reports/basics.md", "exp2 game\n")
+    _write(wt, "docs/reports/basics_exp1.md", "exp1 game\n")
+    _write(wt, "artifacts/manager/17_rl/model.pt", "rl")
+    _write(main, "experiments/pilot_random1_player_round_slim.csv",
+           "episode_id,round_number,contribution\n1,0,5\n1,1,6\n")
+    _write(main, "plots/simulation/29_EXP1_reference/aggregates.csv", "a\n1\n")
+    export = Path(ex.build(wt, main, exports))
+    files = _files(export)
+    agent = (export / ".claude/agents/policy-finder.md").read_text()
+    assert "name: policy-finder\n" in agent and "one idea, 4 players" in agent
+    for gone in ("docs/reports/basics.md", "artifacts/manager/17_rl/model.pt",
+                 ".claude/agents/policy-finder-single-idea.md",
+                 ".claude/agents/policy-finder-exp1-single-idea.md"):
+        assert gone not in files
+    assert "test_data/experiments/pilot_random1_player_round_slim.csv" in files
+
+
+def test_no_agent_for_an_unknown_mode_and_setting(layout):
+    wt, main, exports = layout
+    _write(wt, ".claude/policy_finder.json", json.dumps(
+        {"name": NAME, "version": 2, "rule_name": f"{NAME}-v2", "setting": "exp2_multi",
+         "mode": "single_idea"}))
+    with pytest.raises(ex.ExportError, match="no agent for mode single_idea"):
+        ex.build(wt, main, exports)
+
+
+EXP1_SI = AGENT.parent / "policy-finder-exp1-single-idea.md"
+
+
+def _sections(text):
+    out, name = {}, None
+    for line in text.split("\n---\n", 1)[1].splitlines():
+        if line.startswith("## "):
+            name = line
+        out.setdefault(name, []).append(line)
+    return {k: "\n".join(v) for k, v in out.items()}
+
+
+def test_the_exp1_single_idea_definition_is_built_from_the_two():
+    """Every section of the exp1 single-idea definition is one of Levin's two
+    texts (policy-finder-exp1.md: the game; policy-finder-single-idea.md: the
+    single-idea parts), apart from the edits listed in its pull request."""
+    mine = _sections(EXP1_SI.read_text())
+    exp1 = _sections((AGENT.parent / "policy-finder-exp1.md").read_text())
+    single = _sections(AGENT.read_text())
+    assert mine["## The game"] == exp1["## The game"]
+    assert mine["## Your instance"] == single["## Your instance"].replace(
+        "`python`\n(the interpreter to use) and `base_version` (the earlier version your rule"
+        "\nstarts from, see One change).",
+        "`python`\n(the interpreter to use), `setting` (here `exp1`) and `base_version` (the"
+        "\nearlier version your rule starts from, see One change).")
+    assert mine["## Your notes"] == single["## Your notes"]
+    assert mine["## How to work"] == single["## How to work"].replace(
+        "--sobol-points <sobol_points>` (a null\n   `max_params` is passed as `none`)",
+        "--sobol-points <sobol_points> --setting exp1`\n"
+        "   (a null `max_params` is passed as `none`)")
+    assert mine["## One change"] == single["## One change"].replace(
+        "dependence on the round, on the switch decisions, on a player's history, on\n"
+        "the group or on the other manager.",
+        "dependence on the round, on a player's history or on the group.")
+    assert mine["## What to read"] == exp1["## What to read"].replace(
+        "- From version 2 on, your instance's earlier versions (below).",
+        "- Your instance's earlier versions (below).")
+    text = EXP1_SI.read_text()
+    for exp2_only in ("switch decisions", "switch groups", "`ah`", "other manager", "two groups", "in_group",
+                      "2group_8agent_50ep", "25_LEVIN", "basics.md` has"):
+        assert exp2_only not in text, exp2_only
+    # nothing of the earlier campaigns or the RL manager
+    assert not re.search(r"pf-\d{8}|\bRL\b|reinforcement|deployed", text)

@@ -233,6 +233,31 @@ def test_an_opencode_summary_shows_tokens_and_catalogue_cost(tmp_path, monkeypat
     assert "OpenCode catalogue $" in text and "0.15, 290 / 1500 / 13" in text
 
 
+def test_prefix_and_model_from_the_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("PF_MODEL_TAG", "dsv41")
+    monkeypatch.setenv("PF_LLM_MODEL", "deepseek-ai/DeepSeek-V4.1-Flash-1017")
+    campaign, fake = make(tmp_path, monkeypatch, prefix="pfsi-exp2-{env:PF_MODEL_TAG}",
+                          harness="opencode", model="{env:PF_LLM_MODEL}",
+                          base_url="{env:PF_LLM_BASE_URL}")
+    assert campaign.lineages()[0] == "pfsi-exp2-dsv41-1"
+    command = [str(a) for a in campaign.start_command("pfsi-exp2-dsv41-1", 1)]
+    assert "deepseek-ai/DeepSeek-V4.1-Flash-1017" in command
+    # base_url stays for OpenCode to read from the agent's environment
+    assert campaign.settings["base_url"] == "{env:PF_LLM_BASE_URL}"
+    monkeypatch.delenv("PF_MODEL_TAG")
+    with pytest.raises(cm.CampaignError, match="PF_MODEL_TAG"):
+        make(tmp_path / "b", monkeypatch, prefix="pfsi-{env:PF_MODEL_TAG}")
+
+
+def test_every_campaign_file_loads(tmp_path, monkeypatch):
+    monkeypatch.setenv("PF_MODEL_TAG", "qwen3-coder-next")
+    monkeypatch.setenv("PF_LLM_MODEL", "Qwen/Qwen3-Coder-Next")
+    files = sorted((Path(cm.__file__).parent / "campaigns").glob("*.yml"))
+    assert files
+    for path in files:
+        cm.Campaign(path, pf_runs=tmp_path)
+
+
 def test_a_campaign_runs_at_one_reasoning_effort(tmp_path, monkeypatch):
     monkeypatch.setenv("PF_REASONING_EFFORT", "high")
     campaign, _ = make(tmp_path, monkeypatch, reasoning_effort="high")

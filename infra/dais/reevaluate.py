@@ -34,6 +34,18 @@ and the one over all lineages (summary.json "subsets"; curve_comparable.tsv
 beside curve.tsv). lineages.tsv holds each lineage's best so far per
 generation.
 
+--single-idea: a single-idea campaign (every lineage starts from the seed,
+`punishment = 0`, and runs to the end): the result over all lineages (the
+first generation is the seed in every lineage, so a "best after generation
+1" subset is noise), labelled as the gain of the best rule over the seed,
+never punishing, which is not comparable with the free-mode campaigns'
+improvement and its 70% bar.
+
+--resume: reuse the slices an interrupted run of the same arguments already
+finished in <out dir> (a version slice whose sweep.json was fetched, a
+reference slice whose score was saved); the rest are run. Seeds are those
+of a run from scratch.
+
 --references <file> (infra/dais/references/<setting>.yml) names fixed
 managers to play beside the versions: each in K slices of the same final
 run's setting and size (the first version with a final is the template: its
@@ -397,6 +409,37 @@ def write_tsv(path, rows):
                                  else v) for k, v in r.items()})
 
 
+#: What the slices in an out dir were run with (--resume reuses them only
+#: under the same seed and code)
+RESUME_RECORD = "resume.json"
+
+
+def check_resume(args, out, k):
+    """Record the seed, slice count and code beside the slices; with --resume,
+    refuse slices an earlier run made with another seed or code (the slice
+    count may differ: slice j's seeds do not depend on it)."""
+    record = {"seed": args.seed, "slices": k, "code": args.code,
+              "commit": git("rev-parse", "HEAD")}
+    path = out / RESUME_RECORD
+    if path.exists():
+        earlier = json.loads(path.read_text())
+        changed = [key for key in ("seed", "code", "commit")
+                   if earlier.get(key) != record[key]]
+        if changed and any((out / "slices").glob("*")):
+            sys.exit(f"{out}: its slices were run with another "
+                     + ", ".join(f"{key} ({earlier.get(key)} here {record[key]})"
+                                 for key in changed)
+                     + ": choose a new out dir")
+    path.write_text(json.dumps(record, indent=2) + "\n")
+
+
+#: The headline of a single-idea campaign's summary (--single-idea)
+SINGLE_IDEA_HEADLINE = (
+    "all lineages; single-idea mode: the improvement is the gain of the best rule"
+    " over the seed (never punishing), not comparable with the free-mode campaigns'"
+    " improvement and its 70% bar")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("state")
@@ -414,6 +457,10 @@ def main():
                     "versions' scores from it, nothing replayed")
     ap.add_argument("--references-only", action="store_true",
                     help="play only the references, on the campaign's setting")
+    ap.add_argument("--single-idea", action="store_true",
+                    help="a single-idea campaign: all lineages, the gain over the seed")
+    ap.add_argument("--resume", action="store_true",
+                    help="reuse the slices an interrupted run finished in <out>")
     ap.add_argument("--compare-top-k", type=int, default=4,
                     help="a campaign that iterated more lineages also gets the result "
                     "over the k best after generation 1 (the reference's top_k)")
@@ -421,8 +468,10 @@ def main():
     if cluster_proxy.BACKEND != "local":
         sys.exit("set PF_CLUSTER_BACKEND=local (infra/dais/pipeline.slurm.sh)")
     out = Path(args.out)
-    if (out / "slices").exists() and any((out / "slices").iterdir()):
-        sys.exit(f"{out} holds slices of an earlier run: choose a new out dir")
+    if (not args.resume and (out / "slices").exists()
+            and any((out / "slices").iterdir())):
+        sys.exit(f"{out} holds slices of an earlier run: choose a new out dir, or"
+                 " --resume it")
     out.mkdir(parents=True, exist_ok=True)
     state = json.loads(Path(args.state).read_text())
 
@@ -452,6 +501,7 @@ def main():
     k = args.slices or math.ceil((largest / args.target_se) ** 2)
     print(f"largest recorded se {largest:.2f}: {k} slices per version", flush=True)
 
+    check_resume(args, out, k)
     refs = yaml.safe_load(Path(args.references).read_text()) if args.references else {}
     if args.references_only and not refs:
         sys.exit("--references-only needs --references")
@@ -490,7 +540,7 @@ def main():
     first_gen = min(r["generation"] for r in rows)
     iterated = {r["lineage"] for r in rows if r["generation"] > first_gen}
     subsets = {"all": sorted({r["lineage"] for r in rows})}
-    if len(iterated) > args.compare_top_k:
+    if len(iterated) > args.compare_top_k and not args.single_idea:
         subsets["comparable"] = top_lineages(rows, args.compare_top_k)
     results_by = {}
     for name, lineages in subsets.items():
@@ -504,10 +554,12 @@ def main():
                "refs": args.refs, "seed": args.seed,
                "slices": k, "target_se": args.target_se, "code": args.code,
                "no_final": missing, "references": ref_rows,
-               "headline": ("comparable: the %d lineages best after generation 1 by "
+               "headline": (SINGLE_IDEA_HEADLINE if args.single_idea else
+                            "comparable: the %d lineages best after generation 1 by "
                             "recorded score, as a top_k %d campaign iterates"
-                            % (args.compare_top_k, args.compare_top_k))
-               if "comparable" in results_by else "all lineages",
+                            % (args.compare_top_k, args.compare_top_k)
+                            if "comparable" in results_by else "all lineages"),
+               "mode": "single_idea" if args.single_idea else "free",
                **{k_: v for k_, v in head.items() if k_ not in ("points", "lineages")},
                "subsets": {n: {k_: v for k_, v in r.items() if k_ != "points"}
                            for n, r in results_by.items()}}
@@ -558,29 +610,40 @@ def report(points, summary):
 def run_slices(args, versions, k, out, snapshots, jobs, refs=None):
     """Every version's and reference's K slices into the pool; ({stem: [(pool,
     se)] by slice}, {reference: its row}). Fails if a slice's sim failed or its
-    output is missing."""
-    for stem, (commit, config, gp) in ({} if args.references_only or args.slices_from
-                                       else versions).items():
+    output is missing. With --resume, slices an earlier run finished in `out`
+    are read, not run; with --slices-from, the versions' are not run."""
+    done = {}
+    skip = args.references_only or getattr(args, "slices_from", None)
+    for stem, (commit, config, gp) in ({} if skip else versions).items():
         if args.code:
             commit = with_code(commit, args.code)
+        seed, todo = args.seed, []
+        for j in range(k):
+            name = f"{stem}_r{j:02d}"
+            cfg = gp_config(config, gp, seed, f"{EVAL_OUT}/{name}")
+            seed += batches(cfg)
+            if args.resume and (out / "slices" / name / "sweep.json").exists():
+                done[name] = stem  # finished by an earlier run: its seeds are these
+            else:
+                todo.append((name, cfg))
+        if not todo:
+            continue
         # the slices' configs go into the snapshot: the local backend's only
         existed = (local_cluster.tree(commit).parent / "complete").exists()
         sha = cluster_proxy.snapshot(commit)
         if not existed:
             snapshots[stem] = sha
         tree = local_cluster.tree(sha)
-        seed = args.seed
-        for j in range(k):
-            name = f"{stem}_r{j:02d}"
-            cfg = gp_config(config, gp, seed, f"{EVAL_OUT}/{name}")
-            seed += batches(cfg)
+        for name, cfg in todo:
             path = tree / EVAL_CONFIGS / f"{name}.yml"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(yaml.safe_dump(cfg, sort_keys=False))
             jobs[name] = (stem, sha, cluster_proxy.submit(
                 f"{EVAL_CONFIGS}/{name}.yml", sha, run_group="reevaluate"))
-    ref_jobs = submit_references(args, refs or {}, versions, k, snapshots)
-    print(f"{len(jobs) + len(ref_jobs)} slices submitted", flush=True)
+    ref_jobs, ref_done = submit_references(args, refs or {}, versions, k, snapshots, out)
+    print(f"{len(jobs) + len(ref_jobs)} slices submitted"
+          + (f", {len(done) + len(ref_done)} finished before" if args.resume else ""),
+          flush=True)
     cluster_proxy.wait([job for _, _, job in jobs.values()]
                        + [job for *_, job in ref_jobs.values()])
 
@@ -594,11 +657,21 @@ def run_slices(args, versions, k, out, snapshots, jobs, refs=None):
             cluster_proxy.fetch(sha, f"{EVAL_OUT}/{name}", out / "slices" / name)
             per_round = out / "slices" / name / "per_round.parquet"
             metric = next(iter(versions.values()))[1].get("sweep_metric", "pool_vs_anchor")
-            ref_slices.setdefault(ref, []).append(reference_score(per_round, metric, ref))
-            per_round.unlink()  # large; the score is in references.tsv
+            score = reference_score(per_round, metric, ref)
+            ref_slices.setdefault(ref, []).append(score)
+            # kept for --resume; the per-round data is large
+            (out / "slices" / name / "score.json").write_text(json.dumps(list(score)))
+            per_round.unlink()
         except (cluster_proxy.ClusterError, OSError, KeyError, ValueError,
                 RuntimeError) as e:
             failed.append(f"{name} (job {job}): {e!r}")
+    for name, (ref, cfg) in ref_done.items():
+        score = json.loads((out / "slices" / name / "score.json").read_text())
+        ref_slices.setdefault(ref, []).append(tuple(score))
+    for name, stem in done.items():
+        sweep = json.loads((out / "slices" / name / "sweep.json").read_text())
+        gp = {p["name"]: p for p in sweep["points"]}[versions[stem][2]]
+        results.setdefault(stem, []).append((gp["pool"], gp["pool_se"]))
     for name, (stem, sha, job) in jobs.items():
         code = local_cluster.status(job).get("exit_code")
         if code != 0:
@@ -616,7 +689,8 @@ def run_slices(args, versions, k, out, snapshots, jobs, refs=None):
     ref_rows = {}
     for ref, values in ref_slices.items():
         score, se = combine(values)
-        cfg = next(c for r, _, c, _ in ref_jobs.values() if r == ref)
+        cfg = ([c for r, _, c, _ in ref_jobs.values() if r == ref]
+               + [c for r, c in ref_done.values() if r == ref])[0]
         ref_rows[ref] = {"score": score, "se": se, "slices": len(values),
                          "episodes": len(values) * cfg["n_episodes"],
                          "common_seeds": cfg.get("episode_batch_size", 1)
@@ -645,11 +719,12 @@ def load_slices(args, versions, k):
     return {stem: [results[stem][j] for j in range(k)] for stem in versions}
 
 
-def submit_references(args, refs, versions, k, snapshots):
+def submit_references(args, refs, versions, k, snapshots, out=None):
     """Each reference's K slices, on the first version's final run setting;
-    {slice name: (reference, sha, config, job)}."""
+    ({slice name: (reference, sha, config, job)}, {slice name: (reference,
+    config)} of those an earlier run finished (--resume))."""
     if not refs:
-        return {}
+        return {}, {}
     template = next(iter(versions.values()))[1]
     commit = git("rev-parse", "HEAD")
     if args.code:
@@ -663,7 +738,7 @@ def submit_references(args, refs, versions, k, snapshots):
     # the out dir's name in the slices' names: re-evaluations that share a
     # snapshot (the same code) must not share a reference's slice dirs
     run = re.sub(r"[^A-Za-z0-9.-]", "-", Path(args.out).resolve().name)
-    ref_jobs = {}
+    ref_jobs, ref_done = {}, {}
     for ref, spec in refs.items():
         seed = args.seed
         for j in range(k):
@@ -671,12 +746,16 @@ def submit_references(args, refs, versions, k, snapshots):
             cfg = reference_config(template, ref, spec, seed, f"{EVAL_OUT}/{name}")
             # the versions' seeds when batched alike; else disjoint ones of its own
             seed += max(batches(cfg), batches({**cfg, "episode_batch_size": size}))
+            if (getattr(args, "resume", False) and out is not None
+                    and (out / "slices" / name / "score.json").exists()):
+                ref_done[name] = (ref, cfg)
+                continue
             path = tree / EVAL_CONFIGS / f"{name}.yml"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(yaml.safe_dump(cfg, sort_keys=False))
             ref_jobs[name] = (ref, sha, cfg, cluster_proxy.submit(
                 f"{EVAL_CONFIGS}/{name}.yml", sha, run_group="reevaluate"))
-    return ref_jobs
+    return ref_jobs, ref_done
 
 
 if __name__ == "__main__":

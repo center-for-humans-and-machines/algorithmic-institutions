@@ -419,3 +419,107 @@ def test_a_worker_ended_with_its_slurm_job_is_lost(repo):
     os.kill(pid, signal.SIGTERM)
     lc.wait([job], poll=0.2)
     assert lc.lost(job) and lc.status(job)["state"] == "running"
+
+
+def test_reevaluate_resumes_from_finished_slices(tmp_path, monkeypatch):
+    """--resume: a slice whose sweep.json an earlier run fetched is read, not
+    run again; the others run on the seeds a run from scratch gives them."""
+    import types
+
+    import yaml
+    final = {"seed": 1000, "n_episodes": 2000, "episode_batch_size": 1000,
+             "managers": {"ah": {}, "r_gp": {"params": {"a": 1}}},
+             "pairings": [{"name": "x", "group_0": "r_gp", "group_1": "ah"}]}
+    out = tmp_path / "out"
+    done = out / "slices" / "r_r00"
+    done.mkdir(parents=True)
+    (done / "sweep.json").write_text(json.dumps(
+        {"points": [{"name": "r_gp", "pool": 70.0, "pool_se": 1.0}]}))
+    submitted = []
+    tree = tmp_path / "tree"
+    monkeypatch.setattr(rv.cluster_proxy, "snapshot", lambda commit: "sha")
+    monkeypatch.setattr(rv.local_cluster, "tree", lambda sha: tree)
+
+    def submit(config, sha, run_group=None):
+        submitted.append(yaml.safe_load((tree / config).read_text()))
+        return f"job-{len(submitted)}"
+    monkeypatch.setattr(rv.cluster_proxy, "submit", submit)
+    monkeypatch.setattr(rv.cluster_proxy, "wait", lambda jobs: None)
+    monkeypatch.setattr(rv.local_cluster, "status", lambda job: {"exit_code": 0})
+
+    def fetch(sha, remote, local, *a):
+        Path(local).mkdir(parents=True, exist_ok=True)
+        (Path(local) / "sweep.json").write_text(json.dumps(
+            {"points": [{"name": "r_gp", "pool": 72.0, "pool_se": 1.0}]}))
+    monkeypatch.setattr(rv.cluster_proxy, "fetch", fetch)
+    args = types.SimpleNamespace(seed=100000, code=None, references_only=False,
+                                 resume=True)
+    results, refs = rv.run_slices(args, {"r": ("commit", final, "r_gp")}, 2, out, {}, {})
+    assert len(submitted) == 1 and submitted[0]["seed"] == 100000 + rv.batches(
+        rv.gp_config(final, "r_gp", 100000, "x"))  # slice 1's seed, as from scratch
+    assert sorted(results["r"]) == [(70.0, 1.0), (72.0, 1.0)]
+
+
+def _fake_pool(monkeypatch, tmp_path, submitted):
+    tree = tmp_path / "tree"
+    monkeypatch.setattr(rv.cluster_proxy, "snapshot", lambda commit: "sha")
+    monkeypatch.setattr(rv.local_cluster, "tree", lambda sha: tree)
+    monkeypatch.setattr(rv, "git", lambda *a, **k: "headsha")
+
+    def submit(config, sha, run_group=None):
+        import yaml
+        submitted.append((Path(config).stem, yaml.safe_load((tree / config).read_text())))
+        return f"job-{len(submitted)}"
+    monkeypatch.setattr(rv.cluster_proxy, "submit", submit)
+    monkeypatch.setattr(rv.cluster_proxy, "wait", lambda jobs: None)
+    monkeypatch.setattr(rv.local_cluster, "status", lambda job: {"exit_code": 0})
+
+    def fetch(sha, remote, local, *a):
+        Path(local).mkdir(parents=True, exist_ok=True)
+        (Path(local) / "sweep.json").write_text(json.dumps(
+            {"points": [{"name": "r_gp", "pool": 72.0, "pool_se": 1.0}]}))
+        (Path(local) / "per_round.parquet").write_text("x")
+    monkeypatch.setattr(rv.cluster_proxy, "fetch", fetch)
+    monkeypatch.setattr(rv, "reference_score", lambda per_round, metric, name: (60.0, 2.0))
+
+
+def test_reevaluate_resumes_with_references(tmp_path, monkeypatch):
+    """--resume with --references: a finished reference slice (its score
+    saved) is read, the rest run; the references' rows come out whole."""
+    import types
+    final = {"seed": 1000, "n_episodes": 2000, "episode_batch_size": 1000,
+             "managers": {"ah": {"type": "ah"}, "r_gp": {"type": "rule_based"}},
+             "pairings": [{"name": "x", "group_0": "r_gp", "group_1": "ah"}]}
+    out = tmp_path / "out"
+    args = types.SimpleNamespace(seed=100000, code=None, references_only=False,
+                                 resume=True, out=str(out))
+    run = rv.re.sub(r"[^A-Za-z0-9.-]", "-", out.resolve().name)
+    done = out / "slices" / f"ref-{run}-zero_r00"
+    done.mkdir(parents=True)
+    (done / "score.json").write_text(json.dumps([61.0, 2.0]))
+    submitted = []
+    _fake_pool(monkeypatch, tmp_path, submitted)
+    refs = {"zero": {"type": "dummy", "constant_punishment": 0}}
+    results, ref_rows = rv.run_slices(args, {"r": ("commit", final, "r_gp")}, 2, out,
+                                      {}, {}, refs)
+    assert {name for name, _ in submitted} == {f"ref-{run}-zero_r01", "r_r00", "r_r01"}
+    assert ref_rows["zero"]["slices"] == 2 and ref_rows["zero"]["episodes"] == 4000
+    assert ref_rows["zero"]["score"] == pytest.approx(60.5)
+    # the new reference slice's score is kept for a later --resume
+    assert json.loads((out / "slices" / f"ref-{run}-zero_r01" / "score.json").read_text()) \
+        == [60.0, 2.0]
+
+
+def test_reevaluate_refuses_slices_of_another_seed(tmp_path, monkeypatch):
+    import types
+    monkeypatch.setattr(rv, "git", lambda *a, **k: "headsha")
+    out = tmp_path / "out"
+    (out / "slices" / "r_r00").mkdir(parents=True)
+    args = types.SimpleNamespace(seed=100000, code=None)
+    rv.check_resume(args, out, 15)
+    rv.check_resume(args, out, 20)  # another slice count: the slices still fit
+    with pytest.raises(SystemExit, match="seed"):
+        rv.check_resume(types.SimpleNamespace(seed=5, code=None), out, 15)
+    monkeypatch.setattr(rv, "git", lambda *a, **k: "othersha")
+    with pytest.raises(SystemExit, match="commit"):
+        rv.check_resume(args, out, 15)

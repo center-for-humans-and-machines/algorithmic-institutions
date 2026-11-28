@@ -82,3 +82,15 @@ def test_harness_opencode_is_kept_by_later_versions(wt, monkeypatch):
     assert second["harness"] == "opencode" and second["providers"] == ["parasail/bf16"]
     with pytest.raises(SystemExit):
         write(wt, monkeypatch, "--harness", "opencode")  # no model
+
+
+@pytest.mark.parametrize("setting, ok", [("exp2", True), ("exp1", True),
+                                         ("exp2_multi", False), ("exp2_diff", False)])
+def test_single_idea_settings(wt, monkeypatch, setting, ok):
+    flags = ("--mode", "single_idea", "--setting", setting, "--min-params", "0",
+             "--max-params", "0")
+    if ok:
+        assert write(wt, monkeypatch, *flags)["mode"] == "single_idea"
+    else:
+        with pytest.raises(SystemExit, match="exp2 and exp1 only"):
+            write(wt, monkeypatch, *flags)

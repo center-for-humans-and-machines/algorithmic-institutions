@@ -170,8 +170,12 @@ PER_INSTANCE = (
     "scripts/policy_finder",
 )
 #: What stays of .claude/
-#: The agent definition of an instance whose `mode` is not free
-MODE_AGENTS = {"single_idea": ".claude/agents/policy-finder-single-idea.md"}
+#: The agent definition of an instance whose `mode` is not free, by mode and
+#: setting (instance_settings.py accepts the pairs listed here)
+MODE_AGENTS = {
+    ("single_idea", "exp2"): ".claude/agents/policy-finder-single-idea.md",
+    ("single_idea", "exp1"): ".claude/agents/policy-finder-exp1-single-idea.md",
+}
 CLAUDE_KEEP = ("agents/policy-finder.md", "agents/policy-finder-host.md", "policy_finder.json")
 #: An instance's name, as new_instance.sh and the campaign make them
 INSTANCE_NAME = re.compile(r"pf-\d{8}-\d+")
@@ -577,7 +581,13 @@ def build(wt, main, exports):
         wt, export, symlinks=False, ignore=shutil.ignore_patterns(".git")
     )
     # a single-idea instance has its own agent (instance_settings.py)
-    agent_path = MODE_AGENTS.get(conf.get("mode", "free"), setting["agent"])
+    mode = conf.get("mode", "free")
+    if mode == "free":
+        agent_path = setting["agent"]
+    elif (mode, conf.get("setting", "exp2")) in MODE_AGENTS:
+        agent_path = MODE_AGENTS[(mode, conf.get("setting", "exp2"))]
+    else:
+        raise ExportError(f"no agent for mode {mode} in setting {conf.get('setting', 'exp2')}")
     agent = os.path.join(export, agent_path)
     target = os.path.join(export, ".claude/agents/policy-finder.md")
     if not os.path.isfile(agent):

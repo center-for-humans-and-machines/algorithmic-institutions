@@ -59,6 +59,7 @@ def repo(tmp_path):
     (main / "src.py").write_text("x = 1\n")
     (main / ".gitignore").write_text(".claude/policy_finder.json\n")
     shutil.copy(CHECK, main / "scripts/policy_finder/check_instance.sh")
+    shutil.copy(CHECK.parent / "change_note.py", main / "scripts/policy_finder/change_note.py")
     git(tmp_path, "init", "-q", "-b", "main", str(main))
     git(main, "config", "user.email", "t@t")
     git(main, "config", "user.name", "t")
@@ -422,14 +423,14 @@ def test_single_idea_analysis_passes(repo):
     "old, new, reason",
     [
         ("## Change\n", "", "needs the section '## Change'"),
-        ("Base version: probe1", "Base version: probe1-v3", "must be probe1"),
-        ("Operation: add", "Operation: rewrite", "add, remove or modify"),
+        ("Base version: probe1", "Base version: probe1-v3", "must name probe1"),
+        ("Operation: add", "Operation: rewrite", "no change stated"),
+        ("Operation: add", "Operation: add and modify", "several changes"),
+        ("- Operation: add", "- Operation: add\n- Operation: remove", "several changes"),
         ("Idea: stop punishing after a set round", "Idea:", "'- Idea:' is empty"),
-        ("Justification: paper", "Justification: intuition", "paper, analysis or both"),
-        ("Justification: paper", "Justification: both", "needs '- Analysis:'"),
-        ("Claim: punishment raises contributions in later rounds", "Claim: none",
-         "needs '- Paper:' and '- Claim:'"),
-        ("Justification: paper", "Justification: analysis", "needs '- Analysis:'"),
+        ("- Paper: Fehr, E. and Gaechter, S. (2000). Cooperation and Punishment in"
+         " Public Goods Experiments. American Economic Review.", "- Paper: none",
+         "no justification"),
     ],
 )
 def test_single_idea_change_rejected(repo, old, new, reason):
@@ -439,6 +440,25 @@ def test_single_idea_change_rejected(repo, old, new, reason):
     result = check(main)
     assert result.returncode == 1
     assert reason in result.stderr
+
+
+@pytest.mark.parametrize("old, new", [
+    # the layouts the open-weight agents wrote (change_note.py), and a
+    # reference given as a title and an author, with no claim
+    ("Justification: paper", "Justification: intuition"),
+    ("Justification: paper", "Justification: both"),
+    ("Claim: punishment raises contributions in later rounds", "Claim: none"),
+    ("- Paper: Fehr, E. and Gaechter, S. (2000). Cooperation and Punishment in Public"
+     " Goods Experiments. American Economic Review.",
+     "- Paper: Fehr, Cooperation and Punishment in Public Goods Experiments"),
+    ("- Base version: probe1", "- **Base version:** `probe1` (the seed)"),
+])
+def test_single_idea_loose_layouts_pass(repo, old, new):
+    main, wt = repo
+    assert old in CHANGE
+    _single_idea_v2(main, wt, CHANGE.replace(old, new))
+    result = check(main)
+    assert result.returncode == 0, result.stderr
 
 
 def test_single_idea_both_passes(repo):

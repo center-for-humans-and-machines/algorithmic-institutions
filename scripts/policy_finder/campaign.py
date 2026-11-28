@@ -2,7 +2,9 @@
 
 A campaign is a YAML file (scripts/policy_finder/campaigns/*.yml):
 
-    prefix: pf-20261104     # lineages <prefix>-1 ... <prefix>-<n_fresh>
+    prefix: pf-20261104     # lineages <prefix>-1 ... <prefix>-<n_fresh>;
+                            #   prefix and model may name an environment
+                            #   variable, {env:NAME} (ENV_KEYS)
     n_fresh: 12             # generation 1: fresh lineages
     generations: 6          # then this many generations of --iterate-on
     top_k: 4                # ... on the lineages with the highest lineage best
@@ -58,6 +60,7 @@ import argparse
 import json
 import math
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -82,6 +85,30 @@ DEFAULTS = {
 
 class CampaignError(Exception):
     pass
+
+
+#: Settings that may name an environment variable, `{env:NAME}`, expanded when
+#: the campaign is loaded: one file then serves every model, the job naming
+#: the served model (PF_LLM_MODEL) and a short tag for the prefix
+#: (PF_MODEL_TAG; infra/dais/campaign.slurm.sh). `base_url` is not among
+#: them: OpenCode reads it from the agent's environment itself.
+ENV_KEYS = ("prefix", "model")
+ENV_REF = re.compile(r"\{env:([A-Za-z_][A-Za-z0-9_]*)\}")
+#: A prefix as new_instance.sh accepts instance names
+PREFIX = re.compile(r"[a-z0-9][a-z0-9_-]*")
+
+
+def expand_env(value, key, path):
+    """`value` with every `{env:NAME}` replaced by that variable's value."""
+    if not isinstance(value, str):
+        return value
+
+    def sub(match):
+        found = os.environ.get(match.group(1))
+        if not found:
+            raise CampaignError(f"{path}: {key} names {match.group(1)}, which is not set")
+        return found
+    return ENV_REF.sub(sub, value)
 
 
 def check_harness(s, path):
@@ -117,6 +144,11 @@ class Campaign:
         self.settings = {**DEFAULTS, **yaml.safe_load(self.path.read_text())}
         if not self.settings.get("prefix"):
             raise CampaignError(f"{path}: no prefix")
+        for key in ENV_KEYS:
+            self.settings[key] = expand_env(self.settings[key], key, path)
+        if not PREFIX.fullmatch(str(self.settings["prefix"])):
+            raise CampaignError(f"{path}: prefix {self.settings['prefix']!r} is not"
+                                " [a-z0-9][a-z0-9_-]*")
         check_harness(self.settings, path)
         self.pf_runs = Path(pf_runs or os.environ.get("PF_RUNS") or "")
         if not str(self.pf_runs) or str(self.pf_runs) == ".":
