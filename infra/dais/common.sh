@@ -20,7 +20,7 @@ PF_HERE="${SLURM_SUBMIT_DIR:-$PF_REPO}/infra/dais"
 [ -f "$PF_SCRATCH/env.sh" ] && source "$PF_SCRATCH/env.sh"
 # vLLM image: its version is asserted, not assumed.
 VLLM_SIF="${VLLM_SIF:-}"
-EXPECT_VLLM_TAG="vllm/vllm-openai:v0.25.1"
+EXPECT_VLLM_TAG="${EXPECT_VLLM_TAG:-vllm/vllm-openai:v0.25.1}"
 
 # Sim image: a byte copy of Raven's shared algoinst.sif (torch 1.11.0+cu113).
 # It has no kernels for H200/B200, so sims run on the CPUs.
@@ -39,7 +39,13 @@ export HF_HOME="${HF_HOME:-/dais/fs/scratch/$USER/models}"
 MODEL="${MODEL:-Qwen/Qwen3-Coder-Next}"
 MODEL_REV="${MODEL_REV:-a7fbcb5c0e12d62a448eaa0e260346bf5dcc0feb}"
 TOOL_PARSER="${TOOL_PARSER:-qwen3_xml}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-131072}"
+# the served context; campaign.slurm.sh passes it to the agents' OpenCode
+# config (PF_LLM_CONTEXT). Qwen3-Coder-Next: 262,144 natively. Its KV cache
+# costs about 25 KB per token over both GPUs at TP 2 (B5), so a full-length
+# session holds about 6.6 GB; 2 B200 at 0.90 leave about 170 GB of KV cache
+# (about 6.8M tokens), 2 H200 about 4M (measured), and vLLM preempts rather
+# than fails when sessions together need more.
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
 
 module load apptainer/1.5.2
 

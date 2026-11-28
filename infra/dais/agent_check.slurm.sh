@@ -86,7 +86,7 @@ sh_() { box /opt/pf-agent/shell -c "$1"; }
 
 check opencode_version ok box opencode --version
 check opencode_config ok box opencode debug config
-grep -E '"(model|baseURL|enabled_providers|temperature|top_k|webfetch|websearch)"' -A1 \
+grep -E '"(model|baseURL|enabled_providers|temperature|top_k|webfetch|websearch|reserved|context|external_directory|\/tmp\/\*)"' -A1 \
   "$PF_RUN/opencode_config.log" | head -30 | sed 's/^/     cfg | /'
 check opencode_agents ok box opencode agent list
 # OpenCode itself under the filter: whatever it fetches at start fails and is logged
@@ -181,6 +181,17 @@ if [ "${WITH_MODEL:-0}" = 1 ]; then
       "$PF_RUN/model_session.log"
     grep -o "SamplingParams([^)]*)" "$PF_RUN/vllm.log" | sort | uniq -c | head -5 \
       | sed 's/^/     vllm | /'
+    # OpenCode's permissions: the agent's own /tmp (a bind of the run's
+    # folder) is allowed, a path outside the repo and /tmp is not
+    prompt='Do these three steps with your tools, one tool call each, then reply with one line per step saying whether it succeeded: (1) write the file /tmp/opencode/pfcheck.py containing the line print("tmp ok") (2) run python3 /tmp/opencode/pfcheck.py with bash (3) read the file /etc/hostname with your read tool.'
+    check model_session_tmp ok box timeout 600 opencode run --agent policy-finder \
+      --format json "$prompt"
+    "${PF_PYTHON:-$PF_SCRATCH/venv/bin/python}" "$PF_HERE/agent_events.py" \
+      "$PF_RUN/model_session_tmp.log"
+    ev() { python3 "$PF_HERE/event_status.py" "$PF_RUN/model_session_tmp.log" "$@"; }
+    check tmp_write_allowed ok ev write /tmp/opencode/pfcheck.py
+    check tmp_script_ran ok ev bash /tmp/opencode/pfcheck.py
+    check outside_read_denied fail ev read /etc/hostname
     # the same through the backend the pipeline uses (agent_apptainer.py and
     # opencode_run.py, the runner): a stand-in export, one run, its record
     exp="$PF_RUN/pf_runs/exports/pfchk"

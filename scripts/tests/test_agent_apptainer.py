@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -194,14 +195,53 @@ def test_audit_finds_network_use(tmp_path):
     assert {"pip install", "git clone"} <= set(found["findings"][1]["matches"])
 
 
-def test_local_model_config_has_sampling_and_env_url():
+def test_local_model_config_has_sampling_and_env_url(monkeypatch):
+    monkeypatch.delenv("PF_LLM_CONTEXT", raising=False)
     conf = ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next",
                                "base_url": "{env:PF_LLM_BASE_URL}"})
     local = conf["provider"]["local"]
     assert local["options"]["baseURL"] == "{env:PF_LLM_BASE_URL}"
     model = local["models"]["Qwen/Qwen3-Coder-Next"]
     assert model["options"] == {"temperature": 1.0, "top_p": 0.95, "top_k": 40}
-    assert model["limit"]["context"] == 131072
+    assert model["limit"] == {"context": 262144, "output": 16384}
+    # it compacts with room for the output and a large tool result
+    assert conf["compaction"] == {"auto": True,
+                                  "reserved": 16384 + ex.COMPACTION_MARGIN}
+
+
+def test_local_model_context_is_the_servers(monkeypatch):
+    monkeypatch.setenv("PF_LLM_CONTEXT", "131072")
+    conf = ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next", "base_url": "u"})
+    assert conf["provider"]["local"]["models"]["Qwen/Qwen3-Coder-Next"]["limit"] == {
+        "context": 131072, "output": 16384}
+    monkeypatch.setenv("PF_LLM_CONTEXT", "65536")
+    with pytest.raises(ex.ExportError, match="too small"):
+        ex.opencode_config({"model": "Qwen/Qwen3-Coder-Next", "base_url": "u"})
+
+
+def opencode_permission(rules, path):
+    """OpenCode's verdict for an external path: the last rule that matches
+    wins, `*` matching any characters (its wildcard matcher)."""
+    verdict = None
+    for pattern, action in rules.items():
+        if re.fullmatch(".*".join(map(re.escape, pattern.split("*"))), path):
+            verdict = action
+    return verdict
+
+
+def test_the_agent_may_use_its_own_tmp_only():
+    conf = json.loads((Path(__file__).resolve().parents[2]
+                       / "infra/claude_proxy/container/CC_env/opencode/opencode.json")
+                      .read_text())
+    rules = conf["permission"]["external_directory"]
+    # /tmp in the agent's container is its run's own folder (a bind of
+    # <run>/tmp, agent_apptainer.binds), not the host's /tmp
+    assert "/tmp/*" in rules and rules["/tmp/*"] == "allow"
+    for path in ("/tmp/opencode/analyze.py", "/tmp/x"):
+        assert opencode_permission(rules, path) == "allow", path
+    for path in ("/etc/passwd", "/home/claude/.local/x", "/tmpx/y", "/opt/pf-agent/shell",
+                 "/dais/fs/scratch/x", "/"):
+        assert opencode_permission(rules, path) == "deny", path
 
 
 def test_run_ids_never_collide(env):

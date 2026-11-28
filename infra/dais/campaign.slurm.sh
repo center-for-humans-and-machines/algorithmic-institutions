@@ -205,6 +205,10 @@ CUDA_VISIBLE_DEVICES="$SERVER_DEVICES" \
   serve_model "${GPU_UTIL:-0.90}" "$NGPU" "$PF_RUN/vllm.log" --moe-backend triton ${VLLM_EXTRA:-}
 wait_ready 1800 || { tail -50 "$PF_RUN/vllm.log"; exit 1; }
 export PF_LLM_BASE_URL="$SERVER_URL" PF_LLM_API_KEY_FILE="$SERVER_KEY_FILE"
+# the agents' OpenCode config takes the served context from here
+# (export_instance.local_model), so it compacts before the server refuses
+export PF_LLM_CONTEXT="$MAX_MODEL_LEN"
+echo "served context $MAX_MODEL_LEN tokens"
 
 # server_report: vLLM's request counters (errors included), /health's
 # latency and its log's tail. A report: it never fails (a subshell without
