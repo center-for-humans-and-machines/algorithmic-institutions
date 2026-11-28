@@ -60,6 +60,12 @@ MOE_BACKEND="${MOE_BACKEND:-triton}"
 # split on spaces; every server start gets them (serve_model), before the
 # caller's (VLLM_EXTRA, a per-submission override, comes after)
 MODEL_VLLM_ARGS="${MODEL_VLLM_ARGS:-}"
+# the reasoning effort in force (REASONING_EFFORT, a submission's choice; the
+# profile's default otherwise): the server's default and the prompt check
+# follow from it, and an invalid one stops the job here, before the server
+# shellcheck source=reasoning_effort.sh
+source "${PF_HERE:-$(dirname "${BASH_SOURCE[0]}")}/reasoning_effort.sh"
+resolve_reasoning_effort || exit 2
 # the endpoint probe's tokens per request (probe_endpoint.py): a reasoning
 # model needs room to reason before it answers
 if [ -n "$REASONING_PARSER" ]; then

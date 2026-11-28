@@ -109,7 +109,7 @@ def main():
         first = set(members)
     seconds, first_scored, expired, endpoint, lost = [], 0, [], [], 0
     time_stops, output_stops, lost_to_limits, limits_seen = [], [], [], set()
-    loop_stops = []
+    loop_stops, efforts = [], set()
     overflows, overflows_recovered, limit_hit, length_cut = 0, 0, 0, 0
     for name, version in members:
         stem = name if version == 1 else f"{name}-v{version}"
@@ -123,6 +123,8 @@ def main():
         for r in data.get("agent_runs") or []:
             if (r.get("result") or {}).get("seconds") is not None:
                 seconds.append(r["result"]["seconds"])
+            if "reasoning_effort" in r:
+                efforts.add(r["reasoning_effort"])
             if r.get("time_limit_s"):
                 limits_seen.add((r["time_limit_s"], r.get("opencode_time_limit_s")))
             ran = f"{stem} {r.get('run_id')}"
@@ -183,6 +185,8 @@ def main():
                  "longest_share_of_opencode_limit": share and round(share, 3)})
     print(f"runs stopped at the time limit: {len(time_stops)} {time_stops}")
     print(f"runs with a step cut at the output limit: {len(output_stops)} {output_stops}")
+    print("reasoning effort of the agent runs: "
+          + (", ".join(sorted(str(e) for e in efforts)) or "not recorded"))
     print(f"runs stopped in a loop of failing tool calls: {len(loop_stops)} {loop_stops}")
     print(f"versions lost with a limit stop among their attempts (rerun them with a "
           f"higher cap): {len(lost_to_limits)} {lost_to_limits}")
@@ -191,6 +195,7 @@ def main():
             {"time_limit_stops": time_stops, "output_limit_stops": output_stops,
              "versions_lost_with_limit_stops": lost_to_limits,
              "tool_loop_stops": loop_stops,
+             "reasoning_efforts": sorted(efforts, key=str),
              "agent_run_seconds": durations}, indent=1) + "\n")
     print(f"first generation: {first_scored} of {len(first)} scored; expired runs: "
           f"{len(expired)}; endpoint runs: {len(endpoint)}; lost runs: {lost}; "
