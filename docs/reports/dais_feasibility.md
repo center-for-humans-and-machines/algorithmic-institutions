@@ -273,6 +273,38 @@ Expected to fit or not, unverified. Weight sizes are the summed safetensors file
 - **Unknown:** each model's KV size per token; Qwen's 25 KB per token is no guide.
 - None of these was downloaded or served.
 
+### GLM-5.3 (profile `glm-5.3`, 2026-11-28)
+
+`MODEL_PROFILE=glm-5.3` (`infra/dais/model_profiles/glm-5.3.sh`) serves `zai-org/GLM-5.3` at revision `ba32f8c1` (the Hub's `main` on 2026-11-28), from the official vLLM v0.34.0 image, with tensor parallel 8; `export_instance.LOCAL_MODELS` holds its OpenCode settings.
+
+| Fact | Value | Source |
+|---|---|---|
+| Licence | "GLM-5.3 License": MIT-style; a Z.AI safety review only for Model-as-a-Service businesses above USD 10 billion revenue. Ungated, no token needed | `LICENSE` in the snapshot; Hub API `gated: false` |
+| Weights | 753.3B parameters, native FP8 (e4m3, 128x128 blocks; 2.1B in BF16): 755 GB (704 GiB) in 141 shards, 156 files in all | `config.json`, Hub API `safetensors` |
+| Architecture | `GlmMoeDsaForCausalLM`: 78 layers, 256 experts (8 active), MLA (`kv_lora_rank` 512) with DeepSeek-V3.2-style sparse attention (top 2048), one MTP layer | `config.json` |
+| vLLM | from v0.29 per the recipe; v0.34.0 maps the architecture to `models/deepseek_v32.py`, transformers 5.22.2 (5.15 needed) | recipes.vllm.ai/zai-org/GLM-5.3; the image's registry |
+| Parsers | `--tool-call-parser glm47 --reasoning-parser glm47` | recipe; both registered in v0.34.0 |
+| Context | 1,048,576 natively; served 262,144 | `max_position_embeddings`; profile |
+| Sampling | temperature 1.0, top_p 0.95 | `generation_config.json`; the card's HLE and SWE-Marathon runs |
+| Reasoning | always on; `reasoning_effort` low, high or max (default max, any other value is max), a chat template variable passed as `chat_template_kwargs` | model card "Note"; `chat_template.jinja` |
+
+Chat template quirks (rendered by vLLM's HF renderer on the Python frontend; `--tokenizer-mode glm5_next` is the same there, the recipe's Rust frontend is not used): the reasoning effort becomes a first `<|system|>Reasoning Effort: Max` line, ahead of the tools block and the client's own system prompt; tool calls are XML (`<tool_call>name<arg_key>k</arg_key><arg_value>v</arg_value></tool_call>`), and the template needs the arguments as a mapping, which vLLM's `_postprocess_messages` makes from the OpenAI JSON string; the generation prompt ends in `<think>`, so the model's output starts inside its reasoning; `clear_thinking` defaults to false, so earlier turns keep their reasoning, if the client sends it back as `reasoning_content` (otherwise they get an empty `<think></think>`).
+
+Memory at TP 8 (estimates, not measured): 88 GiB of weights per GPU. On 8 B200 (179 GiB each) at utilisation 0.90 about 68 GiB per GPU remain for the KV cache after about 5 GiB of overhead; on 8 H200 about 33 GiB. The MLA latent cache is replicated on every GPU, about 100 KB per token in BF16 (576 values per layer plus the indexer's keys, 78 layers), so about 0.7M tokens in all on B200 and 0.35M on H200; an FP8 cache (`--kv-cache-dtype fp8_e4m3`, the recipe's) would hold about 1.6 times as many. It does not fit on fewer GPUs: 4 B200 (716 GiB) hold less than the weights, and TP must divide the 64 heads.
+
+What ran (job IDs on DAIS):
+
+- 993473 (`small`, CPU): in the v0.34.0 image, the snapshot's tokenizer loads (`glm5_next`, vocabulary 154,856), the template renders tools, a tool-call history and both effort levels; the `glm47` tool parser turns a GLM tool call into `tool_calls` (`bash`, `{"command": "ls -la /tmp", "timeout": 30}`) with the text before it as content, and the `glm47` reasoning parser splits `reasoning</think>answer`. PASS.
+- `gpudev` cannot prove serving: its QOS allows 4 GPUs per user, fewer than the weights need.
+- The full-node proof (load time, memory, `/health`, chat, tool call unstreamed and streamed, one OpenCode session) is prepared and checked with `sbatch --test-only`, not yet run.
+
+Known problems and open points:
+
+- `probe_endpoint.py` gives a chat 200 tokens and a tool call 600; a model that reasons at maximum effort spends those on reasoning, so `serve.slurm.sh MODE=probe` can fail for it although the server is fine.
+- `agent_check.slurm.sh WITH_MODEL=1` writes OpenCode's config for `Qwen/Qwen3-Coder-Next` and waits 720 s for the server, whatever the profile.
+- The KV cache at BF16 is the profile's only option; FP8 needs `VLLM_EXTRA=--kv-cache-dtype fp8_e4m3` on each submission. MTP speculative decoding (the recipe's `--speculative-config.method mtp`) is off for the same reason.
+- Whether OpenCode 1.19.6 sends `reasoning_content` back in its history is unverified.
+
 ## Prerequisites
 
 | What | Where | How to create it |

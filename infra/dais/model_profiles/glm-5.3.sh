@@ -16,14 +16,17 @@ VLLM_SIF="$PF_SCRATCH/images/vllm-v0.34.0.sif"
 EXPECT_VLLM_TAG=vllm/vllm-openai:v0.34.0
 TOOL_PARSER=glm47
 REASONING_PARSER=glm47
-# The KV cache stays at the model's dtype (BF16): the latent cache is
-# replicated on every GPU at TP 8, about 100 KB per token per GPU, so the
-# about 60 GB left per B200 hold roughly 0.6M tokens in all; 262,144 per
-# session leaves room for more than two at full length. (The vLLM recipe adds
-# --kv-cache-dtype fp8_e4m3, which a profile cannot pass; VLLM_EXTRA can.)
+# The KV cache stays at the model's dtype (BF16): the MLA latent cache is
+# replicated on every GPU at TP 8, an estimated 100 KB per token (78 layers),
+# so the about 68 GiB left per B200 at 0.90 hold roughly 0.7M tokens in all
+# (8 H200: about 0.35M); 262,144 per session. Estimates, not measured. (The
+# vLLM recipe adds --kv-cache-dtype fp8_e4m3, which a profile cannot pass;
+# VLLM_EXTRA can.)
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
 MOE_BACKEND=auto
-# 755 GB: 8 B200 (about 94 GB per GPU) or 8 H200 (141 GB each); not fewer
+# 755 GB (704 GiB, 88 GiB per GPU at TP 8): 8 B200 or 8 H200. Not fewer:
+# 4 B200 hold 4 x 179 GiB, less than the weights, and TP 6 does not divide
+# the 64 attention heads
 SERVER_GPUS="${SERVER_GPUS:-8}"
 # 755 GB from GPFS (DeepSeek's 510 GB loaded in 526 s at TP 4, job 993167),
 # then DeepGEMM warm-up and CUDA graphs: up to an hour
